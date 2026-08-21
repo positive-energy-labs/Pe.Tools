@@ -4,8 +4,7 @@
  * WHY THIS FILE EXISTS AND WHAT IT IS NOT: `/design-system` catalogues real components. It has
  * no host, no session, no document — so the DATA is mocked and every surface that renders it
  * says so with a dashed-seam `FactChip` (the dashed border style is reserved for exactly this
- * meaning). That is SHIMS.md entry 4, which closes only if a satellite is ever promoted to a
- * real route.
+ * meaning). This requirement closes only if a satellite is ever promoted to a real route.
  *
  * PROVENANCE: the rows are the design-lang round's shared fixture (`design-lang/proto/world.ts`),
  * copied rather than imported ON PURPOSE — the proto folds to its snapshot branch at the close of
@@ -17,8 +16,8 @@
  *   · proposed + drift on one cell (`connectedLoad`) — two marks at once, the composition the
  *     precedence order asserts and no fixture had ever forced.
  *   · staged by YOU and staged by PEA on two cells — the square's colour is the only difference,
- *     which is the one thing the state model still cannot supply (CLEANROOM: "staging has no
- *     author"). Here it is a fixture field; in production it is inferred from the wrong fact.
+ *     which is the one thing the state model still cannot supply: staging has no author. Here it
+ *     is a fixture field; in production it is inferred from the wrong fact.
  *   · every capability refusal that renders differently: readonly · excluded · nohome.
  *   · a value long enough to prove the footline clamp and the no-icons-in-cells ruling.
  */
@@ -36,7 +35,7 @@ export interface ParamRow {
   modelValue?: string;
   /** Minutes since the reading behind the value. Absent ⇒ never read. */
   ageMin?: number;
-  fresh: "fresh" | "stale" | "unverified";
+  fresh: "fresh" | "stale" | "unverified" | "never";
   agree: "agree" | "drift";
   stage: "clean" | "proposed" | "staged";
   stagedBy?: "pea" | "you";
@@ -127,6 +126,18 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     scope: "instance",
     value: "26 in",
     fresh: "unverified",
+    agree: "agree",
+    stage: "clean",
+    cap: "editable",
+  },
+  {
+    /* The NEVER rung (ruled 2026-08-16 R2): nothing was ever attempted here — no reading, no
+       value. Distinct from `unverified` (a value exists, never checked). Draws no squiggle. */
+    key: "panelColor",
+    param: "Panel Color",
+    scope: "type",
+    value: "—",
+    fresh: "never",
     agree: "agree",
     stage: "clean",
     cap: "editable",

@@ -2,8 +2,8 @@
  * /design-system/arming — SATELLITE. What it stress-tests: **a lifecycle, not a specimen.**
  *
  * `ArmingStrip` is the ceremony surface SURFACE-PHILOSOPHY §3 has been owed since the honesty
- * rules were written, and it is the one component in `lang/` with NO live consumer (SHIMS entry
- * 3). Every previous look at it was a frozen frame: the design-lang fixture rendered "armed" and
+ * rules were written, and it is the one component in `lang/` with NO live consumer. Every
+ * previous look at it was a frozen frame: the design-lang fixture rendered "armed" and
  * "refused" and nothing else, which is precisely why round 1 recorded "arming has no lifecycle"
  * as a state-model gap rather than as a rendering one. A component whose whole argument is a
  * sequence cannot be reviewed one frame at a time.
@@ -15,9 +15,9 @@
  *
  * FIXTURE, ANNOUNCED: `design-system/fixtures.ts`. No host, no plan, no model. The refusal is
  * simulated on the first commit because that is the case the ceremony exists for; nothing here
- * asks Revit anything (SHIMS entry 4).
+ * asks Revit anything.
  *
- * NO SHIMS: the strip is mounted with its real props. Everything it cannot say — how old its plan
+ * NO STAND-INS: the strip is mounted with its real props. Everything it cannot say — how old its plan
  * is, who armed it, which verb it arms — is a `GAP:` note, not a prop this page invented.
  */
 import { useState } from "react";
@@ -203,7 +203,7 @@ function ArmingRoute() {
         </section>
 
         <section className="flex flex-col gap-1.5">
-          <span className="tele-label text-[10px] text-[var(--r-ink)]">what this page found</span>
+          <span className="t-caption t-upper text-[var(--r-ink)]">what this page found</span>
           <Gap>
             the strip cannot say <strong>how old its own plan is</strong> — the one fact that
             decides whether to press it. It renders &ldquo;armed against a plan of unknown
@@ -248,7 +248,7 @@ function Frozen({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <span className="tele-label text-[10px] text-[var(--r-ink-mute)]">{phase}</span>
+      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{phase}</span>
       {children}
       <p className="text-[10.5px] leading-relaxed text-[var(--r-ink-2)]">{says}</p>
     </div>
@@ -280,7 +280,7 @@ function Header({ title, note }: { title: string; note: string }) {
 function SectionHead({ n, title, note }: { n: string; title: string; note: string }) {
   return (
     <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
-      <span className="tele-label text-[10px] text-[var(--r-ink-mute)]">{n}</span>
+      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{n}</span>
       <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
       <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
     </div>

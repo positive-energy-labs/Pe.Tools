@@ -74,6 +74,14 @@ export interface ServiceHostDescriptor {
   readonly executablePath: string;
   /** Dev-lane checkout this host runs from (recorded as `sourceRoot`). */
   readonly sourceRoot?: string;
+  /** Schema 3, optional: the relative HTTP path that answers 2xx/3xx while this host is up. Recorded
+   * in the service file so a READER (e.g. `pe-revit session status`, which narrates companion legs
+   * and never starts them) can probe health rather than infer liveness from a TCP accept. Defaults to
+   * `descriptor.health` and is unrelated to `shutdown`. */
+  readonly health?: string;
+  /** Schema 3, optional: the Revit session this host belongs to. A host that knows it should write it
+   * — it is what ties this leg to a session row without guessing from lane alone. */
+  readonly sessionId?: string;
   /** The product's shutdown route path, e.g. "/admin/shutdown" — reused to evict a prior owner. */
   readonly shutdown: string;
   /** Which foreign-owner lanes this host may evict (see {@link hostReplacementPolicy}). */
@@ -124,6 +132,8 @@ export async function claimServiceHost(
     createServiceToken(),
     descriptor.executablePath,
     descriptor.sourceRoot,
+    descriptor.health,
+    descriptor.sessionId,
   );
 
   // Policy gate, applied on the current incumbent BEFORE any displacement. A dead/stale owner is not a

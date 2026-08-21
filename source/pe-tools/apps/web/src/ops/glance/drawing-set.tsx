@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { RevitDetailSheets } from "@pe/host-contracts/generated";
-import { Chip, EmptyState, MonoNote, OpSection, Provenance } from "#/ops/primitives";
+import { EmptyState } from "#/components/lang/empty";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Provenance, Section } from "#/components/lang/section";
+import { VizChip } from "#/ops/primitives";
 import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 import { SheetCanvas } from "#/ops/views-detail";
@@ -86,12 +89,14 @@ function chooseDetailTargets(series: Series[]): string[] {
   return chosen;
 }
 
-/** Empty titleblock frame for sheets not in the detail budget — Arch D landscape. */
+/** Empty titleblock frame for sheets not in the detail budget — Arch D landscape.
+ * DELIBERATE dashed spend: this is the SEAM slot (a declared sheet with no anchor
+ * geometry behind it — the stand-in announces what the detail budget left out). */
 function EmptyFrame() {
   return (
     <div
       aria-hidden
-      className="aspect-[3/2] rounded-none border border-dashed border-[var(--line-2)]"
+      className="aspect-[3/2] rounded-none border border-dashed border-[var(--r-line-2)]"
     />
   );
 }
@@ -111,7 +116,13 @@ function Thumbnail({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex min-w-0 flex-col gap-1 rounded-[var(--radius)] border p-1.5 text-left hover:bg-muted/60 ${selected ? "border-[var(--pe-blue)] bg-[color-mix(in_srgb,var(--pe-blue)_6%,transparent)]" : "border-[var(--line)]"}`}
+      className={`flex min-w-0 flex-col gap-1 rounded-[var(--radius)] border p-1.5 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${selected ? "border-[var(--r-line-2)]" : "border-[var(--r-line)]"}`}
+      /* selection is a fill, never a hue — the select rung, with --r-on re-declared. */
+      style={
+        selected
+          ? ({ background: "var(--r-select)", "--r-on": "var(--r-select)" } as React.CSSProperties)
+          : undefined
+      }
       title={
         entry
           ? `${sheet.sheetNumber} — ${sheet.sheetName}`
@@ -119,10 +130,8 @@ function Thumbnail({
       }
     >
       {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
-      <span className="tele truncate text-[10px]">{sheet.sheetNumber}</span>
-      {entry && (
-        <span className="truncate text-[11px] text-muted-foreground">{sheet.sheetName}</span>
-      )}
+      <span className="face-mono t-caption truncate">{sheet.sheetNumber}</span>
+      {entry && <span className="t-label truncate text-[var(--r-ink-2)]">{sheet.sheetName}</span>}
     </button>
   );
 }
@@ -175,7 +184,12 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
     };
   }, [targets, call]);
 
-  if (sheets.length === 0) return <EmptyState note="no sheets in the project index" />;
+  if (sheets.length === 0)
+    return (
+      <EmptyState story="scope" exit="create sheets in the project first">
+        no sheets in the project index
+      </EmptyState>
+    );
 
   const selectedSheet = sheets.find((s) => s.sheetNumber === selected);
   const selectedEntry = selected != null ? details?.get(selected) : undefined;
@@ -183,10 +197,14 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
   return (
     <div className="flex flex-col gap-4">
       {series.map((group) => (
-        <OpSection
+        <Section
           key={group.prefix}
           label={`${group.prefix} series`}
-          aside={<MonoNote>{group.sheets.length} sheets</MonoNote>}
+          aside={
+            <span className="face-mono t-caption text-[var(--r-ink-2)]">
+              {group.sheets.length} sheets
+            </span>
+          }
         >
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
             {group.sheets.map((sheet) => (
@@ -199,18 +217,18 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
               />
             ))}
           </div>
-        </OpSection>
+        </Section>
       ))}
 
-      {selectedSheet && (
-        <OpSection
+      {selectedSheet ? (
+        <Section
           label={`${selectedSheet.sheetNumber} — ${selectedSheet.sheetName}`}
           aside={
             selectedEntry ? (
               <>
-                <Chip hue="blue">{selectedEntry.summary.viewportCount} views</Chip>
-                <Chip hue="green">{selectedEntry.summary.scheduleInstanceCount} schedules</Chip>
-                <Chip hue="kiln">{selectedEntry.summary.textNoteCount} notes</Chip>
+                <VizChip viz={1}>{selectedEntry.summary.viewportCount} views</VizChip>
+                <VizChip viz={2}>{selectedEntry.summary.scheduleInstanceCount} schedules</VizChip>
+                <VizChip viz={6}>{selectedEntry.summary.textNoteCount} notes</VizChip>
               </>
             ) : undefined
           }
@@ -219,14 +237,22 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
             <SheetCanvas entry={selectedEntry} />
           ) : (
             <EmptyState
-              note={`${selectedSheet.sheetNumber} was not detailed — outside the ${DETAIL_BUDGET}-sheet anchor budget`}
-            />
+              story="scope"
+              exit={`raise the ${DETAIL_BUDGET}-sheet anchor budget, or pick a detailed sheet`}
+            >
+              {selectedSheet.sheetNumber} was not detailed
+            </EmptyState>
           )}
-        </OpSection>
+        </Section>
+      ) : (
+        <EmptyState story="scope" exit="select a thumbnail to enlarge its anchor map">
+          no sheet selected
+        </EmptyState>
       )}
-      {!selectedSheet && <MonoNote>select a thumbnail to enlarge its anchor map</MonoNote>}
 
-      {detailError && <MonoNote hue="clay">detail fetch failed: {detailError}</MonoNote>}
+      {detailError && (
+        <OutcomeLine kind="error" label="revit.detail.sheets failed" says={detailError} />
+      )}
       <Provenance>
         {details ? details.size : detailError ? 0 : "…"} of {total ?? sheets.length} sheets detailed
         (anchor geometry; budget {DETAIL_BUDGET}, one per series then richest remainder) · remaining

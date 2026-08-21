@@ -10,8 +10,7 @@
 
    PROVENANCE — this is not a fresh opinion. It is palette **p3 · wholistic bands**, which won
    design-lang base 2 round 2 (ruled 2026-08-16) against three rivals plus the unfixed
-   incumbent, judged by flipping each in both modes over one byte-identical base. Every verdict,
-   every honest cost, and the open frontier live in `docs/features/design-lang/CLEANROOM.md`.
+   incumbent, judged by flipping each in both modes over one byte-identical base.
    The prototype that validated this contract still stands at `src/design-lang/proto/` (route
    `/design-lang`) as the validation record; the token PREFIX stays `--r-*` for exactly that
    reason — renaming would orphan the evidence.
@@ -35,15 +34,25 @@
 
    Tints, washes and hairline-over-fill are NOT tokens. Components mix them from these with
    `color-mix()` against `--r-on`. A surface that wants a different wash STRENGTH is proposing a
-   grammar change, not a colour change — take it to CLEANROOM's frontier section.
+   grammar change, not a colour change.
 
-   ── STANDING LAWS THESE TOKENS ENCODE (COLOR-ROLES.md, SURFACE-PHILOSOPHY §5) ──────────────
+   ── STANDING LAWS THESE TOKENS ENCODE (SURFACE-PHILOSOPHY §5) ──────────────────────────────
      · ONE ALARM. `--r-alarm` means "the model disagrees". Nothing else may wear it.
      · PEA IS NEVER BLUE. The agent's proposals wear the agent's identity.
      · SELECTION AND FOCUS ARE A FILL, NEVER A HUE — only ever `--r-select`, which is literally
        the 4th rung of the ground ladder, so the law is structural rather than remembered.
+       EXTENSION (ruled 2026-08-16, R13a): on a spatial view where a fill cannot separate —
+       coloured plan fills, zone peeks — the locate mark is `--r-ink`: neutral, no hue bought,
+       the highest-contrast mark available. Takeoffs' cursor is the precedent.
      · THE ONLY FILLED BLUE is the verb that writes beyond the page (`--r-commit`).
        Nav is blue TEXT (`--r-nav`, byte-identical) and nothing else in the language is blue.
+       "BEYOND THE PAGE" (ruled 2026-08-16, fit reviews): the write leaves the current page's
+       state — disk, host document, external system; a write that only moves this page's own
+       state is not blue.
+     · THE GRAYSCALE EXTENSION (ruled 2026-08-16, fit reviews): a meaning-band spend on a fill
+       SMALLER THAN A WORD requires a non-hue channel — pattern, weight, outline or position
+       must carry the distinction too. Hue-only fills at rail/pip scale ride the priced
+       alarm/caution CVD collision (honest costs, below) exactly where a wrong read is dear.
      · MONO MEANS THE MACHINE MEASURED THIS. Type carries meaning on the same terms as colour.
      · BOLD IS RESERVED FOR UNSAVED, everywhere, always.
 
@@ -58,8 +67,11 @@
 
    ── THE SQUIGGLE FAMILY — one shape, three colours, ranked (c's axis law) ──────────────────
      drift → --r-alarm  ▸  stale → --r-caution  ▸  unverified → --r-ink-mute
+     `never` (nothing ever attempted — ruled 2026-08-16) draws NO squiggle: the family
+     distrusts an existing value; a never-started cell has nothing to distrust. Its value
+     sits in --r-ink-mute alone. "Not started is a state, not a zero" — this is the rung.
 
-   ── THE BORDER BUDGET (ruled 2026-08-16, CLEANROOM note 3) ────────────────────────────────
+   ── THE BORDER BUDGET (ruled 2026-08-16) ──────────────────────────────────────────────────
    PLAIN CONTENT IS NEVER ENCLOSED. The artifact frame — one ground shift plus one quiet inset
    hairline — is reserved for a MACHINE-OPERATED OBJECT THAT CARRIES STATE: the table, pea's
    chat card, the arming strip, the addressing sentence. A group of plain controls or receipts
@@ -67,6 +79,12 @@
    Every frame spent on something with no state to separate makes the real ones read as less
    special. Enforced in code by `components/lang/artifact-frame.tsx` being the only thing that
    draws one.
+
+   THE DASHED SLOT COUNTS EVERY MECHANISM (ruled 2026-08-16, R13b): `border-style: dashed`,
+   SVG `stroke-dasharray`, and any other way of drawing a broken edge occupy the SAME slot and
+   carry the same reserved meaning — SEAM: a stand-in for something that does not exist
+   (a fixture lane, a declared area with no element behind it, a position with no boundary).
+   A dashed mark meaning anything else is a violation wherever the CSS lives.
 
    ── THE `--r-on` PLUMBING CONVENTION ──────────────────────────────────────────────────────
    `--r-on` is THE GROUND A CHILD ACTUALLY SITS ON. It is declared here as `--r-page` and

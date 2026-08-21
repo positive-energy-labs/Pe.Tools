@@ -4,7 +4,7 @@ Date: 2026-07-24. Status: accepted, first instance implemented (`revit.glance.mo
 
 ## Context
 
-The /ops UI build ([docs/op-contract-feedback.md](../op-contract-feedback.md)) proved that pea's
+The /ops UI build ([docs/features/host/op-contract-gaps.md](../features/host/op-contract-gaps.md)) proved that pea's
 recurring needs are *questions* ("what is this model?", "what's on screen?") while the catalog is
 organized as *capabilities*. Answering one question cost 2–4 calls, three truncation dialects
 (`page{totalCount,returnedCount,isTruncated}`, bare `summary.truncated`, `issues[]` warning

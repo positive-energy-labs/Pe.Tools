@@ -10,19 +10,12 @@ import type {
   RevitMatrixParameterCoverage,
   RevitMatrixScheduleCoverage,
 } from "@pe/host-contracts/generated";
-import {
-  Chip,
-  type Column,
-  CoverageBar,
-  DataTable,
-  EmptyState,
-  KVGrid,
-  MonoNote,
-  OpSection,
-  Provenance,
-  catVar,
-} from "#/ops/primitives";
-import { type OpViewProps, type OpViewRegistry, asRecord } from "#/ops/registry";
+import { FactChip } from "#/components/lang/chip";
+import { CoverageBar } from "#/components/lang/coverage-bar";
+import { EmptyState } from "#/components/lang/empty";
+import { Provenance, Section } from "#/components/lang/section";
+import { type Column, DataTable, KVGrid, VizChip, type VizIndex, vizVar } from "#/ops/primitives";
+import { type OpViewProps, type OpViewRegistry, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { contentViewport, fitFrame } from "#/lib/affine-frame";
 
 /**
@@ -32,8 +25,6 @@ import { contentViewport, fitFrame } from "#/lib/affine-frame";
  */
 
 /* ── shared helpers ───────────────────────────────────────────────────────── */
-
-const UNRECOGNIZED = <EmptyState note="unrecognized response shape" />;
 
 function numericish(value: string): boolean {
   const v = value.trim();
@@ -54,13 +45,15 @@ function columnIsNumeric(rows: string[][], columnIndex: number): boolean {
   return nonEmpty > 0 && numeric / nonEmpty >= 0.6;
 }
 
+/** Severity is STATE — caution ink, never alarm (not the model disagreeing). */
 function issueLine(issue: { severity: string; code: string; message: string }): ReactNode {
   return (
-    <MonoNote
-      hue={issue.severity === "Error" ? "clay" : issue.severity === "Warning" ? "kiln" : undefined}
+    <span
+      className="face-mono t-caption"
+      style={{ color: issue.severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)" }}
     >
       {issue.severity.toLowerCase()} {issue.code}: {issue.message}
-    </MonoNote>
+    </span>
   );
 }
 
@@ -77,9 +70,14 @@ function pageNote(
 
 function SchedulesView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || !Array.isArray(rec.entries)) return UNRECOGNIZED;
+  if (!rec || !Array.isArray(rec.entries)) return <UnrecognizedShape />;
   const res = rec as unknown as RevitDetailSchedules.Res.Response;
-  if (res.entries.length === 0) return <EmptyState note="no schedules resolved" />;
+  if (res.entries.length === 0)
+    return (
+      <EmptyState story="filter" exit="widen the schedule reference query">
+        no schedules resolved
+      </EmptyState>
+    );
 
   return (
     <div className="flex flex-col gap-4">
@@ -129,15 +127,17 @@ function SchedulesView({ data }: OpViewProps) {
 
 /* ── revit.detail.sheets — sheet as canvas ────────────────────────────────── */
 
-const ANCHOR_HUES = {
-  Viewport: "blue",
-  ScheduleInstance: "green",
-  TextNote: "kiln",
-  GenericAnnotation: "lichen",
-  RasterImage: "slate",
-  ImportInstance: "slate",
-  TitleBlock: "slate",
-} as const;
+/** Anchor KIND is taxonomy — the viz ladder by index; canvas marks and the chips
+ * beside them spend the same rung so the identity survives across renderings. */
+const ANCHOR_VIZ: Record<string, VizIndex> = {
+  Viewport: 1,
+  ScheduleInstance: 2,
+  TextNote: 6,
+  GenericAnnotation: 4,
+  RasterImage: 3,
+  ImportInstance: 3,
+  TitleBlock: 3,
+};
 
 export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetailEntry }) {
   const withBounds = entry.anchors.filter((a) => a.bounds != null);
@@ -182,7 +182,7 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
         width={w}
         height={h}
         fill="none"
-        stroke="var(--line-2)"
+        stroke="var(--r-line-2)"
         strokeWidth={0.75}
         vectorEffect="non-scaling-stroke"
       />
@@ -190,7 +190,7 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
         if (anchor.kind === "TitleBlock") return null;
         const b = anchor.bounds;
         if (!b) return null;
-        const hue = catVar(ANCHOR_HUES[anchor.kind] ?? "slate");
+        const hue = vizVar(ANCHOR_VIZ[anchor.kind] ?? 3);
         const bw = Math.max(b.maxX - b.minX, 0);
         const bh = Math.max(b.maxY - b.minY, 0);
         const [x, y] = camera.toViewport([b.minX, b.maxY]);
@@ -215,7 +215,7 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
               y={y + fontSize * 1.3}
               fontSize={fontSize}
               fill={hue}
-              className="font-[var(--font-mono,_monospace)]"
+              className="font-[var(--font-pe-mono,_monospace)]"
             >
               {anchor.label.length > 28 ? `${anchor.label.slice(0, 27)}…` : anchor.label}
             </text>
@@ -228,9 +228,14 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
 
 function SheetsView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || !Array.isArray(rec.sheets)) return UNRECOGNIZED;
+  if (!rec || !Array.isArray(rec.sheets)) return <UnrecognizedShape />;
   const res = rec as unknown as RevitDetailSheets.Res.Response;
-  if (res.sheets.length === 0) return <EmptyState note="no sheets resolved" />;
+  if (res.sheets.length === 0)
+    return (
+      <EmptyState story="filter" exit="widen the sheet reference query">
+        no sheets resolved
+      </EmptyState>
+    );
 
   return (
     <div className="flex flex-col gap-5">
@@ -238,14 +243,14 @@ function SheetsView({ data }: OpViewProps) {
         const s = entry.summary;
         const unplaced = entry.anchors.filter((a) => a.bounds == null);
         return (
-          <OpSection
+          <Section
             key={s.handle.uniqueId ?? s.sheetNumber}
             label={`${s.sheetNumber} — ${s.sheetName}`}
             aside={
               <>
-                <Chip hue="blue">{s.viewportCount} views</Chip>
-                <Chip hue="green">{s.scheduleInstanceCount} schedules</Chip>
-                <Chip hue="kiln">{s.textNoteCount} notes</Chip>
+                <VizChip viz={1}>{s.viewportCount} views</VizChip>
+                <VizChip viz={2}>{s.scheduleInstanceCount} schedules</VizChip>
+                <VizChip viz={6}>{s.textNoteCount} notes</VizChip>
               </>
             }
           >
@@ -253,13 +258,13 @@ function SheetsView({ data }: OpViewProps) {
             {unplaced.length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {unplaced.map((a, i) => (
-                  <Chip
+                  <VizChip
                     key={i}
-                    hue={ANCHOR_HUES[a.kind] ?? "slate"}
+                    viz={ANCHOR_VIZ[a.kind] ?? 3}
                     title={`${a.kind} — no bounding box in response`}
                   >
                     {a.label}
-                  </Chip>
+                  </VizChip>
                 ))}
               </div>
             )}
@@ -271,7 +276,7 @@ function SheetsView({ data }: OpViewProps) {
             {entry.issues.map((issue, i) => (
               <div key={i}>{issueLine(issue)}</div>
             ))}
-          </OpSection>
+          </Section>
         );
       })}
       {res.issues.map((issue, i) => (
@@ -298,18 +303,19 @@ function ParameterRows({
   if (params.length === 0) return null;
   return (
     <div className="mt-2">
-      <div className="section-label mb-1">{label}</div>
-      <div className="rounded-[var(--radius)] border border-[var(--line)]">
+      <div className="t-label t-upper mb-1">{label}</div>
+      <div className="rounded-[var(--radius)] border border-[var(--r-line)]">
         {params.map((p) => (
           <div
             key={p.identity.key}
-            className="flex items-baseline justify-between gap-3 border-b border-[var(--line-soft)] px-2 py-1"
+            className="flex items-baseline justify-between gap-3 border-b border-[var(--r-line)] px-2 py-1"
           >
-            <span className="min-w-0 truncate text-xs" title={p.name}>
+            <span className="t-value min-w-0 truncate" title={p.name}>
               {p.name}
             </span>
             <span
-              className={`tele shrink-0 text-right ${!p.found || p.isBlank ? "text-cat-kiln" : ""}`}
+              className="face-mono t-value shrink-0 text-right"
+              style={{ color: !p.found || p.isBlank ? "var(--r-caution)" : undefined }}
               title={p.rawValue ?? undefined}
             >
               {!p.found ? "not found" : p.isBlank ? "blank" : (p.displayValue ?? p.value ?? "∅")}
@@ -329,17 +335,17 @@ function ElementCard({ entry }: { entry: RevitDetailElements.Res.ElementContextE
   const grouped = instanceParams.length > 0 || typeParams.length > 0;
 
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--line-2)] p-2">
+    <div className="rounded-[var(--radius)] border border-[var(--r-line-2)] p-2">
       <div className="flex flex-wrap items-center gap-2">
-        {entry.categoryName && <Chip hue="blue">{entry.categoryName}</Chip>}
-        <span className="text-xs font-medium">{entry.name}</span>
+        {entry.categoryName && <VizChip viz={1}>{entry.categoryName}</VizChip>}
+        <span className="t-value font-medium">{entry.name}</span>
         {entry.familyName && (
-          <span className="text-[11px] text-muted-foreground">
+          <span className="t-label text-[var(--r-ink-2)]">
             {entry.familyName}
             {entry.typeName ? ` : ${entry.typeName}` : ""}
           </span>
         )}
-        <span className="tele ml-auto text-[10px] text-muted-foreground">{entry.elementId}</span>
+        <span className="face-mono t-caption ml-auto text-[var(--r-ink-2)]">{entry.elementId}</span>
       </div>
       {(entry.levelName || entry.mark) && (
         <div className="mt-1.5">
@@ -362,25 +368,25 @@ function ElementCard({ entry }: { entry: RevitDetailElements.Res.ElementContextE
         <ParameterRows label="parameters" params={params} />
       )}
       <div className="mt-2 flex flex-wrap gap-1">
-        {entry.electrical && <Chip hue="lichen">{entry.electrical.role}</Chip>}
+        {entry.electrical && <VizChip viz={4}>{entry.electrical.role}</VizChip>}
         {entry.circuit && (
-          <Chip hue="blue" title={entry.circuit.loadName ?? undefined}>
+          <VizChip viz={1} title={entry.circuit.loadName ?? undefined}>
             ckt {entry.circuit.circuitNumber}
             {entry.circuit.panelName ? ` @ ${entry.circuit.panelName}` : ""}
-          </Chip>
+          </VizChip>
         )}
         {entry.panelContext && (
-          <Chip hue="green">
+          <VizChip viz={2}>
             panel {entry.panelContext.panelName} · {entry.panelContext.assignedCircuitCount} ckts
-          </Chip>
+          </VizChip>
         )}
         {entry.connectors && entry.connectors.electricalConnectorCount > 0 && (
-          <Chip hue="slate">{entry.connectors.electricalConnectorCount} elec connectors</Chip>
+          <VizChip viz={3}>{entry.connectors.electricalConnectorCount} elec connectors</VizChip>
         )}
-        {entry.panelSchedule && <Chip hue="green">sched {entry.panelSchedule.scheduleName}</Chip>}
-        {entry.loadClassification && <Chip hue="kiln">{entry.loadClassification.name}</Chip>}
+        {entry.panelSchedule && <VizChip viz={2}>sched {entry.panelSchedule.scheduleName}</VizChip>}
+        {entry.loadClassification && <VizChip viz={6}>{entry.loadClassification.name}</VizChip>}
         {entry.wire && (
-          <Chip hue="slate">wire {entry.wire.wireTypeName ?? entry.wire.wiringType}</Chip>
+          <VizChip viz={3}>wire {entry.wire.wireTypeName ?? entry.wire.wiringType}</VizChip>
         )}
       </div>
     </div>
@@ -389,9 +395,14 @@ function ElementCard({ entry }: { entry: RevitDetailElements.Res.ElementContextE
 
 function ElementsView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || !Array.isArray(rec.entries)) return UNRECOGNIZED;
+  if (!rec || !Array.isArray(rec.entries)) return <UnrecognizedShape />;
   const res = rec as unknown as RevitDetailElements.Res.Response;
-  if (res.entries.length === 0) return <EmptyState note="no elements resolved" />;
+  if (res.entries.length === 0)
+    return (
+      <EmptyState story="filter" exit="widen the element reference query">
+        no elements resolved
+      </EmptyState>
+    );
 
   return (
     <div className="flex flex-col gap-3">
@@ -427,7 +438,7 @@ function linkValueText(
 
 function ParameterLinksView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || !asRecord(rec.status)) return UNRECOGNIZED;
+  if (!rec || !asRecord(rec.status)) return <UnrecognizedShape />;
   const res = rec as unknown as RevitDetailParameterLinks.Res.Response;
   const defs = new Map((res.profile?.definitions ?? []).map((d) => [d.id, d]));
   const writes = res.evaluation?.writes ?? [];
@@ -444,7 +455,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       cell: (w) => (
         <span title={w.targetElementUniqueId}>
           {w.targetElementName ?? w.targetElementId}{" "}
-          <span className="tele text-[10px] text-muted-foreground">{w.targetElementId}</span>
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">{w.targetElementId}</span>
         </span>
       ),
     },
@@ -454,7 +465,10 @@ function ParameterLinksView({ data }: OpViewProps) {
       header: "source",
       cell: (w) => {
         const def = defs.get(w.definitionId);
-        if (!def) return <MonoNote>{w.definitionId}</MonoNote>;
+        if (!def)
+          return (
+            <span className="face-mono t-caption text-[var(--r-ink-2)]">{w.definitionId}</span>
+          );
         return `${def.sourceParameter.name ?? def.sourceParameter.identity?.name ?? "?"} (${def.relationship}, ${def.reducer})`;
       },
     },
@@ -469,7 +483,8 @@ function ParameterLinksView({ data }: OpViewProps) {
       header: "proposed",
       numeric: true,
       cell: (w) => (
-        <span className={w.changed ? "text-cat-green" : undefined}>
+        /* a proposed value that would change is STAGED, i.e. unsaved — caution ink. */
+        <span style={{ color: w.changed ? "var(--r-caution)" : undefined }}>
           {linkValueText(w.proposedValue)}
         </span>
       ),
@@ -479,7 +494,13 @@ function ParameterLinksView({ data }: OpViewProps) {
       header: "issue",
       cell: (w) => {
         const issue = issueByTarget.get(w.targetElementUniqueId);
-        return issue ? <MonoNote hue="clay">{issue.code}</MonoNote> : "";
+        return issue ? (
+          <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+            {issue.code}
+          </span>
+        ) : (
+          ""
+        );
       },
     },
   ];
@@ -496,9 +517,13 @@ function ParameterLinksView({ data }: OpViewProps) {
           {
             label: "proposed changes",
             value: res.evaluation ? res.evaluation.changedWriteCount : "not evaluated",
-            hue: (res.evaluation?.changedWriteCount ?? 0) > 0 ? "green" : undefined,
+            tone: (res.evaluation?.changedWriteCount ?? 0) > 0 ? "caution" : undefined,
           },
-          { label: "issues", value: issues.length, hue: issues.length > 0 ? "clay" : undefined },
+          {
+            label: "issues",
+            value: issues.length,
+            tone: issues.length > 0 ? "caution" : undefined,
+          },
         ]}
       />
       {writes.length > 0 ? (
@@ -508,15 +533,21 @@ function ParameterLinksView({ data }: OpViewProps) {
           rows={writes}
           rowKey={(w) => `${w.assignmentId}:${w.targetElementUniqueId}:${w.targetParameter.key}`}
         />
+      ) : res.evaluation ? (
+        <EmptyState story="scope" exit="every link target already matches its source">
+          no proposed writes
+        </EmptyState>
       ) : (
-        <EmptyState note={res.evaluation ? "no proposed writes" : "evaluation not requested"} />
+        <EmptyState story="scope" exit="request evaluation to see what would be written">
+          evaluation not requested
+        </EmptyState>
       )}
       {issues
         .filter((i) => !i.targetElementUniqueId)
         .map((issue, i) => (
-          <MonoNote key={i} hue={issue.severity === "error" ? "clay" : "kiln"}>
+          <span key={i} className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
             {issue.severity} {issue.code}: {issue.message}
-          </MonoNote>
+          </span>
         ))}
       {res.evaluation && (
         <Provenance>
@@ -542,7 +573,7 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
       cell: (p) => (
         <span title={p.definition.identity.key}>
           {p.definition.identity.name}{" "}
-          <span className="tele text-[10px] text-muted-foreground">
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">
             {p.definition.isInstance == null ? "" : p.definition.isInstance ? "inst" : "type"}
           </span>
         </span>
@@ -556,8 +587,10 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
         const value = p.valuesPerType[typeName];
         const hasFormula = p.formulaState === "Present";
         return (
+          /* DERIVED is not a state (R4): a formula value rides the ink ladder; the
+             formula itself is one hover away. */
           <span
-            className={hasFormula ? "text-cat-lichen" : undefined}
+            className={hasFormula ? "text-[var(--r-ink-2)]" : undefined}
             title={hasFormula && p.formula ? `= ${p.formula}` : undefined}
           >
             {value ?? "∅"}
@@ -590,9 +623,14 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
 
 function LoadedFamiliesView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || !Array.isArray(rec.families)) return UNRECOGNIZED;
+  if (!rec || !Array.isArray(rec.families)) return <UnrecognizedShape />;
   const res = rec as unknown as RevitMatrixLoadedFamilies.Res.Response;
-  if (res.families.length === 0) return <EmptyState note="no families matched" />;
+  if (res.families.length === 0)
+    return (
+      <EmptyState story="filter" exit="widen the family filter">
+        no families matched
+      </EmptyState>
+    );
 
   return (
     <div className="flex flex-col gap-4">
@@ -621,27 +659,40 @@ function LoadedFamiliesView({ data }: OpViewProps) {
 
 function ParameterCoverageView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || !Array.isArray(rec.parameters)) return UNRECOGNIZED;
+  if (!rec || !Array.isArray(rec.parameters)) return <UnrecognizedShape />;
   const res = rec as unknown as RevitMatrixParameterCoverage.Res.Response;
-  if (res.parameters.length === 0) return <EmptyState note="no parameters in scope" />;
+  if (res.parameters.length === 0)
+    return (
+      <EmptyState story="filter" exit="widen the parameter or category scope">
+        no parameters in scope
+      </EmptyState>
+    );
 
   return (
     <div className="flex flex-col gap-4">
       {res.parameters.map((entry) => (
         <div key={`${entry.identity.key}:${entry.categoryName ?? ""}`}>
           <div className="mb-1 flex items-baseline gap-2">
-            <span className="text-xs font-medium">{entry.identity.name}</span>
-            {entry.categoryName && <Chip hue="blue">{entry.categoryName}</Chip>}
-            <MonoNote>{entry.elementCount} elements</MonoNote>
+            <span className="t-value font-medium">{entry.identity.name}</span>
+            {entry.categoryName && <VizChip viz={1}>{entry.categoryName}</VizChip>}
+            <span className="face-mono t-caption text-[var(--r-ink-2)]">
+              {entry.elementCount} elements
+            </span>
           </div>
-          <CoverageBar
-            total={entry.elementCount}
-            segments={[
-              { label: "present", count: entry.presentCount, hue: "green" },
-              { label: "blank", count: entry.blankCount, hue: "kiln" },
-              { label: "default", count: entry.defaultCount, hue: "slate" },
-            ]}
-          />
+          {entry.elementCount > 0 ? (
+            <CoverageBar
+              total={entry.elementCount}
+              segments={[
+                { label: "present", count: entry.presentCount, viz: 2 },
+                { label: "blank", count: entry.blankCount, viz: 6 },
+                { label: "default", count: entry.defaultCount, viz: 3 },
+              ]}
+            />
+          ) : (
+            <EmptyState story="scope" exit="no elements carry this parameter — widen the scope">
+              nothing to measure
+            </EmptyState>
+          )}
           {entry.samples.length > 0 && (
             <Provenance>
               samples: {entry.samples.map((s) => `${s.displayName} [${s.elementId}]`).join(", ")}
@@ -668,29 +719,39 @@ function ParameterCoverageView({ data }: OpViewProps) {
 
 function ScheduleCoverageView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || typeof rec.totalElements !== "number") return UNRECOGNIZED;
+  if (!rec || typeof rec.totalElements !== "number") return <UnrecognizedShape />;
   const res = rec as unknown as RevitMatrixScheduleCoverage.Res.Response;
 
   return (
     <div className="flex flex-col gap-3">
-      <OpSection
+      <Section
         label="schedule coverage"
-        aside={<MonoNote>{res.scheduleCount} schedules considered</MonoNote>}
+        aside={
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+            {res.scheduleCount} schedules considered
+          </span>
+        }
       >
-        <CoverageBar
-          total={res.totalElements}
-          segments={[
-            { label: "scheduled", count: res.coveredElements, hue: "green" },
-            { label: "unscheduled", count: res.missingElements, hue: "kiln" },
-          ]}
-        />
-      </OpSection>
+        {res.totalElements > 0 ? (
+          <CoverageBar
+            total={res.totalElements}
+            segments={[
+              { label: "scheduled", count: res.coveredElements, viz: 2 },
+              { label: "unscheduled", count: res.missingElements, viz: 6 },
+            ]}
+          />
+        ) : (
+          <EmptyState story="scope" exit="widen the category scope, or model something first">
+            no elements in scope
+          </EmptyState>
+        )}
+      </Section>
       {(res.roleSummaries?.length ?? 0) > 0 && (
         <div className="flex flex-wrap gap-1">
           {res.roleSummaries?.map((role) => (
-            <Chip key={role.role} hue="slate" title={role.scheduleNames.join(", ")}>
+            <VizChip key={role.role} viz={3} title={role.scheduleNames.join(", ")}>
               {role.role}: {role.scheduleCount} sched / {role.coveredElementCount} elems
-            </Chip>
+            </VizChip>
           ))}
         </div>
       )}
@@ -718,7 +779,7 @@ function ScheduleCoverageView({ data }: OpViewProps) {
 function FamilyEditorSnapshotView({ data }: OpViewProps) {
   const rec = asRecord(data);
   if (!rec || !Array.isArray(rec.parameters) || typeof rec.familyName !== "string")
-    return UNRECOGNIZED;
+    return <UnrecognizedShape />;
   const res = rec as unknown as FamilyEditorSnapshot.Res.Response;
   const typeNames = res.typeNames.slice(0, MAX_TYPE_COLUMNS);
   const overflow = res.typeNames.length - typeNames.length;
@@ -730,7 +791,7 @@ function FamilyEditorSnapshotView({ data }: OpViewProps) {
       cell: (p) => (
         <span title={p.identity?.key}>
           {p.name}{" "}
-          <span className="tele text-[10px] text-muted-foreground">
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">
             {p.isInstance ? "inst" : "type"}
             {p.isShared ? " · shared" : ""}
             {p.isReadOnly ? " · ro" : ""}
@@ -741,14 +802,20 @@ function FamilyEditorSnapshotView({ data }: OpViewProps) {
     {
       key: "formula",
       header: "formula",
-      cell: (p) => (p.formula ? <span className="tele text-cat-lichen">= {p.formula}</span> : ""),
+      cell: (p) =>
+        /* derived rides the ink ladder (R4); the ƒ-ish "=" prefix is the route's word. */
+        p.formula ? (
+          <span className="face-mono t-value text-[var(--r-ink-2)]">= {p.formula}</span>
+        ) : (
+          ""
+        ),
     },
     ...typeNames.map((typeName) => ({
       key: `t:${typeName}`,
       header:
         typeName === res.currentTypeName ? (
           <span>
-            {typeName} <span className="tele text-[10px] text-cat-blue">current</span>
+            {typeName} <span className="face-mono t-caption text-[var(--r-ink-2)]">current</span>
           </span>
         ) : (
           typeName
@@ -784,7 +851,8 @@ function FamilyEditorSnapshotView({ data }: OpViewProps) {
 
 function FamilyModelView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec || typeof rec.familyName !== "string" || !asRecord(rec.evidence)) return UNRECOGNIZED;
+  if (!rec || typeof rec.familyName !== "string" || !asRecord(rec.evidence))
+    return <UnrecognizedShape />;
   const res = rec as unknown as RevitDetailFamilyModel.Res.Response;
   const ev = res.evidence;
 
@@ -797,7 +865,7 @@ function FamilyModelView({ data }: OpViewProps) {
           {
             label: "unmodeled",
             value: res.unmodeledCount,
-            hue: res.unmodeledCount > 0 ? "clay" : undefined,
+            tone: res.unmodeledCount > 0 ? "caution" : undefined,
           },
           { label: "types captured", value: ev.typeNames.length },
           { label: "parameters captured", value: ev.parameters.length },
@@ -807,34 +875,34 @@ function FamilyModelView({ data }: OpViewProps) {
       {ev.typeNames.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {ev.typeNames.map((t) => (
-            <Chip key={t} hue="slate">
+            <FactChip key={t} title="captured type">
               {t}
-            </Chip>
+            </FactChip>
           ))}
         </div>
       )}
       {ev.diagnostics.length > 0 ? (
-        <OpSection label="diagnostics">
-          <div className="rounded-[var(--radius)] border border-[var(--line)]">
+        <Section label="diagnostics">
+          <div className="rounded-[var(--radius)] border border-[var(--r-line)]">
             {ev.diagnostics.map((d, i) => (
-              <div key={i} className="border-b border-[var(--line-soft)] px-2 py-1">
-                <MonoNote
-                  hue={
-                    d.provenance === "Unresolved"
-                      ? "clay"
-                      : d.provenance === "Inferred"
-                        ? "kiln"
-                        : undefined
-                  }
+              <div key={i} className="border-b border-[var(--r-line)] px-2 py-1">
+                <span
+                  className="face-mono t-caption"
+                  style={{
+                    color:
+                      d.provenance === "Unresolved" || d.provenance === "Inferred"
+                        ? "var(--r-caution)"
+                        : "var(--r-ink-2)",
+                  }}
                 >
                   {d.code} @ {d.path}
                   {d.confidence != null ? ` (confidence ${d.confidence})` : ""}
-                </MonoNote>
-                <div className="text-xs">{d.message}</div>
+                </span>
+                <div className="t-value">{d.message}</div>
               </div>
             ))}
           </div>
-        </OpSection>
+        </Section>
       ) : (
         <Provenance>no capture diagnostics — every parameter resolved exactly</Provenance>
       )}

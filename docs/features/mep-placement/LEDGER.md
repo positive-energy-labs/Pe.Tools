@@ -1,0 +1,38 @@
+# mep-placement ledger
+
+Give Pea a real *ability*: draft collision-free duct/pipe placement from a plain-language ask, then refine with the user. The deliverable is a skill + an opinionated placement abstraction, not just code. Ported to `source/Pe.Revit.Placement` (Engine, Router, DuctPlacer, Obstacles, DraftWriter, Fluent) + the bundled `place-mep-ducts` skill.
+
+## Decided
+
+- 2026-07-03 — Method: three isolated pods (`mep-sketch` placeholder-first, `mep-route` probe-and-route, `mep-solve` declare-and-solve) built simultaneously by uncontaminated agents against an identical live proof battery (P1 trunk → P2 branches+fittings → P3 collisions surfaced+fixed → P4 re-elevation → P5 cleanup). Collision *surfacing* was deliberately NOT shared — it was the experimental axis.
+- 2026-07-03 — Ship one ability with **solve's front door, sketch's middle, route's voice**: declarative intent JSON + clarify-first checklist as the interface (100% of refinement becomes data edits — the cheapest lever at 75k operator context), a small verb API as the interactive escape hatch, native placeholder ducts as the draft medium for both draft and solve output (user hand-drags in Revit, agent re-solves), sketch's solver responsibilities + solve's lattice-A* router with named-blocker refusals as one engine, and route's report grammar (HIT/PASS/NEAR/CLEAR with computed fixes, `[approx]` honesty labels, VERDICT lines) plus solve's DIFF-between-solves. MapProbe is a first-class recon entrypoint.
+- 2026-07-03 — Reconnaissance is load-bearing (3/3 pods converged independently). Plan PNGs lie about routability: view ranges hide bands, doors are invisible to bbox indices, "corridors" are sealed at duct elevation. Every agent's loop stabilized only after a recon step.
+- 2026-07-03 — **z is the fix lever**: most collisions resolve by elevation change, not XY rerouting. Skills teach "change elevation first" explicitly.
+- 2026-07-03 — Markers + replace-on-commit give safe iteration: Comments-tagged elements + full relay per run = idempotent commits and surgical cleanup, pixel-diff verified, zero damage across ~56 shared-bridge runs.
+- 2026-07-03 — `Connector.IsConnected` gating + auto-stub-short ("near-connect") is the correct default: finished models have no free terminals. Physical `ConnectTo` remains live-unproven.
+- 2026-07-03 — Live-proven platform facts for this lane (PBP vs `Level.Elevation`, connector selection, stale-state Commit, bridge timeouts) live in [GROUNDING.md](GROUNDING.md), not here.
+- 2026-07-03 — Never trust Pea's self-report: every placement claim is graded by an independent supervisor census/clash script + a PNG read. The unskilled baseline reported "no collisions" while threading 11 joists in *linked* models.
+- 2026-07-03 — The bottleneck is the operating loop, not model judgment. Unskilled Pea places plausibly, samples conventions, and self-corrects — but never thinks to check linked models, doesn't know the elevation convention, and invents an ad-hoc method each turn. Every toolkit surfaced link collisions and convention-matching by construction. This is the empirical case for fat skills carrying the loop.
+- 2026-07-06 — Tool calls are the scarcest resource; the skill says so explicitly. The taught loop is THREE scripts: Scout → one WriteTransaction mega-script (inline intent → MapProbe → Solve → auto-Commit+Keep+ExportPlan when `HARD 0` and not refused) → iterate-or-verify (one `read_image` AFTER commit only). Pea's pace is ~75 s/tool-call with a fat skill + images in context.
+- 2026-07-06 — Hard tasks checkpoint ACROSS turns on a persisted thread; that is the product shape. Turn 1 = the 3-script loop with increment Keeps; supervisor measures gaps; turn 2 = targeted gap-fix. Incremental work is Commit → `Keep()` → next Solve (Solve/Verbs-commit start with DeleteMarked, which otherwise silently wipes a committed-but-unkept increment); kept elements become obstacles for later solves.
+- 2026-07-06 — Reproduce, don't improvise: grade against a real BFS'd terminal→equipment network deleted locally (never synced), so fidelity and collisions have ground truth.
+- 2026-07-06 — `read_image` is load-bearing and proven end-to-end in the live gateway path; visual self-verification is a default operator habit.
+
+## Tried & rejected
+
+- 2026-07-03 — Perfect-before-commit inside one turn: the skilled `mep-solve` run followed the loop faithfully and hit the 900s wall still refining, committing ZERO — while the *wrong* unskilled baseline finished. Correct-by-construction plus a single-turn budget starves the commit. Killed turns silently lose in-flight work (draft rolls back).
+- 2026-07-03 — Judging feedback shape by preference: route's improvise loop cost 3 edits + 4 runs on re-elevation (a new band exposes new obstacles — inherent to improvise) vs 1 edit + 2 runs for the two data-driven pods. Improvisation as the primary interface lost on measured loop cost.
+- 2026-07-06 — Stub allowances without a numeric bound: Pea rationalized a whole missing 18.7 ft riser as a "near-connect stub" (48% of GT length). Bound is now ≤ 6 in, and Solve/Commit print an ENDPOINT GAP report with a pasteable fix.
+- 2026-07-06 — Whole-pod ReadOnly mutation policy (3/3 pods hit it): the static scan covers every compiled `src` file, so one mutating library call forces WriteTransaction on pure-read entrypoints. It must be scoped to the executed entrypoint's reachable code or declared per entrypoint in `pod.json`.
+
+## Owed
+
+- Round 2 of the blackbox campaign, per [PEA-BLACKBOX-PROTOCOL.md](PEA-BLACKBOX-PROTOCOL.md): finish `mep-solve` (commit + refine + cleanup + feedback debrief), then `mep-sketch` (L1-Block 43) and `mep-route` (L2) on the same protocol; hard tier on Theatre (1,119 ducts + 76 equipment); re-baseline the source-fixed harness bugs (skills-in-worker, worker storage profile, product-home resolution). Round 2 also needs a model with unconnected terminals to prove physical `ConnectTo`.
+- `equipment: {element, connect}` intent field, symmetrical to `branches.terminals`, plus `ConnectTo(elementId, connectorHint)` on Verbs — the fan-riser miss is systemic (2/2 tiers missed it in turn 1) because equipment is still a bare `[x,y]` trunk endpoint with nothing routing to the connector z.
+- Harness ports: entrypoint-scoped ReadOnly mutation policy (or per-entrypoint declaration in `pod.json`); confirm `RevitFailureHandling` adoption in scripted transactions landed (it was done in a working tree, uncommitted — the warning-suppression session script is only needed until it does). (verify)
+- Library items deferred while the DLL was locked: `ExportPlan(outDir=null)` defaulting to the state dir; `SolveAndCommitIfClean(intent)` so the clean-check isn't string parsing.
+- Recon output discipline: `Scout` returned ~25 KB in one tool result. Compress recon; summarize-then-zoom.
+- Long autonomous turns need progress visibility — the harness should surface partial progress, or the skill should commit reviewable increments so a killed turn doesn't lose everything.
+- `host_operation_search` returns `[]` for reasonable mutate queries because the capability map has no creation ops; unmatched mutate searches now fall back to scripting discovery, but duct placement itself is still workspace-pod WIP rather than a typed op.
+- Understand PrepHard's delete cascade before shipping any Cleanup-adjacent delete: it swept the medium tier's kept ducts (mechanism unidentified; harmless there because it never syncs).
+- Open design questions: which feedback shape (numeric report vs image vs both) an agent actually routes well with; how much solver determinism is right before it stops surfacing decisions users must own.

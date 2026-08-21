@@ -159,25 +159,28 @@ export function Composer({
         <div
           role="listbox"
           aria-label="Commands"
-          className="absolute bottom-full mb-2 w-full overflow-hidden rounded-lg border-[0.5px] border-[var(--line-2)] bg-popover"
+          className="absolute bottom-full mb-2 w-full overflow-hidden rounded-sm border-[0.5px] border-[var(--r-line-2)] bg-[var(--r-artifact)] [--r-on:var(--r-artifact)]"
         >
           {matches.slice(0, 6).map((command) => (
             <button
               key={`${command.kind}:${command.name}`}
               type="button"
               onClick={() => pick(command)}
-              className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left hover:bg-muted"
+              className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
             >
-              <span className="text-sm font-medium text-foreground">/{command.name}</span>
-              <span className="truncate text-xs text-muted-foreground">{command.description}</span>
+              {/* a slash command is a machine identifier — mono */}
+              <span className="t-value face-mono text-[var(--r-ink)]">/{command.name}</span>
+              <span className="truncate t-label text-[var(--r-ink-2)]">{command.description}</span>
             </button>
           ))}
         </div>
       ) : null}
 
-      {/* Hard-edged instrument panel: hairline border, flat opaque card, no shadow/blur. The card
-          clips its children, so the budget bar stays a flush rectangle under the boundary. */}
-      <div className="overflow-hidden rounded-lg border-[0.5px] border-[var(--line-2)] bg-card">
+      {/* Hard-edged instrument panel: the composer is a machine-operated object carrying state
+          (draft, attachments, the in-flight run), so it wears the artifact treatment — one
+          ground shift plus one quiet hairline. The card clips its children, so the budget bar
+          stays a flush rectangle under the boundary. */}
+      <div className="overflow-hidden rounded-sm border-[0.5px] border-[var(--r-line-2)] bg-[var(--r-artifact)] [--r-on:var(--r-artifact)]">
         {topBar}
 
         {attachments.length > 0 ? (
@@ -185,7 +188,7 @@ export function Composer({
             {attachments.map((attachment, index) => (
               <span
                 key={index}
-                className="inline-flex items-center gap-1 rounded-sm border-[0.5px] border-[var(--line)] bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                className="inline-flex items-center gap-1 rounded-sm border-[0.5px] border-[var(--r-line)] bg-[var(--r-recess)] px-2 py-0.5 t-label text-[var(--r-ink-2)]"
               >
                 {attachment.name ?? "attachment"}
                 <button
@@ -253,8 +256,9 @@ export function Composer({
             )}
           </div>
         </div>
+        {/* a failed operation is an ERROR (caution) — the alarm is reserved for disagreement */}
         {operationError ? (
-          <span className="block px-3 pb-2 text-xs text-destructive">{operationError}</span>
+          <span className="block px-3 pb-2 t-label text-[var(--r-caution)]">{operationError}</span>
         ) : null}
       </div>
     </form>

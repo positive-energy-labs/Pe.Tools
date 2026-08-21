@@ -102,6 +102,13 @@ function ComboboxContent({
         anchor={anchor}
         className="isolate z-50"
       >
+        {/*
+          Popover-width law (measured 2026-08-16, 5 specimens): the hard `w-(--anchor-width)`
+          below wins every `cn` merge, so three of four call sites that pass a wider `w-*` in
+          `className` are silently ignored. `ui/select` states the opposite law (min-width =
+          anchor, grows to content). Both are owed a shared popover foundation in
+          `components/lang/`; until then, changing width here means changing it for everyone.
+        */}
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"
           data-chips={!!anchor}

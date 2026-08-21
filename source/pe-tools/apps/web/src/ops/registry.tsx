@@ -1,10 +1,27 @@
 import type { ComponentType } from "react";
 
+import { OutcomeLine } from "#/components/lang/outcome";
+
 /**
  * Curated readonly views per op key. The generic playground renders whatever
  * the live catalog lists; a registered view replaces the auto-projection with a
  * surface shaped like the Revit thing the op reflects.
  */
+
+/**
+ * A view refusing to render data it cannot narrow. Not an empty state — rows may well
+ * exist — and not the model disagreeing, so it wears `error` (caution), never alarm.
+ * The raw-response disclosure below every result is the exit.
+ */
+export function UnrecognizedShape() {
+  return (
+    <OutcomeLine
+      kind="error"
+      label="unrecognized response shape"
+      says="this curated view cannot narrow the payload — see the raw response below"
+    />
+  );
+}
 
 export type OpViewProps = {
   /** The op's validated response object. Views narrow defensively — never crash. */

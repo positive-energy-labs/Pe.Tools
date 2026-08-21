@@ -3,6 +3,7 @@ using Autodesk.Revit.DB.ExtensibleStorage;
 using Newtonsoft.Json;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Capture;
+using Pe.Revit.FamilyFoundry.Resolution;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.Tests;
@@ -39,9 +40,25 @@ public sealed class FamilyModelRoundtripTests {
                 JsonConvert.SerializeObject(capturedB, Formatting.Indented),
                 Is.EqualTo(JsonConvert.SerializeObject(artifact.CapturedFromA, Formatting.Indented)));
 
-            AssertEquivalentRuntime(
-                FamilyFoundryRuntimeProbe.Collect(artifact.ReopenedA),
-                FamilyFoundryRuntimeProbe.Collect(artifact.ReopenedB));
+            var probeA = FamilyFoundryRuntimeProbe.Collect(artifact.ReopenedA);
+            var probeB = FamilyFoundryRuntimeProbe.Collect(artifact.ReopenedB);
+            AssertEquivalentRuntime(probeA, probeB);
+
+            // A ≡ B alone cannot tell an applied setting from one that never applied, because both documents
+            // would then carry the template value. These assert what REVIT holds against what the fixture
+            // authored: settings, the room-calculation-point offset, and the embedded lookup table.
+            Assert.That(probeA.Settings.AlwaysVertical, Is.False, "settings.alwaysVertical");
+            Assert.That(probeA.Settings.CutWithVoidsWhenLoaded, Is.True, "settings.cutWithVoidsWhenLoaded");
+            Assert.That(probeA.Settings.RoomCalculationPointOffsetFeet, Is.EqualTo(2.0).Within(1e-9),
+                "roomCalculationPoint.offset");
+            Assert.That(probeA.Settings.LookupTableNames, Is.EqualTo(new[] { "FF Minimal Sizes" }));
+            Assert.That(artifact.CapturedFromA.Settings?.CutWithVoidsWhenLoaded, Is.True);
+            Assert.That(artifact.CapturedFromA.RoomCalculationPoint?.Offset, Is.EqualTo("2ft"));
+            Assert.That(artifact.CapturedFromA.LookupTables.Keys, Is.EqualTo(new[] { "FF Minimal Sizes" }));
+            Assert.That(artifact.CapturedFromA.LookupTables["FF Minimal Sizes"].Csv,
+                Does.Contain("Width##length##feet").And.Contain("Small").And.Contain("Large"));
+            AssertIntent(artifact.Authored, probeA, "A");
+            AssertIntent(artifact.CapturedFromA, probeB, "B");
         } finally {
             artifact?.CloseDocuments();
         }
@@ -62,6 +79,9 @@ public sealed class FamilyModelRoundtripTests {
                 Does.Contain("return-elevation").And.Contain("pipe-elevation").And.Contain("electrical-elevation"));
             Assert.That(artifact.CapturedFromA.Solids, Has.Count.EqualTo(4));
             Assert.That(artifact.CapturedFromA.Frames, Has.Count.EqualTo(4));
+            // Revit 2026 removed the OmniClass parameter; on the years that still carry it, the authored code
+            // must be what the built family holds.
+            Assert.That(artifact.CapturedFromA.Settings?.OmniClass, Is.EqualTo("23.80.20.11.14"));
             Assert.That(artifact.CapturedFromA.Connectors, Has.Count.EqualTo(4));
             Assert.That(artifact.CapturedFromA.Frames["return-air"].Origin[0], Is.EqualTo("face:body.Back"),
                 $"Captured planes: {string.Join(", ", artifact.CapturedFromA.Planes.Keys)}");
@@ -99,10 +119,75 @@ public sealed class FamilyModelRoundtripTests {
             for (var index = 0; index < statesA.Count; index++) {
                 Assert.That(statesB[index].TypeName, Is.EqualTo(statesA[index].TypeName));
                 AssertEquivalentRuntime(statesA[index].Result, statesB[index].Result);
+                AssertIntent(artifact.Authored, statesA[index].Result, "A");
+                AssertIntent(artifact.CapturedFromA, statesB[index].Result, "B");
             }
         } finally {
             artifact?.CloseDocuments();
         }
+    }
+
+    /// <summary>
+    ///     What the stock wall-based template actually exposes, measured rather than assumed.
+    /// </summary>
+    /// <remarks>
+    ///     A `Plumbing Fixture wall based` template carries exactly three named reference planes:
+    ///     `Center (Left/Right)`, `Back` — the wall FACE — and `Reference Plane`, the level. There is no
+    ///     front/back centre plane, because a wall-hosted family is not centred in the wall's thickness; it
+    ///     hangs off the face. The legacy ParamDrivenSolids plan centres a solid's depth on
+    ///     `Center (Front/Back)`, so it cannot place geometry here, and `FamilyModelLowerer` refuses rather
+    ///     than building a family with no solids — which is what happened before this test existed, silently,
+    ///     because `CreateSymmetricDimensions` logs "Center not found" and the apply still reports success.
+    /// </remarks>
+    [Test]
+    public void Wall_template_exposes_a_wall_face_instead_of_a_front_back_centre_plane() {
+        var templatePath = FamilyModelBuilder.ResolveTemplatePath(
+            this._application,
+            "Plumbing Fixture wall based");
+        Document? document = null;
+        try {
+            document = this._application.NewFamilyDocument(templatePath);
+            var planeNames = new FilteredElementCollector(document)
+                .OfClass(typeof(ReferencePlane))
+                .Cast<ReferencePlane>()
+                .Select(plane => plane.Name?.Trim())
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+
+            Assert.That(
+                FamilyModelBuilder.GetPlacement(document!.OwnerFamily.FamilyPlacementType),
+                Is.EqualTo(FamilyModelPlacement.WallHosted),
+                $"Revit reports {document.OwnerFamily.FamilyPlacementType} for the wall template.");
+            Assert.That(planeNames, Is.EqualTo(new[] { "Back", "Center (Left/Right)", "Reference Plane" }));
+        } finally {
+            if (document != null)
+                _ = document.Close(false);
+        }
+    }
+
+    /// <summary>
+    ///     The wall-hosted fixture is authored, valid, and REFUSED at lowering — the honest state of the lane
+    ///     until the plan can anchor a one-sided depth span on the wall face. The refusal names the missing
+    ///     plane, so the next reader learns the gap from the diagnostic rather than from an empty family.
+    /// </summary>
+    [Test]
+    public void Wall_hosted_geometry_is_refused_because_the_plan_centres_depth_on_a_plane_walls_lack() {
+        var fixturePath = RevitFamilyFixtureHarness.GetProfileFixturePath(
+            Path.Combine("family-model", "pe-wall-sink.family.json"));
+        var parsed = FamilyModelJson.Parse(File.ReadAllText(fixturePath));
+
+        Assert.That(parsed.Diagnostics, Is.Empty,
+            string.Join(Environment.NewLine, parsed.Diagnostics.Select(item => item.Message)));
+        Assert.That(parsed.Value!.Family.Placement, Is.EqualTo(FamilyModelPlacement.WallHosted));
+        Assert.That(parsed.Value.Family.Template, Is.EqualTo("Plumbing Fixture wall based"));
+
+        var lowered = FamilyModelLowerer.Lower(parsed.Value);
+
+        Assert.That(lowered.Profile, Is.Null, "a refusal never carries a half-built plan");
+        Assert.That(lowered.Diagnostics.Select(item => item.Code),
+            Does.Contain(FamilyModelDiagnosticCodes.UnsupportedPlacementGeometry));
+        Assert.That(lowered.Diagnostics[0].Message, Does.Contain("Center (Front/Back)").And.Contain("wall face"));
     }
 
     [Test]
@@ -172,6 +257,7 @@ public sealed class FamilyModelRoundtripTests {
                 Assert.That(copiedYs.Max(), Is.EqualTo(limitYs[1]).Within(1e-6), $"{typeName} end lock");
                 Assert.That(copiedYs, Is.All.InRange(limitYs[0] - 1e-6, limitYs[1] + 1e-6),
                     $"{typeName} members must fill inward between limits");
+                AssertIntent(parsed.Value!, FamilyFoundryRuntimeProbe.Collect(document), "flex");
                 _ = transaction.RollBack();
             }
         } finally {
@@ -219,6 +305,11 @@ public sealed class FamilyModelRoundtripTests {
             Assert.That(
                 JsonConvert.SerializeObject(capturedB, Formatting.Indented),
                 Is.EqualTo(JsonConvert.SerializeObject(grd.CapturedFromA, Formatting.Indented)));
+
+            AssertIntent(vane.Authored, FamilyFoundryRuntimeProbe.Collect(vane.ReopenedA), "A");
+            AssertIntent(vane.CapturedFromA, FamilyFoundryRuntimeProbe.Collect(vane.ReopenedB), "B");
+            AssertIntent(grd.Authored, FamilyFoundryRuntimeProbe.Collect(grd.ReopenedA), "A");
+            AssertIntent(grd.CapturedFromA, FamilyFoundryRuntimeProbe.Collect(grd.ReopenedB), "B");
         } finally {
             vane?.CloseDocuments();
             grd?.CloseDocuments();
@@ -284,6 +375,48 @@ public sealed class FamilyModelRoundtripTests {
             $"FFManager must not persist roundtrip state in extensible storage: {string.Join(", ", entityOwners)}");
     }
 
+    /// <summary>
+    ///     The INTENT edge beside <see cref="AssertEquivalentRuntime" />: the portable document predicts
+    ///     the geometry, and Revit must agree. Revit-vs-Revit equivalence cannot catch a placement
+    ///     convention that is wrong in the same way on both sides.
+    /// </summary>
+    private static void AssertIntent(
+        Pe.Shared.RevitData.Families.FamilyModel model,
+        RuntimeStateProbe probe,
+        string variant
+    ) {
+        // The gallery is written first, so a failed prediction still leaves a picture to look at.
+        var galleryDirectory = FamilyFoundryRoundtripHarness.OracleGalleryDirectory();
+        var galleryName = $"{model.Family.Name} {variant}";
+        var galleryPath = ProbeSvgGallery.Write(galleryDirectory, galleryName, probe);
+        TestContext.Progress.WriteLine($"[PE_FF_ORACLE_GALLERY] {galleryPath}");
+        // The same probe as data, for the web review board's ACTUAL side.
+        TestContext.Progress.WriteLine(
+            $"[PE_FF_ORACLE_PROBE] {ProbeJsonDump.Write(galleryDirectory, galleryName, probe, model)}");
+        FamilyModelEvaluatorOracleAssert.AssertProbeMatchesPrediction(model, probe, 1e-6);
+    }
+
+    /// <summary>
+    ///     The family-global switches, compared as Revit reports them on both documents. These are the only
+    ///     authored facts that live on the family element rather than in geometry, so a settings key that
+    ///     silently failed to apply would otherwise roundtrip as "equivalent" while the built family differs.
+    /// </summary>
+    private static void AssertEquivalentSettings(
+        RuntimeFamilySettingsProbe a,
+        RuntimeFamilySettingsProbe b
+    ) {
+        Assert.That(b.AlwaysVertical, Is.EqualTo(a.AlwaysVertical), "settings.alwaysVertical");
+        Assert.That(b.Shared, Is.EqualTo(a.Shared), "settings.shared");
+        Assert.That(b.CutWithVoidsWhenLoaded, Is.EqualTo(a.CutWithVoidsWhenLoaded), "settings.cutWithVoidsWhenLoaded");
+        Assert.That(b.PartType, Is.EqualTo(a.PartType), "settings.partType");
+        Assert.That(b.OmniClass, Is.EqualTo(a.OmniClass), "settings.omniClass");
+        Assert.That(b.RoomCalculationPointEnabled, Is.EqualTo(a.RoomCalculationPointEnabled),
+            "roomCalculationPoint.enabled");
+        Assert.That(b.RoomCalculationPointOffsetFeet, Is.EqualTo(a.RoomCalculationPointOffsetFeet).Within(1e-9),
+            "roomCalculationPoint.offset");
+        Assert.That(b.LookupTableNames, Is.EqualTo(a.LookupTableNames), "lookupTables");
+    }
+
     private static void AssertEquivalentRuntime(RuntimeStateProbe a, RuntimeStateProbe b) {
         Assert.That(b.TypeName, Is.EqualTo(a.TypeName));
         Assert.That(b.ParameterValues.Keys, Is.EquivalentTo(a.ParameterValues.Keys));
@@ -294,6 +427,7 @@ public sealed class FamilyModelRoundtripTests {
             AssertXyz(b.Planes[name].Normal, expected.Normal);
             AssertXyz(b.Planes[name].Midpoint, expected.Midpoint);
         }
+        AssertEquivalentSettings(a.Settings, b.Settings);
         Assert.That(b.DimensionCount, Is.EqualTo(a.DimensionCount));
         Assert.That(b.Prisms, Has.Count.EqualTo(a.Prisms.Count));
         Assert.That(b.Cylinders, Has.Count.EqualTo(a.Cylinders.Count));

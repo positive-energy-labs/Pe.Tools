@@ -11,6 +11,7 @@ import {
   type BridgeResponse,
   type BridgeStateSnapshot,
 } from "@pe/host-contracts/contracts";
+import type { Custody, Lane } from "./generated/pe-revit-contract.ts";
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to
 // it. With stable ids (hash(pid + processStartUtc)) a reconnect re-registers the SAME session id,
@@ -20,11 +21,12 @@ type Session = {
   readonly pending: Ref.Ref<BridgePendingRequest | null>; // single in-flight mailbox
   readonly sessionId: string;
   readonly processId: number;
-  // Observed selector metadata, never identity. lane is the SDK vocabulary verbatim
-  // (dev | sandbox | installed); buildStamp is the LOADED payload's stamp as reported at
-  // registration — the host never computes staleness.
-  readonly lane: string | null;
-  readonly sandboxId: string | null;
+  // Observed selector metadata, never identity. `lane` is the SDK's generated vocabulary verbatim
+  // (dev | installed — payload SOURCE only); `sdkSessionId` is the id `pe-revit session status`
+  // prints for this session; buildStamp is the LOADED payload's stamp as reported at registration —
+  // the host never computes staleness.
+  readonly lane: Lane | null;
+  readonly sdkSessionId: string | null;
   readonly buildStamp: string | null;
   readonly state: Ref.Ref<BridgeStateSnapshot>;
   // FIFO turn chain: each invoke awaits the previous invoke's completion gate.
@@ -59,10 +61,14 @@ export class NoRevitSession {
 
 export type BridgeSessionView = {
   readonly connected: boolean;
+  /** The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id. */
   readonly sessionId?: string;
   readonly processId?: number;
-  readonly lane?: string | null;
-  readonly sandboxId?: string | null;
+  readonly lane?: Lane | null;
+  /** The id `pe-revit session status` prints for this session, when the payload reported one. */
+  readonly sdkSessionId?: string | null;
+  /** Disclosed, never enforced — the SDK resolver is what actually refuses mutation on observed. */
+  readonly custody?: Custody;
   readonly buildStamp?: string | null;
   readonly state?: BridgeStateSnapshot;
 };
@@ -98,20 +104,35 @@ export function computeBridgeSessionId(registration: {
 }
 
 /**
- * Registered lane vocabulary is the SDK's, verbatim: dev | sandbox | installed (SPEC.md
- * "Lane vocabulary is dev/sandbox/installed on every surface"). The dev lane is the
- * hot-reload session driven by `pe-revit live` — it holds the user's live docs.
+ * Lane vocabulary is the SDK's, and only the SDK's: the `Lane` union in the generated contract is
+ * `dev | installed` and means payload SOURCE, nothing else. This does not so much normalize a lane
+ * as REFUSE anything outside that union — a payload reporting a retired or invented lane reports
+ * no lane at all, rather than teaching this broker a third vocabulary. A lane-less session is still
+ * a perfectly good target by pid or bridge session id; it is only unreachable through lane words.
  */
-export function normalizeSessionLane(lane: string | null | undefined): string | null {
+const LANES: readonly Lane[] = ["dev", "installed"];
+
+export function normalizeSessionLane(lane: string | null | undefined): Lane | null {
   const normalized = lane?.trim().toLowerCase();
-  return normalized || null;
+  return LANES.find((known) => known === normalized) ?? null;
+}
+
+/**
+ * Custody as the SDK defines it: `controlled` = pe-revit holds this session's registry receipt
+ * (full lifecycle + doc ops); `observed` = no receipt (status and doc reads only). The broker
+ * cannot read the registry, so it discloses the only thing it CAN see — a session that reported
+ * the sdkSessionId from its launch receipt was launched by pe-revit, and is therefore controlled.
+ * The SDK resolver is the enforcement point; this is disclosure, never a second gate.
+ */
+export function inferCustody(session: Pick<SessionTargetCandidate, "sdkSessionId">): Custody {
+  return session.sdkSessionId ? "controlled" : "observed";
 }
 
 export type SessionTargetCandidate = {
   readonly sessionId: string;
   readonly processId: number;
-  readonly lane: string | null;
-  readonly sandboxId: string | null;
+  readonly lane: Lane | null;
+  readonly sdkSessionId: string | null;
 };
 
 export type SessionTargetResolution<S extends SessionTargetCandidate> =
@@ -124,22 +145,34 @@ function describeSessions(sessions: readonly SessionTargetCandidate[]): string {
   return sessions
     .map(
       (s) =>
-        `${s.sessionId} (pid ${s.processId}, lane ${s.lane ?? "unknown"}${
-          s.sandboxId ? `, sandbox ${s.sandboxId}` : ""
+        `${s.sessionId} (pid ${s.processId}, lane ${s.lane ?? "unreported"}, ${inferCustody(s)}${
+          s.sdkSessionId ? `, session ${s.sdkSessionId}` : ""
         })`,
     )
     .join("; ");
 }
 
-const TARGET_SYNTAX =
-  "Target one with target=<selector>: 'user' (the user's own session — it holds their live docs), 'dev' (the hot-reload dev session specifically), 'sandbox:<id>', a pid, or a session id.";
+// The selector words ARE the SDK's custody and lane values, not a parallel product grammar:
+// `controlled`/`observed` come from `Custody`, `dev`/`installed` from `Lane`. `session:<id>`
+// addresses a pe-revit session by the id `session status` prints. Pid and bridge session id stay
+// broker-local addressing, for a connection the SDK's registry may not know about at all.
+const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
+
+const TARGET_SYNTAX = `Target one with target=<selector>: ${[...CUSTODIES, ...LANES]
+  .map((word) => `'${word}'`)
+  .join(", ")}, 'session:<id>', a pid, or a bridge session id.`;
 
 /**
- * The sole target-resolution choke point. Selector grammar: `sandbox:<id>` → the current process
- * session for that logical sandbox; `dev` → succeeds only when exactly one dev session exists;
- * all digits → pid; anything else → raw session id (one process incarnation). Untargeted with one
- * session is implicit (ergonomic and safe); untargeted with several HARD-FAILS immediately with
- * the listing — read-only status/list surfaces aggregate via `list` instead, never through here.
+ * The sole target-resolution choke point, over BRIDGE-CONNECTED sessions — the broker's own
+ * concern (DECISIONS Bridge row). It speaks the SDK's words but resolves over a different set than
+ * pe-revit's resolver does: pe-revit resolves over the session registry, this resolves over live
+ * WebSocket attachments, and a session can be in either without being in the other.
+ *
+ * Selector grammar: `session:<id>` → the connection reporting that pe-revit session id;
+ * `controlled`/`observed` → custody; `dev`/`installed` → lane; all digits → pid; anything else
+ * → bridge session id (one process incarnation). Untargeted with one session is implicit
+ * (ergonomic and safe); untargeted with several HARD-FAILS immediately with the listing —
+ * read-only status/list surfaces aggregate via `list` instead, never through here.
  */
 export function resolveSessionTarget<S extends SessionTargetCandidate>(
   sessions: readonly S[],
@@ -158,57 +191,57 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
     };
   }
 
-  if (selector.toLowerCase().startsWith("sandbox:")) {
-    const sandboxId = selector.slice("sandbox:".length).trim();
-    const matches = sessions.filter((s) => s.sandboxId === sandboxId);
+  if (selector.toLowerCase().startsWith("session:")) {
+    const sdkSessionId = selector.slice("session:".length).trim();
+    const matches = sessions.filter((s) => s.sdkSessionId === sdkSessionId);
     if (matches.length === 1) return { _tag: "found", session: matches[0] };
     if (matches.length === 0)
       return {
         _tag: "error",
         statusCode: 404,
-        message: `No connected session for sandbox '${sandboxId}'. Connected sessions: ${listing}`,
+        message: `No connected session reports pe-revit session '${sdkSessionId}'. Connected sessions: ${listing}`,
       };
     return {
       _tag: "error",
       statusCode: 409,
-      message: `Sandbox '${sandboxId}' has ${matches.length} connected sessions — this should not happen (takeover keeps one per sandbox). Target a pid or session id instead. Connected sessions: ${listing}`,
+      message: `pe-revit session '${sdkSessionId}' has ${matches.length} connected sessions — this should not happen (takeover keeps one per process incarnation). Target a pid or bridge session id instead. Connected sessions: ${listing}`,
     };
   }
 
-  // Pea's world is "the user's session + sandboxes" — `user` selects the one session on a
-  // KNOWN user lane without the caller ever speaking lane vocabulary (dev pea may target a
-  // user session that is dev-lane underneath; that stays invisible to it). Identity-less
-  // sessions (lane unknown — e.g. a pre-identity payload running inside a sandbox) never
-  // match: `user` fails closed rather than guess.
-  if (selector.toLowerCase() === "user") {
-    const matches = sessions.filter((s) => s.lane === "dev" || s.lane === "installed");
+  // Custody, the SDK's word: `observed` is a session pe-revit holds no receipt for — the one the
+  // retired grammar called `user`, and the one the SDK resolver refuses every mutation on.
+  // `controlled` is a session pe-revit launched. The broker discloses which; it never enforces.
+  const custody = CUSTODIES.find((word) => word === selector.toLowerCase());
+  if (custody) {
+    const matches = sessions.filter((s) => inferCustody(s) === custody);
     if (matches.length === 1) return { _tag: "found", session: matches[0] };
     if (matches.length === 0)
       return {
         _tag: "error",
         statusCode: 404,
-        message: `No identified user session is connected (sandboxes or pre-identity sessions only — target those by pid or session id). Connected sessions: ${listing}`,
+        message: `No ${custody} session is connected. Connected sessions: ${listing}`,
       };
     return {
       _tag: "error",
       statusCode: 409,
-      message: `'user' is ambiguous: ${matches.length} non-sandbox sessions are connected. Target a pid or session id. Connected sessions: ${listing}`,
+      message: `'${custody}' is ambiguous: ${matches.length} ${custody} sessions are connected. Target a pid or bridge session id. Connected sessions: ${listing}`,
     };
   }
 
-  if (selector.toLowerCase() === "dev") {
-    const matches = sessions.filter((s) => s.lane === "dev");
+  const lane = LANES.find((known) => known === selector.toLowerCase());
+  if (lane) {
+    const matches = sessions.filter((s) => s.lane === lane);
     if (matches.length === 1) return { _tag: "found", session: matches[0] };
     if (matches.length === 0)
       return {
         _tag: "error",
         statusCode: 404,
-        message: `No dev session is connected. Connected sessions: ${listing}`,
+        message: `No ${lane}-lane session is connected. Connected sessions: ${listing}`,
       };
     return {
       _tag: "error",
       statusCode: 409,
-      message: `'dev' is ambiguous: ${matches.length} dev sessions are connected. Target a pid or session id. Connected sessions: ${listing}`,
+      message: `'${lane}' is ambiguous: ${matches.length} ${lane}-lane sessions are connected. Target a pid or bridge session id. Connected sessions: ${listing}`,
     };
   }
 
@@ -225,7 +258,7 @@ export function resolveSessionTarget<S extends SessionTargetCandidate>(
     return {
       _tag: "error",
       statusCode: 409,
-      message: `Pid ${pid} matches ${matches.length} sessions. Target a session id. Connected sessions: ${listing}`,
+      message: `Pid ${pid} matches ${matches.length} sessions. Target a bridge session id. Connected sessions: ${listing}`,
     };
   }
 
@@ -333,7 +366,8 @@ export const RevitBridgeLive = Layer.effect(
         sessionId: session.sessionId,
         processId: session.processId,
         lane: session.lane,
-        sandboxId: session.sandboxId,
+        sdkSessionId: session.sdkSessionId,
+        custody: inferCustody(session),
         buildStamp: session.buildStamp,
         state: yield* Ref.get(session.state),
       } satisfies BridgeSessionView;
@@ -420,7 +454,7 @@ export const RevitBridgeLive = Layer.effect(
               sessionId,
               processId: frame.registration.processId,
               lane: normalizeSessionLane(frame.registration.lane),
-              sandboxId: frame.registration.sandboxId ?? null,
+              sdkSessionId: frame.registration.sdkSessionId ?? null,
               buildStamp: frame.registration.buildStamp ?? null,
               state: yield* Ref.make(frame.registration.state),
               queueTail: yield* Ref.make(initialGate),

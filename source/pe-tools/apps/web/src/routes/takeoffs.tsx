@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
@@ -210,13 +211,6 @@ function TakeoffsRoute() {
       });
     },
 
-    launch: () => {
-      if (!scope || !r10Path) return;
-      void run("launching RHVAC", async () => {
-        await callHostRpc("rhvac.launch", { path: r10Path }, scope);
-      });
-    },
-
     refresh,
   };
 
@@ -411,7 +405,7 @@ function TargetGate({
   return (
     <main className="flex h-screen flex-col items-center justify-center gap-3 bg-background">
       <h1 className="font-pe-display text-lg font-semibold tracking-tight">Takeoffs</h1>
-      <p className="tele text-muted-foreground">{reason}</p>
+      <p className="face-mono t-value text-muted-foreground">{reason}</p>
       <div className="w-96 rounded-[var(--radius)] border border-border">
         {sessions.map((s) => (
           <button
@@ -421,7 +415,7 @@ function TargetGate({
             className="flex w-full items-baseline gap-2 border-b border-[var(--r-line)] px-2.5 py-1.5 text-left last:border-b-0 hover:bg-muted"
           >
             <span className="text-xs">{sessionLabel(s)}</span>
-            <span className="tele ml-auto text-muted-foreground">
+            <span className="face-mono t-value ml-auto text-muted-foreground">
               {s.lane} · pid {s.processId}
             </span>
           </button>
@@ -429,11 +423,12 @@ function TargetGate({
         {/* A picker with no options says where options come from (SURFACE-PHILOSOPHY §4). */}
         {sessions.length === 0 && (
           <div className="px-2.5 py-3">
-            <p className="tele-label text-muted-foreground">no sessions</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              this list is the live connected-host catalog. Start Revit with the Pe add-in loaded
-              and a session appears here — or take the fixture lane below.
-            </p>
+            <EmptyState
+              story="scope"
+              exit="start Revit with the Pe add-in loaded and a session appears here — or take the fixture lane below"
+            >
+              no sessions — this list is the live connected-host catalog
+            </EmptyState>
           </div>
         )}
       </div>
@@ -519,7 +514,7 @@ function AdoptPanel({
 
   return (
     <Panel title="adopt zoning regions" onClose={onClose}>
-      <p className="tele text-muted-foreground">
+      <p className="face-mono t-value text-muted-foreground">
         pick the zoning-plan view, then the designer-drawn regions that are zones. adoption stamps
         them in place (role, guid, name, system tag) — re-adopt to edit. legends are ignored.
       </p>
@@ -533,7 +528,7 @@ function AdoptPanel({
               className="flex w-full items-baseline gap-2 border-b border-[var(--r-line)] px-2 py-1 text-left last:border-b-0 hover:bg-muted"
             >
               <span className="text-xs">{v.name}</span>
-              <span className="tele ml-auto shrink-0 text-muted-foreground">
+              <span className="face-mono t-value ml-auto shrink-0 text-muted-foreground">
                 {v.level || "no level"} · {v.regions} FR
               </span>
             </button>
@@ -549,7 +544,7 @@ function AdoptPanel({
               onClick={() => (setView(null), setRows(null))}
               reason="Back to the view list — nothing picked here has been stamped yet"
             />
-            <span className="tele text-muted-foreground">{view}</span>
+            <span className="face-mono t-value text-muted-foreground">{view}</span>
           </p>
           <div className="mt-1 max-h-96 overflow-y-auto rounded-[var(--radius)] border border-border">
             {(rows ?? []).map((r) => (
@@ -567,25 +562,25 @@ function AdoptPanel({
                   style={{ background: `rgb(${r.region.color})` }}
                 />
                 <span
-                  className="tele w-24 shrink-0 truncate text-muted-foreground"
+                  className="face-mono t-value w-24 shrink-0 truncate text-muted-foreground"
                   title={r.region.typeName}
                 >
                   {r.region.typeName}
                 </span>
-                <span className="tele w-16 shrink-0 text-right tabular-nums text-muted-foreground">
+                <span className="face-mono t-value w-16 shrink-0 text-right tabular-nums text-muted-foreground">
                   {fmtNum(r.region.sqft, 0)} sf
                 </span>
                 <input
                   value={r.name}
                   placeholder="zone name"
                   onChange={(e) => patchRow(r.region.elementId, { name: e.target.value })}
-                  className="tele h-6 min-w-0 flex-1 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
+                  className="face-mono t-value h-6 min-w-0 flex-1 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
                 />
                 <input
                   value={r.systemTag}
                   placeholder="system tag"
                   onChange={(e) => patchRow(r.region.elementId, { systemTag: e.target.value })}
-                  className="tele h-6 w-24 shrink-0 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
+                  className="face-mono t-value h-6 w-24 shrink-0 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
                 />
                 {r.region.role === "zoning-region" && (
                   <FactChip
@@ -605,11 +600,12 @@ function AdoptPanel({
             )}
             {rows !== null && rows.length === 0 && (
               <div className="px-2 py-3">
-                <p className="tele-label text-muted-foreground">no filled regions</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  this view carries no designer-drawn filled regions to adopt. Draw the zones in
-                  Revit first, or pick another view.
-                </p>
+                <EmptyState
+                  story="scope"
+                  exit="draw the zones in Revit first, or pick another view"
+                >
+                  no filled regions — this view carries no designer-drawn regions to adopt
+                </EmptyState>
               </div>
             )}
           </div>
@@ -621,7 +617,7 @@ function AdoptPanel({
               disabled={busy !== null || picked.length === 0}
               reason={
                 busy !== null
-                  ? `${busy} is in flight — the host runs one transaction at a time`
+                  ? `${busy} is in flight`
                   : picked.length === 0
                     ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
                     : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} in ${view}. Idempotent: re-adopting edits in place.`
@@ -773,32 +769,34 @@ function SyncPanel({
 
   return (
     <Panel title="sync to .r10" onClose={onClose}>
-      <p className="tele text-muted-foreground">
+      <p className="face-mono t-value text-muted-foreground">
         inserts reviewed rooms (with Manual J data) into the target file — always work on a COPY of
         the project template, never the original. systems are seeded by number + name only;
         everything else is filled in RHVAC.
       </p>
-      <label className="tele mt-2 block text-muted-foreground">
+      <label className="face-mono t-value mt-2 block text-muted-foreground">
         target .r10 (host-visible path)
         <input
           value={r10Path}
           onChange={(e) => setR10Path(e.target.value)}
           placeholder="C:\\...\\ManJ_Architect_Manuella_2026.08.14.r10"
-          className="tele mt-0.5 block h-6 w-full rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
+          className="face-mono t-value mt-0.5 block h-6 w-full rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
         />
       </label>
 
-      <p className="section-label mt-2">systems to seed ({tags.length})</p>
+      <p className="t-label t-upper mt-2 text-muted-foreground">systems to seed ({tags.length})</p>
       {tags.map((tag) => (
-        <p key={tag} className="tele py-0.5">
+        <p key={tag} className="face-mono t-value py-0.5">
           {tag}
         </p>
       ))}
 
-      <p className="section-label mt-2">rooms to insert ({inserts.length})</p>
+      <p className="t-label t-upper mt-2 text-muted-foreground">
+        rooms to insert ({inserts.length})
+      </p>
       <div className="max-h-48 overflow-y-auto">
         {inserts.map(({ zone, room }, i) => (
-          <p key={room.guid} className="tele flex gap-2 py-px">
+          <p key={room.guid} className="face-mono t-value flex gap-2 py-px">
             <span className="w-8 shrink-0 text-right text-muted-foreground">{i + 1}</span>
             <span className="min-w-0 flex-1 truncate">{room.name}</span>
             <span className="shrink-0 text-muted-foreground">
@@ -806,14 +804,16 @@ function SyncPanel({
             </span>
           </p>
         ))}
-        {/* "Nothing eligible" is the route's own story, and it names the three gates. */}
+        {/* The FILTER story: rooms exist, and the three eligibility gates — the surface's own
+            narrowing — hid them. The exit names the gates. */}
         {inserts.length === 0 && (
           <div className="py-2">
-            <p className="tele-label text-muted-foreground">nothing eligible</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              a room syncs once it has a Room Region home, Manual J data entered, and no existing
-              .r10 link.
-            </p>
+            <EmptyState
+              story="filter"
+              exit="a room becomes eligible once it has a Room Region home, Manual J data entered, and no existing .r10 link"
+            >
+              nothing eligible to insert
+            </EmptyState>
           </div>
         )}
       </div>
@@ -844,7 +844,7 @@ function SyncPanel({
           disabled={busy !== null || !r10Path}
           reason={
             busy !== null
-              ? `${busy} is in flight — the host runs one transaction at a time`
+              ? `${busy} is in flight`
               : !r10Path
                 ? "type a host-visible path to the target .r10 above"
                 : "Opens the .r10 read-only and joins its rooms and systems onto this world"
@@ -857,7 +857,7 @@ function SyncPanel({
           disabled={busy !== null || !r10Path || inserts.length === 0 || untagged.length > 0}
           reason={
             busy !== null
-              ? `${busy} is in flight — the host runs one transaction at a time`
+              ? `${busy} is in flight`
               : !r10Path
                 ? "type a host-visible path to the target .r10 above"
                 : inserts.length === 0
@@ -867,6 +867,26 @@ function SyncPanel({
                     : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`
           }
           onClick={sync}
+        />
+        {/* Moved off the head when it became the five-slot rail (families #11): this verb acts
+            on the joined .r10, and the join is made — and continued — here. */}
+        <Verb
+          tone="nav"
+          direction="out"
+          label="open in RHVAC"
+          disabled={busy !== null || !r10Path}
+          reason={
+            busy !== null
+              ? `${busy} is in flight`
+              : !r10Path
+                ? "type a host-visible path to the target .r10 above"
+                : "Launches RHVAC on the target .r10, outside this page"
+          }
+          onClick={() =>
+            void run("launching RHVAC", async () => {
+              await callHostRpc("rhvac.launch", { path: r10Path }, scope);
+            })
+          }
         />
       </div>
     </Panel>

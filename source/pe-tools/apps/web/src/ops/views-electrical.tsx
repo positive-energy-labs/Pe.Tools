@@ -1,13 +1,8 @@
-import {
-  Chip,
-  type Column,
-  DataTable,
-  EmptyState,
-  KVGrid,
-  MonoNote,
-  OpSection,
-  Provenance,
-} from "#/ops/primitives";
+import type { ReactNode } from "react";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { Provenance, Section } from "#/components/lang/section";
+import { type Column, DataTable, KVGrid, VizChip } from "#/ops/primitives";
 import {
   asNumber,
   asRecord,
@@ -15,6 +10,7 @@ import {
   asString,
   type OpViewProps,
   type OpViewRegistry,
+  UnrecognizedShape,
 } from "#/ops/registry";
 
 /**
@@ -30,6 +26,11 @@ function joinNonEmpty(parts: (string | undefined)[], sep = " · "): string {
   return parts.filter((p): p is string => Boolean(p && p.trim())).join(sep);
 }
 
+function MonoAside({ children }: { children: ReactNode }) {
+  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+}
+
+/** Severity is STATE — caution ink, never alarm (not the model disagreeing). */
 function IssuesNote({ data }: { data: Rec }) {
   const issues = asRecords(data.issues);
   if (issues.length === 0) return null;
@@ -37,11 +38,14 @@ function IssuesNote({ data }: { data: Rec }) {
     <div className="mt-1.5 flex flex-col gap-0.5">
       {issues.map((issue, i) => {
         const severity = asString(issue.severity) ?? "Info";
-        const hue = severity === "Error" ? "clay" : severity === "Warning" ? "kiln" : "slate";
         return (
-          <MonoNote key={i} hue={hue}>
+          <span
+            key={i}
+            className="face-mono t-caption"
+            style={{ color: severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)" }}
+          >
             {severity.toLowerCase()}: {asString(issue.code)} — {asString(issue.message)}
-          </MonoNote>
+          </span>
         );
       })}
     </div>
@@ -79,12 +83,14 @@ function FilterProvenance({ data }: { data: Rec }) {
 
 function PanelsView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const entries = asRecords(record.entries);
   return (
-    <OpSection label="Electrical panels" aside={<MonoNote>{entries.length} panels</MonoNote>}>
+    <Section label="Electrical panels" aside={<MonoAside>{entries.length} panels</MonoAside>}>
       {entries.length === 0 ? (
-        <EmptyState note="no panels in scope" />
+        <EmptyState story="filter" exit="widen the panel filter, or check the model has panels">
+          no panels in scope
+        </EmptyState>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-2">
           {entries.map((panel, i) => {
@@ -102,16 +108,15 @@ function PanelsView({ data }: OpViewProps) {
             return (
               <article
                 key={asString(panel.panelUniqueId) ?? i}
-                className="min-w-0 rounded-[var(--radius)] border border-[var(--line)] p-2"
+                className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line)] p-2"
               >
                 <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                  <h3
-                    className="truncate text-sm font-semibold text-[var(--pe-blue)]"
-                    title={asString(panel.panelName)}
-                  >
+                  <h3 className="face-mono t-value truncate" title={asString(panel.panelName)}>
                     {asString(panel.panelName) ?? "(unnamed)"}
                   </h3>
-                  {asString(panel.mark) && <Chip hue="blue">{asString(panel.mark)}</Chip>}
+                  {asString(panel.mark) && (
+                    <FactChip title="panel mark">{asString(panel.mark)}</FactChip>
+                  )}
                 </div>
                 <KVGrid
                   columns={2}
@@ -130,10 +135,14 @@ function PanelsView({ data }: OpViewProps) {
                   ]}
                 />
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <Chip hue="slate">{asNumber(panel.assignedCircuitCount) ?? 0} circuits</Chip>
-                  <Chip hue="green">{asNumber(panel.panelScheduleCount) ?? 0} schedules</Chip>
-                  <Chip hue="lichen">{asNumber(panel.connectedLoadCount) ?? 0} loads</Chip>
-                  {panel.isOperationalPanel === false && <Chip hue="kiln">non-operational</Chip>}
+                  <VizChip viz={3}>{asNumber(panel.assignedCircuitCount) ?? 0} circuits</VizChip>
+                  <VizChip viz={2}>{asNumber(panel.panelScheduleCount) ?? 0} schedules</VizChip>
+                  <VizChip viz={4}>{asNumber(panel.connectedLoadCount) ?? 0} loads</VizChip>
+                  {panel.isOperationalPanel === false && (
+                    <FactChip tone="caution" title="panel is not operational">
+                      non-operational
+                    </FactChip>
+                  )}
                 </div>
                 <Provenance>
                   id {asNumber(panel.panelId)} · capacity via{" "}
@@ -146,7 +155,7 @@ function PanelsView({ data }: OpViewProps) {
       )}
       <FilterProvenance data={record} />
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
@@ -159,7 +168,7 @@ function circuitSortKey(entry: Rec): number {
 
 function CircuitsView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const entries = asRecords(record.entries);
   const byPanel = new Map<string, Rec[]>();
   for (const entry of entries) {
@@ -184,7 +193,13 @@ function CircuitsView({ data }: OpViewProps) {
       cell: (row) => (
         <span title={asString(row.loadName)}>
           {asString(row.loadName) ??
-            (row.isEmpty === true ? <MonoNote hue="slate">spare/space</MonoNote> : "∅")}
+            (row.isEmpty === true ? (
+              <span className="face-mono t-caption italic text-[var(--r-ink-mute)]">
+                spare/space
+              </span>
+            ) : (
+              "∅"
+            ))}
         </span>
       ),
     },
@@ -233,16 +248,18 @@ function CircuitsView({ data }: OpViewProps) {
   ];
 
   return (
-    <OpSection
+    <Section
       label="Electrical circuits"
       aside={
-        <MonoNote>
+        <MonoAside>
           {entries.length} circuits · {panels.length} panels
-        </MonoNote>
+        </MonoAside>
       }
     >
       {entries.length === 0 ? (
-        <EmptyState note="no circuits in scope" />
+        <EmptyState story="filter" exit="widen the circuit filter, or circuit something first">
+          no circuits in scope
+        </EmptyState>
       ) : (
         <div className="flex flex-col gap-3">
           {panels.map((panel) => {
@@ -256,7 +273,7 @@ function CircuitsView({ data }: OpViewProps) {
                 columns={columns}
                 rows={rows}
                 rowKey={(row, i) => asString(row.circuitUniqueId) ?? String(i)}
-                footer={<MonoNote>{rows.length} circuits</MonoNote>}
+                footer={<MonoAside>{rows.length} circuits</MonoAside>}
               />
             );
           })}
@@ -264,7 +281,7 @@ function CircuitsView({ data }: OpViewProps) {
       )}
       <FilterProvenance data={record} />
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
@@ -272,7 +289,7 @@ function CircuitsView({ data }: OpViewProps) {
 
 function LoadClassificationsView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const entries = asRecords(record.entries);
 
   const columns: Column<Rec>[] = [
@@ -280,9 +297,9 @@ function LoadClassificationsView({ data }: OpViewProps) {
       key: "name",
       header: "Classification",
       cell: (row) => (
-        <Chip hue="green" mono={false} title={asString(row.name)}>
+        <VizChip viz={2} title={asString(row.name)}>
           {asString(row.name) ?? "(unnamed)"}
-        </Chip>
+        </VizChip>
       ),
     },
     { key: "abbr", header: "Abbrev", width: 64, cell: (row) => asString(row.abbreviation) ?? "∅" },
@@ -306,11 +323,12 @@ function LoadClassificationsView({ data }: OpViewProps) {
       header: "Demand factor",
       cell: (row) => {
         const demand = asRecord(row.demandFactor);
-        if (!demand) return <MonoNote hue="slate">none</MonoNote>;
+        if (!demand)
+          return <span className="face-mono t-caption italic text-[var(--r-ink-mute)]">none</span>;
         return (
           <span title={asString(demand.name)}>
             {asString(demand.name)}{" "}
-            <MonoNote hue="slate">
+            <MonoAside>
               {joinNonEmpty(
                 [
                   asString(demand.ruleType),
@@ -321,7 +339,7 @@ function LoadClassificationsView({ data }: OpViewProps) {
                 ],
                 " · ",
               )}
-            </MonoNote>
+            </MonoAside>
           </span>
         );
       },
@@ -329,12 +347,14 @@ function LoadClassificationsView({ data }: OpViewProps) {
   ];
 
   return (
-    <OpSection
+    <Section
       label="Load classifications"
-      aside={<MonoNote>{entries.length} classifications</MonoNote>}
+      aside={<MonoAside>{entries.length} classifications</MonoAside>}
     >
       {entries.length === 0 ? (
-        <EmptyState note="no load classifications in scope" />
+        <EmptyState story="scope" exit="define load classifications in the model first">
+          no load classifications in scope
+        </EmptyState>
       ) : (
         <DataTable<Rec>
           columns={columns}
@@ -343,7 +363,7 @@ function LoadClassificationsView({ data }: OpViewProps) {
         />
       )}
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
@@ -402,22 +422,22 @@ function extractBreakerSlots(body: Rec): BreakerSlot[] | undefined {
 function BreakerHalf({ slot, side }: { slot: BreakerSlot | undefined; side: "left" | "right" }) {
   const gutter = (
     <span
-      className={`tele w-[34px] shrink-0 px-1.5 py-1 text-[11px] text-[var(--pe-blue)] ${side === "left" ? "text-right" : "text-left"}`}
+      className={`face-mono t-label w-[34px] shrink-0 px-1.5 py-1 text-[var(--r-ink)] ${side === "left" ? "text-right" : "text-left"}`}
     >
       {slot?.num ?? ""}
     </span>
   );
   const facts = slot && (slot.trip || slot.poles) && (
-    <span className="tele shrink-0 px-1 text-[10px] text-muted-foreground">
+    <span className="face-mono t-caption shrink-0 px-1 text-[var(--r-ink-2)]">
       {joinNonEmpty([slot.trip, slot.poles ? `${slot.poles}P` : undefined], "/")}
     </span>
   );
   const load = (
     <span
-      className={`min-w-0 flex-1 truncate px-1.5 py-1 text-xs ${side === "right" ? "text-right" : ""}`}
+      className={`t-value min-w-0 flex-1 truncate px-1.5 py-1 ${side === "right" ? "text-right" : ""}`}
       title={slot?.load}
     >
-      {slot ? (slot.load ?? <span className="text-muted-foreground">—</span>) : ""}
+      {slot ? (slot.load ?? <span className="text-[var(--r-ink-mute)]">—</span>) : ""}
     </span>
   );
   const inner =
@@ -436,7 +456,7 @@ function BreakerHalf({ slot, side }: { slot: BreakerSlot | undefined; side: "lef
     );
   return (
     <div
-      className={`flex min-w-0 items-center ${side === "left" ? "border-r-[1.5px] border-r-[var(--line-2)]" : ""}`}
+      className={`flex min-w-0 items-center ${side === "left" ? "border-r-[1.5px] border-r-[var(--r-line-2)]" : ""}`}
     >
       {inner}
     </div>
@@ -454,7 +474,7 @@ function Panelboard({ slots }: { slots: BreakerSlot[] }) {
       {Array.from({ length: rowCount }, (_, i) => (
         <div
           key={i}
-          className={`grid grid-cols-2 ${i > 0 ? "border-t border-[var(--line-soft)]" : ""}`}
+          className={`grid grid-cols-2 ${i > 0 ? "border-t border-[var(--r-line)]" : ""}`}
         >
           <BreakerHalf slot={odds[i]} side="left" />
           <BreakerHalf slot={evens[i]} side="right" />
@@ -516,7 +536,7 @@ function SectionLines({ section }: { section: Rec }) {
   return (
     <div className="flex flex-col gap-0.5 px-2 py-1.5">
       {lines.map((line, i) => (
-        <MonoNote key={i}>{line}</MonoNote>
+        <MonoAside key={i}>{line}</MonoAside>
       ))}
     </div>
   );
@@ -531,43 +551,53 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
   const slots = body ? extractBreakerSlots(body) : undefined;
   const panelName = asString(entry.panelName) ?? asString(entry.scheduleName) ?? "(unnamed panel)";
   return (
-    <article className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)]">
-      <div className="flex items-baseline justify-between gap-2 border-b border-[var(--line-2)] bg-[color-mix(in_srgb,var(--pe-blue)_12%,transparent)] px-2 py-1.5">
-        <h3 className="truncate text-sm font-semibold text-[var(--pe-blue)]" title={panelName}>
+    <article className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)]">
+      {/* the head band is a recessed ground shift — --r-on re-declared with it. */}
+      <div
+        className="flex items-baseline justify-between gap-2 border-b border-[var(--r-line-2)] px-2 py-1.5"
+        style={
+          { background: "var(--r-recess)", "--r-on": "var(--r-recess)" } as React.CSSProperties
+        }
+      >
+        <h3 className="face-mono t-value truncate" title={panelName}>
           {panelName}
         </h3>
-        <MonoNote>
+        <MonoAside>
           {joinNonEmpty([
             asString(entry.scheduleName),
             asString(entry.templateName),
             asString(entry.panelScheduleType),
           ])}
-        </MonoNote>
+        </MonoAside>
       </div>
       {header && <SectionLines section={header} />}
       {body ? (
         slots ? (
-          <div className={header ? "border-t border-[var(--line-soft)]" : undefined}>
+          <div className={header ? "border-t border-[var(--r-line)]" : undefined}>
             <Panelboard slots={slots} />
           </div>
         ) : (
           <div className="p-1.5">
-            <MonoNote hue="slate">odd/even reconstruction unavailable — faithful grid</MonoNote>
+            <MonoAside>odd/even reconstruction unavailable — faithful grid</MonoAside>
             <div className="mt-1">
               <SectionGrid section={body} />
             </div>
           </div>
         )
       ) : (
-        <EmptyState note="no body section in projection" />
+        <div className="px-2 py-2">
+          <EmptyState story="scope" exit="request the Body section in the projection">
+            no body section in projection
+          </EmptyState>
+        </div>
       )}
       {summary && (
-        <div className="border-t border-[var(--line)]">
+        <div className="border-t border-[var(--r-line)]">
           <SectionLines section={summary} />
         </div>
       )}
       {footer && (
-        <div className="border-t border-[var(--line-soft)]">
+        <div className="border-t border-[var(--r-line)]">
           <SectionLines section={footer} />
         </div>
       )}
@@ -577,14 +607,16 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
 
 function PanelSchedulesView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const entries = asRecords(record.entries);
   const requested = asNumber(record.requestedScheduleCount);
   const resolved = asNumber(record.resolvedScheduleCount);
   return (
-    <OpSection label="Panel schedules" aside={<MonoNote>{entries.length} schedules</MonoNote>}>
+    <Section label="Panel schedules" aside={<MonoAside>{entries.length} schedules</MonoAside>}>
       {entries.length === 0 ? (
-        <EmptyState note="no panel schedules resolved" />
+        <EmptyState story="filter" exit="widen the schedule reference query">
+          no panel schedules resolved
+        </EmptyState>
       ) : (
         <div className="flex flex-col gap-3">
           {entries.map((entry, i) => (
@@ -602,7 +634,7 @@ function PanelSchedulesView({ data }: OpViewProps) {
         ])}
       </Provenance>
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 

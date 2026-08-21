@@ -10,6 +10,16 @@ namespace Pe.Revit.FamilyFoundry.Capture;
 /// <summary>
 ///     Collects authored ParamDrivenSolids snapshots.
 ///     Legacy decompilation helpers remain private to this collector only.
+///     <para>
+///         Reverse inference preserves ambiguity HONESTLY — through warnings and unresolved
+///         markers — instead of silently guessing. Never close an ambiguous case by picking the
+///         likeliest reading; emit the marker and let the author resolve it.
+///     </para>
+///     <para>
+///         Serialized vendor-family output is an authoring SEED, not a low-level dump, and is never
+///         execution-safe without author review: the compiler refuses whatever this leaves
+///         unresolved (see <see cref="Pe.Revit.FamilyFoundry.Plans.ParamDrivenSolidsPlan" />).
+///     </para>
 /// </summary>
 public partial class ParamDrivenSolidsSnapshotCollector : IFamilySnapshotCollector {
     private const double AuthoredOffsetTolerance = 1e-6;

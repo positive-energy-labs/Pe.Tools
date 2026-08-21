@@ -36,7 +36,7 @@ import type { HostErrorKind } from "@pe/host-contracts/contracts";
  */
 // ponytail: dev-only escape — PE_TOOLS_CALL_FORWARD=<base-url> makes this host a pure
 // /call proxy (e.g. to the installed host that owns the Revit bridge) while still serving
-// the checkout's web UI with HMR. Delete when sandbox-lane sessions can dial a dev host.
+// the checkout's web UI with HMR. Delete when an installed-lane session can dial a dev host.
 const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
 
 export const callRoute = HttpRouter.add("POST", "/call", (req) => {

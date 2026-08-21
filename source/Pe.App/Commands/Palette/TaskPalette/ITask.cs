@@ -27,5 +27,8 @@ public interface ITask {
     ///     Executes the task. Called within Revit API context.
     /// </summary>
     /// <param name="uiApp">UIApplication for accessing Revit API</param>
+    // FOOTGUN: tasks run synchronously in Revit API context — asynchronous continuations do not
+    // retain it. Implementations must stay synchronous; move background work outside the task and
+    // marshal only the synchronous Revit segment back in.
     void Execute(UIApplication uiApp);
 }

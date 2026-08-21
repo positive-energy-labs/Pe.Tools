@@ -1,4 +1,5 @@
 import { Button } from "#/components/ui/button";
+import { EmptyState } from "#/components/lang/empty";
 import {
   Combobox,
   ComboboxContent,
@@ -75,11 +76,13 @@ function Picker({
   onPick: (id: string) => void;
   searchable?: boolean;
 }) {
+  // A picker with no options says where options come from (§4). No dashed edge — dashed is
+  // reserved for seam, and "nothing connected yet" is a scope-empty, not a stand-in.
   if (options.length === 0)
     return (
-      <span className="rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
-        {label}
-      </span>
+      <EmptyState story="scope" exit="connect the agent — options arrive with the session">
+        no {title.toLowerCase()} choices
+      </EmptyState>
     );
   const selected = options.find((option) => option.id === activeId) ?? null;
   const anchorRef = useComboboxAnchor();
@@ -103,7 +106,7 @@ function Picker({
             />
           }
         >
-          <span className="tele truncate">{label}</span>
+          <span className="t-value face-mono truncate">{label}</span>
         </ComboboxTrigger>
       </div>
       <ComboboxContent align="end" anchor={anchorRef} className="min-w-56">

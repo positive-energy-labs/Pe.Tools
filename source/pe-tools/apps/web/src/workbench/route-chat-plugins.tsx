@@ -17,7 +17,8 @@ import {
 import { Check, Eye, RefreshCw } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
-import { Button } from "#/components/ui/button";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
 import { type RouteStateWriteResult, useRouteState, writeRouteState } from "./route-state";
 import { CellTrichotomyReviewer } from "./trichotomy-reviewer";
@@ -72,15 +73,15 @@ const routeChatPlugins = Object.fromEntries(
 
 /**
  * Workspace-only plugins: iframed routes with NO route-state slice and NO inline tool card —
- * pea has no route tools for them by design (instances lifecycle is user-click or pe_sandbox
- * MCP only, never a route command).
+ * pea has no route tools for them by design (session lifecycle is user-click or the SDK's own
+ * `session_*` MCP tools, never a route command).
  */
 const workspaceOnlyPlugins: Record<string, string> = {
   instances: "Instances",
 };
 
-/** Registered slices whose ROUTE no longer exists: pea still targets the state (family SHIMS
- * shim 7 retains `route:family-types` for the mcps handlers + inline chat cards), but there is
+/** Registered slices whose ROUTE no longer exists: pea still targets the state
+ * (`route:family-types` remains for the mcps handlers + inline chat cards), but there is
  * no page to iframe — offering it as a workspace would 404. */
 const WORKSPACELESS_ROUTES = new Set(["family-types"]);
 
@@ -216,8 +217,9 @@ function ParameterLinksChatPlugin({
         <Metric value={profile?.assignments.length ?? 0} label="assignments" />
         <Metric value={evaluation?.changedWriteCount ?? 0} label="projected writes" />
         <Metric value={evaluation?.issues.length ?? 0} label="issues" issue />
+        {/* nav is blue TEXT — the legal half of the blue budget */}
         <Link
-          className="ml-auto font-medium text-[var(--pe-blue)] hover:underline"
+          className="ml-auto text-[var(--r-nav)] hover:underline"
           to="/chat"
           search={(previous) => ({ ...previous, plugin: "parameter-links" })}
         >
@@ -257,12 +259,12 @@ function ParameterLinksReview({
   const profile = document?.draftProfile ?? document?.profile;
   const evaluation = document?.evaluation;
   return (
-    <div className="mt-1.5 w-full border-t border-[var(--line-2)] pt-1.5">
+    <div className="mt-1.5 w-full border-t border-[var(--r-line-2)] pt-1.5">
       <div className="max-h-64 space-y-1 overflow-y-auto">
         {profile?.definitions.map((definition) => (
-          <div key={definition.id} className="border-b border-[var(--line-2)] py-1 last:border-0">
-            <div className="font-medium text-[var(--clay-ink)]">{definition.id}</div>
-            <div className="text-[10px] text-[var(--lichen)]">
+          <div key={definition.id} className="border-b border-[var(--r-line)] py-1 last:border-0">
+            <div className="t-value text-[var(--r-ink)]">{definition.id}</div>
+            <div className="t-caption face-mono text-[var(--r-ink-2)]">
               {definition.relationship} · {definition.reducer} · category{" "}
               {definition.sourceCategoryId}
             </div>
@@ -273,57 +275,73 @@ function ParameterLinksReview({
           .slice(0, 5)
           .map((write) => (
             <div key={`${write.assignmentId}:${write.targetElementUniqueId}`} className="py-1">
-              <div className="truncate font-medium text-[var(--clay-ink)]">
+              <div className="truncate t-value text-[var(--r-ink)]">
                 {write.targetElementName ?? write.targetElementId} · {write.targetParameter.name}
               </div>
-              <div className="truncate font-mono text-[10px] text-[var(--lichen)] tabular-nums">
+              <div className="truncate t-caption face-mono text-[var(--r-ink-2)] tabular-nums">
                 {displayParameterLinkValue(write.currentValue)} →{" "}
                 {displayParameterLinkValue(write.proposedValue)}
                 {write.overrideApplied ? " (override)" : ""}
               </div>
             </div>
           ))}
+        {/* a blocking evaluation error IS the machine refusing the plan — the one alarm */}
         {evaluation?.issues.slice(0, 4).map((issue, index) => (
           <div
             key={`${issue.code}:${issue.assignmentId ?? index}`}
-            className={issue.severity === "error" ? "text-[var(--fail)]" : "text-[var(--lichen)]"}
+            className={
+              issue.severity === "error" ? "text-[var(--r-alarm)]" : "text-[var(--r-ink-2)]"
+            }
           >
-            <strong>{issue.code}</strong>: {issue.message}
+            <span className="face-mono">{issue.code}</span>: {issue.message}
           </div>
         ))}
       </div>
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-        <span className="min-w-0 flex-1 truncate text-[10px] text-[var(--lichen)]">
+        <span className="min-w-0 flex-1 truncate t-caption text-[var(--r-ink-2)]">
           {error ??
             (errors > 0
               ? `${errors} blocking error${errors === 1 ? "" : "s"}`
               : "Review the preview before applying.")}
         </span>
         <div className="flex gap-1">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            title="Refresh from Revit"
+          <Verb
+            label="Refresh"
+            icon={RefreshCw}
+            busy={busy === "refresh"}
             disabled={busy != null}
+            reason="Re-read definitions and evaluation from the live Revit session"
             onClick={() => onCommand("refresh")}
-          >
-            <RefreshCw />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
+          />
+          <Verb
+            label="Preview"
+            icon={Eye}
+            busy={busy === "preview"}
             disabled={!profile || busy != null}
+            reason={
+              profile
+                ? "Evaluate the profile against the model — shows every projected write, changes nothing"
+                : "No profile to preview — pea has not drafted one yet"
+            }
             onClick={() => onCommand("preview")}
-          >
-            <Eye /> Preview
-          </Button>
-          <Button
-            size="sm"
+          />
+          <Verb
+            tone="commit"
+            label="Apply"
+            icon={Check}
+            busy={busy === "apply"}
             disabled={!profile || !reviewed || errors > 0 || busy != null}
+            reason={
+              !profile
+                ? "No profile to apply — pea has not drafted one yet"
+                : errors > 0
+                  ? "Blocked: resolve the blocking evaluation errors first"
+                  : !reviewed
+                    ? "Preview first — apply only writes the exact profile you previewed"
+                    : "Write the previewed parameter values into the live Revit model"
+            }
             onClick={() => onCommand("apply")}
-          >
-            <Check /> Apply
-          </Button>
+          />
         </div>
       </div>
     </div>
@@ -378,7 +396,7 @@ function FamilyTypesChatPlugin({
             const { paramName, typeName } = splitCellKey(key);
             return (
               <>
-                {paramName} <span className="font-normal text-[var(--lichen)]">· {typeName}</span>
+                {paramName} <span className="text-[var(--r-ink-2)]">· {typeName}</span>
               </>
             );
           }}
@@ -413,6 +431,9 @@ export function familyTypesWriteError(result: RouteStateWriteResult): string | n
   return `${failures.length} value${failures.length === 1 ? "" : "s"} failed${detail ? `: ${detail}` : "."}`;
 }
 
+/** Pea's inline route card — a machine-operated object carrying state, so it IS an artifact:
+ * the one enclosure the border budget grants this surface's chat lane. The head carries the
+ * route name and pea's action (machine-measured, mono). */
 export function InlineRoutePlugin({
   title,
   action,
@@ -423,13 +444,18 @@ export function InlineRoutePlugin({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-[var(--line)] bg-[var(--paper)] px-2.5 py-2 text-xs">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="font-semibold text-[var(--clay-ink)]">{title}</span>
-        <span className="tele-label text-[var(--lichen)]">{action}</span>
+    <ArtifactFrame
+      head={
+        <div className="flex w-full items-baseline justify-between gap-3">
+          <span className="t-label t-upper text-[var(--r-ink-2)]">{title}</span>
+          <span className="t-caption face-mono text-[var(--r-ink-2)]">{action}</span>
+        </div>
+      }
+    >
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-2 t-label text-[var(--r-ink-2)]">
+        {children}
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[var(--slate)]">{children}</div>
-    </div>
+    </ArtifactFrame>
   );
 }
 
@@ -442,14 +468,15 @@ export function Metric({
   label: string;
   issue?: boolean;
 }) {
+  // A non-zero issue count is attention owed — caution, never the alarm.
   return (
     <span
       className={`inline-flex items-baseline gap-1 ${
-        issue && value > 0 ? "text-[var(--fail)]" : undefined
+        issue && value > 0 ? "text-[var(--r-caution)]" : ""
       }`}
     >
-      <span className="tele">{value}</span>
-      <span className="tele-label">{label}</span>
+      <span className="t-value face-mono">{value}</span>
+      <span className="t-caption face-mono">{label}</span>
     </span>
   );
 }

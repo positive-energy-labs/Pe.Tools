@@ -12,8 +12,11 @@ import { RouteChatPluginDock } from "./route-chat-plugins";
 import { useCacheView, WorldLane } from "./world";
 import { useToolIo } from "./tool-io";
 import { SidePane } from "#/components/ui/side-pane";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "#/components/lang/chip";
 import { TargetWorld, useChatTarget } from "#/components/chat-target";
-import { chipDescriptor, laneVar, toneColor } from "#/host/target-ui";
+import { chipDescriptor, laneVar } from "#/host/target-ui";
 import type { WorldEvent } from "#/host/use-target";
 import { imageSource } from "./adapter";
 import {
@@ -108,6 +111,7 @@ export function Lens({
   // the world-mode target section; one hook, so all three stay one resolution.
   const chatTarget = useChatTarget();
   const targetTone = chipDescriptor(chatTarget.resolution).tone;
+  const targetRailColor = TARGET_RAIL_COLOR[targetTone] ?? "var(--r-ink-mute)";
 
   const frameRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -495,8 +499,9 @@ export function Lens({
         <div className="lens-grid">
           <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
             {/* world rail — the thread lane's ambient answer to "against what world": the full
-                height of the dial carries the current target tone (blue pinned, kiln ambiguous,
-                clay dangling), so drift is visible without opening anything. */}
+                height of the dial carries the current target tone as a meaning role (done when
+                bound, caution when ambiguous, alarm when the pin dangles), so drift is visible
+                without opening anything. */}
             <div
               aria-hidden="true"
               title={`target: ${chipDescriptor(chatTarget.resolution).text}`}
@@ -506,7 +511,7 @@ export function Lens({
                 top: 0,
                 bottom: 0,
                 width: 2,
-                background: toneColor(targetTone),
+                background: targetRailColor,
                 opacity: targetTone === "muted" ? 0.25 : 0.55,
                 zIndex: 1,
               }}
@@ -539,9 +544,11 @@ export function Lens({
                         top: -1 + k * 3,
                         width: 6,
                         height: 2,
+                        // A vanished session is a caution fact; ordinary bridge events keep
+                        // their lane's taxonomy hue (viz ladder via laneVar).
                         background:
                           event.kind === "session-gone"
-                            ? "var(--cat-clay)"
+                            ? "var(--r-caution)"
                             : laneVar(
                                 chatTarget.sessions.find((s) => s.sessionId === event.sessionId)
                                   ?.lane ?? "installed",
@@ -576,11 +583,14 @@ export function Lens({
           <ThreadPrimitive.Root style={{ display: "contents" }}>
             <div className="lens-chat" ref={chatRef}>
               {moments.length === 0 ? (
-                <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center text-muted-foreground">
-                  <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--pe-blue)]">
+                <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
+                  {/* Pea's name wears the agent identity — never blue (design-lang law). */}
+                  <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--r-pea)]">
                     Pea
                   </h1>
-                  <p>Ask anything to begin. Pick a thread on the left, or start a new one.</p>
+                  <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
+                    no messages in this thread yet
+                  </EmptyState>
                 </div>
               ) : null}
               <ContextStrip state={state} depth={modeDepth(mode)} />
@@ -603,7 +613,7 @@ export function Lens({
             onOpenChange={onSideOpenChange}
             onWidthChange={onSideResize}
             header={sideHead}
-            className="lens-side-pane col-start-1 sticky top-0 border-r-[0.5px] bg-[var(--paper-3)]"
+            className="lens-side-pane col-start-1 sticky top-0 border-r-[0.5px] bg-[var(--r-artifact)] [--r-on:var(--r-artifact)]"
           >
             {mode === "trace" ? (
               <div className="lens-trace-frame">
@@ -662,29 +672,32 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
     return null;
   }
 
+  // Machine-operated state pea maintains (the plan, the resolved prompt, injections) — each
+  // block is an ArtifactFrame per the border budget; the rows inside are plain content.
   return (
     <div className="mt-[14px] mr-6 ml-[34px] grid gap-2">
       {plan.length > 0 ? (
-        <div className={BLOCK}>
-          <div className={BLOCK_HEAD}>Plan</div>
+        <ArtifactFrame head={<span className="t-label t-upper text-[var(--r-ink-2)]">Plan</span>}>
           {plan.map((entry) => (
             <div
               className={`${PLAN_ITEM} ${
                 entry.status === "completed"
-                  ? "text-[var(--slate)]"
+                  ? "text-[var(--r-ink-2)]"
                   : entry.status === "pending"
-                    ? "text-muted-foreground"
+                    ? "text-[var(--r-ink-mute)]"
                     : ""
               }`}
               key={entry.id}
             >
+              {/* status glyph rides the outcome mapping: landed → done, in flight → ink-2,
+                  not started → ink-mute. No blue, no viz hue. */}
               <span
                 className={
                   entry.status === "completed"
-                    ? "text-[var(--pe-green)]"
+                    ? "text-[var(--r-done)]"
                     : entry.status === "in_progress"
-                      ? "text-[var(--pe-blue)]"
-                      : "text-[var(--kiln)]"
+                      ? "text-[var(--r-ink-2)]"
+                      : "text-[var(--r-ink-mute)]"
                 }
               >
                 {entry.status === "completed" ? "✓" : entry.status === "in_progress" ? "▸" : "○"}
@@ -692,50 +705,52 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
               <span>{entry.content}</span>
             </div>
           ))}
-        </div>
+        </ArtifactFrame>
       ) : null}
 
       {showContext && systemPrompt ? (
-        <div className={BLOCK}>
-          <button
-            className={`${BLOCK_HEAD} w-full cursor-pointer border-0`}
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-          >
-            <span>System prompt{systemPrompt.source ? ` · ${systemPrompt.source}` : ""}</span>
-            <span className="text-[var(--pe-blue)]">{open ? "hide" : "show"}</span>
-          </button>
+        <ArtifactFrame
+          head={
+            <button
+              className="flex w-full cursor-pointer items-center justify-between border-0 bg-transparent p-0 t-label t-upper text-[var(--r-ink-2)]"
+              type="button"
+              title="Show or hide the resolved system prompt pea started with"
+              onClick={() => setOpen((value) => !value)}
+            >
+              <span>System prompt{systemPrompt.source ? ` · ${systemPrompt.source}` : ""}</span>
+              <span>{open ? "hide" : "show"}</span>
+            </button>
+          }
+        >
           {open ? (
-            <pre className="m-0 px-[9px] py-2 font-mono text-[11.5px] leading-[1.5] break-words whitespace-pre-wrap text-[var(--lens-ink-2)]">
+            <pre className="m-0 t-label face-mono px-[9px] py-2 leading-[1.5] break-words whitespace-pre-wrap text-[var(--r-ink-2)]">
               {systemPrompt.content}
             </pre>
           ) : null}
-        </div>
+        </ArtifactFrame>
       ) : null}
 
       {showContext && state.inspector.contextEntries.length > 0 ? (
-        <div className={BLOCK}>
-          <div className={BLOCK_HEAD}>Context injected</div>
+        <ArtifactFrame
+          head={<span className="t-label t-upper text-[var(--r-ink-2)]">Context injected</span>}
+        >
           {state.inspector.contextEntries.map((entry) => (
-            <div className={`${PLAN_ITEM} text-[var(--slate)]`} key={entry.id}>
-              <span className="rounded border-[0.5px] border-[rgba(0,86,149,0.4)] px-1.5 py-px text-[10px] tracking-[0.08em] text-[var(--pe-blue)]">
-                CTX
-              </span>
+            <div className={`${PLAN_ITEM} text-[var(--r-ink-2)]`} key={entry.id}>
+              <FactChip title="Injected by the harness into pea's context this session">
+                ctx
+              </FactChip>
               <span>{entry.title}</span>
             </div>
           ))}
-        </div>
+        </ArtifactFrame>
       ) : null}
     </div>
   );
 }
 
-// Shared ContextStrip chrome: bordered block, uppercase block head, plan/context row.
-const BLOCK = "overflow-hidden rounded-lg border-[0.5px] border-[var(--line)]";
-const BLOCK_HEAD =
-  "flex items-center justify-between border-b-[0.5px] border-[var(--line)] bg-[var(--paper-2)] px-3 py-[7px] text-[10px] tracking-[0.12em] uppercase text-[var(--slate)]";
+// Plan/context row chrome inside a ContextStrip ArtifactFrame.
 const PLAN_ITEM =
-  "flex gap-[9px] border-b-[0.5px] border-[var(--line-soft)] px-3 py-1.5 text-[13px] last:border-b-0";
+  "flex gap-[9px] border-b-[0.5px] border-[var(--r-line)] px-3 py-1.5 t-prose last:border-b-0";
 
 /** Trace-lane row: header strip ONLY (fixed height). Bodies render in the inspect window. */
 function TraceCellView({
@@ -762,11 +777,11 @@ function CellHeader({ cell }: { cell: TraceCell }) {
         {call.status || duration ? (
           <span className="h-meta">
             {call.status ? (
-              <span className="tele-label" style={{ color: statusColor(call.status) }}>
+              <span className="t-label face-mono" style={{ color: statusColor(call.status) }}>
                 {call.status.replace("_", " ")}
               </span>
             ) : null}
-            {duration ? <span className="tele">{duration}</span> : null}
+            {duration ? <span className="t-value face-mono">{duration}</span> : null}
           </span>
         ) : null}
       </div>
@@ -779,7 +794,7 @@ function CellHeader({ cell }: { cell: TraceCell }) {
         <span className="h-title">{entry.kind}</span>
         {entry.status ? (
           <span className="h-meta">
-            <span className="tele-label">{entry.status}</span>
+            <span className="t-label face-mono">{entry.status}</span>
           </span>
         ) : null}
       </div>
@@ -817,7 +832,7 @@ function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
       <CellHeader cell={{ key: `tool:${call.id}`, kind: "tool", toolCall: call }} />
       {input !== undefined ? (
         <>
-          <div className="io-label tele-label">in</div>
+          <div className="io-label t-label face-mono">in</div>
           <pre>{stringify(input)}</pre>
         </>
       ) : null}
@@ -825,7 +840,7 @@ function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
         images.map((src, index) => <img key={index} className="tool-img" src={src} alt="" />)
       ) : output !== undefined ? (
         <>
-          <div className="io-label tele-label">out</div>
+          <div className="io-label t-label face-mono">out</div>
           <pre>{stringify(output)}</pre>
         </>
       ) : null}
@@ -934,17 +949,30 @@ function formatTime(date?: Date): string | undefined {
 }
 
 // Telemetry metadata for a tool trace row: status hue + a human duration. Both feed the hybrid
-// header's right-aligned `tele` cluster (the machine-measured tier).
+// header's right-aligned mono cluster. Hues ride the outcome mapping (design-lang.css):
+// landed → done, failed → caution (a busy bridge is NOT the model disagreeing),
+// in flight → ink-2 (busy), pending → ink-mute (not started).
 const TOOL_STATUS_COLOR: Record<string, string> = {
-  completed: "var(--pe-green)",
-  failed: "var(--fail)",
-  in_progress: "var(--pe-blue)",
-  pending: "var(--muted-foreground)",
+  completed: "var(--r-done)",
+  failed: "var(--r-caution)",
+  in_progress: "var(--r-ink-2)",
+  pending: "var(--r-ink-mute)",
 };
 
 function statusColor(status: string): string {
-  return TOOL_STATUS_COLOR[status] ?? "var(--muted-foreground)";
+  return TOOL_STATUS_COLOR[status] ?? "var(--r-ink-2)";
 }
+
+// The mapdial's world rail: the target tone as a meaning role. Healthy bindings (pinned or
+// implicit) read as done; ambiguity is caution; a dangling pin claims a world that is gone —
+// the claim disagrees with reality, which is the drift family's top rank (the one alarm).
+const TARGET_RAIL_COLOR: Record<string, string> = {
+  pinned: "var(--r-done)",
+  implicit: "var(--r-done)",
+  ambiguous: "var(--r-caution)",
+  dangling: "var(--r-alarm)",
+  muted: "var(--r-ink-mute)",
+};
 
 function toolDuration(call: WorkbenchToolCall): string | undefined {
   const start = call.startedAt;

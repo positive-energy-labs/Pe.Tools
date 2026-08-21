@@ -16,8 +16,11 @@ import { Route as DesignSystemRouteImport } from "./routes/design-system";
 import { Route as DocLabRouteImport } from "./routes/doc-lab";
 import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
+import { Route as FamilyEditorProtoRouteImport } from "./routes/family-editor-proto";
+import { Route as FamilyReviewProtoRouteImport } from "./routes/family-review-proto";
 import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as ParamTablesRouteImport } from "./routes/param-tables";
 import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
 import { Route as RunsRouteImport } from "./routes/runs";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
@@ -67,6 +70,16 @@ const FamilyRoute = FamilyRouteImport.update({
   path: "/family",
   getParentRoute: () => rootRouteImport,
 } as any);
+const FamilyEditorProtoRoute = FamilyEditorProtoRouteImport.update({
+  id: "/family-editor-proto",
+  path: "/family-editor-proto",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyReviewProtoRoute = FamilyReviewProtoRouteImport.update({
+  id: "/family-review-proto",
+  path: "/family-review-proto",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const InstancesRoute = InstancesRouteImport.update({
   id: "/instances",
   path: "/instances",
@@ -75,6 +88,11 @@ const InstancesRoute = InstancesRouteImport.update({
 const OpsRoute = OpsRouteImport.update({
   id: "/ops",
   path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ParamTablesRoute = ParamTablesRouteImport.update({
+  id: "/param-tables",
+  path: "/param-tables",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ParameterLinksRoute = ParameterLinksRouteImport.update({
@@ -152,8 +170,11 @@ export interface FileRoutesByFullPath {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
+  "/family-editor-proto": typeof FamilyEditorProtoRoute;
+  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
+  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
@@ -176,8 +197,11 @@ export interface FileRoutesByTo {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
+  "/family-editor-proto": typeof FamilyEditorProtoRoute;
+  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
+  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
@@ -201,8 +225,11 @@ export interface FileRoutesById {
   "/doc-lab": typeof DocLabRoute;
   "/families": typeof FamiliesRoute;
   "/family": typeof FamilyRoute;
+  "/family-editor-proto": typeof FamilyEditorProtoRoute;
+  "/family-review-proto": typeof FamilyReviewProtoRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
+  "/param-tables": typeof ParamTablesRoute;
   "/parameter-links": typeof ParameterLinksRoute;
   "/runs": typeof RunsRoute;
   "/schedule-grid": typeof ScheduleGridRoute;
@@ -227,8 +254,11 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
+    | "/family-editor-proto"
+    | "/family-review-proto"
     | "/instances"
     | "/ops"
+    | "/param-tables"
     | "/parameter-links"
     | "/runs"
     | "/schedule-grid"
@@ -251,8 +281,11 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
+    | "/family-editor-proto"
+    | "/family-review-proto"
     | "/instances"
     | "/ops"
+    | "/param-tables"
     | "/parameter-links"
     | "/runs"
     | "/schedule-grid"
@@ -275,8 +308,11 @@ export interface FileRouteTypes {
     | "/doc-lab"
     | "/families"
     | "/family"
+    | "/family-editor-proto"
+    | "/family-review-proto"
     | "/instances"
     | "/ops"
+    | "/param-tables"
     | "/parameter-links"
     | "/runs"
     | "/schedule-grid"
@@ -300,8 +336,11 @@ export interface RootRouteChildren {
   DocLabRoute: typeof DocLabRoute;
   FamiliesRoute: typeof FamiliesRoute;
   FamilyRoute: typeof FamilyRoute;
+  FamilyEditorProtoRoute: typeof FamilyEditorProtoRoute;
+  FamilyReviewProtoRoute: typeof FamilyReviewProtoRoute;
   InstancesRoute: typeof InstancesRoute;
   OpsRoute: typeof OpsRoute;
+  ParamTablesRoute: typeof ParamTablesRoute;
   ParameterLinksRoute: typeof ParameterLinksRoute;
   RunsRoute: typeof RunsRoute;
   ScheduleGridRoute: typeof ScheduleGridRoute;
@@ -367,6 +406,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof FamilyRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/family-editor-proto": {
+      id: "/family-editor-proto";
+      path: "/family-editor-proto";
+      fullPath: "/family-editor-proto";
+      preLoaderRoute: typeof FamilyEditorProtoRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family-review-proto": {
+      id: "/family-review-proto";
+      path: "/family-review-proto";
+      fullPath: "/family-review-proto";
+      preLoaderRoute: typeof FamilyReviewProtoRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
     "/instances": {
       id: "/instances";
       path: "/instances";
@@ -379,6 +432,13 @@ declare module "@tanstack/react-router" {
       path: "/ops";
       fullPath: "/ops";
       preLoaderRoute: typeof OpsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/param-tables": {
+      id: "/param-tables";
+      path: "/param-tables";
+      fullPath: "/param-tables";
+      preLoaderRoute: typeof ParamTablesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/parameter-links": {
@@ -494,8 +554,11 @@ const rootRouteChildren: RootRouteChildren = {
   DocLabRoute: DocLabRoute,
   FamiliesRoute: FamiliesRoute,
   FamilyRoute: FamilyRoute,
+  FamilyEditorProtoRoute: FamilyEditorProtoRoute,
+  FamilyReviewProtoRoute: FamilyReviewProtoRoute,
   InstancesRoute: InstancesRoute,
   OpsRoute: OpsRoute,
+  ParamTablesRoute: ParamTablesRoute,
   ParameterLinksRoute: ParameterLinksRoute,
   RunsRoute: RunsRoute,
   ScheduleGridRoute: ScheduleGridRoute,

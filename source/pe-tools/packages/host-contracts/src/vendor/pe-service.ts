@@ -1,7 +1,7 @@
 /* eslint-disable no-control-regex -- Windows rejects ASCII control characters in service names. */
 // pe-service.ts — the SDK-owned TypeScript client for the Pe service primitive (SDK-LEDGER A10).
 //
-// Service-file schema version: 2
+// Service-file schema version: 3
 // OWNED BY Pe.Revit.Sdk — DO NOT FORK. Copy this file verbatim into a consumer; the SDK ships it
 // inside the Pe.Revit.Sdk nupkg under clients/ts/ so there is exactly ONE implementation per language
 // (this mirrors Pe.Revit.Loader's C# InstalledProduct.EnsureRunning / TakeOver / ServiceFile byte-for-byte
@@ -10,7 +10,8 @@
 //
 // The runtime service file the SERVICE writes when it binds and deletes on graceful shutdown:
 //   <appBase>/state/service/<name>.json =
-//     { schemaVersion, instanceId, pid, processStartUtc, port, version, lane, token }
+//     { schemaVersion, instanceId, pid, processStartUtc, port, version, lane, token,
+//       executablePath?, sourceRoot?, health?, sessionId? }
 //   <appBase>/state/service/<name>.log  = spawned stdout+stderr plus supervisor breadcrumbs (append-only)
 // Discovery is file-based: the port the service actually bound is authoritative; a manifest's
 // preferredPort is only a hint and is never hardcoded by a client. The shutdown endpoint is authorized
@@ -28,14 +29,19 @@ import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "nod
 import { dirname, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
-export const SERVICE_FILE_SCHEMA_VERSION = 2;
+export const SERVICE_FILE_SCHEMA_VERSION = 3;
+
+/** Every schema this reader accepts. A v2 file predates `health`/`sessionId` and is read with
+ * both absent — rejecting it would blind a supervisor to every service that has not restarted
+ * since the bump. Byte-identical rule to the C# reader's ReadableSchemas. */
+export const SERVICE_FILE_READABLE_SCHEMA_VERSIONS = [2, 3] as const;
 const SHUTDOWN_TOKEN_HEADER = "x-pe-service-token";
 
 export type ServiceTier = "managed" | "plain";
 
 /** The runtime service file: { pid, port, version, lane, token }. `port` is the port actually bound. */
 export interface ServiceFile {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly instanceId: string;
   readonly pid: number;
   readonly processStartUtc: string;
@@ -51,6 +57,13 @@ export interface ServiceFile {
   readonly executablePath?: string;
   /** D2 (optional, dev lane): the checkout a dev host runs from. Emitted only when set. */
   readonly sourceRoot?: string;
+  /** Schema 3, optional: the relative HTTP path that answers 2xx/3xx while this service is up.
+   * Declaring it is what lets a READER probe liveness properly instead of inferring it from a TCP
+   * accept — `pe-revit session status` narrates companion legs and never starts them. */
+  readonly health?: string;
+  /** Schema 3, optional: the Revit session this host belongs to, written by hosts that know it. It is
+   * what ties a leg to a session row without guessing. */
+  readonly sessionId?: string;
 }
 
 /**
@@ -253,7 +266,7 @@ export function readServiceFileSync(appBase: string, name: string): ServiceFile 
 
 function validateServiceFile(raw: Partial<ServiceFile>): ServiceFile | null {
   if (
-    raw.schemaVersion !== SERVICE_FILE_SCHEMA_VERSION ||
+    !SERVICE_FILE_READABLE_SCHEMA_VERSIONS.includes(raw.schemaVersion as 2 | 3) ||
     typeof raw.instanceId !== "string" ||
     !raw.instanceId ||
     typeof raw.processStartUtc !== "string" ||
@@ -275,6 +288,8 @@ function validateServiceFile(raw: Partial<ServiceFile>): ServiceFile | null {
     token: typeof raw.token === "string" ? raw.token : "",
     ...(typeof raw.executablePath === "string" ? { executablePath: raw.executablePath } : {}),
     ...(typeof raw.sourceRoot === "string" ? { sourceRoot: raw.sourceRoot } : {}),
+    ...(typeof raw.health === "string" ? { health: raw.health } : {}),
+    ...(typeof raw.sessionId === "string" ? { sessionId: raw.sessionId } : {}),
   };
 }
 
@@ -419,6 +434,8 @@ export function createServiceFile(
   token: string,
   executablePath?: string,
   sourceRoot?: string,
+  health?: string,
+  sessionId?: string,
   instanceId: string = randomUUID(),
 ): ServiceFile {
   return {
@@ -432,6 +449,8 @@ export function createServiceFile(
     token,
     ...(executablePath !== undefined ? { executablePath } : {}),
     ...(sourceRoot !== undefined ? { sourceRoot } : {}),
+    ...(health !== undefined ? { health } : {}),
+    ...(sessionId !== undefined ? { sessionId } : {}),
   };
 }
 

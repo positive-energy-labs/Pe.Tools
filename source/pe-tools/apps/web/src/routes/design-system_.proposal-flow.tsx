@@ -13,10 +13,9 @@
  * rather than a resemblance, this page shows it moving.
  *
  * FIXTURE, ANNOUNCED: the world is `design-system/fixtures.ts` — no host, no document, no element
- * behind any value. The dashed seam chip in the header is the reserved mark for exactly that
- * (SHIMS entry 4).
+ * behind any value. The dashed seam chip in the header is the reserved mark for exactly that.
  *
- * NO SHIMS: the card is built from `lang/` primitives only. Where the card needs something `lang/`
+ * NO STAND-INS: the card is built from `lang/` primitives only. Where the card needs something `lang/`
  * does not have — a denied proposal, a current→proposed pair inside a table cell — there is a
  * `GAP:` at the call site and a visible gap-note, never a local component invented to cover it.
  */
@@ -186,8 +185,8 @@ function ProposalFlow() {
                     <span className="flex min-w-0 flex-wrap items-baseline gap-2">
                       {/* GAP (StateCell): the card knows the PRIOR value and the cell has no slot
                           for it — `current → proposed` is renderable in a chat card and physically
-                          unrenderable in a table cell, which CLEANROOM records as the same fact
-                          modelled twice, once incompletely. Rendered here as plain page text
+                          unrenderable in a table cell: the same fact is modelled twice, once
+                          incompletely. Rendered here as plain page text
                           beside the cell rather than smuggled into `value`, so the two scales stay
                           honestly different where the model is honestly incomplete. */}
                       {item.review === "open" && item.current != null ? (
@@ -269,7 +268,7 @@ function ProposalFlow() {
         </section>
 
         <section className="flex flex-col gap-1.5">
-          <span className="tele-label text-[10px] text-[var(--r-ink)]">what this page found</span>
+          <span className="t-caption t-upper text-[var(--r-ink)]">what this page found</span>
           <Gap>
             a <strong>denied</strong> proposal has no representation in the language or the model:
             no reason, no author, no <code>denied</code> member on the cell. The card can only put
@@ -287,7 +286,7 @@ function ProposalFlow() {
             every staged square on this page is <code>stagedBy=&quot;pea&quot;</code> because the
             fixture says so. In production the same square is inferred from <code>origin</code>,
             which is the author of the VALUE, not of the staging — so pea&apos;s square and yours
-            are currently a guess (CLEANROOM&apos;s strongest signal; SHIMS entry 5).
+            are currently a guess — the strongest signal from the review.
           </Gap>
           <Gap>
             the receipt cannot name the write it reports. <code>OutcomeLine</code> carries no verb,
@@ -397,7 +396,7 @@ function Header({ title, note }: { title: string; note: string }) {
 function SectionHead({ n, title, note }: { n: string; title: string; note: string }) {
   return (
     <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
-      <span className="tele-label text-[10px] text-[var(--r-ink-mute)]">{n}</span>
+      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{n}</span>
       <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
       <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
     </div>

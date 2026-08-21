@@ -68,8 +68,8 @@ means "proposal" in one and "alarm" in the other.
 
 **"Not started" is a state, not a zero.** An entity with no rows yet renders as a labelled empty,
 never as absence, or the untouched half of the project is invisible — and invisible reads as done.
-*(Specimen owed when an EmptyState primitive ships; nothing in `components/lang` renders a labelled
-empty today.)*
+→ rendered: `components/lang/empty.tsx` (`EmptyState`, required `story` + `exit`; specimen on
+`/design-system/swatch`), and at cell scale the `fresh: "never"` rung (consolidation ruling R2).
 
 **Compute agreement; do not remember it.** Drift, staleness, and agreement are diffs between two
 readings, recomputed each render. A stored verdict goes stale exactly when it matters: a user edit
@@ -123,10 +123,10 @@ most over-subscribed visual in the codebase — dashed also means estimated, not
 needs-attention, held, void, and open-proposal depending on where you look. Do not add a ninth
 meaning; if you need one, take a different slot.
 
-**Keep the ledger of open stand-ins beside the feature** at `docs/features/<surface>/SHIMS.md`, one
-numbered entry per gap naming what discharges it. Two rules make it citable across time: an entry
-leaves the file only when the replacement ships, and numbers are stable — a closed entry is struck
-and named, never renumbered. Other docs cite these by number.
+**Keep the ledger of open stand-ins beside the feature** as Owed lines in the owning feature's
+`docs/features/<name>/LEDGER.md`, one entry per gap naming what discharges it. An entry leaves the
+file only when the replacement ships; closed entries are deleted — git history is the archive.
+Other docs cite these by description, never by number.
 
 **Make the claim a function of state, not a maintained flag.** One control can render under two or
 three truth claims computed from whether a live connection exists and whether the record has a real
@@ -172,9 +172,10 @@ so the commit is always a separate, explicitly-invoked verb, never a side effect
 
 **Typing beats proposing.** A user editing a proposed cell severs the proposal outright: no accept,
 no dismiss, the user's value stands. Masking the proposal by render precedence is not the same thing:
-discarding the edit resurrects it, which nobody expects. The older surface still masks. *(Specimen
-owed when sever ships in the proposal flow; `StateCell` has no `stage` member for severed and
-cannot render the state at all.)*
+discarding the edit resurrects it, which nobody expects. The older surface still masks. *(RULED
+2026-08-16, consolidation R6: sever leaves NO cell trace — it is history, and history is not
+computable from current facts. The record lives in the proposal ledger's settled "superseded" card;
+`StateCell` will never grow a severed member. `/family` ships the behaviour.)*
 
 ---
 
@@ -183,8 +184,9 @@ cannot render the state at all.)*
 **Addressing is a sentence; narrowing is chips.** What the surface is pointed at reads as a line of
 clickable nouns — the document, the entity, the world — and carries nouns only. Scope and filter
 state live in table chips, never in the sentence. Chips narrow but never hide: every active
-narrowing is visible and individually removable, so the user can always widen back out. *(Specimen
-owed when the addressing sentence ships; `NarrowChip` owns removal and nothing owns re-adding.)*
+narrowing is visible and individually removable, so the user can always widen back out.
+→ rendered: `components/lang/addressing-bar.tsx` (the five-slot head rail, R11; `/family` is the
+reference adoption). Still open: `NarrowChip` owns removal and nothing owns re-adding.
 
 **Under compression, identity outranks controls.** A crowded toolbar wraps rather than shrinking the
 addressing line to a sliver. The buttons are what move.
@@ -244,8 +246,9 @@ say where options come from.
 
 ## 5 · Colour and type
 
-Full rules in [`COLOR-ROLES.md`](COLOR-ROLES.md), including the sweep still owed by the older
-surfaces. Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
+Full rules in the header of `apps/web/src/design-lang.css` — the one place a colour of the
+language is decided — rendered live in `/design-system` §02. (`COLOR-ROLES.md` is the
+superseded ancestor — deleted, git history only.) Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
 components consume role tokens rather than raw palette. Deliberately alien prototype chrome, such as
 a variant switcher, is exempt — it must not read as part of the design under review.
 
@@ -266,7 +269,7 @@ Type carries meaning on the same terms as colour.
 
 **Extend the shared primitive; do not fork it.** Forks are cheap to start and expensive forever. The
 standing census of forks and what the canon must absorb before it can abolish them is
-[`../features/web-primitives/THEMES.md`](../features/web-primitives/THEMES.md).
+[`../features/design-system/LEDGER.md`](../features/design-system/LEDGER.md).
 
 **Capability should be presence-based.** A column descriptor where `sort` present means sortable and
 `facet` present means filterable is legible at the call site and cannot desync from a parallel
@@ -295,7 +298,7 @@ to move.
 
 **The second consumer is the evidence** — which speculative seams paid rent, which rotted, and the
 tripwire test for authoring time, in
-[`../features/web-primitives/PURGE-LEARNINGS.md`](../features/web-primitives/PURGE-LEARNINGS.md).
+[`../features/design-system/LEDGER.md`](../features/design-system/LEDGER.md).
 
 **Generalising at two consumers can cost more than it saves.** A shell abstracted over two similar
 surfaces ended up unable to say anything specific about either, and both died together; the

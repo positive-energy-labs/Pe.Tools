@@ -52,4 +52,4 @@ See `../BUILD.md` for the complete build/runtime decision table. This executable
 - `.slnx` is IDE organization and parity input only; it is not the build-matrix source of truth.
 - `.slnx` and configuration strings are compatibility surfaces, not the intended orchestration authority.
 - Successful `./build` output does not mean the live Revit session has fresh runtime assemblies.
-- AttachedRrd validation belongs to SDK `pe-revit` live/test commands, with Peco wrappers adding Pea status/log hooks. Do not use `./build` for live runtime freshness.
+- Attached validation belongs to SDK `pe-revit` live/test commands, with Peco wrappers adding Pea status/log hooks. Do not use `./build` for live runtime freshness.

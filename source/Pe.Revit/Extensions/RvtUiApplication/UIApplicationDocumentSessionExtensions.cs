@@ -3,6 +3,10 @@ using Autodesk.Revit.UI;
 namespace Pe.Revit.Extensions.ProjDocument;
 
 public static class UIApplicationDocumentSessionExtensions {
+    // FOOTGUN: use this handle (Revit's own UIApplication/UIControlledApplication.MainWindowHandle) to
+    // parent modal dialogs and message windows. Starting with Revit 2019,
+    // System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle is no longer a reliable way to
+    // retrieve the Revit main window — MainWindowHandle replaces it.
     public static IntPtr GetActiveWindowHandle(this UIApplication uiApp) =>
         uiApp?.MainWindowHandle ?? IntPtr.Zero;
 

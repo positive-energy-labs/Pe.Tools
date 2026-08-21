@@ -6,17 +6,17 @@ Owns ordinary non-Revit tests for shared contracts, host boundaries, APS boundar
 
 ## Purpose
 
-`Pe.Shared.Tests` keeps year-neutral and out-of-proc package behavior out of the expensive Revit-backed harness. It must not use `ricaun.RevitTest`, `UIApplication`, live `Document`, Revit transactions, RRD, or `FreshRevitProcess`.
+`Pe.Shared.Tests` keeps year-neutral and out-of-proc package behavior out of the expensive Revit-backed harness. It must not use `ricaun.RevitTest`, `UIApplication`, live `Document`, Revit transactions, or the attached or fresh proof targets.
 
 ## Validation
 
-Use ordinary source compile / test lanes only:
+Use ordinary compile and deterministic lanes only:
 
 ```powershell
-dotnet test source/Pe.Shared.Tests/Pe.Shared.Tests.csproj -c Debug
+dotnet tool run pe-revit -- test deterministic --project source/Pe.Shared.Tests/Pe.Shared.Tests.csproj
 ```
 
-This is `NoRrdContact` proof. A passing run proves ordinary package behavior only; it does not prove loaded Revit runtime freshness.
+This is deterministic proof with contact none. A passing run proves ordinary package behavior only; it does not prove loaded Revit runtime freshness.
 
 ## Living Memory
 

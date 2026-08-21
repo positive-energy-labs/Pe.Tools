@@ -202,7 +202,7 @@ public static class TakeoffPolicy
 
         // SeedSource stays at the Hybrid default everywhere; the old stepped-ceiling upgrade rule
         // (and the below-grade -> RegionCores steer it once guarded) was dead by override order
-        // once Hybrid became the default, and was deleted 2026-08-16 per DECISIONS 2026-08-14
+        // once Hybrid became the default, and was deleted 2026-08-16 per the takeoffs ledger
         // ("revive it consciously or delete it"). RegionCores is reachable only by explicit ask.
         if (profile.NoHabitableDomain)
             profile.Flags.Add("no-habitable-domain");

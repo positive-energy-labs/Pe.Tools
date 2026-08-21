@@ -74,7 +74,7 @@ export const BIND_COMMAND = "bind";
 
 export const bindCommandSpec: RouteStateCommandSpec = {
   description:
-    "HUMAN ONLY. Bind this workspace to one Revit session (e.g. 'sandbox:<id>' or 'user'); commands inherit it unless they pass their own target. target: null unbinds.",
+    "HUMAN ONLY. Bind this workspace to one Revit session (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit); commands inherit it unless they pass their own target. target: null unbinds.",
   input: z.object({ target: z.string().nullable() }),
   actor: "human",
 };

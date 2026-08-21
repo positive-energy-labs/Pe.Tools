@@ -36,6 +36,11 @@
       "types": "./src/vendor/pe-service-host.ts",
       "import": "./src/vendor/pe-service-host.ts",
       "default": "./src/vendor/pe-service-host.ts"
+    },
+    "./pe-revit-contract": {
+      "types": "./src/vendor/generated/pe-revit-contract.ts",
+      "import": "./src/vendor/generated/pe-revit-contract.ts",
+      "default": "./src/vendor/generated/pe-revit-contract.ts"
     }
   },
   "publishConfig": {

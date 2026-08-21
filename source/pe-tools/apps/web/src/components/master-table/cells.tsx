@@ -1,59 +1,18 @@
-import { useRef } from "react";
-
+/**
+ * MASTER-TABLE CELL RENDERERS — thin wrappers over the language, not a second editor.
+ *
+ * RULED 2026-08-16 (fit reviews, #2 — "the editable cell fractured into parallel editors"):
+ * `BaseCell` was a parallel implementation of `StateCell`'s keyboard/commit contract, and it
+ * silently swallowed refused numeric commits (§3's named defect, in canon). It is deleted.
+ * `TextCell`/`NumberCell` now RENDER `StateCell` at row scale — one editor, one refusal
+ * mechanism (the visible dismissible note), one focus treatment (the inset hairline, per the
+ * focus law). `CellSelect` is the one forced wrapper: a `<select>` cannot be an input, so it
+ * keeps its own element and routes its refusal through the alarm mixes instead.
+ */
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
-import { fmtNum, parseCell, type ValueColumn } from "#/components/master-table/model";
+import { StateCell, fmtNum } from "#/components/lang/cell";
+import type { Verdict, VerdictTone } from "#/components/master-table/model";
 import { cn } from "#/lib/utils";
-
-const CELL_CLASS = "tele h-7 w-full min-w-0 bg-transparent px-1.5 outline-none focus:bg-primary/5";
-
-function BaseCell({
-  display,
-  onText,
-  numeric,
-  className,
-  placeholder,
-  title,
-}: {
-  display: string;
-  onText: (text: string) => void;
-  numeric?: boolean;
-  className?: string;
-  placeholder?: string;
-  title?: string;
-}) {
-  const initial = useRef(display);
-  const move = useCellNavigation();
-  initial.current = display;
-  return (
-    <input
-      key={display}
-      defaultValue={display}
-      placeholder={placeholder}
-      title={title}
-      tabIndex={-1}
-      inputMode={numeric ? "decimal" : undefined}
-      className={cn(CELL_CLASS, numeric && "text-right", className)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          if (!move?.(e.shiftKey ? "up" : "down")) e.currentTarget.blur();
-        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-          e.preventDefault();
-          move?.(e.key === "ArrowUp" ? "up" : "down");
-        } else if (e.key === "Tab") {
-          if (move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
-        } else if (e.key === "Escape") {
-          e.currentTarget.value = initial.current;
-          e.currentTarget.blur();
-        }
-      }}
-      onBlur={(e) => {
-        const text = e.currentTarget.value;
-        if (text !== initial.current) onText(text);
-      }}
-    />
-  );
-}
 
 export function TextCell({
   value,
@@ -68,13 +27,16 @@ export function TextCell({
   placeholder?: string;
   title?: string;
 }) {
+  const move = useCellNavigation();
   return (
-    <BaseCell
-      display={value}
-      onText={onCommit}
-      className={className}
+    <StateCell
+      scale="row"
+      value={value}
       placeholder={placeholder}
-      title={title}
+      note={title}
+      onCommit={(text) => onCommit(text)}
+      onNavigate={(direction) => move?.(direction) ?? false}
+      className={cn("face-mono t-value", className)}
     />
   );
 }
@@ -96,20 +58,24 @@ export function NumberCell({
   className?: string;
   title?: string;
 }) {
+  const move = useCellNavigation();
   return (
-    <BaseCell
-      display={fmtNum(value, digits)}
-      numeric
-      className={className}
-      title={title}
-      onText={(text) => {
-        const parsed = parseCell(text, { integer, min });
-        if (parsed !== null) onCommit(parsed);
-      }}
+    <StateCell
+      scale="row"
+      value={fmtNum(value, digits)}
+      numeric={{ integer, min, digits }}
+      note={title}
+      // `numeric` already parsed, clamped and normalized — a refused parse never reaches here.
+      onCommit={(text) => onCommit(Number(text))}
+      onNavigate={(direction) => move?.(direction) ?? false}
+      className={cn("face-mono t-value text-right", className)}
     />
   );
 }
 
+/** The forced wrapper: a select-shaped editor cannot ride `StateCell`'s input. Focus takes the
+ * select fill (the focus law — a fill, never a hue); `invalid` is its refusal mechanism and
+ * spends the one alarm as an ink + wash mix, visibly on the surface. */
 export function CellSelect({
   value,
   onChange,
@@ -136,8 +102,8 @@ export function CellSelect({
         if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
       }}
       className={cn(
-        "tele h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-primary/5",
-        invalid && "bg-destructive/10 text-destructive",
+        "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-[var(--r-select)]",
+        invalid && "bg-[color-mix(in_srgb,var(--r-alarm)_10%,var(--r-on))] text-[var(--r-alarm)]",
         className,
       )}
     >
@@ -147,8 +113,10 @@ export function CellSelect({
 }
 
 /**
- * A cell the user may not edit. `reason` is REQUIRED and surfaces as the title: a value that
- * refuses editing must say why (e.g. "detected area — geometry is edited in Revit").
+ * A cell the user may not edit. `reason` surfaces as the title — a value that refuses editing
+ * should say why (e.g. "detected area — geometry is edited in Revit"). OPTIONAL since the fit
+ * reviews (ruled 2026-08-16): requiring it farmed ceremony on identity columns ("a tooltip
+ * that tells you what a table is"); supply it where the refusal is a fact worth stating.
  */
 export function ReadCell({
   value,
@@ -156,68 +124,47 @@ export function ReadCell({
   className,
 }: {
   value: React.ReactNode;
-  reason: string;
+  reason?: string;
   className?: string;
 }) {
   return (
-    <span title={reason} className={cn("tele block truncate px-1.5 tabular-nums", className)}>
+    <span title={reason} className={cn("face-mono t-value block truncate px-1.5", className)}>
       {value}
     </span>
   );
 }
 
-/** The state/verdict swatch — one hue budget: clay alarms, green is done, the rest is quiet. */
-export function StateDot({ tone, dim }: { tone: string; dim?: boolean }) {
+/** The verdict swatch. Tone is the NARROW meaning-role union — never a raw CSS colour
+ * (takeoffs #11, ruled 2026-08-16 R5; `stateColumn`, which took any string, died with it). */
+export function StateDot({ tone, dim }: { tone: VerdictTone; dim?: boolean }) {
   return (
     <span
       className="inline-block size-2 shrink-0 rounded-[1px] align-middle"
-      style={{ background: tone, opacity: dim ? 0.35 : 1 }}
+      style={{ background: VERDICT_INK[tone], opacity: dim ? 0.35 : 1 }}
     />
   );
 }
 
-/** What a row's state/verdict column shows. `note` is the cell title — say what the state MEANS. */
-export interface StateMeta {
-  label: string;
-  /** A design-language meaning role, e.g. "var(--r-alarm)". Never a viz/taxonomy colour. */
-  tone: string;
-  note: string;
-  /** Wears the ONE alarm: this row is the one asking for a human. */
-  alarm?: boolean;
-  dim?: boolean;
-}
+export const VERDICT_INK: Record<VerdictTone, string> = {
+  alarm: "var(--r-alarm)",
+  caution: "var(--r-caution)",
+  done: "var(--r-done)",
+  ink: "var(--r-ink-2)",
+  mute: "var(--r-ink-mute)",
+};
 
-/**
- * The state/verdict column slot: a dot + label whose vocabulary the route owns. Filterable and
- * sortable on the state's label, so "show me only what needs a call" is one select away.
- */
-export function stateColumn<Row>({
-  key = "state",
-  label = "state",
-  title,
-  of,
-}: {
-  key?: string;
-  label?: string;
-  title?: string;
-  of: (row: Row) => StateMeta;
-}): ValueColumn<Row> {
-  return {
-    key,
-    label,
-    title,
-    facet: (row) => of(row).label,
-    sort: (row) => of(row).label,
-    cell: (row) => {
-      const meta = of(row);
-      return (
-        <span className="tele block truncate px-1.5" title={meta.note}>
-          <StateDot tone={meta.tone} dim={meta.dim} />{" "}
-          <span className={meta.alarm ? "text-[var(--r-alarm)]" : "text-muted-foreground"}>
-            {meta.label}
-          </span>
-        </span>
-      );
-    },
-  };
+/** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The
+ * WORD wears its tone only at alarm rank (the one alarm must be unmissable); every quieter
+ * verdict keeps the word in secondary ink and lets the dot carry the tone. */
+export function VerdictCell({ verdict }: { verdict: Verdict }) {
+  return (
+    <span className="face-mono t-value block truncate px-1.5" title={verdict.note}>
+      <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
+      <span
+        className={verdict.tone === "alarm" ? "text-[var(--r-alarm)]" : "text-[var(--r-ink-2)]"}
+      >
+        {verdict.word}
+      </span>
+    </span>
+  );
 }

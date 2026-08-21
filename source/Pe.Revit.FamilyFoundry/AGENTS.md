@@ -26,7 +26,6 @@ Revit mutation details behind predictable operations and helpers.
 - `Apply/DocumentFamilyProfileApplyExtensions.cs` and `Apply/FamilyProfileApplicator.cs` — document-owned apply verbs
   plus the shared runtime apply path.
 - `OperationSettings/` — authored settings contracts used by profiles.
-- `docs/features/family-foundry/_README.md` — cross-package output/transparency model and default debugging read order.
 
 ## Validation
 
@@ -48,6 +47,15 @@ Revit mutation details behind predictable operations and helpers.
 | **param-driven solids** | The canonical authored/serialized semantic solids shape                          | Avoid referring to old low-level extrusion authoring as an equal peer model          |
 | **artifact manifest**   | The per-family output map carried on `FamilyProcessingContext.Artifacts`         | Prefer this over ad hoc “output files” wording when discussing FF transparency       |
 | **family report**       | The per-family top-level proof packet entrypoint written as `family-report.json` | Open this before drilling into raw logs or snapshot payloads                         |
+| **profile**             | The top-level authored settings document — `FFManagerProfile`, `FFMigratorProfile` | Avoid using it for a captured snapshot or a compiled plan                            |
+| **capture**             | Family-side state extraction; one public entrypoint pair, `Document.CaptureFamilySnapshot()` / `FamilyDocument.CaptureFamilySnapshot()` in `Capture/FamilySnapshotCaptureExtensions.cs` | Avoid "collect" when you mean the whole capture entrypoint                             |
+| **snapshot**            | Captured family state — `FamilySnapshot`, `ParameterSnapshot`, `RefPlaneSnapshot`, `ParamDrivenSolidsSnapshot` | Avoid "section"; these are snapshot fragments, not sections                            |
+| **collect**             | A live query/capture substep — `IFamilySnapshotCollector`, `IProjectSnapshotCollector`, `SnapshotCapturePipeline`, `ParameterSnapshotCollector`, `LookupTableSnapshotCollector`, `ReferencePlaneSnapshotCollector`, `ParamDrivenSolidsSnapshotCollector` | `SnapshotCollector` is the preferred noun; collector mechanics live under `Capture/`, snapshot models under `Snapshots/` |
+| **projection**          | Deriving an authored target shape from captured state — `FamilySnapshotProfileProjector`, `FamilyParamProfileAdapter.ProjectSnapshotsToProfile(...)` | Avoid calling a projection a capture                                                  |
+| **apply**               | Running authored settings through FF mutation pipelines, via the document-owned `ApplyFamilyProfile(...)` / `ApplyFamilyMigrationProfile(...)` extensions | Avoid describing an individual operation (`SetKnownParams`, `SetLookupTables`, `MakeParamDrivenPlanesAndDims`, `MakeConstrainedExtrusions`, `MakeParamDrivenConnectors`) as an apply |
+| **create**              | Not a stable caller-facing FF seam — it exists only inside helpers such as `CreateProjectedFamilyDocument(...)`, `ConstrainedExtrusionFactory.CreateRectangle/CreateCircle(...)`, `RefPlaneDimCreator.Create...(...)` | Do not present it as a public FF verb peer to `apply`                                 |
+| **spec**                | Overloaded on purpose: authored reusable parts (`AuthoredPlaneSpec`, `AuthoredSpanSpec`, `AuthoredPrismSpec`, `AuthoredConnectorSpec`), captured/legacy shapes (`MirrorConstraintSnapshot`, `OffsetConstraintSnapshot`, `ConstrainedRectangleExtrusionSnapshot`, `ConstrainedCircleExtrusionSnapshot`), and resolved execution shapes (`SymmetricPlanePairSpec`, `OffsetPlaneConstraintSpec`) | Say which of the three you mean; never let one stand for all                           |
+| **authored → resolved** | The real transition `AuthoredParamDrivenSolidsSettings` makes when its compiler emits `ParamDrivenPlanesAndDimsPlan` / `ParamDrivenExtrusionsPlan` | Describe it as authored-to-resolved-execution, not as two peer settings shapes         |
 
 ## Living Memory
 

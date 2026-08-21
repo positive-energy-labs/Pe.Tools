@@ -7,6 +7,9 @@ namespace Pe.App.Services;
 ///     Thin wrapper around the optional RevitDBExplorer.API package.
 ///     The full RevitDBExplorer add-in is expected to be installed separately.
 /// </summary>
+// Provenance: Pe.Tools used to carry an embedded fork of RevitDBExplorer. The fork was dropped once
+// NeVeSpl merged https://github.com/NeVeSpl/RevitDBExplorer/pull/36 and shipped RevitDBExplorer.API
+// to NuGet (April 2026) — this wrapper consumes the upstream package, nothing is vendored.
 public static class RevitDbExplorerService {
     private const string ReleasesUrl = "https://github.com/NeVeSpl/RevitDBExplorer/releases/latest";
 

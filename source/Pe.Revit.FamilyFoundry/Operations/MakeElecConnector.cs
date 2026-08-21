@@ -18,10 +18,12 @@ public class MakeElecConnector(MakeElecConnectorSettings settings) : DocOperatio
         OperationContext groupContext) {
         var logs = new List<LogEntry>();
 
-        // Note: Load Classification (RBS_ELEC_LOAD_CLASSIFICATION) is intentionally NOT mapped here.
+        // FOOTGUN: Load Classification (RBS_ELEC_LOAD_CLASSIFICATION) is intentionally NOT mapped here.
         // Load Classification is a Reference type (SpecTypeId.Reference.LoadClassification) that requires
         // an ElementId pointing to an ElectricalLoadClassification element. These elements only exist
         // in project documents, not family documents, so we cannot set a default value in the family.
+        // The param *association* is portable across documents, but the referenced value's identity is
+        // document-local — FamilyManager.Set(fp, ElementId) is only valid with ids from the same document.
         // Load Classification must be set at the project level when family instances are placed.
         var targetMappings =
             new Dictionary<BuiltInParameter, string> {

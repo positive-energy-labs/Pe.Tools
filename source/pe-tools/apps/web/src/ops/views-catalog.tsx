@@ -1,19 +1,19 @@
 import type { ReactNode } from "react";
+import { FactChip, type FactTone } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { Provenance, Section } from "#/components/lang/section";
 import {
-  type CatHue,
-  Chip,
   DataTable,
-  EmptyState,
   KVGrid,
-  MonoNote,
-  OpSection,
-  Provenance,
-  TreeView,
   type TreeNode,
+  TreeView,
+  VizChip,
+  type VizIndex,
 } from "#/ops/primitives";
 import {
   type OpViewProps,
   type OpViewRegistry,
+  UnrecognizedShape,
   asArray,
   asNumber,
   asRecord,
@@ -29,13 +29,21 @@ import {
 
 /* ── shared helpers ───────────────────────────────────────────────────────── */
 
-const HUE_CYCLE: CatHue[] = ["blue", "green", "slate", "lichen", "clay", "kiln"];
+const VIZ_CYCLE: VizIndex[] = [1, 2, 3, 4, 5, 6];
 
-/** Stable categorical hue for an arbitrary name (categories, sections). */
-function hueFor(name: string): CatHue {
+/** Stable viz rung for an arbitrary name (categories, sections) — taxonomy by hash. */
+function vizFor(name: string): VizIndex {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return HUE_CYCLE[Math.abs(hash) % HUE_CYCLE.length] ?? "slate";
+  return VIZ_CYCLE[Math.abs(hash) % VIZ_CYCLE.length] ?? 3;
+}
+
+function MonoAside({ children }: { children: ReactNode }) {
+  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+}
+
+function Dash() {
+  return <span className="text-[var(--r-ink-mute)]">—</span>;
 }
 
 /** Truncation/limit line from the shared RevitDataResultPage shape, if present. */
@@ -51,7 +59,8 @@ function pageNote(data: Record<string, unknown>): string | undefined {
     : `${returned} of ${total} returned`;
 }
 
-/** Shared RevitDataIssue[] rendered as a quiet mono block, warnings/errors tinted. */
+/** Shared RevitDataIssue[] as quiet mono lines; severity is STATE, so caution ink —
+ * never alarm (a data issue is not the model disagreeing). The word carries rank. */
 function IssuesNote({ data }: { data: Record<string, unknown> }) {
   const issues = asRecords(data.issues);
   if (issues.length === 0) return null;
@@ -59,13 +68,14 @@ function IssuesNote({ data }: { data: Record<string, unknown> }) {
     <div className="mt-1.5 space-y-0.5">
       {issues.map((issue, i) => {
         const severity = asString(issue.severity) ?? "Info";
-        const hue: CatHue | undefined =
-          severity === "Error" ? "kiln" : severity === "Warning" ? "clay" : undefined;
         return (
           <div key={`${asString(issue.code) ?? "issue"}-${i}`}>
-            <MonoNote hue={hue}>
+            <span
+              className="face-mono t-caption"
+              style={{ color: severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)" }}
+            >
               {severity.toLowerCase()} {asString(issue.code)}: {asString(issue.message)}
-            </MonoNote>
+            </span>
           </div>
         );
       })}
@@ -73,26 +83,26 @@ function IssuesNote({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-/** Chip row that caps display and says how many were left out. */
+/** Taxonomy chip row that caps display and says how many were left out. */
 function ChipRow({
   values,
-  hue = "slate",
+  viz = 3,
   max = 4,
 }: {
   values: string[];
-  hue?: CatHue | ((value: string) => CatHue);
+  viz?: VizIndex | ((value: string) => VizIndex);
   max?: number;
 }) {
-  if (values.length === 0) return <span className="text-muted-foreground">—</span>;
+  if (values.length === 0) return <Dash />;
   const shown = values.slice(0, max);
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
       {shown.map((value) => (
-        <Chip key={value} hue={typeof hue === "function" ? hue(value) : hue} title={value}>
+        <VizChip key={value} viz={typeof viz === "function" ? viz(value) : viz} title={value}>
           {value}
-        </Chip>
+        </VizChip>
       ))}
-      {values.length > max && <MonoNote>+{values.length - max}</MonoNote>}
+      {values.length > max && <MonoAside>+{values.length - max}</MonoAside>}
     </span>
   );
 }
@@ -160,7 +170,7 @@ function nestByBrowserPaths(section: IndexSection): TreeNode[] {
 
 function ProjectIndexView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const summary = asRecord(record.summary) ?? {};
 
   const handleLabel = (entry: Record<string, unknown>): string =>
@@ -249,16 +259,21 @@ function ProjectIndexView({ data }: OpViewProps) {
       children: nestByBrowserPaths(s),
     }));
 
-  if (nodes.length === 0) return <EmptyState note="project index returned no sections" />;
+  if (nodes.length === 0)
+    return (
+      <EmptyState story="scope" exit="request at least one section, or open a richer document">
+        project index returned no sections
+      </EmptyState>
+    );
   return (
-    <OpSection label="Project Index">
+    <Section label="Project Index">
       <TreeView nodes={nodes} dense />
       <Provenance>
         {summary.truncated === true ? "index truncated by budget · " : ""}
         {pageNote(record) ?? "counts are index-time observations, not live proof"}
       </Provenance>
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
@@ -266,7 +281,7 @@ function ProjectIndexView({ data }: OpViewProps) {
 
 function ProjectBrowserView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const organizations = asRecords(record.organizations);
   const items = asRecords(record.items);
 
@@ -341,13 +356,18 @@ function ProjectBrowserView({ data }: OpViewProps) {
     }
   }
 
-  if (roots.length === 0) return <EmptyState note="no browser organization returned" />;
+  if (roots.length === 0)
+    return (
+      <EmptyState story="scope" exit="open a document with a populated Project Browser">
+        no browser organization returned
+      </EmptyState>
+    );
   return (
-    <OpSection
+    <Section
       label="Project Browser"
       aside={
         <span title={asString(record.browserSnapshotId)}>
-          <MonoNote>snapshot ·{(asString(record.browserSnapshotId) ?? "∅").slice(-8)}</MonoNote>
+          <MonoAside>snapshot ·{(asString(record.browserSnapshotId) ?? "∅").slice(-8)}</MonoAside>
         </span>
       }
     >
@@ -357,7 +377,7 @@ function ProjectBrowserView({ data }: OpViewProps) {
         {pageNote(record) ? ` · ${pageNote(record)}` : ""}
       </Provenance>
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
@@ -365,7 +385,7 @@ function ProjectBrowserView({ data }: OpViewProps) {
 
 function SchedulesView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const entries = asRecords(record.entries);
   const summary = asRecord(record.summary);
 
@@ -373,37 +393,41 @@ function SchedulesView({ data }: OpViewProps) {
     const chips: ReactNode[] = [];
     if (entry.isTemplate === true)
       chips.push(
-        <Chip key="tpl" hue="slate">
+        <FactChip key="tpl" title="a schedule template, not a live schedule">
           template
-        </Chip>,
+        </FactChip>,
       );
     if (entry.isItemized === true)
       chips.push(
-        <Chip key="item" hue="lichen">
+        <FactChip key="item" title="itemize every instance is on">
           itemized
-        </Chip>,
+        </FactChip>,
       );
     if (entry.filterBySheet === true)
       chips.push(
-        <Chip key="fbs" hue="clay">
+        <FactChip
+          key="fbs"
+          tone="caution"
+          title="filter-by-sheet is on — row counts change with sheet placement"
+        >
           filter-by-sheet
-        </Chip>,
+        </FactChip>,
       );
     if (asRecords(entry.filters).length > 0)
       chips.push(
-        <Chip key="filters" hue="blue">
+        <FactChip key="filters" title="schedule filter count">
           {asRecords(entry.filters).length} filters
-        </Chip>,
+        </FactChip>,
       );
     return chips.length > 0 ? (
       <span className="inline-flex flex-wrap gap-1">{chips}</span>
     ) : (
-      <span className="text-muted-foreground">—</span>
+      <Dash />
     );
   };
 
   return (
-    <OpSection label="Schedule Catalog">
+    <Section label="Schedule Catalog">
       <DataTable
         title="Schedules"
         rows={entries}
@@ -415,11 +439,7 @@ function SchedulesView({ data }: OpViewProps) {
             header: "Category",
             cell: (row) => {
               const category = asString(row.categoryName);
-              return category ? (
-                <Chip hue={hueFor(category)}>{category}</Chip>
-              ) : (
-                <span className="text-muted-foreground">—</span>
-              );
+              return category ? <VizChip viz={vizFor(category)}>{category}</VizChip> : <Dash />;
             },
           },
           {
@@ -427,7 +447,7 @@ function SchedulesView({ data }: OpViewProps) {
             header: "Placed On",
             cell: (row) => (
               <ChipRow
-                hue="blue"
+                viz={1}
                 values={asRecords(row.sheetPlacements)
                   .map((p) => asString(p.sheetNumber))
                   .filter((s): s is string => !!s)}
@@ -458,7 +478,7 @@ function SchedulesView({ data }: OpViewProps) {
         }
       />
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
@@ -466,7 +486,7 @@ function SchedulesView({ data }: OpViewProps) {
 
 function LoadedFamiliesView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const families = asRecords(record.families);
   const summary = asRecord(record.summary) ?? {};
 
@@ -484,7 +504,7 @@ function LoadedFamiliesView({ data }: OpViewProps) {
       id: `cat/${category}`,
       label: (
         <span className="inline-flex items-center gap-1.5">
-          <Chip hue={hueFor(category)}>{category}</Chip>
+          <VizChip viz={vizFor(category)}>{category}</VizChip>
         </span>
       ),
       meta: `${categoryFamilies.length} families`,
@@ -500,15 +520,20 @@ function LoadedFamiliesView({ data }: OpViewProps) {
       })),
     }));
 
-  if (nodes.length === 0) return <EmptyState note="no loaded families in scope" />;
+  if (nodes.length === 0)
+    return (
+      <EmptyState story="filter" exit="widen the category/name filter, or load families first">
+        no loaded families in scope
+      </EmptyState>
+    );
   return (
-    <OpSection
+    <Section
       label="Loaded Families"
       aside={
         <>
-          <MonoNote>{asNumber(summary.totalFamilies) ?? families.length} families</MonoNote>
-          <MonoNote>{asNumber(summary.totalTypes) ?? "?"} types</MonoNote>
-          <MonoNote>{asNumber(summary.totalPlacedInstances) ?? "?"} placed</MonoNote>
+          <MonoAside>{asNumber(summary.totalFamilies) ?? families.length} families</MonoAside>
+          <MonoAside>{asNumber(summary.totalTypes) ?? "?"} types</MonoAside>
+          <MonoAside>{asNumber(summary.totalPlacedInstances) ?? "?"} placed</MonoAside>
         </>
       }
     >
@@ -520,7 +545,7 @@ function LoadedFamiliesView({ data }: OpViewProps) {
         {pageNote(record) ? ` · ${pageNote(record)}` : ""}
       </Provenance>
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
@@ -528,12 +553,12 @@ function LoadedFamiliesView({ data }: OpViewProps) {
 
 function ParameterBindingsView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const entries = asRecords(record.entries);
   const summary = asRecord(record.summary) ?? {};
 
   return (
-    <OpSection label="Project Parameter Bindings">
+    <Section label="Project Parameter Bindings">
       <DataTable
         title="Project Parameters"
         rows={entries}
@@ -549,8 +574,9 @@ function ParameterBindingsView({ data }: OpViewProps) {
             header: "Binding",
             cell: (row) => {
               const kind = asString(row.bindingKind);
-              if (!kind) return <span className="text-muted-foreground">—</span>;
-              return <Chip hue={kind === "Instance" ? "slate" : "kiln"}>{kind}</Chip>;
+              if (!kind) return <Dash />;
+              // binding kind is taxonomy: instance vs type, colour by kind.
+              return <VizChip viz={kind === "Instance" ? 3 : 6}>{kind}</VizChip>;
             },
           },
           {
@@ -561,7 +587,7 @@ function ParameterBindingsView({ data }: OpViewProps) {
                 values={asArray(row.categoryNames).flatMap((v) =>
                   typeof v === "string" ? [v] : [],
                 )}
-                hue={hueFor}
+                viz={vizFor}
               />
             ),
           },
@@ -587,29 +613,30 @@ function ParameterBindingsView({ data }: OpViewProps) {
         }
       />
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
 /* ── revit.catalog.parameter-evidence — the evidence ledger ───────────────── */
 
-const EVIDENCE_HUES: Record<string, CatHue> = {
-  ProjectBinding: "blue",
-  ScheduleField: "green",
-  ScheduleFilter: "lichen",
-  ScopedElement: "clay",
+/** Evidence SOURCE is taxonomy — a viz rung per source kind. */
+const EVIDENCE_VIZ: Record<string, VizIndex> = {
+  ProjectBinding: 1,
+  ScheduleField: 2,
+  ScheduleFilter: 4,
+  ScopedElement: 5,
 };
 
 function ParameterEvidenceView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const candidates = asRecords(record.candidates);
   const collectedAt = asString(record.evidenceCollectedAtUtc);
 
   return (
-    <OpSection
+    <Section
       label="Parameter Evidence"
-      aside={record.primitiveCacheHit === true ? <MonoNote>cache hit</MonoNote> : undefined}
+      aside={record.primitiveCacheHit === true ? <MonoAside>cache hit</MonoAside> : undefined}
     >
       <DataTable
         title="Evidence Ledger"
@@ -632,19 +659,19 @@ function ParameterEvidenceView({ data }: OpViewProps) {
             header: "Evidence Sources",
             cell: (row) => {
               const counts = asRecords(row.evidenceCounts);
-              if (counts.length === 0) return <span className="text-muted-foreground">—</span>;
+              if (counts.length === 0) return <Dash />;
               return (
                 <span className="inline-flex flex-wrap gap-1">
                   {counts.map((count, i) => {
                     const source = asString(count.source) ?? "?";
                     return (
-                      <Chip
+                      <VizChip
                         key={`${source}-${asString(count.scope) ?? i}`}
-                        hue={EVIDENCE_HUES[source] ?? "slate"}
+                        viz={EVIDENCE_VIZ[source] ?? 3}
                         title={`${source} · scope ${asString(count.scope) ?? "?"} · ${asString(count.strength) ?? "?"}`}
                       >
                         {source} {asNumber(count.count) ?? "?"}
-                      </Chip>
+                      </VizChip>
                     );
                   })}
                 </span>
@@ -668,7 +695,7 @@ function ParameterEvidenceView({ data }: OpViewProps) {
               return reasons.length > 0 ? (
                 <span title={reasons.join("\n")}>{reasons[0]}</span>
               ) : (
-                <span className="text-muted-foreground">—</span>
+                <Dash />
               );
             },
           },
@@ -682,23 +709,29 @@ function ParameterEvidenceView({ data }: OpViewProps) {
         }
       />
       <IssuesNote data={record} />
-    </OpSection>
+    </Section>
   );
 }
 
 /* ── revit.catalog.concept-evidence — ranked inferred candidates ──────────── */
 
-const CONFIDENCE_HUES: Record<string, CatHue> = {
-  Low: "kiln",
-  Medium: "clay",
-  High: "green",
+/** Confidence is STATE (rank of trust), so it wears meaning tones, not viz. */
+const CONFIDENCE_TONE: Record<string, FactTone> = {
+  Low: "caution",
+  Medium: "meta",
+  High: "done",
 };
 
 function ConceptEvidenceView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const concepts = asRecords(record.concepts);
-  if (concepts.length === 0) return <EmptyState note="no concepts inferred" />;
+  if (concepts.length === 0)
+    return (
+      <EmptyState story="scope" exit="name at least one concept in the request">
+        no concepts inferred
+      </EmptyState>
+    );
 
   return (
     <div className="space-y-4">
@@ -709,12 +742,12 @@ function ConceptEvidenceView({ data }: OpViewProps) {
           typeof v === "string" ? [v] : [],
         );
         return (
-          <OpSection
+          <Section
             key={conceptName}
             label={conceptName}
-            aside={<MonoNote>{candidates.length} candidates</MonoNote>}
+            aside={<MonoAside>{candidates.length} candidates</MonoAside>}
           >
-            <div className="rounded-[var(--radius)] border border-[var(--line)]">
+            <div className="rounded-[var(--radius)] border border-[var(--r-line)]">
               {candidates.map((candidate, i) => {
                 const identity = asRecord(candidate.identity);
                 const confidence = asString(candidate.confidence);
@@ -725,45 +758,48 @@ function ConceptEvidenceView({ data }: OpViewProps) {
                 return (
                   <div
                     key={asString(identity?.key) ?? `${i}`}
-                    className={`flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:bg-muted/40 ${i > 0 ? "border-t border-[var(--line-soft)]" : ""}`}
+                    className={`flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${i > 0 ? "border-t border-[var(--r-line)]" : ""}`}
                   >
-                    <span className="tele w-6 shrink-0 text-right text-muted-foreground">
+                    <span className="face-mono t-value w-6 shrink-0 text-right text-[var(--r-ink-2)]">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-1.5">
-                        <span className="text-xs font-medium">
+                        <span className="t-value font-medium">
                           {asString(identity?.name) ?? "∅"}
                         </span>
                         {confidence && (
-                          <Chip hue={CONFIDENCE_HUES[confidence] ?? "slate"}>
+                          <FactChip
+                            tone={CONFIDENCE_TONE[confidence] ?? "meta"}
+                            title="inference confidence, ranked by the host"
+                          >
                             {confidence.toLowerCase()}
-                          </Chip>
+                          </FactChip>
                         )}
-                        <MonoNote>score {asNumber(candidate.score)?.toFixed(2) ?? "?"}</MonoNote>
+                        <MonoAside>score {asNumber(candidate.score)?.toFixed(2) ?? "?"}</MonoAside>
                       </div>
                       {reasons.length > 0 && (
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        <p className="t-label mt-0.5 text-[var(--r-ink-2)]">
                           {reasons.join(" · ")}
                         </p>
                       )}
-                      <MonoNote>
+                      <MonoAside>
                         {asNumber(facts.bindingCount) ?? 0} bindings ·{" "}
                         {asNumber(facts.scheduleFieldCount) ?? 0} schedule fields ·{" "}
                         {asNumber(facts.placedScheduleFieldCount) ?? 0} placed
-                      </MonoNote>
+                      </MonoAside>
                     </div>
                   </div>
                 );
               })}
               {candidates.length === 0 && (
-                <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+                <div className="t-label px-2 py-4 text-center italic text-[var(--r-ink-mute)]">
                   no candidates
                 </div>
               )}
             </div>
             {notes.length > 0 && <Provenance>{notes.join(" · ")}</Provenance>}
-          </OpSection>
+          </Section>
         );
       })}
       <Provenance>
@@ -780,10 +816,11 @@ function ConceptEvidenceView({ data }: OpViewProps) {
 
 /* ── revit.catalog.recent-documents — the Revit Home screen ───────────────── */
 
-const DOC_KIND_HUES: Record<string, CatHue> = {
-  rvt: "blue",
-  rfa: "green",
-  rte: "lichen",
+/** File extension is doc-kind taxonomy. */
+const DOC_KIND_VIZ: Record<string, VizIndex> = {
+  rvt: 1,
+  rfa: 2,
+  rte: 4,
 };
 
 function splitPath(path: string): { stem: string; ext: string; dir: string } {
@@ -801,13 +838,17 @@ function splitPath(path: string): { stem: string; ext: string; dir: string } {
 
 function RecentDocumentsView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const documents = asRecords(record.documents);
   if (documents.length === 0)
-    return <EmptyState note="no recent documents found in Revit.ini or the registry MRU" />;
+    return (
+      <EmptyState story="scope" exit="open a document in Revit so the MRU has an entry">
+        no recent documents found in Revit.ini or the registry MRU
+      </EmptyState>
+    );
 
   return (
-    <OpSection label="Recent Documents" aside={<MonoNote>{documents.length} entries</MonoNote>}>
+    <Section label="Recent Documents" aside={<MonoAside>{documents.length} entries</MonoAside>}>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2">
         {documents.map((doc, i) => {
           const path = asString(doc.path) ?? "";
@@ -818,21 +859,25 @@ function RecentDocumentsView({ data }: OpViewProps) {
           return (
             <div
               key={path || `${i}`}
-              className="min-w-0 rounded-[var(--radius)] border border-[var(--line)] px-2.5 py-2"
+              className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line)] px-2.5 py-2"
               title={path}
             >
               <div className="flex items-baseline gap-1.5">
-                <Chip hue={DOC_KIND_HUES[ext] ?? "slate"}>{ext || "?"}</Chip>
-                {exists === false && <Chip hue="kiln">missing</Chip>}
+                <VizChip viz={DOC_KIND_VIZ[ext] ?? 3}>{ext || "?"}</VizChip>
+                {exists === false && (
+                  <FactChip tone="caution" title="file was not found at read time">
+                    missing
+                  </FactChip>
+                )}
               </div>
-              <p className="mt-1 truncate text-sm font-medium" title={stem}>
+              <p className="t-prose mt-1 truncate font-medium" title={stem}>
                 {asString(doc.title) || stem || "∅"}
               </p>
-              <p className="truncate text-[11px] text-muted-foreground" title={dir}>
+              <p className="t-label truncate text-[var(--r-ink-2)]" title={dir}>
                 {dir || asString(doc.pathKind) || "—"}
               </p>
               <div className="mt-1">
-                <MonoNote>
+                <MonoAside>
                   {source === "RevitIni"
                     ? "Revit.ini"
                     : source === "RegistryProfileMru"
@@ -841,7 +886,7 @@ function RecentDocumentsView({ data }: OpViewProps) {
                   {" · "}
                   {asString(doc.revitYear) ?? "?"}
                   {rank !== undefined ? ` · #${rank}` : ""}
-                </MonoNote>
+                </MonoAside>
               </div>
             </div>
           );
@@ -851,7 +896,7 @@ function RecentDocumentsView({ data }: OpViewProps) {
         read from this machine's Revit.ini and per-profile registry MRU — existence checked at read
         time, not proof the file still opens
       </Provenance>
-    </OpSection>
+    </Section>
   );
 }
 
@@ -861,18 +906,18 @@ const FIELD_OPTIONS_CAP = 60;
 
 function FieldOptionsView({ data }: OpViewProps) {
   const record = asRecord(data);
-  if (!record) return <EmptyState note="unrecognized response shape" />;
+  if (!record) return <UnrecognizedShape />;
   const items = asRecords(record.items);
   const mode = asString(record.mode);
   const shown = items.slice(0, FIELD_OPTIONS_CAP);
 
   return (
-    <OpSection label="Field Options">
+    <Section label="Field Options">
       <KVGrid
         columns={3}
         items={[
           { label: "source key", value: asString(record.sourceKey) ?? "∅" },
-          { label: "mode", value: mode ?? "∅", hue: mode === "Constraint" ? "kiln" : "lichen" },
+          { label: "mode", value: mode ?? "∅" },
           {
             label: "custom values",
             value: record.allowsCustomValue === true ? "allowed" : "not allowed",
@@ -885,20 +930,20 @@ function FieldOptionsView({ data }: OpViewProps) {
           const label = asString(item.label);
           const description = asString(item.description);
           return (
-            <Chip key={value} hue="slate" title={[value, description].filter(Boolean).join(" — ")}>
+            <FactChip key={value} title={[value, description].filter(Boolean).join(" — ")}>
               {label || value}
-            </Chip>
+            </FactChip>
           );
         })}
-        {items.length > shown.length && <MonoNote>+{items.length - shown.length} more</MonoNote>}
-        {items.length === 0 && <MonoNote>no option values in this domain</MonoNote>}
+        {items.length > shown.length && <MonoAside>+{items.length - shown.length} more</MonoAside>}
+        {items.length === 0 && <MonoAside>no option values in this domain</MonoAside>}
       </div>
       <Provenance>
         {items.length} values in domain
         {mode === "Suggestion" ? " · suggestions, not a closed set" : ""}
         {mode === "Constraint" ? " · closed constraint set" : ""}
       </Provenance>
-    </OpSection>
+    </Section>
   );
 }
 

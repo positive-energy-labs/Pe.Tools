@@ -18,16 +18,22 @@ import {
   NumberCell,
   ReadCell,
   StateDot,
-  stateColumn,
   TextCell,
-  type StateMeta,
+  VERDICT_INK,
 } from "#/components/master-table/cells";
-import type { StateCellProps } from "#/components/lang/cell";
+import { AddressingBar } from "#/components/lang/addressing-bar";
+import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
-import { fmtNum, type Column } from "#/components/master-table/model";
+import {
+  fmtNum,
+  type Column,
+  type Verdict as RowVerdict,
+  type VerdictTone,
+} from "#/components/master-table/model";
 import { Pane, PaneSplit, PaneWorkspace } from "#/components/ui/pane";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { ZoneThumb } from "#/takeoff/zone-plan";
@@ -58,7 +64,6 @@ export interface AtlasActions {
   openSync: () => void;
   capture: (lane: WorldLane) => void;
   partition: (zone: WorldZone) => void;
-  launch: () => void;
   refresh: () => void;
 }
 
@@ -86,41 +91,46 @@ export interface AtlasProps {
 //                             until a sync moves them into the .r10.
 //   synced    → --r-done      it landed.
 //
-// NOTE (docs/features/takeoff/DESIGN-AUDIT.md #1): these four are NOT the cell grammar's state
-// axes and cannot be expressed as a `state:` column — "a human decision is queued" and "not
-// started" have no rung. The column below therefore stays on `stateColumn`, honestly.
+// NOTE: these four are a
+// row-level PIPELINE VERDICT, not the cell grammar's state axes — the column rides the table's
+// `verdict:` clause, whose tone union is the meaning band by construction.
 
 type RoomState = "call" | "unreviewed" | "data" | "synced";
 
 const ROOM_STATES: RoomState[] = ["call", "unreviewed", "data", "synced"];
 
-const STATE_META: Record<RoomState, { tone: string; label: string; note: string }> = {
+const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; note: string }> = {
   call: {
-    tone: "var(--r-alarm)",
+    tone: "alarm",
     label: "needs a call",
     note: "a human must decide: an open detector flag, or the .r10 no longer matches the model",
   },
   unreviewed: {
-    tone: "var(--r-ink-mute)",
+    tone: "mute",
     label: "no Manual J",
     note: "nothing open, but no Manual J data entered yet — export would refuse this room",
   },
   data: {
-    tone: "var(--r-caution)",
+    tone: "caution",
     label: "data entered",
     note: "Manual J data entered against settled geometry, not yet exported — unsaved",
   },
   synced: {
-    tone: "var(--r-done)",
+    tone: "done",
     label: "in .r10",
     note: "exported and the .r10 still agrees with the model",
   },
 };
 
-/** The one alarm is `call`; `unreviewed` is the one dim. */
-const stateMeta = (state: RoomState): StateMeta => ({
-  ...STATE_META[state],
-  alarm: state === "call",
+/** The CSS ink behind a room state — for the SVG plan fills and rail bars, which cannot take
+ * a tone name. One derivation, so the three surfaces cannot diverge. */
+const stateInk = (state: RoomState): string => VERDICT_INK[STATE_META[state].tone];
+
+/** The one alarm is `call` (tone carries it); `unreviewed` is the one dim. */
+const stateMeta = (state: RoomState): RowVerdict => ({
+  word: STATE_META[state].label,
+  tone: STATE_META[state].tone,
+  note: STATE_META[state].note,
   dim: state === "unreviewed",
 });
 
@@ -197,7 +207,7 @@ function ZoneStateBar({
           key={i}
           className="min-w-px flex-1 rounded-[1px]"
           style={{
-            background: STATE_META[s].tone,
+            background: stateInk(s),
             opacity: s === "unreviewed" ? 0.3 : 0.9,
           }}
         />
@@ -212,7 +222,7 @@ function ZoneStateBar({
  */
 function Swatch({ tone, label, seam }: { tone: string; label: string; seam?: boolean }) {
   return (
-    <span className="tele inline-flex items-center gap-1 text-muted-foreground">
+    <span className="face-mono t-value inline-flex items-center gap-1 text-muted-foreground">
       <span
         className={cn(
           "inline-block size-2.5 rounded-[1px] border",
@@ -242,7 +252,8 @@ const ROOM_TYPES: RoomType[] = [
   "mechanical",
 ];
 
-/** The Manual J number columns: one whole-unit field each, all editable, all faded until entered. */
+/** The Manual J number columns: one whole-unit field each, all editable, all on the never rung
+ *  (muted ink, R2) until the room has data. */
 const MANUAL_J: { field: keyof RoomData; label: string; width: string }[] = [
   { field: "people", label: "ppl", width: "w-12" },
   { field: "lightingW", label: "ltg W", width: "w-16" },
@@ -256,26 +267,37 @@ const flagKey = (guid: string, flag: string) => `${guid}::${flag}`;
 /** Why a verdict verb will (or will not) act, stated where a newcomer reads it. */
 const decideReason = (live: boolean, room: WorldRoom, verb: Verdict): string =>
   !live
-    ? `Marks this call ${verb === "accept" ? "accepted" : "dismissed"} for this session only — the fixture writes nothing`
+    ? `Marks this call ${verb === "accept" ? "accepted" : "dismissed"} for this session only (fixture)`
     : room.elementId === null
       ? "no Room Region home yet — partition must materialize this room before a verdict can be written"
       : `Writes the ${verb} onto this room's Room Region provenance blob in the live model`;
 
 /**
  * `Verb.reason` is a REQUIRED constructor argument (SURFACE-PHILOSOPHY §3 — "make the explanation
- * a required constructor argument") and renders ON THE SURFACE when the verb is disabled, so this
- * string is what a newcomer reads rather than a tooltip they have to discover.
+ * a required constructor argument"). RULED 2026-08-16: the reason is TITLE-BORNE — it renders as
+ * the verb's title, not on the surface; the one exception is a DISABLED `commit` verb, which
+ * renders its reason visibly (a concurrent canon change carries that rendering).
  *
  * `onFixture` is per-verb ON PURPOSE. The whole host lane refuses for one reason at once, and the
  * language has no lane-level refusal — a shared sentence therefore renders four times across one
  * header row and reads as a rendering fault (AUDIT #10). Short, verb-specific lines are the only
  * fix available without changing the primitive.
+ *
+ * The one-transaction honesty stamp lives in ONE home — the head rail's busy advisory — so the
+ * per-verb busy reason stays short instead of repeating the same sentence on every verb.
  */
 const hostReason = (live: boolean, busy: string | null, does: string, onFixture: string): string =>
-  !live ? onFixture : busy !== null ? `${busy} is in flight — one transaction at a time` : does;
+  !live ? onFixture : busy !== null ? `${busy} is in flight` : does;
 
 /** THE Manual J editor for one field — the table column and the room panel render this same
- *  element, so fallback, constraints, fade-until-entered, and patch construction exist once. */
+ *  element, so fallback, constraints, never-muting, and patch construction exist once.
+ *
+ *  A room with no Manual J data is the NEVER rung (R2): nothing was ever entered, so the value
+ *  sits in `--r-ink-mute` — the grammar's own treatment, replacing the route-invented
+ *  `opacity-50`. JUDGED during the adoption pass: the column STAYS on `NumberCell` rather than
+ *  the editable `StateCell`, because `onCommit(text: string)` would re-implement the numeric
+ *  contract (`parseCell`'s integer/min refusal, `inputMode="decimal"`, the right-aligned fmt)
+ *  per column for no mark the grammar would add. */
 function ManualJField({
   room,
   field,
@@ -291,7 +313,7 @@ function ManualJField({
       digits={0}
       integer
       min={0}
-      className={room.data === null ? "opacity-50" : undefined}
+      className={room.data === null ? "text-[var(--r-ink-mute)]" : undefined}
       onCommit={(v) => onPatch({ [field]: v })}
     />
   );
@@ -316,6 +338,26 @@ interface Row {
   room: WorldRoom;
   state: RoomState;
   open: string[];
+}
+
+/**
+ * The .r10 column's cell-state derivation — one function, so the column's marks and its facet
+ * word are read from the same facts. AUDIT #3 → RULED R2 (2026-08-16): `fresh: "never"` is the
+ * epistemic ladder's bottom rung — nothing was ever attempted here. It draws NO squiggle
+ * (nothing exists to distrust) and mutes the value; the borrowed `unverified` rung goes back.
+ */
+function r10State(row: Row): StateCellProps {
+  const r10 = row.room.r10;
+  if (!r10) return { value: "not exported", fresh: "never" };
+  const drift = row.room.sqft - r10.lastSyncedSqft;
+  return drift === 0
+    ? { value: `#${r10.identifier}`, agree: "agree", fresh: "fresh" }
+    : {
+        value: `#${r10.identifier}`,
+        agree: "drift",
+        // The struck ghost token: what the .r10 still holds, at zero row-height cost.
+        modelValue: `${fmtNum(r10.lastSyncedSqft, 0)} sf`,
+      };
 }
 
 // ── Variant ─────────────────────────────────────────────────────────────────
@@ -459,12 +501,11 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         ),
       },
       {
-        ...stateColumn<Row>({
-          label: "state",
-          title:
-            "this ROOM's derived state — the same vocabulary the rail bars and the plan fills use",
-          of: (row) => stateMeta(row.state),
-        }),
+        key: "state",
+        label: "state",
+        title:
+          "this ROOM's derived state — the same vocabulary the rail bars and the plan fills use",
+        verdict: (row) => stateMeta(row.state),
         // Pipeline order, not alphabetical: "needs a call" sorts before "in .r10" because that
         // is the order the work happens in.
         sort: (row) => ROOM_STATES.indexOf(row.state),
@@ -480,7 +521,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         sort: (row) => row.zone.zone.key,
         search: (row) => row.zone.zone.key,
         cell: (row) => (
-          <span className="tele block truncate px-1.5">
+          <span className="face-mono t-value block truncate px-1.5">
             <span
               className="mr-1 inline-block size-2 rounded-[1px] align-middle"
               style={{ background: `rgb(${row.zone.zone.color})` }}
@@ -538,8 +579,9 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           />
         ),
       },
-      // The Manual J block (+ ceiling): same shape, same law — faded until the room has data,
-      // and any number entered CREATES that data (the room's state moves to "data entered").
+      // The Manual J block (+ ceiling): same shape, same law — the never rung (muted ink, R2)
+      // until the room has data, and any number entered CREATES that data (the room's state
+      // moves to "data entered").
       // In panel mode these fields move to the room panel; the table narrows to identity+status.
       ...(fieldsMode === "columns"
         ? [
@@ -595,18 +637,19 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           { value: "none", label: "none open" },
           ...flagVocabulary.map((f) => ({ value: f, label: f })),
         ],
-        // A queued human decision is not a cell-grammar state (AUDIT #2) — there is no axis for
-        // "a person is owed a verdict here" — so this column stays hand-rolled, on the alarm role.
+        // The owed COUNT and the alarm ink now live in the table's gutter (the owed marker,
+        // ruled 2026-08-16) — this column keeps only the FILTER job, so its cell is trimmed to
+        // the filterable words themselves: the open flag names, plain ink, no double mark.
         cell: (row) =>
           row.open.length > 0 ? (
             <span
-              className="tele block truncate px-1.5 text-[var(--r-alarm)]"
+              className="face-mono t-value block truncate px-1.5 text-muted-foreground"
               title={row.open.join(", ")}
             >
-              {row.open.length} open
+              {row.open.join(", ")}
             </span>
           ) : row.room.decisions.length > 0 ? (
-            <span className="tele block truncate px-1.5 text-muted-foreground">
+            <span className="face-mono t-value block truncate px-1.5 text-muted-foreground">
               {row.room.decisions.length} decided
             </span>
           ) : null,
@@ -623,22 +666,11 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         width: "w-28",
         title:
           "this room's line in the .r10, and whether it still agrees with the model. Read-only: the identifier is assigned by sync, never typed.",
-        state: (row): StateCellProps => {
-          const r10 = row.room.r10;
-          // AUDIT #3: "never attempted" has no rung on the five axes. `unverified` — the squiggle
-          // family's "never checked" rank — is the closest TRUE statement (no reading of the .r10
-          // has ever been taken for this room) and it keeps the facet word out of "clean".
-          if (!r10) return { value: "not exported", fresh: "unverified" };
-          const drift = row.room.sqft - r10.lastSyncedSqft;
-          return drift === 0
-            ? { value: `#${r10.identifier}`, agree: "agree", fresh: "fresh" }
-            : {
-                value: `#${r10.identifier}`,
-                agree: "drift",
-                // The struck ghost token: what the .r10 still holds, at zero row-height cost.
-                modelValue: `${fmtNum(r10.lastSyncedSqft, 0)} sf`,
-              };
-        },
+        state: r10State,
+        // The domain word for the never rung (`StateColumn.word`, ruled with #1 and R2): the
+        // universal "never" is true but the route's fact is sharper — nothing of this room was
+        // ever exported. The marks stay universal; every other row keeps the grammar's word.
+        word: (row) => (row.room.r10 ? cellStateLabel(r10State(row)) : "not exported"),
       },
     ],
     [actions, flagVocabulary, fieldsMode],
@@ -670,50 +702,35 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
 
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background">
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5">
-        <h1 className="font-pe-display text-lg font-semibold tracking-tight">Takeoffs</h1>
-        <span className="tele text-muted-foreground">
-          the plan is the index; the table is the truth
-        </span>
-        {live ? (
-          <FactChip title="The targeted Revit document. Every read and every write on this page addresses it.">
-            {world.docName}
-          </FactChip>
-        ) : (
-          <FactChip
-            dashed
-            title="The fixture lane — the project-a replay, chosen explicitly by ?source=fixture. No document is attached, and nothing here can be written."
+      {/* ── ONE head rail (lang AddressingBar — families #11's five-slot rule, adopted).
+             `sync .r10` is THE page-blast verb: it is where reviewed work leaves this page.
+             `adopt zones` and `refresh` act on the world the zones pane indexes, so they live
+             in that pane's action strip; `open in RHVAC` acts on the joined .r10, so it lives
+             in the sync panel beside the join it launches. ── */}
+      <AddressingBar
+        name="takeoffs"
+        sentence={
+          <span
+            className="face-mono t-value text-[var(--r-ink)]"
+            title={
+              live
+                ? "The targeted Revit document. Every read and every write on this page addresses it."
+                : // The nothing-can-be-written stamp lives on the seam chip (its one home).
+                  "The project-a replay fixture — chosen explicitly by ?source=fixture."
+            }
           >
-            fixture · project-a replay
-          </FactChip>
-        )}
-        {world.r10Path && (
-          <FactChip title="The .r10 this document is joined against — the Manual J file rooms sync into.">
-            {world.r10Path}
-          </FactChip>
-        )}
-        <div className="ml-auto flex items-center gap-1.5">
-          {busy ? (
-            <OutcomeLine kind="busy" label={busy} says="the host runs one transaction at a time" />
-          ) : !geoReady ? (
-            <OutcomeLine
-              kind="busy"
-              label="loading room geometry"
-              says="rooms draw as position dots until their boundaries land"
-            />
-          ) : null}
-          <Verb
-            label="adopt zones"
-            onClick={actions.openAdopt}
-            disabled={!live || busy !== null}
-            reason={hostReason(
-              live,
-              busy,
-              "Opens the adoption panel: stamp designer-drawn regions in a zoning view as Zoning Regions",
-              "fixture · no document to stamp into",
-            )}
-          />
+            <span className="text-[var(--r-ink-2)]">auditing </span>
+            {world.docName || "…"}
+          </span>
+        }
+        facts={
+          world.r10Path && (
+            <FactChip title="The .r10 this document is joined against — the Manual J file rooms sync into.">
+              {world.r10Path}
+            </FactChip>
+          )
+        }
+        verb={
           <Verb
             label="sync .r10"
             onClick={actions.openSync}
@@ -725,33 +742,29 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
               "fixture · no .r10 to sync into",
             )}
           />
-          <Verb
-            tone="nav"
-            direction="out"
-            label="open in RHVAC"
-            onClick={actions.launch}
-            disabled={!live || !world.r10Path}
-            reason={
-              !live
-                ? "fixture · no host to launch RHVAC on"
-                : !world.r10Path
-                  ? "no .r10 is joined yet — load one in the sync panel first"
-                  : "Launches RHVAC on the joined .r10, outside this page"
-            }
-          />
-          <Verb
-            label="refresh"
-            onClick={actions.refresh}
-            disabled={!live || busy !== null}
-            reason={hostReason(
-              live,
-              busy,
-              "Re-reads the model: zones, materialized regions, decisions, and the .r10 join",
-              "fixture · the replay is already the whole world",
-            )}
-          />
-        </div>
-      </header>
+        }
+        advisory={
+          busy ? (
+            <OutcomeLine kind="busy" label={busy} says="the host runs one transaction at a time" />
+          ) : !geoReady ? (
+            <OutcomeLine
+              kind="busy"
+              label="loading room geometry"
+              says="rooms draw as position dots until their boundaries land"
+            />
+          ) : undefined
+        }
+        seam={
+          !live ? (
+            <FactChip
+              dashed
+              title="The fixture lane — the project-a replay, chosen explicitly by ?source=fixture. No document is attached, and nothing here can be written."
+            >
+              fixture · project-a replay
+            </FactChip>
+          ) : undefined
+        }
+      />
 
       <PaneWorkspace
         className="min-h-0 flex-1"
@@ -771,9 +784,42 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           },
         }}
         navigation={
-          <Pane kind="navigation" title="zones" meta={`${world.zones.length} declared`}>
+          <Pane
+            kind="navigation"
+            title="zones"
+            meta={`${world.zones.length} declared`}
+            /* The pane's own action strip: both verbs act on the world this pane indexes —
+               adoption fills the zone list, refresh re-reads it (families #11's standing rule;
+               they left the head when it became the five-slot rail). */
+            actions={
+              <>
+                <Verb
+                  label="adopt zones"
+                  onClick={actions.openAdopt}
+                  disabled={!live || busy !== null}
+                  reason={hostReason(
+                    live,
+                    busy,
+                    "Opens the adoption panel: stamp designer-drawn regions in a zoning view as Zoning Regions",
+                    "fixture · no document to stamp into",
+                  )}
+                />
+                <Verb
+                  label="refresh"
+                  onClick={actions.refresh}
+                  disabled={!live || busy !== null}
+                  reason={hostReason(
+                    live,
+                    busy,
+                    "Re-reads the model: zones, materialized regions, decisions, and the .r10 join",
+                    "fixture · the replay is already the whole world",
+                  )}
+                />
+              </>
+            }
+          >
             <div className="shrink-0 border-b border-border px-2 py-1.5">
-              <div className="tele-label mb-1 text-muted-foreground">
+              <div className="t-caption t-upper mb-1 text-muted-foreground">
                 room states — one per room
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -781,9 +827,9 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                   <span
                     key={s}
                     title={STATE_META[s].note}
-                    className="tele inline-flex items-center gap-1 text-muted-foreground"
+                    className="face-mono t-value inline-flex items-center gap-1 text-muted-foreground"
                   >
-                    <StateDot {...stateMeta(s)} />
+                    <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
                     {STATE_META[s].label}
                   </span>
                 ))}
@@ -791,7 +837,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
             </div>
 
             <div className="shrink-0 border-b border-border px-2 py-2">
-              <div className="tele-label mb-1 text-muted-foreground">
+              <div className="t-caption t-upper mb-1 text-muted-foreground">
                 zone pipeline — global filter
               </div>
               <div className="flex flex-col">
@@ -815,11 +861,20 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                         on && "bg-accent",
                       )}
                     >
-                      <span className="tele w-3 shrink-0 text-muted-foreground">{i + 1}</span>
-                      <span className={cn("tele flex-1 truncate", !on && "text-muted-foreground")}>
+                      <span className="face-mono t-value w-3 shrink-0 text-muted-foreground">
+                        {i + 1}
+                      </span>
+                      <span
+                        className={cn(
+                          "face-mono t-value flex-1 truncate",
+                          !on && "text-muted-foreground",
+                        )}
+                      >
                         {stage}
                       </span>
-                      <span className="tele tabular-nums text-muted-foreground">{n}</span>
+                      <span className="face-mono t-value tabular-nums text-muted-foreground">
+                        {n}
+                      </span>
                     </button>
                   );
                 })}
@@ -827,7 +882,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
               {stageFilter && (
                 <button
                   type="button"
-                  className="tele-label mt-1 text-muted-foreground hover:text-foreground"
+                  className="t-caption mt-1 text-muted-foreground hover:text-foreground"
                   onClick={() => setStageFilter(null)}
                 >
                   clear filter — show all {world.zones.length}
@@ -842,7 +897,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                 if (zs.length === 0) return null;
                 return (
                   <div key={lane.label}>
-                    <div className="tele-label sticky top-0 z-10 border-y border-[var(--r-line)] bg-muted px-2 py-0.5 text-muted-foreground">
+                    <div className="t-caption t-upper sticky top-0 z-10 border-y border-[var(--r-line)] bg-muted px-2 py-0.5 text-muted-foreground">
                       {lane.label} · {zs.length}
                     </div>
                     <ul>
@@ -868,7 +923,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                               )}
                             >
                               <ZoneThumb zone={z.zone} className="size-5" />
-                              <span className="tele shrink-0">{z.zone.key}</span>
+                              <span className="face-mono t-value shrink-0">{z.zone.key}</span>
                               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                                 {off ? "off-plan scribble" : z.name}
                               </span>
@@ -908,7 +963,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                       onClick={() => setLevel(lane.label)}
                       title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
                       className={cn(
-                        "tele rounded-[var(--radius)] border px-2 py-0.5",
+                        "face-mono t-value rounded-[var(--radius)] border px-2 py-0.5",
                         lane.label === level
                           ? "border-[var(--r-line-2)] bg-accent"
                           : "border-transparent text-muted-foreground hover:bg-muted",
@@ -926,7 +981,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                   onClick={() => setStatsOpen((v) => !v)}
                   title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
                   className={cn(
-                    "tele ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5",
+                    "face-mono t-value ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5",
                     statsOpen ? "bg-accent" : "text-muted-foreground hover:bg-muted",
                   )}
                 >
@@ -940,12 +995,12 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                       ? "collapse the plan — give the table the full height"
                       : "show the plan"
                   }
-                  className="tele rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
+                  className="face-mono t-value rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}
                 </button>
 
-                <span className="tele ml-auto text-muted-foreground">
+                <span className="face-mono t-value ml-auto text-muted-foreground">
                   {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc
                   clears
                 </span>
@@ -1014,6 +1069,19 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                   rows={rows}
                   columns={columns}
                   rowKey={(row) => row.room.guid}
+                  // THE OWED MARKER (fit reviews, ruled 2026-08-16): open detector calls owe a
+                  // human verdict — the gutter locates them with the count in the one alarm.
+                  // The flags column keeps the FILTER job; its cell dropped the duplicate
+                  // alarm count when this landed.
+                  gutter={(row) =>
+                    row.open.length > 0
+                      ? {
+                          count: row.open.length,
+                          tone: "alarm" as const,
+                          title: `${row.open.length} open detector call${row.open.length === 1 ? "" : "s"} owe a verdict — ${row.open.join(", ")} (a/d accepts or dismisses the first)`,
+                        }
+                      : null
+                  }
                   scopeLabel="rooms in scope"
                   searchPlaceholder="name / type / zone…"
                   chips={chips}
@@ -1047,11 +1115,25 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                     </>
                   }
                   empty={
-                    <>
-                      No rooms in scope. Zones before <span className="tele">partitioned</span> have
-                      no rooms yet — widen the rail filter or press{" "}
-                      <span className="tele">Esc</span>.
-                    </>
+                    // §4's two kinds, derived: the table's own narrowing (its filters, or the
+                    // rail/plan scope) hid rooms that exist — or the world genuinely has none.
+                    rows.length > 0 ? (
+                      <EmptyState story="filter" exit="clear a column filter or the search">
+                        the narrowing hid all {rows.length} rooms in scope
+                      </EmptyState>
+                    ) : world.zones.some((z) => z.rooms.length > 0) ? (
+                      <EmptyState story="filter" exit="widen the rail filter or press Esc">
+                        no rooms in this scope — the rail filter or the plan selection narrowed past
+                        every partitioned zone
+                      </EmptyState>
+                    ) : (
+                      <EmptyState
+                        story="scope"
+                        exit="capture a level, then partition a zone — rooms are materialized by partition"
+                      >
+                        no rooms anywhere yet — zones before partitioned have no rooms
+                      </EmptyState>
+                    )
                   }
                   activeKey={cursor}
                   onRowClick={(row) => {
@@ -1125,16 +1207,25 @@ function LevelPlan({
     return b;
   }, [drawn]);
 
-  // A labelled empty, not an absence: say which of the two empties this is, and where the exit is.
+  // A labelled empty, not an absence (lang EmptyState, R9). §4's two kinds, told apart: zones
+  // that exist but are excluded by the plan's own sub-60 sf gate are the FILTER story; a level
+  // nothing was ever adopted on is the SCOPE story. Different exits.
   if (!bounds)
     return (
-      <div className="flex size-full flex-col items-center justify-center gap-1 px-4 text-center">
-        <p className="tele-label text-muted-foreground">no zones on this level</p>
-        <p className="text-xs text-muted-foreground">
-          {zones.length > 0
-            ? `all ${zones.length} zone${zones.length === 1 ? "" : "s"} on this level are sub-${PLAN_MIN_SQFT} sf scribbles, drawn far from the cluster — they stay in the rail, marked.`
-            : "nothing has been adopted on this level yet. Adopt zones from a zoning-plan view, or pick another level above."}
-        </p>
+      <div className="flex size-full items-center justify-center px-4 text-center">
+        {zones.length > 0 ? (
+          <EmptyState story="filter" exit="see the rail — they stay listed there, marked">
+            all {zones.length} zone{zones.length === 1 ? "" : "s"} on this level are sub-
+            {PLAN_MIN_SQFT} sf scribbles, drawn far from the cluster
+          </EmptyState>
+        ) : (
+          <EmptyState
+            story="scope"
+            exit="adopt zones from a zoning-plan view, or pick another level above"
+          >
+            nothing has been adopted on this level yet
+          </EmptyState>
+        )}
       </div>
     );
 
@@ -1207,7 +1298,7 @@ function LevelPlan({
               {z.rooms.map((room) => {
                 const state = stateOf(room);
                 const isCursor = room.guid === cursor;
-                const tone = isCursor ? CURSOR_INK : STATE_META[state].tone;
+                const tone = isCursor ? CURSOR_INK : stateInk(state);
                 const [labelX, labelY] = frame.toViewport(room.label);
                 const click = (e: React.MouseEvent) => {
                   e.stopPropagation();
@@ -1292,12 +1383,12 @@ function LevelPlan({
 
       <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
         {ROOM_STATES.map((s) => (
-          <Swatch key={s} tone={STATE_META[s].tone} label={STATE_META[s].label} />
+          <Swatch key={s} tone={stateInk(s)} label={STATE_META[s].label} />
         ))}
         <Swatch tone={ABSENT_INK} label="held residue" seam />
         <Swatch tone={CURSOR_INK} label="cursor" />
         {skipped > 0 && (
-          <span className="tele text-muted-foreground">
+          <span className="face-mono t-value text-muted-foreground">
             {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
             rail
           </span>
@@ -1354,11 +1445,11 @@ function LevelStats({
   return (
     <div className="absolute top-2 right-2 z-20 w-64 rounded-[var(--radius)] border border-border bg-background/95 px-2 py-1.5 shadow-sm backdrop-blur">
       <div className="mb-1 flex items-baseline gap-1.5">
-        <span className="section-label">{level} — level totals</span>
+        <span className="t-label t-upper text-muted-foreground">{level} — level totals</span>
         <button
           type="button"
           onClick={onClose}
-          className="tele ml-auto text-muted-foreground hover:text-foreground"
+          className="face-mono t-value ml-auto text-muted-foreground hover:text-foreground"
         >
           ×
         </button>
@@ -1372,7 +1463,7 @@ function LevelStats({
               title={`${STATE_META[s].label} — ${fmtNum(area[s], 0)} sf`}
               style={{
                 width: `${(area[s] / Math.max(totalArea, 1)) * 100}%`,
-                background: STATE_META[s].tone,
+                background: stateInk(s),
                 opacity: s === "unreviewed" ? 0.35 : 0.9,
               }}
             />
@@ -1388,7 +1479,7 @@ function LevelStats({
           />
         )}
       </div>
-      <p className="tele mt-0.5 text-muted-foreground">
+      <p className="face-mono t-value mt-0.5 text-muted-foreground">
         {fmtNum(totalArea, 0)} sf declared on this level, by room state
       </p>
 
@@ -1421,7 +1512,7 @@ function LevelStats({
 
 function StatLine({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <p className="tele flex gap-1.5">
+    <p className="face-mono t-value flex gap-1.5">
       <span className="w-16 shrink-0 text-right text-muted-foreground">{label}</span>
       <span className={cn("min-w-0 flex-1 truncate", tone)}>{value}</span>
     </p>
@@ -1432,7 +1523,7 @@ function StatLine({ label, value, tone }: { label: string; value: string; tone?:
 
 function Line({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <p className="tele flex gap-1.5">
+    <p className="face-mono t-value flex gap-1.5">
       <span className="w-16 shrink-0 text-right text-muted-foreground">{label}</span>
       <span className={cn("min-w-0 flex-1 break-words", muted && "text-muted-foreground")}>
         {value}
@@ -1481,13 +1572,15 @@ function ZoneCard({
     <div className="absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur">
       <div className="flex items-center gap-1.5 px-2 py-1.5">
         <ZoneThumb zone={zone.zone} className="size-5" />
-        <span className="tele">{zone.zone.key}</span>
-        <span className="tele min-w-0 truncate text-muted-foreground">{zone.name}</span>
+        <span className="face-mono t-value">{zone.zone.key}</span>
+        <span className="face-mono t-value min-w-0 truncate text-muted-foreground">
+          {zone.name}
+        </span>
         <button
           type="button"
           onClick={onClose}
           title="deselect this zone (Esc) — the table widens back to the whole house"
-          className="tele ml-auto text-muted-foreground hover:text-foreground"
+          className="face-mono t-value ml-auto text-muted-foreground hover:text-foreground"
         >
           ×
         </button>
@@ -1498,7 +1591,7 @@ function ZoneCard({
       <div className="space-y-1 px-2 py-1.5">
         <div className="flex items-center gap-1.5">
           <ZoneStateBar zone={zone} states={states} className="w-16" />
-          <span className="tele text-muted-foreground" title={STAGE_BLURB[zone.stage]}>
+          <span className="face-mono t-value text-muted-foreground" title={STAGE_BLURB[zone.stage]}>
             {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
           </span>
         </div>
@@ -1516,7 +1609,7 @@ function ZoneCard({
           </FactChip>
         )}
         {zoneSystems.map((s) => (
-          <p key={s.tag} className="tele text-muted-foreground">
+          <p key={s.tag} className="face-mono t-value text-muted-foreground">
             {s.tag} · {fmtNum(s.sensibleBtuh, 0)} Btu/h
             {s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""}
           </p>
@@ -1602,12 +1695,15 @@ function RoomPanel({
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
             <StateDot {...stateMeta(state)} />
             <span
-              className={cn("tele", state === "call" ? "text-[var(--r-alarm)]" : undefined)}
+              className={cn(
+                "face-mono t-value",
+                state === "call" ? "text-[var(--r-alarm)]" : undefined,
+              )}
               title={STATE_META[state].note}
             >
               {STATE_META[state].label}
             </span>
-            <span className="tele text-muted-foreground">
+            <span className="face-mono t-value text-muted-foreground">
               {room.sqft} sf · {fmtNum(room.ceilingFt, 1)} ft clg · {room.type}
             </span>
           </p>
@@ -1615,9 +1711,11 @@ function RoomPanel({
 
         {fieldsMode === "panel" && (
           <div className="px-2.5 py-2">
-            <p className="section-label mb-1">manual j — this room</p>
+            <p className="t-label t-upper mb-1 text-muted-foreground">manual j — this room</p>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
-              <span className="tele pr-1.5 text-right text-muted-foreground">ceil ft</span>
+              <span className="face-mono t-value pr-1.5 text-right text-muted-foreground">
+                ceil ft
+              </span>
               <span className="rounded-[1px] border border-[var(--r-line)]">
                 <NumberCell
                   value={room.ceilingFt}
@@ -1628,7 +1726,9 @@ function RoomPanel({
               </span>
               {MANUAL_J.map((mj) => (
                 <Fragment key={mj.field}>
-                  <span className="tele pr-1.5 text-right text-muted-foreground">{mj.label}</span>
+                  <span className="face-mono t-value pr-1.5 text-right text-muted-foreground">
+                    {mj.label}
+                  </span>
                   <span className="rounded-[1px] border border-[var(--r-line)]">
                     <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
@@ -1640,12 +1740,14 @@ function RoomPanel({
 
         {open.length > 0 && (
           <div className="px-2.5 py-2">
-            <p className="section-label mb-1">open calls — {open.length}</p>
+            <p className="t-label t-upper mb-1 text-muted-foreground">open calls — {open.length}</p>
             <ul className="space-y-2">
               {open.map((flag) => (
                 <li key={flag}>
-                  <p className="tele text-[var(--r-alarm)]">{flag}</p>
-                  <p className="tele text-muted-foreground">{FLAG_MEANING[flag] ?? "no blurb"}</p>
+                  <p className="face-mono t-value text-[var(--r-alarm)]">{flag}</p>
+                  <p className="face-mono t-value text-muted-foreground">
+                    {FLAG_MEANING[flag] ?? "no blurb"}
+                  </p>
                   {/* The verdict's TONE is derived from the lane, not maintained: on the live
                       lane it writes onto the Room Region provenance blob (a write beyond the
                       page — `commit`), on the fixture it only marks locally (`act`). The route
@@ -1699,7 +1801,7 @@ function RoomPanel({
         )}
 
         <div className="px-2.5 py-2">
-          <p className="section-label mb-1">provenance</p>
+          <p className="t-label t-upper mb-1 text-muted-foreground">provenance</p>
           <Line label="run" value={room.provenance.runId} />
           <Line
             label="source sf"
@@ -1741,8 +1843,8 @@ function RoomPanel({
         </div>
 
         <div className="space-y-1 px-2.5 py-2">
-          <p className="section-label">addressable</p>
-          <p className="tele rounded-[var(--radius)] border border-[var(--r-line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
+          <p className="t-label t-upper text-muted-foreground">addressable</p>
+          <p className="face-mono t-value rounded-[var(--radius)] border border-[var(--r-line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
             {url}
           </p>
         </div>
@@ -1825,7 +1927,9 @@ function ZonePeek({
           {zone.rooms.map((room) => {
             const on = cursorRoom?.guid === room.guid;
             const state = stateOf(room);
-            const accent = on ? CURSOR_INK : STATE_META[state].tone;
+            // `stateInk`, not the tone NAME — the tone is a token key ("alarm"), and feeding it
+            // to color-mix silently produced an invalid colour (found during the adoption pass).
+            const accent = on ? CURSOR_INK : stateInk(state);
             const [labelX, labelY] = frame.toViewport(room.label);
             if (!room.outer) {
               const r = Math.max(Math.sqrt(Math.max(room.sqft, 20)) / 3.2, span / 90);
@@ -1885,11 +1989,11 @@ function ZonePeek({
 
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-2.5 py-1">
         <Swatch tone={CURSOR_INK} label="cursor room" />
-        <Swatch tone={STATE_META.call.tone} label="needs a call" />
+        <Swatch tone={stateInk("call")} label="needs a call" />
         {zone.residues.length > 0 && (
           <Swatch tone={ABSENT_INK} label={`held ×${zone.residues.length}`} seam />
         )}
-        <span className="tele text-muted-foreground">
+        <span className="face-mono t-value text-muted-foreground">
           {withGeometry.length}/{zone.rooms.length} with real boundaries
         </span>
       </div>

@@ -41,7 +41,7 @@ If a tool, operation, skill, or prompt leaves these questions implicit, it is in
 
 For **Pea**, host operations and product workflows must expose important secondary and tertiary relationships, not just flat object lists. `pe_status`, automatic document context injection, workspace roots, loaded-family catalogs, schema summaries, and generated reference docs are examples of context surfaces that make the Revit world smaller and more legible.
 
-For **Peco**, the priority is removing live-loop and source-navigation friction. The agent should receive clear diagnostics, freshness verdicts, proof-lane guidance, focused repo skills, and enough source structure to avoid guessing where behavior belongs.
+For **Peco**, the priority is removing execution-loop and source-navigation friction. The agent should receive clear diagnostics, freshness verdicts, proof-lane guidance, focused repo skills, and enough source structure to avoid guessing where behavior belongs.
 
 ## Control Loop and Judgment Loop
 

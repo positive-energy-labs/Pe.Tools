@@ -31,6 +31,17 @@ internal static class TsHostLauncher {
                         false,
                         $"Sharing this checkout's running dev host: {DescribeFile(file)}"
                     );
+                // Say WHY we are about to spawn — the 2026-08-20 livelock was undiagnosable because
+                // this branch fell through silently against a healthy incumbent.
+                Serilog.Log.Information(
+                    "Dev host not shared: file={File} at {Path} health={Health} match={Match} (want lane=dev exe={Exe} sourceRoot={Root})",
+                    file is null ? "unreadable-or-missing" : DescribeFile(file),
+                    ServiceFile.PathFor(appBase, serviceName),
+                    file is not null && ProbeHealth(file.Port),
+                    file is not null && MatchesDevTarget(file, runtime),
+                    runtime.HostExecutablePath,
+                    runtime.SourceHostWorkingDirectory
+                );
             }
 
             return PeRuntimeContext.Deployment is { } deployment
@@ -164,7 +175,7 @@ internal static class TsHostLauncher {
     ) {
         var appBase = ResolveAppBase();
         var process = Process.Start(startInfo);
-        var timeout = TimeSpan.FromSeconds(45);
+        var timeout = TimeSpan.FromSeconds(90); // a vite dev host cold-starts in 40-60 s; 45 s false-failed 2026-08-20
         var deadlineUtc = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadlineUtc) {
             Thread.Sleep(250);
@@ -205,6 +216,10 @@ internal static class TsHostLauncher {
     }
 
     // SDK-owned probe (public since beta.98) — one implementation, never re-rolled per consumer.
+    // FOOTGUN (live-verified 2026-07-03): a stale dev-root Pe.Host.exe left over from the deleted C#
+    // ASP.NET host LISTENS but 404s /host/status, so the port is open while product identity is
+    // unprovable. The fix is `vp pack` in apps/host and copying the TS-built Pe.Host.exe into the dev
+    // host root. A source-run `jiti src/index.ts` host or a stale dev root is never lane proof.
     private static bool ProbeHealth(int port) =>
         InstalledProduct.ProbeHealth(port, HostProcessIdentity.HealthPath);
 

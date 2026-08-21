@@ -203,7 +203,7 @@ public sealed record HostOperationDefinition(
             return HostOperationVisibility.DefaultVisible;
         // ExpertOnly = admin/plumbing surfaces (schema/field-option feeds for UIs,
         // cache admin) and heavy diagnostics; reachable only by explicit tier filter.
-        // Rationale per key: docs/op-audit.md.
+        // Rationale per key: ADR 0003 (read envelope and glance tier); open review items in docs/features/host/LEDGER.md.
         if (key is "revit.matrix.schedule-profiles"
             or "revit.catalog.electrical-load-classifications"
             or "revit.catalog.field-options"

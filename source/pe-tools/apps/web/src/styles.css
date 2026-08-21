@@ -1,3 +1,6 @@
+/* TODO: Google Fonts is a REMOTE BLOCKING @import — first paint waits on fonts.googleapis.com,
+   and the app is a local tool that may run with no internet at all. Self-host Open Sans and
+   Spectral (or drop to the system stack) so the page never blocks on a third party. */
 @import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Spectral:wght@500;600;700&display=swap");
 @import "tailwindcss";
 @plugin '@tailwindcss/typography';
@@ -44,75 +47,14 @@
   --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
   --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
 
-  /* ══ MIGRATION ALIAS SHIM — EVERY LINE BELOW IS DEBT ════════════════════════
-     The entire pre-lang vocabulary (--st- · --act- · --cat- · --pe- · Lens), resolved
-     onto --r-* canon so unmigrated routes render coherently on the new grounds.
-     A route pass replaces its consumers with components/lang + real --r-* roles,
-     then DELETES its lines here. LINE COUNT IS THE PROGRESS METER.
-     Never add a line; never consume these in new code. */
-
-  /* hairlines — chain off --foreground, so they already ride --r-ink */
-  --line: color-mix(in srgb, var(--foreground) 12%, transparent);
-  --line-2: color-mix(in srgb, var(--foreground) 20%, transparent);
-  --line-soft: color-mix(in srgb, var(--foreground) 7%, transparent);
-
-  /* Lens vocabulary — chains through the semantic layer above */
-  --paper: var(--background);
-  --paper-2: var(--muted);
-  --paper-3: color-mix(in srgb, var(--background), var(--muted) 50%);
-  --mist: var(--secondary);
-  --basalt: var(--foreground);
-  --ink: var(--foreground);
-  --slate: var(--muted-foreground);
-  --lens-ink-2: var(--muted-foreground);
-  --pe-blue: var(--primary);
-  --pe-blue-soft: var(--r-nav);
-  --pe-green: var(--r-pea);
-  --lichen: var(--cat-lichen);
-  --clay: var(--cat-clay);
-  --kiln: var(--cat-kiln);
-  --fail: var(--destructive);
-  --clay-ink: var(--r-alarm);
-  --clay-tint: color-mix(in srgb, var(--r-alarm) 10%, var(--r-page));
-
-  /* workbench identity — "you". SHIM: neutral ink until the workbench pass rules
-     whether the user gets an identity hue at all (finding for joint review). */
-  --user: var(--r-ink-2);
-  --user-tint: color-mix(in srgb, var(--user) 14%, transparent);
-  --user-line: color-mix(in srgb, var(--user) 36%, transparent);
-  --pea-tint: color-mix(in srgb, var(--pe-green) 12%, transparent);
-  --pea-line: color-mix(in srgb, var(--pe-green) 32%, transparent);
-
-  /* categorical palette — now the viz ladder (design-lang.css). Series identity
-     carries over: blue·green·slate·lichen·clay·kiln → viz-1..6. Consumers that
-     spend these as STATE (clay=warning, green=success) are the violation the
-     route passes exist to fix; taxonomy spends migrate to --viz-* directly. */
-  --cat-blue: var(--viz-1);
-  --cat-green: var(--viz-2);
-  --cat-slate: var(--viz-3);
-  --cat-lichen: var(--viz-4);
-  --cat-clay: var(--viz-5);
-  --cat-kiln: var(--viz-6);
-
-  /* role tokens (COLOR-ROLES.md, superseded by the --r-* meaning band).
-     −2 lines, /family promotion 2026-08-16: `--st-derived` and `--st-ground` died with
-     variant-e and have no consumer left anywhere. The seven below all still resolve real
-     spends inside `components/ui/{verb,chip,switcher}.tsx` — whose last PRODUCT consumers this
-     pass removed. What holds them alive now is the design-system's own SUPERSEDED-SPECIMEN
-     exhibits (`/design-system/swatch` imports both `ui/verb` and `ui/chip` to show what the
-     lang components replaced), so retiring these seven lines is that exhibit's call, not a
-     route pass's. */
-  --act-commit: var(--r-commit);
-  --act-hover: color-mix(in srgb, var(--r-ink) 40%, transparent);
-  --st-proposal: var(--r-pea);
-  --st-drift: var(--r-alarm);
-  --st-warn: var(--r-caution);
-  --st-done: var(--r-done);
-  --st-meta: var(--r-ink-2);
+  /* ══ MIGRATION ALIAS SHIM — THE METER READS ZERO ════════════════════════════
+     The entire pre-lang vocabulary (--st- · --act- · --cat- · --pe- · Lens, and finally
+     --line-soft with the 2026-08-16 exhibit cleanup) is DELETED at verified zero consumers.
+     LINE COUNT IS THE PROGRESS METER, and it is 0. Never add a line back. */
 }
 
 @theme inline {
-  /* PE type system (PE_DESIGN_VIBE.md): Open Sans is the working body/UI default,
+  /* PE type system (docs/features/design-system/LEDGER.md): Open Sans is the working body/UI default,
      Spectral is a selective display garnish. font-sans === font-pe so the whole app
      inherits the PE body font without every element opting in. */
   --font-sans: "Open Sans", system-ui, -apple-system, sans-serif;
@@ -138,16 +80,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  /* Categorical data palette as real utilities (bg-cat-blue/12, text-cat-clay, border-cat-green/25)
-     so consumers stop reaching for bg-[var(--cat-*)] brackets. One hue per category; tint it. */
-  --color-cat-blue: var(--cat-blue);
-  --color-cat-green: var(--cat-green);
-  --color-cat-slate: var(--cat-slate);
-  --color-cat-lichen: var(--cat-lichen);
-  --color-cat-clay: var(--cat-clay);
-  --color-cat-kiln: var(--cat-kiln);
   /* Viz ladder utilities (bg-viz-1/12, text-viz-3, border-viz-5/25) — the parallel
-     palette for taxonomy/series spends. cat-* above is its shim-era alias. */
+     palette for taxonomy/series spends. The cat-* shim-era aliases are gone. */
   --color-viz-1: var(--viz-1);
   --color-viz-2: var(--viz-2);
   --color-viz-3: var(--viz-3);
@@ -168,7 +102,7 @@ body,
   min-height: 100%;
 }
 
-/* ── TYPE TIERS (ruled 2026-08-16 · evidence: docs/features/design-lang/TYPE-COPY-CENSUS.md) ──
+/* ── TYPE TIERS (ruled 2026-08-16) ──────────────────────────────────────────────────────────
    Three orthogonal axes, so a text spend is three one-word decisions:
      TIER — size+leading by ROLE, the six utilities below. Arbitrary text-[Npx] and every
             half-pixel size die; the census shows the first three tiers cover 90% of real use.
@@ -178,8 +112,8 @@ body,
             tier — that one decision retires the seven hand-rolled section-head forks.
    WEIGHT LAW (ruled with it): bold = unsaved on data surfaces, or emphasis inside t-prose —
    never chrome emphasis. Semibold = t-title and t-upper heads ONLY. Chrome never buys weight.
-   tele / tele-label / section-label below are LEGACY bundles: routes shed them during their
-   sweep pass; new code composes tier × face × case instead. */
+   The legacy tele / tele-label / section-label bundles are DELETED (2026-08-16 exhibit
+   cleanup, verified zero consumers); everything composes tier × face × case. */
 @utility t-caption {
   font-size: 10px;
   line-height: 1.4;
@@ -220,32 +154,6 @@ body,
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
-}
-
-/* ── Legacy type bundles (superseded by tier × face × case above) ────────────
-   Two families only. Open Sans for anything a human reads as language; mono for
-   anything the machine measured. The law: "mono means the machine measured this" —
-   states, stats, statuses, timestamps, durations, counts, ids get tele/tele-label;
-   mono is never chrome. Section headers are small-caps tracked SANS (not mono). */
-@utility tele {
-  font-family: var(--font-pe-mono);
-  font-size: 12px;
-  letter-spacing: 0.05em;
-  font-variant-numeric: tabular-nums;
-}
-@utility tele-label {
-  font-family: var(--font-pe-mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-}
-@utility section-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted-foreground);
 }
 
 /* Centered content column — the one piece of the old shell worth keeping. */

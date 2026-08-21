@@ -48,7 +48,9 @@ export const hostOperationDefinitionSchema = Schema.Struct({
   searchTerms: Schema.optional(Schema.Array(Schema.String)),
   intent: Schema.optional(hostOperationIntentSchema),
   requiresActiveDocument: Schema.optional(Schema.Boolean),
-  supportedActiveDocumentKind: Schema.optional(Schema.Literals(["Any", "ProjectOnly", "FamilyOnly"])),
+  supportedActiveDocumentKind: Schema.optional(
+    Schema.Literals(["Any", "ProjectOnly", "FamilyOnly"]),
+  ),
   costTier: Schema.optional(hostOperationCostTierSchema),
   visibility: Schema.optional(hostOperationVisibilitySchema),
   requestExamples: Schema.optional(Schema.Array(hostOperationRequestExampleSchema)),

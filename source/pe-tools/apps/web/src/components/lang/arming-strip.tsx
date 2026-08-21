@@ -1,11 +1,13 @@
 /**
  * ARMING STRIP — the ceremony surface for a write that leaves the page.
  *
- * CONSUMER: soon — the family apply verb. No surface has ever shipped an arming strip; this is
- * the first, and SURFACE-PHILOSOPHY §3 has been owed it since the honesty rules were written
- * (reason supplied before it arms · explicit identity · plan hash · drift refusal · receipt).
+ * CONSUMER: /parameter-links (fit reviews, ruled 2026-08-16 — the first shipping consumer:
+ * its preview→stale→apply gate IS this lifecycle, `refused`'s re-plan = preview). The family
+ * apply verb is next. SURFACE-PHILOSOPHY §3 has been owed this strip since the honesty rules
+ * were written (reason supplied before it arms · explicit identity · plan hash · drift
+ * refusal · receipt).
  *
- * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * RULINGS EMBODIED:
  * - ROUND 1's SECOND MECHANICAL FINDING: **only variant e's arming strip read as ceremony rather
  *   than "just another component"**, and that was attributed to BORDER SCARCITY — a tinted
  *   ground plus one edge, inside the artifact frame, doing what an outline box could not. This
@@ -26,8 +28,8 @@
  * - COMMIT IS THE ONLY FILLED BLUE, at every blast radius. Cancel and re-plan are `act`.
  *
  * ponytail: arming has no lifecycle or identity in the state model — no armed-at, no armed-by,
- * no link from the verb it arms, and no link from a refusal to a fresh plan hash (CLEANROOM,
- * "state-model gaps that block grammar work"). The consequence is visible and stated on the
+ * no link from the verb it arms, and no link from a refusal to a fresh plan hash. The consequence
+ * is visible and stated on the
  * surface rather than hidden: the strip cannot say how stale its own plan is, which is the one
  * fact that decides whether to press it. Upgrade path: the arming record grows `armedAt`,
  * `armedBy` and `supersededBy`, then this signature takes them and the caveat line is deleted.

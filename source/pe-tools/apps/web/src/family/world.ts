@@ -38,7 +38,13 @@ export interface ProtoParam {
  * The prose records stay exactly as they were — variants a–d read them, and this section is
  * additive. Where the two overlap they agree by construction: this fixture mirrors the prose.
  */
-export type GeomKind = "Prism" | "Cylinder" | "VoidCylinder" | "DuctConnector" | "PipeConnector";
+/**
+ * The constituent's kind, VERBATIM from the document. Widened from a five-member union to a
+ * string in phase B: the union was this fixture's inventory, and the real schema carries kinds it
+ * never named (`VoidPrism`, an `Electrical` connector). The kind is display-only — nothing
+ * branches on it — so narrowing it bought type safety over a set that was never closed.
+ */
+export type GeomKind = string;
 
 /** `param:<Name>` when a family parameter drives the dim; anything else is a frozen literal. */
 export type GeomBinding = string;

@@ -9,7 +9,6 @@ import {
   LayoutGrid,
   Link2,
   Map,
-  LoaderCircle,
   MessageSquare,
   Palette,
   Server,
@@ -20,7 +19,9 @@ import {
 } from "lucide-react";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
-import { Button } from "#/components/ui/button";
+import { FactChip } from "#/components/lang/chip";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Verb } from "#/components/lang/verb";
 import { Card } from "#/components/ui/card";
 
 type InstallStatus = {
@@ -95,34 +96,40 @@ function UpdateButton() {
   return (
     <div className="flex items-center gap-2">
       {installed.data?.releaseVersion && (
-        <span className="text-xs text-muted-foreground">v{installed.data.releaseVersion}</span>
+        <FactChip title="the host release currently installed as a service">
+          v{installed.data.releaseVersion}
+        </FactChip>
       )}
-      {available.data?.error && (
-        <span className="text-xs text-muted-foreground">update check unavailable</span>
-      )}
-      {update.isSuccess && (
-        <span className="text-xs text-muted-foreground">
-          {update.data.changed
-            ? `updated to ${update.data.releaseVersion} — staged for the next Revit start; this Revit keeps its loaded version`
-            : `already on the latest version (${update.data.releaseVersion})`}
-        </span>
-      )}
+      {available.data?.error && <OutcomeLine kind="advisory" label="update check unavailable" />}
+      {update.isSuccess &&
+        (update.data.changed ? (
+          <OutcomeLine
+            kind="receipt"
+            label={`updated to ${update.data.releaseVersion}`}
+            says="staged for the next Revit start; this Revit keeps its loaded version"
+          />
+        ) : (
+          <OutcomeLine
+            kind="advisory"
+            label={`already on ${update.data.releaseVersion}`}
+            says="the latest release is installed"
+          />
+        ))}
       {update.isError && (
-        <span className="text-xs text-destructive">
-          {String(update.error?.message ?? update.error)}
-        </span>
+        <OutcomeLine kind="error" label={String(update.error?.message ?? update.error)} />
       )}
       {installed.data?.releaseVersion &&
         (available.data?.updateAvailable || update.isPending) &&
         !update.isSuccess && (
-          <Button size="sm" onClick={() => update.mutate()} disabled={update.isPending}>
-            {update.isPending ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <DownloadCloud className="size-4" />
-            )}
-            {update.isPending ? "Updating…" : "Update"}
-          </Button>
+          <Verb
+            tone="commit"
+            label="update"
+            icon={DownloadCloud}
+            busy={update.isPending}
+            disabled={update.isPending}
+            onClick={() => update.mutate()}
+            reason="Download and install the latest host release — the running Revit keeps its loaded add-in until it restarts"
+          />
         )}
     </div>
   );
@@ -130,6 +137,9 @@ function UpdateButton() {
 
 export const Route = createFileRoute("/")({ component: App });
 
+/** The front door lists EVERY living route (SURFACE-PHILOSOPHY §0: a surface unreachable
+ * from the front door rots). `/design-system`'s satellite exhibits are reachable through
+ * the satellite links on its card. */
 const TOOLS = [
   {
     to: "/family",
@@ -215,7 +225,7 @@ const TOOLS = [
     label: "Fleet",
     icon: Server,
     description:
-      "Every Revit world the bridge and sandbox registry know about — your own session, pea-owned sandboxes you start and stop, and the ledger of what happened.",
+      "Every Revit world pe-revit and the bridge know about — the sessions pea controls and starts and stops, the one it only observes (your own Revit), each session's companion legs, and the ledger of what happened.",
   },
   {
     to: "/design-system",
@@ -224,6 +234,12 @@ const TOOLS = [
     icon: Palette,
     description:
       "The spec and catalogue for the design language — production components under production tokens, with the gaps they cannot yet express marked in place.",
+    satellites: [
+      { to: "/design-system/proposal-flow", label: "proposal-flow" },
+      { to: "/design-system/arming", label: "arming" },
+      { to: "/design-system/popovers", label: "popovers" },
+      { to: "/design-system/swatch", label: "swatch" },
+    ],
   },
 ] as const;
 
@@ -247,8 +263,8 @@ function App() {
       <header className="border-b border-border">
         <div className="page-wrap flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-primary" />
-            <span className="text-sm font-semibold tracking-tight text-foreground">
+            <span className="size-2 rounded-full bg-foreground" />
+            <span className="t-value font-semibold tracking-tight text-foreground">
               Positive Energy
             </span>
           </div>
@@ -261,13 +277,14 @@ function App() {
 
       <main className="page-wrap py-16">
         <section className="max-w-2xl">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Internal tools · Update proof 0.6.22
+          <p className="t-label t-upper mb-3 text-muted-foreground">
+            Internal tools ·{" "}
+            <span className="face-mono normal-case font-normal">update proof 0.6.22</span>
           </p>
-          <h1 className="font-pe-display text-5xl font-semibold leading-tight tracking-tight text-foreground">
+          <h1 className="t-display font-pe-display tracking-tight text-foreground">
             Healthy people, healthy planet.
           </h1>
-          <p className="mt-4 text-base leading-7 text-muted-foreground">
+          <p className="t-prose mt-4 text-muted-foreground">
             A small workbench of internal tools — the Pea agent, Revit data, and the host pipeline.
             Pick one to get started.
           </p>
@@ -275,27 +292,37 @@ function App() {
 
         <section className="mt-12 grid gap-4 sm:grid-cols-2">
           {tools.map((tool) => (
-            <Card
-              key={tool.to}
-              render={<Link to={tool.to} />}
-              className="group flex flex-col gap-3 p-5 transition-colors hover:border-primary/40 hover:bg-accent/30"
-            >
-              <div className="flex items-center justify-between">
-                <span className="inline-flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                  <tool.icon className="size-4.5" />
-                </span>
-                <ArrowUpRight className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
-              </div>
-              <div>
-                <p className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
-                  {tool.label}
+            <div key={tool.to} className="flex flex-col gap-1.5">
+              <Card
+                render={<Link to={tool.to} />}
+                className="group flex flex-1 flex-col gap-3 p-5 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex size-9 items-center justify-center rounded-[var(--radius)] bg-[var(--r-recess)] text-foreground">
+                    <tool.icon className="size-4.5" />
+                  </span>
+                  <ArrowUpRight className="size-4 text-muted-foreground group-hover:text-[var(--r-nav)]" />
+                </div>
+                <div>
+                  <p className="t-caption t-upper text-muted-foreground">{tool.label}</p>
+                  <h2 className="t-title mt-0.5 tracking-tight text-foreground">{tool.title}</h2>
+                  <p className="t-prose mt-1.5 text-muted-foreground">{tool.description}</p>
+                </div>
+              </Card>
+              {"satellites" in tool && (
+                <p className="t-caption face-mono flex flex-wrap gap-x-2 px-1 text-muted-foreground">
+                  {tool.satellites.map((satellite) => (
+                    <Link
+                      key={satellite.to}
+                      to={satellite.to}
+                      className="text-[var(--r-nav)] hover:underline"
+                    >
+                      /{satellite.label}
+                    </Link>
+                  ))}
                 </p>
-                <h2 className="mt-0.5 text-lg font-semibold tracking-tight text-foreground">
-                  {tool.title}
-                </h2>
-                <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{tool.description}</p>
-              </div>
-            </Card>
+              )}
+            </div>
           ))}
         </section>
       </main>

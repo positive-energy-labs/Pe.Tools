@@ -5,7 +5,7 @@
  * it describes (the table's recess foot), not beside it — the key describes the table, so making
  * it a fifth framed object would spend the border budget on a caption.
  *
- * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * RULINGS EMBODIED:
  * - ROUND-2 RULING NOTE 2 promoted the key to a first-class entity: it was instrumental to the
  *   table reading at all, and its open design work — how cell states sort and group inside it —
  *   was handed to this step and answered here: **grouped BY AXIS, ordered inside a group by the
@@ -61,17 +61,21 @@ const AXES: readonly KeyAxis[] = [
   },
   {
     axis: "freshness",
-    asks: "how old is the reading behind it?",
+    asks: "how much do we know about it?",
     items: [
       { label: "stale read", specimen: <StateCell value="5.5 in" fresh="stale" /> },
-      { label: "never read", specimen: <StateCell value="26 in" fresh="unverified" /> },
+      {
+        label: "unverified — value never checked",
+        specimen: <StateCell value="26 in" fresh="unverified" />,
+      },
+      { label: "never — nothing attempted yet", specimen: <StateCell value="—" fresh="never" /> },
     ],
   },
   {
     axis: "capability",
     asks: "can it be written at all?",
     items: [
-      // GRAMMAR GAP (CLEANROOM): `readonly` and `excluded` are two different refusals — a formula
+      // GRAMMAR GAP: `readonly` and `excluded` are two different refusals — a formula
       // drives it · the model never bound it — and render as ONE greyed-italic body. The key can
       // only show what the cell draws, so it shows one specimen and names both.
       {

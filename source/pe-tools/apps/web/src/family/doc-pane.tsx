@@ -9,23 +9,28 @@
  * PROPOSALS DOCK ON TOP OF IT, so the verdict is always beside the spec text that justifies it —
  * the whole reason the table's rail and folds only ever LOCATE and never decide.
  */
+import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Switcher } from "#/components/ui/switcher";
-import { EMPTY_CLASS, SPEC, hashOf, type CellVerdict } from "#/family/model";
-import type { ProtoProposal } from "#/family/world";
+import { Switcher } from "#/components/lang/switcher";
+import { hashOf, type CellVerdict } from "#/family/model";
+import type { ProtoProposal, ProtoSpec } from "#/family/world";
 import { cn } from "#/lib/utils";
 
-export function SpecText({ litBlocks }: { litBlocks: Set<string> }) {
-  const spec = SPEC;
+export function SpecText({
+  spec,
+  litBlocks,
+}: {
+  /** The open document's spec, THREADED rather than imported: on the live lane there is not one
+   * yet, and a pane that kept rendering the fixture's cut sheet would be citing another family. */
+  spec: ProtoSpec | null;
+  litBlocks: Set<string>;
+}) {
   if (!spec)
     return (
-      <p
-        className={cn(EMPTY_CLASS, "p-3")}
-        title="No document is attached to this profile, so no number in it can be cited. Parsing a cut sheet is what fills this pane."
-      >
+      <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
         no spec attached — every number in the profile is asserted rather than sourced
-      </p>
+      </EmptyState>
     );
   return (
     <div className="space-y-2 p-2">
@@ -46,13 +51,13 @@ export function SpecText({ litBlocks }: { litBlocks: Set<string> }) {
               lit ? "border-[var(--r-line-2)] bg-[var(--r-select)]" : "border-[var(--r-line)]",
             )}
           >
-            <div className="tele flex items-baseline justify-between text-[9px] text-[var(--r-ink-2)]">
+            <div className="face-mono flex items-baseline justify-between t-caption text-[var(--r-ink-2)]">
               <span>
                 {block.id} · p{block.page}
               </span>
               <span>{block.kind}</span>
             </div>
-            <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-[10px] leading-snug text-[var(--r-ink)]">
+            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption leading-snug text-[var(--r-ink)]">
               {block.md}
             </pre>
           </div>
@@ -67,23 +72,21 @@ export function SpecText({ litBlocks }: { litBlocks: Set<string> }) {
  * stand-in that moved between renders would be worse than nothing.
  */
 export function SpecSheet({
+  spec,
   litBlocks,
   zoom,
   onZoom,
 }: {
+  spec: ProtoSpec | null;
   litBlocks: Set<string>;
   zoom: number;
   onZoom: (zoom: number) => void;
 }) {
-  const spec = SPEC;
   if (!spec)
     return (
-      <p
-        className={cn(EMPTY_CLASS, "p-3")}
-        title="There is no parsed document behind this pane, so there are no block placements to draw."
-      >
-        no spec attached to render
-      </p>
+      <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
+        no spec attached to render — there are no block placements to draw
+      </EmptyState>
     );
 
   const pages = [...new Set(spec.blocks.map((block) => block.page))].sort((a, b) => a - b);
@@ -126,7 +129,7 @@ export function SpecSheet({
           const blocks = spec.blocks.filter((block) => block.page === page);
           return (
             <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
-              <div className="tele mb-0.5 text-[9px] text-[var(--r-ink-2)]">page {page}</div>
+              <div className="face-mono mb-0.5 t-caption text-[var(--r-ink-2)]">page {page}</div>
               <svg
                 viewBox="0 0 100 130"
                 className="block w-full border border-[var(--r-line-2)] bg-[var(--r-page)]"
@@ -187,12 +190,15 @@ export function ProposalCard({
   verdict,
   focused,
   blockMd,
+  specFileName,
   onAccept,
   onDeny,
   onHover,
   register,
 }: {
   proposal: ProtoProposal;
+  /** Named so the citation line can say WHICH document it read from. */
+  specFileName?: string | null;
   verdict: CellVerdict;
   focused: boolean;
   blockMd: string | null;
@@ -227,7 +233,7 @@ export function ProposalCard({
         colour: "var(--r-ink-mute)",
         // MUTED, never `--r-done`: nothing of pea's was adopted. Accepted and superseded look
         // different because they ARE different — one is agreement, the other is being overtaken.
-        // The CELL shows nothing at all; the grammar has no `severed` stage (DESIGN-AUDIT #7).
+        // The CELL shows nothing at all; the grammar has no `severed` stage.
         note: `Superseded — you typed your own value into ${target}, so pea's ${proposal.proposed} has nothing left to argue for. There was no accept and no deny; the cell simply moved on. The grounding citation is untouched, because where a number came from is a separate fact from what pea read.`,
       },
     }[verdict];
@@ -236,7 +242,7 @@ export function ProposalCard({
         ref={register}
         onMouseEnter={() => onHover(true)}
         onMouseLeave={() => onHover(false)}
-        className="tele flex items-baseline gap-1 py-0.5 text-[9px]"
+        className="face-mono flex items-baseline gap-1 py-0.5 t-caption"
         title={settled.note}
         style={{ color: settled.colour }}
       >
@@ -264,15 +270,15 @@ export function ProposalCard({
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
-      <div className="tele text-[9px] text-[var(--r-ink-2)]">{target}</div>
-      <div className="tele text-[11px] text-[var(--r-pea-ink)]">
+      <div className="face-mono t-caption text-[var(--r-ink-2)]">{target}</div>
+      <div className="face-mono t-label text-[var(--r-pea-ink)]">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 text-[10px] leading-snug text-[var(--r-ink)]">{proposal.note}</p>
+      <p className="mt-0.5 t-caption leading-snug text-[var(--r-ink)]">{proposal.note}</p>
       {blockMd && (
         <p
-          className="tele mt-1 line-clamp-3 whitespace-pre-line text-[9px] leading-snug text-[var(--r-ink-2)]"
-          title={`Read from ${proposal.sourceBlockId} of ${SPEC?.fileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
+          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink-2)]"
+          title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}
         </p>

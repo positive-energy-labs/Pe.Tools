@@ -5,7 +5,7 @@
    Every colour below is `var(--r-…)` from `src/design-lang.css`. There is not one colour
    literal in this file, on purpose: a literal would be invariant against the token layer and
    would quietly un-decide a colour the palette round already decided. That invariance is the
-   exact defect round 2 found in canon `Button`/`Chip` (CLEANROOM, cross-cutting findings) and
+   exact defect round 2 found in canon `Button`/`Chip`, and
    `components/lang` exists partly to not have it.
 
    One file rather than seven: the mechanisms below are genuinely SHARED — the hover law, the
@@ -16,7 +16,7 @@
    these primitives must render correctly anywhere on any route, including routes still on the
    old token vocabulary.
 
-   ══ THE SLOT TABLE (what may say what — CLEANROOM, ruled through two rounds) ═══════════════
+   ══ THE SLOT TABLE (what may say what — ruled through two rounds) ══════════════════════════
      CELL BODY (fill + ring)  → pea's PROPOSAL, and UNEDITABLE/DISABLED. Nothing else. Ever.
      TEXT DECORATION          → the squiggle family: state of the VALUE, ranked by colour.
      TEXT WEIGHT              → BOLD = unsaved. Reserved; no other use anywhere.
@@ -105,7 +105,7 @@
       never floats), a pea ring, the top-right fold — and the bottom-left unsaved square in
       pea's own ink. Fold and square TRAVEL TOGETHER on an open proposal: the fold says pea
       authored it, the square says nothing has been written yet, and they are the same fact seen
-      from two sides (CLEANROOM round-2 ruling note 1). */
+      from two sides. */
 .dl-cell[data-body="proposed"] {
   --dl-cell-fill: color-mix(in srgb, var(--r-pea-ink) 20%, var(--r-on));
   --dl-cell-ring: inset 0 0 0 1.5px color-mix(in srgb, var(--r-pea) 70%, transparent);
@@ -159,7 +159,7 @@
   font-weight: inherit;
 }
 /* ONE square, two authors — the shape is identical, only `--dl-cell-square` differs, so the two
-   can never diverge into two marks (COLOR-ROLES shape law, with the colour axis doing "whose"). */
+   can never diverge into two marks, with the colour axis doing "whose". */
 .dl-cell[data-body="proposed"]::before,
 .dl-cell[data-unsaved]::before {
   content: "";
@@ -169,6 +169,64 @@
   width: 5px;
   height: 5px;
   background: var(--dl-cell-square);
+}
+
+/* ── THE EDITABLE CELL (ruled 2026-08-16, R8) ─────────────────────────────────────────────
+   The input IS the value slot: transparent, full-bleed, inheriting the cell's ink, weight and
+   style, so every mark (wash, ring, fold, square, squiggle) composes around a caret instead of
+   a text node. Focus is a hairline, never a hue (the lang focus law) — an inset ring, because
+   the cell may already carry a wash that a background fill would erase. */
+.dl-cell-input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-style: inherit;
+  font-weight: inherit;
+  color: inherit;
+  line-height: inherit;
+  /* numeric cells right-align on the WRAPPER; the input must follow, not reset to start. */
+  text-align: inherit;
+}
+.dl-cell-input::placeholder {
+  color: var(--r-ink-mute);
+  font-style: italic;
+}
+.dl-cell:has(.dl-cell-input:focus-visible) {
+  box-shadow:
+    var(--dl-cell-ring, 0 0 #0000),
+    inset 0 0 0 1px var(--r-line-2);
+}
+
+/* THE REFUSAL NOTE (R8, folding families' RefusalNote into the grammar): absolutely
+   positioned so the row can NEVER grow — §3's "restore AND say why, near the cell, without
+   resizing the row". Caution, dismiss-on-click, full sentence in the title. It suppresses
+   mousedown so it cannot steal the caret from the input it sits over. */
+.dl-refuse {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  max-width: 75%;
+  padding: 0 5px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  font-style: italic;
+  color: var(--r-caution);
+  background: color-mix(in srgb, var(--r-caution) 12%, var(--r-on));
+  border: 0;
+  border-left: 2px solid var(--r-caution);
+  cursor: pointer;
 }
 
 /* 3 · THE SQUIGGLE FAMILY — one decoration family, ranked by colour. The decoration says
@@ -190,6 +248,13 @@
   text-decoration-color: var(--r-ink-mute);
 }
 
+/* NEVER (ruled 2026-08-16) — nothing was ever attempted here. Draws NO squiggle: the squiggle
+   family distrusts an existing value, and here nothing exists to distrust. The value alone goes
+   muted. Distinct from locked (no italic, no fill — the cell is writable, just untouched). */
+.dl-cell[data-never] {
+  --dl-cell-ink: var(--r-ink-mute);
+}
+
 /* drift's second half: the other side's value as a struck ghost token, INLINE, so the one alarm
    is unmissable and still costs zero row height. */
 .dl-ghost {
@@ -209,8 +274,8 @@
 }
 
 /* the footline — one per cell, one line, clamped, so a grid never re-flows.
-   ponytail: the clamp truncates real sentences, including RFI citations. CLEANROOM's frontier
-   asks whether a clamped row needs a disclosure; ceiling accepted until a reader complains. */
+   ponytail: the clamp truncates real sentences, including RFI citations. A clamped row may need
+   a disclosure; ceiling accepted until a reader complains. */
 .dl-foot {
   display: block;
   margin-top: 1px;
@@ -231,6 +296,27 @@
   text-decoration: underline solid var(--r-line-2);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
+}
+
+/* ── EMPTY STATE · empty.tsx ───────────────────────────────────────────────────────────────
+   The labelled empty: the statement is italic muted (absence is quiet), the EXIT is upright
+   secondary ink (a way out is an instruction, not an absence). `data-story` distinguishes the
+   route's story (scope) from the surface's own (filter) — no visual difference today; the
+   attribute exists so the distinction is authored, greppable and styleable when one is earned. */
+.dl-empty {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--r-ink-mute);
+}
+.dl-empty-exit {
+  font-style: normal;
+  color: var(--r-ink-2);
+}
+.dl-empty-exit::before {
+  content: " — ";
+  color: var(--r-ink-mute);
 }
 
 /* ── VERBS · verb.tsx ──────────────────────────────────────────────────────────────────────
@@ -267,12 +353,12 @@
 }
 /* act — safe, page-scoped. Neutral. The mix is against `--r-on`, NOT against the artifact
    token: mixing against the artifact is what made three round-2 buttons land within 1.03:1 of
-   the ground they actually stood on, one of them invisible in dark (CLEANROOM note 4). */
+   the ground they actually stood on, one of them invisible in dark. */
 .dl-verb[data-tone="act"] {
   background: color-mix(in srgb, var(--r-ink) 10%, var(--r-on));
 }
-/* agent — pea's own verb. COLOR-ROLES Law 0 had no interaction slot for the agent's identity,
-   which made pea's own verb illegal; 4 of 5 round-1 builders hit it. This is that slot. */
+/* agent — pea's own verb. The agent's identity had no interaction slot, which made pea's own verb
+   illegal; 4 of 5 round-1 builders hit it. This is that slot. */
 .dl-verb[data-tone="agent"] {
   color: var(--r-pea-ink);
   background: color-mix(in srgb, var(--r-pea-ink) 12%, var(--r-on));
@@ -297,7 +383,19 @@
 
 /* §3 (SURFACE-PHILOSOPHY, honesty): refuse PER OPTION, with the reason REQUIRED by the
    constructor. RULED 2026-08-16: the reason's home is the title — the visible under-line
-   rendering (.dl-refusal) made dense verb lanes wrap and repeat one sentence four times. */
+   rendering (.dl-refusal) made dense verb lanes wrap and repeat one sentence four times.
+   THE ONE EXCEPTION (fit reviews, ruled 2026-08-16): a DISABLED COMMIT verb renders its reason
+   visibly as this small quiet line beside the verb — the highest-stakes refusal on a page must
+   pass §0's no-tooltips bar, and the lane-spam argument never applied to the lone page-blast
+   verb. Every other verb keeps title-only. */
+.dl-verb-reason {
+  font-size: 10px;
+  font-style: italic;
+  line-height: 1.35;
+  color: var(--r-ink-2);
+  align-self: center;
+  max-width: 36ch;
+}
 
 /* ── HELP TIP · help.tsx ───────────────────────────────────────────────────────────────────
    Region orientation behind a "?" mark. Reveal is hover/focus, CSS-only; the pop is SANS
@@ -314,7 +412,8 @@
   height: 13px;
   padding: 0;
   font-family: var(--font-pe-mono);
-  font-size: 9px;
+  /* TIER LAW (2026-08-16 pass): every size in this file sits on a tier rung — 10/11/12/13/16. */
+  font-size: 10px;
   line-height: 1;
   color: var(--r-ink-2);
   background: transparent;
@@ -361,7 +460,7 @@
   color: var(--r-ink);
 }
 .dl-verb-group-radius {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--r-ink-2);
 }
 .dl-verb-row {
@@ -453,6 +552,146 @@
   height: 9px;
 }
 
+/* ── SECTION + PROVENANCE · section.tsx ────────────────────────────────────────────────────
+   The page-chrome unit: a sans small-caps head over a hairline, an optional aside, and no
+   box — plain content is never enclosed. Provenance is the composed-read honesty line:
+   mono (the machine measured this), caption tier, secondary ink. */
+.dl-section {
+  min-width: 0;
+}
+.dl-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--r-line);
+}
+.dl-section-label {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--r-ink);
+}
+.dl-section-aside {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 6px;
+}
+.dl-provenance {
+  margin: 6px 0 0;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--r-ink-2);
+}
+
+/* ── COVERAGE BAR · coverage-bar.tsx — the viz ladder's first catalogued consumer ─────────
+   Width, order and the legend carry the meaning (the grayscale law); colour reinforces. */
+.dl-coverage {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid var(--r-line);
+}
+.dl-coverage-seg {
+  border-right: 1px solid var(--r-on);
+}
+.dl-coverage-rest {
+  background: var(--r-recess);
+}
+.dl-coverage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 4px;
+}
+.dl-coverage-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--r-ink);
+}
+.dl-coverage-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+}
+.dl-coverage-label,
+.dl-coverage-of {
+  color: var(--r-ink-2);
+}
+
+/* ── ADDRESSING BAR · addressing-bar.tsx ───────────────────────────────────────────────────
+   The one head rail. Plain content on the page ground (the border budget: a head rail is
+   chrome, not a machine-operated object) under a single hairline. Wraps under compression —
+   identity outranks controls. */
+.dl-addr {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--r-line);
+}
+.dl-addr-name {
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--r-ink-2);
+}
+.dl-addr-seam {
+  margin-left: auto;
+}
+
+/* ── SWITCHER · switcher.tsx ───────────────────────────────────────────────────────────────
+   Mode is a place you are standing: the active option takes the SELECT fill and the primary
+   ink; inactive options are quiet secondary ink under the one veil on hover. The firm hairline
+   encloses the group because a switch's options only mean anything as a set. */
+.dl-switcher {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  border: 1px solid var(--r-line-2);
+  border-radius: var(--radius);
+}
+.dl-switcher-opt {
+  height: 20px;
+  padding: 0 6px;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  color: var(--r-ink-2);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.dl-switcher-opt:enabled:hover {
+  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+}
+.dl-switcher-opt[data-on] {
+  background: var(--r-select);
+  --r-on: var(--r-select);
+  color: var(--r-ink);
+}
+.dl-switcher-opt:disabled {
+  cursor: not-allowed;
+  color: var(--r-ink-mute);
+  font-style: italic;
+}
+
 /* ── OUTCOMES · outcome.tsx ────────────────────────────────────────────────────────────────
    Coloured mono text + one icon + decoration. NEVER bold — bold is reserved for unsaved, so an
    outcome gets its punch from colour, its icon and the frame it sits near. No left bars:
@@ -466,7 +705,7 @@
   gap: 7px;
   padding: 2px 0;
   font-family: var(--font-pe-mono);
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--dl-outcome-ink);
@@ -479,7 +718,7 @@
 }
 .dl-outcome-says {
   font-family: var(--font-pe);
-  font-size: 10.5px;
+  font-size: 11px;
   font-style: italic;
   color: var(--r-ink-2);
   overflow: hidden;
@@ -580,7 +819,7 @@
   gap: 8px;
 }
 .dl-strip-verb {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
 }
 .dl-strip-target {
@@ -630,8 +869,8 @@
 }
 
 /* ── THE CELL-STATE KEY · cell-key.tsx ─────────────────────────────────────────────────────
-   A first-class entity, not a legend strip (CLEANROOM round-2 ruling note 2 — the key was
-   instrumental to the table reading at all). Specimens are REAL `StateCell`s with real props,
+   A first-class entity, not a legend strip; the key was instrumental to the table reading at
+   all. Specimens are REAL `StateCell`s with real props,
    grouped BY AXIS, ordered inside a group by the cell's own precedence, so the key cannot teach
    a ranking the cells do not obey. It sits on the recess ground, so specimen washes re-mix. */
 
@@ -660,14 +899,14 @@
 /* the axis names stay QUIET — this is a key, not a legend poster. */
 .dl-key-axis-name {
   font-family: var(--font-pe-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--r-ink-2);
 }
 .dl-key-axis-asks {
   min-width: 0;
-  font-size: 9.5px;
+  font-size: 10px;
   font-style: italic;
   color: var(--r-ink-mute);
   overflow: hidden;
@@ -679,14 +918,14 @@
   grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   align-items: baseline;
   gap: 7px;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--r-ink-2);
 }
 .dl-key-item .dl-cell,
 .dl-key-item .dl-sq,
 .dl-key-item .dl-cite {
   font-family: var(--font-pe-mono);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 /* the specimen carries the page's primary ink — except a locked one, which must keep the muted
    ink that IS its state, so the `--dl-cell-ink` escape hatch is left alone. */

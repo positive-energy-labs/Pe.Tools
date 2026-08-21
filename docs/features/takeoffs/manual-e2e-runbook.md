@@ -2,8 +2,8 @@
 
 The release gate on a new model: adopt preexisting Zone Regions → capture →
 partition → review → enter data → sync (INSERT-dominant) into a copy of the firm template
-`.r10`. Opening the result in RHVAC is useful follow-up, not part of this gate. Decisions behind
-the run are in `SHIMS.md`.
+`.r10`. Opening the result in RHVAC is useful follow-up, not part of this gate. Decisions and open
+shims behind the run are in `LEDGER.md`.
 
 ## Preconditions (check before burning the run)
 
@@ -56,15 +56,4 @@ the run are in `SHIMS.md`.
   blind. A law-break in PromoteZone throws by design.
 - `.r10` locked (RHVAC open on it): sync refuses; close RHVAC first.
 - Exposures: the minimal lane creates floor + roof rows and one wall per Room Region polygon edge.
-  Glass and doors remain empty (SHIMS #5).
-
-## First passing proof — 2026-08-15
-
-project-a clone, `Mechanical Zoning Plan - Attic Level`, one adopted zone (`ATTIC-1`): capture and
-partition materialized 2 Room Regions. Browser sync inserted rooms 2 and 3 into a disposable
-template copy and linked both FR blobs. A fresh 32-bit Jet extraction independently confirmed
-system 3; room names, 478/60 sf areas, 8 ft ceilings, people and lighting; and floor, roof, and
-wall exposure rows.
-
-Post-review Jet proof used a disposable copy to seed System 99 with only number/name, update room 2,
-and freshly extract `VentilationCFM = 37`, the System name, and the new file identity.
+  Glass and doors remain empty (open shim, see LEDGER Owed).

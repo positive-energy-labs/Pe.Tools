@@ -1,7 +1,8 @@
 import { type ComponentType, useCallback, useEffect, useState } from "react";
-import { Button } from "#/components/ui/button";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { Provenance } from "#/components/lang/section";
+import { Verb } from "#/components/lang/verb";
 import { callHostDynamic } from "#/host/client";
-import { MonoNote, Provenance } from "#/ops/primitives";
 
 /**
  * Synthetic ops: composed views that fan out several real host ops and render
@@ -108,27 +109,31 @@ export function SyntheticRunner({
 
   return (
     <div className="flex flex-col gap-3">
-      {running && !results && <MonoNote>gathering {op.deps.length} ops…</MonoNote>}
-      {results && failedRequired.length > 0 && (
-        <div
-          className="rounded-[2px] p-3 text-xs"
-          style={{ border: "0.5px solid var(--line-2)", color: "var(--cat-clay)" }}
-        >
-          {failedRequired.map((status) => (
-            <div key={status.alias} className="tele">
-              {status.key}: {status.error}
-            </div>
-          ))}
-        </div>
+      {running && !results && (
+        <OutcomeLine kind="busy" label={`gathering ${op.deps.length} ops…`} />
       )}
+      {/* a failed dep is an ERROR outcome (caution — a busy bridge is not the model
+          disagreeing), one line per dep, unenclosed (border budget: plain content). */}
+      {results &&
+        failedRequired.map((status) => (
+          <OutcomeLine
+            key={status.alias}
+            kind="error"
+            label={`${status.key} failed`}
+            says={status.error}
+          />
+        ))}
       {results && failedRequired.length === 0 && (
         <View results={results} observedAtMs={observedAtMs} call={call} />
       )}
       {results && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <Button variant="ghost" size="xs" onClick={() => void runAll()} disabled={running}>
-            {running ? "refreshing…" : "refresh"}
-          </Button>
+          <Verb
+            label="refresh"
+            onClick={() => void runAll()}
+            busy={running}
+            reason="re-run every dep of this glance against the live host"
+          />
           <Provenance>
             composed from{" "}
             {statuses

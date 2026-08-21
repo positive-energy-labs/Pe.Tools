@@ -1,32 +1,41 @@
 /**
- * Target model — the web-side mirror of the host's `resolveSessionTarget` (apps/host/src/bridge.ts).
+ * Target model — the web-side view of the host's `resolveSessionTarget` (apps/host/src/bridge.ts).
  *
- * A Target is a SELECTOR STRING, never a resolved session id. Selectors are stable across
- * process restarts ("user" still means the user's Revit after a restart; a raw sessionId dies
- * with the process), so UI state (URL params, chat session pins) stores selectors and resolves
- * them against the live session list on every render.
+ * This file used to carry its own `SessionLane` union and its own selector grammar, hand-synced to
+ * the host's. Both are gone: `Custody` and `Lane` are imported from the SDK's GENERATED contract
+ * (`apps/host/src/generated/pe-revit-contract.ts`, drift-guarded by `pe-revit doctor`), so there is
+ * one vocabulary and adding a lane value in the SDK is a compile error here rather than a silent
+ * disagreement.
  *
- * Resolution is a pure function so every surface (composer chip, route toolbar, plugin,
- * inspector) reflects ONE state, and so the full state space is exercisable in POCs and tests
- * without a live host.
+ * A Target is a SELECTOR STRING, never a resolved session id. Selectors are stable across process
+ * restarts (`observed` still means the session pe-revit holds no receipt for after a restart; a raw
+ * bridge session id dies with the process), so UI state (URL params, chat session pins) stores
+ * selectors and resolves them against the live session list on every render.
+ *
+ * Resolution is a pure function so every surface (composer chip, route toolbar, plugin, inspector)
+ * reflects ONE state, and so the full state space is exercisable in POCs and tests without a live
+ * host.
  */
 
-/**
- * Lane = payload provenance, reported at registration, never identity. SDK vocabulary
- * verbatim (SPEC.md): dev = the user-owned hot-reload session (source payload, driven by
- * `pe-revit live`); installed = the product payload from installed roots; sandbox = an
- * SDK-spawned disposable process. "unknown" mirrors the host: a session that reported no
- * lane never matches the `user` selector (a pre-identity payload must stay unreachable
- * through user vocabulary).
- */
-export type SessionLane = "dev" | "sandbox" | "installed" | "unknown";
+import type { Custody, Lane } from "@pe/host-contracts/pe-revit-contract";
+
+export type { Custody, Lane };
 
 /** One Revit process incarnation, as observed by the broker. Projection of bridge session summary. */
 export interface SessionFacts {
+  /** The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id. */
   sessionId: string;
   processId: number;
-  lane: SessionLane;
-  sandboxId?: string;
+  /** Payload SOURCE, the SDK's only two values. Null when the payload reported none. */
+  lane: Lane | null;
+  /** The id `pe-revit session status` prints, when this payload was launched by pe-revit. */
+  sdkSessionId?: string;
+  /**
+   * `controlled` = pe-revit holds a receipt (full lifecycle); `observed` = it does not (reads
+   * only). Disclosed by the broker. The UI must NOT re-implement the refusal — the SDK resolver
+   * already refuses every mutation on `observed`, and a second guard here can only disagree.
+   */
+  custody: Custody;
   activeDocumentTitle?: string;
   activeDocumentIsFamilyDocument?: boolean;
   openDocumentCount: number;
@@ -35,13 +44,15 @@ export interface SessionFacts {
 }
 
 /**
- * Selector grammar — must stay in lockstep with host TARGET_SYNTAX (bridge.ts:133).
- * ""             implicit: sole session or nothing
- * "user"         the user's Revit (lane dev or installed)
- * "dev"          lane dev
- * "sandbox:<id>" sandbox by id
- * "<digits>"     pid
- * anything else  raw session id
+ * Selector grammar — the host's `TARGET_SYNTAX`, in the SDK's words.
+ * ""              implicit: sole session or nothing
+ * "controlled"    custody controlled (pe-revit launched it)
+ * "observed"      custody observed (no pe-revit receipt — the user's own Revit)
+ * "dev"           lane dev
+ * "installed"     lane installed
+ * "session:<id>"  by pe-revit session id
+ * "<digits>"      pid
+ * anything else   raw bridge session id
  */
 export type TargetSelector = string;
 
@@ -58,11 +69,15 @@ export type TargetResolution =
   /** Nothing matched. "no-sessions" = empty world; "no-match" = a pin dangling (its process died). */
   | { kind: "unresolved"; selector: TargetSelector; reason: "no-sessions" | "no-match" };
 
+const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
+const LANES: readonly Lane[] = ["dev", "installed"];
+
 function matches(session: SessionFacts, selector: TargetSelector): boolean {
-  if (selector === "user") return session.lane === "dev" || session.lane === "installed";
-  if (selector === "dev") return session.lane === "dev";
-  if (selector.startsWith("sandbox:"))
-    return session.sandboxId === selector.slice("sandbox:".length);
+  const lower = selector.toLowerCase();
+  if (CUSTODIES.some((c) => c === lower)) return session.custody === lower;
+  if (LANES.some((l) => l === lower)) return session.lane === lower;
+  if (lower.startsWith("session:"))
+    return session.sdkSessionId === selector.slice("session:".length);
   if (/^\d+$/.test(selector)) return session.processId === Number(selector);
   return session.sessionId === selector;
 }
@@ -89,16 +104,14 @@ export function resolveTarget(
 }
 
 /**
- * Mint the selector a UI writes when the user pins a session. Prefers the most
- * stable selector that is unambiguous in the CURRENT world: sandboxes pin by
- * sandbox id; the user's Revit pins as `user` when it's the only dev/installed
- * session (survives restarts), else falls back to pid.
+ * Mint the selector a UI writes when the user pins a session. Prefers the most stable selector
+ * that is unambiguous in the CURRENT world: a pe-revit-launched session pins by its session id
+ * (the SDK mints it and it survives restarts under the same name); the user's own Revit pins as
+ * `observed` when it's the only observed session; else pid, which dies with the process.
  */
 export function mintSelector(session: SessionFacts, all: readonly SessionFacts[]): TargetSelector {
-  if (session.lane === "sandbox" && session.sandboxId) return `sandbox:${session.sandboxId}`;
-  const userLike = all.filter((s) => s.lane === "dev" || s.lane === "installed");
-  if ((session.lane === "dev" || session.lane === "installed") && userLike.length === 1)
-    return "user";
+  if (session.sdkSessionId) return `session:${session.sdkSessionId}`;
+  if (all.filter((s) => s.custody === session.custody).length === 1) return session.custody;
   return String(session.processId);
 }
 
@@ -108,7 +121,8 @@ export function fromBridgeSessions(
     sessionId: string;
     connected: boolean;
     lane?: string | null;
-    sandboxId?: string | null;
+    sdkSessionId?: string | null;
+    custody?: string | null;
     processId?: number | null;
     activeDocumentTitle?: string | null;
     activeDocumentIsFamilyDocument?: boolean | null;
@@ -121,10 +135,12 @@ export function fromBridgeSessions(
     .map((e) => ({
       sessionId: e.sessionId,
       processId: e.processId ?? 0,
-      lane: (e.lane === "dev" || e.lane === "sandbox" || e.lane === "installed"
-        ? e.lane
-        : "unknown") as SessionLane,
-      sandboxId: e.sandboxId ?? undefined,
+      // Anything outside the SDK's union is no lane at all, not an invented "unknown" member.
+      lane: LANES.find((l) => l === e.lane) ?? null,
+      sdkSessionId: e.sdkSessionId ?? undefined,
+      // The broker discloses custody; an entry that predates the field is treated as observed —
+      // the read-only reading, which is the safe one to be wrong about.
+      custody: CUSTODIES.find((c) => c === e.custody) ?? "observed",
       activeDocumentTitle: e.activeDocumentTitle ?? undefined,
       activeDocumentIsFamilyDocument: e.activeDocumentIsFamilyDocument ?? undefined,
       observedAtUnixMs: e.activeDocumentObservedAtUnixMs ?? undefined,
@@ -140,7 +156,7 @@ export function sessionLabel(session: SessionFacts): string {
 /** Short human phrase for a selector (chip text, tooltips). */
 export function selectorLabel(selector: TargetSelector): string {
   if (selector === "") return "auto";
-  if (selector.startsWith("sandbox:")) return selector; // the id is the meaning
+  if (selector.startsWith("session:")) return selector.slice("session:".length); // the id is the meaning
   if (/^\d+$/.test(selector)) return `pid ${selector}`;
   return selector;
 }

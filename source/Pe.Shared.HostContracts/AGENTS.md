@@ -11,7 +11,7 @@ Owns durable host-facing contracts: operation definitions, request/response/prob
 ## Critical Entry Points
 
 - `Protocol/HostProtocolContracts.cs` and `Operations/` - route and contract-version authority.
-- `Operations/HostOperationsCatalog.cs` - public operation list plus generated TypeScript contract metadata.
+- `Operations/HostOpsCatalogOperations.cs` - public operation list plus generated TypeScript contract metadata.
 - `Operations/HostOperationContracts.cs` - operation metadata vocabulary used by Pea, CLI output, and future UI surfaces.
 - `Scripting/` - scripting HTTP and bridge operation DTOs.
 - `SettingsStorage/` - settings storage DTO contracts.

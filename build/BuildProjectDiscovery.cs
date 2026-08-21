@@ -4,7 +4,10 @@ namespace Build;
 
 internal static class BuildProjectDiscovery {
     private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase) {
+        ".agents",
         ".artifacts",
+        // Harness-created worktrees nest under .claude/worktrees and carry full source copies.
+        ".claude",
         ".git",
         "bin",
         "dist",

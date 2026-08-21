@@ -63,6 +63,10 @@ public static class Theme {
     ///     The old hardcoded <c>/Pe.Revit.Ui;component/…</c> only worked post-merge by WPF fallback
     ///     luck (no such assembly exists after repack). Deriving the assembly name from the running
     ///     type makes both shapes resolve the real stream.
+    ///     FOOTGUN: WPF BAML/pack-URI resolution failures in Revit almost always start here — a
+    ///     hardcoded assembly name in a pack URI resolves in Debug and dies (or silently falls back)
+    ///     after the Release ILRepack. Never hardcode the assembly segment of a pack URI. Residual
+    ///     gap: intermittent BAML resolution errors not explained by this shape are still unexplained.
     /// </summary>
     private static Uri ResolveComponentUri(string componentPath) {
         var assemblyName = typeof(Theme).Assembly.GetName().Name ?? "Pe.Revit.Ui";

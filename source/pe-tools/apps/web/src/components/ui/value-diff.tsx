@@ -3,8 +3,8 @@ import { cn } from "#/lib/utils";
 /**
  * ValueDiff — the one way a value change is written anywhere in the workbench:
  * struck current value, arrow, proposed value. Values are measured facts, so the
- * whole atom is `tele`. When `from` is unknown or unchanged, only `to` renders.
- * The new value inherits color from the caller (proposal clay, staged green, …).
+ * whole atom is mono at the value tier. When `from` is unknown or unchanged, only
+ * `to` renders. The new value inherits color from the caller (a meaning role).
  */
 export function ValueDiff({
   from,
@@ -17,7 +17,7 @@ export function ValueDiff({
 }) {
   const changed = from != null && from !== to;
   return (
-    <span className={cn("tele tabular-nums", className)}>
+    <span className={cn("face-mono t-value", className)}>
       {changed && (
         <>
           <span className="text-muted-foreground line-through opacity-70">{from || "—"}</span>

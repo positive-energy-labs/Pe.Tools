@@ -17,3 +17,7 @@
 *.jpg binary
 *.dll binary
 *.exe binary
+
+# The TS workspace is formatted to LF (vp check); without this, autocrlf checkouts write CRLF and
+# vp check can never be green on a clean tree while git sees phantom modifications after --fix.
+source/pe-tools/** text=auto eol=lf

@@ -21,7 +21,7 @@ Owns reusable local/operator services used by the interim `pe-dev automation` ad
 - `../Pe.Aps/DesignAutomation/` - generic DA appbundle/activity/workitem/status/artifact mechanics.
 - `../Pe.Aps/DataManagement/` - APS cloud model catalog, folder traversal, region normalization, version selection, and source download.
 - `../Pe.Aps/Core/ObjectStorageApiClient.cs` - APS object storage and signed download/upload handling for staged inputs and result artifacts.
-- `../Pe.Aps/Auth/ApsCredentialSource.cs` - APS credential loading from `Global/settings.json`.
+- `../Pe.Shared.StorageRuntime/ApsCredentialSource.cs` - APS credential loading from `Global/settings.json` (consumed through `Pe.Aps/Auth/IApsCredentialProvider.cs`).
 - `../Pe.Dev.RevitAutomation.Worker/RevitAutomationShellApp.cs` - in-engine DA shell entrypoint.
 
 ## Validation
@@ -60,3 +60,14 @@ When validating the current DA lane, prefer a tiny schedule manifest first so su
 - Result artifacts download through the APS signed S3 flow. Do not assume legacy direct object fetch URLs will stay valid.
 - The public schedule submit path should return quickly. Long-lived polling belongs in explicit inspect commands, not the primary submit command.
 - Activity `settings` must stay current with APS behavior. Do not reintroduce reserved keys such as `dasOpenNetwork`.
+
+### Multi-year engine constraints
+
+- APS binds an appbundle and activity to one Revit engine year. Keep one appbundle/activity per engine year; there is no
+  single multi-year deployment.
+- `Autodesk.PackageBuilder` cleans up bundle manifest authoring but does not remove that engine-bound constraint.
+- Root build/config knows `R23` through `R26`, but DA packaging starts at `R24` — R23 DA targeting is no longer supported.
+- Never derive the year by parsing the engine string (`engine.Contains("2025")`). Use one shared engine/year registry
+  across worker build/package, appbundle/activity naming, artifact paths, and CLI validation/defaulting.
+- Treat `engine` as per-model, not batch-wide: detect cloud model year from APS/Data Management metadata, carry it
+  through discovery, group submissions by engine year, and keep an explicit override for missing or suspect metadata.

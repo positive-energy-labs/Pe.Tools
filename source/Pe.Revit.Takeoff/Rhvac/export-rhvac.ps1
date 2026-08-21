@@ -2,6 +2,9 @@
 # and sync lane (system seeding + inserts + updates + deletes in one pass).
 # See README.md in this folder for the format spec.
 #
+# ASCII ONLY: the 32-bit lane runs PowerShell 5.1, which parses these scripts under the ANSI
+# codepage — any non-ASCII character breaks parsing. Keep every script in this folder ASCII-only.
+#
 # MUST run 32-bit (r10 files are Access 97 Jet; only the WOW64 Jet driver opens them):
 #   C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe -File export-rhvac.ps1 `
 #       -RoomsJson rooms.json -Template project.r10 -Output out.r10     # insert new rooms

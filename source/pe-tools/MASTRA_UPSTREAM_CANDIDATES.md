@@ -116,6 +116,15 @@ fork once the route supports it.
 
 ## Lazy-import @mastra/fastembed inside the memory factory (mastracode 0.30)
 
-`mastracode/dist/chunk-YADYGJS7.js:32` has a static top-level `import { fastembed } from '@mastra/fastembed'`, whose only use is `embedder: vector ? fastembed.small : void 0` (`:3000`) inside the memory factory. That eager import drags onnxruntime-node (255MB, native binding resolved relative to `dist/`) into EVERY consumer of any mastracode root export — including `createAuthStorage`, which needs no embeddings. In a SEA-packaged host this is fatal at init (the relative binding require cannot resolve). Ask: move the import to a lazy `await import('@mastra/fastembed')` inside the factory, gated on `vector` actually being configured. Until then Pe.Tools' installed host build stubs `onnxruntime-node` with a throwing proxy (apps/host/vite.config.ts, decision record docs/rework/SDK-LEDGER.md T9) — safe because no embedding-dependent memory feature is exercised there (no embedder, `semanticRecall: false`, OM is LLM-based). A lazy upstream import deletes that stub for everyone.
+`mastracode/dist/chunk-YADYGJS7.js:32` has a static top-level `import { fastembed } from '@mastra/fastembed'`, whose only use is `embedder: vector ? fastembed.small : void 0` (`:3000`) inside the memory factory. That eager import drags onnxruntime-node (255MB, native binding resolved relative to `dist/`) into EVERY consumer of any mastracode root export — including `createAuthStorage`, which needs no embeddings. In a SEA-packaged host this is fatal at init (the relative binding require cannot resolve). Ask: move the import to a lazy `await import('@mastra/fastembed')` inside the factory, gated on `vector` actually being configured. Until then Pe.Tools' installed host build stubs `onnxruntime-node` with a throwing proxy (apps/host/vite.config.ts, decision record: docs/features/host/LEDGER.md, "Node SEA cannot static-ESM-import a bare specifier") — safe because no embedding-dependent memory feature is exercised there (no embedder, `semanticRecall: false`, OM is LLM-based). A lazy upstream import deletes that stub for everyone.
 
 Related, same eager-init class: `MASTRACODE_PACKAGE_ROOT = findMastraCodePackageRoot(dirname(fileURLToPath(import.meta.url)))` runs at module init and THROWS when mastracode is bundled (no package.json named "mastracode" above the executable). The root is only consumed by the local-plugin symlink machinery. Ask: resolve it lazily at first plugin use. Until then the installed host stages a decoy `package.json` (`{"name":"mastracode"}`) beside the exe (stage-native-sidecars.mjs).
+
+## Widen the `@mastra/client-js` SSE event payload types (client-js 1.31.1)
+
+The published event union is lossy: `om_status` is typed `{status: string}`, `om_observation_end` is
+typed `{}`, and everything else collapses into `OtherAgentControllerEvent`. Consumers that render
+these events cannot narrow them from the shipped types, so `apps/web/src/workbench/wire.ts`
+re-declares a discriminated union and re-validates every SSE frame at the boundary. Ask: type the
+event payloads as their real shapes (or export the server-side event schema) so the client union is
+narrowable. Until then `wire.ts` stays, and its `parseWireEvent` drop rate is the drift alarm.

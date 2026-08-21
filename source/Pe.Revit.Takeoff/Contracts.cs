@@ -9,7 +9,8 @@ namespace Pe.Revit.Takeoff;
 // RegionCores = connected components of unobstructed domain; Hybrid = cores, except a core with
 // >= 2 distance-transform plateaus is seeded by them so open-plan cores split along interior
 // evidence ridges (ceiling/floor steps). DistanceMaxima is standalone plateau seeding: falsified as
-// a default (under-seeds closets/baths, 41.9 vs 52.8 — see DECISIONS.md), retained last in the enum
+// a default (under-seeds closets/baths, 41.9 vs 52.8 — see docs/features/takeoffs/LEDGER.md),
+// retained last in the enum
 // as the A/B control that makes Hybrid's contribution measurable rather than assumed.
 public enum TakeoffSeedSource { RegionCores, Hybrid, DistanceMaxima }
 public enum TakeoffSource { Detector, Native }
@@ -31,12 +32,12 @@ public sealed class TakeoffOptions
     public double DoorHeadContrastFt = 1.5; // neighbor must be this much taller to call the low cell a lintel
     public double DoorHeadMaxComponentFt = 9.0; // widest connected lintel component that still reads as a door/opening; larger is a soffit/low slab (seals wall fringe only, never backs)
     public bool SealWallRunGaps = false;    // close a colinear break in a wall run (headerless doorway)
-    public double DoorGapMaxFt = 6.0;       // widest colinear break that can still be a doorway (6.0 valid only atop diagonal-honest scan steps; kaitpw A/B 2026-08-16)
+    public double DoorGapMaxFt = 6.0;       // 6.0 is adopted atop diagonal-honest scan steps; 6.75 is tombstoned in the takeoffs ledger
     public double DoorJambMinFt = 2.0;      // ink run required on BOTH sides to call it a doorway
     public double StoryCapFt = 14.0;        // ceiling search cap above the level plane
     public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only roofs read patchy)
     public double BoundarySimplifyFt = 2.0; // physical wall-fit tolerance for raster boundary chains
-                                            // (coarsening falsified twice — see DECISIONS 2026-08-14)
+                                            // (coarsening falsified twice — LEDGER 2026-08-14)
     // ---- Shared-boundary regularizer frame snapping (SpaceBoundaryNetwork.cs) ----
     // 35/12 are the fan-out-tuned values (+4 rooms, BoundaryDrift 25->21, ink flat); the rest are
     // the consts that stage always carried. SnapTol 45/20 is a per-zone area-dominant lever.
@@ -151,6 +152,8 @@ public sealed class TakeoffOptions
     // sin was a raster-resolution corner, and the canonical editability audit downstream is what
     // actually stops sloppy geometry — not these two numbers.
     public double FrameMaxBoundaryDriftFt = 2.5;  // how far a PROJECTED boundary may sit from the source
+    // Drop is deliberately split from invention (decided 2026-08-15, LEDGER): byte-identical at
+    // 2.5/2.5, and the sweep says loosening it only pays at >=7.8 ft (one 547 sf LL08 room).
     public double FrameMaxSourceDropFt = 2.5;     // how far a SOURCE feature may sit from the projection
     public double FrameMaxAreaDrift = 0.20;       // |projected - source| / source area tolerance
     public double FrameMinFrameSupport = 0.42;    // length share of a room's edges on its best frame
@@ -170,6 +173,8 @@ public sealed class TakeoffOptions
     // agreeing with the authority is what lets zone-fit clip a room without the cut edge reading as
     // OffFrameEdge against the 0.25-degree editability tolerance. Beyond this margin the two are
     // genuinely different frames and the measurement stands. 0 disables.
+    // Adopted 2026-08-15 (LEDGER): ML05's wing measured 45.267 deg against a zone drawn at 45.000,
+    // and the 0.25 deg editability tolerance split that hair. Board 59->69 accepted (+2,509 sf).
     public double FrameZoneSnapDeg = 1.0;
     // ---- Zone fit (TakeoffPromotion zone-fit stage) ----
     // The zone boundary is user-declared AUTHORITY, not evidence: where ink only earns a drift
@@ -177,6 +182,7 @@ public sealed class TakeoffOptions
     // the zone onto it (killing void slivers); clip intersects an overhanging room with the zone
     // (trimming instead of rejecting). Both re-run the strict editability audit and fall back to the
     // pre-fit geometry on failure — e.g. a zone edge diagonal to the room's frame.
+    // TODO: ZoneSnapFt = 1.0 buys exactly one room on project-a — re-measure it or retire the knob.
     public double ZoneSnapFt = 1.0;         // room vertex this close to the zone boundary snaps onto it (0 = off)
     public bool ZoneClipEnabled = true;     // a room overhanging the zone is intersected with it, not rejected
     // Clipping a rail-aligned room against the zone MANUFACTURES edges the detector never proposed:

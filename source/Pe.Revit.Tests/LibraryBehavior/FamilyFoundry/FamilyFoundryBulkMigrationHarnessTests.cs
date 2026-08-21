@@ -11,6 +11,13 @@ using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 
 namespace Pe.Revit.Tests;
 
+// Deliberate coverage exclusions:
+// - ElementId storage stays excluded until a safely-settable case adds product signal.
+// - snapshot-refplanesanddims-* is reserved for authored reference-plane constraints and is
+//   intentionally not required for synthetic SetValue topology.
+// - Association coverage deliberately stays one nested family only.
+// - Do not widen ParameterSnapshot metadata unless runtime proof exposes an assertion blind spot.
+// - Never mutate the real BASE profile for harness needs.
 [TestFixture]
 public sealed class FamilyFoundryBulkMigrationHarnessTests {
     private const string ProfileFixtureName = "real-mech-equip-base-mapping.json";

@@ -22,6 +22,7 @@ import {
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { toolTitle, type WorkbenchState } from "@pe/agent-contracts";
 import { Check, ChevronRight, GitFork, X } from "lucide-react";
+import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
 import { isRenderable, workbenchToThreadMessages } from "./aui-adapter";
 import { PROSE_CLASS } from "./prose";
@@ -182,7 +183,7 @@ function TurnTag({ id }: { id: string }) {
   return (
     <button
       type="button"
-      className="tele-label cursor-pointer border-0 bg-transparent p-0 text-muted-foreground hover:text-foreground"
+      className="t-label face-mono cursor-pointer border-0 bg-transparent p-0 text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
       title={`Center turn ${turn} on the focal axis`}
       onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
     >
@@ -199,7 +200,7 @@ function MomentTime() {
   );
   if (!at) return null;
   return (
-    <span className="tele-label ml-auto text-muted-foreground">
+    <span className="t-caption face-mono ml-auto font-normal normal-case text-[var(--r-ink-2)]">
       {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
     </span>
   );
@@ -229,8 +230,9 @@ function UserMoment() {
   if (!text && images.length === 0) return null;
   return (
     <MomentSection id={id} role="user">
-      {/* Role attribution is provenance — telemetry tier, same voice as the mapdial/trace. */}
-      <div className="tele-label mb-1.5 flex items-center gap-[7px] text-[var(--user)]">
+      {/* Role attribution: sans small-caps head (heads are sans by law). "you" is NEUTRAL INK —
+          the user has no identity hue; position + this label carry authorship (workbench ruling). */}
+      <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-[var(--r-ink-2)]">
         <TurnTag id={id} />
         <span>you</span>
         {/* lens-fork kept as CSS: visibility is driven by `.lens-moment:hover` (geometry element) */}
@@ -250,13 +252,14 @@ function UserMoment() {
             key={src}
             src={src}
             alt="attachment"
-            className="max-h-64 rounded-sm border-[0.5px] border-[var(--user-line)] object-contain"
+            className="max-h-64 rounded-sm border-[0.5px] border-[var(--r-line-2)] object-contain"
           />
         ))}
-        {/* Hard block, not a speech bubble — the radius law. Right alignment + tint stay: they
-            are the scan cue for "my turns". */}
+        {/* Hard block, not a speech bubble — the radius law. Right alignment + a NEUTRAL ink
+            wash are the scan cue for "my turns": fills separate, and no hue is bought (the
+            "you" identity ruling). No border — plain prose is never enclosed. */}
         {text ? (
-          <div className="rounded-sm border-[0.5px] border-[var(--user-line)] bg-[var(--user-tint)] px-3 py-2 text-sm leading-normal">
+          <div className="rounded-sm bg-[color-mix(in_srgb,var(--r-ink)_6%,transparent)] px-3 py-2 text-sm leading-normal">
             {text}
           </div>
         ) : null}
@@ -280,7 +283,8 @@ function AssistantMoment() {
   if (!hasContent && !running) return null;
   return (
     <MomentSection id={id} role="assistant">
-      <div className="tele-label mb-1.5 flex items-center gap-[7px] text-[var(--pe-green)]">
+      {/* pea's name wears the agent identity at TEXT weight (--r-pea-ink). */}
+      <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-[var(--r-pea-ink)]">
         <TurnTag id={id} />
         <span>pea</span>
         <MomentTime />
@@ -319,8 +323,9 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
     console.error("[workbench] message-part render failed", error, info.componentStack);
   }
   render(): ReactNode {
+    // A render fault is an ERROR (caution), not the model disagreeing (alarm).
     if (this.state.error)
-      return <div className="text-[13px] text-[var(--fail)]">{this.state.error}</div>;
+      return <div className="t-prose text-[var(--r-caution)]">{this.state.error}</div>;
     return this.props.children;
   }
 }
@@ -337,18 +342,21 @@ const MarkdownText: TextMessagePartComponent = () => (
 const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
+  // Reasoning is quiet secondary prose behind a neutral disclosure — the old viz-hue rail
+  // (kiln/lichen) spent taxonomy colours on chrome. Chrome buys no weight, no hue.
   return (
-    <div className="border-l-2 border-[var(--kiln)]">
+    <div className="border-l-2 border-[var(--r-line-2)]">
       <button
-        className="inline-flex items-center gap-[5px] bg-transparent px-1.5 py-px text-xs font-semibold text-[var(--lichen)] hover:text-[var(--clay-ink)]"
+        className="inline-flex items-center gap-[5px] bg-transparent px-1.5 py-px t-label text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
         type="button"
+        title="Pea's chain of thought for this turn — collapsed so the spine stays calm"
         onClick={() => setOpen((value) => !value)}
       >
         <ChevronRight size={12} className={`transition-transform ${open ? "rotate-90" : ""}`} />
         <span>Thought process</span>
       </button>
       {open ? (
-        <div className="mt-1 mb-0.5 ml-2 border-l border-[var(--line-2)] pl-[9px] text-[13px] leading-[1.55] whitespace-pre-wrap text-[var(--lichen)]">
+        <div className="mt-1 mb-0.5 ml-2 border-l border-[var(--r-line)] pl-[9px] t-prose whitespace-pre-wrap text-[var(--r-ink-2)]">
           {text}
         </div>
       ) : null}
@@ -388,13 +396,14 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
       <div className={`lens-marker tool ${tone}`}>
         <span>⌗ {toolTitle(toolName)}</span>
         {target ? <code>{target}</code> : null}
+        {/* outcome mapping: error → caution, in flight → busy ink-2, landed → done */}
         <span
-          className={`tele-label ml-auto ${
+          className={`t-label face-mono ml-auto ${
             isError
-              ? "text-[var(--fail)]"
+              ? "text-[var(--r-caution)]"
               : status?.type === "running"
-                ? "text-[var(--pe-green)]"
-                : "text-muted-foreground"
+                ? "text-[var(--r-ink-2)]"
+                : "text-[var(--r-done)]"
           }`}
         >
           {isError ? "err" : status?.type === "running" ? "run" : "ok"}
@@ -408,23 +417,24 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         running={status?.type === "running"}
       />
       {pending ? (
+        // The HITL gate is a verb lane: approving lets pea write beyond the page (the one
+        // filled blue); denying is a safe, page-scoped act. Reasons ride the titles.
         <div className="flex flex-wrap gap-[7px]">
           {(approval.options ?? DEFAULT_APPROVAL_OPTIONS).map((option) => {
             const allow = option.kind.startsWith("allow");
             return (
-              <button
+              <Verb
                 key={option.id}
-                type="button"
-                className={`inline-flex items-center gap-[5px] rounded-sm border-[0.5px] px-[11px] py-[5px] text-[12.5px] font-semibold transition-colors active:translate-y-[0.5px] ${
+                tone={allow ? "commit" : "act"}
+                icon={allow ? Check : X}
+                label={option.label ?? option.id}
+                reason={
                   allow
-                    ? "border-[var(--pe-blue)] bg-[var(--pe-blue)] text-white hover:bg-[var(--pe-blue-soft)]"
-                    : "border-[var(--line-2)] bg-[var(--paper)] text-[var(--slate)] hover:border-[color-mix(in_srgb,var(--fail)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--fail)_12%,transparent)] hover:text-[var(--fail)]"
-                }`}
+                    ? `Let pea run ${toolTitle(toolName)} — the call executes against the live target`
+                    : `Refuse this ${toolTitle(toolName)} call — pea continues without it`
+                }
                 onClick={() => void resolveApproval(approval.id, option.id)}
-              >
-                {allow ? <Check size={13} /> : <X size={13} />}
-                {option.label ?? option.id}
-              </button>
+              />
             );
           })}
         </div>

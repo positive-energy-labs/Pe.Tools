@@ -26,10 +26,55 @@ internal static class FamilyFoundryRuntimeProbe {
             prisms,
             cylinders,
             connectors,
+            CollectSettings(familyDocument),
             planes.Count,
             dimensions.Count,
             prisms.Count + cylinders.Count,
             connectors.Count);
+    }
+
+    /// <summary>
+    ///     Reads the family-global settings the portable `settings` section names, plus the room calculation
+    ///     point and the embedded size-table names. `FamilySizeTableManager` is the only door to table data,
+    ///     so asking it for the names is the one independent check available without exporting every table.
+    /// </summary>
+    private static RuntimeFamilySettingsProbe CollectSettings(Document familyDocument) {
+        var family = familyDocument.OwnerFamily;
+        var points = new FilteredElementCollector(familyDocument)
+            .OfClass(typeof(SpatialElementCalculationPoint))
+            .Cast<SpatialElementCalculationPoint>()
+            .Select(point => point.Position.GetLength())
+            .ToList();
+        var ownerFamilyId = family?.Id;
+        var tableNames = new List<string>();
+        if (ownerFamilyId != null) {
+            using var manager = FamilySizeTableManager.GetFamilySizeTableManager(familyDocument, ownerFamilyId);
+            if (manager != null && manager.IsValidObject)
+                tableNames = manager.GetAllSizeTableNames().OrderBy(name => name, StringComparer.Ordinal).ToList();
+        }
+
+        return new RuntimeFamilySettingsProbe(
+            ReadBoolean(family, BuiltInParameter.FAMILY_ALWAYS_VERTICAL),
+            ReadBoolean(family, BuiltInParameter.FAMILY_SHARED),
+            ReadBoolean(family, BuiltInParameter.FAMILY_ALLOW_CUT_WITH_VOIDS),
+            ReadInteger(family, BuiltInParameter.FAMILY_CONTENT_PART_TYPE),
+#if REVIT2026_OR_GREATER
+            // Revit 2026 removed the OmniClass parameter; see FamilyModelSettings.OmniClass.
+            null,
+#else
+            family?.get_Parameter(BuiltInParameter.OMNICLASS_CODE)?.AsString(),
+#endif
+            family?.ShowSpatialElementCalculationPoint == true,
+            points.Count == 0 ? null : points[0],
+            tableNames);
+    }
+
+    private static bool? ReadBoolean(Family? family, BuiltInParameter builtInParameter) =>
+        ReadInteger(family, builtInParameter) is { } value ? value != 0 : null;
+
+    private static int? ReadInteger(Family? family, BuiltInParameter builtInParameter) {
+        var parameter = family?.get_Parameter(builtInParameter);
+        return parameter == null || parameter.StorageType != StorageType.Integer ? null : parameter.AsInteger();
     }
 
     private static IReadOnlyDictionary<string, double> CollectParameterValues(Document familyDocument,
@@ -127,7 +172,8 @@ internal static class FamilyFoundryRuntimeProbe {
                     box.Min,
                     box.Max,
                     extrusion.StartOffset,
-                    extrusion.EndOffset);
+                    extrusion.EndOffset,
+                    extrusion.IsSolid);
             })
             .ToList();
 
@@ -145,7 +191,8 @@ internal static class FamilyFoundryRuntimeProbe {
                     box.Max,
                     extrusion.StartOffset,
                     extrusion.EndOffset,
-                    MeasureRoundExtrusionDiameter(extrusion));
+                    MeasureRoundExtrusionDiameter(extrusion),
+                    extrusion.IsSolid);
             })
             .ToList();
 

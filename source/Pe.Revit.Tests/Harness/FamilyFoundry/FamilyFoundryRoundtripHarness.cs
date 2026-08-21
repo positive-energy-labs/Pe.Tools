@@ -140,6 +140,45 @@ internal static class FamilyFoundryRoundtripHarness {
         }
     }
 
+    /// <summary>
+    ///     The run directory for intent-oracle SVG galleries. `.artifacts` is outside version control, so
+    ///     galleries accumulate there. The date is read at call time; it is never a baked-in constant.
+    ///     `PE_FF_ORACLE_GALLERY_DIR` wins when set, taken verbatim: under
+    ///     `test fresh` the test assembly runs from a shadow copy in %TEMP% that carries its own
+    ///     Pe.Tools.slnx, so walking up from the assembly finds the copy's root and the gallery lands in a
+    ///     directory nobody looks at. The walk stays as the fallback for in-place lanes.
+    /// </summary>
+    public static string OracleGalleryDirectory() {
+        var pinned = Environment.GetEnvironmentVariable("PE_FF_ORACLE_GALLERY_DIR");
+        if (!string.IsNullOrWhiteSpace(pinned)) {
+            _ = Directory.CreateDirectory(pinned);
+            return pinned;
+        }
+
+        var root = FindRepoRoot() ?? Path.GetTempPath();
+        var directory = Path.Combine(root, ".artifacts", "runs", $"family-oracle-{DateTime.Now:yyyyMMdd}");
+        _ = Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    private static string? FindRepoRoot() {
+        var assemblyDirectory = Path.GetDirectoryName(typeof(FamilyFoundryRoundtripHarness).Assembly.Location);
+        foreach (var candidateRoot in new[] { assemblyDirectory, Directory.GetCurrentDirectory() }) {
+            if (string.IsNullOrWhiteSpace(candidateRoot))
+                continue;
+
+            var directory = new DirectoryInfo(candidateRoot);
+            while (directory != null) {
+                if (File.Exists(Path.Combine(directory.FullName, "Pe.Tools.slnx")))
+                    return directory.FullName;
+
+                directory = directory.Parent;
+            }
+        }
+
+        return null;
+    }
+
     public static FFManagerProfile ProjectToProfile(FamilySnapshot snapshot) =>
         FamilySnapshotProfileProjector.ProjectToProfile(snapshot, "__CURRENT_FAMILY__");
 

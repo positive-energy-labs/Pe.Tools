@@ -150,7 +150,7 @@ namespace Build {
         }
 
         public static void WritePathFailureHint(IModuleLogger logger) {
-            logger.LogError("Recovery: use '.\\tools\\dotnet-sandbox-safe.ps1 <dotnet arguments>' for sandbox recovery. See docs/ENVIRONMENT.md.");
+            logger.LogError("Recovery: use '.\\tools\\dotnet-sandbox-safe.ps1 <dotnet arguments>' for sandbox recovery. See that script's comment header.");
         }
     }
 

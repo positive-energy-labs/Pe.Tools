@@ -4,7 +4,7 @@ namespace Pe.Revit.Takeoff;
 
 // Pipeline step 3's write side: accepted rooms become persistent, editable Room Region FRs inside
 // their Zoning Region; held residue becomes visible held-residue FRs. FR-only — Spaces are out of
-// the critical path (DECISIONS). Identity is geometric, never rank: reruns re-bind existing
+// the critical path (LEDGER). Identity is geometric, never rank: reruns re-bind existing
 // regions by label-point containment + area +/-20% (the proven anchor law) and NEVER touch a
 // designer's existing region — propose, never overwrite.
 public sealed record RegionProvenance(

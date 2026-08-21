@@ -215,10 +215,10 @@ test("mask, schema, human command gate, and substrate bind are enforced", async 
     error: expect.stringContaining("human-only"),
   });
   expect(
-    await module.command(threadA, "test-route", "human", "bind", { target: "sandbox:x" }),
-  ).toMatchObject({ ok: true, result: { target: "sandbox:x" } });
+    await module.command(threadA, "test-route", "human", "bind", { target: "session:x" }),
+  ).toMatchObject({ ok: true, result: { target: "session:x" } });
   expect((await module.read(threadA, "test-route"))?.doc).toMatchObject({
-    binding: { target: "sandbox:x" },
+    binding: { target: "session:x" },
   });
 });
 

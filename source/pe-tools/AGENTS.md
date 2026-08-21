@@ -50,7 +50,7 @@ Names may change, but the authority boundaries should not blur.
 
 `pea` is the user product entrypoint. It owns product policy over a MastraCode `Session` and TUI shell. It is not the semantic authority for Revit behavior, settings semantics, JSON schema generation, product layout, or Host operation contracts.
 
-There is no separate dev agent surface anymore (`peco` was deleted): the SDK `pe-revit` CLI/MCP owns live-loop and test mechanics, the `pea` MCP server owns product tools, and `pea --prompt` is the headless black-box Pea probe.
+There is no separate dev agent surface anymore (`peco` was deleted): the SDK `pe-revit` CLI/MCP owns execution-loop and test mechanics, the `pea` MCP server owns product tools, and `pea --prompt` is the headless black-box Pea probe.
 
 `@pe/runtime` is the thin shared runtime helper package below Pea and tooling. Keep it limited to storage, memory, auth profile, tool metadata, request-context, and Harness construction helpers that still need Pe-owned policy. Do not rebuild MastraCode protocol, run-control, event-bus, model/mode, thread, or ACP surfaces here.
 
@@ -127,7 +127,7 @@ The old Pe-owned local browser workbench and ACP/web protocol stack were deleted
 
 Pea Cloud, WorkOS, Mastra Gateway, sponsored model access, and Gateway-backed observational memory remain product goals, but they must be lazy capabilities. Local TUI startup, thread browsing, local provider-key model access, and Revit/operator dev loops should not require cloud login; use explicit local-only/no-cloud-auth controls when cloud auth would add friction.
 
-## Pea TUI Live Loop
+## Pea TUI dev loop
 
 `pea beta-tui` must prioritize a usable prompt loop over OpenTUI polish. On the current Windows + zellij path, OpenTUI rendering can prevent zellij-injected stdin from reaching the app even when plain raw stdin panes work. Until that backend issue is resolved, keep `pea beta-tui` defaulting to the line workbench and treat OpenTUI as an opt-in/fallback-rendering experiment.
 

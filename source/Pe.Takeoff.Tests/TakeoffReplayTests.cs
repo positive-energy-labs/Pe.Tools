@@ -246,7 +246,7 @@ public sealed class TakeoffReplayTests
         });
     }
 
-    // ---- partition formulation semantics (source/Pe.Revit.Takeoff/DECISIONS.md) ----
+    // ---- partition formulation semantics (docs/features/takeoffs/LEDGER.md) ----
 
     private static TakeoffOptions PartitionOptions() => new() { CellFt = 0.5, SealWallRunGaps = true };
 

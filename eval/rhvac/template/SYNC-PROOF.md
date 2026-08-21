@@ -82,7 +82,7 @@ The load-bearing ones:
 
 1. **Not opened in Elite RHVAC.** Everything above is Jet-layer. A file with *seeded systems* has
    never been through RHVAC's own open + recalculate (the room-UPDATE equivalent has — see
-   `source/Pe.Revit.Takeoff/DECISIONS.md`). This is the standing manual check per export.
+   `docs/features/takeoffs/LEDGER.md`). This is the standing manual check per export.
 2. **`fileIdentity` is weak** — the format carries no GUID. It is file name + a hash of the
    project/client titles; retitling the project in RHVAC changes the stamp.
 3. **The preset catalog is a shim** with 16 assemblies mined from one project (projectA). A firm

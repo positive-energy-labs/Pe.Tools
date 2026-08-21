@@ -82,50 +82,81 @@
  *   under `⇄ live`, because a bulk crossing you cannot see the far side of is a bulk crossing made
  *   blind (SURFACE-PHILOSOPHY §2). Per-cell capture/apply stay in the drill-in.
  *
- * ── WHAT IS AND IS NOT WIRED ────────────────────────────────────────────────────────────────
- * NOTHING HERE TALKS TO A HOST. Every verb rewrites page-local state, immediately and visibly,
- * against the fixture in `world.ts`. That is a DECLARED lane, not a fallback: the header carries
- * a dashed seam chip naming exactly what would replace it. The host wiring the previous surface
- * carried (route:settings documents, family.editor.snapshot/apply, capture/build evidence) is not
- * disabled here — it is not present, and re-landing it against this shape is the next pass.
+ * ── WHAT IS AND IS NOT WIRED (phase B, 2026-08-17) ──────────────────────────────────────────
+ * TWO LANES, ONE SHAPE. `useFamilyLane` answers the only question that separates them — is a
+ * family document open in `route:settings`? — and the page below it renders ONE `PageWorld` either
+ * way. Nothing in this file asks whether a host exists.
+ *
+ *   LIVE     — a real `family.json`, parsed and projected. The document slot lists what the bound
+ *              session can see and picking one runs settings `open`; `save profile` diffs the
+ *              draft into staged field patches and runs settings `save`, whose refusal (a version
+ *              conflict, a schema failure, a field still flagged for attention) is surfaced
+ *              VERBATIM on the same receipt channel every other verb uses.
+ *   FIXTURE  — no document. `FIXTURE_WORLD`, wearing the dashed seam chip, save page-local. Not a
+ *              fallback: a DECLARED lane, and the chip says what replaces it.
+ *
+ * ── THE TWO HOST CROSSINGS (phase D, 2026-08-17) ────────────────────────────────────────────
+ * The table pane header's last two verbs are the only two on this page that talk to Revit, and they
+ * are the two directions evidence travels:
+ *
+ *   capture live   `route:family` `capture_evidence` → `revit.detail.family-model`. A READ. Its
+ *                  result lands in the evidence slice, the projection turns it into the live half,
+ *                  and the ⇄ live overlay, the drift marks and the freshness chip are all readings
+ *                  OF it. Refuses in the host's own words when no family document is active in
+ *                  Revit. It moves nothing into the profile — `capture all` does that, under the
+ *                  overlay, once there is a reading to move.
+ *   build .rfa     `route:family` `build_evidence` → `revit.apply.family-model`. A WRITE, and the
+ *                  only one that leaves both the page and the document: it re-opens the SAVED
+ *                  family.json host-side and materializes a timestamped .rfa. Because it reads the
+ *                  file rather than the table, it is armed rather than pressed — the ceremony, its
+ *                  refusal predicates and its receipt live in `#/family/build`.
+ *
+ * STILL PAGE-LOCAL ON BOTH LANES, and honest about it: `apply` in both its bulk and per-type shapes
+ * (`family.editor.apply` is a later phase — the profile-wins direction has no concurrency guard yet),
+ * and the proposals with their accept/deny (they need `route:settings` field
+ * proposals, which the projection deliberately does not invent), and the doc pane's parse.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import {
   ReadCell,
   StateDot,
   TextCell,
-  stateColumn,
-  type StateMeta,
+  VERDICT_INK,
+  VerdictCell,
 } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
-import type { Column, MasterTableState } from "#/components/master-table/model";
+import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
 import { Sentence } from "#/components/sentence";
 import { Pane, PaneWorkspace } from "#/components/ui/pane";
-import { Switcher } from "#/components/ui/switcher";
+import { AddressingBar } from "#/components/lang/addressing-bar";
+import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
+import {
+  BUILD_OUTCOME_UNKNOWN,
+  BUILD_VERB,
+  BuildStrip,
+  buildOutputPath,
+  buildReceiptLine,
+  buildRefusals,
+  readBuildReceipt,
+  type BuildFacts,
+  type BuildRefusal,
+} from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
-import { ProposedCell, RefusalNote } from "#/family/marks";
+import { NavStateCell, ProposedCell } from "#/family/marks";
+import { FAMILY_MODULE } from "#/family/host";
+import { useFamilyLane } from "#/family/lane";
 import {
   AGREEMENT_TONE,
-  CONSTITUENTS,
-  EMPTY_CLASS,
-  GEOM_BY_SLUG,
-  GROUNDING,
-  LIVE,
-  LIVE_ONLY_ROWS,
   MARK,
   MARK_TITLE,
-  MERGE_ANCHOR,
-  MISSING_IN_REVIT,
   OVERLAY_LABEL,
   OVERLAY_TITLE,
-  PARAM_ROWS,
-  SPEC,
-  TYPE_NAMES,
   agreementOf,
   bindingOf,
   consumersOf,
@@ -148,10 +179,11 @@ import {
   type Focus,
   type Overlay,
   type PRow,
+  type PageWorld,
   type SavedProfile,
 } from "#/family/model";
+import { draftToPatches } from "#/family/project";
 import {
-  WORLD,
   boundParam,
   type GeomMeta,
   type GeomConstituent,
@@ -162,24 +194,23 @@ import { cn } from "#/lib/utils";
 type DocMode = "text" | "sheet";
 
 export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string }) {
-  const [draft, setDraft] = useState<Draft>(initialDraft);
+  /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
+  const lane = useFamilyLane();
+  const { world, store } = lane;
+  /**
+   * The last-read document, as a draft. It is the page's record of the DISK and the baseline the
+   * reverse projection diffs against — so a save writes what moved and nothing else, and a draft
+   * back at its baseline honestly has nothing to save.
+   */
+  const savedDraft = useMemo(() => initialDraft(world), [world]);
+
+  const [draft, setDraft] = useState<Draft>(() => initialDraft(world));
   /** THE PSEUDO-DIMENSION. PAGE state, never the URL: which reading you are looking through is not
    * a place, and a link that restored someone else's overlay would be claiming it is. Draft is the
    * default because it is the only one you can work in. */
   const [overlay, setOverlay] = useState<Overlay>("draft");
-  /** The disk. Seeded from the fixture — the profile starts saved — and re-snapshotted on save. */
-  const [saved, setSaved] = useState<SavedProfile>(() => savedFrom(initialDraft()));
-  /** Bumped on every REFUSED commit. It keys the editors that can refuse, so a refused edit puts
-   * the old value back in the box: leaving the emptied text sitting there while the model kept the
-   * old number would be the input lying about what happened. */
-  const [refusals, setRefusals] = useState(0);
-  /**
-   * The LAST refusal, held next to the cell that refused. The header receipt says it too, but a
-   * receipt at the top of the page relaxes after four seconds and is nowhere near the box you were
-   * typing in — a refusal has to be legible where the refusal happened. It clears when that cell
-   * commits something acceptable, or when another one refuses.
-   */
-  const [refusal, setRefusal] = useState<{ key: string; text: string } | null>(null);
+  /** The disk, per cell. Seeded from the document — it starts saved — and re-snapshotted on save. */
+  const [saved, setSaved] = useState<SavedProfile>(() => savedFrom(initialDraft(world)));
   /** Table state is OWNED here, because the sort direction is an input to the ghost-pinning
    * workaround — the sort key has to know which way it is about to be read. */
   const [tableState, setTableState] = useState<MasterTableState>(() => ({
@@ -195,7 +226,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   const [docMode, setDocMode] = useState<DocMode>("text");
   const [docZoom, setDocZoom] = useState(1);
   const [drillType, setDrillType] = useState<string | null>(null);
-  const [stageType, setStageType] = useState<string>(TYPE_NAMES[1] ?? TYPE_NAMES[0] ?? "Standard");
+  const [stageType, setStageType] = useState<string>(
+    world.typeNames[1] ?? world.typeNames[0] ?? "Standard",
+  );
   const [focus, setFocus] = useState<Focus>(null);
   const [focusedProposal, setFocusedProposal] = useState<string | null>(null);
   /** The row whose proposals were last LOCATED from the table. Sticky — hover comes and goes, but
@@ -221,6 +254,35 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const say = (text: string) => setReceipt({ text, atMs: Date.now() });
+
+  /**
+   * RE-SEED ON A NEW REVISION, and only then.
+   *
+   * `lane.seedKey` is "which document, at which version token". It changes when you pick a
+   * different document and when a save bumps the token — both of which mean the draft you were
+   * holding describes something that is no longer in front of you. It does NOT change on an
+   * unrelated re-render, which is what keeps work in progress alive.
+   *
+   * The ref rather than the effect's dependency list is load-bearing: React may run an effect twice
+   * for the same value, and a re-seed that fired twice would throw away the edit you made between.
+   */
+  const seededRef = useRef(lane.seedKey);
+  useEffect(() => {
+    if (seededRef.current === lane.seedKey) return;
+    seededRef.current = lane.seedKey;
+    const next = initialDraft(world);
+    setDraft(next);
+    setSaved(savedFrom(next));
+    setStageType(world.typeNames[1] ?? world.typeNames[0] ?? "");
+    // Modes that named something in the OLD document cannot survive it.
+    setDrillType(null);
+    setInspect(null);
+    setBinding(null);
+    setFocus(null);
+    setFocusedProposal(null);
+    setPinnedParam(null);
+    setOverlay("draft");
+  }, [lane.seedKey, world]);
 
   // Esc unwinds ONE thing, innermost first: the bind picker, then the inspector, then the
   // drill-in. Each is a mode of a pane rather than a place, so leaving one must never feel like
@@ -250,7 +312,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * A list, not a single one — a cell may be argued about twice, and hiding the second would be
    * the surface lying about how much is outstanding. */
   const proposalsAt = (param: string, typeName: string | null): ProtoProposal[] =>
-    WORLD.proposals.filter(
+    world.proposals.filter(
       (entry) =>
         entry.param === param &&
         (entry.typeName ?? null) === typeName &&
@@ -259,9 +321,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
   /** Every open proposal anywhere on a parameter's row — what the RAIL counts. */
   const proposalsOn = (param: string): ProtoProposal[] =>
-    WORLD.proposals.filter((entry) => entry.param === param && verdictOf(entry.id) === "open");
+    world.proposals.filter((entry) => entry.param === param && verdictOf(entry.id) === "open");
 
-  const openProposals = WORLD.proposals.filter((entry) => verdictOf(entry.id) === "open");
+  const openProposals = world.proposals.filter((entry) => verdictOf(entry.id) === "open");
 
   /** Locate: point the sidebar at a proposal without deciding anything about it. */
   const locate = (proposal: ProtoProposal) => {
@@ -277,7 +339,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    */
   const rows = useMemo<PRow[]>(
     () => [
-      ...PARAM_ROWS,
+      ...world.paramRows,
       ...draft.newParams.map((param) => ({
         key: param.name,
         name: param.name,
@@ -290,37 +352,37 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       // saved value — under `draft` every cell of them would be a blank refusal, and a row that can
       // only ever say "not here" is a row the table is better off not carrying. Under the live
       // overlay they are the other half of the reconcile: what Revit has that the profile does not.
-      ...(overlay === "live" ? LIVE_ONLY_ROWS : []),
-      ...ghostRows(draft),
+      ...(overlay === "live" ? world.liveOnlyRows : []),
+      ...ghostRows(world, draft),
     ],
-    [draft, overlay],
+    [world, draft, overlay],
   );
 
-  const consumers = useMemo(() => consumersOf(draft), [draft]);
+  const consumers = useMemo(() => consumersOf(world, draft), [world, draft]);
   const ghostCount = rows.filter((row) => row.kind === "ghost").length;
 
   const driftCells = useMemo(() => {
     const cells: { param: string; typeName: string }[] = [];
     for (const row of rows) {
-      for (const typeName of TYPE_NAMES) {
-        if (agreementOf(draft, row, typeName) === "drift")
+      for (const typeName of world.typeNames) {
+        if (agreementOf(world, draft, row, typeName) === "drift")
           cells.push({ param: row.name, typeName });
       }
     }
     return cells;
-  }, [draft, rows]);
+  }, [world, draft, rows]);
 
   /** How many value cells the draft would write into the file. The header's dirty fact says
    * WHETHER; this says HOW MUCH, and the caution squares say WHERE. */
   const unsavedCount = useMemo(() => {
     let count = 0;
     for (const row of rows)
-      for (const typeName of TYPE_NAMES) {
-        if (row.kind === "ghost" && typeName !== TYPE_NAMES[0]) continue; // one merged cell, one count
-        if (isUnsavedAt(draft, saved, row, typeName)) count += 1;
+      for (const typeName of world.typeNames) {
+        if (row.kind === "ghost" && typeName !== world.typeNames[0]) continue; // one merged cell, one count
+        if (isUnsavedAt(world, draft, saved, row, typeName)) count += 1;
       }
     return count;
-  }, [draft, saved, rows]);
+  }, [world, draft, saved, rows]);
 
   // ── verbs ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -358,7 +420,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * never on `--r-done` — nothing of pea's was adopted.
    */
   const sever = (next: Draft, param: string, typeName: string | null) => {
-    for (const entry of WORLD.proposals) {
+    for (const entry of world.proposals) {
       if (entry.param !== param) continue;
       if ((entry.typeName ?? null) !== typeName) continue;
       if ((next.verdicts[entry.id] ?? "open") !== "open") continue;
@@ -373,18 +435,18 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * exactly as typing in a type cell severs a per-type one — the law does not care which level you
    * beat pea to.
    */
-  const editAuthored = (param: string, value: string) => {
+  const editAuthored = (param: string, value: string): string | void => {
     const trimmed = value.trim();
     // A parameter with no family value is not a state — but a REFUSAL has to be audible. A silent
-    // dropped commit looks exactly like an edit that landed and then vanished.
+    // dropped commit looks exactly like an edit that landed and then vanished. Returning the
+    // reason REFUSES the commit in the editable `StateCell` (R8): the cell restores the prior
+    // value and wears the dismissible caution note; the header receipt says it too, so the
+    // refusal survives the note being dismissed.
     if (trimmed === "") {
-      const text = `Refused — "${param}" cannot have an empty family value. Every type inherits it; clearing it would leave ${TYPE_NAMES.length} types resolving to nothing. To make one type differ, override it in that type's cell instead.`;
-      setRefusals((count) => count + 1);
-      setRefusal({ key: `param:${param}`, text });
+      const text = `Refused — "${param}" cannot have an empty family value. Every type inherits it; clearing it would leave ${world.typeNames.length} types resolving to nothing. To make one type differ, override it in that type's cell instead.`;
       say(text);
-      return;
+      return text;
     }
-    setRefusal((current) => (current?.key === `param:${param}` ? null : current));
     setDraft((previous) => {
       const next = structuredClone(previous);
       next.authored[param] = trimmed;
@@ -417,7 +479,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         if (row.kind !== "profile") continue;
         if (only !== undefined && row.name !== only) continue;
         for (const typeName of types) {
-          if (agreementOf(previous, row, typeName) !== "drift") continue;
+          if (agreementOf(world, previous, row, typeName) !== "drift") continue;
           const value = next.live[row.name]?.[typeName]?.value;
           if (value == null) continue;
           const bucket = { ...next.types[typeName] };
@@ -439,7 +501,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         if (row.kind !== "profile") continue;
         if (only !== undefined && row.name !== only) continue;
         for (const typeName of types) {
-          if (agreementOf(previous, row, typeName) !== "drift") continue;
+          if (agreementOf(world, previous, row, typeName) !== "drift") continue;
           const entry = next.live[row.name]?.[typeName];
           if (!entry) continue;
           entry.value = effective(next, row.name, typeName);
@@ -461,32 +523,225 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     say(`applied ${count} value${count === 1 ? "" : "s"} into the live family`);
   };
 
-  const save = () => {
-    // The disk moves to where the draft is. Every caution square goes out in the same beat, and
-    // the saved overlay stops differing anywhere — which is the visible proof that save wrote what
-    // the marks said it would.
-    setSaved(savedFrom(draft));
-    setDraft((previous) => ({ ...previous, dirty: false }));
-    say(
-      `saved ${WORLD.profile.path} — ${unsavedCount} value${unsavedCount === 1 ? "" : "s"} written`,
-    );
+  const [saving, setSaving] = useState(false);
+
+  /**
+   * OPEN — the lane switch, and the only verb on this page that changes which file the page IS.
+   * It runs the settings lifecycle's `open`, which preserves the field trichotomy: proposals pea
+   * already made against a document survive you looking at another one and coming back.
+   */
+  const openDocument = (relativePath: string) =>
+    void (async () => {
+      const opened = await store.settingsCommand("open", {
+        documentId: { ...FAMILY_MODULE, relativePath },
+      });
+      if (!opened.ok)
+        say(
+          `Could not open ${relativePath} — ${opened.hint ?? opened.error ?? "the host refused, without saying why"}`,
+        );
+    })();
+
+  /** The host's own schema verdict on the SAVED file. Only meaningful on the live lane: the fixture
+   * has no schema behind it, and a green chip there would be claiming a check nobody ran. */
+  const validation = lane.document ? (store.snapshot?.validation ?? null) : null;
+  const validationSays = (validation?.issues ?? [])
+    .slice(0, 3)
+    .map((issue) =>
+      typeof issue === "object" && issue != null && "message" in issue
+        ? String((issue as { message: unknown }).message)
+        : JSON.stringify(issue),
+    )
+    .join(" · ");
+
+  /**
+   * SAVE, on whichever lane.
+   *
+   * FIXTURE: the disk moves to where the draft is. Every caution square goes out in the same beat,
+   * and the saved overlay stops differing anywhere — the visible proof that save wrote what the
+   * marks said it would.
+   *
+   * LIVE: the draft is diffed into staged field patches, staged onto `route:settings`, and the
+   * host's own `save` writes them under the version token captured at open. Nothing is folded in
+   * here on success: the snapshot comes back over SSE with a new token, the lane re-projects, and
+   * the re-seed effect above rebuilds the draft from what actually landed. That is the difference
+   * between a surface that shows you the write and one that shows you its own optimism.
+   */
+  const save = async () => {
+    if (!lane.document) {
+      setSaved(savedFrom(draft));
+      setDraft((previous) => ({ ...previous, dirty: false }));
+      say(`saved ${world.path} — ${unsavedCount} value${unsavedCount === 1 ? "" : "s"} written`);
+      return;
+    }
+    const patches = draftToPatches(lane.document.model, draft, savedDraft);
+    if (patches.length === 0) {
+      say(
+        `Nothing to write — every value in the draft already matches ${lane.document.relativePath} on disk.`,
+      );
+      return;
+    }
+    setSaving(true);
+    try {
+      // The host refuses in its own words, and those words are the teaching channel — a conflict, a
+      // schema failure and a field flagged for attention are three different refusals, and
+      // flattening them into "save failed" would be the surface throwing away the only help there is.
+      const staged = await store.applyFields(patches);
+      if (!staged.ok) {
+        say(`Refused while staging — ${staged.hint ?? staged.error ?? "the document rejected it"}`);
+        return;
+      }
+      const written = await store.settingsCommand("save");
+      if (!written.ok) {
+        say(`Refused — ${written.hint ?? written.error ?? "save failed"}`);
+        return;
+      }
+      say(
+        `saved ${lane.document.relativePath} — ${patches.length} field${patches.length === 1 ? "" : "s"} written`,
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── THE HOST CROSSINGS (phase D) ──────────────────────────────────────────────────────────────
+  //
+  // Two verbs, and they are the only two on this page that talk to Revit. Everything else above is
+  // arithmetic on the draft — a page-local move that becomes real when `save profile` writes it.
+  //
+  //   capture live   READS. `route:family`'s `capture_evidence` wraps `revit.detail.family-model`
+  //                  and stamps the result into the evidence slice. It moves nothing into the
+  //                  profile; that is `capture all`'s job, under the ⇄ live overlay, once there is
+  //                  a reading to move.
+  //   build .rfa     WRITES, outside the page and outside the document: `build_evidence` re-opens
+  //                  the SAVED family.json host-side and hands it to `revit.apply.family-model`,
+  //                  which materializes an .rfa and returns evidence pinned to that revision. It
+  //                  is the whole reason the arming ceremony exists — see `#/family/build`.
+  //
+  // `family.editor.apply` is deliberately NOT wired: the profile-wins direction is a later phase,
+  // and the apply verbs above stay page-local and honest about it.
+
+  const [capturing, setCapturing] = useState(false);
+  /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
+  const [armedBuild, setArmedBuild] = useState<{ token: string | null; reason: string } | null>(
+    null,
+  );
+  const [building, setBuilding] = useState(false);
+  /** The host's own last word on a build, or a latched unknown outcome. Outranks the predicates. */
+  const [buildSaid, setBuildSaid] = useState<BuildRefusal | null>(null);
+
+  /** Fields staged onto `route:settings` but not yet written — unsaved by another route. */
+  const stagedCount = useMemo(
+    () => Object.values(store.fields).filter((field) => field.staged != null).length,
+    [store.fields],
+  );
+
+  /** Everything the ceremony reads, in one flat record. The predicates live in `#/family/build`. */
+  const buildFacts = useMemo<BuildFacts>(
+    () => ({
+      relativePath: lane.document?.relativePath ?? null,
+      versionToken: lane.document?.versionToken ?? null,
+      validation,
+      unsavedCount,
+      stagedCount,
+      boundTarget: store.boundTarget,
+      armedToken: armedBuild?.token ?? null,
+    }),
+    [lane.document, validation, unsavedCount, stagedCount, store.boundTarget, armedBuild],
+  );
+
+  /**
+   * A FRESH READ IS NOT A NEW DOCUMENT. Evidence arriving — from either crossing — has to reach the
+   * LIVE half of the draft, and must not touch the authored half: `lane.seedKey` deliberately does
+   * not move for a capture, because re-seeding would throw away edits in progress. A live value is
+   * a READING of Revit, not part of what you are editing, so it is folded in on its own.
+   */
+  const evidenceStamp = store.evidence?.from.capturedAt ?? null;
+  const liveValues = world.live?.values ?? null;
+  const evidenceRef = useRef(evidenceStamp);
+  useEffect(() => {
+    if (evidenceRef.current === evidenceStamp) return;
+    evidenceRef.current = evidenceStamp;
+    setDraft((previous) => ({ ...previous, live: structuredClone(liveValues ?? {}) }));
+  }, [evidenceStamp, liveValues]);
+
+  const captureLive = async () => {
+    setCapturing(true);
+    try {
+      const read = await store.familyCommand("capture_evidence", {});
+      if (!read.ok) {
+        // The host's words verbatim — "is a family document active in the bound session?" IS the
+        // exit, and paraphrasing it into "capture failed" would throw away the only help there is.
+        say(
+          `Could not read the live family — ${read.hint ?? read.error ?? "the host refused, without saying why"}`,
+        );
+        return;
+      }
+      const payload = (read.result ?? {}) as { familyName?: string; parameterCount?: number };
+      say(
+        `read ${payload.familyName ?? "the live family"} out of Revit — ${payload.parameterCount ?? 0} parameters; the ⇄ live overlay is now stamped with this read`,
+      );
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  /**
+   * THE COMMIT. Fires only from the armed strip, and only once its own predicates are silent — but
+   * it re-checks them here anyway, because the strip's arming is page state and this is the write.
+   */
+  const runBuild = async () => {
+    const relativePath = lane.document?.relativePath;
+    if (relativePath == null || armedBuild == null) return;
+    if (buildRefusals({ ...buildFacts, armedToken: armedBuild.token }).length > 0) return;
+    setBuilding(true);
+    setBuildSaid(null);
+    try {
+      const built = await store.familyCommand("build_evidence", {
+        documentId: { ...FAMILY_MODULE, relativePath },
+      });
+      if (!built.ok) {
+        const says = built.hint ?? built.error ?? "the host refused, without saying why";
+        setBuildSaid({ code: "host", says });
+        say(`Build refused — ${says}`);
+        return;
+      }
+      const receipt = readBuildReceipt(built.result);
+      if (receipt == null) {
+        // OUTCOME UNKNOWN, latched. `build_evidence` mutates outside the page — it writes a file —
+        // so an answer with no receipt is neither a success nor a refusal, and claiming either
+        // would be the surface inventing a fact about the disk.
+        setBuildSaid({ code: "unknown", says: BUILD_OUTCOME_UNKNOWN });
+        say(BUILD_OUTCOME_UNKNOWN);
+        return;
+      }
+      // Disarm on the way out: the plan was spent, and a strip still armed against a token the
+      // build has already consumed would invite a second, differently-named .rfa.
+      setArmedBuild(null);
+      say(buildReceiptLine(receipt, new Date().toLocaleTimeString()));
+    } finally {
+      setBuilding(false);
+    }
+  };
+
+  /** Re-arm against the file as it now stands. Writes nothing — the one exit every refusal shares. */
+  const replanBuild = () => {
+    setBuildSaid(null);
+    setArmedBuild({ token: lane.document?.versionToken ?? null, reason: "" });
   };
 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
 
   /** Retype a frozen literal. It stays frozen — this edits the number, not its reachability. */
-  const editLiteral = (slug: string, property: string, value: string) => {
+  const editLiteral = (slug: string, property: string, value: string): string | void => {
     const trimmed = value.trim();
     // An emptied literal is not a value — the geometry would have no number at all. Refused OUT
-    // LOUD: the box puts the old literal back and the receipt says what would have happened.
+    // LOUD: returning the reason makes the editable `StateCell` restore the old literal and wear
+    // the caution note (R8), and the receipt says what would have happened.
     if (trimmed === "") {
       const text = `Refused — ${slug}.${property} is a frozen literal, so it cannot be emptied: the geometry would have no dimension at all. Type a number, or bind it to a parameter to give it somewhere else to come from.`;
-      setRefusals((count) => count + 1);
-      setRefusal({ key: `geom:${slug}.${property}`, text });
       say(text);
-      return;
+      return text;
     }
-    setRefusal((current) => (current?.key === `geom:${slug}.${property}` ? null : current));
     setDraft((previous) => {
       const next = structuredClone(previous);
       next.geom[slug] = {
@@ -519,7 +774,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    *     the honest promotion: binding must never quietly move a number.
    */
   const bindTo = (slug: string, property: string, paramName: string) => {
-    const literal = bindingOf(draft, slug, property);
+    const literal = bindingOf(world, draft, slug, property);
     setDraft((previous) => {
       const next = structuredClone(previous);
       next.geom[slug] = {
@@ -535,7 +790,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   };
 
   const bindToNew = (slug: string, property: string, dataType: string) => {
-    const literal = bindingOf(draft, slug, property);
+    const literal = bindingOf(world, draft, slug, property);
     const base = paramNameFor(slug, property);
     const taken = new Set(Object.keys(draft.authored));
     let name = base;
@@ -580,17 +835,20 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     [inspect],
   );
   const liveFocus = focus ?? heldFocus;
-  const focusedParams = useMemo(() => paramsInFocus(liveFocus, draft), [liveFocus, draft]);
+  const focusedParams = useMemo(
+    () => paramsInFocus(world, liveFocus, draft),
+    [world, liveFocus, draft],
+  );
   const focusedParts = useMemo(() => partsInFocus(liveFocus, consumers), [liveFocus, consumers]);
   const litBlocks = useMemo(() => {
     const set = new Set<string>();
-    for (const param of focusedParams) for (const id of GROUNDING[param] ?? []) set.add(id);
+    for (const param of focusedParams) for (const id of world.grounding[param] ?? []) set.add(id);
     if (focusedProposal) {
-      const proposal = WORLD.proposals.find((entry) => entry.id === focusedProposal);
+      const proposal = world.proposals.find((entry) => entry.id === focusedProposal);
       if (proposal) set.add(proposal.sourceBlockId);
     }
     return set;
-  }, [focusedParams, focusedProposal]);
+  }, [world, focusedParams, focusedProposal]);
 
   // ── columns ───────────────────────────────────────────────────────────────────────────────────
   //
@@ -609,7 +867,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       "The verdict rail — the page's answer to 'where do proposals live', readable top to bottom without reading a single value. A dot means one proposal on this row; a counted chip means several. Clicking either LOCATES them in the sidebar; it never decides anything, because a verdict belongs next to the spec text that justifies it.",
     cell: (row) => {
       const open = proposalsOn(row.name);
-      const accepted = WORLD.proposals.filter(
+      const accepted = world.proposals.filter(
         (entry) => entry.param === row.name && verdictOf(entry.id) === "accepted",
       );
       if (open.length === 0)
@@ -641,10 +899,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             /* Pea's identity, never the commit colour: a MARK takes `--r-pea` (the display rung),
                a counted chip is text and takes pea's ink. */
             className={cn(
-              "tele flex items-center justify-center",
+              "face-mono flex items-center justify-center",
               open.length === 1
                 ? "size-2 rounded-[1px] bg-[var(--r-pea)]"
-                : "h-3.5 min-w-3.5 rounded-[2px] border border-[var(--r-pea)] px-0.5 text-[9px] leading-none text-[var(--r-pea-ink)]",
+                : "h-3.5 min-w-3.5 rounded-[2px] border border-[var(--r-pea)] px-0.5 t-caption leading-none text-[var(--r-pea-ink)]",
             )}
           >
             {open.length > 1 ? open.length : null}
@@ -679,25 +937,25 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       if (row.kind === "ghost") {
         const slug = row.slug ?? "";
         const property = row.property ?? "";
-        const literal = bindingOf(draft, slug, property);
-        const dim = GEOM_BY_SLUG.get(slug)?.dims.find((entry) => entry.property === property);
+        const literal = bindingOf(world, draft, slug, property);
+        const dim = world.geomBySlug.get(slug)?.dims.find((entry) => entry.property === property);
         return (
           <span className="flex h-7 min-w-0 items-center px-1.5">
             <button
               type="button"
               onClick={() => setInspect({ kind: "part", slug })}
               title={`${slug}.${property} — a bindable ${row.dataType} dimension that NO parameter drives. ${dim?.note ?? ""} It is ${literal} for every type of this family, forever: no type can differ, no schedule can read it, no formula can reach it. Its value is the ONE merged cell to the right, spanning every type column, because there is exactly one of it. Click to open ${slug} in the inspector; use "bind…" in the state column to give it a parameter.`}
-              className="tele block w-full truncate text-left text-[10px] italic leading-[12px] text-[var(--r-ink-mute)] hover:text-[var(--r-ink)]"
+              className="face-mono block w-full truncate text-left t-caption italic leading-[12px] text-[var(--r-ink-mute)] hover:text-[var(--r-ink)]"
             >
               {row.name}
-              <span className="ml-1 not-italic text-[9px] text-[var(--r-caution)]">geom</span>
+              <span className="ml-1 not-italic t-caption text-[var(--r-caution)]">geom</span>
             </button>
           </span>
         );
       }
 
       const authored = draft.authored[row.name] ?? "";
-      const blocks = GROUNDING[row.name] ?? [];
+      const blocks = world.grounding[row.name] ?? [];
       const family = proposalsAt(row.name, null);
       const drives = consumers.get(row.name) ?? [];
       const reason = `${row.name} — ${row.dataType}, bound per ${
@@ -705,12 +963,12 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           ? "instance (a placed element may depart from it; the family still authors a default per type, which is what the type columns hold)"
           : "type"
       }.${isFormula(authored) ? ` Driven by the family-level formula ${authored}, so no type can override its result.` : ""}${
-        MISSING_IN_REVIT.has(row.name)
+        world.missingInRevit.has(row.name)
           ? " ⊘ — the live family has no parameter by this name; apply moves values, not schema."
           : ""
       }${
         blocks.length > 0
-          ? ` Grounded in ${blocks.join(", ")} of ${SPEC?.fileName ?? "the spec"} — hover the row to light it in the sidebar.`
+          ? ` Grounded in ${blocks.join(", ")} of ${world.spec?.fileName ?? "the spec"} — hover the row to light it in the sidebar.`
           : " Ungrounded: nothing in the spec claims this number."
       }${family.length > 0 ? ` Pea proposes a FAMILY-LEVEL value here: ${family[0]!.current ?? "—"} → ${family[0]!.proposed}. Accepting it moves every type that does not override.` : ""}${
         drives.length > 0
@@ -725,7 +983,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           onLocate={locate}
           where={`the family value of ${row.name}`}
         >
-          <span className="tele block min-w-0 flex-1 truncate px-1.5" title={reason}>
+          <span className="face-mono t-value block min-w-0 flex-1 truncate px-1.5" title={reason}>
             <span className="block truncate leading-[13px]">
               {row.kind === "live-only" ? (
                 <span className="text-[var(--r-ink-2)]">{row.name}</span>
@@ -740,13 +998,13 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 </button>
               )}
               {row.isInstance && (
-                <span className="ml-1 text-[9px] text-[var(--r-ink-mute)]">inst</span>
+                <span className="ml-1 t-caption text-[var(--r-ink-mute)]">inst</span>
               )}
-              {MISSING_IN_REVIT.has(row.name) && (
-                <span className="ml-1 text-[9px] text-[var(--r-caution)]">⊘</span>
+              {world.missingInRevit.has(row.name) && (
+                <span className="ml-1 t-caption text-[var(--r-caution)]">⊘</span>
               )}
               {blocks.length > 0 && (
-                <span className="ml-1 text-[9px] text-[var(--r-ink-mute)]">{blocks.join(" ")}</span>
+                <span className="ml-1 t-caption text-[var(--r-ink-mute)]">{blocks.join(" ")}</span>
               )}
             </span>
             {/* The family level, on ONE line: the formula, and what the parameter DRIVES. A bound
@@ -754,10 +1012,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 mark is the only place the representation is visible. Several consumers join here,
                 and that join is the point: editing this row moves all of them at once.
 
-                DERIVED SPENDS NO COLOUR (DESIGN-AUDIT #3): the language has no role for "a formula
+                DERIVED SPENDS NO COLOUR: the language has no role for "a formula
                 computed this", and the leading `=` already says it. Italic carries the rest. */}
             {(isFormula(authored) || drives.length > 0) && (
-              <span className="block truncate text-[9px] leading-[11px]">
+              <span className="block truncate t-caption leading-[11px]">
                 {isFormula(authored) && (
                   <span className="italic text-[var(--r-ink-2)]">{authored}</span>
                 )}
@@ -813,7 +1071,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           setOverlay("draft");
         }}
         title={`Drill into "${typeName}". The table pane swaps to the same table, narrowed to this one type and opened up with the spine and the crossing verbs. "← all types" in the pane header, or Esc, comes back.`}
-        className="tele-label block w-full text-left normal-case text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
+        className="face-mono t-label block w-full text-left text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
       >
         {typeName} <span className="opacity-60">⤢</span>
       </button>
@@ -828,14 +1086,14 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       if (row.kind === "ghost") {
         const slug = row.slug ?? "";
         const property = row.property ?? "";
-        if (typeName !== MERGE_ANCHOR)
+        if (typeName !== world.mergeAnchor)
           return (
             <ReadCell
               value=""
               reason={`Suppressed — part of the ONE merged value cell for ${row.name}, which begins in the first type column and spans all of them. There is exactly one literal for the whole family, so it is drawn once. (MasterTable has no spanning cell; this is the honest emulation of one.)`}
             />
           );
-        const literal = bindingOf(draft, slug, property);
+        const literal = bindingOf(world, draft, slug, property);
         const diskLiteral = saved.geom[slug]?.[property] ?? null;
         if (overlay === "live")
           return (
@@ -877,33 +1135,22 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               }
             />
           );
+        // THE EDITABLE CELL (R8, families #6 discharged here): the grammar draws the caution
+        // square + bold for the unsaved staged value and carries the refusal itself — returning
+        // the reason from `editLiteral` restores the literal and shows the dismissible note,
+        // without the row growing a pixel. The route-drawn RefusalNote this replaced is deleted.
         return (
-          // The wrapper is unconditional here so the refusal chip has something to be positioned
-          // against without ever pushing the input onto a second line — a row that grew a pixel
-          // when it refused would break the one promise the overlays are built on.
-          <span className="relative flex h-7 w-full items-center">
-            <ProposedCell
-              proposals={[]}
-              onLocate={locate}
-              where={row.name}
-              unsaved={
-                isUnsavedAt(draft, saved, row, typeName)
-                  ? `UNSAVED — the file ${diskLiteral === null ? "does not carry this dimension at all" : `carries ${diskLiteral}`}; saving writes ${literal}.`
-                  : null
-              }
-            >
-              <TextCell
-                key={`${literal}:${refusals}`}
-                value={literal}
-                className="text-[var(--r-ink)]"
-                title={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for, and the two are deliberately different acts: this one changes what the family measures, binding changes who is allowed to say so. Emptying it is refused out loud — a dimension with no number is not a state.`}
-                onCommit={(next) => editLiteral(slug, property, next)}
-              />
-            </ProposedCell>
-            {refusal?.key === `geom:${slug}.${property}` && (
-              <RefusalNote text={refusal.text} onDismiss={() => setRefusal(null)} />
-            )}
-          </span>
+          <NavStateCell
+            value={literal}
+            stage={isUnsavedAt(world, draft, saved, row, typeName) ? "staged" : "clean"}
+            stagedBy="you"
+            note={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for. Emptying it is refused out loud — a dimension with no number is not a state.${
+              isUnsavedAt(world, draft, saved, row, typeName)
+                ? ` UNSAVED — the file ${diskLiteral === null ? "does not carry this dimension at all" : `carries ${diskLiteral}`}; saving writes ${literal}.`
+                : ""
+            }`}
+            onCommit={(next) => editLiteral(slug, property, next)}
+          />
         );
       }
 
@@ -921,11 +1168,11 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
       const authored = draft.authored[row.name] ?? "";
       const proposals = proposalsAt(row.name, typeName);
-      const grounded = (GROUNDING[row.name] ?? []).length > 0;
-      const drifted = agreementOf(draft, row, typeName) === "drift";
+      const grounded = (world.grounding[row.name] ?? []).length > 0;
+      const drifted = agreementOf(world, draft, row, typeName) === "drift";
       const diskValue = savedValueAt(saved, row, typeName);
-      const draftValue = draftValueAt(draft, row, typeName);
-      const unsaved = isUnsavedAt(draft, saved, row, typeName);
+      const draftValue = draftValueAt(world, draft, row, typeName);
+      const unsaved = isUnsavedAt(world, draft, saved, row, typeName);
       // The two marks that are facts about the CELL rather than about the reading, so they are
       // applied identically in all three overlays. ONE DECORATION SLOT, RANKED — the language's
       // squiggle law: drift outranks the citation, because a cell that is both is more urgently
@@ -936,7 +1183,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           ? "underline decoration-[var(--r-line-2)] decoration-dotted underline-offset-[3px]"
           : undefined;
       const groundedNote = grounded
-        ? ` Grounded in ${(GROUNDING[row.name] ?? []).join(", ")} of ${SPEC?.fileName ?? "the spec"} — the hairline underline is that citation, and it stays put in every overlay unless drift outranks it.`
+        ? ` Grounded in ${(world.grounding[row.name] ?? []).join(", ")} of ${world.spec?.fileName ?? "the spec"} — the hairline underline is that citation, and it stays put in every overlay unless drift outranks it.`
         : "";
 
       const marks = (inner: React.ReactNode) => (
@@ -960,7 +1207,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
       // ── ⇄ LIVE: Revit's number, in the cell it is a reading of ──────────────────────────────
       if (overlay === "live") {
-        if (MISSING_IN_REVIT.has(row.name))
+        if (world.missingInRevit.has(row.name))
           return marks(
             <ReadCell
               className={cn("leading-7 italic text-[var(--r-caution)]", underline)}
@@ -989,7 +1236,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             reason={
               drifted
                 ? `DRIFT — Revit carries ${entry.value} at ${typeName}; the draft resolves to ${draftValue}. ${MARK_TITLE.drift} Read-only here: editing a live number is not a thing that exists, which is why apply is the write path and its verbs are lit in this overlay.${groundedNote}`
-                : `${typeName} — ${entry.value}. ${MARK_TITLE[agreementOf(draft, row, typeName)]}${groundedNote}`
+                : `${typeName} — ${entry.value}. ${MARK_TITLE[agreementOf(world, draft, row, typeName)]}${groundedNote}`
             }
           />,
         );
@@ -1029,6 +1276,13 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       }
 
       // ── DRAFT: the staged document, editable ────────────────────────────────────────────────
+      //
+      // NOT migrated onto the editable `StateCell` (adoption pass 2026-08-16, findings #13/#14):
+      // an override-less type cell shows the FAMILY value as a placeholder — the inheritance
+      // showing through, not a value the type holds — and the grammar's editable slot has no
+      // placeholder, so an empty `StateCell` here would claim "no value" where the cell resolves
+      // to the authored one. The fold also LOCATES here (the notch is a button); `StateCell`'s
+      // fold is CSS. Both stay honest on `ProposedCell` + `TextCell` until the axes can say them.
       if (isFormula(authored))
         return (
           <ReadCell
@@ -1068,55 +1322,47 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   // header rows; a column WITHOUT a group spans both, and a spanning cell distorts the first
   // row's measured height — which is exactly what the sticky offset is measured from, so the
   // group labels end up hidden under the leaf row. Uniform grouping keeps the two rows honest.
-  const stateCol = (state: MasterTableState): Column<PRow> => {
-    const base = stateColumn<PRow>({
-      key: "state",
-      label: "state",
-      title:
-        "The row's worst verdict across all three types — what this parameter is most asking of you. Filter it to work one kind of trouble at a time. A ghost row's state is `unbound`, which is filterable like any other: that is how you ask the table for every number in this family that nothing can reach.",
-      /* THIS COLUMN STAYS ON `stateColumn`, NOT the `state:` clause (DESIGN-AUDIT #1). Of its
-         seven words only `drift` has an axis; `unbound`, `derived`, `only-live`, `only-profile`
-         and `unread` have none, and `state:` + `word` would draw six of seven as an unmarked
-         "clean" cell wearing a route label — the marks saying nothing while the word said
-         everything. Only the TONES moved onto the meaning band. */
-      of: (row): StateMeta =>
-        row.kind === "ghost"
-          ? {
-              label: "unbound",
-              tone: "var(--r-caution)",
-              note: `UNBOUND — ${row.name} is a bindable dimension with no parameter driving it. It is not drift and it is not disagreement: both sides carry the same number. It is UNREACHABILITY, and the only verb that answers it is bind.`,
-            }
-          : (() => {
-              const state = rowAgreement(draft, row);
-              return {
-                label: state,
-                tone: AGREEMENT_TONE[state],
-                alarm: state === "drift",
-                dim: state === "agree" || state === "unread",
-                note: MARK_TITLE[state],
-              };
-            })(),
-    });
+  /* The row's verdict rides the meaning band via the
+     narrow tone union — `stateColumn` and its unconstrained CSS-string tone are gone). */
+  const rowVerdict = (row: PRow): Verdict => {
+    if (row.kind === "ghost")
+      return {
+        word: "unbound",
+        tone: "caution",
+        note: `UNBOUND — ${row.name} is a bindable dimension with no parameter driving it. It is not drift and it is not disagreement: both sides carry the same number. It is UNREACHABILITY, and the only verb that answers it is bind.`,
+      };
+    const state = rowAgreement(world, draft, row);
     return {
-      ...base,
-      group: "PARAMETER",
-      width: "w-36",
-      // The state column SURVIVES the live column's death, and is careful about why. It carries no
-      // live VALUE — it carries the row's worst agreement, which is a diff and not a reading, and
-      // it is the only thing on the page you can filter by ("show me only drift", "show me only
-      // unbound"). A facet is a use a cell state cannot serve.
-      sort: (row) =>
-        pinnedSort(
-          row,
-          row.kind === "ghost" ? "unbound" : rowAgreement(draft, row),
-          sortDirOf(state, "state"),
-        ),
-      // A ghost's state cell carries its ONE crossing. Every other row's verbs live in the doc
-      // sidebar or the drill-in, because they are decisions between two substrates; binding is
-      // not — there is nothing to weigh, so it belongs on the row it changes.
-      cell: (row) => (row.kind === "ghost" ? ghostStateCell(row) : base.cell(row)),
+      word: state,
+      tone: AGREEMENT_TONE[state],
+      dim: state === "agree" || state === "unread",
+      note: MARK_TITLE[state],
     };
   };
+  const stateCol = (state: MasterTableState): Column<PRow> => ({
+    key: "state",
+    label: "state",
+    title:
+      "The row's worst verdict across all three types — what this parameter is most asking of you. Filter it to work one kind of trouble at a time. A ghost row's state is `unbound`, which is filterable like any other: that is how you ask the table for every number in this family that nothing can reach.",
+    group: "PARAMETER",
+    width: "w-36",
+    facet: (row) => rowVerdict(row).word,
+    // The state column SURVIVES the live column's death, and is careful about why. It carries no
+    // live VALUE — it carries the row's worst agreement, which is a diff and not a reading, and
+    // it is the only thing on the page you can filter by ("show me only drift", "show me only
+    // unbound"). A facet is a use a cell state cannot serve.
+    sort: (row) =>
+      pinnedSort(
+        row,
+        row.kind === "ghost" ? "unbound" : rowAgreement(world, draft, row),
+        sortDirOf(state, "state"),
+      ),
+    // A ghost's state cell carries its ONE crossing. Every other row's verbs live in the doc
+    // sidebar or the drill-in, because they are decisions between two substrates; binding is
+    // not — there is nothing to weigh, so it belongs on the row it changes.
+    cell: (row) =>
+      row.kind === "ghost" ? ghostStateCell(row) : <VerdictCell verdict={rowVerdict(row)} />,
+  });
 
   /**
    * The bind picker — a plain render FUNCTION, not a component, and deliberately so: a component
@@ -1134,10 +1380,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     dataType: string,
     className?: string,
   ): React.ReactNode => {
-    const literal = bindingOf(draft, slug, property);
+    const literal = bindingOf(world, draft, slug, property);
     const open = binding?.slug === slug && binding.property === property;
     const newName = paramNameFor(slug, property);
-    const candidates = [...PARAM_ROWS, ...draft.newParams].filter(
+    const candidates = [...world.paramRows, ...draft.newParams].filter(
       (param) => param.dataType === dataType,
     );
 
@@ -1156,7 +1402,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             else bindTo(slug, property, choice);
           }}
           className={cn(
-            "tele h-6 w-full min-w-0 truncate rounded-[2px] border-0 bg-[var(--r-recess)] px-1 text-[10px] text-[var(--r-ink)] outline-none",
+            "face-mono h-6 w-full min-w-0 truncate rounded-[2px] border-0 bg-[var(--r-recess)] px-1 t-caption text-[var(--r-ink)] outline-none",
             className,
           )}
         >
@@ -1181,7 +1427,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     return (
       <Verb
         label="bind…"
-        className={cn("h-4 px-1 text-[9px]", className)}
+        className={cn("h-4 px-1 t-caption", className)}
         onClick={() => setBinding({ slug, property })}
         reason={`Bind ${slug}.${property} to a parameter — its one crossing, and the only verb that changes what CAN be said about this number. Offers every ${dataType} parameter already in the profile, or a new one named "${newName}" seeded with ${literal}. The ghost row then disappears into the parameter row that now represents it. Nothing leaves the page.`}
       />
@@ -1191,7 +1437,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   const ghostStateCell = (row: PRow): React.ReactNode => {
     const slug = row.slug ?? "";
     const property = row.property ?? "";
-    const literal = bindingOf(draft, slug, property);
+    const literal = bindingOf(world, draft, slug, property);
     if (binding?.slug === slug && binding.property === property)
       return (
         <span className="flex h-7 items-center px-1">
@@ -1200,9 +1446,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       );
     return (
       <span className="flex h-7 items-center gap-1 px-1.5">
-        <StateDot tone="var(--r-caution)" />
+        <StateDot tone="caution" />
         <span
-          className="tele text-[10px] text-[var(--r-caution)]"
+          className="face-mono t-caption text-[var(--r-caution)]"
           title={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
         >
           unbound
@@ -1223,10 +1469,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    */
   const columns = useMemo<Column<PRow>[]>(() => {
     const list: Column<PRow>[] = [railColumn(), identityColumn(tableState), stateCol(tableState)];
-    for (const typeName of TYPE_NAMES) list.push(typeColumn(typeName, { header: true }));
+    for (const typeName of world.typeNames) list.push(typeColumn(typeName, { header: true }));
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, saved, overlay, refusals, stageType, binding, consumers, tableState]);
+  }, [world, draft, saved, overlay, stageType, binding, consumers, tableState]);
 
   /**
    * THE DRILL-IN, on the same primitive. Same MasterTable, same identity cell, same editable type
@@ -1248,16 +1494,16 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         label: "spine",
         group: "SPINE",
         width: "w-16",
-        facet: (row) => agreementOf(draft, row, typeName),
+        facet: (row) => agreementOf(world, draft, row, typeName),
         all: "any agreement",
         title:
           "The seam. Every verb on this page is a crossing between the two sides, so the verdict is read here rather than hunted for in either column.",
         cell: (row) => {
-          const state = agreementOf(draft, row, typeName);
+          const state = agreementOf(world, draft, row, typeName);
           return (
             <span
-              className="tele block px-1.5 text-center"
-              style={{ color: AGREEMENT_TONE[state] }}
+              className="face-mono t-value block px-1.5 text-center"
+              style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
               title={MARK_TITLE[state]}
             >
               {MARK[state]}
@@ -1268,11 +1514,11 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       {
         key: "live",
         label: "revit",
-        group: "LIVE",
+        group: "world.live",
         width: "w-28",
         title: `What Revit carries for the ${typeName} type right now. The profile's number right-aligns and this one left-aligns, so the two meet at the spine and each row reads as ONE diff. Reconciling them is the pane header's job — capture pulls Revit's numbers into the profile, apply writes the profile's numbers into Revit.`,
         cell: (row) => {
-          if (MISSING_IN_REVIT.has(row.name))
+          if (world.missingInRevit.has(row.name))
             return (
               <ReadCell
                 className="italic text-[var(--r-caution)]"
@@ -1281,7 +1527,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               />
             );
           const entry = draft.live[row.name]?.[typeName];
-          const state = agreementOf(draft, row, typeName);
+          const state = agreementOf(world, draft, row, typeName);
           return (
             <ReadCell
               className={cn(
@@ -1293,7 +1539,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               reason={
                 entry
                   ? `${typeName} — ${entry.value}. ${MARK_TITLE[state]}`
-                  : MARK_TITLE[MISSING_IN_REVIT.has(row.name) ? "only-profile" : "unread"]
+                  : MARK_TITLE[world.missingInRevit.has(row.name) ? "only-profile" : "unread"]
               }
             />
           );
@@ -1301,7 +1547,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       },
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, saved, overlay, refusals, drillType, stageType, binding, consumers, drillState]);
+  }, [world, draft, saved, overlay, drillType, stageType, binding, consumers, drillState]);
 
   // ── the anatomy pane ──────────────────────────────────────────────────────────────────────────
 
@@ -1327,9 +1573,12 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       }
     >
       <AnatomyDrawing
+        world={world}
         draft={draft}
         typeName={stageType}
+        model={lane.document?.model ?? null}
         focusedParts={focusedParts}
+        focusedParams={focusedParams}
         onFocus={setFocus}
         onInspect={(slug) => setInspect({ kind: "part", slug })}
         inspecting={inspect?.kind === "part" ? inspect.slug : null}
@@ -1381,6 +1630,18 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       rows={rows}
       columns={columns}
       rowKey={(row) => row.key}
+      // THE OWED MARKER (fit reviews, ruled 2026-08-16): a ghost row owes exactly one human
+      // decision — its bind crossing. Count is always 1; the caution ink matches the band the
+      // ghost section already wears.
+      gutter={(row) =>
+        row.kind === "ghost"
+          ? {
+              count: 1,
+              tone: "caution" as const,
+              title: `${row.slug ?? ""}.${row.property ?? ""} is unbound — a bind decision is owed: give it a parameter (its one crossing) or it stays a number nothing can reach`,
+            }
+          : null
+      }
       scopeLabel="parameters"
       searchPlaceholder="parameter"
       onRowHover={hoverRow}
@@ -1395,8 +1656,8 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       }}
       summary={
         <span title="Read left to right: how much of this profile the spec backs, what pea still wants, how many geometry dimensions nothing can reach, how many cells save would write, and where Revit disagrees. The one alarm is spent on drift and nothing else; unbound and unsaved wear caution, because a gap and a pending write are warnings rather than conflicts.">
-          {Object.keys(GROUNDING).length} grounded · {openProposals.length} open ·{" "}
-          {TYPE_NAMES.length} types ·{" "}
+          {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
+          {world.typeNames.length} types ·{" "}
           <span className={ghostCount > 0 ? "text-[var(--r-caution)]" : undefined}>
             {ghostCount} unbound
           </span>{" "}
@@ -1411,10 +1672,18 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         </span>
       }
       empty={
-        <span className={EMPTY_CLASS}>
-          no parameters in this profile — nothing to audit until one is authored or a geometry
-          literal is promoted
-        </span>
+        // §4's two kinds of empty, told apart: the fixture profile always has rows, so a bare
+        // table is almost always the table's OWN narrowing — but the claim is derived, not
+        // assumed, so each story renders only when it is true.
+        rows.length === 0 ? (
+          <EmptyState story="scope" exit="author a parameter, or promote a geometry literal">
+            no parameters in this profile — nothing to audit
+          </EmptyState>
+        ) : (
+          <EmptyState story="filter" exit="clear a column filter or the search">
+            the narrowing hid all {rows.length} rows
+          </EmptyState>
+        )
       }
     />
   );
@@ -1449,10 +1718,16 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         </span>
       }
       empty={
-        <span className={EMPTY_CLASS}>
-          no parameters to reconcile at this type — the profile authors none, so there is nothing
-          for Revit to agree or disagree with
-        </span>
+        rows.some((row) => row.kind === "profile") ? (
+          <EmptyState story="filter" exit="clear a column filter or the search">
+            the narrowing hid every parameter at this type
+          </EmptyState>
+        ) : (
+          <EmptyState story="scope" exit="author a parameter in the profile first">
+            no parameters to reconcile at this type — the profile authors none, so there is nothing
+            for Revit to agree or disagree with
+          </EmptyState>
+        )
       }
     />
   ) : null;
@@ -1526,7 +1801,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             <Verb
               label="capture all"
               disabled={overlay !== "live" || driftCells.length === 0}
-              onClick={() => captureAll(TYPE_NAMES)}
+              onClick={() => captureAll(world.typeNames)}
               reason={
                 overlay !== "live"
                   ? "Switch to the ⇄ live overlay first. Capture rewrites the profile with Revit's numbers in bulk, and this is the one view where those numbers are on screen — pressing it from here would be a write you cannot see the far side of."
@@ -1539,7 +1814,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               label="apply all"
               tone="commit"
               disabled={overlay !== "live" || driftCells.length === 0}
-              onClick={() => applyAll(TYPE_NAMES)}
+              onClick={() => applyAll(world.typeNames)}
               reason={
                 overlay !== "live"
                   ? "Switch to the ⇄ live overlay first. Apply MODIFIES the family open in Revit; the overlay is where you can see exactly which numbers it would overwrite."
@@ -1548,10 +1823,60 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                     : `Let the profile win on all ${driftCells.length} drifting cells — every alarm cell on screen goes back to the draft's number. This is the direction that writes into the model, which is why it is the only verb here in the commit colour.`
               }
             />
+            {/* THE TWO HOST CROSSINGS, last in the lane and in escalating blast radius: the switch
+                changes what you are looking at, capture all / apply all move the draft, and these
+                two leave the page. `capture live` reads Revit; `build .rfa` writes an .rfa. */}
+            <Verb
+              label="capture live"
+              busy={capturing}
+              disabled={lane.document == null || capturing}
+              onClick={() => void captureLive()}
+              reason={
+                lane.document == null
+                  ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
+                  : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there."
+              }
+            />
+            <Verb
+              label={BUILD_VERB}
+              tone="commit"
+              busy={building}
+              disabled={lane.document == null || building}
+              onClick={() =>
+                setArmedBuild({ token: lane.document?.versionToken ?? null, reason: "" })
+              }
+              reason={
+                lane.document == null
+                  ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
+                  : `Materialize ${lane.document.relativePath} into a real .rfa inside Revit, at ${buildOutputPath(lane.document.relativePath)}. Pressing this ARMS the ceremony below the header — it does not build. The strip states which family, from which revision, to which path, and refuses out loud if the file on disk is not the file this table is showing.`
+              }
+            />
           </>
         )
       }
     >
+      {/* THE CEREMONY SLOT. It sits inside the pane that owns the crossing, above the table it is
+          about, and it is EMPTY until the verb arms it — "never hover-height" (settled law)
+          means the reason, the refusals and the receipt all get room at strip scale. The build is a
+          whole-family write, so the slot is the same in the drill-in: no type is on the plan. */}
+      <BuildStrip
+        className="mx-2 mt-2 shrink-0"
+        armed={armedBuild}
+        building={building}
+        said={buildSaid}
+        facts={buildFacts}
+        familyName={world.familyName}
+        count={world.paramRows.length}
+        onReasonChange={(reason) =>
+          setArmedBuild((previous) => (previous == null ? previous : { ...previous, reason }))
+        }
+        onCommit={() => void runBuild()}
+        onCancel={() => {
+          setArmedBuild(null);
+          setBuildSaid(null);
+        }}
+        onReplan={replanBuild}
+      />
       {drillIn ?? crossType}
     </Pane>
   );
@@ -1570,10 +1895,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     if (meta.control === "read")
       return (
         <span
-          className="tele text-[10px] text-[var(--r-ink-2)]"
+          className="face-mono t-caption text-[var(--r-ink-2)]"
           title={`${meta.note} READ-ONLY — a box you could type in would be claiming an edit that nothing downstream would actually make.`}
         >
-          {value} <span className="text-[9px] opacity-50">reported</span>
+          {value} <span className="t-caption opacity-50">reported</span>
         </span>
       );
     if (meta.control === "toggle")
@@ -1602,7 +1927,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         onChange={(event) => editMeta(slug, meta.key, event.target.value)}
         title={meta.note}
         aria-label={meta.label}
-        className="tele h-5 w-full rounded-[2px] border border-[var(--r-line-2)] bg-transparent px-1 text-[10px] outline-none"
+        className="face-mono h-5 w-full rounded-[2px] border border-[var(--r-line-2)] bg-transparent px-1 t-caption outline-none"
       >
         {(meta.options ?? []).map((option) => (
           <option key={option} value={option}>
@@ -1616,7 +1941,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   const partInspector = (part: GeomConstituent): React.ReactNode => (
     <>
       <p
-        className="tele mb-1.5 text-[9px] text-[var(--r-ink-2)]"
+        className="face-mono mb-1.5 t-caption text-[var(--r-ink-2)]"
         title={`${part.slug} is a ${part.kind}. The kind is READ-ONLY here: a prism does not become a cylinder because a word changed, and the profile's job is to say what the geometry is, not to pretend it can be retyped.`}
       >
         {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
@@ -1624,17 +1949,17 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
       <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
         <p
-          className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
           title="The constituent's bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE LIVES rather than as a second place to work. A bound dim names the parameter that represents it in the table; an unbound one carries its literal and the very same bind verb its ghost row carries."
         >
           bindable dims — represented in the table
         </p>
         {part.dims.map((dim) => {
-          const bound = boundParam(bindingOf(draft, part.slug, dim.property));
+          const bound = boundParam(bindingOf(world, draft, part.slug, dim.property));
           return (
             <div key={dim.property} className="flex items-center gap-2 py-0.5">
               <span
-                className="tele w-24 shrink-0 truncate text-[9px] text-[var(--r-ink-2)]"
+                className="face-mono w-24 shrink-0 truncate t-caption text-[var(--r-ink-2)]"
                 title={dim.note}
               >
                 {dim.property}
@@ -1647,18 +1972,19 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                     setPinnedParam(bound);
                   }}
                   title={`Driven by "${bound}", currently ${draft.authored[bound] ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
-                  className="tele min-w-0 flex-1 truncate text-left text-[10px] text-[var(--r-ink)] hover:underline"
+                  className="face-mono min-w-0 flex-1 truncate text-left t-caption text-[var(--r-ink)] hover:underline"
                 >
                   {bound}
                 </button>
               ) : (
                 <>
                   <span className="min-w-0 flex-1">
-                    <TextCell
-                      key={`${bindingOf(draft, part.slug, dim.property)}:${refusals}`}
-                      value={bindingOf(draft, part.slug, dim.property)}
-                      className="h-5 rounded-[2px] border border-[var(--r-line-2)] px-1 text-[10px] text-[var(--r-caution)]"
-                      title={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
+                    {/* The SAME editable cell as the ghost row it mirrors — one grammar, and the
+                        refusal (an emptied literal) is the cell's own note in both places. */}
+                    <NavStateCell
+                      value={bindingOf(world, draft, part.slug, dim.property)}
+                      className="rounded-[2px] border border-[var(--r-line-2)] t-caption text-[var(--r-caution)]"
+                      note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
                       onCommit={(next) => editLiteral(part.slug, dim.property, next)}
                     />
                   </span>
@@ -1672,7 +1998,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
       <div className="rounded-[2px] border border-[var(--r-line)] p-1.5">
         <p
-          className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
           title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
         >
           non-bindable metadata — lives only here
@@ -1680,7 +2006,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         {part.meta.map((meta) => (
           <div key={meta.key} className="flex items-baseline gap-2 py-0.5">
             <span
-              className="tele w-24 shrink-0 truncate text-[9px] text-[var(--r-ink-2)]"
+              className="face-mono w-24 shrink-0 truncate t-caption text-[var(--r-ink-2)]"
               title={meta.note}
             >
               {meta.label}
@@ -1696,52 +2022,52 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     const row = rows.find((entry) => entry.name === name && entry.kind === "profile");
     const authored = draft.authored[name] ?? "";
     const drives = consumers.get(name) ?? [];
-    const blocks = GROUNDING[name] ?? [];
+    const blocks = world.grounding[name] ?? [];
     const family = proposalsAt(name, null);
     return (
       <>
-        <p className="tele mb-1.5 text-[9px] text-[var(--r-ink-2)]">
+        <p className="face-mono mb-1.5 t-caption text-[var(--r-ink-2)]">
           {row?.dataType ?? "unknown"} · bound per {row?.isInstance ? "instance" : "type"}
           {row?.group ? ` · ${row.group}` : ""}
-          {MISSING_IN_REVIT.has(name) && (
+          {world.missingInRevit.has(name) && (
             <span className="ml-1 text-[var(--r-caution)]">⊘ not in Revit</span>
           )}
         </p>
 
         <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
           <p
-            className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
             title="THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows it only as the grey placeholder in each type cell, and a placeholder is not an editor; this is where it is actually authored. Type an expression beginning with = to make it a formula instead, which locks every type column on the row."
           >
             family value {isFormula(authored) ? "· formula" : ""}
           </p>
-          <TextCell
-            // Keyed on the refusal counter so a refused empty commit puts the number back in the
-            // box. A box that kept showing the empty text while the model kept the old value would
-            // be the one place on this page where what you see is not what is stored.
-            key={`${authored}:${refusals}`}
+          {/* THE FAMILY-LEVEL VALUE CELL, on the editable `StateCell` (R8, families #6): pea's
+              open family-level proposal takes the body (fold + wash), your unwritten edit takes
+              the staged square + bold, and a refused empty commit is the cell's own restore +
+              caution note — the route's refusal paragraph this replaced is deleted. */}
+          <NavStateCell
             value={authored}
+            stage={
+              family.length > 0
+                ? "proposed"
+                : (saved.authored[name] ?? null) !== authored
+                  ? "staged"
+                  : "clean"
+            }
+            stagedBy={family.length > 0 ? "pea" : "you"}
             className={cn(
-              "h-6 rounded-[2px] border border-[var(--r-line-2)] px-1 text-[11px]",
+              "rounded-[2px] border border-[var(--r-line-2)] t-label",
               isFormula(authored) && "italic",
             )}
-            title={
+            note={
               isFormula(authored)
                 ? `A FORMULA — ${authored}. Its result is derived, so no type may override it and Revit's number for it is an output rather than a competing value. Edit the expression here; change what feeds it to change the result.`
-                : `The value every type inherits unless it authors its own. Editing it moves all ${TYPE_NAMES.filter((typeName) => draft.types[typeName]?.[name] === undefined).length} inheriting type${TYPE_NAMES.filter((typeName) => draft.types[typeName]?.[name] === undefined).length === 1 ? "" : "s"} at once — watch the grey placeholders in the table change. Begin with = to make it a formula.`
+                : `The value every type inherits unless it authors its own. Editing it moves all ${world.typeNames.filter((typeName) => draft.types[typeName]?.[name] === undefined).length} inheriting type${world.typeNames.filter((typeName) => draft.types[typeName]?.[name] === undefined).length === 1 ? "" : "s"} at once — watch the grey placeholders in the table change. Begin with = to make it a formula.`
             }
             onCommit={(next) => editAuthored(name, next)}
           />
-          {refusal?.key === `param:${name}` && (
-            <p
-              className="tele mt-1 text-[9px] leading-snug text-[var(--r-caution)]"
-              title={refusal.text}
-            >
-              {refusal.text}
-            </p>
-          )}
           {family.length > 0 && (
-            <p className="tele mt-1 text-[9px] text-[var(--r-pea-ink)]">
+            <p className="face-mono mt-1 t-caption text-[var(--r-pea-ink)]">
               pea proposes {family[0]!.proposed} here — the card is above; typing your own value
               severs it instead.
             </p>
@@ -1750,18 +2076,15 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
         <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
           <p
-            className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
             title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
           >
             drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
           </p>
           {drives.length === 0 ? (
-            <p
-              className={EMPTY_CLASS}
-              title="Nothing in the profile's geometry reads this parameter. Binding a ghost row to it is what would fill this list."
-            >
+            <EmptyState story="scope" exit="bind a ghost row to this parameter to fill this list">
               drives nothing — fine for schedule data, suspicious for a Length
-            </p>
+            </EmptyState>
           ) : (
             drives.map((entry) => (
               <button
@@ -1769,7 +2092,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 type="button"
                 onClick={() => setInspect({ kind: "part", slug: entry.slug })}
                 title={`Open ${entry.slug} — its kind, its other dims, and the non-bindable metadata no parameter can drive.`}
-                className="tele block w-full truncate text-left text-[10px] text-[var(--r-ink)] hover:underline"
+                className="face-mono block w-full truncate text-left t-caption text-[var(--r-ink)] hover:underline"
               >
                 → {entry.slug}.{entry.property}
               </button>
@@ -1779,27 +2102,27 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
         <div className="rounded-[2px] border border-[var(--r-line)] p-1.5">
           <p
-            className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
             title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."
           >
             grounding
           </p>
           {blocks.length === 0 ? (
-            <p
-              className={EMPTY_CLASS}
-              title={`Nothing in ${SPEC?.fileName ?? "the spec"} claims this number, so it is asserted rather than sourced. Parsing a document that mentions it, or citing an existing block, is what fills this.`}
+            <EmptyState
+              story="scope"
+              exit={`parse a document that claims this number, or cite a block of ${world.spec?.fileName ?? "the spec"}`}
             >
               ungrounded — asserted, not sourced
-            </p>
+            </EmptyState>
           ) : (
             blocks.map((id) => (
               <p
                 key={id}
-                className="tele line-clamp-3 whitespace-pre-line text-[10px] leading-snug text-[var(--r-ink)]"
-                title={`Block ${id} of ${SPEC?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
+                className="face-mono line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink)]"
+                title={`Block ${id} of ${world.spec?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
               >
                 <span className="text-[var(--r-ink-2)]">{id} · </span>
-                {SPEC?.blocks.find((block) => block.id === id)?.md ?? "(block not found)"}
+                {world.spec?.blocks.find((block) => block.id === id)?.md ?? "(block not found)"}
               </p>
             ))
           )}
@@ -1812,10 +2135,11 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     inspect == null ? null : (
       <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-[var(--r-line)]">
         <div className="flex h-6 shrink-0 items-center gap-2 border-b border-[var(--r-line)] bg-[var(--r-recess)] px-2">
-          <span className="tele-label shrink-0 text-[9px] text-[var(--r-ink-2)]">
+          {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
+          <span className="dl-tag shrink-0">
             {inspect.kind === "part" ? "constituent" : "parameter"}
           </span>
-          <span className="tele min-w-0 flex-1 truncate text-[10px] text-[var(--r-ink)]">
+          <span className="face-mono min-w-0 flex-1 truncate t-caption text-[var(--r-ink)]">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
           <Verb
@@ -1828,9 +2152,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {inspect.kind === "part"
-            ? (GEOM_BY_SLUG.get(inspect.slug) ?? null) == null
-              ? partProseOnly(inspect.slug)
-              : partInspector(GEOM_BY_SLUG.get(inspect.slug)!)
+            ? (world.geomBySlug.get(inspect.slug) ?? null) == null
+              ? partProseOnly(world, inspect.slug)
+              : partInspector(world.geomBySlug.get(inspect.slug)!)
             : paramInspector(inspect.name)}
         </div>
       </div>
@@ -1846,7 +2170,11 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       // take away the evidence at the exact moment you edit the number it justifies.
       bodyClassName="flex min-h-0 flex-col overflow-hidden p-0"
       title="doc"
-      meta={SPEC ? `${SPEC.fileName} · ${SPEC.blocks.length} blocks` : "no spec attached"}
+      meta={
+        world.spec
+          ? `${world.spec.fileName} · ${world.spec.blocks.length} blocks`
+          : "no spec attached"
+      }
       actions={
         <>
           <FactChip
@@ -1878,7 +2206,11 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           <Verb
             label="parse"
             onClick={() =>
-              say(`re-parsed ${SPEC?.fileName ?? "the spec"} — ${SPEC?.blocks.length ?? 0} blocks`)
+              say(
+                world.spec
+                  ? `re-parsed ${world.spec.fileName} — ${world.spec.blocks.length} blocks`
+                  : "No spec is attached to this profile, so there is nothing to re-read. Parsing one is route:family's parse_spec command, which this page does not yet run.",
+              )
             }
             reason="Read the source document again and rebuild its blocks. Parsing is the doc pane's own verb — it changes what can be cited, and nothing about the profile."
           />
@@ -1889,20 +2221,17 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         {/* proposals — margin annotations, docked as a stack above the spec */}
         <div className="border-b border-[var(--r-line)] p-2">
           <p
-            className="tele mb-1 text-[9px] text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
           >
             pea proposes — ephemeral, page-scoped
           </p>
-          {WORLD.proposals.length === 0 ? (
-            <p
-              className={EMPTY_CLASS}
-              title="Pea has read nothing into this profile yet. Proposals arrive when pea is asked to read the attached spec against the family."
-            >
+          {world.proposals.length === 0 ? (
+            <EmptyState story="scope" exit="ask pea to read the attached spec against the family">
               no proposals — pea has not read this spec against the profile
-            </p>
+            </EmptyState>
           ) : (
-            WORLD.proposals.map((proposal) => (
+            world.proposals.map((proposal) => (
               <ProposalCard
                 key={proposal.id}
                 proposal={proposal}
@@ -1912,8 +2241,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 // count on the rail would be pointing at something the sidebar refuses to show.
                 focused={focusedProposal === proposal.id || pinnedParam === proposal.param}
                 blockMd={
-                  SPEC?.blocks.find((block) => block.id === proposal.sourceBlockId)?.md ?? null
+                  world.spec?.blocks.find((block) => block.id === proposal.sourceBlockId)?.md ??
+                  null
                 }
+                specFileName={world.spec?.fileName ?? null}
                 onAccept={() => accept(proposal)}
                 onDeny={() => deny(proposal)}
                 onHover={(on) => {
@@ -1929,9 +2260,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         </div>
 
         {docMode === "text" ? (
-          <SpecText litBlocks={litBlocks} />
+          <SpecText spec={world.spec} litBlocks={litBlocks} />
         ) : (
-          <SpecSheet litBlocks={litBlocks} zoom={docZoom} onZoom={setDocZoom} />
+          <SpecSheet spec={world.spec} litBlocks={litBlocks} zoom={docZoom} onZoom={setDocZoom} />
         )}
       </div>
 
@@ -1941,81 +2272,144 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
   return (
     <main className="flex h-screen min-h-0 flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
-      {/* ── ONE head rail. The addressing sentence carries nouns only; the facts beside it are
-             chips; the one verb that leaves the page is the only blue on the row. Everything
-             else — the overlay switch, the crossings, the doc's own verbs — lives in the pane
-             that owns it, so no fact and no verb is ever far from the thing it describes
-             (SURFACE-PHILOSOPHY §4). This replaces three stacked strips in three idioms. ── */}
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-4 py-2">
-        <span className="tele-label text-[10px] tracking-[0.3em] text-[var(--r-ink-2)]">
-          FAMILY
-        </span>
-        <Sentence
-          prefix={
-            openProposals.length > 0 ? `${openProposals.length} proposals against` : "editing"
-          }
-          prefixTone={openProposals.length > 0 ? "awaiting" : "rest"}
-          documentLabel={WORLD.profile.path}
-          documents={[WORLD.profile.path]}
-          documentsEmpty="The fixture world carries exactly one profile; a document library arrives with the host lane."
-          slots={[
-            {
-              key: "family",
-              joiner: "against",
-              text: LIVE ? `${LIVE.familyName} in ${LIVE.worldLabel}` : null,
-              placeholder: "nothing live",
-              options: null,
-              title:
-                "The family open in the bound Revit session — what the ⇄ live overlay reads and the only thing apply writes into. Without it the profile still edits; it just cannot disagree with anything.",
-            },
-          ]}
-          target={target}
-          onBind={(selector) => setTarget(selector ?? "")}
-          receipt={receipt}
-        />
-        {LIVE && (
-          <FactChip title="How long ago the live family was read. Every claim under the ⇄ live overlay is only as true as this number — an old read is a weaker claim, not a wrong one.">
-            live · read {LIVE.readAgo}
-          </FactChip>
-        )}
-        <FactChip
-          tone={draft.dirty ? "caution" : "meta"}
-          title={
-            draft.dirty
-              ? "The profile document has changes that are not on disk — an edit, an accepted proposal, or a capture. Nothing about Revit is implied by this; it is a fact about the file."
-              : "The profile on disk matches what you are looking at. Edits and accepted proposals flip this the moment they land."
-          }
-        >
-          {draft.dirty ? `unsaved draft · ${unsavedCount}` : "saved"}
-        </FactChip>
-        <Verb
-          label="save profile"
-          tone="commit"
-          onClick={save}
-          disabled={!draft.dirty}
-          reason={
-            draft.dirty
-              ? `Write the profile back to ${WORLD.profile.path}. This commits the DOCUMENT — it touches nothing in Revit, which is what apply is for.`
-              : "Nothing to save — the document already matches the file."
-          }
-        />
-        {/* `?family=<id>` arrives from /families' row click. This surface reads one fixture
-            profile and cannot honour it, and saying so is cheaper than pretending. */}
-        {requestedFamily != null && (
-          <OutcomeLine
-            kind="advisory"
-            label={`?family=${requestedFamily} ignored`}
-            says="this surface reads one fixture profile — opening a requested family needs the host lane"
+      {/* ── ONE head rail (lang AddressingBar — the five-slot rule this head proved).
+             Everything else — the overlay switch, the crossings, the doc's own verbs — lives
+             in the pane that owns it, so no fact and no verb is ever far from the thing it
+             describes (SURFACE-PHILOSOPHY §4). ── */}
+      <AddressingBar
+        name="family"
+        sentence={
+          <Sentence
+            prefix={
+              openProposals.length > 0 ? `${openProposals.length} proposals against` : "editing"
+            }
+            prefixTone={openProposals.length > 0 ? "awaiting" : "rest"}
+            documentLabel={world.path}
+            /* THE DOCUMENT SLOT IS THE LANE SWITCH — there is no separate mode toggle, which is
+               the Sentence's own law. The list is always what the bound session can SEE, and the
+               label is always what the page is READING: on the fixture lane those disagree, which
+               is exactly the honest state (the label names the fixture, the list offers the way
+               out). Picking one runs settings `open`; nothing else on the page changes shape. */
+            documents={store.documents}
+            onPickDocument={openDocument}
+            documentsEmpty="No family.json is visible from here — bind a world in the clause to the right, or author one under FamilyFoundry/models. Until one is open this page reads its declared fixture, and says so."
+            slots={[
+              {
+                key: "family",
+                joiner: "against",
+                text: world.live ? `${world.live.familyName} in ${world.live.worldLabel}` : null,
+                placeholder: "nothing live",
+                options: null,
+                title:
+                  "The family open in the bound Revit session — what the ⇄ live overlay reads and the only thing apply writes into. Without it the profile still edits; it just cannot disagree with anything.",
+              },
+            ]}
+            target={target}
+            onBind={(selector) => {
+              setTarget(selector ?? "");
+              // Pointing the page at a different world changes WHICH documents it can see, so the
+              // list is re-read in the same beat rather than going quietly stale.
+              store.refreshDocuments();
+            }}
+            receipt={receipt}
           />
-        )}
-        <FactChip
-          dashed
-          className="ml-auto"
-          title="FIXTURE LANE, declared rather than fallen back to. Every value, proposal and live reading on this page comes from the checked-in world in `src/family/world.ts`; no host, no store, no network, and every verb rewrites page-local state. What replaces it: route:settings for the document, family.editor.snapshot/apply for the live half, and the grounded-doc camera for the sheet mode."
-        >
-          fixture · no host
-        </FactChip>
-      </header>
+        }
+        facts={
+          <>
+            {world.live && (
+              <FactChip
+                tone={lane.document?.evidenceStale ? "caution" : "meta"}
+                title={
+                  lane.document?.evidenceStale
+                    ? "STALE — this read was stamped with a different revision of the document than the one you are editing, so every claim under the ⇄ live overlay describes a family that has moved since. Capture again before trusting it."
+                    : "How long ago the live family was read. Every claim under the ⇄ live overlay is only as true as this number — an old read is a weaker claim, not a wrong one."
+                }
+              >
+                live · read {world.live.readAgo}
+                {lane.document?.evidenceStale ? " · stale" : ""}
+              </FactChip>
+            )}
+            {validation && (
+              <FactChip
+                tone={validation.isValid ? "done" : "caution"}
+                title={
+                  validation.isValid
+                    ? "The host validated this document against its schema on the last read or save, and it passed."
+                    : `The host reports ${validation.issues.length} schema issue(s) in the saved document: ${validationSays}`
+                }
+              >
+                {validation.isValid
+                  ? "schema valid"
+                  : `${validation.issues.length} schema issue${validation.issues.length === 1 ? "" : "s"}`}
+              </FactChip>
+            )}
+            <FactChip
+              tone={draft.dirty ? "caution" : "meta"}
+              title={
+                draft.dirty
+                  ? "The profile document has changes that are not on disk — an edit, an accepted proposal, or a capture. Nothing about Revit is implied by this; it is a fact about the file."
+                  : "The profile on disk matches what you are looking at. Edits and accepted proposals flip this the moment they land."
+              }
+            >
+              {draft.dirty ? `unsaved draft · ${unsavedCount}` : "saved"}
+            </FactChip>
+          </>
+        }
+        verb={
+          <Verb
+            label="save profile"
+            tone="commit"
+            busy={saving}
+            onClick={() => void save()}
+            disabled={!draft.dirty || saving}
+            reason={
+              !draft.dirty
+                ? "Nothing to save — the document already matches the file."
+                : lane.document
+                  ? `Stage every value you moved and write them into ${lane.document.relativePath} through route:settings, under the version token this snapshot was read at. If someone else saved first the write is REFUSED rather than merged, and the reason lands on the sentence verbatim. It touches nothing in Revit — that is what apply is for.`
+                  : `Write the profile back to ${world.path}. This commits the DOCUMENT — it touches nothing in Revit, which is what apply is for.`
+            }
+          />
+        }
+        advisory={
+          /* Two advisories, and only ever one at a time — the second is strictly worse news.
+             A document that is OPEN but unparseable must never quietly become the fixture. */
+          lane.parseError != null ? (
+            <OutcomeLine
+              kind="error"
+              label="the open document will not parse"
+              says={`${store.snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, NOT your file; fix the JSON and re-read.`}
+            />
+          ) : requestedFamily != null ? (
+            <OutcomeLine
+              kind="advisory"
+              label={`?family=${requestedFamily} ignored`}
+              says="this surface opens an authored family.json, not a placed element — pick the document in the sentence"
+            />
+          ) : undefined
+        }
+        seam={
+          lane.document ? (
+            /* THE LIVE LANE'S CHIP. Not dashed: nothing is standing in. It names what you are
+               actually editing and the token the next save will be guarded by, because "which
+               revision" is the fact a save can refuse over. */
+            <FactChip
+              title={`LIVE — reading ${lane.document.relativePath} through route:settings. The version token guards the next save: if the file moved underneath you, the write is REFUSED rather than merged. Capture, apply and pea's proposals stay page-local.`}
+            >
+              {lane.document.versionToken
+                ? `live · v${lane.document.versionToken}`
+                : "live · untokened"}
+            </FactChip>
+          ) : (
+            <FactChip
+              dashed
+              title="FIXTURE LANE, declared rather than fallen back to. Every value, proposal and live reading on this page comes from the checked-in world in `src/family/world.ts`; no host, no store, no network, and every verb rewrites page-local state. What replaces it: route:settings for the document, family.editor.snapshot/apply for the live half, and the grounded-doc camera for the sheet mode."
+            >
+              fixture · no host
+            </FactChip>
+          )
+        }
+      />
 
       <PaneWorkspace
         className="min-h-0 flex-1"
@@ -2042,15 +2436,12 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 }
 
 /** A constituent the profile names in prose but declares no structured geometry for. */
-function partProseOnly(slug: string) {
-  const prose = CONSTITUENTS.find((entry) => entry.slug === slug)?.text ?? null;
+function partProseOnly(world: PageWorld, slug: string) {
+  const prose = world.constituents.find((entry) => entry.slug === slug)?.text ?? null;
   return (
-    <p
-      className={EMPTY_CLASS}
-      title="The profile mentions this constituent in its prose but declares no bindable dims and no metadata for it, so there is nothing here to edit. Declaring its geometry is what fills this panel."
-    >
+    <EmptyState story="scope" exit="declare its geometry in the profile to make it editable here">
       no structured geometry declared for {slug}
       {prose ? ` — the profile says only: ${prose}` : ""}
-    </p>
+    </EmptyState>
   );
 }

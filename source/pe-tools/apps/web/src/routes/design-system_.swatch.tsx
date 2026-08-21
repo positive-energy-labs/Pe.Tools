@@ -18,7 +18,7 @@
  * what tells you whether the component you are about to restyle has one caller or twenty-two.
  *
  * FIXTURE, ANNOUNCED: `design-system/fixtures.ts` — the same rows the index and the other
- * satellites render, so no surface here can show a cell state the table cannot (SHIMS entry 4).
+ * satellites render, so no surface here can show a cell state the table cannot.
  */
 import { Fragment, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -91,7 +91,11 @@ import {
 } from "#/components/ui/select";
 import { SidePane } from "#/components/ui/side-pane";
 import { Switch } from "#/components/ui/switch";
-import { Switcher } from "#/components/ui/switcher";
+import { AddressingBar } from "#/components/lang/addressing-bar";
+import { CoverageBar } from "#/components/lang/coverage-bar";
+import { EmptyState } from "#/components/lang/empty";
+import { Provenance, Section } from "#/components/lang/section";
+import { Switcher } from "#/components/lang/switcher";
 import { Textarea } from "#/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { ValueDiff } from "#/components/ui/value-diff";
@@ -129,12 +133,12 @@ function Block({
       className="grid scroll-mt-14 grid-cols-1 items-start gap-x-6 gap-y-2 border-b border-[var(--r-line)] py-3.5 last:border-b-0 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
     >
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="tele text-[11px] text-[var(--r-ink)]">{name}</span>
+        <span className="face-mono t-label text-[var(--r-ink)]">{name}</span>
         {/* `code` is display:block app-wide; `w-fit` keeps the path a token you select, not a band. */}
         <code className="w-fit font-[family-name:var(--font-pe-mono)] text-[10px] break-all text-[var(--r-ink-2)] select-all">
           #/components/{group}/{file}
         </code>
-        <span className="font-[family-name:var(--font-pe-mono)] text-[9.5px] text-[var(--r-ink-mute)]">
+        <span className="face-mono t-caption text-[var(--r-ink-mute)]">
           {consumers} · {COUNTED}
         </span>
       </div>
@@ -163,9 +167,7 @@ function Spec({
   return (
     <div className={cn("flex min-w-0 flex-col items-start gap-1", className)}>
       <div className="flex min-h-6 items-center">{children}</div>
-      <span className="tele-label text-[9px] whitespace-nowrap text-[var(--r-ink-mute)]">
-        {cap}
-      </span>
+      <span className="face-mono t-caption whitespace-nowrap text-[var(--r-ink-mute)]">{cap}</span>
     </div>
   );
 }
@@ -187,13 +189,13 @@ function Grid<R extends string, C extends string>({
     >
       <span />
       {cols.map((c) => (
-        <span key={c} className="tele-label text-[9px] text-[var(--r-ink-mute)]">
+        <span key={c} className="face-mono t-caption text-[var(--r-ink-mute)]">
           {c}
         </span>
       ))}
       {rows.map((r) => (
         <Fragment key={r}>
-          <span className="tele-label text-[9px] whitespace-nowrap text-[var(--r-ink-mute)]">
+          <span className="face-mono t-caption whitespace-nowrap text-[var(--r-ink-mute)]">
             {r}
           </span>
           {cols.map((c) => (
@@ -209,11 +211,7 @@ function Grid<R extends string, C extends string>({
 
 /** What a frozen specimen cannot show. One line, mono, never a paragraph. */
 function Note({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="font-[family-name:var(--font-pe-mono)] text-[9.5px] leading-snug text-[var(--r-ink-mute)]">
-      {children}
-    </p>
-  );
+  return <p className="face-mono t-caption leading-snug text-[var(--r-ink-mute)]">{children}</p>;
 }
 
 /** A minimal bound around a component that fills its container. */
@@ -224,13 +222,18 @@ function Bound({ className, children }: { className?: string; children: React.Re
 /* ═══ the roster ════════════════════════════════════════════════════════════════════════════ */
 
 const LANG_FILES = [
+  "addressing-bar",
   "arming-strip",
   "artifact-frame",
   "cell",
   "cell-key",
   "chip",
+  "coverage-bar",
+  "empty",
   "help",
   "outcome",
+  "section",
+  "switcher",
   "verb",
 ] as const;
 
@@ -252,7 +255,6 @@ const UI_FILES = [
   "select",
   "side-pane",
   "switch",
-  "switcher",
   "textarea",
   "toggle-group",
   "value-diff",
@@ -261,7 +263,7 @@ const UI_FILES = [
 function Jump({ group, files }: { group: "lang" | "ui"; files: readonly string[] }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-      <span className="tele-label text-[10px] text-[var(--r-ink)]">{group}</span>
+      <span className="t-caption t-upper text-[var(--r-ink)]">{group}</span>
       {files.map((f) => (
         <a
           key={f}
@@ -391,8 +393,7 @@ const VERB_MAKERS: Record<VerbRow, (f: VerbFlags) => React.ReactNode> = {
 };
 
 function verbFlags(state: VerbState): VerbFlags {
-  if (state === "disabled")
-    return { disabled: true, reason: "no target bound — the refusal rides in the title" };
+  if (state === "disabled") return { disabled: true, reason: "no target bound" };
   if (state === "busy") return { busy: true, reason: "In flight" };
   return { reason: "What pressing this does" };
 }
@@ -404,6 +405,47 @@ function LangGroup() {
         title="lang"
         note="the design language itself — every component here runs on --r-* tokens only"
       />
+
+      <Block
+        group="lang"
+        file="addressing-bar"
+        name="AddressingBar"
+        consumers="1 consumer — family/workspace (the head the shape was proven on); families + takeoffs adopt in their route passes"
+      >
+        <Bound className="w-full max-w-2xl">
+          <AddressingBar
+            name="family"
+            sentence={
+              <span className="t-label text-[var(--r-ink-2)]">editing profiles/door.pea.json</span>
+            }
+            facts={
+              <FactChip tone="caution" title="Unsaved draft — two edits not on disk.">
+                unsaved draft · 2
+              </FactChip>
+            }
+            verb={
+              <Verb
+                tone="commit"
+                label="save profile"
+                onClick={noop}
+                reason="Writes the profile back to disk"
+              />
+            }
+            seam={
+              <FactChip
+                dashed
+                title="Fixture lane — the swatch mounts no Sentence; the real consumer wires components/sentence here."
+              >
+                fixture
+              </FactChip>
+            }
+          />
+        </Bound>
+        <Note>
+          the five-slot rule: name · sentence · facts · the one page-blast verb · seam,
+          right-aligned. A verb that acts on one pane belongs in that pane&apos;s strip.
+        </Note>
+      </Block>
 
       <Block
         group="lang"
@@ -505,8 +547,8 @@ function LangGroup() {
       <Block
         group="lang"
         file="cell"
-        name="StateCell · CELL_STATE_ORDER · cellStateLabel · cellFactsText"
-        consumers="6 consumers — master-table (×2), fixtures, design-system, proposal-flow, takeoff/atlas"
+        name="StateCell · CELL_STATE_ORDER · cellStateLabel · cellFactsText · parseCell · fmtNum"
+        consumers="7 consumers — master-table (×3; its Text/Number cells are StateCell wrappers since 2026-08-16), fixtures, design-system, proposal-flow, takeoff/atlas"
       >
         <Lane>
           {CELL_BY_STATE.map(({ state, props }) => (
@@ -533,6 +575,18 @@ function LangGroup() {
             </Spec>
           ))}
         </Lane>
+        <Lane>
+          <Spec cap="onCommit · non-number refuses, restores, and says why">
+            <Bound className="w-40">
+              <EditableCellSpec />
+            </Bound>
+          </Spec>
+          <Spec cap="numeric={{ min: 0, digits: 1 }} · the built-in parse refusal">
+            <Bound className="w-40">
+              <NumericCellSpec />
+            </Bound>
+          </Spec>
+        </Lane>
         <Note>
           row scale is full-bleed and sized by its container — the boxes above are the bound a table
           column supplies. Its facts read out via title, not a footline.
@@ -554,7 +608,7 @@ function LangGroup() {
         group="lang"
         file="chip"
         name="FactChip · NarrowChip"
-        consumers="8 consumers — family/workspace, design-system (×4 routes), families, takeoffs, takeoff/atlas"
+        consumers="9 consumers — family/workspace, design-system (×4 routes), families, takeoffs, takeoff/atlas, master-table (NarrowChip is its filter strip — FilterChip deleted 2026-08-16)"
       >
         <Lane>
           {FACT_TONES.map((tone) => (
@@ -577,6 +631,49 @@ function LangGroup() {
         <NarrowChipSpec />
       </Block>
 
+      <Block
+        group="lang"
+        file="coverage-bar"
+        name="CoverageBar"
+        consumers="promoted for the ops pass 2026-08-16 — src/ops glance views migrate here; THE viz ladder's first catalogued consumer"
+      >
+        <div className="w-full max-w-md">
+          <CoverageBar
+            segments={[
+              { label: "grounded", count: 34, viz: 2 },
+              { label: "staged", count: 11, viz: 1 },
+              { label: "unread", count: 6, viz: 6 },
+            ]}
+            total={60}
+          />
+        </div>
+        <Note>
+          segments spend --viz-N by index (never a meaning role); width + legend carry the meaning —
+          the grayscale law. Empty denominators render nothing: the caller owns its EmptyState
+          because only it knows the exit.
+        </Note>
+      </Block>
+
+      <Block
+        group="lang"
+        file="empty"
+        name="EmptyState"
+        consumers="promoted 2026-08-16 (R9) — ~24 EMPTY_CLASS sites across families, family, takeoffs migrate onto it"
+      >
+        <Lane>
+          <Spec cap='story="scope" · exit required'>
+            <EmptyState story="scope" exit="run capture on this level to detect rooms">
+              no zones on this level
+            </EmptyState>
+          </Spec>
+          <Spec cap='story="filter"'>
+            <EmptyState story="filter" exit="clear the room-state chip to widen back out">
+              0 of 124 rooms match
+            </EmptyState>
+          </Spec>
+        </Lane>
+      </Block>
+
       <Block group="lang" file="help" name="HelpTip" consumers="1 consumer — design-system">
         <Lane>
           <Spec cap="children">
@@ -595,13 +692,44 @@ function LangGroup() {
         <div className="flex flex-col">
           {OUTCOME_SPECS.map((o) => (
             <div key={o.kind} className="flex items-baseline gap-3">
-              <span className="tele-label w-16 shrink-0 text-[9px] text-[var(--r-ink-mute)]">
+              <span className="face-mono t-caption w-16 shrink-0 text-[var(--r-ink-mute)]">
                 {o.kind}
               </span>
               <OutcomeLine kind={o.kind} label={o.label} />
             </div>
           ))}
         </div>
+      </Block>
+
+      <Block
+        group="lang"
+        file="section"
+        name="Section · Provenance"
+        consumers="promoted for the ops pass 2026-08-16 — 44 OpSection + 80+ Provenance/MonoNote sites in src/ops migrate here; route section heads shed their hand-rolled copies in their passes"
+      >
+        <div className="w-full max-w-md">
+          <Section
+            label="loaded families"
+            help={<HelpTip>What this section shows and how to read it.</HelpTip>}
+            aside={<FactChip title="Rows currently in scope.">214 rows</FactChip>}
+          >
+            <p className="t-label text-[var(--r-ink-2)]">section content sits unenclosed.</p>
+            <Provenance>read 2026-08-16 14:02 · 3 sessions · sheets truncated at 10</Provenance>
+          </Section>
+        </div>
+      </Block>
+
+      <Block
+        group="lang"
+        file="switcher"
+        name="Switcher"
+        consumers="3 consumers — family/doc-pane, family/workspace, this page · promoted from ui/ 2026-08-16 (R10)"
+      >
+        <Lane>
+          <Spec cap="options · one disabled">
+            <SwitcherSpec />
+          </Spec>
+        </Lane>
       </Block>
 
       <Block
@@ -631,7 +759,8 @@ function LangGroup() {
         </Lane>
         <Note>
           hover and :focus-visible take the one 10% ink veil and cannot be frozen — hover a specimen
-          above.
+          above. A disabled COMMIT verb renders its reason visibly beside the verb (fit reviews,
+          2026-08-16); every other tone keeps the reason in the title.
         </Note>
       </Block>
     </section>
@@ -1028,7 +1157,7 @@ function UiGroup() {
                 storageKey="swatch.side-pane.open"
                 defaultWidth={150}
                 minWidth={110}
-                header={<span className="tele text-[10px]">header</span>}
+                header={<span className="face-mono t-caption">header</span>}
               >
                 <div className="p-2 text-[11px] text-[var(--r-ink-2)]">body</div>
               </SidePane>
@@ -1043,7 +1172,7 @@ function UiGroup() {
                 defaultOpen={false}
                 defaultWidth={150}
                 minWidth={110}
-                header={<span className="tele text-[10px]">header</span>}
+                header={<span className="face-mono t-caption">header</span>}
               >
                 <div className="p-2 text-[11px] text-[var(--r-ink-2)]">body</div>
               </SidePane>
@@ -1073,19 +1202,6 @@ function UiGroup() {
           </Spec>
           <Spec cap="disabled · checked">
             <Switch disabled defaultChecked />
-          </Spec>
-        </Lane>
-      </Block>
-
-      <Block
-        group="ui"
-        file="switcher"
-        name="Switcher"
-        consumers="2 consumers — family/doc-pane, family/workspace"
-      >
-        <Lane>
-          <Spec cap="options · one disabled">
-            <SwitcherSpec />
           </Spec>
         </Lane>
       </Block>
@@ -1208,6 +1324,37 @@ function SelectSpec() {
 function PickListSpec() {
   const [active, setActive] = useState<string | null>(PICK_ITEMS[0]?.id ?? null);
   return <PickList items={PICK_ITEMS} activeId={active} onPick={setActive} />;
+}
+
+/** The editable cell (R8): commit keeps a number, anything else refuses with a reason. */
+function EditableCellSpec() {
+  const [value, setValue] = useState("24 in");
+  return (
+    <StateCell
+      scale="row"
+      value={value}
+      stage="staged"
+      onCommit={(text) => {
+        if (!/^\d/.test(text.trim())) return "a dimension starts with a number";
+        setValue(text);
+      }}
+    />
+  );
+}
+
+/** The numeric cell (fit reviews, 2026-08-16): `numeric` parses before `onCommit` — blank or
+ *  not-a-number fires the built-in refusal note, so nothing is ever swallowed silently. */
+function NumericCellSpec() {
+  const [value, setValue] = useState("24");
+  return (
+    <StateCell
+      scale="row"
+      className="face-mono t-value text-right"
+      value={value}
+      numeric={{ min: 0, digits: 1 }}
+      onCommit={(text) => setValue(text)}
+    />
+  );
 }
 
 function SwitcherSpec() {

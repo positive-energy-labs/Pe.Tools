@@ -138,6 +138,8 @@ export class PeaCliCommands {
       name: "search",
       description: "Search generated public host operations by capability and filters.",
       args: {
+        host: commonArgs.host,
+        bridgeSessionId: commonArgs.bridgeSessionId,
         query: { type: "string", description: "Optional search query." },
         domain: { type: "string", description: "Optional top-level domain filter." },
         intent: { type: "string", description: "Optional intent filter: Read or Mutate." },
@@ -149,7 +151,13 @@ export class PeaCliCommands {
         },
       },
       run: async (ctx) => {
-        const results = await new HostRpcCaller().searchOperations({
+        // Same host resolution as `call` (service file, never the 5180 default): a bare
+        // `new HostRpcCaller()` was the `fetch failed` with no URL seen 2026-08-19/20. The URL
+        // is disclosed BEFORE the fetch, so an empty catalog and a wrong-lane resolution are
+        // told apart by reading the output rather than by guessing.
+        const client = this.createHostRpcCaller(ctx.values);
+        console.log(`host ${client.hostBaseUrl}`);
+        const results = await client.searchOperations({
           query: firstNonBlank(ctx.values.query),
           domain: firstNonBlank(ctx.values.domain),
           intent: parseOperationIntent(ctx.values.intent),

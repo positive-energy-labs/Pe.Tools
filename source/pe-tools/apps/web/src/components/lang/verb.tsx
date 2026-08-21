@@ -5,19 +5,23 @@
  * accept/deny. `components/ui/verb.tsx` still serves the unmigrated routes; absorbing it is the
  * per-route normalization phase's job, not this file's.
  *
- * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * RULINGS EMBODIED:
  * - THE ROUND-1 GAP CENSUS against canon `ui/verb`, all five builders independently:
  *     · no ICON SLOT — the three nav directions are only legible as icons. Fixed: `icon`, and
  *       `direction` supplies nav's arrow for free.
  *     · no FILLED tone — every variant that took a commit position contested the bordered blue.
  *       Fixed: `commit` is a filled blue, and it is the ONLY filled blue in the language.
- *     · no AGENT tone — COLOR-ROLES Law 0 gave the agent's identity no interaction slot, which
+ *     · no AGENT tone — the agent's identity had no interaction slot, which
  *       made pea's own verb illegal (4/5 builders hit this). Fixed: `agent`.
  *     · `reason` is REQUIRED, always. The constructor argument is the enforcement (§3): every
  *       refusal at every call site has an explanation. RULED 2026-08-16 (kaitpw, on the live
  *       takeoffs header): the reason's home is the TITLE — dense chrome never pays a second
  *       line for it, and four near-identical refusal sentences under one verb lane read as
- *       noise, not honesty. The earlier visible under-line rendering is superseded.
+ *       noise, not honesty. AMENDED at the fit-review sitting (2026-08-16): a DISABLED `commit`
+ *       verb is the one exception — its reason renders visibly as a small quiet line beside the
+ *       verb (no new slot, no new component), because the highest-stakes refusal on a page must
+ *       pass §0's "why is that one disabled, without tooltips" bar and the lane-spam problem
+ *       never applied to the lone page-blast verb. All other tones stay title-only.
  *     · mono type collided with "mono means the machine measured this". Verbs are sans now.
  * - BLAST RADIUS IS NOT A TONE. It groups the lane and buys no hue: all three writes wear the
  *   same single blue however far they reach. That is `VerbGroup`, below.
@@ -58,6 +62,8 @@ interface VerbBase {
    * Always required — the constructor argument is what guarantees every refusal has an
    * explanation — and carried as the control's title (ruled 2026-08-16: hover is the reason's
    * home; a visible line under every refused verb made dense chrome wrap and repeat itself).
+   * EXCEPTION (fit reviews, 2026-08-16): a disabled `commit` verb ALSO renders it visibly,
+   * as a small quiet line beside the verb.
    */
   reason: string;
   disabled?: boolean;
@@ -88,17 +94,24 @@ export function Verb(props: VerbProps) {
   const inert = disabled === true || busy === true;
 
   return (
-    <button
-      type="button"
-      className={cn("dl-verb", className)}
-      data-tone={tone}
-      disabled={inert}
-      onClick={onClick}
-      title={reason}
-    >
-      {Icon != null ? <Icon /> : null}
-      {busy === true ? `${label}…` : label}
-    </button>
+    <>
+      <button
+        type="button"
+        className={cn("dl-verb", className)}
+        data-tone={tone}
+        disabled={inert}
+        onClick={onClick}
+        title={reason}
+      >
+        {Icon != null ? <Icon /> : null}
+        {busy === true ? `${label}…` : label}
+      </button>
+      {/* THE UN-GAGGED COMMIT (fit reviews, ruled 2026-08-16): only a disabled commit verb says
+          its reason on the surface; busy is not a refusal and every other tone keeps the title. */}
+      {tone === "commit" && disabled === true ? (
+        <span className="dl-verb-reason">{reason}</span>
+      ) : null}
+    </>
   );
 }
 

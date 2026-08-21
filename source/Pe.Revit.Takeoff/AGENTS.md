@@ -2,7 +2,7 @@
 
 Takeoffs turns designer-drawn zoning intent into persistent, editable room geometry in Revit and bridges room data into Elite RHVAC for Manual J. The designer declares scope and engineering intent; ops handle deterministic partitioning, identity, and data transfer; ambiguity stays visible for human resolution.
 
-Read [README.md](README.md) for the pipeline, data homes, and scope boundaries. Read [DECISIONS.md](DECISIONS.md) before reopening a settled question or re-trying a falsified approach. Read [TUNING.md](../../docs/features/takeoffs/TUNING.md) before tuning solver knobs or scoring runs — it holds the currency (savedWork), the per-room honesty bar, and the run-snapshot protocol. Read [the RHVAC & Manual J reference](../../docs/features/takeoffs/rhvac-and-mj-reference.md) before touching `.r10` I/O, export conventions, or Revit↔RHVAC terminology.
+Read [README.md](README.md) for the pipeline, data homes, and scope boundaries. Read [the takeoffs ledger](../../docs/features/takeoffs/LEDGER.md) before reopening a settled question or re-trying a falsified approach. Read [TUNING.md](../../docs/features/takeoffs/TUNING.md) before tuning solver knobs or scoring runs — it holds the currency (savedWork), the per-room honesty bar, and the run-snapshot protocol. Read [the RHVAC & Manual J reference](../../docs/features/takeoffs/rhvac-and-mj-reference.md) before touching `.r10` I/O, export conventions, or Revit↔RHVAC terminology.
 
 ## Language
 

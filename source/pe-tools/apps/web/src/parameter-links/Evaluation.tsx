@@ -1,7 +1,8 @@
 /**
  * Read-only projection of the last evaluation: the projected target writes
- * (current → proposed, changed-flagged), the issues (severity-styled), and the
- * runtime status the host reported (updater registration + active counts).
+ * (current → proposed; a pending write is UNSAVED, so it is bold — the reserved
+ * weight), the issues (error = the host refusing the plan → refused/alarm;
+ * warning → advisory), and the runtime status the host reported.
  */
 import type {
   ParameterLinkEvaluation,
@@ -9,7 +10,10 @@ import type {
   ParameterLinksRuntimeStatus,
 } from "@pe/agent-contracts";
 
-import { Metric } from "#/workbench/route-chat-plugins";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { OutcomeLine } from "#/components/lang/outcome";
 
 export function displayParameterLinkValue(value: ParameterLinkValue): string {
   if (value.displayValue) return value.displayValue;
@@ -25,22 +29,26 @@ export function RuntimeStatusBar({
   appliedWriteCount: number;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      <span
-        className={`inline-flex items-center gap-1.5 text-xs ${
-          status?.updaterRegistered ? "text-[var(--cat-green)]" : "text-muted-foreground"
-        }`}
+    <div className="flex flex-wrap items-center gap-1.5">
+      <FactChip
+        tone={status?.updaterRegistered ? "done" : "meta"}
+        title={
+          status?.updaterRegistered
+            ? "the host's parameter-link updater is registered and reacting to model changes"
+            : "no updater registered — links only reconcile when applied from here"
+        }
       >
-        <span
-          className={`size-2 rounded-full ${
-            status?.updaterRegistered ? "bg-[var(--cat-green)]" : "bg-muted-foreground/40"
-          }`}
-        />
-        {status?.updaterRegistered ? "Updater registered" : "Updater idle"}
-      </span>
-      <Metric value={status?.activeDefinitionCount ?? 0} label="active defs" />
-      <Metric value={status?.activeAssignmentCount ?? 0} label="active assigns" />
-      <Metric value={appliedWriteCount} label="applied writes" />
+        {status?.updaterRegistered ? "updater · registered" : "updater · idle"}
+      </FactChip>
+      <FactChip title="link definitions the host is actively maintaining">
+        {status?.activeDefinitionCount ?? 0} active defs
+      </FactChip>
+      <FactChip title="assignments the host is actively maintaining">
+        {status?.activeAssignmentCount ?? 0} active asns
+      </FactChip>
+      <FactChip title="target-parameter writes the last apply performed">
+        {appliedWriteCount} applied writes
+      </FactChip>
     </div>
   );
 }
@@ -52,103 +60,137 @@ export function EvaluationView({
 }) {
   if (!evaluation) {
     return (
-      <p className="px-1 py-6 text-center text-xs text-[var(--lichen)]">
-        No evaluation yet — Preview the draft to project its target writes.
-      </p>
+      <EmptyState
+        story="scope"
+        exit="run Preview to project the draft's target writes"
+        className="px-1 py-6 text-center"
+      >
+        no evaluation yet
+      </EmptyState>
     );
   }
 
   const writes = evaluation.writes;
   const changed = writes.filter((write) => write.changed);
+  const errorCount = evaluation.issues.filter((issue) => issue.severity === "error").length;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <Metric value={evaluation.sourceElementCount} label="source elements" />
-        <Metric value={evaluation.targetElementCount} label="target elements" />
-        <Metric value={evaluation.changedWriteCount} label="projected writes" />
-        <Metric value={evaluation.issues.length} label="issues" issue />
+      <div className="flex flex-wrap items-center gap-1.5">
+        <FactChip title="source elements the evaluation read">
+          {evaluation.sourceElementCount} sources
+        </FactChip>
+        <FactChip title="target elements the evaluation projected onto">
+          {evaluation.targetElementCount} targets
+        </FactChip>
+        <FactChip
+          tone={evaluation.changedWriteCount > 0 ? "caution" : "meta"}
+          title="writes whose proposed value differs from the current one — what apply would change"
+        >
+          {evaluation.changedWriteCount} projected writes
+        </FactChip>
+        {evaluation.issues.length > 0 && (
+          <FactChip
+            tone={errorCount > 0 ? "alarm" : "caution"}
+            title={
+              errorCount > 0
+                ? "error-severity issues block apply until resolved"
+                : "warnings — apply is not blocked"
+            }
+          >
+            {evaluation.issues.length} issues
+          </FactChip>
+        )}
       </div>
 
       {evaluation.issues.length > 0 ? (
-        <ul className="space-y-1">
+        <div>
           {evaluation.issues.map((issue, index) => (
-            <li
+            <OutcomeLine
               key={`${issue.code}:${issue.assignmentId ?? issue.definitionId ?? index}`}
-              className={`rounded-[2px] border-l-2 px-2 py-1 text-xs ${
-                issue.severity === "error"
-                  ? "border-[var(--fail)] bg-[var(--fail)]/8 text-[var(--fail)]"
-                  : "border-[var(--cat-clay)] bg-[var(--cat-clay)]/8 text-[var(--cat-clay)]"
-              }`}
-            >
-              <span className="font-medium">{issue.code}</span>
-              <span className="opacity-80"> · {issue.message}</span>
-            </li>
+              kind={issue.severity === "error" ? "refused" : "advisory"}
+              label={issue.code}
+              says={issue.message}
+            />
           ))}
-        </ul>
+        </div>
       ) : null}
 
       {writes.length === 0 ? (
-        <p className="px-1 py-4 text-xs text-[var(--lichen)]">
-          Evaluation produced no target writes.
-        </p>
+        <EmptyState
+          story="scope"
+          exit="add assignments that bind source elements, then preview again"
+          className="px-1 py-4"
+        >
+          the evaluation produced no target writes
+        </EmptyState>
       ) : (
-        <div className="overflow-x-auto rounded-[2px] border border-[var(--line-2)]">
-          <table className="w-full border-collapse text-left text-xs">
+        <ArtifactFrame className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
             <thead>
-              <tr className="border-b border-[var(--line-2)] text-[var(--lichen)]">
-                <th className="px-2 py-1.5 font-medium">Target</th>
-                <th className="px-2 py-1.5 font-medium">Parameter</th>
-                <th className="px-2 py-1.5 font-medium">Current</th>
-                <th className="px-2 py-1.5 font-medium">Linked</th>
-                <th className="px-2 py-1.5 font-medium">Result</th>
-                <th className="px-2 py-1.5 font-medium">Δ</th>
+              <tr className="border-b border-border">
+                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Target</th>
+                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Parameter</th>
+                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Current</th>
+                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Linked</th>
+                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Result</th>
               </tr>
             </thead>
             <tbody>
               {writes.map((write) => (
                 <tr
                   key={`${write.assignmentId}:${write.targetElementUniqueId}:${write.targetParameter.name ?? write.targetParameter.kind}`}
-                  className={`border-b border-[var(--line-2)] last:border-b-0 ${
-                    write.changed ? "" : "opacity-55"
-                  }`}
+                  className="border-b border-border last:border-b-0"
                 >
-                  <td className="max-w-[14rem] truncate px-2 py-1 text-[var(--clay-ink)]">
+                  <td
+                    className={
+                      write.changed
+                        ? "t-value max-w-[14rem] truncate px-2 py-1 text-foreground"
+                        : "t-value max-w-[14rem] truncate px-2 py-1 text-[var(--r-ink-mute)]"
+                    }
+                  >
                     {write.targetElementName ?? write.targetElementId}
                   </td>
-                  <td className="px-2 py-1 text-[var(--slate)]">
+                  <td
+                    className={
+                      write.changed
+                        ? "t-value px-2 py-1 text-muted-foreground"
+                        : "t-value px-2 py-1 text-[var(--r-ink-mute)]"
+                    }
+                  >
                     {write.targetParameter.name ?? write.targetParameter.kind}
                   </td>
-                  <td className="px-2 py-1 font-mono tabular-nums text-[var(--lichen)]">
+                  <td className="t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]">
                     {displayParameterLinkValue(write.currentValue)}
                   </td>
-                  <td className="px-2 py-1 font-mono tabular-nums text-[var(--lichen)]">
+                  <td className="t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]">
                     {displayParameterLinkValue(write.linkedValue)}
                   </td>
+                  {/* A changed result is a PENDING write — unsaved until apply — so it takes
+                      the reserved weight. An unchanged one is a no-op and stays muted. */}
                   <td
-                    className={`px-2 py-1 font-mono tabular-nums ${
-                      write.changed ? "text-[var(--clay-ink)]" : "text-[var(--lichen)]"
-                    }`}
+                    className={
+                      write.changed
+                        ? "t-value face-mono px-2 py-1 font-bold text-foreground"
+                        : "t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]"
+                    }
                   >
                     {displayParameterLinkValue(write.proposedValue)}
                     {write.overrideApplied ? " (override)" : ""}
-                  </td>
-                  <td className="px-2 py-1">
-                    {write.changed ? (
-                      <span className="inline-block size-1.5 rounded-full bg-[var(--pe-blue)]" />
-                    ) : null}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </ArtifactFrame>
       )}
 
       {changed.length === 0 && writes.length > 0 ? (
-        <p className="text-[10px] text-[var(--lichen)]">
-          Every target already matches its source — Apply is a no-op.
-        </p>
+        <OutcomeLine
+          kind="advisory"
+          label="0 changed"
+          says="every target already matches its source — apply is a no-op"
+        />
       ) : null}
     </div>
   );

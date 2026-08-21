@@ -1052,6 +1052,13 @@ public sealed class RevitScriptExecutionService(
             ));
     }
 
+    /// <summary>
+    ///     The single host-owned transaction on the ACTIVE document is THE constraint on family
+    ///     round-trips, live-proven 3/3 in the 2026-07 mutation spike: `Document.EditFamily` throws
+    ///     while the project is modifiable, `LoadFamily`-into-project throws while a txn is open on
+    ///     it, and `LoadFamily`-into-famdoc SILENTLY returns false without a txn on that famdoc.
+    ///     Any family round-trip must route around this (parked-transaction choreography won).
+    /// </summary>
     private void ExecuteInHostOwnedTransaction(
         PeScriptContainer container,
         RevitScriptContext context,

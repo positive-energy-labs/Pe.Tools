@@ -1,19 +1,18 @@
 import type { ReactNode } from "react";
 
-import type { SessionLane } from "#/host/target";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { Provenance, Section } from "#/components/lang/section";
+import type { Lane } from "#/host/target";
 import { LaneBadge, LiveDot } from "#/host/target-ui";
 import {
-  Chip,
-  EmptyState,
-  KVGrid,
-  MonoNote,
-  OpSection,
-  Provenance,
-  DataTable,
-  TreeView,
-  type CatHue,
   type Column,
+  DataTable,
+  KVGrid,
   type TreeNode,
+  TreeView,
+  VizChip,
+  type VizIndex,
 } from "#/ops/primitives";
 import {
   asArray,
@@ -23,6 +22,7 @@ import {
   asString,
   type OpViewProps,
   type OpViewRegistry,
+  UnrecognizedShape,
 } from "#/ops/registry";
 
 /**
@@ -30,29 +30,42 @@ import {
  * not controls: every surface renders observed facts with honest empty states.
  */
 
-const LANES: readonly SessionLane[] = ["dev", "sandbox", "installed", "unknown"];
+// The SDK's lane union, verbatim. A value outside it is NOT a lane — there is no "unknown"
+// member to fall back to, so the badge simply does not render.
+const LANES: readonly Lane[] = ["dev", "installed"];
 
-function laneOf(value: unknown): SessionLane {
-  return LANES.find((lane) => lane === value) ?? "unknown";
+function laneOf(value: unknown): Lane | null {
+  return LANES.find((lane) => lane === value) ?? null;
+}
+
+function MonoAside({ children }: { children: ReactNode }) {
+  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
 }
 
 /* ── host.status — host identity card ─────────────────────────────────────── */
 
 function HostStatusView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec) return <EmptyState note="unrecognized response shape" />;
+  if (!rec) return <UnrecognizedShape />;
   const connected = rec.bridgeIsConnected === true;
   const disconnectReason = asString(rec.disconnectReason);
   const agentRuntime = asRecord(rec.agentRuntime);
   return (
-    <OpSection
+    <Section
       label="host"
       aside={
         <span className="flex items-center gap-1.5">
-          <LiveDot tone="implicit" lane={connected ? "dev" : "unknown"} />
-          <MonoNote hue={connected ? "green" : "kiln"}>
+          <LiveDot tone="implicit" lane={connected ? "dev" : null} />
+          <FactChip
+            tone={connected ? "done" : "caution"}
+            title={
+              connected
+                ? "the Revit bridge is connected"
+                : "a busy bridge is not the model disagreeing — caution, not alarm"
+            }
+          >
             {connected ? "bridge connected" : "bridge down"}
-          </MonoNote>
+          </FactChip>
         </span>
       }
     >
@@ -72,7 +85,7 @@ function HostStatusView({ data }: OpViewProps) {
       />
       {!connected && disconnectReason && (
         <Provenance>
-          <span className="text-cat-clay">disconnect: {disconnectReason}</span>
+          <span style={{ color: "var(--r-caution)" }}>disconnect: {disconnectReason}</span>
         </Provenance>
       )}
       {agentRuntime && agentRuntime.available !== true && (
@@ -83,7 +96,7 @@ function HostStatusView({ data }: OpViewProps) {
             : " (not yet settled)"}
         </Provenance>
       )}
-    </OpSection>
+    </Section>
   );
 }
 
@@ -99,7 +112,7 @@ function SessionRow({
   openDocumentCount,
 }: {
   connected: boolean;
-  lane: SessionLane;
+  lane: Lane | null;
   title: string | undefined;
   processId: number | undefined;
   sessionId: string | undefined;
@@ -107,17 +120,17 @@ function SessionRow({
   openDocumentCount: number | undefined;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 border-b border-[var(--line-soft)] px-2 py-1.5">
+    <div className="flex min-w-0 items-center gap-2 border-b border-[var(--r-line)] px-2 py-1.5">
       <LiveDot tone={connected ? "implicit" : "dangling"} lane={lane} />
-      <LaneBadge lane={lane} />
-      <span className="min-w-0 truncate text-xs font-medium" title={title}>
-        {title ?? <span className="text-muted-foreground">no active document</span>}
+      {lane ? <LaneBadge lane={lane} /> : null}
+      <span className="t-value min-w-0 truncate font-medium" title={title}>
+        {title ?? <span className="italic text-[var(--r-ink-mute)]">no active document</span>}
       </span>
-      <span className="tele ml-auto shrink-0 text-[10px] text-muted-foreground">
+      <span className="face-mono t-caption ml-auto shrink-0 text-[var(--r-ink-2)]">
         {revitVersion ? `revit ${revitVersion}` : "revit ∅"} · {openDocumentCount ?? 0} doc
         {openDocumentCount === 1 ? "" : "s"}
       </span>
-      <span className="tele shrink-0 text-[10px] text-muted-foreground" title={sessionId}>
+      <span className="face-mono t-caption shrink-0 text-[var(--r-ink-2)]" title={sessionId}>
         pid {processId ?? "∅"} · {sessionId ? `${sessionId.slice(0, 8)}…` : "∅"}
       </span>
     </div>
@@ -125,17 +138,19 @@ function SessionRow({
 }
 
 function sessionListFrame(children: ReactNode) {
-  return <div className="rounded-[var(--radius)] border border-[var(--line)]">{children}</div>;
+  return <div className="rounded-[var(--radius)] border border-[var(--r-line)]">{children}</div>;
 }
 
 function BridgeSessionsListView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec) return <EmptyState note="unrecognized response shape" />;
+  if (!rec) return <UnrecognizedShape />;
   const sessions = asRecords(rec.sessions);
   return (
-    <OpSection label="sessions" aside={<MonoNote>{sessions.length} connected</MonoNote>}>
+    <Section label="sessions" aside={<MonoAside>{sessions.length} connected</MonoAside>}>
       {sessions.length === 0 ? (
-        <EmptyState note="no revit connected" />
+        <EmptyState story="scope" exit="start a Revit session with the bridge add-in loaded">
+          no revit connected
+        </EmptyState>
       ) : (
         sessionListFrame(
           sessions.map((s, i) => (
@@ -152,19 +167,24 @@ function BridgeSessionsListView({ data }: OpViewProps) {
           )),
         )
       )}
-    </OpSection>
+    </Section>
   );
 }
 
 function BridgeSessionSummaryView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec) return <EmptyState note="unrecognized response shape" />;
+  if (!rec) return <UnrecognizedShape />;
   const connected = rec.bridgeIsConnected === true;
   const activeDocument = asRecord(rec.activeDocument);
-  if (!connected) return <EmptyState note="no revit connected" />;
+  if (!connected)
+    return (
+      <EmptyState story="scope" exit="start a Revit session with the bridge add-in loaded">
+        no revit connected
+      </EmptyState>
+    );
   const observedAt = asNumber(activeDocument?.observedAtUnixMs);
   return (
-    <OpSection label="session">
+    <Section label="session">
       {sessionListFrame(
         <SessionRow
           connected={connected}
@@ -181,17 +201,19 @@ function BridgeSessionSummaryView({ data }: OpViewProps) {
         {asString(rec.buildStamp) ? ` · build ${asString(rec.buildStamp)}` : ""}
         {observedAt ? ` · doc observed ${new Date(observedAt).toISOString()}` : ""}
       </Provenance>
-    </OpSection>
+    </Section>
   );
 }
 
-/* ── logs.tail — tele log lane ────────────────────────────────────────────── */
+/* ── logs.tail — mono log lane ────────────────────────────────────────────── */
 
 const LOG_TIMESTAMP = /^(\[?\d{4}-\d{2}-\d{2}[T ][\d:.,]+(?:Z|[+-]\d{2}:?\d{2})?\]?\s*)/;
 
+/** error/warn lines go caution — a log line is never the model disagreeing, so no
+ * alarm is spent; the word in the line carries the rank. */
 function logLineColor(line: string): string | undefined {
-  if (/\b(error|err|fatal)\b/i.test(line)) return "var(--cat-clay)";
-  if (/\bwarn(ing)?\b/i.test(line)) return "var(--cat-kiln)";
+  if (/\b(error|err|fatal)\b/i.test(line)) return "var(--r-caution)";
+  if (/\bwarn(ing)?\b/i.test(line)) return "var(--r-caution)";
   return undefined;
 }
 
@@ -200,8 +222,8 @@ function LogLine({ line }: { line: string }) {
   const timestamp = match?.[1] ?? "";
   const rest = timestamp ? line.slice(timestamp.length) : line;
   return (
-    <div className="tele whitespace-pre text-[11px] leading-[1.5]">
-      {timestamp && <span className="text-muted-foreground">{timestamp}</span>}
+    <div className="face-mono t-label whitespace-pre leading-[1.5]">
+      {timestamp && <span className="text-[var(--r-ink-2)]">{timestamp}</span>}
       <span style={{ color: logLineColor(rest) }}>{rest}</span>
     </div>
   );
@@ -213,9 +235,14 @@ function scrollToBottom(el: HTMLDivElement | null) {
 
 function LogsTailView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec) return <EmptyState note="unrecognized response shape" />;
+  if (!rec) return <UnrecognizedShape />;
   const files = asRecords(rec.files);
-  if (files.length === 0) return <EmptyState note="no log files in response" />;
+  if (files.length === 0)
+    return (
+      <EmptyState story="scope" exit="name at least one log file in the request">
+        no log files in response
+      </EmptyState>
+    );
   return (
     <div className="flex flex-col gap-4">
       {files.map((file, i) => {
@@ -223,17 +250,19 @@ function LogsTailView({ data }: OpViewProps) {
           typeof line === "string" ? [line] : [],
         );
         return (
-          <OpSection
+          <Section
             key={asString(file.label) ?? String(i)}
             label={asString(file.label) ?? `log ${i}`}
-            aside={<MonoNote>{lines.length} lines</MonoNote>}
+            aside={<MonoAside>{lines.length} lines</MonoAside>}
           >
             {lines.length === 0 ? (
-              <EmptyState note="log empty or unreadable" />
+              <EmptyState story="scope" exit="nothing has logged here yet — check the path">
+                log empty or unreadable
+              </EmptyState>
             ) : (
               <div
                 ref={scrollToBottom}
-                className="max-h-[18rem] overflow-auto rounded-[var(--radius)] border border-[var(--line)] px-2 py-1"
+                className="max-h-[18rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)] px-2 py-1"
               >
                 {lines.map((line, index) => (
                   <LogLine key={index} line={line} />
@@ -243,7 +272,7 @@ function LogsTailView({ data }: OpViewProps) {
             <Provenance>
               {asString(file.filePath) ?? "path ∅"} · tail only, older lines not fetched
             </Provenance>
-          </OpSection>
+          </Section>
         );
       })}
     </div>
@@ -254,37 +283,42 @@ function LogsTailView({ data }: OpViewProps) {
 
 function SettingsWorkspacesView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec) return <EmptyState note="unrecognized response shape" />;
+  if (!rec) return <UnrecognizedShape />;
   const workspaces = asRecords(rec.workspaces);
-  if (workspaces.length === 0) return <EmptyState note="no workspaces" />;
+  if (workspaces.length === 0)
+    return (
+      <EmptyState story="scope" exit="create a workspace under the settings root">
+        no workspaces
+      </EmptyState>
+    );
   return (
-    <OpSection label="workspaces" aside={<MonoNote>{workspaces.length}</MonoNote>}>
+    <Section label="workspaces" aside={<MonoAside>{workspaces.length}</MonoAside>}>
       <div className="flex flex-col gap-2">
         {workspaces.map((workspace, i) => {
           const modules = asRecords(workspace.modules);
           return (
             <div
               key={asString(workspace.workspaceKey) ?? String(i)}
-              className="rounded-[var(--radius)] border border-[var(--line)] px-3 py-2"
+              className="rounded-[var(--radius)] border border-[var(--r-line)] px-3 py-2"
             >
               <div className="flex items-baseline gap-2">
-                <span className="text-xs font-medium">
+                <span className="t-value font-medium">
                   {asString(workspace.displayName) ?? asString(workspace.workspaceKey) ?? "∅"}
                 </span>
-                <MonoNote>{asString(workspace.workspaceKey) ?? "∅"}</MonoNote>
+                <MonoAside>{asString(workspace.workspaceKey) ?? "∅"}</MonoAside>
               </div>
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {modules.map((module, j) => (
-                  <Chip key={asString(module.moduleKey) ?? String(j)} hue="blue">
+                  <FactChip key={asString(module.moduleKey) ?? String(j)} title="module key">
                     {asString(module.moduleKey) ?? "∅"}
-                  </Chip>
+                  </FactChip>
                 ))}
               </div>
               {modules.map((module, j) => {
                 const roots = asRecords(module.roots);
                 const defaultRootKey = asString(module.defaultRootKey);
                 return (
-                  <div key={j} className="tele mt-1 text-[10px] text-muted-foreground">
+                  <div key={j} className="face-mono t-caption mt-1 text-[var(--r-ink-2)]">
                     {asString(module.moduleKey)}:{" "}
                     {roots
                       .map((root) => {
@@ -300,17 +334,18 @@ function SettingsWorkspacesView({ data }: OpViewProps) {
           );
         })}
       </div>
-    </OpSection>
+    </Section>
   );
 }
 
 /* ── settings.tree — profiles/fragments/schemas tree ──────────────────────── */
 
-const KIND_HUE: Record<string, CatHue> = {
-  Profile: "blue",
-  Fragment: "lichen",
-  Schema: "slate",
-  Other: "kiln",
+/** Settings-file KIND is taxonomy — a viz rung per kind. */
+const KIND_VIZ: Record<string, VizIndex> = {
+  Profile: 1,
+  Fragment: 4,
+  Schema: 3,
+  Other: 6,
 };
 
 function settingsDirToNode(dir: Record<string, unknown>, path: string): TreeNode {
@@ -325,7 +360,7 @@ function settingsDirToNode(dir: Record<string, unknown>, path: string): TreeNode
       return {
         id: `${path}/file:${asString(file.id) ?? asString(file.relativePath) ?? String(i)}`,
         label: asString(file.name) ?? "∅",
-        meta: <Chip hue={KIND_HUE[kind] ?? "slate"}>{kind.toLowerCase()}</Chip>,
+        meta: <VizChip viz={KIND_VIZ[kind] ?? 3}>{kind.toLowerCase()}</VizChip>,
       } satisfies TreeNode;
     }),
   ];
@@ -348,16 +383,18 @@ function countSettingsFiles(dir: Record<string, unknown>): number {
 function SettingsTreeView({ data }: OpViewProps) {
   const rec = asRecord(data);
   const root = asRecord(rec?.root);
-  if (!rec || !root) return <EmptyState note="unrecognized response shape" />;
+  if (!rec || !root) return <UnrecognizedShape />;
   const total = countSettingsFiles(root);
   return (
-    <OpSection label="settings tree" aside={<MonoNote>{total} files</MonoNote>}>
+    <Section label="settings tree" aside={<MonoAside>{total} files</MonoAside>}>
       {total === 0 && asRecords(root.directories).length === 0 ? (
-        <EmptyState note="no settings documents found" />
+        <EmptyState story="scope" exit="add a profile, fragment or schema under the settings root">
+          no settings documents found
+        </EmptyState>
       ) : (
         <TreeView nodes={[settingsDirToNode(root, "root")]} dense />
       )}
-    </OpSection>
+    </Section>
   );
 }
 
@@ -376,8 +413,12 @@ const POD_COLUMNS: Column<PodRow>[] = [
       return (
         <span className="flex items-center gap-1.5">
           <span className="font-medium">{name}</span>
-          {version && <MonoNote>v{version}</MonoNote>}
-          {pod.isValid !== true && <Chip hue="clay">invalid</Chip>}
+          {version && <MonoAside>v{version}</MonoAside>}
+          {pod.isValid !== true && (
+            <FactChip tone="caution" title="manifest failed validation">
+              invalid
+            </FactChip>
+          )}
         </span>
       );
     },
@@ -392,10 +433,10 @@ const POD_COLUMNS: Column<PodRow>[] = [
     header: "Entrypoints",
     cell: (pod) => {
       const entrypoints = asRecords(asRecord(pod.manifest)?.entrypoints);
-      if (entrypoints.length === 0) return <MonoNote>none</MonoNote>;
+      if (entrypoints.length === 0) return <MonoAside>none</MonoAside>;
       return (
         <span
-          className="tele text-[10px]"
+          className="face-mono t-caption"
           title={entrypoints.map((e) => asString(e.sourcePath) ?? "").join("\n")}
         >
           {entrypoints.map((e) => asString(e.id) ?? "∅").join(" · ")}
@@ -413,18 +454,23 @@ const POD_COLUMNS: Column<PodRow>[] = [
 
 function ScriptingPodListView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec) return <EmptyState note="unrecognized response shape" />;
+  if (!rec) return <UnrecognizedShape />;
   const pods = asRecords(rec.pods);
-  if (pods.length === 0) return <EmptyState note="no pods in workspace root" />;
+  if (pods.length === 0)
+    return (
+      <EmptyState story="scope" exit="create a pod under the workspace root">
+        no pods in workspace root
+      </EmptyState>
+    );
   return (
-    <OpSection label="pods" aside={<MonoNote>{pods.length}</MonoNote>}>
+    <Section label="pods" aside={<MonoAside>{pods.length}</MonoAside>}>
       <DataTable
         columns={POD_COLUMNS}
         rows={pods}
         rowKey={(pod, i) => asString(pod.workspaceKey) ?? String(i)}
         footer={<Provenance>root: {asString(rec.workspacesRootPath) ?? "∅"}</Provenance>}
       />
-    </OpSection>
+    </Section>
   );
 }
 
@@ -432,19 +478,26 @@ function ScriptingPodListView({ data }: OpViewProps) {
 
 function ApsAuthStatusView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec) return <EmptyState note="unrecognized response shape" />;
+  if (!rec) return <UnrecognizedShape />;
   const exists = rec.exists === true;
   const expiresAtUtc = asString(rec.expiresAtUtc);
   const expiryMs = expiresAtUtc ? new Date(expiresAtUtc).getTime() : Number.NaN;
-  const state: { label: string; hue: CatHue } = !exists
-    ? { label: "no token", hue: "kiln" }
+  const state: { label: string; tone: "caution" | "done" } = !exists
+    ? { label: "no token", tone: "caution" }
     : Number.isFinite(expiryMs) && expiryMs <= Date.now()
-      ? { label: "expired", hue: "clay" }
+      ? { label: "expired", tone: "caution" }
       : Number.isFinite(expiryMs)
-        ? { label: "valid", hue: "green" }
-        : { label: "present · expiry unknown", hue: "kiln" };
+        ? { label: "valid", tone: "done" }
+        : { label: "present · expiry unknown", tone: "caution" };
   return (
-    <OpSection label="aps auth" aside={<Chip hue={state.hue}>{state.label}</Chip>}>
+    <Section
+      label="aps auth"
+      aside={
+        <FactChip tone={state.tone} title="persisted APS token state at read time">
+          {state.label}
+        </FactChip>
+      }
+    >
       <KVGrid
         columns={2}
         items={[
@@ -458,7 +511,7 @@ function ApsAuthStatusView({ data }: OpViewProps) {
         ]}
       />
       <Provenance>persisted-token status only — no network call to APS was made</Provenance>
-    </OpSection>
+    </Section>
   );
 }
 
@@ -471,9 +524,14 @@ function opDomain(key: string): string {
 
 function HostOpsCatalogView({ data }: OpViewProps) {
   const rec = asRecord(data);
-  if (!rec) return <EmptyState note="unrecognized response shape" />;
+  if (!rec) return <UnrecognizedShape />;
   const operations = asRecords(rec.operations);
-  if (operations.length === 0) return <EmptyState note="catalog empty" />;
+  if (operations.length === 0)
+    return (
+      <EmptyState story="scope" exit="is the host running with its op registry loaded?">
+        catalog empty
+      </EmptyState>
+    );
   const counts = new Map<string, number>();
   for (const op of operations) {
     const key = asString(op.key);
@@ -485,10 +543,10 @@ function HostOpsCatalogView({ data }: OpViewProps) {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .map(([domain, count]) => ({ label: domain, value: String(count) }));
   return (
-    <OpSection label="op catalog" aside={<MonoNote>{operations.length} ops</MonoNote>}>
+    <Section label="op catalog" aside={<MonoAside>{operations.length} ops</MonoAside>}>
       <KVGrid columns={3} items={items} />
       <Provenance>counts by domain prefix, from the live catalog response</Provenance>
-    </OpSection>
+    </Section>
   );
 }
 

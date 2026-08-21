@@ -114,7 +114,9 @@ function loadConfig(): AnalyticsConfig | null {
   return fromShape(manifest?.telemetry?.posthog) ?? fromShape(settings?.posthog);
 }
 
-function fromShape(posthog: { apiKey?: string; host?: string } | undefined): AnalyticsConfig | null {
+function fromShape(
+  posthog: { apiKey?: string; host?: string } | undefined,
+): AnalyticsConfig | null {
   const apiKey = posthog?.apiKey?.trim();
   if (!apiKey) return null;
   return { apiKey, host: (posthog?.host ?? "https://us.i.posthog.com").replace(/\/$/, "") };

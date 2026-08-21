@@ -27,7 +27,7 @@ public sealed class BridgeSessionDescriptorTests {
         Assert.That(descriptor!.Assembly, Is.EqualTo("Pe.App"));
         Assert.That(descriptor.Lane, Is.EqualTo("dev"), "lane is reported normalized-lowercase");
         Assert.That(descriptor.BuildStamp, Is.EqualTo("abc123"));
-        Assert.That(descriptor.SandboxId, Is.Null);
+        Assert.That(descriptor.SessionId, Is.Null);
         Assert.That(descriptor.PayloadPath, Is.EqualTo("C:/repo/.artifacts/build/Pe.App/net8.0-windows"));
     }
 
@@ -81,14 +81,14 @@ public sealed class BridgeSessionDescriptorTests {
             ProcessStartUtcUnixMs: 1752000000000,
             SessionDescriptorPath: @"C:\x\session.json",
             Lane: "dev",
-            SandboxId: null,
+            SdkSessionId: null,
             BuildStamp: "abc123"
         );
         var json = JsonConvert.SerializeObject(withIdentity, settings);
         Assert.That(json, Does.Contain("\"processStartUtcUnixMs\":1752000000000"));
         Assert.That(json, Does.Contain("\"lane\":\"dev\""));
         Assert.That(json, Does.Contain("\"buildStamp\":\"abc123\""));
-        Assert.That(json, Does.Not.Contain("sandboxId"), "null optionals are omitted on the wire");
+        Assert.That(json, Does.Not.Contain("sdkSessionId"), "null optionals are omitted on the wire");
 
         // The pre-identity wire shape still deserializes: absent optionals default to null —
         // this is exactly why ContractVersion stays at 19.

@@ -1,21 +1,25 @@
 import { useEffect, useState } from "react";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { Provenance } from "#/components/lang/section";
 import { callHostDynamic } from "#/host/client";
-import type { SessionLane } from "#/host/target";
+import type { Lane } from "#/host/target";
 import { LaneBadge, LiveDot } from "#/host/target-ui";
-import { Chip, EmptyState, MonoNote, Provenance } from "#/ops/primitives";
-import { asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
+import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 
 /**
  * glance.session-topology — the operator's map. Host process on the left,
  * bridge sessions laned off it, open documents as leaves. Every edge is a
- * hairline; every measured value is tele; dead sessions stay visible, muted.
+ * hairline; every measured value is mono; dead sessions stay visible, muted.
  */
 
 const DOC_FETCH_BOUND = 12;
 
-function asLane(value: unknown): SessionLane {
-  return value === "dev" || value === "sandbox" || value === "installed" ? value : "unknown";
+// The SDK's lane union, verbatim: payload SOURCE only. A value outside it is not a lane, and
+// renders as no lane badge rather than an invented "unknown" one.
+function asLane(value: unknown): Lane | null {
+  return value === "dev" || value === "installed" ? value : null;
 }
 
 /* ── staged per-session document fetch ────────────────────────────────────── */
@@ -90,30 +94,40 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
   const agent = asRecord(host.agentRuntime);
   const disconnectReason = asString(host.disconnectReason);
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-[var(--radius)] border border-[var(--line-2)] px-3 py-2.5">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-[var(--radius)] border border-[var(--r-line-2)] px-3 py-2.5">
       <div className="flex items-center gap-1.5">
         <LiveDot tone={connected ? "pinned" : "dangling"} lane={lane} />
-        <span className="text-xs font-semibold">host</span>
-        <LaneBadge lane={lane} />
+        <span className="t-value font-medium">host</span>
+        {lane ? <LaneBadge lane={lane} /> : null}
       </div>
-      <div className="tele text-[10px] text-muted-foreground" title={exePath}>
+      <div className="face-mono t-caption text-[var(--r-ink-2)]" title={exePath}>
         {text(host.runtimeIdentity) || "∅"} · pid {text(host.processId) || "∅"}
       </div>
-      <div className="tele text-[10px] text-muted-foreground">
+      <div className="face-mono t-caption text-[var(--r-ink-2)]">
         contracts host v{text(host.hostContractVersion) || "?"} · bridge v
         {text(host.bridgeContractVersion) || "?"} · {text(host.bridgePath) || "∅"}
       </div>
       <div className="flex flex-wrap gap-1">
-        <Chip hue={connected ? "green" : "clay"}>
+        <FactChip
+          tone={connected ? "done" : "caution"}
+          title={connected ? "the Revit bridge is up" : "the bridge is down — caution, not alarm"}
+        >
           bridge {connected ? "connected" : "disconnected"}
-        </Chip>
+        </FactChip>
         {agent && (
-          <Chip hue={agent.available === true ? "slate" : "clay"}>
+          <FactChip
+            tone={agent.available === true ? "meta" : "caution"}
+            title="in-process agent runtime availability"
+          >
             agent runtime {agent.available === true ? "up" : "down"}
-          </Chip>
+          </FactChip>
         )}
       </div>
-      {disconnectReason && <MonoNote hue="clay">{disconnectReason}</MonoNote>}
+      {disconnectReason && (
+        <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+          {disconnectReason}
+        </span>
+      )}
     </div>
   );
 }
@@ -122,19 +136,20 @@ function DocumentLeaf({ doc }: { doc: Record<string, unknown> }) {
   const isActive = doc.isActive === true;
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 py-0.5">
+      {/* the active mark is neutral ink (R13a's locate mark) — never a hue. */}
       <span
-        className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "bg-[var(--pe-blue)]" : "bg-[var(--line-2)]"}`}
+        className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "bg-[var(--r-ink)]" : "bg-[var(--r-line-2)]"}`}
       />
       <span
-        className={`min-w-0 truncate text-xs ${isActive ? "font-medium" : "text-muted-foreground"}`}
+        className={`t-value min-w-0 truncate ${isActive ? "font-medium" : "text-[var(--r-ink-2)]"}`}
         title={text(doc.path) || text(doc.title)}
       >
         {text(doc.title) || "∅"}
       </span>
-      <span className="tele-label shrink-0 text-muted-foreground">
+      <span className="face-mono t-caption shrink-0 text-[var(--r-ink-2)]">
         {doc.isFamilyDocument === true ? "rfa" : "rvt"}
       </span>
-      {isActive && <Chip hue="blue">active</Chip>}
+      {isActive && <FactChip title="this document has focus in Revit">active</FactChip>}
     </div>
   );
 }
@@ -148,43 +163,63 @@ function SessionNode({
 }) {
   const connected = session.connected === true;
   const lane = asLane(session.lane);
-  const sandboxId = asString(session.sandboxId);
+  const sdkSessionId = asString(session.sdkSessionId);
+  const custody = asString(session.custody);
   const openCount = asNumber(session.openDocumentCount);
   return (
     <div
-      className={`flex min-w-0 flex-col gap-1 rounded-[var(--radius)] border px-3 py-2 ${connected ? "border-[var(--line)]" : "border-[var(--line-soft)] opacity-60"}`}
+      className={`flex min-w-0 flex-col gap-1 rounded-[var(--radius)] border px-3 py-2 ${connected ? "border-[var(--r-line)]" : "border-[var(--r-line)] opacity-60"}`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <LiveDot tone={connected ? "implicit" : "muted"} lane={lane} />
-        <span className="tele min-w-0 truncate text-[11px]">{text(session.sessionId)}</span>
-        <LaneBadge lane={lane} />
-        {sandboxId && <Chip hue="lichen">{sandboxId}</Chip>}
-        {!connected && <Chip hue="clay">disconnected</Chip>}
+        <span className="face-mono t-label min-w-0 truncate">{text(session.sessionId)}</span>
+        {lane ? <LaneBadge lane={lane} /> : null}
+        {custody && (
+          <FactChip
+            title={
+              custody === "controlled"
+                ? "pe-revit holds this session's registry receipt and owns its lifecycle"
+                : "pe-revit holds no receipt for this session; it can read status and documents only"
+            }
+          >
+            {custody}
+          </FactChip>
+        )}
+        {sdkSessionId && <FactChip title="pe-revit session id">{sdkSessionId}</FactChip>}
+        {!connected && (
+          <FactChip tone="caution" title="last seen by the bridge; not reachable now">
+            disconnected
+          </FactChip>
+        )}
       </div>
-      <div className="tele text-[10px] text-muted-foreground">
+      <div className="face-mono t-caption text-[var(--r-ink-2)]">
         pid {text(session.processId) || "∅"} · Revit {text(session.revitVersion) || "?"} ·{" "}
         {text(session.runtimeFramework) || "?"}
         {openCount !== undefined && ` · ${openCount} doc${openCount === 1 ? "" : "s"}`}
       </div>
 
       {/* document leaves — staged fetch, graceful in every state */}
-      <div className="mt-0.5 flex flex-col border-l border-[var(--line-soft)] pl-2.5">
+      <div className="mt-0.5 flex flex-col border-l border-[var(--r-line)] pl-2.5">
         {!connected && (
-          <MonoNote>
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">
             not queried — last reported doc: {asString(session.activeDocumentTitle) ?? "∅"}
-          </MonoNote>
+          </span>
         )}
         {connected && (!docFetch || docFetch.state === "loading") && (
-          <MonoNote>fetching documents…</MonoNote>
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">fetching documents…</span>
         )}
         {connected && docFetch?.state === "skipped" && (
-          <MonoNote hue="kiln">not fetched — over the {DOC_FETCH_BOUND}-session bound</MonoNote>
+          <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+            not fetched — over the {DOC_FETCH_BOUND}-session bound
+          </span>
         )}
         {connected && docFetch?.state === "error" && (
-          <MonoNote hue="clay">documents unreachable: {docFetch.error}</MonoNote>
+          <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+            documents unreachable: {docFetch.error}
+          </span>
         )}
         {connected && docFetch?.state === "ok" && docFetch.docs.length === 0 && (
-          <MonoNote>no documents open</MonoNote>
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">no documents open</span>
         )}
         {connected &&
           docFetch?.state === "ok" &&
@@ -195,7 +230,9 @@ function SessionNode({
           docFetch?.state === "ok" &&
           !docFetch.hasActive &&
           docFetch.docs.length > 0 && (
-            <MonoNote hue="kiln">no active document — open but none focused</MonoNote>
+            <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+              no active document — open but none focused
+            </span>
           )}
       </div>
     </div>
@@ -216,7 +253,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
     .filter((id): id is string => !!id);
   const docFetches = useSessionDocuments(connectedIds);
 
-  if (!topology) return <EmptyState note="unrecognized host.topology shape" />;
+  if (!topology) return <UnrecognizedShape />;
 
   const fetched = Math.min(connectedIds.length, DOC_FETCH_BOUND);
 
@@ -225,14 +262,22 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
       <div className="flex min-w-0 items-start">
         {/* host node */}
         <div className="w-64 shrink-0">
-          {host ? <HostNode host={host} /> : <EmptyState note="host.status unavailable" />}
+          {host ? (
+            <HostNode host={host} />
+          ) : (
+            <EmptyState story="scope" exit="is the host process running?">
+              host.status unavailable
+            </EmptyState>
+          )}
         </div>
 
         {/* trunk + session lanes */}
-        <div className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 border-l border-[var(--line)] py-1">
+        <div className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 border-l border-[var(--r-line)] py-1">
           {sessions.length === 0 ? (
             <div className="pl-5">
-              <EmptyState note="no bridge sessions — no Revit process is connected to this host" />
+              <EmptyState story="scope" exit="start a Revit process with the bridge add-in loaded">
+                no bridge sessions — no Revit process is connected to this host
+              </EmptyState>
             </div>
           ) : (
             sessions.map((session, i) => {
@@ -242,7 +287,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
                   {/* branch tick from trunk to session */}
                   <span
                     aria-hidden
-                    className="absolute left-0 top-4 inline-block w-5 border-t border-[var(--line)]"
+                    className="absolute left-0 top-4 inline-block w-5 border-t border-[var(--r-line)]"
                   />
                   <SessionNode session={session} docFetch={id ? docFetches[id] : undefined} />
                 </div>

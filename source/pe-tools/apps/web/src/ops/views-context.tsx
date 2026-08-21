@@ -1,17 +1,12 @@
 import type { ReactNode } from "react";
-import {
-  type CatHue,
-  Chip,
-  DataTable,
-  EmptyState,
-  KVGrid,
-  MonoNote,
-  OpSection,
-  Provenance,
-} from "#/ops/primitives";
+import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
+import { Provenance, Section } from "#/components/lang/section";
+import { DataTable, KVGrid, type KVTone, VizChip, type VizIndex } from "#/ops/primitives";
 import {
   type OpViewProps,
   type OpViewRegistry,
+  UnrecognizedShape,
   asArray,
   asNumber,
   asRecord,
@@ -28,18 +23,20 @@ import {
 
 /* ── shared helpers ───────────────────────────────────────────────────────── */
 
-const KIND_HUE: Record<string, CatHue> = {
-  Document: "slate",
-  View: "blue",
-  Sheet: "green",
-  Schedule: "slate",
-  Element: "clay",
-  Category: "lichen",
-  Family: "kiln",
+/** Handle KIND is taxonomy — the viz ladder, by index. Series identity carries the
+ * old cat hues forward (blue→1 green→2 slate→3 lichen→4 clay→5 kiln→6). */
+const KIND_VIZ: Record<string, VizIndex> = {
+  Document: 3,
+  View: 1,
+  Sheet: 2,
+  Schedule: 3,
+  Element: 5,
+  Category: 4,
+  Family: 6,
 };
 
-function kindHue(kind: string | undefined): CatHue {
-  return (kind && KIND_HUE[kind]) || "slate";
+function kindViz(kind: string | undefined): VizIndex {
+  return (kind && KIND_VIZ[kind]) || 3;
 }
 
 /** id string for a context handle: elementId first, then uniqueId, then ∅. */
@@ -54,13 +51,13 @@ function handleLabel(handle: Record<string, unknown> | undefined): string {
   return (handle && asString(handle.label)) || "∅";
 }
 
-/** kind-tinted chip for a context handle. */
+/** kind-tinted taxonomy chip for a context handle. */
 function HandleChip({ handle }: { handle: Record<string, unknown> }) {
   const kind = asString(handle.kind);
   return (
-    <Chip hue={kindHue(kind)} title={`${kind ?? "?"} · ${handleId(handle)}`}>
+    <VizChip viz={kindViz(kind)} title={`${kind ?? "?"} · ${handleId(handle)}`}>
       {handleLabel(handle)}
-    </Chip>
+    </VizChip>
   );
 }
 
@@ -88,17 +85,49 @@ function docKind(doc: Record<string, unknown>): string {
   return doc.isFamilyDocument === true ? "rfa" : "rvt";
 }
 
+/** Host-reported data issues. Severity is STATE: caution ink (a busy bridge is not the
+ * model disagreeing — nothing here earns the one alarm); the severity word carries rank. */
 function IssueLines({ issues }: { issues: unknown }) {
   const rows = asRecords(issues);
   if (rows.length === 0) return null;
   return (
     <div className="mt-1.5 flex flex-col gap-0.5">
       {rows.map((issue, i) => (
-        <MonoNote key={i} hue={issue.severity === "Error" ? "clay" : "kiln"}>
+        <span
+          key={i}
+          className="face-mono t-caption"
+          style={{
+            color: issue.severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)",
+          }}
+        >
           {text(issue.severity)} {text(issue.code)}: {text(issue.message)}
-        </MonoNote>
+        </span>
       ))}
     </div>
+  );
+}
+
+/** Machine-fact chips shared by every document rendering. */
+function DocFactChips({ doc }: { doc: Record<string, unknown> }) {
+  return (
+    <>
+      {doc.isWorkshared === true && (
+        <FactChip title="worksharing is enabled on this document">workshared</FactChip>
+      )}
+      {doc.isModelInCloud === true && (
+        <FactChip title="this model lives in the cloud">cloud</FactChip>
+      )}
+      {doc.isReadOnly === true && (
+        <FactChip tone="caution" title="document is read-only — no write can land">
+          read-only
+        </FactChip>
+      )}
+      {doc.isModifiable === false && doc.isReadOnly !== true && (
+        <FactChip tone="caution" title="document is not modifiable right now">
+          not modifiable
+        </FactChip>
+      )}
+    </>
   );
 }
 
@@ -107,7 +136,7 @@ function IssueLines({ issues }: { issues: unknown }) {
 function ContextSummaryView({ data }: OpViewProps) {
   const res = asRecord(data);
   const documents = res && asRecord(res.documents);
-  if (!res || !documents) return <EmptyState note="unrecognized response shape" />;
+  if (!res || !documents) return <UnrecognizedShape />;
 
   const activeDoc = asRecord(documents.activeDocument);
   const activeView = asRecord(res.activeView);
@@ -125,77 +154,79 @@ function ContextSummaryView({ data }: OpViewProps) {
     <div className="flex flex-col gap-5">
       {/* hero: document identity large, chips beneath, active-view stage line —
           Revit's window chrome distilled to a title block */}
-      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)] px-4 py-3">
-        <div className="tele-label text-[10px] tracking-[0.3em] text-muted-foreground">
+      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)] px-4 py-3">
+        <div className="face-mono t-caption uppercase tracking-[0.3em] text-[var(--r-ink-2)]">
           DOCUMENT
         </div>
         <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
           <span
-            className="min-w-0 truncate text-lg font-semibold leading-tight"
+            className="t-title min-w-0 truncate leading-tight"
             title={activeDoc ? text(activeDoc.title) : undefined}
           >
             {activeDoc ? text(activeDoc.title) : "no active document"}
           </span>
           {activeDoc && (
-            <span className="tele-label shrink-0 text-muted-foreground">{docKind(activeDoc)}</span>
+            <span className="face-mono t-caption shrink-0 text-[var(--r-ink-2)]">
+              {docKind(activeDoc)}
+            </span>
           )}
         </div>
         {docPath && (
-          <div className="tele mt-0.5 text-[10px] text-muted-foreground" title={docPath}>
+          <div className="face-mono t-caption mt-0.5 text-[var(--r-ink-2)]" title={docPath}>
             {truncateMiddle(docPath, 72)}
           </div>
         )}
         {activeDoc && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            {activeDoc.isWorkshared === true && <Chip hue="slate">workshared</Chip>}
-            {activeDoc.isModelInCloud === true && <Chip hue="blue">cloud</Chip>}
-            {activeDoc.isReadOnly === true && <Chip hue="kiln">read-only</Chip>}
-            {activeDoc.isModifiable === false && activeDoc.isReadOnly !== true && (
-              <Chip hue="kiln">not modifiable</Chip>
-            )}
+            <DocFactChips doc={activeDoc} />
           </div>
         )}
 
         {/* stage line: where the camera is right now */}
         {activeView && (
-          <div className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-[var(--line-soft)] pt-2">
-            <span className="tele-label text-[10px] text-muted-foreground">ON STAGE</span>
-            <Chip hue={activeView.isSheet === true ? "green" : "blue"}>
+          <div className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-[var(--r-line)] pt-2">
+            <span className="face-mono t-caption uppercase tracking-[0.08em] text-[var(--r-ink-2)]">
+              ON STAGE
+            </span>
+            <VizChip viz={activeView.isSheet === true ? 2 : 1} title="view kind">
               {text(activeView.viewType)}
-            </Chip>
-            <span className="min-w-0 truncate text-xs font-medium" title={text(activeView.title)}>
+            </VizChip>
+            <span className="t-value min-w-0 truncate font-medium" title={text(activeView.title)}>
               {text(activeView.title)}
             </span>
-            <MonoNote>1:{text(activeView.scale)}</MonoNote>
+            <span className="face-mono t-value text-[var(--r-ink-2)]">
+              1:{text(activeView.scale)}
+            </span>
             {asString(activeView.levelName) && (
-              <Chip hue="slate" title="level">
-                {text(activeView.levelName)}
-              </Chip>
+              <FactChip title="level of the active view">{text(activeView.levelName)}</FactChip>
             )}
             {asString(activeView.viewTemplateName) && (
-              <Chip hue="lichen" title="view template">
+              <FactChip title="view template applied to the active view">
                 {text(activeView.viewTemplateName)}
-              </Chip>
+              </FactChip>
             )}
             {sheetPlacements.map((p, i) => (
-              <MonoNote key={i} hue={p.isActiveSheet === true ? "green" : undefined}>
+              <span
+                key={i}
+                className="face-mono t-caption"
+                style={{
+                  color: p.isActiveSheet === true ? "var(--r-ink)" : "var(--r-ink-2)",
+                }}
+                title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
+              >
                 on {text(p.sheetNumber)} {text(p.sheetName)}
-              </MonoNote>
+              </span>
             ))}
           </div>
         )}
       </div>
 
       {/* status bar: selection + project browser counts */}
-      <OpSection label="session">
+      <Section label="session">
         <KVGrid
           columns={3}
           items={[
-            {
-              label: "selection",
-              value: `${selectedCount} selected`,
-              hue: selectedCount > 0 ? "blue" : undefined,
-            },
+            { label: "selection", value: `${selectedCount} selected` },
             { label: "open documents", value: text(documents.openDocumentCount) },
             { label: "views", value: text(browser.viewCount) },
             { label: "sheets", value: text(browser.sheetCount) },
@@ -208,22 +239,28 @@ function ContextSummaryView({ data }: OpViewProps) {
             selection: {returnedCount} of {selectedCount} entries returned
           </Provenance>
         )}
-      </OpSection>
+      </Section>
 
-      <OpSection
+      <Section
         label="visible categories"
-        aside={<MonoNote>{visibleCategories.length} categories</MonoNote>}
+        aside={
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+            {visibleCategories.length} categories
+          </span>
+        }
       >
         {visibleCategories.length === 0 ? (
-          <EmptyState note="no visible categories reported" />
+          <EmptyState story="scope" exit="open a view with model elements and re-run">
+            no visible categories reported
+          </EmptyState>
         ) : (
           <div className="flex flex-wrap gap-1">
             {visibleCategories.map((cat, i) => {
               const handle = asRecord(cat.handle);
               return (
-                <Chip key={i} hue="lichen" title={handle ? handleId(handle) : undefined}>
+                <VizChip key={i} viz={4} title={handle ? handleId(handle) : undefined}>
                   {handle ? handleLabel(handle) : "?"} {text(cat.elementCount)}
-                </Chip>
+                </VizChip>
               );
             })}
           </div>
@@ -231,7 +268,7 @@ function ContextSummaryView({ data }: OpViewProps) {
         <Provenance>
           scope: active view · counts are observed at call time, not proven complete
         </Provenance>
-      </OpSection>
+      </Section>
     </div>
   );
 }
@@ -242,25 +279,27 @@ function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
   const isActive = doc.isActive === true;
   return (
     <div
-      className={`flex max-w-[18rem] min-w-0 flex-col gap-0.5 rounded-[var(--radius)] border px-2.5 py-1.5 ${isActive ? "border-[var(--line-2)] bg-[color-mix(in_srgb,var(--pe-blue)_5%,transparent)] shadow-[inset_0_2px_0_0_var(--pe-blue)]" : "border-[var(--line)]"}`}
+      className={`flex max-w-[18rem] min-w-0 flex-col gap-0.5 rounded-[var(--radius)] border px-2.5 py-1.5 ${isActive ? "border-[var(--r-line-2)]" : "border-[var(--r-line)]"}`}
+      /* selection is a fill, never a hue — the active tab takes the select rung and
+         re-declares the ground it shifted. */
+      style={
+        isActive
+          ? ({ background: "var(--r-select)", "--r-on": "var(--r-select)" } as React.CSSProperties)
+          : undefined
+      }
     >
       <div className="flex min-w-0 items-baseline gap-1.5">
         <span
-          className={`min-w-0 truncate text-xs ${isActive ? "font-semibold" : ""}`}
+          className={`t-value min-w-0 truncate ${isActive ? "font-medium" : ""}`}
           title={text(doc.title)}
         >
           {text(doc.title)}
         </span>
-        <span className="tele-label shrink-0 text-muted-foreground">{docKind(doc)}</span>
+        <span className="face-mono t-caption shrink-0 text-[var(--r-ink-2)]">{docKind(doc)}</span>
       </div>
       <div className="flex flex-wrap items-center gap-1">
-        {isActive && <Chip hue="blue">active</Chip>}
-        {doc.isWorkshared === true && <Chip hue="slate">workshared</Chip>}
-        {doc.isModelInCloud === true && <Chip hue="blue">cloud</Chip>}
-        {doc.isReadOnly === true && <Chip hue="kiln">read-only</Chip>}
-        {doc.isModifiable === false && doc.isReadOnly !== true && (
-          <Chip hue="kiln">not modifiable</Chip>
-        )}
+        {isActive && <FactChip title="this document has focus in Revit">active</FactChip>}
+        <DocFactChips doc={doc} />
       </div>
     </div>
   );
@@ -268,19 +307,23 @@ function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
 
 function DocumentSessionView({ data }: OpViewProps) {
   const res = asRecord(data);
-  if (!res || !Array.isArray(res.openDocuments)) {
-    return <EmptyState note="unrecognized response shape" />;
-  }
+  if (!res || !Array.isArray(res.openDocuments)) return <UnrecognizedShape />;
   const docs = asRecords(res.openDocuments);
 
   return (
     <div className="flex flex-col gap-3">
-      <OpSection
+      <Section
         label="open documents"
-        aside={<MonoNote>{text(res.openDocumentCount)} open</MonoNote>}
+        aside={
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+            {text(res.openDocumentCount)} open
+          </span>
+        }
       >
         {docs.length === 0 ? (
-          <EmptyState note="no documents open" />
+          <EmptyState story="scope" exit="open a document in the connected Revit session">
+            no documents open
+          </EmptyState>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {docs.map((doc) => (
@@ -291,7 +334,7 @@ function DocumentSessionView({ data }: OpViewProps) {
         {res.hasActiveDocument !== true && docs.length > 0 && (
           <Provenance>no active document — Revit has documents open but none focused</Provenance>
         )}
-      </OpSection>
+      </Section>
     </div>
   );
 }
@@ -302,9 +345,7 @@ type VisibleCategoryRow = Record<string, unknown>;
 
 function VisibleSummaryView({ data, request }: OpViewProps) {
   const res = asRecord(data);
-  if (!res || !Array.isArray(res.categories)) {
-    return <EmptyState note="unrecognized response shape" />;
-  }
+  if (!res || !Array.isArray(res.categories)) return <UnrecognizedShape />;
   const categories = asRecords(res.categories);
   const activeView = asRecord(res.activeView);
   const views = asRecords(res.views);
@@ -354,14 +395,19 @@ function VisibleSummaryView({ data, request }: OpViewProps) {
           handles.length > 0
             ? handles
             : asRecords(row.sampleElements).map((s) => asRecord(s.handle));
-        if (samples.length === 0) return <MonoNote>∅</MonoNote>;
+        if (samples.length === 0)
+          return <span className="face-mono t-caption text-[var(--r-ink-2)]">∅</span>;
         const ids = samples.map((h) => handleId(h ?? undefined));
         const complete = row.isReturnedElementSetComplete === true;
         return (
-          <MonoNote hue={complete ? undefined : "kiln"}>
+          <span
+            className="face-mono t-caption"
+            style={{ color: complete ? "var(--r-ink-2)" : "var(--r-caution)" }}
+            title={complete ? undefined : "returned element set is incomplete"}
+          >
             {ids.join(" ")}
             {!complete && " …"}
-          </MonoNote>
+          </span>
         );
       },
     },
@@ -373,14 +419,14 @@ function VisibleSummaryView({ data, request }: OpViewProps) {
         title={activeView ? `Visible in ${handleLabel(activeView)}` : "Visible elements"}
         columns={columns}
         rows={categories}
-        rowKey={(row, i) => {
+        rowKey={(row: VisibleCategoryRow, i: number) => {
           const handle = asRecord(row.handle);
           return handle ? `${handleId(handle)}-${handleLabel(handle)}` : String(i);
         }}
         footer={
-          <MonoNote>
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">
             {text(res.totalVisibleElementCount)} visible elements · {categories.length} categories
-          </MonoNote>
+          </span>
         }
       />
       {views.length > 0 && (
@@ -388,9 +434,9 @@ function VisibleSummaryView({ data, request }: OpViewProps) {
           {views.map((view, i) => {
             const handle = asRecord(view.handle);
             return (
-              <Chip key={i} hue="blue" title={handle ? handleId(handle) : undefined}>
+              <VizChip key={i} viz={1} title={handle ? handleId(handle) : undefined}>
                 {text(view.title)} {text(view.elementCount)}
-              </Chip>
+              </VizChip>
             );
           })}
         </div>
@@ -437,7 +483,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
   const worksets = asRecords(view.worksets);
   const provenance = provenanceDescriptions(view.provenance);
 
-  const stateItems = [
+  const stateItems: { label: string; value: ReactNode; tone?: KVTone }[] = [
     { label: "scale", value: `1:${text(view.scale)}` },
     { label: "detail level", value: text(view.detailLevel) || "∅" },
     { label: "display style", value: text(view.displayStyle) || "∅" },
@@ -457,41 +503,47 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
           : view.temporaryHideIsolateActive
             ? "ACTIVE"
             : "off",
-      hue: view.temporaryHideIsolateActive === true ? ("kiln" as CatHue) : undefined,
+      tone: view.temporaryHideIsolateActive === true ? "caution" : undefined,
     },
   ];
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 rounded-[var(--radius)] border border-[var(--line)] px-3 py-2.5">
+    <div className="flex min-w-0 flex-col gap-4 rounded-[var(--radius)] border border-[var(--r-line)] px-3 py-2.5">
       <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-        <Chip hue="blue">{text(view.viewType)}</Chip>
-        <span className="min-w-0 truncate text-xs font-semibold" title={text(view.title)}>
+        <VizChip viz={1} title="view kind">
+          {text(view.viewType)}
+        </VizChip>
+        <span className="t-value min-w-0 truncate font-medium" title={text(view.title)}>
           {text(view.title)}
         </span>
         {asString(view.viewTemplateName) && (
-          <Chip hue="lichen" title="view template">
+          <FactChip title="view template applied to this view">
             {text(view.viewTemplateName)}
-          </Chip>
+          </FactChip>
         )}
-        {view.areGraphicsOverridesAllowed === false && <Chip hue="kiln">overrides disallowed</Chip>}
-        <MonoNote>
+        {view.areGraphicsOverridesAllowed === false && (
+          <FactChip tone="caution" title="graphics overrides are disallowed on this view">
+            overrides disallowed
+          </FactChip>
+        )}
+        <span className="face-mono t-caption text-[var(--r-ink-2)]">
           {text(view.candidateVisibleElementCount)} candidate visible ·{" "}
           {text(view.viewOwnedElementCount)} view-owned
-        </MonoNote>
+        </span>
       </div>
 
-      <OpSection label="graphics state">
+      <Section label="graphics state">
         <KVGrid columns={3} items={stateItems} />
-      </OpSection>
+      </Section>
 
       {planViewRange && (
-        <OpSection label="view range">
+        <Section label="view range">
           <KVGrid columns={2} items={viewRangeItems(planViewRange)} />
-        </OpSection>
+        </Section>
       )}
 
       {view3D && (
-        <OpSection label="3d state">
+        <Section label="3d state">
           <KVGrid
             columns={3}
             items={[
@@ -514,82 +566,108 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
               },
             ]}
           />
-        </OpSection>
+        </Section>
       )}
 
-      <OpSection label="filters" aside={<MonoNote>{filters.length}</MonoNote>}>
+      <Section
+        label="filters"
+        aside={<span className="face-mono t-caption text-[var(--r-ink-2)]">{filters.length}</span>}
+      >
         {filters.length === 0 ? (
-          <MonoNote>no view filters applied</MonoNote>
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">no view filters applied</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {filters.map((filter, i) => {
               const fh = asRecord(filter.handle);
               const visible = filter.isVisible;
               return (
-                <Chip
+                <FactChip
                   key={i}
-                  hue={visible === false ? "clay" : "green"}
+                  tone={visible === false ? "caution" : "meta"}
                   title={`${text(filter.elementFilterType) || "filter"} · ${asNumber(filter.categoryCount) ?? "?"} categories`}
                 >
                   {fh ? handleLabel(fh) : "?"}{" "}
                   {visible == null ? "?" : visible ? "shown" : "hidden"}
-                </Chip>
+                </FactChip>
               );
             })}
           </div>
         )}
-      </OpSection>
+      </Section>
 
-      <OpSection label="hidden categories" aside={<MonoNote>{hiddenCategories.length}</MonoNote>}>
+      <Section
+        label="hidden categories"
+        aside={
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+            {hiddenCategories.length}
+          </span>
+        }
+      >
         {hiddenCategories.length === 0 ? (
-          <MonoNote>none hidden</MonoNote>
+          <span className="face-mono t-caption text-[var(--r-ink-2)]">none hidden</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {hiddenCategories.map((cat, i) => {
               const ch = asRecord(cat.handle);
               return (
-                <Chip key={i} hue="clay" title={text(cat.categoryType) || undefined}>
+                <FactChip
+                  key={i}
+                  tone="caution"
+                  title={`hidden in this view${asString(cat.categoryType) ? ` · ${text(cat.categoryType)}` : ""}`}
+                >
                   {ch ? handleLabel(ch) : "?"}
-                </Chip>
+                </FactChip>
               );
             })}
           </div>
         )}
-      </OpSection>
+      </Section>
 
       {links.length > 0 && (
-        <OpSection label="links" aside={<MonoNote>{links.length}</MonoNote>}>
+        <Section
+          label="links"
+          aside={<span className="face-mono t-caption text-[var(--r-ink-2)]">{links.length}</span>}
+        >
           <div className="flex flex-wrap gap-1">
             {links.map((link, i) => {
               const lh = asRecord(link.handle);
               const hidden = link.isHiddenInView === true;
               const unloaded = link.isLoaded === false;
               return (
-                <Chip
+                <FactChip
                   key={i}
-                  hue={hidden || unloaded ? "clay" : "slate"}
-                  title={text(link.linkVisibilityType) || undefined}
+                  tone={hidden || unloaded ? "caution" : "meta"}
+                  title={text(link.linkVisibilityType) || "linked model"}
                 >
                   {lh ? handleLabel(lh) : "?"}
                   {hidden && " hidden"}
                   {unloaded && " unloaded"}
-                </Chip>
+                </FactChip>
               );
             })}
           </div>
-        </OpSection>
+        </Section>
       )}
 
       {worksets.length > 0 && (
-        <OpSection label="worksets" aside={<MonoNote>{worksets.length}</MonoNote>}>
+        <Section
+          label="worksets"
+          aside={
+            <span className="face-mono t-caption text-[var(--r-ink-2)]">{worksets.length}</span>
+          }
+        >
           <div className="flex flex-wrap gap-1">
             {worksets.map((workset, i) => (
-              <Chip key={i} hue={text(workset.visibility) === "Hidden" ? "clay" : "slate"}>
+              <FactChip
+                key={i}
+                tone={text(workset.visibility) === "Hidden" ? "caution" : "meta"}
+                title="workset visibility in this view"
+              >
                 {text(workset.name)} {text(workset.visibility).toLowerCase()}
-              </Chip>
+              </FactChip>
             ))}
           </div>
-        </OpSection>
+        </Section>
       )}
 
       {provenance.length > 0 && <Provenance>{provenance.join(" · ")}</Provenance>}
@@ -599,9 +677,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
 
 function ViewRenderingStateView({ data }: OpViewProps) {
   const res = asRecord(data);
-  if (!res || !Array.isArray(res.observedState)) {
-    return <EmptyState note="unrecognized response shape" />;
-  }
+  if (!res || !Array.isArray(res.observedState)) return <UnrecognizedShape />;
   const observed = asRecords(res.observedState);
   const notInspected = asArray(res.notInspected).map(text).filter(Boolean);
   const apiLimitations = asArray(res.apiLimitations).map(text).filter(Boolean);
@@ -611,7 +687,9 @@ function ViewRenderingStateView({ data }: OpViewProps) {
   return (
     <div className="flex flex-col gap-4">
       {observed.length === 0 ? (
-        <EmptyState note="no views observed" />
+        <EmptyState story="scope" exit="open a view in Revit, or name one in the request">
+          no views observed
+        </EmptyState>
       ) : (
         observed.map((view, i) => {
           const handle = asRecord(view.handle);
@@ -620,10 +698,10 @@ function ViewRenderingStateView({ data }: OpViewProps) {
       )}
 
       {/* the honesty block: this op's whole point is explicit limitations */}
-      <OpSection label="evidence limits">
+      <Section label="evidence limits">
         {confidenceWarnings.map((warning, i) => (
           <Provenance key={`w${i}`}>
-            <MonoNote hue="kiln">confidence: {warning}</MonoNote>
+            <span style={{ color: "var(--r-caution)" }}>confidence: {warning}</span>
           </Provenance>
         ))}
         {notInspected.map((item, i) => (
@@ -638,7 +716,7 @@ function ViewRenderingStateView({ data }: OpViewProps) {
         {notInspected.length + apiLimitations.length + confidenceWarnings.length === 0 && (
           <Provenance>no limitations reported by the host for this observation</Provenance>
         )}
-      </OpSection>
+      </Section>
       <IssueLines issues={res.issues} />
     </div>
   );
@@ -646,8 +724,9 @@ function ViewRenderingStateView({ data }: OpViewProps) {
 
 /* ── revit.resolve.references — resolution testimony ──────────────────────── */
 
-/** Thin normalized score bar + raw tele number. Scores are ints with no fixed
- * ceiling, so the bar is honest only relative to the best score in this set. */
+/** Thin normalized score bar + raw mono number. Scores are ints with no fixed
+ * ceiling, so the bar is honest only relative to the best score in this set.
+ * One series, so the fill spends viz-1; a demoted candidate goes mute ink. */
 function ScoreBar({ score, max, muted }: { score: number; max: number; muted: boolean }) {
   const frac = max > 0 ? Math.max(0, Math.min(1, score / max)) : 0;
   return (
@@ -655,22 +734,28 @@ function ScoreBar({ score, max, muted }: { score: number; max: number; muted: bo
       className="inline-flex shrink-0 items-center gap-1.5"
       title={`score ${score} of max ${max} in this set`}
     >
-      <span className="inline-block h-[3px] w-[72px] rounded-[1px] bg-[color-mix(in_srgb,var(--line-2)_60%,transparent)]">
+      <span className="inline-block h-[3px] w-[72px] rounded-[1px] bg-[var(--r-line)]">
         <span
-          className={`block h-full rounded-[1px] ${muted ? "bg-cat-kiln" : "bg-[var(--pe-blue)]"}`}
-          style={{ width: `${frac * 100}%` }}
+          className="block h-full rounded-[1px]"
+          style={{
+            width: `${frac * 100}%`,
+            background: muted ? "var(--r-ink-mute)" : "var(--viz-1)",
+          }}
         />
       </span>
-      <span className={`tele text-[10px] ${muted ? "text-cat-kiln" : ""}`}>{score}</span>
+      <span
+        className="face-mono t-caption"
+        style={{ color: muted ? "var(--r-ink-mute)" : undefined }}
+      >
+        {score}
+      </span>
     </span>
   );
 }
 
 function ResolveReferencesView({ data }: OpViewProps) {
   const res = asRecord(data);
-  if (!res || !Array.isArray(res.candidates)) {
-    return <EmptyState note="unrecognized response shape" />;
-  }
+  if (!res || !Array.isArray(res.candidates)) return <UnrecognizedShape />;
   const candidates = [...asRecords(res.candidates)].sort(
     (a, b) => (asNumber(b.score) ?? 0) - (asNumber(a.score) ?? 0),
   );
@@ -682,47 +767,71 @@ function ResolveReferencesView({ data }: OpViewProps) {
     <div className="flex flex-col gap-3">
       {/* testimony header: the phrase under interrogation */}
       <div className="min-w-0">
-        <div className="tele-label text-[10px] tracking-[0.3em] text-muted-foreground">
+        <div className="face-mono t-caption uppercase tracking-[0.3em] text-[var(--r-ink-2)]">
           REFERENCE
         </div>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-2">
-          <span className="min-w-0 text-base font-medium leading-snug">
+          <span className="t-title min-w-0 font-medium leading-snug">
             “{text(res.referenceText)}”
           </span>
-          <MonoNote hue={ambiguous ? "kiln" : candidateCount === 1 ? "green" : "clay"}>
+          <span
+            className="face-mono t-caption"
+            style={{
+              color:
+                candidateCount === 1
+                  ? "var(--r-done)"
+                  : candidateCount === 0
+                    ? "var(--r-caution)"
+                    : "var(--r-caution)",
+            }}
+          >
             {candidateCount === 0
               ? "no matches"
               : candidateCount === 1
                 ? "resolved"
                 : `${candidateCount} candidates — ambiguous`}
-          </MonoNote>
+          </span>
         </div>
       </div>
 
       {candidates.length === 0 ? (
-        <EmptyState note="nothing in the model matched this reference" />
+        <EmptyState
+          story="scope"
+          exit="loosen the reference text, or check the model has the thing"
+        >
+          nothing in the model matched this reference
+        </EmptyState>
       ) : (
-        <div className="flex flex-col rounded-[var(--radius)] border border-[var(--line)]">
+        <div className="flex flex-col rounded-[var(--radius)] border border-[var(--r-line)]">
           {candidates.map((candidate, i) => {
             const handle = asRecord(candidate.handle);
             const related = asRecords(candidate.relatedHandles);
             const provenance = asRecords(candidate.provenance);
             const score = asNumber(candidate.score);
             const top = i === 0;
+            /* rank is carried by order, the #n gutter and the score bar (grayscale law).
+               The edge mark only locates: ink for the leader (R13a's neutral locate mark),
+               caution for a demoted candidate in an ambiguous set. */
+            const edge = top ? "var(--r-ink)" : ambiguous ? "var(--r-caution)" : "transparent";
             return (
               <div
                 key={handle ? `${handleId(handle)}-${i}` : i}
-                className={`flex min-w-0 flex-col gap-1 border-l-2 px-2.5 py-2 ${i < candidates.length - 1 ? "border-b border-b-[var(--line-soft)]" : ""} ${top ? "border-l-[var(--pe-blue)] bg-[color-mix(in_srgb,var(--pe-blue)_4%,transparent)]" : ambiguous ? "border-l-cat-kiln" : "border-l-transparent"}`}
+                className={`flex min-w-0 flex-col gap-1 border-l-2 px-2.5 py-2 ${i < candidates.length - 1 ? "border-b border-b-[var(--r-line)]" : ""}`}
+                style={{ borderLeftColor: edge }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span className="tele w-6 shrink-0 text-[10px] text-muted-foreground">
+                  <span className="face-mono t-caption w-6 shrink-0 text-[var(--r-ink-2)]">
                     #{i + 1}
                   </span>
                   {handle && <HandleChip handle={handle} />}
-                  <span className={`min-w-0 truncate text-xs ${top ? "font-medium" : ""}`}>
+                  <span className={`t-value min-w-0 truncate ${top ? "font-medium" : ""}`}>
                     {text(candidate.label)}
                   </span>
-                  {handle && <MonoNote>{handleId(handle)}</MonoNote>}
+                  {handle && (
+                    <span className="face-mono t-caption text-[var(--r-ink-2)]">
+                      {handleId(handle)}
+                    </span>
+                  )}
                   {score !== undefined && (
                     <span className="ml-auto">
                       <ScoreBar score={score} max={maxScore} muted={!top && ambiguous} />
@@ -738,7 +847,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
                 )}
                 {provenance.length > 0 && (
                   <details className="pl-6">
-                    <summary className="tele cursor-pointer select-none text-[10px] text-muted-foreground">
+                    <summary className="face-mono t-caption cursor-pointer select-none text-[var(--r-ink-2)]">
                       provenance ({provenance.length})
                     </summary>
                     <div className="mt-0.5 flex flex-col gap-0.5">
@@ -772,7 +881,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
 function ViewImageView({ data }: OpViewProps) {
   const res = asRecord(data);
   const filePath = res && asString(res.filePath);
-  if (!res || !filePath) return <EmptyState note="unrecognized response shape" />;
+  if (!res || !filePath) return <UnrecognizedShape />;
 
   const view = asRecord(res.view);
   const modelRect = asRecord(res.modelRect);
@@ -780,28 +889,28 @@ function ViewImageView({ data }: OpViewProps) {
   const viewScale = asNumber(res.viewScale);
   const sheetNumber = asString(res.sheetNumber);
 
-  const items: { label: string; value: ReactNode; hue?: CatHue }[] = [
-    { label: "view", value: view ? handleLabel(view) : "∅", hue: "blue" },
+  const items: { label: string; value: ReactNode; tone?: KVTone }[] = [
+    { label: "view", value: view ? handleLabel(view) : "∅" },
     { label: "pixel size", value: `${text(res.pixelSize)} px (long edge)` },
     { label: "file size", value: byteSize !== undefined ? formatBytes(byteSize) : "∅" },
   ];
   if (viewScale !== undefined) items.push({ label: "view scale", value: `1:${viewScale}` });
-  if (sheetNumber) items.push({ label: "sheet", value: sheetNumber, hue: "green" });
+  if (sheetNumber) items.push({ label: "sheet", value: sheetNumber });
 
   return (
     <div className="flex flex-col gap-4">
-      <OpSection label="exported image">
+      <Section label="exported image">
         <KVGrid columns={3} items={items} />
         <div className="mt-2">
-          <div className="text-[11px] text-muted-foreground">file path</div>
-          <div className="tele" title={filePath}>
+          <div className="t-label text-[var(--r-ink-2)]">file path</div>
+          <div className="face-mono t-value" title={filePath}>
             {truncateMiddle(filePath, 72)}
           </div>
         </div>
-      </OpSection>
+      </Section>
 
       {modelRect && (
-        <OpSection label="model extent">
+        <Section label="model extent">
           <KVGrid
             columns={2}
             items={[
@@ -809,7 +918,7 @@ function ViewImageView({ data }: OpViewProps) {
               { label: "max (x, y)", value: `${text(modelRect.maxX)}, ${text(modelRect.maxY)} ft` },
             ]}
           />
-        </OpSection>
+        </Section>
       )}
 
       <Provenance>

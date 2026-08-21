@@ -11,7 +11,7 @@ Owns APS-facing mechanics for Pe.Tools: auth, Data Management, Object Storage, a
 ## Critical Entry Points
 
 - `Aps.cs` - top-level APS factory for auth-backed Object Storage, Data Management, cloud-model catalog, and Design Automation services.
-- `Auth/ApsCredentialSource.cs` - loads APS web credentials from global settings.
+- `Auth/IApsCredentialProvider.cs` - credential contract this package consumes; the concrete loader is `source/Pe.Shared.StorageRuntime/ApsCredentialSource.cs`, which reads APS web credentials from global settings.
 - `Auth/ApsAuthService.cs` - CLI/host-friendly login/logout/token façade.
 - `Core/ApsAuthenticationService.cs` - OAuth, persisted token store, and token acquisition.
 - `Core/DataManagementApiClient.cs` - low-level Data Management SDK parsing and source-download support.
@@ -36,7 +36,7 @@ Use a tiny DA manifest before broad APS validation. Data Management and OSS fail
 ## Living Memory
 
 - `Pe.Aps` may know APS appbundles, activities, workitems, OSS buckets/objects, signed URLs, hubs, projects, folders, items, and versions.
-- `Pe.Aps` must not know `ParameterCollectionArtifact`, `ScheduleCollectionArtifact`, manifest formats, receipt formats, repo roots, CLI logging conventions, or local RRD/session behavior.
+- `Pe.Aps` must not know `ParameterCollectionArtifact`, `ScheduleCollectionArtifact`, manifest formats, receipt formats, repo roots, CLI logging conventions, or local dev-session behavior.
 - Revit/domain request-result contracts live in shared Revit data/contracts packages, not here.
 - Keep SDK-specific model quirks near `Core/*ApiClient.cs`; expose slim records or service results to callers.
 - Data Management region normalization maps `EU` to `EMEA`; missing hub region should stay a caller-visible failure unless explicitly overridden.

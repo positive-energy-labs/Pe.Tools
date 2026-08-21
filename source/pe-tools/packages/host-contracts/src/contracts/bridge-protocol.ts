@@ -4,7 +4,7 @@
 import { Schema } from "effect";
 
 export const HOST_CONTRACT_VERSION = 37 as const;
-export const BRIDGE_CONTRACT_VERSION = 19 as const;
+export const BRIDGE_CONTRACT_VERSION = 20 as const;
 export const BRIDGE_PATH = "/api/bridge" as const;
 export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;
 
@@ -84,15 +84,20 @@ export type BridgeStateSnapshot = Schema.Schema.Type<typeof bridgeStateSnapshotS
 
 // Session = one Revit process incarnation; connection = one WS attachment to it. The identity
 // tuple is pid + processStartUtcUnixMs (the broker hashes it into the session id); lane/
-// sandboxId/buildStamp/sessionDescriptorPath are selectors and observed metadata, never identity.
-// All optional — absent fields decode fine, so BRIDGE_CONTRACT_VERSION stays 19 on purpose.
+// sdkSessionId/buildStamp/sessionDescriptorPath are selectors and observed metadata, never identity.
+//
+// `sdkSessionId` is the id `pe-revit session status` prints for this session (SessionRow.id). The
+// name is QUALIFIED because `sessionId` on this wire already means the BROKER's hash. It replaced
+// `sandboxId` at SDK beta.121 — a wire rename, not an additive optional, and the version gate is
+// exact-match, so BRIDGE_CONTRACT_VERSION went 19 -> 20 with it.
+// `lane` is the SDK's: `dev` | `installed`, payload SOURCE only.
 export const bridgeRegistrationRequestSchema = Schema.Struct({
   buildStamp: nullableString,
   contractVersion: Schema.Number,
   lane: nullableString,
   processId: Schema.Number,
   processStartUtcUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
-  sandboxId: nullableString,
+  sdkSessionId: nullableString,
   sessionDescriptorPath: nullableString,
   state: bridgeStateSnapshotSchema,
 });

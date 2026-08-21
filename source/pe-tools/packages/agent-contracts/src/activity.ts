@@ -83,7 +83,6 @@ export function deriveOpActivity(key: string): Activity {
 export const TOOL_TITLES: Record<string, string> = {
   pe_status: "Status check",
   pe_logs: "Read logs",
-  pe_sandbox: "Tend the worlds",
   host_operation_search: "Find a capability",
   host_operation_call: "Revit operation",
   request_access: "Ask for access",
@@ -129,14 +128,6 @@ export function actionLabel(toolName: string, args: unknown, running: boolean): 
   return running ? `${action} in progress` : action;
 }
 
-const SANDBOX_GERUND: Record<string, string> = {
-  start: "booting a world",
-  restart: "rebooting a world",
-  stop: "stopping a world",
-  wait: "waiting on a world",
-  status: "checking worlds",
-};
-
 /** Total map from a tool call to its activity. Unknown tools fall back to "working". */
 export function deriveActivity(call: WorkbenchToolCall): Activity {
   const args = parseArgs(call.rawInput);
@@ -149,17 +140,17 @@ export function deriveActivity(call: WorkbenchToolCall): Activity {
     case "read_image":
       return { verb: "looking", gerund: "looking at", target: str(args, "viewName") ?? "a view" };
     case "host_operation_search":
-      return { verb: "searching", gerund: "searching for a capability", target: str(args, "query") };
+      return {
+        verb: "searching",
+        gerund: "searching for a capability",
+        target: str(args, "query"),
+      };
     case "revit_api_docs_search":
     case "revit_api_docs_fetch":
       return { verb: "reading docs", gerund: "reading the Revit API docs" };
     case "script_bootstrap":
     case "script_execute":
       return { verb: "scripting", gerund: "scripting" };
-    case "pe_sandbox": {
-      const action = str(args, "action") ?? "status";
-      return { verb: "tending worlds", gerund: SANDBOX_GERUND[action] ?? "tending worlds" };
-    }
     case "request_access":
       return { verb: "asking", gerund: "asking for access" };
     case "route_state_apply":

@@ -481,7 +481,8 @@ export function selectSentenceSnapshot(state: WorkbenchState): SentenceSnapshot 
     };
   }
 
-  const running = state.uiStatus.overall.status === "running" || state.uiStatus.overall.status === "waiting";
+  const running =
+    state.uiStatus.overall.status === "running" || state.uiStatus.overall.status === "waiting";
   if (!running) return { phase: "idle", lastCompleted };
 
   const activeId = state.uiStatus.overall.activeToolCallId;

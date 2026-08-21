@@ -3,7 +3,7 @@
  *
  * CONSUMERS: soon — the families and takeoffs receipts lanes; the design-system exhibit.
  *
- * RULINGS EMBODIED (docs/features/design-lang/CLEANROOM.md):
+ * RULINGS EMBODIED:
  * - OUTCOME RECEIPTS READ AS COLOURED MONO TEXT, not left bars — round 1 measured that vertical
  *   bars were simply not understood.
  * - EVERY KIND REUSES A MEANING ROLE ALREADY IN THE CONTRACT. No outcome gets a hue of its own,
@@ -21,8 +21,8 @@
  * - BORDER BUDGET: an outcomes lane is PLAIN CONTENT. It reports on a machine-operated object;
  *   it is not one. Never wrap these in an `ArtifactFrame`.
  *
- * ponytail: an outcome carries no verb, no time, no target and no item list — CLEANROOM's
- * "outcomes are orphans" finding, which means a lane of these cannot say which write produced
+ * ponytail: an outcome carries no verb, no time, no target and no item list, which means a lane
+ * of these cannot say which write produced
  * which receipt, and "4 staged for retry" has nowhere for the 4 to live. No rendering has been
  * ruled for any of it, so no slot is taken here. Upgrade path: the state model grows the link
  * first, then this signature.

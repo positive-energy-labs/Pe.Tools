@@ -3,11 +3,15 @@
  * mount (the sentence's doc slot, the .rvt/.rfa chips). The look is the poc/chip-a
  * winner: extension chip + name + mono sub-line, optional year band headers, selected
  * marker. Presentation only — each mount owns its own data wiring and action loop.
+ *
+ * Colour law (workbench pass): a document KIND is taxonomy, so the extension chip spends
+ * the viz ladder (rvt→viz-1, rfa→viz-6 — the old blue/kiln identities carried forward).
+ * Selection is the selection FILL, never a hue; hover is the one veil.
  */
 
 const EXT_COLOR: Record<string, string> = {
-  rvt: "var(--pe-blue)",
-  rfa: "var(--cat-kiln)",
+  rvt: "var(--viz-1)",
+  rfa: "var(--viz-6)",
 };
 
 export function extOf(path: string): string | undefined {
@@ -19,20 +23,8 @@ export function extOf(path: string): string | undefined {
 export function DocGroup({ label, aside }: { label: string; aside?: string }) {
   return (
     <div className="flex items-baseline gap-2 px-2 pb-0.5 pt-1.5">
-      <span
-        className="font-[var(--font-pe-mono)]"
-        style={{ fontSize: 8, letterSpacing: "0.06em", color: "var(--foreground)" }}
-      >
-        {label.toUpperCase()}
-      </span>
-      {aside ? (
-        <span
-          className="font-[var(--font-pe-mono)]"
-          style={{ fontSize: 8, color: "var(--muted-foreground)" }}
-        >
-          {aside}
-        </span>
-      ) : null}
+      <span className="t-caption t-upper text-[var(--r-ink-2)]">{label}</span>
+      {aside ? <span className="t-caption face-mono text-[var(--r-ink-2)]">{aside}</span> : null}
     </div>
   );
 }
@@ -46,7 +38,7 @@ export function DocRow({
   disabled,
   onPick,
 }: {
-  /** Extension chip ("rvt"/"rfa" get their category hue; anything else renders muted). */
+  /** Extension chip ("rvt"/"rfa" get their taxonomy hue; anything else renders muted). */
   ext?: string;
   label: string;
   /** Mono sub-line: observed state ("open now"), never a guess. */
@@ -61,51 +53,35 @@ export function DocRow({
       type="button"
       disabled={disabled}
       onClick={onPick}
-      className="flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-[var(--pe-blue)]/5 disabled:opacity-40"
-      style={{
-        borderBottom: "0.5px solid var(--line-soft)",
-        background: selected ? "color-mix(in srgb, var(--pe-blue) 5%, transparent)" : undefined,
-      }}
+      className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-[var(--r-line)] px-2 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] disabled:opacity-40 disabled:italic ${
+        selected ? "bg-[var(--r-select)] [--r-on:var(--r-select)]" : ""
+      }`}
     >
       {ext ? (
         <span
-          className="font-[var(--font-pe-mono)] px-1"
+          className="t-caption face-mono shrink-0 rounded-[2px] border-[0.5px] px-1"
           style={{
-            fontSize: 8,
-            letterSpacing: "0.06em",
-            borderRadius: 2,
-            flexShrink: 0,
-            border: `0.5px solid ${EXT_COLOR[ext] ?? "var(--line-2)"}`,
-            color: EXT_COLOR[ext] ?? "var(--muted-foreground)",
+            borderColor: EXT_COLOR[ext] ?? "var(--r-line-2)",
+            color: EXT_COLOR[ext] ?? "var(--r-ink-2)",
           }}
         >
           {ext}
         </span>
       ) : null}
       <span className="min-w-0 flex-1">
-        <span className="block truncate" style={{ fontSize: 11.5, color: "var(--foreground)" }}>
-          {label}
-        </span>
+        <span className="block truncate t-label text-[var(--r-ink)]">{label}</span>
         {sub ? (
           <span
-            className="block truncate font-[var(--font-pe-mono)]"
-            style={{
-              fontSize: 8,
-              letterSpacing: "0.04em",
-              color: subTone === "active" ? "var(--cat-kiln)" : "var(--muted-foreground)",
-            }}
+            className={`block truncate t-caption face-mono ${
+              subTone === "active" ? "text-[var(--r-ink)]" : "text-[var(--r-ink-2)]"
+            }`}
           >
             {sub}
           </span>
         ) : null}
       </span>
       {selected ? (
-        <span
-          className="font-[var(--font-pe-mono)]"
-          style={{ fontSize: 8, color: "var(--pe-blue)", flexShrink: 0 }}
-        >
-          ◉
-        </span>
+        <span className="t-caption face-mono shrink-0 text-[var(--r-ink)]">◉</span>
       ) : null}
     </button>
   );

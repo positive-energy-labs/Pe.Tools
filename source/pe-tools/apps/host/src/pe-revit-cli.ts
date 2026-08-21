@@ -17,11 +17,13 @@
 //      --json (source of truth: Pe.Revit.Cli/CommandEnvelope.cs Build()):
 //        { result, resolved, diagnostics[{code,detail,fix}], nextSteps[], guide, related[] }.
 //      A successful process exit is NOT a verdict: empty stdout, non-JSON, or a non-envelope object
-//      all mean the resolved CLI did not actually answer this verb (e.g. a pre-sandbox installed
+//      all mean the resolved CLI did not actually answer this verb (e.g. a pre-session installed
 //      shim), so validation throws rather than relaying a blank/foreign 200.
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { spawn } from "node:child_process";
+import type { Diagnostic, Envelope, Resolved as GeneratedResolved } from "./generated/pe-revit-contract.ts";
 
 /** A resolved launch: the executable plus the fixed args that precede the verb tokens. */
 export interface PeRevitLaunch {
@@ -92,12 +94,7 @@ export function installRoot(
 }
 
 /** One structured diagnostic, mirroring CommandEnvelope.Diagnostic ({ code, detail, fix }). */
-export interface PeRevitDiagnostic {
-  readonly code: string;
-  readonly detail: string;
-  /** Present (may be null) on every diagnostic the CLI emits; the optional fix hint. */
-  readonly fix?: string | null;
-}
+export type PeRevitDiagnostic = Diagnostic;
 
 /**
  * The universal pe-revit --json envelope — ONE shape for EVERY verb (source of truth:
@@ -106,14 +103,8 @@ export interface PeRevitDiagnostic {
  * nextSteps are generated from the declarative VerbCatalog rows. Consumers should stop re-declaring
  * this shape and import it from here.
  */
-export interface PeRevitEnvelope<Result = unknown, Resolved = unknown> {
-  readonly result: Result;
-  readonly resolved: Resolved;
-  readonly diagnostics: readonly PeRevitDiagnostic[];
-  readonly nextSteps: readonly string[];
-  readonly guide: string;
-  readonly related: readonly string[];
-}
+export type PeRevitEnvelope<Result = unknown, Resolution = GeneratedResolved | null> =
+  Omit<Envelope<Result>, "resolved"> & { readonly resolved: Resolution };
 
 /**
  * Reject missing/stale/foreign CLI output instead of treating a successful process exit as a verdict.
@@ -146,6 +137,7 @@ export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
     "result" in v &&
     "resolved" in v &&
     Array.isArray(v.diagnostics) &&
+    (v.binary === null || typeof v.binary === "object") &&
     Array.isArray(v.nextSteps) &&
     typeof v.guide === "string" &&
     Array.isArray(v.related)
@@ -162,4 +154,37 @@ export function parsePeRevitEnvelope<Result = unknown, Resolved = unknown>(
     Result,
     Resolved
   >;
+}
+
+export function run(
+  argv: readonly string[],
+  launch?: PeRevitLaunch,
+): Promise<Envelope<unknown>>;
+export function run<T>(
+  argv: readonly string[],
+  launch?: PeRevitLaunch,
+): Promise<Envelope<T>>;
+export function run<T>(
+  argv: readonly string[],
+  launch: PeRevitLaunch = { cmd: "dotnet", args: ["pe-revit"] },
+): Promise<Envelope<T>> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(launch.cmd, [...launch.args, ...argv], {
+      cwd: launch.cwd,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
+    child.on("error", reject);
+    child.on("close", () => {
+      try {
+        resolve(JSON.parse(validatePeRevitEnvelope(stdout, argv, launch)) as Envelope<T>);
+      } catch (error) {
+        reject(new Error(`${(error as Error).message}${stderr.trim() ? `\n${stderr.trim()}` : ""}`));
+      }
+    });
+  });
 }

@@ -63,7 +63,7 @@ export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
           atMs,
           kind: "session-appeared",
           sessionId: id,
-          label: `${worldName(s)} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
+          label: `${worldName({ id: s.sdkSessionId ?? s.sessionId, custody: s.custody })} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
         });
       } else if (old.activeDocumentTitle !== s.activeDocumentTitle) {
         events.push({

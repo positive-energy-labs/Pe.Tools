@@ -1,17 +1,10 @@
 import type { ReactNode } from "react";
-import {
-  type CatHue,
-  Chip,
-  type CoverageSegment,
-  CoverageBar,
-  EmptyState,
-  KVGrid,
-  MonoNote,
-  OpSection,
-  Provenance,
-  catVar,
-} from "#/ops/primitives";
-import { asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
+import { FactChip } from "#/components/lang/chip";
+import { CoverageBar, type CoverageSegment } from "#/components/lang/coverage-bar";
+import { EmptyState } from "#/components/lang/empty";
+import { Provenance, Section } from "#/components/lang/section";
+import { KVGrid, VizChip, type VizIndex } from "#/ops/primitives";
+import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 
 /**
@@ -22,21 +15,22 @@ import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 
 /* ── shared helpers ───────────────────────────────────────────────────────── */
 
-const HUE_CYCLE: CatHue[] = ["blue", "green", "slate", "lichen", "clay", "kiln"];
+const VIZ_CYCLE: VizIndex[] = [1, 2, 3, 4, 5, 6];
 
-/** Discipline-flavored hue for a Revit category name; falls back to a cycle. */
-function categoryHue(name: string, index: number): CatHue {
+/** Discipline-flavored viz rung for a Revit category name; falls back to a cycle.
+ * Taxonomy only — the rung asserts identity, never state. */
+function categoryViz(name: string, index: number): VizIndex {
   const n = name.toLowerCase();
-  if (/mechanical|duct|air|hvac|flex/.test(n)) return "green";
+  if (/mechanical|duct|air|hvac|flex/.test(n)) return 2;
   if (
     /electrical|lighting|conduit|cable|wire|power|data|communication|fire|security|nurse|telephone|switch/.test(
       n,
     )
   )
-    return "clay";
-  if (/plumbing|pipe|sprinkler/.test(n)) return "blue";
-  if (/annotation|tag|detail|title|text|symbol/.test(n)) return "slate";
-  return HUE_CYCLE[index % HUE_CYCLE.length] ?? "lichen";
+    return 5;
+  if (/plumbing|pipe|sprinkler/.test(n)) return 1;
+  if (/annotation|tag|detail|title|text|symbol/.test(n)) return 3;
+  return VIZ_CYCLE[index % VIZ_CYCLE.length] ?? 4;
 }
 
 /** Sort name/count rows descending; top N + "other". */
@@ -47,10 +41,9 @@ function composition(rows: { name: string; count: number }[], topN: number): Cov
   const segments: CoverageSegment[] = top.map((row, i) => ({
     label: row.name,
     count: row.count,
-    hue: categoryHue(row.name, i),
+    viz: categoryViz(row.name, i),
   }));
-  if (rest > 0)
-    segments.push({ label: `other ×${sorted.length - topN}`, count: rest, hue: "slate" });
+  if (rest > 0) segments.push({ label: `other ×${sorted.length - topN}`, count: rest, viz: 3 });
   return segments;
 }
 
@@ -60,30 +53,49 @@ function obs(observedAtUtc: string | undefined, fallbackMs: number): string {
   return fallbackMs ? new Date(fallbackMs).toLocaleTimeString() : "—";
 }
 
-/** Stat band cell: tele value over a quiet sans label. */
-function Stat({ label, value, hue }: { label: string; value: ReactNode; hue?: CatHue }) {
+function MonoAside({ children }: { children: ReactNode }) {
+  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+}
+
+/** Stat band cell: mono value over a quiet sans label. `warn` is the only state a
+ * stat may carry — caution ink, the label saying why in the title. */
+function Stat({
+  label,
+  value,
+  warn,
+  warnTitle,
+}: {
+  label: string;
+  value: ReactNode;
+  warn?: boolean;
+  warnTitle?: string;
+}) {
   return (
-    <div className="min-w-[64px] border-r border-[var(--line-soft)] px-3 py-1.5">
-      <div className="tele" style={hue ? { color: catVar(hue) } : undefined}>
+    <div
+      className="min-w-[64px] border-r border-[var(--r-line)] px-3 py-1.5"
+      title={warn ? warnTitle : undefined}
+    >
+      <div className="face-mono t-value" style={warn ? { color: "var(--r-caution)" } : undefined}>
         {value ?? "∅"}
       </div>
-      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="t-caption text-[var(--r-ink-2)]">{label}</div>
     </div>
   );
 }
 
 /* ── glance.model — what IS this model ────────────────────────────────────── */
 
-const SERIES_META: Record<string, { label: string; hue: CatHue }> = {
-  M: { label: "mechanical", hue: "green" },
-  E: { label: "electrical", hue: "clay" },
-  P: { label: "plumbing", hue: "blue" },
-  G: { label: "general", hue: "slate" },
+/** Sheet-series prefix is discipline taxonomy — viz by kind, label carries the word. */
+const SERIES_META: Record<string, { label: string; viz: VizIndex }> = {
+  M: { label: "mechanical", viz: 2 },
+  E: { label: "electrical", viz: 5 },
+  P: { label: "plumbing", viz: 1 },
+  G: { label: "general", viz: 3 },
 };
 
 function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   const res = asRecord(results["revit.glance.model"]);
-  if (!res) return <EmptyState note="unrecognized revit.glance.model shape" />;
+  if (!res) return <UnrecognizedShape />;
 
   const observedAtUtc = asString(res.observedAtUtc);
   const doc = asRecord(res.document);
@@ -122,13 +134,13 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   return (
     <div className="flex flex-col gap-5">
       {/* document hero: identity + discipline + levels, first 200px answers the question */}
-      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)] px-3 py-2">
+      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)] px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-          <span className="min-w-0 truncate text-sm font-semibold" title={path || undefined}>
+          <span className="t-value min-w-0 truncate font-medium" title={path || undefined}>
             {doc ? text(doc.title) : "no active document"}
           </span>
           {doc && (
-            <span className="tele-label text-muted-foreground">
+            <span className="face-mono t-caption text-[var(--r-ink-2)]">
               {doc.isFamilyDocument === true
                 ? "family"
                 : isTemplateFile
@@ -136,45 +148,53 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
                   : "project"}
             </span>
           )}
-          {doc?.isWorkshared === true && <Chip hue="slate">workshared</Chip>}
-          {doc?.isModelInCloud === true && <Chip hue="blue">cloud</Chip>}
-          {doc?.isReadOnly === true && <Chip hue="kiln">read-only</Chip>}
+          {doc?.isWorkshared === true && (
+            <FactChip title="worksharing is enabled">workshared</FactChip>
+          )}
+          {doc?.isModelInCloud === true && (
+            <FactChip title="this model lives in the cloud">cloud</FactChip>
+          )}
+          {doc?.isReadOnly === true && (
+            <FactChip tone="caution" title="document is read-only — no write can land">
+              read-only
+            </FactChip>
+          )}
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {series.length === 0 ? (
-            <MonoNote>no sheet series to infer discipline from</MonoNote>
+            <MonoAside>no sheet series to infer discipline from</MonoAside>
           ) : (
             series.map((entry) => {
               const letter = asString(entry.prefix) ?? "?";
               const count = asNumber(entry.sheetCount) ?? 0;
               const meta = SERIES_META[letter];
               return (
-                <Chip
+                <VizChip
                   key={letter}
-                  hue={meta?.hue ?? "lichen"}
+                  viz={meta?.viz ?? 4}
                   title={`${count} sheets numbered ${letter}…`}
                 >
                   {letter} {meta ? `· ${meta.label}` : ""} {count}
-                </Chip>
+                </VizChip>
               );
             })
           )}
-          <MonoNote>discipline inferred from sheet-number series</MonoNote>
+          <MonoAside>discipline inferred from sheet-number series</MonoAside>
         </div>
         {levels.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <span className="text-[11px] text-muted-foreground">{levels.length} levels</span>
+            <span className="t-label text-[var(--r-ink-2)]">{levels.length} levels</span>
             {levels.map((level, i) => (
-              <MonoNote key={i}>
+              <MonoAside key={i}>
                 {text(level.name)} @ {(asNumber(level.elevationFeet) ?? 0).toFixed(1)}ft
-              </MonoNote>
+              </MonoAside>
             ))}
           </div>
         )}
       </div>
 
       {/* stat band: true project totals + family totals */}
-      <div className="flex flex-wrap rounded-[var(--radius)] border border-[var(--line)]">
+      <div className="flex flex-wrap rounded-[var(--radius)] border border-[var(--r-line)]">
         <Stat label="views" value={text(totals.viewCount)} />
         <Stat label="sheets" value={text(totals.sheetCount)} />
         <Stat label="schedules" value={text(totals.scheduleCount)} />
@@ -186,32 +206,30 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
         <Stat
           label="placed instances"
           value={famSummary ? text(famSummary.totalPlacedInstances) : "∅"}
-          hue={
-            famSummary && (asNumber(famSummary.totalPlacedInstances) ?? 0) === 0
-              ? "kiln"
-              : undefined
-          }
+          warn={famSummary != null && (asNumber(famSummary.totalPlacedInstances) ?? 0) === 0}
+          warnTitle="zero placed instances — the model may be a shell"
         />
         {famSummary && (
           <Stat
             label="unplaced families"
             value={text(famSummary.unplacedFamilies)}
-            hue={
+            warn={
               (asNumber(famSummary.unplacedFamilies) ?? 0) >
               (asNumber(famSummary.placedFamilies) ?? 0)
-                ? "kiln"
-                : undefined
             }
+            warnTitle="more unplaced than placed families"
           />
         )}
       </div>
 
-      <OpSection
+      <Section
         label="family composition by category"
-        aside={famTotal !== undefined && <MonoNote>{famTotal} families</MonoNote>}
+        aside={famTotal !== undefined && <MonoAside>{famTotal} families</MonoAside>}
       >
-        {famComposition.length === 0 ? (
-          <EmptyState note="no loaded families reported" />
+        {famComposition.length === 0 || (famTotal ?? 1) <= 0 ? (
+          <EmptyState story="scope" exit="load families into the document first">
+            no loaded families reported
+          </EmptyState>
         ) : (
           <>
             <CoverageBar segments={famComposition} total={famTotal} />
@@ -223,35 +241,39 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             )}
           </>
         )}
-      </OpSection>
+      </Section>
 
-      <OpSection
+      <Section
         label="parameter binding health"
-        aside={totalBindings !== undefined && <MonoNote>{totalBindings} project bindings</MonoNote>}
+        aside={
+          totalBindings !== undefined && <MonoAside>{totalBindings} project bindings</MonoAside>
+        }
       >
-        {!bindingSummary ? (
-          <EmptyState note="no binding summary in the glance packet" />
+        {!bindingSummary || (totalBindings ?? 0) <= 0 ? (
+          <EmptyState story="scope" exit="bind project parameters to categories first">
+            no project parameter bindings reported
+          </EmptyState>
         ) : (
           <div className="flex flex-col gap-2">
             <CoverageBar
               segments={[
-                { label: "instance", count: instanceBindings ?? 0, hue: "blue" },
-                { label: "type", count: typeBindings ?? 0, hue: "slate" },
+                { label: "instance", count: instanceBindings ?? 0, viz: 1 },
+                { label: "type", count: typeBindings ?? 0, viz: 3 },
               ]}
               total={totalBindings}
             />
             {topBoundCategories.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {topBoundCategories.map((cat, i) => (
-                  <Chip
+                  <VizChip
                     key={cat.name}
-                    hue={categoryHue(cat.name, i)}
+                    viz={categoryViz(cat.name, i)}
                     title={`${cat.count} bindings`}
                   >
                     {cat.name} {cat.count}
-                  </Chip>
+                  </VizChip>
                 ))}
-                <MonoNote>most-bound categories</MonoNote>
+                <MonoAside>most-bound categories</MonoAside>
               </div>
             )}
             {bindingSummary.truncated === true && (
@@ -262,7 +284,7 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             )}
           </div>
         )}
-      </OpSection>
+      </Section>
 
       <Provenance>
         one bounded revit.glance.model packet; summaries are complete, never truncated · obs{" "}
@@ -276,7 +298,7 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
 
 function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   const res = asRecord(results["revit.glance.attention"]);
-  if (!res) return <EmptyState note="unrecognized revit.glance.attention shape" />;
+  if (!res) return <UnrecognizedShape />;
 
   const observedAtUtc = asString(res.observedAtUtc);
   const activeView = asRecord(res.activeView);
@@ -310,22 +332,38 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
     <div className="flex flex-col gap-5">
       {/* active-view stage card */}
       {!activeView ? (
-        <EmptyState note="no active view reported" />
+        <EmptyState story="scope" exit="open a view in the connected Revit session">
+          no active view reported
+        </EmptyState>
       ) : (
-        <div className="min-w-0 rounded-[var(--radius)] border border-[var(--line-2)] px-3 py-2">
+        <div className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)] px-3 py-2">
           <div className="flex min-w-0 flex-wrap items-baseline gap-2">
-            <span className="min-w-0 truncate text-sm font-semibold" title={text(activeView.title)}>
+            <span className="t-value min-w-0 truncate font-medium" title={text(activeView.title)}>
               {text(activeView.title)}
             </span>
-            <Chip hue={activeView.isSheet === true ? "green" : "blue"}>
+            <VizChip viz={activeView.isSheet === true ? 2 : 1} title="view kind">
               {text(activeView.viewType)}
-            </Chip>
-            {activeView.isTemplate === true && <Chip hue="kiln">view template</Chip>}
-            <MonoNote>1:{text(activeView.scale)}</MonoNote>
+            </VizChip>
+            {activeView.isTemplate === true && (
+              <FactChip
+                tone="caution"
+                title="this is a view template, not a model view — trust nothing spatial"
+              >
+                view template
+              </FactChip>
+            )}
+            <MonoAside>1:{text(activeView.scale)}</MonoAside>
             {sheetPlacements.map((p, i) => (
-              <MonoNote key={i} hue={p.isActiveSheet === true ? "green" : undefined}>
+              <span
+                key={i}
+                className="face-mono t-caption"
+                style={{
+                  color: p.isActiveSheet === true ? "var(--r-ink)" : "var(--r-ink-2)",
+                }}
+                title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
+              >
                 sheet {text(p.sheetNumber)} · {text(p.sheetName)}
-              </MonoNote>
+              </span>
             ))}
           </div>
           {viewState && (
@@ -343,7 +381,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
                   {
                     label: "temporary hide/isolate",
                     value: viewState.temporaryHideIsolateActive === true ? "ACTIVE" : "off",
-                    hue: viewState.temporaryHideIsolateActive === true ? "kiln" : undefined,
+                    tone: viewState.temporaryHideIsolateActive === true ? "caution" : undefined,
                   },
                   {
                     label: "crop box",
@@ -356,12 +394,14 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
         </div>
       )}
 
-      <OpSection
+      <Section
         label="visible elements by category"
-        aside={totalVisible !== undefined && <MonoNote>{totalVisible} visible elements</MonoNote>}
+        aside={totalVisible !== undefined && <MonoAside>{totalVisible} visible elements</MonoAside>}
       >
-        {visibleComposition.length === 0 ? (
-          <EmptyState note="0 visible elements reported in the active view" />
+        {visibleComposition.length === 0 || (totalVisible ?? 1) <= 0 ? (
+          <EmptyState story="scope" exit="unhide something, or open a view that shows the model">
+            0 visible elements reported in the active view
+          </EmptyState>
         ) : (
           <>
             <CoverageBar segments={visibleComposition} total={totalVisible} />
@@ -373,27 +413,38 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             )}
           </>
         )}
-      </OpSection>
+      </Section>
 
-      <OpSection label="can pea trust this view?">
+      <Section label="can pea trust this view?">
         <div className="flex flex-col gap-2">
           {confidenceWarnings.length === 0 ? (
-            <MonoNote>0 confidence warnings from the rendering-state probe</MonoNote>
+            <MonoAside>0 confidence warnings from the rendering-state probe</MonoAside>
           ) : (
             <ul className="flex flex-col gap-1">
               {confidenceWarnings.map((warning, i) => (
-                <li key={i} className="tele text-[10px] text-cat-kiln">
+                <li key={i} className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
                   {warning}
                 </li>
               ))}
             </ul>
           )}
           {apiLimitations.length > 0 && (
-            <div className="rounded-[var(--radius)] border border-cat-kiln/25 bg-cat-kiln/[0.06] px-2 py-1.5">
-              <div className="tele-label mb-1 text-cat-kiln">api limitations (verbatim)</div>
+            /* plain content, not enclosed (border budget) — the caution ink and the
+               upper head carry the weight the old tinted box was buying. */
+            <div>
+              <div
+                className="face-mono t-caption t-upper mb-1"
+                style={{ color: "var(--r-caution)" }}
+              >
+                api limitations (verbatim)
+              </div>
               <ul className="flex flex-col gap-1">
                 {apiLimitations.map((limitation, i) => (
-                  <li key={i} className="text-[11px] leading-snug text-cat-kiln">
+                  <li
+                    key={i}
+                    className="t-label leading-snug"
+                    style={{ color: "var(--r-caution)" }}
+                  >
                     {limitation}
                   </li>
                 ))}
@@ -402,12 +453,12 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           )}
           {notInspected.length > 0 && (
             <details>
-              <summary className="tele cursor-pointer select-none text-[10px] text-muted-foreground">
+              <summary className="face-mono t-caption cursor-pointer select-none text-[var(--r-ink-2)]">
                 {notInspected.length} things this packet did NOT inspect
               </summary>
               <ul className="mt-1 flex flex-col gap-1 pl-3">
                 {notInspected.map((item, i) => (
-                  <li key={i} className="text-[11px] leading-snug text-muted-foreground">
+                  <li key={i} className="t-label leading-snug text-[var(--r-ink-2)]">
                     {item}
                   </li>
                 ))}
@@ -415,7 +466,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             </details>
           )}
         </div>
-      </OpSection>
+      </Section>
 
       <Provenance>
         one bounded revit.glance.attention packet; trust strip quoted verbatim · obs{" "}

@@ -71,16 +71,24 @@ async function loadCatalog(
 ): Promise<HostOperationDefinition[]> {
   const base = trimTrailingSlash(hostBaseUrl);
   // A catalog describes one Revit process. Sharing it across selectors can make Pea discover an
-  // operation in the dev session and then invoke it in a sandbox where that contract does not exist.
+  // operation in the dev session and then invoke it in another session where that contract does not exist.
   const cacheKey = `${base}\0${bridgeSessionId ?? ""}`;
   const cached = catalogCache.get(cacheKey);
   if (cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.ops;
 
   const headers: Record<string, string> = {};
   if (bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = bridgeSessionId;
+  // A transport failure must NAME THE URL: a bare `fetch failed` with the host up was the
+  // 2026-08-19/20 dead end — no port, no hint, indistinguishable from a wrong-lane resolution.
   const response = await fetch(`${base}/ops`, {
     headers,
     signal: AbortSignal.timeout(30_000),
+  }).catch((error: unknown) => {
+    throw new HostCallError(`host.ops.catalog: GET ${base}/ops failed: ${String(error)}`, 0, {
+      operationKey: "host.ops.catalog",
+      title: String(error),
+      status: 0,
+    });
   });
   if (!response.ok) {
     throw new HostCallError(
@@ -176,6 +184,11 @@ export class HostRpcCaller {
       ...options,
       hostBaseUrl: options.hostBaseUrl ?? hostProcessIdentity.defaultHostBaseUrl,
     };
+  }
+
+  /** The host this caller resolved — disclosable BEFORE a request, not only in a failure. */
+  get hostBaseUrl(): string {
+    return this.options.hostBaseUrl;
   }
 
   call<K extends OpKey>(key: K, request?: OpRequestOf<K>): Promise<OpResponseOf<K>> {
@@ -388,7 +401,8 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
     catch: (error) =>
       error instanceof HostCallError
         ? error
-        : new HostCallError(`${key}: ${String(error)}`, 0, {
+        : // Same rule as the catalog fetch: a transport failure names the URL it tried.
+          new HostCallError(`${key}: POST ${base}/call failed: ${String(error)}`, 0, {
             operationKey: key,
             title: String(error),
             status: 0,

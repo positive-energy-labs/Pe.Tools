@@ -56,14 +56,14 @@ describe("even-odd containment", () => {
 });
 
 describe("zone stage", () => {
-  it("walks unregistered â†’ registered â†’ partitioned", () => {
+  it("walks unregistered → registered → partitioned", () => {
     expect(zoneStage([], 0)).toBe("unregistered");
     expect(zoneStage(["FC-8"], 0)).toBe("registered");
     expect(zoneStage(["FC-8"], 3)).toBe("partitioned");
   });
 });
 
-// â”€â”€ The write-through review law â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── The write-through review law ─────────────────────────────────────────────
 
 const region = (elementId: number, blob: string, outer = square(0, 0, 10)): LiveRegion => ({
   elementId,
@@ -91,7 +91,7 @@ describe("resolutions on the provenance blob", () => {
     expect(readResolutions("not json")).toEqual([]);
   });
 
-  it("keeps one decision per (subject, flag) â€” a later verb replaces the earlier", () => {
+  it("keeps one decision per (subject, flag) — a later verb replaces the earlier", () => {
     const first = upsertResolution([], {
       subject: "R01",
       flag: "seedless",
@@ -111,7 +111,7 @@ describe("resolutions on the provenance blob", () => {
   });
 });
 
-// â”€â”€ The decision queue â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── The decision queue ───────────────────────────────────────────────────────
 
 const run = (over: Partial<PartitionRun> = {}): PartitionRun => ({
   levelName: "Level 1/Main Level",
@@ -173,7 +173,7 @@ describe("decision queue", () => {
     expect(rows[0]).toMatchObject({ kind: "failure", elementId: null });
   });
 
-  it("leaves a clean room out of the queue entirely â€” it is not a data browser", () => {
+  it("leaves a clean room out of the queue entirely — it is not a data browser", () => {
     expect(
       decisionRows(run({ rooms: [room("R01", [])], regions: [region(42, provenance())] })),
     ).toHaveLength(0);
@@ -184,7 +184,7 @@ describe("decision queue", () => {
   });
 });
 
-// â”€â”€ Rerun proposals never silently drop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Rerun proposals never silently drop ───────────────────────────────────────
 
 describe("rerun proposals", () => {
   const guid = "7a4e0000-0000-4000-8000-000000010006";
@@ -224,7 +224,7 @@ describe("rerun proposals", () => {
   });
 });
 
-// â”€â”€ The scripts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── The scripts ──────────────────────────────────────────────────────────────
 
 const embeddedArgument = (script: string, method: string): string => {
   const match = script.match(

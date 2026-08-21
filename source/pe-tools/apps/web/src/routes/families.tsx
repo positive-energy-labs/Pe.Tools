@@ -14,18 +14,20 @@
  * The projection lane runs sideways: families picked in the table, dense profile JSON back.
  *
  * All Family Foundry calls go through `#/host/familyfoundry`, fully typed against the checked-in
- * generated clients. The remaining unproven surface is LIVE behavior (SHIMS: step-3 live proof).
+ * generated clients. The remaining unproven surface is LIVE behavior: step-3 live proof.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { AddressingBar } from "#/components/lang/addressing-bar";
 import { FactChip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { ReadCell, stateColumn, type StateMeta } from "#/components/master-table/cells";
+import { ReadCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
-import type { Column } from "#/components/master-table/model";
+import type { Column, Verdict } from "#/components/master-table/model";
 import { Sentence, type SlotOption } from "#/components/sentence";
 import {
   Combobox,
@@ -276,23 +278,15 @@ function Seam({ op }: { op: string }) {
   return (
     <FactChip
       dashed
-      title={`${op} is a typed bridge op that has never met a live Revit session. It will run — nothing here is a mock — but its live behaviour is unproven, and docs/features/family/SHIMS.md names the step-3 proof that closes this chip.`}
+      title={`${op} is a typed bridge op that has never met a live Revit session. It will run — nothing here is a mock — but its live behaviour remains unproven until the step-3 live proof closes this chip.`}
     >
       unproven · {op}
     </FactChip>
   );
 }
 
-/**
- * THE LABELLED EMPTY, inline and consistent — "not started" is a state, not a zero
- * (SURFACE-PHILOSOPHY §1). `components/lang` has no `EmptyState` primitive, and this pass does
- * not invent one: every empty on this route wears these classes and carries a `title` saying
- * what would fill it. DESIGN-AUDIT finding #2 names the primitive that is owed.
- */
-const EMPTY_CLASS = "tele text-[11px] italic text-[var(--r-ink-mute)]";
-
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span className="section-label">{children}</span>;
+  return <span className="t-label t-upper text-muted-foreground">{children}</span>;
 }
 
 /**
@@ -309,7 +303,6 @@ function NamePicker({
   placeholder,
   ariaLabel,
   title,
-  empty,
   disabled,
 }: {
   options: readonly string[];
@@ -318,7 +311,6 @@ function NamePicker({
   placeholder: string;
   ariaLabel: string;
   title: string;
-  empty: string;
   disabled?: boolean;
 }) {
   const anchor = useComboboxAnchor();
@@ -340,18 +332,18 @@ function NamePicker({
       <ComboboxChips
         ref={anchor}
         title={title}
-        className="tele max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-[var(--radius)] border-[var(--r-line-2)] bg-transparent py-0.5 text-[11px]"
+        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-[var(--radius)] border-[var(--r-line-2)] bg-transparent py-0.5 t-label"
       >
         {collapsed ? (
           <span
-            className="px-1 text-[11px] text-muted-foreground"
+            className="px-1 t-label text-muted-foreground"
             title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
           >
             all {values.length}
           </span>
         ) : (
           values.map((name) => (
-            <ComboboxChip key={name} className="tele rounded-[var(--radius)] text-[11px]">
+            <ComboboxChip key={name} className="face-mono rounded-[var(--radius)] t-label">
               {name}
             </ComboboxChip>
           ))
@@ -359,16 +351,19 @@ function NamePicker({
         <ComboboxChipsInput
           aria-label={ariaLabel}
           placeholder={values.length === 0 ? placeholder : "add…"}
-          className="tele text-[11px] placeholder:text-muted-foreground"
+          className="face-mono t-label placeholder:text-muted-foreground"
         />
         <ComboboxTrigger />
       </ComboboxChips>
       <ComboboxContent anchor={anchor} className="rounded-[var(--radius)]">
-        {/* A picker with no options says where options come from (SURFACE-PHILOSOPHY §4). */}
-        <ComboboxEmpty className={EMPTY_CLASS}>{empty}</ComboboxEmpty>
+        {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
+            "you typed a string that matched nothing" — plain muted text, no story/exit. */}
+        <ComboboxEmpty className="face-mono t-label text-[var(--r-ink-mute)]">
+          no matches
+        </ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
-            <ComboboxItem key={name} value={name} className="tele pr-7 text-[11px]">
+            <ComboboxItem key={name} value={name} className="face-mono pr-7 t-label">
               <span className="truncate">{name}</span>
             </ComboboxItem>
           )}
@@ -592,47 +587,46 @@ function FamiliesRoute() {
 
   const familyState = useMemo(
     () =>
-      (familyId: number): StateMeta => {
+      (familyId: number): Verdict => {
         const done = receiptByFamilyId.get(familyId);
         if (done) {
           return done.success
             ? {
-                label: "applied",
-                tone: "var(--r-done)",
+                word: "applied",
+                tone: "done",
                 note: `${done.parametersChanged} parameter(s) changed · +${done.diffSummary.added} −${done.diffSummary.removed} ~${done.diffSummary.modified}`,
               }
             : {
                 // A refused write is the one thing on this row asking for a person: the ONE alarm.
-                label: "failed",
-                tone: "var(--r-alarm)",
-                alarm: true,
+                word: "failed",
+                tone: "alarm",
                 note: done.error ?? "apply failed with no reported reason",
               };
         }
         const entry = planByFamilyId.get(familyId);
         if (!plan) {
           return {
-            label: "unplanned",
-            tone: "var(--r-ink-mute)",
+            word: "unplanned",
+            tone: "mute",
             dim: true,
             note: "no plan compiled yet — the table is scope, not judgment",
           };
         }
         if (!entry) {
           return {
-            label: "outside profile",
-            tone: "var(--r-ink-mute)",
+            word: "outside profile",
+            tone: "mute",
             dim: true,
             note: "in scope, but the bound profile does not claim this family",
           };
         }
         const flag = familyFlag(entry);
         // Not a warning about the model and not a refusal — a verdict with nothing behind it.
-        if (flag) return { label: "no actions", tone: "var(--r-ink-mute)", note: flag };
+        if (flag) return { word: "no actions", tone: "mute", note: flag };
         return excludedIds.has(familyId)
           ? {
-              label: "excluded",
-              tone: "var(--r-ink-mute)",
+              word: "excluded",
+              tone: "mute",
               dim: true,
               note: "excluded from apply in the decision queue",
             }
@@ -640,8 +634,8 @@ function FamiliesRoute() {
               /* Queued actions are UNSAVED work: nothing has left the page, and caution is the
                  language's staged rank. Deliberately NOT the commit blue — that is the verb's,
                  and a state dot wearing it would spend the one filled blue on a readout. */
-              label: "included",
-              tone: "var(--r-caution)",
+              word: "included",
+              tone: "caution",
               note: `${entry.plan.loweredActions.length} action(s) queued`,
             };
       },
@@ -692,7 +686,7 @@ function FamiliesRoute() {
                 return next;
               })
             }
-            className="tele h-7 w-full px-1.5 text-left text-muted-foreground hover:text-foreground"
+            className="face-mono t-value h-7 w-full px-1.5 text-left text-muted-foreground hover:text-foreground"
           >
             {pickedIds.has(row.familyId) ? "▪" : "□"}
           </button>
@@ -745,20 +739,16 @@ function FamiliesRoute() {
       /* The plan verdict sits AFTER the identity columns, not among the parameter clusters: the
          plan is a lens over these rows, not a parameter of the family.
 
-         IT STAYS ON `stateColumn`, NOT the `state:` clause (DESIGN-AUDIT #1). Of the seven
-         words this column speaks, exactly one has an axis — `included` is `stage: "staged"`.
-         `applied`, `failed`, `no actions`, `outside profile`, `excluded` and `unplanned` have
-         none, and `state:` + `word` would render six of seven as an unmarked "clean" cell
-         wearing a route label: the marks would say nothing while the word said everything,
-         which is worse than the dot the route draws itself. Only the TONES moved onto the
-         meaning band. */
-      stateColumn<TypeRow>({
+         It rides the table's `verdict:` clause: a
+         pipeline verdict about the ROW, whose word the route owns and whose tone union is the
+         meaning band by construction. */
+      {
         key: "plan-state",
         label: "plan",
         title:
           "What the compiled plan says about this family. The plan is a LENS: it tints rows and fills the decision queue, but it never hides a family or narrows the scope you asked for.",
-        of: (row) => familyState(row.familyId),
-      }),
+        verdict: (row) => familyState(row.familyId),
+      },
     ];
 
     const parameterColumns: Column<TypeRow>[] = shown.map((col) => {
@@ -781,7 +771,7 @@ function FamiliesRoute() {
               /* A project binding and a formula are FACTS about where a value lives, not
                  alarms — they get quiet ink and spend no meaning role. Formula-driven was
                  `--cat-lichen`, a TAXONOMY colour carrying a value fact; the language has no
-                 "derived" role to move it to (DESIGN-AUDIT #3), so it drops to the ink ladder
+                 "derived" role to move it to, so it drops to the ink ladder
                  and separates from a project binding by italic rather than by hue. */
               className={cn(
                 unresolved && "text-[var(--r-ink-mute)]/50",
@@ -921,86 +911,68 @@ function FamiliesRoute() {
 
   return (
     <main className="flex h-screen flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
-      {/* ── the sentence: targeting nouns only ───────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-4 py-2">
-        {/* The route's own name is chrome, not a state: it was in alarm ink, which is the one
-            colour that may only ever mean "the model disagrees". */}
-        <span className="tele-label text-[10px] tracking-[0.3em] text-muted-foreground">
-          FAMILIES
-        </span>
-        <Sentence
-          prefix="auditing"
-          slots={[
-            {
-              key: "document",
-              text: activeDocument,
-              placeholder: connected ? "no project open" : "bridge disconnected",
-              options: null,
-              title:
-                "The project this audit reads. It is session truth, not a choice — /families follows whatever document is active in the bound world, so open a different project in Revit to move it.",
-            },
-            {
-              key: "profile",
-              joiner: "against",
-              text: profilePath,
-              placeholder: "pick a profile",
-              options: profileOptions,
-              onPick: (id) => setProfilePath(id),
-              title:
-                "The desired-state profile every family is reconciled against. Binding one is what makes plan possible; re-binding throws away the compiled plan and any receipts, because they described the old profile.",
-              empty:
-                'No profiles readable in this world — the library lives under the CmdFFDesiredMigrator settings module, rootKey "profiles". Bind a world first if the sentence still says disconnected.',
-            },
-          ]}
-          target={target}
-          onBind={(selector) => setTarget(selector ?? "")}
-          busy={busy != null}
-          receipt={receipt}
-        />
-        {/* Tones by blast radius, not by prominence: `plan` and `project → profile` are host
-            READS and stay `act`; only `apply` leaves the page, so it is the only blue here. */}
-        <Verb
-          label="plan"
-          onClick={() => void runPlan()}
-          busy={busy === "plan"}
-          disabled={!profileJson}
-          reason={
-            profileJson
-              ? "Compile the bound profile against this project: one reconciliation per family, plus a plan hash. Read-only — nothing in Revit changes until you apply."
-              : "Bind a profile in the sentence first — there is nothing to compile against."
-          }
-        />
-        <Verb
-          label={`apply to ${includedPlanned.length} families`}
-          tone="commit"
-          onClick={() => void runApply()}
-          busy={busy === "apply"}
-          disabled={applyBlockedReason !== null}
-          reason={
-            applyBlockedReason ??
-            `Mutate Revit: run the lowered actions on the ${includedPlanned.length} included famil${includedPlanned.length === 1 ? "y" : "ies"}, sending the plan hash along. If the project has changed underneath, the op refuses rather than applying a stale plan.`
-          }
-        />
-        <Verb
-          label="project → profile"
-          onClick={() => void runProject()}
-          busy={busy === "project"}
-          disabled={pickedIds.size === 0}
-          reason={
-            pickedIds.size === 0
-              ? "Nothing picked. Tick families in the table's pick column — projection runs the audit backwards, so it needs a source to read."
-              : `Run the audit backwards: read ${pickedIds.size} picked famil${pickedIds.size === 1 ? "y" : "ies"} out of the model as profile JSON, so an existing family can seed a profile instead of being reconciled against one. Read-only.`
-          }
-        />
-        <Seam op="familyfoundry.plan · apply · project" />
-        {plan?.planHash && (
-          <FactChip
-            title={`Fingerprint of the compiled plan (${plan.planHash}). Apply sends it back, and the op refuses if the project no longer compiles to the same hash — so an edit made in Revit since you planned can never be applied over blindly. If apply reports drift, re-plan and re-read the decision queue.`}
-          >
-            plan {plan.planHash.slice(0, 12)}
-          </FactChip>
-        )}
-      </div>
+      {/* ── ONE head rail (lang AddressingBar — families #11's five-slot rule, adopted).
+             `apply` is THE page-blast verb — the only blue on the row, the one write that
+             leaves the page. `plan` and `project → profile` are host READS that act on the
+             table's scope, so they live in the table's own strip (the standing rule: a verb
+             that acts on one pane belongs in that pane's action strip). ── */}
+      <AddressingBar
+        name="families"
+        sentence={
+          <Sentence
+            prefix="auditing"
+            slots={[
+              {
+                key: "document",
+                text: activeDocument,
+                placeholder: connected ? "no project open" : "bridge disconnected",
+                options: null,
+                title:
+                  "The project this audit reads. It is session truth, not a choice — /families follows whatever document is active in the bound world, so open a different project in Revit to move it.",
+              },
+              {
+                key: "profile",
+                joiner: "against",
+                text: profilePath,
+                placeholder: "pick a profile",
+                options: profileOptions,
+                onPick: (id) => setProfilePath(id),
+                title:
+                  "The desired-state profile every family is reconciled against. Binding one is what makes plan possible; re-binding throws away the compiled plan and any receipts, because they described the old profile.",
+                empty:
+                  'No profiles readable in this world — the library lives under the CmdFFDesiredMigrator settings module, rootKey "profiles". Bind a world first if the sentence still says disconnected.',
+              },
+            ]}
+            target={target}
+            onBind={(selector) => setTarget(selector ?? "")}
+            busy={busy != null}
+            receipt={receipt}
+          />
+        }
+        facts={
+          plan?.planHash && (
+            <FactChip
+              title={`Fingerprint of the compiled plan (${plan.planHash}). Apply sends it back, and the op refuses if the project no longer compiles to the same hash — so an edit made in Revit since you planned can never be applied over blindly. If apply reports drift, re-plan and re-read the decision queue.`}
+            >
+              plan {plan.planHash.slice(0, 12)}
+            </FactChip>
+          )
+        }
+        verb={
+          <Verb
+            label={`apply to ${includedPlanned.length} families`}
+            tone="commit"
+            onClick={() => void runApply()}
+            busy={busy === "apply"}
+            disabled={applyBlockedReason !== null}
+            reason={
+              applyBlockedReason ??
+              `Mutate Revit: run the lowered actions on the ${includedPlanned.length} included famil${includedPlanned.length === 1 ? "y" : "ies"}, sending the plan hash along. If the project has changed underneath, the op refuses rather than applying a stale plan.`
+            }
+          />
+        }
+        seam={<Seam op="familyfoundry.plan · apply · project" />}
+      />
 
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-4 py-1.5">
@@ -1017,7 +989,7 @@ function FamiliesRoute() {
           <SelectTrigger
             aria-label="placement filter"
             title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-            className="tele h-6 w-32 shrink-0 rounded-[var(--radius)] border-[var(--r-line-2)] px-1.5 text-[11px]"
+            className="face-mono h-6 w-32 shrink-0 rounded-[var(--radius)] border-[var(--r-line-2)] px-1.5 t-label"
           >
             <SelectValue />
           </SelectTrigger>
@@ -1027,7 +999,7 @@ function FamiliesRoute() {
                 key={value}
                 value={value}
                 title={PLACEMENT_NOTES[value]}
-                className="tele text-[11px]"
+                className="face-mono t-label"
               >
                 {PLACEMENT_LABELS[value]}
               </SelectItem>
@@ -1046,13 +1018,13 @@ function FamiliesRoute() {
         ) : categoryCatalog.isPending ? (
           <OutcomeLine className="min-w-0 flex-1" kind="busy" label="reading categories" />
         ) : categories.length === 0 ? (
-          <span
-            className={cn(EMPTY_CLASS, "min-w-0 flex-1")}
-            title="The catalog read succeeded and reported nothing: this project has no loaded families at all, so there is no scope to draft. Loading a family in Revit fills it."
+          <EmptyState
+            story="scope"
+            exit="load a family in Revit, or bind a different world in the sentence above"
+            className="min-w-0 flex-1"
           >
-            no loaded families in this project — load one in Revit, or bind a different world in the
-            sentence above
-          </span>
+            no loaded families in this project — the catalog read succeeded and reported nothing
+          </EmptyState>
         ) : (
           <>
             <NamePicker
@@ -1062,7 +1034,6 @@ function FamiliesRoute() {
               placeholder="add categories…"
               ariaLabel="draft categories"
               title="Which Revit categories the draft asks for. Picking one only edits the DRAFT — nothing loads until you apply the scope, because the matrix op is the expensive one."
-              empty="no matching category — the list is every category the loaded families report, so a name missing here is a family not loaded in Revit"
             />
             <NamePicker
               options={draftFamilyNames}
@@ -1078,18 +1049,14 @@ function FamiliesRoute() {
               }
               ariaLabel="draft families"
               title="Every family the draft categories resolve to, all picked by default. Dropping one narrows exactly what apply asks the matrix op for — it does not filter a loaded table, it loads less."
-              empty="no matching family — the list comes from the drafted categories and the placement filter, so widen either to see more"
             />
           </>
         )}
-        {draftCategories.length === 0 ? (
-          <span
-            className={cn(EMPTY_CLASS, "shrink-0")}
-            title="Nothing is drafted yet. The draft is built from categories: pick one in the categories box and the families it resolves to appear beside it."
-          >
-            no categories picked yet
-          </span>
-        ) : draftFamilyNames.length === 0 && draftCatalog.isFetching ? (
+        {/* RULED 2026-08-16 (fit reviews): the third EmptyState that sat here — "no categories
+            picked yet" — is deleted; the two visibly-empty pickers beside it announce
+            themselves. */}
+        {draftCategories.length === 0 ? null : draftFamilyNames.length === 0 &&
+          draftCatalog.isFetching ? (
           <OutcomeLine className="shrink-0" kind="busy" label="resolving families" />
         ) : (
           <FactChip title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated.">
@@ -1126,7 +1093,7 @@ function FamiliesRoute() {
           {/* The kind is DERIVED, never remembered: an apply the op refused is the model
               disagreeing (alarm); anything else that threw is a busy or broken bridge, which
               is not (caution). `useVerb` funnels both into one string, so the discriminator
-              has to come from the payload — see DESIGN-AUDIT #4. */}
+              has to come from the payload. */}
           <OutcomeLine
             kind={applyData?.refused === true ? "refused" : "error"}
             label={applyData?.refused === true ? "apply refused" : "command failed"}
@@ -1204,21 +1171,21 @@ function FamiliesRoute() {
                             return next;
                           })
                         }
-                        className="tele text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
+                        className="face-mono t-value text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </button>
                     </td>
-                    <td className="tele py-0.5 text-[11px]">{entry.familyName}</td>
+                    <td className="face-mono py-0.5 t-label">{entry.familyName}</td>
                     <td
-                      className="tele w-24 py-0.5 text-[11px] text-muted-foreground"
+                      className="face-mono w-24 py-0.5 t-label text-muted-foreground"
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className="tele truncate py-0.5 text-[10px] text-muted-foreground"
+                      className="face-mono truncate py-0.5 t-caption text-muted-foreground"
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
@@ -1226,7 +1193,7 @@ function FamiliesRoute() {
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
                     <td
-                      className="tele w-64 truncate py-0.5 text-[10px] text-[var(--r-ink-mute)]"
+                      className="face-mono w-64 truncate py-0.5 t-caption text-[var(--r-ink-mute)]"
                       title={flag ?? ""}
                     >
                       {flag ?? ""}
@@ -1240,11 +1207,11 @@ function FamiliesRoute() {
                   className="border-b border-[var(--r-line)] opacity-60"
                 >
                   <td className="w-8 py-0.5 text-center">
-                    <span className="tele text-muted-foreground">✕</span>
+                    <span className="face-mono t-value text-muted-foreground">✕</span>
                   </td>
-                  <td className="tele py-0.5 text-[11px]">{family.familyName}</td>
-                  <td className="tele w-24 py-0.5 text-[11px] text-muted-foreground">—</td>
-                  <td className="tele py-0.5 text-[10px] text-muted-foreground" colSpan={2}>
+                  <td className="face-mono py-0.5 t-label">{family.familyName}</td>
+                  <td className="face-mono w-24 py-0.5 t-label text-muted-foreground">—</td>
+                  <td className="face-mono py-0.5 t-caption text-muted-foreground" colSpan={2}>
                     in scope, but the bound profile does not claim this family
                   </td>
                 </tr>
@@ -1252,13 +1219,14 @@ function FamiliesRoute() {
               {plan.families.length === 0 && outsideProfile.length === 0 && (
                 <tr>
                   <td colSpan={5}>
-                    <span
-                      className={cn(EMPTY_CLASS, "block py-1")}
-                      title="The plan compiled cleanly and matched nothing in the applied scope. Two exits: widen the scope above so the profile's families are loaded, or bind a profile that claims the ones already here."
+                    <EmptyState
+                      story="scope"
+                      exit="widen the categories above, or bind a profile that covers this project"
+                      className="py-1"
                     >
-                      no family in this scope is claimed by the bound profile — widen the categories
-                      above, or bind a profile that covers this project
-                    </span>
+                      no family in this scope is claimed by the bound profile — the plan compiled
+                      cleanly and matched nothing
+                    </EmptyState>
                   </td>
                 </tr>
               )}
@@ -1290,7 +1258,7 @@ function FamiliesRoute() {
             <tbody>
               {applyData.receipts.map((entry) => (
                 <tr key={entry.familyId} className="border-b border-[var(--r-line)]">
-                  <td className="tele w-56 truncate py-0.5 text-[11px]">
+                  <td className="face-mono w-56 truncate py-0.5 t-label">
                     {entry.familyName ?? `element ${entry.familyId}`}
                   </td>
                   <td className="w-20 py-0.5">
@@ -1307,14 +1275,14 @@ function FamiliesRoute() {
                     </FactChip>
                   </td>
                   <td
-                    className="tele w-40 py-0.5 text-[10px] text-muted-foreground"
+                    className="face-mono w-40 py-0.5 t-caption text-muted-foreground"
                     title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
                   >
                     {entry.parametersChanged} changed · +{entry.diffSummary.added} −
                     {entry.diffSummary.removed} ~{entry.diffSummary.modified}
                   </td>
                   <td
-                    className="tele truncate py-0.5 text-[10px] text-muted-foreground"
+                    className="face-mono truncate py-0.5 t-caption text-muted-foreground"
                     title={
                       entry.operationsRun.length > 0
                         ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
@@ -1341,18 +1309,19 @@ function FamiliesRoute() {
               {applyData.receipts.length === 0 && (
                 <tr>
                   <td colSpan={5}>
-                    <span
-                      className={cn(EMPTY_CLASS, "block py-1")}
-                      title={
+                    <EmptyState
+                      story="scope"
+                      exit={
                         applyData.refused
-                          ? "The op refused the whole apply before touching the model, so no family produced a receipt. The refusal itself is the line above this table."
-                          : "The op ran and returned an empty receipt list, which is not the same as nothing being wrong — re-plan and read the decision queue."
+                          ? "the refusal itself is the line above this table — re-plan and retry"
+                          : "re-plan and read the decision queue before retrying"
                       }
+                      className="py-1"
                     >
                       {applyData.refused
                         ? "no receipts — apply was refused before it touched anything"
                         : "no receipts — apply ran and reported nothing"}
-                    </span>
+                    </EmptyState>
                   </td>
                 </tr>
               )}
@@ -1372,19 +1341,20 @@ function FamiliesRoute() {
             </SectionLabel>
             <FactChip
               className="ml-2"
-              title="How many picked families the projection read back out of the model. Nothing was written anywhere."
+              title="How many picked families the projection read back out of the model."
             >
               {projection.projections.length} famil
               {projection.projections.length === 1 ? "y" : "ies"}
             </FactChip>
           </summary>
           {projection.projections.length === 0 && projection.diagnostics.length === 0 && (
-            <p
-              className={cn(EMPTY_CLASS, "mt-1")}
-              title="The projection ran, refused nothing, and produced no documents — the picked set resolved to nothing readable. Re-pick families in the table's pick column and run it again."
+            <EmptyState
+              story="scope"
+              exit="re-pick families in the table's pick column and run it again"
+              className="mt-1"
             >
               nothing projected — the picked set read back empty
-            </p>
+            </EmptyState>
           )}
           {/* Projection is read-only and blocks nothing, which is exactly what the outcome
               lane's `advisory` means — "a dry run blocks nothing". */}
@@ -1400,12 +1370,12 @@ function FamiliesRoute() {
           {projection.projections.map((entry) => (
             <div key={entry.familyId} className="mt-2">
               <div className="flex items-center gap-2">
-                <span className="tele text-[11px]">{entry.familyName ?? entry.familyId}</span>
+                <span className="face-mono t-label">{entry.familyName ?? entry.familyId}</span>
                 {entry.profileJson && (
                   <Verb
                     label="copy"
                     onClick={() => void navigator.clipboard.writeText(entry.profileJson ?? "")}
-                    reason="Copy this family's projected profile JSON to the clipboard. There is no profile editor here by design — profiles are files, so paste it into one. Nothing is written."
+                    reason="Copy this family's projected profile JSON to the clipboard. There is no profile editor here by design — profiles are files, so paste it into one."
                   />
                 )}
                 {!entry.success && (
@@ -1417,7 +1387,7 @@ function FamiliesRoute() {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="tele mt-1 max-h-40 overflow-auto rounded-[2px] border border-[var(--r-line)] p-2 text-[10px] text-muted-foreground">
+                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-[var(--r-line)] p-2 t-caption text-muted-foreground">
                   {entry.profileJson}
                 </pre>
               )}
@@ -1435,16 +1405,66 @@ function FamiliesRoute() {
         searchPlaceholder="family or type"
         chips={chips}
         summary={
-          <span title="Every family, type, and parameter the applied scope resolved to. Uncommon parameter columns may be hidden — the chip beside this says how many.">
-            {totalFamilies} families · {totalTypes} types · {params.length} parameters
+          <span className="flex items-center gap-2">
+            <span title="Every family, type, and parameter the applied scope resolved to. Uncommon parameter columns may be hidden — the chip beside this says how many.">
+              {totalFamilies} families · {totalTypes} types · {params.length} parameters
+            </span>
+            {/* The table's own action strip (families #11's standing rule): both verbs act on
+                the table's scope — plan compiles the lens over these rows, projection reads the
+                picked ones back out — and both are host READS, so neither wears the blue. */}
+            <Verb
+              label="plan"
+              onClick={() => void runPlan()}
+              busy={busy === "plan"}
+              disabled={!profileJson}
+              reason={
+                profileJson
+                  ? "Compile the bound profile against this project: one reconciliation per family, plus a plan hash. Read-only — nothing in Revit changes until you apply."
+                  : "Bind a profile in the sentence first — there is nothing to compile against."
+              }
+            />
+            <Verb
+              label="project → profile"
+              onClick={() => void runProject()}
+              busy={busy === "project"}
+              disabled={pickedIds.size === 0}
+              reason={
+                pickedIds.size === 0
+                  ? "Nothing picked. Tick families in the pick column — projection runs the audit backwards, so it needs a source to read."
+                  : `Run the audit backwards: read ${pickedIds.size} picked famil${pickedIds.size === 1 ? "y" : "ies"} out of the model as profile JSON, so an existing family can seed a profile instead of being reconciled against one. Read-only.`
+              }
+            />
           </span>
         }
         empty={
-          !connected
-            ? "Nothing to audit — the bridge is disconnected. Connect the host in Revit, then bind that world in the sentence above."
-            : applied === null
-              ? "No scope applied yet. Pick one or more categories in the scope row above, then press “apply scope” — the matrix op is expensive, so it waits to be asked."
-              : "The applied scope resolved to no families. Add a category above, re-add families in the families picker, or relax the placement filter from “placed only” back to “all loaded”, then re-apply the scope."
+          // §4's two kinds of empty: the first three are the route's story (nothing in scope);
+          // the last fires only when rows exist and the table's own narrowing hid them.
+          !connected ? (
+            <EmptyState
+              story="scope"
+              exit="connect the host in Revit, then bind that world in the sentence above"
+            >
+              nothing to audit — the bridge is disconnected
+            </EmptyState>
+          ) : applied === null ? (
+            <EmptyState
+              story="scope"
+              exit="pick categories in the scope row above, then press “apply scope”"
+            >
+              no scope applied yet — the matrix op is expensive, so it waits to be asked
+            </EmptyState>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              story="scope"
+              exit="add a category, re-add families in the families picker, or relax the placement filter, then re-apply the scope"
+            >
+              the applied scope resolved to no families
+            </EmptyState>
+          ) : (
+            <EmptyState story="filter" exit="clear a column filter or the search">
+              the narrowing hid all {totalTypes} types in scope
+            </EmptyState>
+          )
         }
         /* Fleet → one family. The URL is the whole handoff: /family opens the requested
            family in the bound session's family editor and lands in its live lane. No

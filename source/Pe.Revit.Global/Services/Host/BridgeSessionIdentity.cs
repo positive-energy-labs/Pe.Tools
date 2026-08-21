@@ -1,4 +1,4 @@
-using Pe.Shared.HostContracts.Bridge;
+﻿using Pe.Shared.HostContracts.Bridge;
 using Pe.Shared.Product;
 using Serilog;
 
@@ -7,7 +7,7 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>
 /// Resolves the identity + selector metadata this Revit session reports at bridge registration.
 /// Identity is only the process tuple (pid + processStartUtc) — the broker hashes it into the
-/// session id and returns it in the ack. Lane/sandboxId/buildStamp are selectors/metadata:
+/// session id and returns it in the ack. Lane/sdkSessionId/buildStamp are selectors/metadata:
 /// descriptor-launched sessions read them from the validated PE_REVIT_SESSION_DESCRIPTOR file;
 /// descriptor-less sessions report installed metadata from the runtime descriptor beside the
 /// loaded payload. PE_REVIT_LOADED_PAYLOAD_* supplies only the loaded payload path, never these
@@ -17,7 +17,7 @@ internal sealed record BridgeSessionIdentity(
     long ProcessStartUtcUnixMs,
     string? SessionDescriptorPath,
     string? Lane,
-    string? SandboxId,
+    string? SdkSessionId,
     string? BuildStamp
 ) {
     private const string SessionDescriptorEnvironmentVariable = "PE_REVIT_SESSION_DESCRIPTOR";
@@ -65,7 +65,7 @@ internal sealed record BridgeSessionIdentity(
             return null;
         }
 
-        var descriptor = BridgeSessionDescriptor.TryParse(descriptorJson);
+        var descriptor = BridgeSessionDescriptor.TryParseReceipt(descriptorJson, payloadDirectory);
         if (descriptor is null) {
             Log.Warning("Session descriptor '{DescriptorPath}' is not valid JSON.", descriptorPath);
             return null;
@@ -82,21 +82,11 @@ internal sealed record BridgeSessionIdentity(
             return null;
         }
 
-        // D6 observability: a sandbox descriptor does NOT get its own host/runtime lane — the
-        // sandbox Pe.App shares the one installed host, port, and service file by design (the
-        // ProductRuntimeLane enum answers "which binaries am I using", and for a sandbox that is
-        // genuinely "installed"). The bridge still attributes the session as sandbox here; this log
-        // makes the intentional sharing observable rather than silent. See docs/adr/0002.
-        if (descriptor.Lane == "sandbox")
-            Log.Information(
-                "Sandbox session (descriptor '{DescriptorPath}') shares the one installed host, port, and service file by design; the bridge still attributes it as 'sandbox'.",
-                descriptorPath);
-
         return new BridgeSessionIdentity(
             processStartUtcUnixMs,
             descriptorPath,
             descriptor.Lane,
-            descriptor.SandboxId,
+            descriptor.SessionId,
             descriptor.BuildStamp
         );
     }
@@ -124,7 +114,7 @@ internal sealed record BridgeSessionIdentity(
                         processStartUtcUnixMs,
                         null,
                         descriptor.Lane ?? InstalledLane,
-                        descriptor.SandboxId,
+                        descriptor.SessionId,
                         descriptor.BuildStamp
                     );
                 }

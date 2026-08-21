@@ -13,12 +13,25 @@ export interface VerbReceipt {
   atMs: number;
 }
 
+/** The failure kinds a verb can carry (ruled 2026-08-16, R12 — families #4): a thrown host
+ * call is `error` (caution — a busy bridge is not the model disagreeing), an op-level refusal
+ * is `refused` (the one alarm), a success path with something to say is `advisory`, and a
+ * write that landed some items while the rest stay staged is `partial` (caution — staged is
+ * unsaved; added at the fit-review sitting, the schedule-grid audit's one-line fix). */
+export type VerbFailKind = "error" | "refused" | "advisory" | "partial";
+
 export function useVerb() {
   const [busy, setBusy] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<{ kind: VerbFailKind; text: string } | null>(null);
   const [receipt, setReceipt] = useState<VerbReceipt | null>(null);
   const inFlight = useRef(false);
+
+  /** Carry the OutcomeKind with the text, so no consumer has to sniff a payload to know
+   * which lane its failure belongs in. */
+  const fail = useCallback((kind: VerbFailKind, text: string | null) => {
+    setOutcome(text === null ? null : { kind, text });
+  }, []);
 
   useEffect(() => {
     if (!busy) return;
@@ -35,17 +48,24 @@ export function useVerb() {
     inFlight.current = true;
     setBusy(label);
     setSeconds(0);
-    setError(null);
+    setOutcome(null);
     try {
       const text = await work();
       if (typeof text === "string") setReceipt({ text, atMs: Date.now() });
     } catch (cause) {
-      setError(`${label} failed — ${cause instanceof Error ? cause.message : String(cause)}`);
+      setOutcome({
+        kind: "error",
+        text: `${label} failed — ${cause instanceof Error ? cause.message : String(cause)}`,
+      });
     } finally {
       inFlight.current = false;
       setBusy(null);
     }
   }, []);
 
-  return { busy, seconds, error, setError, receipt, run };
+  // `error`/`setError` survive as the kindless spelling; `outcome`/`fail` carry the kind.
+  const error = outcome?.text ?? null;
+  const setError = useCallback((text: string | null) => fail("error", text), [fail]);
+
+  return { busy, seconds, error, setError, outcome, fail, receipt, run };
 }

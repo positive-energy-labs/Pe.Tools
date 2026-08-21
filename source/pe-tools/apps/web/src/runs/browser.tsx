@@ -39,12 +39,10 @@ import {
 
 import { MasterTable } from "#/components/master-table/master-table";
 import { fmtNum, type Column, type MasterTableState } from "#/components/master-table/model";
-import { Chip } from "#/components/ui/chip";
+import { FactChip as Chip } from "#/components/lang/chip";
+import { EmptyState } from "#/components/lang/empty";
 import { Pane, PaneSplit } from "#/components/ui/pane";
 import { cn } from "#/lib/utils";
-// The app's one EmptyState primitive lives in ops/primitives (components/lang has none). It is
-// pure presentation — no ops coupling — so /runs borrows it rather than forking a second one.
-import { EmptyState } from "#/ops/primitives";
 
 import { hydrateFromSet } from "./feedback/hydrate";
 import { fb, itemKey, type StagedItem, useFb } from "./feedback/staging";
@@ -153,14 +151,14 @@ function PartialityChip(props: { part: Partiality | null; prefix?: string; compa
   if (!part || part.kind === "full") return null;
   if (part.kind === "partial") {
     return (
-      <Chip tone="warn" title={partialTitle(part.zone)}>
+      <Chip tone="caution" title={partialTitle(part.zone)}>
         {prefix}
         {compact ? `partial · ${zoneShort(part.zone)}` : `partial run — zone-filtered: ${part.zone}`}
       </Chip>
     );
   }
   return (
-    <Chip tone="warn" dashed title={possiblyPartialTitle(part.zones, part.modal)}>
+    <Chip tone="caution" dashed title={possiblyPartialTitle(part.zones, part.modal)}>
       {prefix}
       {compact
         ? `partial? ${part.zones}/${part.modal}`
@@ -633,7 +631,7 @@ function ZoneCard(props: {
         </span>
         {b ? (
           <Chip
-            tone={b.triage.verdict === "solve" ? "done" : "warn"}
+            tone={b.triage.verdict === "solve" ? "done" : "caution"}
             title={`Triage verdict for the current run: ${b.triage.verdict} — ${b.triage.reason}`}
           >
             {b.triage.verdict}
@@ -1747,7 +1745,7 @@ function HeaderScores(props: {
   if (cur === undefined) return null; // still loading — silence beats a flashed fake absent state
   if (cur === null) {
     return (
-      <Chip tone="warn" title={NO_SCORES_TITLE}>
+      <Chip tone="caution" title={NO_SCORES_TITLE}>
         no scores.json
       </Chip>
     );
@@ -2420,7 +2418,9 @@ export default function RunBrowser() {
   if (runs.length === 0 || !curId) {
     return (
       <div className="mx-auto flex max-w-xl flex-col gap-2 p-8">
-        <EmptyState note="No runs captured yet — the pool fills itself the next time the harness runs." />
+        <EmptyState story="scope" exit="run the takeoff harness to fill the pool">
+          No runs captured yet
+        </EmptyState>
         <p className="tele text-[11px] leading-relaxed text-muted-foreground">
           Every run of{" "}
           <span className="text-foreground">
@@ -2680,7 +2680,7 @@ export default function RunBrowser() {
             </span>
           )}
           {abCaveat ? (
-            <Chip tone="warn" title={abCaveat}>
+            <Chip tone="caution" title={abCaveat}>
               A/B pairing caveat
             </Chip>
           ) : null}

@@ -10,6 +10,11 @@
  * Geometry NEVER lives here — `state_changed` rebroadcasts the whole document on every
  * write, so the doc carries markdown blocks + a `parseId`; the grounded view is
  * refetched from the parse cache.
+ *
+ * KEPT DELIBERATELY though the /family-types route is deleted: pea's mcps handlers register
+ * against this slice, the chat surface renders FamilyTypesChatPlugin on it, and family.ts /
+ * parameter-links.ts import specDocSchema / parameterIdentitySchema from here. Retire only
+ * when pea's family editing runs through the live lane's own commands.
  */
 import { z } from "zod";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";

@@ -1,39 +1,137 @@
 /**
  * /family — the pure layer: what a family profile IS, and every reading of it.
  *
- * Nothing here renders and nothing here talks to a host. Everything is derived from `world.ts`
- * plus the page's `Draft`, so a verb that changes the draft visibly changes every reading in the
- * same beat — SURFACE-PHILOSOPHY §1, "compute agreement; do not remember it".
+ * Nothing here renders and nothing here talks to a host. Everything is derived from ONE
+ * `PageWorld` plus the page's `Draft`, so a verb that changes the draft visibly changes every
+ * reading in the same beat — SURFACE-PHILOSOPHY §1, "compute agreement; do not remember it".
  *
- * THE FIXTURE LANE IS DECLARED, NOT A FALLBACK. This surface reads `WORLD` and only `WORLD`,
- * and says so with a dashed seam chip in its header. The host lane is not disabled here; it does
- * not exist yet, and pretending otherwise is the one thing these surfaces may not do.
+ * THE WORLD IS A FACTORY ARGUMENT, NOT A MODULE CONSTANT (phase B, 2026-08-17). This layer used
+ * to read `world.ts` at module scope, which made the fixture the only thing the page could ever
+ * render. `buildPageWorld` now takes any `ProtoWorld` and returns everything those constants
+ * carried, so the surface has exactly two lanes and one derivation:
+ *
+ *   LIVE     — a real `family.json` open through `route:settings`, projected by `project.ts`.
+ *   FIXTURE  — `FIXTURE_WORLD`, the DECLARED no-host lane, wearing its dashed seam chip.
+ *
+ * Every helper below takes the world as its FIRST argument for the same reason: a helper that
+ * closed over a module constant would silently keep answering about the fixture.
  */
-import type { MasterTableState } from "#/components/master-table/model";
+import type { MasterTableState, VerdictTone } from "#/components/master-table/model";
 import {
   WORLD,
   boundParam,
   type GeomConstituent,
   type ProposalVerdict,
+  type ProtoLive,
   type ProtoLiveValue,
+  type ProtoParam,
+  type ProtoProposal,
+  type ProtoSpec,
+  type ProtoWorld,
 } from "#/family/world";
 
-// ── the fixture, read once ──────────────────────────────────────────────────────────────────────
+// ── the ONE world factory ───────────────────────────────────────────────────────────────────────
 
-export const TYPE_NAMES = Object.keys(WORLD.profile.types);
-/** Where a ghost row's ONE merged literal cell is drawn: the first type column. Its neighbours are
- * suppressed, which is as close to a colspan as MasterTable can get today. */
-export const MERGE_ANCHOR = TYPE_NAMES[0] ?? "";
-export const SPEC = WORLD.spec;
-export const LIVE = WORLD.live;
-/** The grounding link table is its own field, independent of proposals. A citation is a fact about
- * where a number came from; accepting or denying pea's reading does not erase it. */
-export const GROUNDING: Record<string, string[]> = WORLD.grounding ?? {};
-export const MISSING_IN_REVIT = new Set(LIVE?.missingParams ?? []);
+/** A constituent the profile describes in PROSE — the anatomy list's row, and the only reading of
+ * a constituent that a geometry-less profile can offer. */
+export interface ProseConstituent {
+  slug: string;
+  kind: "solid" | "connector";
+  text: string;
+  params: string[];
+}
 
-/** The structured constituents. Their SHAPE is fixture; only their values are drafted. */
-export const GEOM: GeomConstituent[] = WORLD.profile.geometry ?? [];
-export const GEOM_BY_SLUG = new Map(GEOM.map((part) => [part.slug, part]));
+/**
+ * Everything the page reads about the document's SHAPE — computed once per world, never per render.
+ * It carries exactly what the module constants used to carry, which is why threading it changed no
+ * reading: `world.typeNames` was `TYPE_NAMES`, `world.geomBySlug` was `GEOM_BY_SLUG`, and so on.
+ */
+export interface PageWorld {
+  /** The projection this world was built from — the page's only route back to raw fixture facts. */
+  source: ProtoWorld;
+  path: string;
+  familyName: string;
+  typeNames: string[];
+  /** Where a ghost row's ONE merged literal cell is drawn: the first type column. Its neighbours
+   * are suppressed, which is as close to a colspan as MasterTable can get today. */
+  mergeAnchor: string;
+  spec: ProtoSpec | null;
+  live: ProtoLive | null;
+  /** The grounding link table, independent of proposals. A citation is a fact about where a number
+   * came from; accepting or denying pea's reading does not erase it. */
+  grounding: Record<string, string[]>;
+  missingInRevit: Set<string>;
+  /** The structured constituents. Their SHAPE is the document's; only their values are drafted. */
+  geom: GeomConstituent[];
+  geomBySlug: Map<string, GeomConstituent>;
+  params: ProtoParam[];
+  paramRows: PRow[];
+  liveOnlyRows: PRow[];
+  constituents: ProseConstituent[];
+  proposals: ProtoProposal[];
+  profileDirty: boolean;
+}
+
+export function buildPageWorld(source: ProtoWorld): PageWorld {
+  const params = source.profile.params;
+  const geom = source.profile.geometry ?? [];
+  const live = source.live;
+  /** Which parameters a constituent consumes — read out of the profile's own description text, so
+   * the link is the document's claim rather than a hand-authored map. */
+  const paramsOf = (description: string) =>
+    params.map((param) => param.name).filter((name) => description.includes(name));
+  const typeNames = Object.keys(source.profile.types);
+  return {
+    source,
+    path: source.profile.path,
+    familyName: source.profile.familyName,
+    typeNames,
+    mergeAnchor: typeNames[0] ?? "",
+    spec: source.spec,
+    live,
+    grounding: source.grounding ?? {},
+    missingInRevit: new Set(live?.missingParams ?? []),
+    geom,
+    geomBySlug: new Map(geom.map((part) => [part.slug, part])),
+    params,
+    paramRows: params.map((param) => ({
+      key: param.name,
+      name: param.name,
+      dataType: param.dataType,
+      group: param.group ?? "other",
+      isInstance: param.isInstance ?? false,
+      kind: "profile" as const,
+    })),
+    liveOnlyRows: (live?.extraParams ?? []).map((name) => ({
+      key: `live:${name}`,
+      name,
+      dataType: "unknown",
+      group: "live only",
+      isInstance: false,
+      kind: "live-only" as const,
+    })),
+    constituents: [
+      ...Object.entries(source.profile.solids).map(([slug, text]) => ({
+        slug,
+        kind: "solid" as const,
+        text,
+        params: paramsOf(text),
+      })),
+      ...Object.entries(source.profile.connectors).map(([slug, text]) => ({
+        slug,
+        kind: "connector" as const,
+        text,
+        params: paramsOf(text),
+      })),
+    ],
+    proposals: source.proposals,
+    profileDirty: source.profileDirty ?? false,
+  };
+}
+
+/** THE DECLARED FIXTURE LANE. Built once, because `world.ts` never changes at runtime — the page
+ * renders this when no family document is open, and says so with its dashed seam chip. */
+export const FIXTURE_WORLD: PageWorld = buildPageWorld(WORLD);
 
 /** "core-bore" + "stub.depth" → "Core Bore Stub Depth". The name a new parameter INHERITS from the
  * property it was lifted out of — a promoted literal should arrive already saying where it came
@@ -89,17 +187,17 @@ export const MARK_TITLE: Record<Agreement, string> = {
  * this vocabulary allowed on `--r-alarm`; every other word is either a gap in what the profile
  * claims (caution) or a fact with no urgency (the ink ladder).
  *
- * `derived` deliberately spends NO colour: the language has no role for "a formula computed this"
- * (DESIGN-AUDIT #3), and the `ƒ` glyph plus italic already carry it. Borrowing `--r-done` — which
+ * `derived` deliberately spends NO colour: the language has no role for "a formula computed
+ * this", and the `ƒ` glyph plus italic already carry it. Borrowing `--r-done` — which
  * is what the retired `--st-derived` shim resolved to — would have claimed the value LANDED.
  */
-export const AGREEMENT_TONE: Record<Agreement, string> = {
-  agree: "var(--r-ink-2)",
-  drift: "var(--r-alarm)",
-  derived: "var(--r-ink-2)",
-  "only-profile": "var(--r-caution)",
-  "only-live": "var(--r-caution)",
-  unread: "var(--r-ink-mute)",
+export const AGREEMENT_TONE: Record<Agreement, VerdictTone> = {
+  agree: "ink",
+  drift: "alarm",
+  derived: "ink",
+  "only-profile": "caution",
+  "only-live": "caution",
+  unread: "mute",
 };
 
 /** Worst-first, so a row's one-word state is the thing it is most asking of you. */
@@ -120,8 +218,8 @@ export const AGREEMENT_RANK: Agreement[] = [
  * to accept or deny. It is deliberately NOT "denied": denying is a judgement about pea's reading,
  * superseding is the user simply having gone first.
  *
- * The cell grammar cannot draw this state at all (SURFACE-PHILOSOPHY §3 owes a specimen for it;
- * DESIGN-AUDIT #7), so it lives only on the sidebar card, muted.
+ * The cell grammar cannot draw this state at all (SURFACE-PHILOSOPHY §3 owes a specimen for it),
+ * so it lives only on the sidebar card, muted.
  */
 export type CellVerdict = ProposalVerdict | "superseded";
 
@@ -147,14 +245,14 @@ export interface Draft {
   dirty: boolean;
 }
 
-export function initialDraft(): Draft {
+export function initialDraft(world: PageWorld): Draft {
   return {
-    authored: Object.fromEntries(WORLD.profile.params.map((param) => [param.name, param.value])),
-    types: structuredClone(WORLD.profile.types),
-    live: structuredClone(LIVE?.values ?? {}),
+    authored: Object.fromEntries(world.params.map((param) => [param.name, param.value])),
+    types: structuredClone(world.source.profile.types),
+    live: structuredClone(world.live?.values ?? {}),
     verdicts: {},
     geom: Object.fromEntries(
-      GEOM.map((part) => [
+      world.geom.map((part) => [
         part.slug,
         {
           dims: Object.fromEntries(part.dims.map((dim) => [dim.property, dim.binding])),
@@ -163,7 +261,7 @@ export function initialDraft(): Draft {
       ]),
     ),
     newParams: [],
-    dirty: WORLD.profileDirty ?? false,
+    dirty: world.profileDirty,
   };
 }
 
@@ -213,22 +311,25 @@ export function savedFrom(draft: Draft): SavedProfile {
   };
 }
 
-/** The binding a dim carries right now — drafted if the page has touched it, fixture otherwise. */
-export function bindingOf(draft: Draft, slug: string, property: string): string {
+/** The binding a dim carries right now — drafted if the page has touched it, document otherwise. */
+export function bindingOf(world: PageWorld, draft: Draft, slug: string, property: string): string {
   return (
     draft.geom[slug]?.dims[property] ??
-    GEOM_BY_SLUG.get(slug)?.dims.find((dim) => dim.property === property)?.binding ??
+    world.geomBySlug.get(slug)?.dims.find((dim) => dim.property === property)?.binding ??
     ""
   );
 }
 
 /** paramName → every constituent.property it drives. Several dims may join on one parameter, and
  * that JOIN is the fact worth surfacing: editing the row moves all of them at once. */
-export function consumersOf(draft: Draft): Map<string, { slug: string; property: string }[]> {
+export function consumersOf(
+  world: PageWorld,
+  draft: Draft,
+): Map<string, { slug: string; property: string }[]> {
   const map = new Map<string, { slug: string; property: string }[]>();
-  for (const part of GEOM) {
+  for (const part of world.geom) {
     for (const dim of part.dims) {
-      const name = boundParam(bindingOf(draft, part.slug, dim.property));
+      const name = boundParam(bindingOf(world, draft, part.slug, dim.property));
       if (name == null) continue;
       const list = map.get(name) ?? [];
       list.push({ slug: part.slug, property: dim.property });
@@ -266,24 +367,6 @@ export interface PRow {
   property?: string;
 }
 
-export const PARAM_ROWS: PRow[] = WORLD.profile.params.map((param) => ({
-  key: param.name,
-  name: param.name,
-  dataType: param.dataType,
-  group: param.group ?? "other",
-  isInstance: param.isInstance ?? false,
-  kind: "profile" as const,
-}));
-
-export const LIVE_ONLY_ROWS: PRow[] = (LIVE?.extraParams ?? []).map((name) => ({
-  key: `live:${name}`,
-  name,
-  dataType: "unknown",
-  group: "live only",
-  isInstance: false,
-  kind: "live-only" as const,
-}));
-
 /**
  * THE GHOST ROWS: every bindable dim no parameter drives, in constituent order, at the BOTTOM.
  *
@@ -291,11 +374,11 @@ export const LIVE_ONLY_ROWS: PRow[] = (LIVE?.extraParams ?? []).map((name) => ({
  * which is the whole visible payoff of the verb. The bottom of the table is therefore always
  * exactly "the numbers in this family that nothing can reach", and it empties as you work.
  */
-export function ghostRows(draft: Draft): PRow[] {
+export function ghostRows(world: PageWorld, draft: Draft): PRow[] {
   const rows: PRow[] = [];
-  for (const part of GEOM) {
+  for (const part of world.geom) {
     for (const dim of part.dims) {
-      if (boundParam(bindingOf(draft, part.slug, dim.property)) != null) continue;
+      if (boundParam(bindingOf(world, draft, part.slug, dim.property)) != null) continue;
       rows.push({
         key: `geom:${part.slug}.${dim.property}`,
         name: `${part.slug}.${dim.property}`,
@@ -313,7 +396,12 @@ export function ghostRows(draft: Draft): PRow[] {
 
 /** Every verdict is COMPUTED from the two substrates, never remembered — so an edit visibly
  * creates the same drift that Revit moving underneath would. */
-export function agreementOf(draft: Draft, row: PRow, typeName: string): Agreement {
+export function agreementOf(
+  world: PageWorld,
+  draft: Draft,
+  row: PRow,
+  typeName: string,
+): Agreement {
   // A ghost is a literal in the geometry: Revit's family HAS this number, but no read reports it
   // as a parameter because it is not one. "unread" is the honest state — not agreement.
   if (row.kind === "ghost") return "unread";
@@ -321,13 +409,13 @@ export function agreementOf(draft: Draft, row: PRow, typeName: string): Agreemen
   const authored = draft.authored[row.name] ?? "";
   if (isFormula(authored)) return "derived";
   const entry = draft.live[row.name]?.[typeName];
-  if (!entry) return MISSING_IN_REVIT.has(row.name) ? "only-profile" : "unread";
+  if (!entry) return world.missingInRevit.has(row.name) ? "only-profile" : "unread";
   if (entry.readOnly) return "derived";
   return entry.value === effective(draft, row.name, typeName) ? "agree" : "drift";
 }
 
-export function rowAgreement(draft: Draft, row: PRow): Agreement {
-  const seen = new Set(TYPE_NAMES.map((typeName) => agreementOf(draft, row, typeName)));
+export function rowAgreement(world: PageWorld, draft: Draft, row: PRow): Agreement {
+  const seen = new Set(world.typeNames.map((typeName) => agreementOf(world, draft, row, typeName)));
   return AGREEMENT_RANK.find((state) => seen.has(state)) ?? "agree";
 }
 
@@ -338,8 +426,13 @@ export function rowAgreement(draft: Draft, row: PRow): Agreement {
 // question of the same coordinates and renders in the same box.
 
 /** What the staged document resolves to here — a ghost's literal, or the type's effective value. */
-export function draftValueAt(draft: Draft, row: PRow, typeName: string): string | null {
-  if (row.kind === "ghost") return bindingOf(draft, row.slug ?? "", row.property ?? "");
+export function draftValueAt(
+  world: PageWorld,
+  draft: Draft,
+  row: PRow,
+  typeName: string,
+): string | null {
+  if (row.kind === "ghost") return bindingOf(world, draft, row.slug ?? "", row.property ?? "");
   if (row.kind === "live-only") return null;
   return effective(draft, row.name, typeName);
 }
@@ -356,6 +449,7 @@ export function savedValueAt(saved: SavedProfile, row: PRow, typeName: string): 
 
 /** true when saving would write something into this cell — including "the row is new". */
 export function isUnsavedAt(
+  world: PageWorld,
   draft: Draft,
   saved: SavedProfile,
   row: PRow,
@@ -363,7 +457,7 @@ export function isUnsavedAt(
 ): boolean {
   if (row.kind === "live-only") return false;
   const disk = savedValueAt(saved, row, typeName);
-  return disk === null || disk !== draftValueAt(draft, row, typeName);
+  return disk === null || disk !== draftValueAt(world, draft, row, typeName);
 }
 
 /**
@@ -400,34 +494,6 @@ export function inches(value: string | undefined): number | null {
   return match ? Number(match[0]) : null;
 }
 
-/** Which parameters a constituent consumes — read out of the profile's own description text,
- * so the link is the document's claim rather than a hand-authored map. */
-function paramsOf(description: string): string[] {
-  return WORLD.profile.params
-    .map((param) => param.name)
-    .filter((name) => description.includes(name));
-}
-
-export const CONSTITUENTS: {
-  slug: string;
-  kind: "solid" | "connector";
-  text: string;
-  params: string[];
-}[] = [
-  ...Object.entries(WORLD.profile.solids).map(([slug, text]) => ({
-    slug,
-    kind: "solid" as const,
-    text,
-    params: paramsOf(text),
-  })),
-  ...Object.entries(WORLD.profile.connectors).map(([slug, text]) => ({
-    slug,
-    kind: "connector" as const,
-    text,
-    params: paramsOf(text),
-  })),
-];
-
 /** ONE focus for the whole page: either a parameter or a constituent is lit, never both
  * independently. Everything else derives its highlight from this. */
 export type Focus = { kind: "param"; id: string } | { kind: "part"; id: string } | null;
@@ -438,17 +504,17 @@ export type Focus = { kind: "param"; id: string } | { kind: "part"; id: string }
  * moves. A dim that you rebind lights differently on the very next render, which is what makes
  * "bind" feel like it did something to the model rather than to a list.
  */
-export function paramsInFocus(focus: Focus, draft: Draft): Set<string> {
+export function paramsInFocus(world: PageWorld, focus: Focus, draft: Draft): Set<string> {
   if (!focus) return new Set();
   if (focus.kind === "param") return new Set([focus.id]);
-  const part = GEOM_BY_SLUG.get(focus.id);
+  const part = world.geomBySlug.get(focus.id);
   if (part) {
     const names = part.dims
-      .map((dim) => boundParam(bindingOf(draft, part.slug, dim.property)))
+      .map((dim) => boundParam(bindingOf(world, draft, part.slug, dim.property)))
       .filter((name): name is string => name != null);
     return new Set(names);
   }
-  return new Set(CONSTITUENTS.find((entry) => entry.slug === focus.id)?.params ?? []);
+  return new Set(world.constituents.find((entry) => entry.slug === focus.id)?.params ?? []);
 }
 
 export function partsInFocus(
@@ -469,11 +535,3 @@ export function hashOf(text: string): number {
   }
   return hash;
 }
-
-/**
- * THE LABELLED EMPTY, inline and consistent — "not started" is a state, not a zero
- * (SURFACE-PHILOSOPHY §1). `components/lang` has no `EmptyState` primitive and this pass did not
- * invent one; every empty on this surface wears these classes and carries a `title` saying what
- * would fill it. DESIGN-AUDIT #2 names the primitive that is owed.
- */
-export const EMPTY_CLASS = "tele text-[11px] italic text-[var(--r-ink-mute)]";
