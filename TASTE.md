@@ -66,3 +66,19 @@ improvement on ML15 looks good thought. that closing of the gap is exactly what 
 Metric agreement: board savedWork was flat (+0.0001) and blind to both the win and the miss —
 the promised "remaining double-line pairs" diagnostic is now owed BEFORE the coverage iteration
 lands, so the next A/B prices exactly what this verdict judged by eye.
+
+## 2026-08-21 — Loop 2 taste rulings (kaitpw, answered before Round 0)
+
+Asked after the overnight loop's SUMMARY left four FOR-kaitpw calls open. Answers, verbatim intent:
+
+- **#1 Flat savedWork can adopt.** A candidate with flat savedWork may adopt on an eyes ADOPT plus
+  a NAMED secondary number that moved: accepted double-line residue ft (r7 baseline 980.7). This
+  reopens parallel-on-ink as a quality adoption; the three tombstones were metric-blind, not wrong
+  by eye (see 2026-08-17 above). Per-room honesty still holds — ML05 R02 style falls still reject.
+- **#3 Segment-wise frames for ML09 are in scope** as an overreach build: code, not a knob.
+  Whole-room second-frame retry was the no-op; per-segment-run frames are the untried mechanism.
+- **#4 No blanket zone-edge non-vacuity rule.** Keep the 4 r7 rooms (4,581 sf, incl. Main 10,
+  which the ledger already blessed). Vacuity is a flag a human sees, not a gate.
+- Run shape: 3 builders per round, 60 min timebox, raster lane only (Revit stays at zero),
+  code-first — solver stage order, new stages, and the frame model are all fair game.
+  Gates and the honesty bar are not.
