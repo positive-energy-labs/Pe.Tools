@@ -29,10 +29,21 @@ $st = AgentStatus
 if ($st -in @('idle', 'done', 'blocked')) { "$Agent already settled: $st"; if ($st -eq 'blocked') { Hd agent read $Agent --lines 15 }; exit 0 }
 if ($st -eq 'missing') { Write-Warning "$Agent not found in session $Session"; exit 2 }
 
-# wait's own exit code is advisory; the re-read below owns the verdict
-Hd agent wait $Agent --until idle --until done --until blocked --timeout $TimeoutMs | Out-Null
-
+# wait's own exit code is advisory; the re-read below owns the verdict. Codex flickers to idle
+# for one tick while it waits on a background terminal (seen 2x on 2026-08-20), so a settled
+# verdict needs 3 consecutive settled reads 5 s apart; any `working` read re-enters the wait.
+$deadline = (Get-Date).AddMilliseconds($TimeoutMs)
+while ((Get-Date) -lt $deadline) {
+  $left = [int][math]::Max(1000, ($deadline - (Get-Date)).TotalMilliseconds)
+  Hd agent wait $Agent --until idle --until done --until blocked --timeout $left | Out-Null
+  $settled = $true
+  foreach ($i in 1..3) {
+    $st = AgentStatus
+    if ($st -notin @('idle', 'done', 'blocked')) { $settled = $false; break }
+    if ($i -lt 3) { Start-Sleep -Seconds 5 }
+  }
+  if ($settled) { "$Agent settled: $st"; if ($st -eq 'blocked') { Hd agent read $Agent --lines 15 }; exit 0 }
+}
 $st = AgentStatus
-if ($st -in @('idle', 'done', 'blocked')) { "$Agent settled: $st"; if ($st -eq 'blocked') { Hd agent read $Agent --lines 15 }; exit 0 }
 Write-Warning "$Agent still $st after ${TimeoutMs}ms"
 exit 1
