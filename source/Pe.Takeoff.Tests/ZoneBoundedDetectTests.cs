@@ -295,6 +295,14 @@ public sealed class ZoneBoundedDetectTests
             var prepared = profile.NoHabitableDomain
                 ? null
                 : TakeoffPolicy.PrepareDetection(snap, profile, _ => { });
+            PreparedLevelTakeoffDetection? additivePrepared = null;
+            if (!profile.NoHabitableDomain && profile.Options.AdditiveWhiteoutCandidateLane)
+            {
+                var additiveProfile = TakeoffPolicy.InferLevelProfile(snap);
+                ApplyKnobOverrides(additiveProfile.Options);
+                additiveProfile.Options.InkClusterWhiteoutCells = 0;
+                additivePrepared = TakeoffPolicy.PrepareDetection(snap, additiveProfile, _ => { });
+            }
             // Door-head seals are model-derived evidence, so the promotion oracle counts them;
             // wall-run and gap-close plugs stay heuristic and do not back a room's boundary.
             var distanceToInk = snap.EvidenceInkDistance(profile);
@@ -377,6 +385,33 @@ public sealed class ZoneBoundedDetectTests
                     result, zone, policy.Options, distanceToInk,
                     message => File.AppendAllText(progress, message + Environment.NewLine),
                     census, distanceToWallInk);
+                if (additivePrepared != null && promotion.Result.Rooms.Count > 0 && whiteoutCells > 0)
+                {
+                    var residualZone = new ZoneScope { Name = $"{zone.Name}/residual" };
+                    residualZone.Loops.AddRange(zone.Loops.Select(loop => loop.Select(point =>
+                        new[] { point[0], point[1] }).ToList()));
+                    foreach (var room in promotion.Result.Rooms)
+                    {
+                        residualZone.Loops.Add(room.Polygon.Select(point =>
+                            new[] { point[0], point[1] }).ToList());
+                        residualZone.Loops.AddRange(room.Holes.Select(hole => hole.Select(point =>
+                            new[] { point[0], point[1] }).ToList()));
+                    }
+                    var additiveRaw = additivePrepared.Detect(residualZone, _ => { });
+                    var additivePromotion = TakeoffPromotion.PromoteZone(
+                        additiveRaw, residualZone, policy.Options, distanceToInk,
+                        message => File.AppendAllText(progress, "[additive] " + message + Environment.NewLine),
+                        distanceToWallInk: distanceToWallInk);
+                    try
+                    {
+                        promotion = TakeoffPromotion.AddResidual(
+                            promotion, additivePromotion, zone, distanceToInk);
+                    }
+                    catch (InvalidOperationException exception)
+                    {
+                        failures.Add($"{zone.Name}: additive residual rejected: {exception.Message}");
+                    }
+                }
                 var triage = promotion.Diagnostics.Triage ?? ZoneTriageVerdict.Solve;
                 long promotionMilliseconds = timer.ElapsedMilliseconds;
                 // Append, not overwrite: the promotion stage log written above this point is the

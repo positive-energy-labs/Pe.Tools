@@ -113,6 +113,84 @@ public static class TakeoffPromotion
         return Close(state);
     }
 
+    /// <summary>
+    /// Adds a separately promoted residual partition without sending the incumbent rooms back
+    /// through any stage. The residual zone has the incumbent polygons as holes, so overlap or an
+    /// open seam is a binding-law failure rather than a reason to move either partition.
+    /// </summary>
+    public static ZonePromotionResult AddResidual(
+        ZonePromotionResult incumbent,
+        ZonePromotionResult residual,
+        ZoneScope wholeZone,
+        Func<double, double, double> distanceToInk)
+    {
+        if (incumbent == null) throw new ArgumentNullException(nameof(incumbent));
+        if (residual == null) throw new ArgumentNullException(nameof(residual));
+        if (wholeZone == null) throw new ArgumentNullException(nameof(wholeZone));
+        if (distanceToInk == null) throw new ArgumentNullException(nameof(distanceToInk));
+
+        var result = Clone(incumbent.Result);
+        result.Residues = Clone(residual.Result).Residues;
+        var usedIds = result.Rooms.Select(room => room.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var room in residual.Result.Rooms)
+        {
+            var addition = Clone(room);
+            string stem = $"A-{addition.Id}";
+            addition.Id = stem;
+            for (int suffix = 2; !usedIds.Add(addition.Id); suffix++) addition.Id = $"{stem}-{suffix}";
+            result.Rooms.Add(addition);
+        }
+
+        var zoneGeometry = wholeZone.ExactGeometry();
+        double acceptedSqft = result.Rooms.Sum(room => room.RawSqft);
+        double heldSqft = result.Residues.Where(item => item.Reason == ResidueReason.Rejected).Sum(item => item.RawSqft);
+        double voidSqft = result.Residues.Where(item => item.Reason is ResidueReason.Border or ResidueReason.Crumb).Sum(item => item.RawSqft);
+        double excludedSqft = result.Residues.Where(item => item.Reason == ResidueReason.Excluded).Sum(item => item.RawSqft);
+        double closureError = Math.Abs(acceptedSqft + heldSqft + voidSqft + excludedSqft - zoneGeometry.Area);
+        bool strict = TakeoffEditability.Evaluate(ToLevel(result, result.Rooms)).IsStrictlyEditable;
+        bool contained = result.Rooms.All(room => PolygonDifference(ToPolygon(room), zoneGeometry).Area <= Epsilon);
+        if (!strict || !contained || closureError > AccountingEpsilonSqft)
+            throw new InvalidOperationException(
+                $"additive promotion violated a binding law: strict={strict} contained={contained} closure={closureError:F9}sf");
+
+        result.TotalSqft = acceptedSqft;
+        result.DomainSqft = zoneGeometry.Area;
+        result.ClaimedWallSqft = 0;
+        result.ExcludedResidueSqft = excludedSqft;
+        result.DispositionsResolved = true;
+        var rejections = incumbent.Diagnostics.Rejections
+            .Concat(residual.Diagnostics.Rejections.Select(item =>
+                new KeyValuePair<string, int>($"additive/{item.Key}", item.Value)))
+            .GroupBy(item => item.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Value), StringComparer.Ordinal);
+        var details = incumbent.Diagnostics.RejectionDetails
+            .Concat(residual.Diagnostics.RejectionDetails.Select(item =>
+                new KeyValuePair<string, string>($"additive/{item.Key}", item.Value)))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+        return new ZonePromotionResult(result, new ZonePromotionDiagnostics(
+            incumbent.Diagnostics.SourceRooms + residual.Diagnostics.SourceRooms,
+            incumbent.Diagnostics.SharedNetworkStrictRooms + residual.Diagnostics.SharedNetworkStrictRooms,
+            result.Rooms.Count,
+            result.Residues.Count(item => item.Reason == ResidueReason.Rejected),
+            incumbent.Diagnostics.TinyMerged + residual.Diagnostics.TinyMerged,
+            zoneGeometry.Area,
+            zoneGeometry.Area,
+            acceptedSqft,
+            heldSqft,
+            voidSqft,
+            excludedSqft,
+            TakeoffEvidenceFidelity.BoundarySupportFraction(result.Rooms, distanceToInk),
+            closureError,
+            strict,
+            contained,
+            incumbent.Diagnostics.SharedEdgePairs + residual.Diagnostics.SharedEdgePairs,
+            incumbent.Diagnostics.LostSharedEdgePairs + residual.Diagnostics.LostSharedEdgePairs,
+            rejections,
+            details,
+            incumbent.Diagnostics.Census,
+            incumbent.Diagnostics.Triage));
+    }
+
     /// <summary>Everything one promotion run reads and mutates as it walks <see cref="Stages"/>.</summary>
     private sealed class PromotionState(
         TakeoffResult source,
