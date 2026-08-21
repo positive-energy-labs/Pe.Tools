@@ -118,15 +118,17 @@ read `doc current`.
   port breaks launch.jsons and hardcoded ports). Plain `vp run @pe/web#dev` is fine when no host
   contact is needed. The service file is the URL authority (`%LOCALAPPDATA%\Positive
   Energy\Pe.Tools\state\service\<name>.json`, schema v3 with `health`; `sessionId` is written
-  only after a bridge connects and is absent until then, so a `legBecause: lane:dev` leg is a
-  lane match, not proof). `session status` shows the host as a `leg` of its session (`up|down`,
+  once the product's bridge registers, so until then a `legBecause: lane:dev` leg is a lane
+  match, not proof). A stale SDK sample in `Addins\{year}` (another product's older
+  `Pe.Revit.Loader.dll`) wins the loader identity for the whole process — `session logs` shows
+  `LoaderStartupFailed` and the first op kills the bridge; `install list` names the culprit. `session status` shows the host as a `leg` of its session (`up|down`,
   `how: health|tcp|pid`, `legBecause`). Never assume 5180. A session start through the route can
   spawn a competing host that evicts this pane and `node --watch` does not come back without a
   file change — re-run the pane (dies when: one owner per service name, host ledger).
 - The host relays session lifecycle for the browser at `GET /sessions` and `POST /sessions
   {action: start|stop|restart|converge, id?, year?, doc?}` — the SDK envelope passed through
-  untouched. On a dev-lane host a bare `start` injects this checkout's `--project` (dev lane),
-  unlike the bare CLI verb (installed lane).
+  untouched. `start` takes `lane: installed` (default, the bare CLI meaning) or `dev` (this
+  checkout's Pe.App; 400 on a host with no checkout).
 - **`vp check` is a gate, not a poll**: `vp check --fix <targets>` once, then `vp check <targets>`
   once. Never loop it. Separate formatter noise from type/lint output when diagnosing.
 - Typegen is two lanes: `codegen`/`codegen:check` are OFFLINE projections from `pe-dev ops-catalog`
