@@ -14,6 +14,7 @@ from PIL import Image
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "review-takeoff.py"
 ZONE_SCRIPT = HERE / "render-zone-promotion.py"
+COMPARE_SCRIPT = HERE / "compare-zone-runs.py"
 
 
 def digest(path):
@@ -40,6 +41,44 @@ def write_replay_bin(path, w, h, minx, miny, cell, bits, level="Test"):
 
 
 class ReviewTakeoffTests(unittest.TestCase):
+    def test_zone_run_compare_panels_boundary_only_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+
+            def write_run(name, points):
+                run = root / name
+                (run / "input").mkdir(parents=True)
+                (run / "zones").mkdir()
+                write_replay_bin(run / "input" / "replay_Test.bin", 4, 4, 0, 0, 1,
+                                 bytes([0xFF, 0xFF]))
+                (run / "zones" / "rooms_Test.tsv").write_text(
+                    "ROOM\tR01\t4\t8\t1\t1\t9\n"
+                    f"POLY\tR01\touter\t{points}\n", encoding="utf-8")
+                zone = {
+                    "Level": "Test", "Zone": "Test#00", "MinX": 0, "MinY": 0,
+                    "MaxX": 4, "MaxY": 4, "Tsv": "zones/rooms_Test.tsv",
+                    "ZoneLoops": [[[0, 0], [4, 0], [4, 4], [0, 4]]],
+                    "Ink": "input/ink_Test.bin", "RawRooms": 1, "AcceptedRooms": 1,
+                    "AcceptedSqft": 4, "HeldRooms": 0, "HeldSqft": 0,
+                    "ExcludedSqft": 12, "ZoneSqft": 16, "SharedEdgePairs": 0,
+                    "LostSharedEdgePairs": 0, "InkBackedEdgeFraction": 1,
+                    "ClosureErrorSqft": 0,
+                }
+                report = run / "report.json"
+                report.write_text(json.dumps({"Zones": [zone]}), encoding="utf-8")
+                return report
+
+            before = write_run("before", "0;0|2;0|2;2|0;2")
+            after = write_run("after", "1;0|3;0|3;2|1;2")
+            output = root / "ab"
+            result = subprocess.run([
+                sys.executable, str(COMPARE_SCRIPT), str(before), str(after),
+                "--out-dir", str(output),
+            ], check=True, cwd=HERE, capture_output=True, text=True)
+
+            self.assertIn("compare.md + 1 a/b panels", result.stdout)
+            self.assertEqual(len(list(output.glob("*_ab.png"))), 1)
+
     def test_zone_promotion_renderer_crops_registered_disposition(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

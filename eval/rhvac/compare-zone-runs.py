@@ -3,7 +3,7 @@
     python eval/rhvac/compare-zone-runs.py A/report.json B/report.json --out-dir compare-out
 
 This is a report, not a gate: it always exits 0. With --out-dir it writes compare.md and
-side-by-side A/B panels for the zones whose accepted rooms or accepted sf moved materially.
+side-by-side A/B panels for zones whose accepted count, area, or boundary geometry changed.
 """
 
 import argparse
@@ -45,6 +45,10 @@ def moved(before, after):
     if not before:
         return True
     return abs(after - before) / abs(before) > MATERIAL
+
+
+def accepted_boundaries(root, zone):
+    return rzp.overlay.load_disposition_tsv(root / zone["Tsv"])[1] if zone else {}
 
 
 def zone_row(key, left, right):
@@ -155,7 +159,9 @@ def main():
         left, right = zones_a.get(key), zones_b.get(key)
         if not (moved((left or {}).get("AcceptedRooms", 0), (right or {}).get("AcceptedRooms", 0))
                 or moved((left or {}).get("AcceptedSqft", 0.0),
-                         (right or {}).get("AcceptedSqft", 0.0))):
+                         (right or {}).get("AcceptedSqft", 0.0))
+                or accepted_boundaries(path_a.parent, left)
+                != accepted_boundaries(path_b.parent, right)):
             continue
         panel_a = ab_panel(path_a.parent, left, "A")
         panel_b = ab_panel(path_b.parent, right, "B")
