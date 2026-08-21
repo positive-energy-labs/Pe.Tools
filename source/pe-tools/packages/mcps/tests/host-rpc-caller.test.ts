@@ -105,6 +105,24 @@ test("operation discovery preserves the explicit session selector", async () => 
   }
 });
 
+test("a transport failure names the URL it tried, on both the catalog and the call wire", async () => {
+  // `pea host operations search` against a dead/wrong-lane host used to print a bare
+  // `fetch failed`: no port, no path, indistinguishable from having resolved the wrong host.
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new TypeError("fetch failed");
+  };
+  try {
+    const client = new HostRpcCaller({ hostBaseUrl: "http://127.0.0.1:53999" });
+    await expect(client.searchOperations({ query: "catalog" })).rejects.toThrow(
+      "GET http://127.0.0.1:53999/ops",
+    );
+    await expect(client.call("host.status")).rejects.toThrow("POST http://127.0.0.1:53999/call");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("derives capability map from the op catalog", async () => {
   const result = await new HostRpcCaller({ catalogOverride: catalog }).searchOperations({
     projection: "capability-map",

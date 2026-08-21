@@ -1,7 +1,7 @@
 import { normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { hostServiceName } from "@pe/host-contracts/service-identity";
+import { devHostSourceDir, hostServiceName } from "@pe/host-contracts/service-identity";
 
 export { productRoot } from "@pe/host-contracts/service-identity";
 
@@ -49,8 +49,20 @@ function resolveHostLane(): HostLane {
   );
 }
 
+/**
+ * The dev host's identity input, mapped through the ONE derivation every deriver shares —
+ * `devHostSourceDir` (host-contracts/service-identity.ts), mirrored in C# by
+ * `ProductDevelopmentRuntimeLayout.ResolveSourceHostWorkingDirectory`. A spawn-plumbing env var
+ * wins (a supervisor telling the child what it just spawned); otherwise this module's own location
+ * says which checkout the host is running from. Both go through the same mapping, so the host and
+ * its clients (`pea --host dev`, `TsHostLauncher`) hash the same string or none of them do.
+ */
 function resolveSourceRoot(): string | null {
-  if (hostOwnershipEnvironmentSource()) return hostOwnershipEnvironmentSource();
+  const candidate = hostOwnershipEnvironmentSource() ?? sourceRootFromModule();
+  return candidate ? (devHostSourceDir(candidate) ?? candidate) : null;
+}
+
+function sourceRootFromModule(): string | null {
   const modulePath = normalize(fileURLToPath(import.meta.url));
   const marker = `${normalize("apps/host/src").toLowerCase()}\\`;
   const index = modulePath.toLowerCase().indexOf(marker);

@@ -152,8 +152,12 @@ export class PeaCliCommands {
       },
       run: async (ctx) => {
         // Same host resolution as `call` (service file, never the 5180 default): a bare
-        // `new HostRpcCaller()` was the `fetch failed` with no URL seen 2026-08-19/20.
-        const results = await this.createHostRpcCaller(ctx.values).searchOperations({
+        // `new HostRpcCaller()` was the `fetch failed` with no URL seen 2026-08-19/20. The URL
+        // is disclosed BEFORE the fetch, so an empty catalog and a wrong-lane resolution are
+        // told apart by reading the output rather than by guessing.
+        const client = this.createHostRpcCaller(ctx.values);
+        console.log(`host ${client.hostBaseUrl}`);
+        const results = await client.searchOperations({
           query: firstNonBlank(ctx.values.query),
           domain: firstNonBlank(ctx.values.domain),
           intent: parseOperationIntent(ctx.values.intent),
