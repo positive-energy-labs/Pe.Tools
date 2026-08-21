@@ -1,18 +1,19 @@
 ---
 name: delegate
-description: Use to conserve token limits, work faster, or perform unrelated background tasks. Use especially for prototyping, sprawling requests, or long-haul sessions.
+description: Use when context hygiene and size is important. Subagent delegation keeps context clean, conserves token limits, and enables parallel work. Use for long sessions, sprawling requests, prototyping, etc. 
+argument-hint: Session is huge|big|medium? What needs a second opinion? What work is best kept out of context (starting line research, one-offs, unimportant work, etc.)? 
 ---
 
 # Delegation
 
-Optimize work by delegating to cheaper subagents. First, compress the problem space and anchor yourself. The user is consulting *you*, but not everything needs your eyes or hand. Judgement and liability are yours. Then, if any of the following feels true then delegate: 
+Optimize work by delegating to cheaper subagents. First, compress the problem space and anchor yourself. The user is consulting *you*, but not everything needs your eyes or hand. Judgement and liability are yours. Then, if any of the following feels true, delegate: 
 - "requires 20+ tool calls?"
 - "is there an unambiguous goal?"
 - "will it interrupt my train of thought?"
 - "is a fresh perspective needed?"
 - "will parallel workstreams be faster AND workstreams dont overlap?"
 
-**Declare posture periodically before fan-outs.** State in-chat the posture you are assuming. Optimize for the problem size and remember that limits change by hour and week.
+**Declare posture before fan-out.** Show sequencing, with you included, as a table of task, model+think, and why. Be adaptable to the work and concious of what needs you and what doesn't. Huge sessions need you as only an orchestrator. The smaller the session, or the lower the limits, the more work you should do.
 
 **Run subagents in Herdr**, the `execute` skill owns the mechanics (session, panes, prompts, waits, wake-on-done). This skill owns who/when/what: model choice, mission shape, and work partitioning. A user interrupt kills harness subagents but not Herdr agents, one more reason the harness Agent tool is the exception, not the default. After any interruption, never assert liveness, check, then relaunch (or explicitly declare the work lost) before continuing.
 
@@ -22,22 +23,24 @@ Optimize work by delegating to cheaper subagents. First, compress the problem sp
 
 ## Model Attributes
 
-> Cost: Price per task.
+> **Cost:** Price per task.
 >
-> Taste: Good "intuition", opinions, pretty code, UI/UX, architecture, and decisions.
+> **Taste:** Good "intuition", opinions, pretty code, UI/UX, architecture, and decisions.
 >
-> Intelligence: How likely is full marks on a big and complicated, but unambiguous task? On long-hauls, can they resist derailments and stay on task?
+> **Intelligence:** How likely is full marks on a big and complicated, but bounded and/or specified task? On long-hauls, can they resist derailments and stay on task?
+> - **Bounded:** The job has a supplied edge or stop condition.
+> - **Specified:** The job’s important choices are supplied.
 
 | Model | Cost | Taste | Intelligence | Use For | Usage Notes |
 |--|--|--|--|--|--|
-| Fable 5 | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate to sparingly, only for unbounded work and requests that require an opinion | low or medium thinking only. Rarely in parallel.
-| Opus 5 | 6 | 6 | 4 | Most on the ground work, task must be bounded | medium or high thinking, Opus readily overdoes and derails, especially at high think and above.
-| Codex (GPT-5.6) | 2 | 4 | 8 | Foot soldier, brute force, long slogs, and compile smashing. Use when the goal is quantifiable AND all implicit is explicable. | `codex exec` handles model and thinking level (5.6 high). 5.6 does only what you ask, both a blessing and a curse. It has no "intuition" but the job will always get done.
+| Fable 5 | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate to sparingly, only for unbounded AND unspecified work. Or requests for important design opinion. | Low or medium thinking only. Never in parallel. |
+| Opus 5 | 6 | 6 | 4 | Most initial implementations. The task must be bounded and extra work or review forbidden. | Medium or high thinking. Opus readily overdoes and derails, especially at high thinking and above. |
+| Codex (GPT-5.6) | 2 | 4 | 8 | Migration foot soldier, brute force, long slogs, compile smashing, etc. Use when the goal is quantifiable AND important choices can be specified. | Codex TOML handles model + thinking (5.6 high). 5.6 takes you at face value with no interpretation. A blessing and a curse. It’s short on "intuition," *but* the job will always get done. **Amazing for swarms** |
 
 ## Tips
-- Revive *recently finished* agents to prevent repeated work and avoid the lossiness of playing Telephone. May also be cheaper if within token cache TTL. In Herdr this is just another prompt to the same settled agent.
+- Reuse *recently* finished agents to avoid repeated work and the lossiness of playing Telephone. In Herdr this is just another prompt to the same settled agent.
 - Worktrees for parallel/experimental work: creation rules live in the `execute` skill (CLI-created siblings, never nested).
-- For parallelism, chunk workstreams by what they touch. Fine on disjoint file surfaces; consider serializing when both touch the same files, read the same base, or produce the same artifacts for feedback.
+- Use different models/providers for different perspectives. Anything below GPT-5.6 Sol and Opus 5 is fair game.
 - If all subagents need the same base, then provide it to them. ie do the preliminary research, scaffold or make the fixture, etc. 
 - Delegation surfaces systemic signals digestable, dont let them go. Alarm bells should ring when the tasks complexity or length exceeded expectations. Something should be fixed. Systemic concerns surface to user before approval.
 - Instrument-first missions ("census before fix; the census is deliverable #1 even if nothing else lands") beat fix-first missions every time.
