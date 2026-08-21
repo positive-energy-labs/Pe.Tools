@@ -111,6 +111,28 @@ internal static class FrameLocalProjector
         TakeoffResult source, FrameLocalKnobs knobs, Geometry? declaredZone = null) =>
         Project(source, knobs, allowLocalRetry: true, declaredZone);
 
+    internal static Geometry CanonicalRail(Geometry zone, FrameLocalKnobs knobs)
+    {
+        var reference = DeStaircase(zone, knobs.DeStaircaseFt);
+        if (reference is not Polygon polygon) return reference;
+        var label = polygon.InteriorPoint.Coordinate;
+        var room = new RoomResult {
+            Id = "ZONE-RAIL",
+            RawSqft = polygon.Area,
+            PerimeterFt = polygon.Length,
+            LabelX = label.X,
+            LabelY = label.Y,
+            Polygon = Coordinates(polygon.ExteriorRing, counterClockwise: true),
+            Holes = Enumerable.Range(0, polygon.NumInteriorRings)
+                .Select(index => Coordinates(polygon.GetInteriorRingN(index), counterClockwise: false))
+                .ToList(),
+        };
+        var source = new TakeoffResult { Rooms = [room], DomainSqft = polygon.Area };
+        var projected = Project(source, knobs, allowLocalRetry: false, reference)
+            .Accepted.Rooms.SingleOrDefault();
+        return projected == null ? reference : ToSourceRoom(projected).Geometry;
+    }
+
     private static FrameLocalProjectionResult Project(
         TakeoffResult source, FrameLocalKnobs knobs, bool allowLocalRetry,
         Geometry? declaredZone = null)

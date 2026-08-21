@@ -62,6 +62,9 @@ public static class TakeoffPromotion
     /// </summary>
     private static readonly (string Name, Action<PromotionState> Run)[] Stages = [
         ("zone-geometry", state => state.ZoneGeometry = state.Zone.ExactGeometry()),
+        ("canonical-zone-rail", state => state.CanonicalZoneRail =
+            FrameLocalProjector.CanonicalRail(
+                state.ZoneGeometry, FrameLocalKnobs.From(state.Options))),
         ("triage", RunTriage),
         ("shared-network", RunSharedNetwork),
         ("absorb-neighbor", RunAbsorbNeighbor),
@@ -133,6 +136,8 @@ public static class TakeoffPromotion
 
         internal readonly TakeoffResult Result = Clone(source);
         internal Geometry ZoneGeometry = null!;      // set by the zone-geometry stage
+        // Fit authority only. The raster ZoneGeometry remains the partition, scope, and accounting domain.
+        internal Geometry CanonicalZoneRail = null!;
         internal ZoneCensus? Census;                 // supplied by the caller; null = no triage
         internal ZoneTriageVerdict Triage = ZoneTriageVerdict.Solve;
 
@@ -451,7 +456,7 @@ public static class TakeoffPromotion
     {
         bool snapping = state.Options.ZoneSnapFt > 0;
         if ((!snapping && !state.Options.ZoneClipEnabled) || state.Result.Rooms.Count == 0) return;
-        var zoneBoundary = state.ZoneGeometry.Boundary;
+        var zoneBoundary = state.CanonicalZoneRail.Boundary;
         int snapped = 0, clipped = 0, jointClipped = 0, fellBack = 0, squared = 0, dissolved = 0;
         foreach (var room in state.Result.Rooms
                      .OrderBy(item => item.Id, StringComparer.Ordinal).ToList())
@@ -678,7 +683,7 @@ public static class TakeoffPromotion
             return false;
 
         double worst = TakeoffEvidenceFidelity.WorstUnbackedRunFt(
-            replacements[firstCandidate.Id], state.DistanceToInk, state.ZoneGeometry.Boundary,
+            replacements[firstCandidate.Id], state.DistanceToInk, state.CanonicalZoneRail.Boundary,
             state.Options.InkBackedZoneEdgeExemptFt);
         if (worst > JointClipMaximumUnbackedRunFt + Epsilon)
         {
@@ -1512,7 +1517,7 @@ public static class TakeoffPromotion
     private static void RunInkBacking(PromotionState state)
     {
         if (state.Options.InkBackedAcceptMin <= 0 || state.Result.Rooms.Count == 0) return;
-        var zoneBoundary = state.ZoneGeometry.Boundary;
+        var zoneBoundary = state.CanonicalZoneRail.Boundary;
         int held = 0;
         foreach (var room in state.Result.Rooms
                      .OrderBy(item => item.Id, StringComparer.Ordinal).ToList())

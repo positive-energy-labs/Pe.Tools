@@ -12,6 +12,25 @@ public sealed class FrameLocalProjectorTests
     private static readonly GeometryFactory Factory = new();
 
     [Test]
+    public void Canonical_zone_rail_removes_raster_steps_before_fit_authority()
+    {
+        var zone = ToPolygon(Room("zone", [
+            (0, 5), (1, 5), (1, 4), (2, 4), (2, 3), (3, 3), (3, 2), (4, 2), (4, 1), (5, 1),
+            (5, 0), (6, 0), (6, 1), (7, 1), (7, 2), (8, 2), (8, 3), (9, 3), (9, 4), (10, 4),
+            (10, 5), (9, 5), (9, 6), (8, 6), (8, 7), (7, 7), (7, 8), (6, 8), (6, 9), (5, 9),
+            (5, 10), (4, 10), (4, 9), (3, 9), (3, 8), (2, 8), (2, 7), (1, 7), (1, 6), (0, 6),
+        ], 5, 5));
+
+        var rail = FrameLocalProjector.CanonicalRail(zone, FrameLocalKnobs.Default);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(rail.NumPoints, Is.LessThan(zone.NumPoints));
+            Assert.That(rail.IsValid, Is.True);
+        });
+    }
+
+    [Test]
     public void Projects_rotated_adjacent_rooms_without_hardcoded_frames()
     {
         var left = Rect("left", 0, 0, 10, 8, 17, 4, 4);
