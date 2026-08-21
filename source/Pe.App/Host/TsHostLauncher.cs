@@ -34,8 +34,9 @@ internal static class TsHostLauncher {
                 // Say WHY we are about to spawn — the 2026-08-20 livelock was undiagnosable because
                 // this branch fell through silently against a healthy incumbent.
                 Serilog.Log.Information(
-                    "Dev host not shared: file={File} health={Health} match={Match} (want lane=dev exe={Exe} sourceRoot={Root})",
-                    file is null ? "missing" : DescribeFile(file),
+                    "Dev host not shared: file={File} at {Path} health={Health} match={Match} (want lane=dev exe={Exe} sourceRoot={Root})",
+                    file is null ? "unreadable-or-missing" : DescribeFile(file),
+                    ServiceFile.PathFor(appBase, serviceName),
                     file is not null && ProbeHealth(file.Port),
                     file is not null && MatchesDevTarget(file, runtime),
                     runtime.HostExecutablePath,

@@ -404,7 +404,13 @@ internal sealed class BridgeAgent : IDisposable {
     /// on top of the op the user actually asked for. A null handle simply means this op is not
     /// recoverable through `pe-revit op result`; every other behaviour is unchanged.
     /// </summary>
-    private static OpReceiptHandle? BeginOpReceipt(BridgeRequest request) {
+    // OPAQUE on purpose (object, never OpReceiptHandle) and never inlined: a type reference in
+    // HandleRequestAsync's state machine is resolved when THAT method is JIT-compiled, so a
+    // Pe.Revit.Loader identity without the receipt types (seen 2026-08-20: TypeLoadException on
+    // the first op, read loop dead, every product op 503) would take the whole request path down
+    // instead of just the receipt. Here the failure lands inside the catch below.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static object? BeginOpReceipt(BridgeRequest request) {
         try {
             using var process = Process.GetCurrentProcess();
             return OpReceipt.Begin(
@@ -427,10 +433,12 @@ internal sealed class BridgeAgent : IDisposable {
     /// payload goes to every receipts root first; `pe-revit op result` then answers with the real
     /// response instead of `response-missing`.
     /// </summary>
-    private static void CompleteOpReceipt(OpReceiptHandle? receipt, string verdict, string responseJson) {
-        if (receipt is null)
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static void CompleteOpReceipt(object? handle, string verdict, string responseJson) {
+        if (handle is null)
             return;
         try {
+            var receipt = (OpReceiptHandle)handle;
             string? written = null;
             foreach (var directory in SessionFiles.ReceiptDirectories()) {
                 var path = Path.Combine(directory, receipt.ResponseFileName);

@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json.Linq;
+using System.Linq;
 
 namespace Pe.Shared.HostContracts.Bridge;
 
@@ -24,6 +25,51 @@ public sealed record BridgeSessionDescriptor(
     string? BuildStamp,
     string? PayloadPath
 ) {
+    /// <summary>
+    /// Parses the SDK's schema-2 session RECEIPT (session.json: <c>lane</c>/<c>sessionId</c> plus
+    /// <c>override:{Assembly}</c> pointers) for the payload loaded from
+    /// <paramref name="payloadDirectory"/>. The receipt carries no <c>path</c> itself: the override
+    /// it names for this payload does (a build-emitted runtime descriptor). No override for any
+    /// product means every product runs its installed payload in-lane, so the receipt describes
+    /// this payload too. Returns null when the text is not a JSON object.
+    /// </summary>
+    public static BridgeSessionDescriptor? TryParseReceipt(string? json, string? payloadDirectory) {
+        var receipt = TryParse(json);
+        if (receipt is null || receipt.PayloadPath is not null)
+            return receipt;
+        JObject root;
+        try {
+            root = JObject.Parse(json!);
+        } catch (Newtonsoft.Json.JsonException) {
+            return receipt;
+        }
+        var overrides = root.Properties()
+            .Where(p => p.Name.StartsWith("override:", StringComparison.OrdinalIgnoreCase) && p.Value.Type == JTokenType.String)
+            .ToList();
+        foreach (var property in overrides) {
+            BridgeSessionDescriptor? over;
+            try {
+                var file = property.Value.Value<string>()!;
+                over = File.Exists(file) ? TryParse(File.ReadAllText(file)) : null;
+            } catch (Exception e) when (e is IOException or UnauthorizedAccessException) {
+                over = null;
+            }
+            if (over?.PayloadPath is null || !over.DescribesPayloadDirectory(payloadDirectory))
+                continue;
+            return new BridgeSessionDescriptor(
+                over.Assembly ?? property.Name.Substring("override:".Length),
+                receipt.Lane ?? over.Lane,
+                receipt.SessionId,
+                over.BuildStamp,
+                over.PayloadPath
+            );
+        }
+        // A receipt with no override at all: every product is on its installed payload, in-lane.
+        return overrides.Count == 0 && payloadDirectory is not null
+            ? receipt with { PayloadPath = payloadDirectory }
+            : receipt;
+    }
+
     /// <summary>Parses descriptor JSON. Returns null when the text is not a JSON object.</summary>
     public static BridgeSessionDescriptor? TryParse(string? json) {
         if (string.IsNullOrWhiteSpace(json))

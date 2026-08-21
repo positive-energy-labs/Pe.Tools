@@ -65,7 +65,7 @@ internal sealed record BridgeSessionIdentity(
             return null;
         }
 
-        var descriptor = BridgeSessionDescriptor.TryParse(descriptorJson);
+        var descriptor = BridgeSessionDescriptor.TryParseReceipt(descriptorJson, payloadDirectory);
         if (descriptor is null) {
             Log.Warning("Session descriptor '{DescriptorPath}' is not valid JSON.", descriptorPath);
             return null;
