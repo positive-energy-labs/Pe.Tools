@@ -24,15 +24,16 @@ export const hostProgram = <A, E, R>(options: {
       yield* Effect.sync(() =>
         capture("app_boot", { component: "host", version: resolveHostVersion() }),
       );
-      // Pre-bind evictions (dev lane, see evictLiveHost): clearing the same-name predecessor BEFORE
-      // chooseServicePort lets it reuse the remembered port (stable dev URL) instead of drifting to
-      // an ephemeral one; the installed host goes too, or it holds the shared pea Mastra thread.
-      if (hostOwnership.lane === "dev") {
-        yield* Effect.promise(async () => {
-          if (process.argv.includes(DEV_TAKEOVER_ARGUMENT))
-            await evictLiveHost(productRoot(), hostOwnership.serviceName, "dev takeover");
-          await evictLiveHost(productRoot(), hostProcessIdentity.serviceName, "shared pea thread");
-        });
+      // Pre-bind eviction (dev lane, see evictLiveHost): clearing THIS checkout's own same-name
+      // predecessor BEFORE chooseServicePort lets it reuse the remembered port (stable dev URL)
+      // instead of drifting to an ephemeral one. The installed host is a SIBLING, never an
+      // incumbent to clear (ruled 2026-08-20): a dev host starting beside a live installed session
+      // must leave that session's bridge intact, and every client picks a host BY LANE
+      // (`--host dev | installed`, packages/mcps/src/shared/host-config.ts).
+      if (hostOwnership.lane === "dev" && process.argv.includes(DEV_TAKEOVER_ARGUMENT)) {
+        yield* Effect.promise(() =>
+          evictLiveHost(productRoot(), hostOwnership.serviceName, "dev takeover"),
+        );
       }
       const port = yield* Effect.promise(() =>
         chooseServicePort(productRoot(), hostOwnership.serviceName, preferredPort),

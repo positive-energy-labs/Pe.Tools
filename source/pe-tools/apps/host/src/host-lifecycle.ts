@@ -120,13 +120,12 @@ export async function announceServedSession(
  * uses), waiting for verified exit. Best-effort: a refusal returns and leaves downstream layers
  * (SDK claim, Mastra thread-lock retry) to report the contention honestly.
  *
- * A dev host runs this BEFORE binding (see host-program.ts) against two incumbents:
- *  - its own same-name predecessor (gated on `--take-over-host`, mirroring the D3 dev-over-dev
- *    policy) — pre-bind eviction lets `chooseServicePort` reuse the remembered port instead of
- *    drifting to an ephemeral one on every takeover;
- *  - the installed host: per-worktree source names removed the same-name eviction that used to
- *    resolve their contention on the shared pea Mastra thread (ThreadLockError -> 503 degrade),
- *    so the D3 "dev replaces installed automatically" rule is restored here.
+ * A dev host runs this BEFORE binding (see host-program.ts) against exactly ONE incumbent: its own
+ * same-name predecessor, gated on `--take-over-host` (the D3 dev-over-dev policy). Pre-bind
+ * eviction lets `chooseServicePort` reuse the remembered port instead of drifting to an ephemeral
+ * one on every takeover. The installed host is never a target — dev and installed hosts are
+ * siblings (ruled 2026-08-20) and a Mastra thread contention degrades to 503, which is cheap;
+ * dropping a live installed session's bridge is not.
  */
 export async function evictLiveHost(appBase: string, name: string, why: string): Promise<void> {
   const incumbent = await readServiceFile(appBase, name);

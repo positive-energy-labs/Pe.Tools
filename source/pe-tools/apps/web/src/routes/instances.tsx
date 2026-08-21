@@ -60,6 +60,34 @@ function yearLabel(year: string | undefined): string | undefined {
   return year.length === 2 ? `20${year}` : year;
 }
 
+/**
+ * The id a start would mint, when this page can know it. The SDK mints `{installed |
+ * project-stem}-{yy}`, and only the installed lane's stem is a constant the browser holds — a dev
+ * start's stem comes from the HOST's checkout project, which is not on the wire. So a dev start
+ * never pre-empts; it posts, and the route relays whatever the SDK answers plus its nextSteps.
+ */
+function mintedSessionId(lane: "installed" | "dev", year: string): string | null {
+  return lane === "installed" ? `installed-${year}` : null;
+}
+
+/**
+ * A registry row already owns the id this start would mint, so `start` is the wrong verb —
+ * `restart` is. Beta.122 does not refuse the start: it answers `session.generation-displaced`,
+ * mints a NEW generation, boots a whole Revit and moves the pointer off the old one (its own
+ * `fix:` names restart). So pre-empting here is not politeness, it is the difference between
+ * refreshing a session and silently orphaning a generation. Graveyard rows are the ones
+ * `phase === "gone"` names: stopped, dead, crashed. Restart is what the graveyard's own per-row
+ * verb already does to them.
+ */
+function stoppedTwin(
+  worlds: readonly WorldFacts[],
+  lane: "installed" | "dev",
+  year: string,
+): WorldFacts | undefined {
+  const id = mintedSessionId(lane, year);
+  return id ? worlds.find((w) => w.id === id && w.phase === "gone") : undefined;
+}
+
 function parseUtc(iso: string | null | undefined): number | undefined {
   if (!iso) return undefined;
   const ms = Date.parse(iso);
@@ -133,7 +161,11 @@ function Page() {
 
   const [localLog, setLocalLog] = useState<{ atMs: number; actor: "you"; label: string }[]>([]);
   const [busy, setBusy] = useState<string | null>(null); // action key while a POST is in flight
-  const [outcome, setOutcome] = useState<{ kind: OutcomeKind; text: string } | null>(null);
+  const [outcome, setOutcome] = useState<{
+    kind: OutcomeKind;
+    text: string;
+    says?: string;
+  } | null>(null);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [startYear, setStartYear] = useState("25");
   const [startDoc, setStartDoc] = useState("");
@@ -157,18 +189,26 @@ function Page() {
       const body = (await response.json()) as {
         error?: string;
         diagnostics?: { detail?: string }[];
+        nextSteps?: string[];
       };
+      // The SDK's own words, both halves. A diagnostic without its nextSteps is half a verdict:
+      // `session.generation-displaced` (start on a row that already exists) is only actionable
+      // because the SDK says so in its fix/nextSteps, and this page must not paraphrase it.
+      const says = body.nextSteps?.length ? body.nextSteps.join(" · ") : undefined;
       if (!response.ok)
         setOutcome({
           kind: "error",
-          text: body.error ?? `${label} failed (${response.status})`,
+          text:
+            body.diagnostics?.[0]?.detail ?? body.error ?? `${label} failed (${response.status})`,
+          says,
         });
       else if (body.diagnostics?.length)
-        // The SDK's own diagnostic text, relayed. A refusal on an `observed` session arrives here
-        // as session.observed-not-mutable — the resolver's words, not a UI-side guard's.
+        // A refusal on an `observed` session arrives here as session.observed-not-mutable — the
+        // resolver's words, not a UI-side guard's.
         setOutcome({
           kind: "advisory",
           text: body.diagnostics[0]?.detail ?? `${label} reported a diagnostic`,
+          says,
         });
     } catch (caught) {
       setOutcome({
@@ -186,6 +226,8 @@ function Page() {
     .filter((w) => w.phase === "gone")
     .sort((a, b) => (parseUtc(b.row?.stoppedAtUtc) ?? 0) - (parseUtc(a.row?.stoppedAtUtc) ?? 0))
     .slice(0, 6); // ponytail: the registry keeps every session ever; show the recent tail only
+  // Over ALL worlds, not the displayed graveyard tail: an old stopped row still owns its id.
+  const twin = stoppedTwin(worlds, startLane, startYear);
 
   const ledger = [
     ...worldLog.map((e) => ({ atMs: e.atMs, actor: "bridge" as const, label: e.label })),
@@ -464,25 +506,46 @@ function Page() {
               title="A document title or path to open as the session comes up. Leave it empty to start with no document."
               className="face-mono t-caption w-52 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5 text-[var(--r-ink)] placeholder:text-[var(--r-ink-mute)]"
             />
-            <Verb
-              tone="commit"
-              label={`+ start 20${startYear}`}
-              busy={busy === `start-${startYear}`}
-              disabled={busy != null}
-              reason={`Boot a Revit 20${startYear} session and block until it is ready. The same verb pea and an agent run — the ledger records it either way.`}
-              onClick={() =>
-                void act(
-                  {
-                    action: "start",
-                    year: startYear,
-                    lane: startLane,
-                    ...(startDoc.trim() ? { doc: startDoc.trim() } : {}),
-                  },
-                  `start a 20${startYear} session`,
-                  `start-${startYear}`,
-                )
-              }
-            />
+            {/* A stopped row still owns its id, so the honest verb here is `restart`, not
+                `start` — the swap the SDK's own `fix:` names. The
+                document field has no say in a restart (the SDK's keep-doc leg reopens what the
+                dead process had), so it is not passed. */}
+            {twin ? (
+              <Verb
+                tone="commit"
+                label={`restart ${twin.id}`}
+                busy={busy === `restart-${twin.id}`}
+                disabled={busy != null}
+                reason={`20${startYear} already has a ${twin.row?.state ?? "gone"} session under the id ${twin.id}, and a stopped row still owns its id. Restart boots a fresh Revit process under it.`}
+                onClick={() =>
+                  void act(
+                    { action: "restart", id: twin.id },
+                    `restart ${twin.id}`,
+                    `restart-${twin.id}`,
+                  )
+                }
+              />
+            ) : (
+              <Verb
+                tone="commit"
+                label={`+ start 20${startYear}`}
+                busy={busy === `start-${startYear}`}
+                disabled={busy != null}
+                reason={`Boot a Revit 20${startYear} session and block until it is ready. The same verb pea and an agent run — the ledger records it either way.`}
+                onClick={() =>
+                  void act(
+                    {
+                      action: "start",
+                      year: startYear,
+                      lane: startLane,
+                      ...(startDoc.trim() ? { doc: startDoc.trim() } : {}),
+                    },
+                    `start a 20${startYear} session`,
+                    `start-${startYear}`,
+                  )
+                }
+              />
+            )}
           </VerbGroup>
 
           <MasterTable
@@ -509,7 +572,7 @@ function Page() {
 
           {outcome ? (
             <div className="mt-2">
-              <OutcomeLine kind={outcome.kind} label={outcome.text} />
+              <OutcomeLine kind={outcome.kind} label={outcome.text} says={outcome.says} />
             </div>
           ) : null}
 

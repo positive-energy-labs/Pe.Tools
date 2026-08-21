@@ -122,9 +122,9 @@ read `doc current`.
   match, not proof). A stale SDK sample in `Addins\{year}` (another product's older
   `Pe.Revit.Loader.dll`) wins the loader identity for the whole process — `session logs` shows
   `LoaderStartupFailed` and the first op kills the bridge; `install list` names the culprit. `session status` shows the host as a `leg` of its session (`up|down`,
-  `how: health|tcp|pid`, `legBecause`). Never assume 5180. A session start through the route can
-  spawn a competing host that evicts this pane and `node --watch` does not come back without a
-  file change — re-run the pane (dies when: one owner per service name, host ledger).
+  `how: health|tcp|pid`, `legBecause`). Never assume 5180. Dev and installed hosts are SIBLINGS —
+  a dev host never evicts the installed `host`, so this pane survives a session start through the
+  route, and every client picks its host BY LANE: `--host dev | installed | <worktree path> | <url>`.
 - The host relays session lifecycle for the browser at `GET /sessions` and `POST /sessions
   {action: start|stop|restart|converge, id?, year?, doc?}` — the SDK envelope passed through
   untouched. `start` takes `lane: installed` (default, the bare CLI meaning) or `dev` (this
@@ -140,14 +140,16 @@ read `doc current`.
 
 ## Host ops and scripts
 
-- Discover, then call: `pea host operations search --query "..."` against the connected session's
-  catalog; never guess op keys or shapes. (dies when: `search` reports its URL and envelope — today
-  it fails `fetch failed` with the host up; take keys from `pea host --help` EXAMPLES meanwhile.)
+- Discover, then call: `pea host operations search --host <lane> --query "..."` against the
+  connected session's catalog; never guess op keys or shapes. It prints the URL it resolved before
+  it fetches, and every transport failure names that URL — read it before believing an odd answer.
+  Put `--host` AFTER the subcommand: `pea --host dev host operations …` runs the ROOT entry (TUI)
+  instead of dispatching, and dies on the shared Mastra thread lock.
 - **Never put JSON on the command line.** `--request '{...}'` dies in PowerShell/pnpm re-quoting.
   Write a `.cs` to `.artifacts/tmp/<run>/`, then `pea script execute --host http://127.0.0.1:<port>
   --bridge-session-id <id> --permission-mode <ReadOnly|WriteTransaction> --file x.cs`, ending with
-  a read-back step. Explicit `--host` URL beats `--host dev` token resolution. (dies when: `pea
-  --request-file` + `--host dev` resolution, host ledger)
+  a read-back step. `--host dev` resolves this worktree's live service file; an explicit URL is
+  only needed to reach a host outside it. (dies when: `pea --request-file`, host ledger)
 - Treat `{ok:true}` with an empty/thin payload as *suspect*; cross-check one independent source
   before reporting it. (dies when: op-envelope identity + `emptyBecause`, host ledger)
 - ReadOnly script mode is NOT containment. Treat every script as a write until the read-back
