@@ -7,14 +7,61 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   modalZoneCount,
   pairZones,
+  parseReplaySeedInk,
   parseZoneTsv,
   partiality,
   reportKeyed,
+  replayPathForInk,
   type RunReport,
   type RunScores,
   scoreBoards,
   type ZoneRecord,
 } from "./world";
+
+describe("replay seed ink", () => {
+  it("reads the solver's SKAT seed bits and derives the replay path from the legacy Ink locator", () => {
+    expect(replayPathForInk("input/ink_Lower_Level.bin")).toBe("input/replay_Lower_Level.bin");
+
+    const buffer = new ArrayBuffer(86);
+    const bytes = new Uint8Array(buffer);
+    const view = new DataView(buffer);
+    let offset = 0;
+    const u32 = (value: number) => {
+      view.setUint32(offset, value, true);
+      offset += 4;
+    };
+    const i32 = (value: number) => {
+      view.setInt32(offset, value, true);
+      offset += 4;
+    };
+    const f64 = (value: number) => {
+      view.setFloat64(offset, value, true);
+      offset += 8;
+    };
+    const text = (value: string) => {
+      const encoded = new TextEncoder().encode(value);
+      bytes[offset++] = encoded.length;
+      bytes.set(encoded, offset);
+      offset += encoded.length;
+    };
+    u32(0x54414b53);
+    i32(1);
+    text("L");
+    f64(12);
+    text("{}");
+    i32(2);
+    i32(2);
+    f64(1);
+    f64(2);
+    f64(0.25);
+    offset += 32; // FloorZ + CeilZ floats for four cells.
+    bytes[offset] = 0b1010;
+
+    const raster = parseReplaySeedInk(buffer);
+    expect(raster).toMatchObject({ w: 2, h: 2, minX: 1, minY: 2, cellFt: 0.25 });
+    expect([...raster.bits]).toEqual([0b1010]);
+  });
+});
 
 const TSV = [
   "META\tlevel\tL1",

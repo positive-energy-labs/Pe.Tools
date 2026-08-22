@@ -23,6 +23,7 @@ import {
 } from "../palette";
 import {
   loadRaster,
+  loadReplaySeedInk,
   loadZoneGeometry,
   paintRaster,
   ringPath,
@@ -44,7 +45,11 @@ const FONT = "12px Consolas, monospace";
 const LINE_H = 18;
 
 function svgEscape(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /** Serialize the decision overlay for one panel — same geometry the on-screen ZonePanel draws,
@@ -67,7 +72,10 @@ function overlaySvg(
     const stroke = flagged ? alarm : roomTone(room.disposition).stroke;
     const dash = !flagged && unknown ? ' stroke-dasharray="2 2"' : "";
     parts.push(
-      `<path d="${ringPath(vp, rings.map((r) => r.points))}" fill="${flagged ? alarm : "none"}" fill-opacity="${flagged ? 0.18 : 0}" stroke="${stroke}" stroke-width="${flagged ? 2.5 : unknown ? 1.25 : 1.75}"${dash}/>`,
+      `<path d="${ringPath(
+        vp,
+        rings.map((r) => r.points),
+      )}" fill="${flagged ? alarm : "none"}" fill-opacity="${flagged ? 0.18 : 0}" stroke="${stroke}" stroke-width="${flagged ? 2.5 : unknown ? 1.25 : 1.75}"${dash}/>`,
     );
     if (flagged) {
       // Label the flagged element on the pixels too — the id in the manifest is the data,
@@ -151,7 +159,15 @@ async function paintPanelTile(
     const rings = geom.polys.get(room.id);
     if (!rings) continue;
     ctx.fillStyle = roomTone(room.disposition).fill;
-    ctx.fill(new Path2D(ringPath(vp, rings.map((r) => r.points))), "evenodd");
+    ctx.fill(
+      new Path2D(
+        ringPath(
+          vp,
+          rings.map((r) => r.points),
+        ),
+      ),
+      "evenodd",
+    );
   }
   for (const res of geom.residues) {
     ctx.fillStyle = res.reason === "rejected" ? HELD_FILL : VOID_FILL;
@@ -159,7 +175,7 @@ async function paintPanelTile(
   }
   try {
     const [ink, seals, close] = await Promise.all([
-      loadRaster(runId, zone.Ink).catch(() => null),
+      loadReplaySeedInk(runId, zone.Ink).catch(() => null),
       zone.Seals ? loadRaster(runId, zone.Seals).catch(() => null) : null,
       zone.Close ? loadRaster(runId, zone.Close).catch(() => null) : null,
     ]);
@@ -198,7 +214,9 @@ function captionLines(item: StagedItem): { text: string; tone: "text" | "muted" 
   const lines: { text: string; tone: "text" | "muted" | "alarm" }[] = [];
   lines.push({ text: `${item.zone} — A ${item.runA ?? "(none)"} | B ${item.runB}`, tone: "text" });
   if (b) {
-    const delta = a ? ` · Δ ${Math.round(b.AcceptedSqft - a.AcceptedSqft) >= 0 ? "+" : ""}${Math.round(b.AcceptedSqft - a.AcceptedSqft)} sf vs A` : "";
+    const delta = a
+      ? ` · Δ ${Math.round(b.AcceptedSqft - a.AcceptedSqft) >= 0 ? "+" : ""}${Math.round(b.AcceptedSqft - a.AcceptedSqft)} sf vs A`
+      : "";
     lines.push({
       text: `B: ${b.triage.verdict} (${b.triage.reason}) · ${b.AcceptedRooms}/${b.OracleRooms}r · ${fmtSqft(b.AcceptedSqft)} accepted · ${fmtSqft(b.HeldSqft)} held · ink-backed ${Math.round(b.InkBackedEdgeFraction * 100)}%${delta}`,
       tone: "muted",
@@ -211,7 +229,10 @@ function captionLines(item: StagedItem): { text: string; tone: "text" | "muted" 
     });
   }
   lines.push({
-    text: item.flags.length > 0 ? `⚑ flags (B): ${item.flags.map(flagLabel).join(", ")}` : "flags: none",
+    text:
+      item.flags.length > 0
+        ? `⚑ flags (B): ${item.flags.map(flagLabel).join(", ")}`
+        : "flags: none",
     tone: item.flags.length > 0 ? "alarm" : "muted",
   });
   if (item.note.trim()) lines.push({ text: `note: ${item.note.trim()}`, tone: "text" });
@@ -231,7 +252,9 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
         : missingTile("not in baseline"),
     );
   }
-  tiles.push(item.b ? await paintPanelTile(item.runB, item.b, flags) : missingTile("not in current"));
+  tiles.push(
+    item.b ? await paintPanelTile(item.runB, item.b, flags) : missingTile("not in current"),
+  );
 
   const lines = captionLines(item);
   const captionH = lines.length * LINE_H + 14;
@@ -250,7 +273,11 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
   tiles.forEach((tile, i) => {
     const x = GAP + i * (PANEL_W + GAP);
     ctx.fillStyle = MUTED;
-    ctx.fillText(comparing ? (i === 0 ? "A · baseline" : "B · current") : "B · current", x, GAP - 2);
+    ctx.fillText(
+      comparing ? (i === 0 ? "A · baseline" : "B · current") : "B · current",
+      x,
+      GAP - 2,
+    );
     ctx.drawImage(tile, x, GAP + 14);
     ctx.strokeStyle = "#e7e5e4";
     ctx.strokeRect(x + 0.5, GAP + 14.5, PANEL_W - 1, PANEL_H - 1);
@@ -300,6 +327,9 @@ export function canvasToPngBase64(canvas: HTMLCanvasElement): Promise<string> {
 
 export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))), "image/png");
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
+      "image/png",
+    );
   });
 }

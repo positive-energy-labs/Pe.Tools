@@ -56,6 +56,43 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def artifact_path(root, relative):
+    root = root.resolve()
+    path = (root / relative).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise SystemExit(f"visual input escapes artifact root: {relative}")
+    return path
+
+
+def zone_input_paths(root, zone):
+    ink_path = artifact_path(root, zone["Ink"])
+    replay_path = ink_path.parent / f"replay_{ink_path.stem.removeprefix('ink_')}.bin"
+    if not replay_path.is_file():
+        raise SystemExit(
+            f"missing replay seed ink: {replay_path}\n"
+            f"replay_<level>.bin is the only evidence source (stale ink_*.bin lane "
+            f"deleted). Recapture: docs/features/takeoffs/manual-e2e-runbook.md "
+            f"(Capture step writes replay_<level>.bin)")
+    paths = [
+        artifact_path(root, zone["Tsv"]),
+        replay_path,
+    ]
+    for key in ("Seals", "Close"):
+        if zone.get(key):
+            paths.append(artifact_path(root, zone[key]))
+    if zone.get("Seals"):
+        seal_path = artifact_path(root, zone["Seals"])
+        classes_path = seal_path.parent / seal_path.name.replace("seals_", "classes_")
+        if classes_path.exists():
+            paths.append(classes_path)
+    for path in paths:
+        if not path.is_file():
+            raise SystemExit(f"missing visual input: {path}")
+    return paths
+
+
 def field(source, *names, default=None):
     """SchemaVersion 2 adds camelCase blocks next to the v1 PascalCase fields; tolerate both."""
     if not isinstance(source, dict):
@@ -150,8 +187,8 @@ def despeckle(mask, cell):
 
 
 def render_zone(root, zone, output, padding_cells=12, scale=2):
-    ink_path = root / zone["Ink"]
-    tsv_path = root / zone["Tsv"]
+    ink_path = artifact_path(root, zone["Ink"])
+    tsv_path = artifact_path(root, zone["Tsv"])
     # Evidence authority: the replay snapshot's seed ink — the raster the solver actually
     # partitioned on — and NOTHING else. The stale ink_*.bin fallback was deleted
     # 2026-08-17 (Attic bin was missing 51% of seed cells); zone["Ink"] is report schema
@@ -173,12 +210,10 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
         relative = zone.get(key)
         if not relative:
             return None
-        path = root / relative
-        if not path.exists():
-            return None
+        path = artifact_path(root, relative)
         seal_width, seal_height, *_, seal_bits = overlay.load_ink(path)
         if (seal_width, seal_height) != (width, height):
-            return None
+            raise SystemExit(f"closure grid does not match replay: {path}")
         return despeckle(unpack_mask(seal_bits, width, height), cell)
 
     # Per-cell seal attribution (INKC sidecar, derived from the Seals path — no report field).
@@ -194,7 +229,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
             return None
         class_width, class_height, *_, data = overlay.load_classes(classes_path)
         if (class_width, class_height) != (width, height):
-            return None
+            raise SystemExit(f"closure class grid does not match replay: {classes_path}")
         grid = np.frombuffer(data, dtype=np.uint8).reshape(height, width)
         return (despeckle(np.isin(grid, (2, 4)), cell),   # door-head + oversize fringe
                 despeckle(grid == 3, cell))               # wall-run gap
@@ -366,13 +401,56 @@ def draw_legend(panel_draw):
                             fill=(140, 140, 140), font=legend_font)
 
 
+def verify(manifest_path):
+    manifest_path = Path(manifest_path).resolve()
+    root = manifest_path.parent
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected = {
+        manifest["report"]: manifest["reportSha256"],
+        **manifest["inputs"],
+        **manifest["files"],
+    }
+    failures = []
+    for relative, expected_hash in expected.items():
+        path = artifact_path(root, relative)
+        actual = digest(path) if path.is_file() else None
+        if actual != expected_hash:
+            failures.append(f"{relative}: expected {expected_hash}, got {actual or 'missing'}")
+    report_path = artifact_path(root, manifest["report"])
+    if report_path.is_file():
+        zone_count = len(json.loads(report_path.read_text(encoding="utf-8"))["Zones"])
+        if zone_count != manifest["panelCount"]:
+            failures.append(
+                f"panelCount: manifest {manifest['panelCount']}, report {zone_count}")
+    expected_outputs = set(manifest["files"])
+    actual_outputs = {
+        path.relative_to(root).as_posix()
+        for path in (root / "review").glob("*.png")
+    }
+    for relative in sorted(actual_outputs - expected_outputs):
+        failures.append(f"{relative}: unexpected output")
+    if failures:
+        raise SystemExit("review verification failed:\n" + "\n".join(failures))
+    print(f"verified {manifest['panelCount']} panels and {len(manifest['inputs'])} inputs: {root}")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("report")
+    parser.add_argument("report", nargs="?")
+    parser.add_argument("--verify", metavar="MANIFEST")
     args = parser.parse_args()
+    if args.verify:
+        verify(args.verify)
+        return
+    if not args.report:
+        parser.error("report is required unless --verify is used")
     report_path = Path(args.report).resolve()
     root = report_path.parent
     report = json.loads(report_path.read_text(encoding="utf-8"))
+    inputs = {
+        path.relative_to(root).as_posix(): digest(path)
+        for zone in report["Zones"] for path in zone_input_paths(root, zone)
+    }
     review = root / "review"
     review.mkdir(exist_ok=True)
     panels = []
@@ -399,9 +477,11 @@ def main():
     contact_path = review / "contact-sheet.png"
     contact.save(contact_path)
     manifest = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "report": report_path.name,
         "reportSha256": digest(report_path),
+        "panelCount": len(panels),
+        "inputs": dict(sorted(inputs.items())),
         "contactSheet": contact_path.relative_to(root).as_posix(),
         "files": {
             path.relative_to(root).as_posix(): digest(path)
@@ -410,6 +490,7 @@ def main():
     }
     (root / "review-manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    verify(root / "review-manifest.json")
     print(contact_path)
 
 

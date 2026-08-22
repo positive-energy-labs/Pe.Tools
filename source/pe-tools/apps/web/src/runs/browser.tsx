@@ -68,6 +68,7 @@ import {
 import {
   boardSummary,
   fetchRunIndex,
+  loadReplaySeedInk,
   loadRaster,
   loadRunReport,
   loadRunScores,
@@ -153,7 +154,9 @@ function PartialityChip(props: { part: Partiality | null; prefix?: string; compa
     return (
       <Chip tone="caution" title={partialTitle(part.zone)}>
         {prefix}
-        {compact ? `partial · ${zoneShort(part.zone)}` : `partial run — zone-filtered: ${part.zone}`}
+        {compact
+          ? `partial · ${zoneShort(part.zone)}`
+          : `partial run — zone-filtered: ${part.zone}`}
       </Chip>
     );
   }
@@ -247,10 +250,7 @@ function Delta({
   }
   const good = goodWhenUp ? value > 0 : value < 0;
   return (
-    <span
-      className="tabular-nums"
-      style={{ color: good ? "var(--st-done)" : "var(--st-warn)" }}
-    >
+    <span className="tabular-nums" style={{ color: good ? "var(--st-done)" : "var(--st-warn)" }}>
       {value > 0 ? "+" : ""}
       {fmtNum(value, digits)}
       {suffix}
@@ -328,7 +328,7 @@ export function ZonePanel(props: {
     void (async () => {
       const [ink, seals, close] = underlay
         ? await Promise.all([
-            loadRaster(runId, zone.Ink).catch(() => null),
+            loadReplaySeedInk(runId, zone.Ink).catch(() => null),
             zone.Seals ? loadRaster(runId, zone.Seals).catch(() => null) : null,
             zone.Close ? loadRaster(runId, zone.Close).catch(() => null) : null,
           ])
@@ -344,7 +344,11 @@ export function ZonePanel(props: {
       };
       for (const room of geom.rooms) {
         const rings = geom.polys.get(room.id);
-        if (rings) fill(rings.map((r) => r.points), roomTone(room.disposition).fill);
+        if (rings)
+          fill(
+            rings.map((r) => r.points),
+            roomTone(room.disposition).fill,
+          );
       }
       for (const res of geom.residues) {
         fill(res.loops, res.reason === "rejected" ? HELD_FILL : VOID_FILL);
@@ -396,7 +400,10 @@ export function ZonePanel(props: {
             return (
               <path
                 key={room.id}
-                d={ringPath(vp, rings.map((r) => r.points))}
+                d={ringPath(
+                  vp,
+                  rings.map((r) => r.points),
+                )}
                 fill={flagged ? "var(--r-alarm)" : "none"}
                 fillOpacity={flagged ? 0.18 : 0}
                 stroke={flagged ? "var(--r-alarm)" : tone.stroke}
@@ -420,7 +427,9 @@ export function ZonePanel(props: {
                 d={ringPath(vp, res.loops)}
                 fill={flagged ? "var(--r-alarm)" : "none"}
                 fillOpacity={flagged ? 0.14 : 0}
-                stroke={flagged ? "var(--r-alarm)" : res.reason === "rejected" ? HELD_STROKE : VOID_STROKE}
+                stroke={
+                  flagged ? "var(--r-alarm)" : res.reason === "rejected" ? HELD_STROKE : VOID_STROKE
+                }
                 strokeWidth={flagged ? 2.5 : res.reason === "rejected" ? 1.6 : 0.75}
                 strokeDasharray={!flagged && res.reason === "rejected" ? "4 3" : undefined}
                 pointerEvents="all"
@@ -571,7 +580,11 @@ const STAT_ROWS: StatRow[] = [
     label: "ink-backed",
     value: (z) => fmtPct(z.InkBackedEdgeFraction),
     delta: (a, b) => (
-      <Delta value={(b.InkBackedEdgeFraction - a.InkBackedEdgeFraction) * 100} digits={1} suffix="pp" />
+      <Delta
+        value={(b.InkBackedEdgeFraction - a.InkBackedEdgeFraction) * 100}
+        digits={1}
+        suffix="pp"
+      />
     ),
   },
   {
@@ -637,7 +650,10 @@ function ZoneCard(props: {
             {b.triage.verdict}
           </Chip>
         ) : (
-          <Chip tone="meta" title="This zone exists only in the baseline run — the zoning pass cut the level differently.">
+          <Chip
+            tone="meta"
+            title="This zone exists only in the baseline run — the zoning pass cut the level differently."
+          >
             baseline only
           </Chip>
         )}
@@ -672,7 +688,10 @@ function ZoneCard(props: {
                   ? "bg-secondary text-secondary-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
-              style={{ borderColor: props.highlighted ? "var(--st-meta)" : "var(--line-2)", borderRadius: 2 }}
+              style={{
+                borderColor: props.highlighted ? "var(--st-meta)" : "var(--line-2)",
+                borderRadius: 2,
+              }}
             >
               ⌖ highlight
             </button>
@@ -686,18 +705,38 @@ function ZoneCard(props: {
         {comparing ? (
           <>
             {a && runA ? (
-              <ZonePanel runId={runA} zone={a} maxW={panelHalfW} maxH={panelH} underlay={underlay} />
+              <ZonePanel
+                runId={runA}
+                zone={a}
+                maxW={panelHalfW}
+                maxH={panelH}
+                underlay={underlay}
+              />
             ) : (
               <MissingPanel w={panelHalfW} h={panelH} label="not in baseline" />
             )}
             {b ? (
-              <ZonePanel runId={runB} zone={b} maxW={panelHalfW} maxH={panelH} underlay={underlay} fbKey={fbKey} />
+              <ZonePanel
+                runId={runB}
+                zone={b}
+                maxW={panelHalfW}
+                maxH={panelH}
+                underlay={underlay}
+                fbKey={fbKey}
+              />
             ) : (
               <MissingPanel w={panelHalfW} h={panelH} label="not in current" />
             )}
           </>
         ) : b ? (
-          <ZonePanel runId={runB} zone={b} maxW={panelFullW} maxH={panelH} underlay={underlay} fbKey={fbKey} />
+          <ZonePanel
+            runId={runB}
+            zone={b}
+            maxW={panelFullW}
+            maxH={panelH}
+            underlay={underlay}
+            fbKey={fbKey}
+          />
         ) : (
           <MissingPanel w={panelFullW} h={panelH} label="not in run" />
         )}
@@ -747,7 +786,12 @@ function ZoneCard(props: {
               <td colSpan={comparing ? 3 : 1}>
                 <span className="flex flex-wrap gap-1">
                   {knobs.map(([k, v]) => (
-                    <Chip key={k} tone="meta" dashed title={`Solver self-tuned ${k} to ${v} for this zone.`}>
+                    <Chip
+                      key={k}
+                      tone="meta"
+                      dashed
+                      title={`Solver self-tuned ${k} to ${v} for this zone.`}
+                    >
                       {k}={v}
                     </Chip>
                   ))}
@@ -805,7 +849,8 @@ function RunStrip(props: {
                 {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
                 {typeof meta?.zoneFilter === "string" ? (
                   <span style={{ color: "var(--st-warn)" }} title={partialTitle(meta.zoneFilter)}>
-                    {" "}· partial
+                    {" "}
+                    · partial
                   </span>
                 ) : null}
               </span>
@@ -818,13 +863,13 @@ function RunStrip(props: {
               style={{
                 borderColor: "var(--line-2)",
                 background: isPrev ? "var(--secondary)" : "transparent",
-                color: isCur
-                  ? "var(--line-2)"
-                  : isPrev
-                    ? "var(--foreground)"
-                    : "var(--st-meta)",
+                color: isCur ? "var(--line-2)" : isPrev ? "var(--foreground)" : "var(--st-meta)",
               }}
-              title={isPrev ? "This is the baseline (A) — click to clear it." : "Compare against this run as baseline (A)."}
+              title={
+                isPrev
+                  ? "This is the baseline (A) — click to clear it."
+                  : "Compare against this run as baseline (A)."
+              }
             >
               {isPrev ? "A✕" : "A"}
             </button>
@@ -858,7 +903,12 @@ function levelViewport(f: Frame): ZoneViewport {
 }
 
 function rasterFrame(r: Raster): Frame {
-  return { minX: r.minX, minY: r.minY, maxX: r.minX + r.w * r.cellFt, maxY: r.minY + r.h * r.cellFt };
+  return {
+    minX: r.minX,
+    minY: r.minY,
+    maxX: r.minX + r.w * r.cellFt,
+    maxY: r.minY + r.h * r.cellFt,
+  };
 }
 
 // Level frame seeded by the FIRST raster seen and then held fixed → run stepping flip-books
@@ -876,17 +926,25 @@ function levelFrame(level: string, ink: Raster): Frame {
 // One offscreen canvas per run+level at native raster resolution, muted palette. Separate
 // cache from light.tsx's (different paint) — both are tiny.
 const levelCanvasCache = new Map<string, Promise<{ canvas: HTMLCanvasElement; ink: Raster }>>();
-function loadLevelCanvas(runId: string, zone: ZoneRecord): Promise<{ canvas: HTMLCanvasElement; ink: Raster }> {
+function loadLevelCanvas(
+  runId: string,
+  zone: ZoneRecord,
+): Promise<{ canvas: HTMLCanvasElement; ink: Raster }> {
   const key = `combo:${runId}/${zone.Ink}`;
   let cached = levelCanvasCache.get(key);
   if (!cached) {
     cached = (async () => {
       const [ink, seals, close] = await Promise.all([
-        loadRaster(runId, zone.Ink),
+        loadReplaySeedInk(runId, zone.Ink),
         zone.Seals ? loadRaster(runId, zone.Seals) : Promise.resolve(null),
         zone.Close ? loadRaster(runId, zone.Close) : Promise.resolve(null),
       ]);
-      const vp: ZoneViewport = { ...rasterFrame(ink), pxPerFt: 1 / ink.cellFt, widthPx: ink.w, heightPx: ink.h };
+      const vp: ZoneViewport = {
+        ...rasterFrame(ink),
+        pxPerFt: 1 / ink.cellFt,
+        widthPx: ink.w,
+        heightPx: ink.h,
+      };
       const canvas = document.createElement("canvas");
       canvas.width = ink.w;
       canvas.height = ink.h;
@@ -1033,7 +1091,10 @@ function PlanPane(props: {
         nodes.push(
           <path
             key={`r:${zone.Zone}/${roomId}`}
-            d={ringPath(vp, rings.map((ring) => ring.points))}
+            d={ringPath(
+              vp,
+              rings.map((ring) => ring.points),
+            )}
             fillRule="evenodd"
             fill={tone.fill}
             stroke={tone.stroke}
@@ -1106,7 +1167,9 @@ function PlanPane(props: {
     return [...zones, ...held];
   }, [data, vp, props.hoverZone, props.pinnedZone, props.onHover, props.onPick]);
 
-  const inkTopLeft = data?.ink ? toPx(vp, data.ink.minX, data.ink.minY + data.ink.h * data.ink.cellFt) : null;
+  const inkTopLeft = data?.ink
+    ? toPx(vp, data.ink.minX, data.ink.minY + data.ink.h * data.ink.cellFt)
+    : null;
   const worldStyle: CSSProperties = {
     position: "absolute",
     left: 0,
@@ -1181,7 +1244,10 @@ function PlanPane(props: {
         </svg>
       </div>
       {props.tag && (
-        <div className="tele absolute left-2 top-2 border bg-background/90 px-1.5 py-0.5 text-[11px] text-muted-foreground" style={{ borderRadius: 2 }}>
+        <div
+          className="tele absolute left-2 top-2 border bg-background/90 px-1.5 py-0.5 text-[11px] text-muted-foreground"
+          style={{ borderRadius: 2 }}
+        >
           {props.tag}
         </div>
       )}
@@ -1201,7 +1267,10 @@ function PlanPane(props: {
  * loud instead of leaving it to induction. Hideable (atlas floater treatment, change #5). */
 function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
   const sw = (bg: string, extra?: CSSProperties) => (
-    <span className="inline-block h-2.5 w-4 shrink-0 rounded-[1px]" style={{ background: bg, ...extra }} />
+    <span
+      className="inline-block h-2.5 w-4 shrink-0 rounded-[1px]"
+      style={{ background: bg, ...extra }}
+    />
   );
   const line = (border: string, dashed = false) => (
     <span
@@ -1221,7 +1290,12 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
       style={{ borderRadius: 2 }}
     >
       <span className="flex items-baseline">
-        <span className={cn("font-semibold uppercase tracking-wide", !props.underlay && "line-through opacity-50")}>
+        <span
+          className={cn(
+            "font-semibold uppercase tracking-wide",
+            !props.underlay && "line-through opacity-50",
+          )}
+        >
           evidence — the run's raster
         </span>
         <button
@@ -1234,7 +1308,11 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
         </button>
       </span>
       <div className={cn("flex flex-col gap-0.5", !props.underlay && "opacity-40")}>
-        {row(sw("rgb(122,118,114)"), "received ink (solid)", "Wall pixels the solver actually received from the DWG. Solid + dark = drawn; muted so decisions stay readable.")}
+        {row(
+          sw("rgb(122,118,114)"),
+          "received ink (solid)",
+          "Wall pixels the solver actually received from the DWG. Solid + dark = drawn; muted so decisions stay readable.",
+        )}
         {row(
           sw("rgba(187,118,108,0.45)"),
           "door-head seal (invented)",
@@ -1248,15 +1326,40 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
       </div>
       <span className="mt-0.5 font-semibold uppercase tracking-wide">decisions — drawn on top</span>
       <div className="flex flex-col gap-0.5">
-        {row(sw(ACCEPT_FILL, { border: `1.5px solid ${ACCEPT_STROKE}` }), "accepted room", "A room the solver accepted into the takeoff — per the persisted disposition column.")}
-        {row(line(HELD_STROKE, true), "held residue", "Area the solver found but did not trust — held for review, not counted.")}
-        {row(sw(UNKNOWN_FILL, { border: `1px dashed ${UNKNOWN_STROKE}` }), "room — disposition unknown", UNKNOWN_TITLE)}
-        {row(sw(VOID_FILL, { border: `1px solid ${VOID_STROKE}` }), "void / excluded", "Area inside the zone the solver deliberately excluded.")}
-        {row(line(ZONE_STROKE), "zone — solid = solve", "Zone boundary. Solid stroke: triage verdict solve.")}
-        {row(line(ZONE_STROKE, true), "zone — dashed = hold", "Zone boundary. Dashed stroke: triage verdict hold.")}
+        {row(
+          sw(ACCEPT_FILL, { border: `1.5px solid ${ACCEPT_STROKE}` }),
+          "accepted room",
+          "A room the solver accepted into the takeoff — per the persisted disposition column.",
+        )}
+        {row(
+          line(HELD_STROKE, true),
+          "held residue",
+          "Area the solver found but did not trust — held for review, not counted.",
+        )}
+        {row(
+          sw(UNKNOWN_FILL, { border: `1px dashed ${UNKNOWN_STROKE}` }),
+          "room — disposition unknown",
+          UNKNOWN_TITLE,
+        )}
+        {row(
+          sw(VOID_FILL, { border: `1px solid ${VOID_STROKE}` }),
+          "void / excluded",
+          "Area inside the zone the solver deliberately excluded.",
+        )}
+        {row(
+          line(ZONE_STROKE),
+          "zone — solid = solve",
+          "Zone boundary. Solid stroke: triage verdict solve.",
+        )}
+        {row(
+          line(ZONE_STROKE, true),
+          "zone — dashed = hold",
+          "Zone boundary. Dashed stroke: triage verdict hold.",
+        )}
       </div>
       <span className="mt-0.5 border-t pt-1 text-[9px]" style={{ borderColor: "var(--line-2)" }}>
-        solid dark = received · pale translucent = invented{props.underlay ? "" : " · underlay hidden"}
+        solid dark = received · pale translucent = invented
+        {props.underlay ? "" : " · underlay hidden"}
       </span>
     </div>
   );
@@ -1378,7 +1481,9 @@ function ZonePeekFloater(props: {
     >
       <div className="mb-1 flex flex-col items-center">
         <span className="text-foreground">{props.zoneName}</span>
-        {props.highlighted && <span className="text-[10px] text-muted-foreground">highlighted · esc clears</span>}
+        {props.highlighted && (
+          <span className="text-[10px] text-muted-foreground">highlighted · esc clears</span>
+        )}
       </div>
       <table className="w-full table-fixed">
         <colgroup>
@@ -1391,13 +1496,17 @@ function ZonePeekFloater(props: {
             <tr key={label} className="align-top">
               {comparing && <td className="pr-2 text-right text-foreground">{a ? f(a) : "—"}</td>}
               <td className="text-center text-muted-foreground">{label}</td>
-              <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>{f(b)}</td>
+              <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
+                {f(b)}
+              </td>
             </tr>
           ))}
           <tr className="align-top">
             {comparing && <td className="pr-2 text-right text-foreground">{rejList(a, true)}</td>}
             <td className="text-center text-muted-foreground">rejections</td>
-            <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>{rejList(b, false)}</td>
+            <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
+              {rejList(b, false)}
+            </td>
           </tr>
           {knobs.length > 0 && (
             <tr className="align-top">
@@ -1460,7 +1569,11 @@ function PlanDock(props: {
     const vp = levelViewport(frame);
     const paneW = comparing ? el.clientWidth / 2 : el.clientWidth;
     const s = Math.min(paneW / vp.widthPx, el.clientHeight / vp.heightPx) * 0.94;
-    setView({ scale: s, tx: (paneW - vp.widthPx * s) / 2, ty: (el.clientHeight - vp.heightPx * s) / 2 });
+    setView({
+      scale: s,
+      tx: (paneW - vp.widthPx * s) / 2,
+      ty: (el.clientHeight - vp.heightPx * s) / 2,
+    });
   }, [frame, comparing]);
 
   // A highlight/locate request centers the view on the zone's bbox once the level frame is
@@ -1505,7 +1618,10 @@ function PlanDock(props: {
 
   return (
     <div className="flex size-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b px-2 py-1" style={{ borderColor: "var(--line-2)" }}>
+      <div
+        className="flex shrink-0 items-center gap-2 border-b px-2 py-1"
+        style={{ borderColor: "var(--line-2)" }}
+      >
         <div className="flex gap-0.5">
           {levels.map((l) => (
             <button
@@ -1515,7 +1631,9 @@ function PlanDock(props: {
               title="Show this level on the plan — the sheet scrolls to its section (and scrolling the sheet moves this tab)."
               className={cn(
                 "tele rounded-[2px] px-2 py-0.5 text-[11px]",
-                l === level ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted",
+                l === level
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:bg-muted",
               )}
             >
               {l.replace(" Level", "")}
@@ -1529,7 +1647,9 @@ function PlanDock(props: {
             title="Show/hide the key — what each mark on the plan means."
             className={cn(
               "tele rounded-[2px] border px-1.5 py-0.5 text-[10px]",
-              showKey ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted",
+              showKey
+                ? "bg-secondary text-secondary-foreground"
+                : "text-muted-foreground hover:bg-muted",
             )}
             style={{ borderColor: "var(--line-2)" }}
           >
@@ -1541,7 +1661,9 @@ function PlanDock(props: {
             title="Show/hide the level-stats floater — solve counts, sf, loudest rejections, A/B deltas."
             className={cn(
               "tele rounded-[2px] border px-1.5 py-0.5 text-[10px]",
-              showStats ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted",
+              showStats
+                ? "bg-secondary text-secondary-foreground"
+                : "text-muted-foreground hover:bg-muted",
             )}
             style={{ borderColor: "var(--line-2)" }}
           >
@@ -1570,7 +1692,10 @@ function PlanDock(props: {
                 onPick={onPick}
               />
             ) : null}
-            <div className={cn("flex flex-1", comparing && "border-l")} style={comparing ? { borderColor: "var(--line-2)" } : undefined}>
+            <div
+              className={cn("flex flex-1", comparing && "border-l")}
+              style={comparing ? { borderColor: "var(--line-2)" } : undefined}
+            >
               <PlanPane
                 runId={curId}
                 tag={comparing ? "B · current" : null}
@@ -1691,10 +1816,7 @@ async function buildLedgerRows(index: RunIndexEntry[]): Promise<RunRow[]> {
       when: entry.meta?.generatedUtc ?? report.GeneratedUtc,
       board,
       scores: rowScores(scoresAll[i]!),
-      scoreDelta: savedWorkDelta(
-        scoresAll[i]!,
-        i + 1 < index.length ? scoresAll[i + 1]! : null,
-      ),
+      scoreDelta: savedWorkDelta(scoresAll[i]!, i + 1 < index.length ? scoresAll[i + 1]! : null),
       delta: prev
         ? {
             solved: board.solved - prev.solved,
@@ -1803,15 +1925,20 @@ function LedgerDock(props: {
         label: "run",
         lock: true,
         width: "w-52",
-        title: "The run's label (or options-hash name) and when the harness persisted it. Sorted descending = newest first. Click the row to make it the CURRENT run (B).",
+        title:
+          "The run's label (or options-hash name) and when the harness persisted it. Sorted descending = newest first. Click the row to make it the CURRENT run (B).",
         sort: (row) => row.id, // ids are timestamp-prefixed — id order IS chronology
         search: (row) => `${row.label ?? ""} ${row.hash} ${row.id}`,
         cell: (row) => (
           <span className="tele flex min-w-0 items-baseline gap-1.5 px-1.5">
-            <span className={cn("truncate", row.label ? "text-foreground" : "text-muted-foreground")}>
+            <span
+              className={cn("truncate", row.label ? "text-foreground" : "text-muted-foreground")}
+            >
               {runName(row)}
             </span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/70">{fmtTime(row.when)}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/70">
+              {fmtTime(row.when)}
+            </span>
             <PartialityChip part={row.partiality} compact />
           </span>
         ),
@@ -1820,7 +1947,8 @@ function LedgerDock(props: {
         key: "options",
         label: "options",
         width: "w-20",
-        title: "Solver options generation — runs sharing a hash ran identical options; a hash change means the knobs moved.",
+        title:
+          "Solver options generation — runs sharing a hash ran identical options; a hash change means the knobs moved.",
         facet: (row) => row.hash,
         cell: (row) => (
           <span className="flex px-1">
@@ -1834,7 +1962,8 @@ function LedgerDock(props: {
         key: "mark",
         label: "a/b",
         width: "w-14",
-        title: "The sheet's A/B selection. B (current) follows the clicked row; this cell sets/clears A (baseline).",
+        title:
+          "The sheet's A/B selection. B (current) follows the clicked row; this cell sets/clears A (baseline).",
         cell: (row) => {
           if (row.id === curId) {
             return <span className="tele block px-1.5 font-semibold text-foreground">B</span>;
@@ -1853,12 +1982,15 @@ function LedgerDock(props: {
               type="button"
               onClick={() => onPickBaseline(row.id)}
               title={
-                (isA ? "This is the baseline (A) — click to clear it." : "Set this run as the baseline (A).") +
-                caveat
+                (isA
+                  ? "This is the baseline (A) — click to clear it."
+                  : "Set this run as the baseline (A).") + caveat
               }
               className={cn(
                 "tele h-7 w-full px-1.5 text-left",
-                isA ? "font-semibold text-foreground" : "text-muted-foreground/60 hover:text-muted-foreground",
+                isA
+                  ? "font-semibold text-foreground"
+                  : "text-muted-foreground/60 hover:text-muted-foreground",
               )}
             >
               {isA ? "A" : "set A"}
@@ -1889,7 +2021,9 @@ function LedgerDock(props: {
         title: "Accepted rooms across every solved zone.",
         sort: (row) => row.board.acceptedRooms,
         cell: (row) => (
-          <span className="tele block px-1.5 text-right tabular-nums">{row.board.acceptedRooms}</span>
+          <span className="tele block px-1.5 text-right tabular-nums">
+            {row.board.acceptedRooms}
+          </span>
         ),
       },
       {
@@ -1901,7 +2035,9 @@ function LedgerDock(props: {
         title: "Accepted square footage across every solved zone.",
         sort: (row) => row.board.acceptedSqft,
         cell: (row) => (
-          <span className="tele block px-1.5 text-right tabular-nums">{fmtNum(row.board.acceptedSqft, 0)}</span>
+          <span className="tele block px-1.5 text-right tabular-nums">
+            {fmtNum(row.board.acceptedSqft, 0)}
+          </span>
         ),
       },
       {
@@ -1987,7 +2123,8 @@ function LedgerDock(props: {
         group: "Δ vs prev run",
         right: true,
         width: "w-16",
-        title: "Solved zones vs this run's chronological predecessor — NOT the row below after sorting.",
+        title:
+          "Solved zones vs this run's chronological predecessor — NOT the row below after sorting.",
         sort: (row) => row.delta?.solved ?? Number.NEGATIVE_INFINITY,
         cell: (row) => (
           <span className="tele block px-1.5 text-right">
@@ -2046,7 +2183,11 @@ function LedgerDock(props: {
         cell: (row) => (
           <span className="flex items-center gap-1 px-1">
             {row.board.rejectionTop.map(([reason, count]) => (
-              <Chip key={reason} tone="meta" title={`${count} rejections of kind ${reason} in this run.`}>
+              <Chip
+                key={reason}
+                tone="meta"
+                title={`${count} rejections of kind ${reason} in this run.`}
+              >
                 {reason} {count}
               </Chip>
             ))}
@@ -2064,14 +2205,21 @@ function LedgerDock(props: {
       <button
         type="button"
         onClick={onToggle}
-        title={open ? "Collapse the run ledger." : "Expand the run ledger — rows are runs, marks drive the sheet's A/B."}
+        title={
+          open
+            ? "Collapse the run ledger."
+            : "Expand the run ledger — rows are runs, marks drive the sheet's A/B."
+        }
         className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-muted"
       >
         <span className="tele-label text-muted-foreground">ledger</span>
         <span className="tele text-[11px] text-muted-foreground">
-          {runs.length} runs · {optionSets} option sets · click a row = current (B), mark = baseline (A)
+          {runs.length} runs · {optionSets} option sets · click a row = current (B), mark = baseline
+          (A)
         </span>
-        <span className="tele ml-auto text-[11px] text-muted-foreground">{open ? "▾ collapse" : "▴ expand"}</span>
+        <span className="tele ml-auto text-[11px] text-muted-foreground">
+          {open ? "▾ collapse" : "▴ expand"}
+        </span>
       </button>
       {open && (
         <div className="flex flex-col" style={{ height: 320 }}>
@@ -2194,7 +2342,9 @@ export default function RunBrowser() {
     const zone = params.get("zone");
     if (zone) pendingZone.current = zone;
     if ((b && !has(b)) || (a && !has(a))) {
-      setLinkNote(`deep link run${b && !has(b) ? ` B=${b}` : ""}${a && !has(a) ? ` A=${a}` : ""} is not in the pool`);
+      setLinkNote(
+        `deep link run${b && !has(b) ? ` B=${b}` : ""}${a && !has(a) ? ` A=${a}` : ""} is not in the pool`,
+      );
     }
   }, [runs]);
 
@@ -2259,8 +2409,12 @@ export default function RunBrowser() {
       if (!runs || runs.length === 0) return;
       e.preventDefault();
       setCurId((current) => {
-        const idx = Math.max(0, runs.findIndex((r) => r.id === current));
-        const next = e.key === "ArrowUp" ? Math.max(0, idx - 1) : Math.min(runs.length - 1, idx + 1);
+        const idx = Math.max(
+          0,
+          runs.findIndex((r) => r.id === current),
+        );
+        const next =
+          e.key === "ArrowUp" ? Math.max(0, idx - 1) : Math.min(runs.length - 1, idx + 1);
         return runs[next]?.id ?? current;
       });
     };
@@ -2274,10 +2428,7 @@ export default function RunBrowser() {
     setBaseline((b) => (b === id ? "auto" : b));
   }, []);
 
-  const pickBaseline = useCallback(
-    (id: string) => setBaseline((b) => (b === id ? null : id)),
-    [],
-  );
+  const pickBaseline = useCallback((id: string) => setBaseline((b) => (b === id ? null : id)), []);
 
   /** A staged card's row/mark was clicked: swing the LENS to its pinned pair. The stage is
    * untouched — the lens is a view (round-2 state model). */
@@ -2500,7 +2651,10 @@ export default function RunBrowser() {
                       pinned A {item.runA ?? "(none)"} → B {item.runB}
                     </span>
                     {!onLens && (
-                      <span style={{ color: "var(--st-warn)" }} title="Pinned pair differs from the page lens.">
+                      <span
+                        style={{ color: "var(--st-warn)" }}
+                        title="Pinned pair differs from the page lens."
+                      >
                         ≠ lens
                       </span>
                     )}
@@ -2560,12 +2714,18 @@ export default function RunBrowser() {
                     {solved}/{zonePairs.length} solved · {fmtSqft(sf)}
                   </span>
                   {hidden > 0 && (
-                    <Chip tone="meta" title="Zones with no material A/B change, hidden by the 'changed only' filter.">
+                    <Chip
+                      tone="meta"
+                      title="Zones with no material A/B change, hidden by the 'changed only' filter."
+                    >
                       {hidden} unchanged hidden
                     </Chip>
                   )}
                 </div>
-                <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+                <div
+                  className="grid gap-3"
+                  style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+                >
                   {visible.map((pair) => (
                     <div
                       key={pair.id}
@@ -2660,7 +2820,11 @@ export default function RunBrowser() {
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="tele text-sm font-semibold">runs</h1>
           {linkNote && (
-            <span className="tele text-[11px]" style={{ color: "var(--st-warn)" }} title="The URL's deep link could not be fully applied.">
+            <span
+              className="tele text-[11px]"
+              style={{ color: "var(--st-warn)" }}
+              title="The URL's deep link could not be fully applied."
+            >
               {linkNote}
             </span>
           )}
@@ -2676,7 +2840,11 @@ export default function RunBrowser() {
             <span className="tele text-xs text-muted-foreground">
               Δ vs A: <Delta value={board.solved - boardPrev.solved} /> solved ·{" "}
               <Delta value={board.acceptedSqft - boardPrev.acceptedSqft} suffix=" sf" /> ·{" "}
-              <Delta value={board.heldSqft - boardPrev.heldSqft} goodWhenUp={false} suffix=" sf held" />
+              <Delta
+                value={board.heldSqft - boardPrev.heldSqft}
+                goodWhenUp={false}
+                suffix=" sf held"
+              />
             </span>
           )}
           {abCaveat ? (
@@ -2726,7 +2894,9 @@ export default function RunBrowser() {
               title="Show/hide the raster evidence underlay (received ink + invented closures) on every panel and the plan."
               className={cn(
                 "tele rounded-[2px] px-1.5 py-0.5 text-[10px]",
-                underlay ? "bg-secondary text-secondary-foreground" : "border text-muted-foreground",
+                underlay
+                  ? "bg-secondary text-secondary-foreground"
+                  : "border text-muted-foreground",
               )}
               style={underlay ? undefined : { borderColor: "var(--line-2)" }}
             >
@@ -2787,7 +2957,11 @@ export default function RunBrowser() {
                 <button
                   type="button"
                   onClick={() => setPlanOpen((o) => !o)}
-                  title={planOpen ? "Collapse the plan dock (drag the divider to resize it)." : "Expand the plan dock."}
+                  title={
+                    planOpen
+                      ? "Collapse the plan dock (drag the divider to resize it)."
+                      : "Expand the plan dock."
+                  }
                   className="tele px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}

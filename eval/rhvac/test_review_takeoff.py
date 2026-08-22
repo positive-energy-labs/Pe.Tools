@@ -113,6 +113,21 @@ class ReviewTakeoffTests(unittest.TestCase):
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertTrue((root / manifest["contactSheet"]).is_file())
             self.assertEqual(len(manifest["files"]), 3)
+            self.assertEqual(manifest["panelCount"], 2)
+            verified = subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], check=True, cwd=HERE, capture_output=True, text=True)
+            self.assertIn("verified 2 panels", verified.stdout)
+
+            with open(root / "input" / "replay_Test.bin", "ab") as stream:
+                stream.write(b"tampered")
+            rejected = subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("input/replay_Test.bin", rejected.stderr)
 
     def test_zone_promotion_renderer_refuses_missing_replay(self):
         # The stale ink_*.bin lane is deleted: no replay seed ink = hard error naming

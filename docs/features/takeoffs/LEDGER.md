@@ -1,6 +1,10 @@
 # takeoffs ledger
 
 ## Decided
+- 2026-08-22 — Visual adoption is zone-scoped and visual-first: `ceil(0.75 * expected zones)` must pass the full rubric; a contact sheet proves census, while a manifest-complete tight A/B focus atlas is the primary review surface.
+- 2026-08-22 — Visual defect precedence is illegal topology; wrong room topology and stairstep runs; wrong wall rails; then ordinary edit burden. `MicroStepRun` means the severe repeated handle-scale stairstep; a single `DeJog` micro-jog is moderate unless it damages topology.
+- 2026-08-22 — Keep every reliably drawn candidate in the UI through review; do not sync held-room Filled Regions or require their persistence while the algorithm is unstable. Emit `void` only from positive evidence; reevaluate persistence after the solve plateaus.
+- 2026-08-22 — The autonomous tuning loop uses delegated visual checkpoints, not user summons and not every wave: baseline, large cumulative metric moves, named focused investigations, phase boundaries, and plateau.
 - 2026-07-03 — Boundary convention: centerline on interior partitions, outside-face on envelope — matches the firm's taught ASHRAE measuring rule; finish-face undershoots real areas 15–25%.
 - 2026-07-12 — STRAIGHT-ONLY: curve/hole ambition shipped diagonal artifacts across whole plans; removed wholesale.
 - 2026-08-14 — Laws inherited from the whole-level campaign, each with earned evidence: drop-don't-mangle (a missing room is one human fix, a warped polygon is un-diagnosable); editability over area fidelity (raw raster staircases left one editable wall of 82); flag-don't-reject (only ceiling-height variance earned junk-flag status, 93.4% precision / 71% recall); identity is geometric never rank (`R{rank}` reshuffles, label-point + area ±20% re-anchored 100% on a shuffle fixture); counts aren't proof (every claim pairs a plan-image checkpoint with a deterministic census); rooms are one shared coverage (simplify together so a shared edge gets one identical replacement).

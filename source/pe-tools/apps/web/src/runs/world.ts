@@ -4,9 +4,10 @@
 // Data source: the dev-only run-pool file server at `src/routes/api/runs-data.$.ts` (the
 // `pe:takeoff-runs-pool` role; it is a TanStack Start API route, not a vite plugin). It serves
 // the pool at .artifacts/takeoff-runs or PE_TAKEOFF_RUNS_DIR, and reports which directory that
-// resolved to. A run package is exactly what the C# harness persists: report.json (v3) +
-// zones/rooms_*.tsv + input/{ink,seals,close}_*.bin.
-// Underlay law (kaitpw 2026-08-16): raster = what the run actually solved on (its own bins);
+// resolved to. A run package is exactly what the C# harness persists: report.json +
+// zones/rooms_*.tsv + input/replay_*.bin + closure rasters.
+// Underlay law (kaitpw 2026-08-16): raster = the replay snapshot's seed ink, which is what the
+// solver actually partitioned on; the separately persisted ink_*.bin can be stale.
 // rooms/residues/zones = SVG on top. Revit export images are queued as a later alternate underlay
 // (docs/features/takeoff-runs/SHIMS.md #5).
 
@@ -238,9 +239,7 @@ export function modalZoneCount(reports: RunReport[]): number | null {
 /** Modal zone count across the whole pool by run id. Reports are promise-cached, so the ledger
  * and the header share the fetches. Unreadable reports are skipped, not fatal. */
 export async function poolModalZones(runIds: string[]): Promise<number | null> {
-  const reports = await Promise.all(
-    runIds.map((id) => loadRunReport(id).catch(() => null)),
-  );
+  const reports = await Promise.all(runIds.map((id) => loadRunReport(id).catch(() => null)));
   return modalZoneCount(reports.filter((report): report is RunReport => report !== null));
 }
 
@@ -339,9 +338,99 @@ export function loadRaster(runId: string, relPath: string): Promise<Raster> {
   return cached;
 }
 
+export function replayPathForInk(inkPath: string): string {
+  const slash = inkPath.lastIndexOf("/");
+  const directory = slash < 0 ? "" : inkPath.slice(0, slash + 1);
+  const file = inkPath.slice(slash + 1);
+  if (!file.startsWith("ink_")) throw new Error(`${inkPath}: not an ink raster path`);
+  return `${directory}replay_${file.slice(4)}`;
+}
+
+/** Parse the seed-ink portion of the gzipped DetectSnapshot (SKAT). This is intentionally the
+ * same narrow read as eval/rhvac/overlay.py: skip level/elevation/options and floor/ceiling grids,
+ * then expose the exact packed seed-ink bits as a Raster. */
+export function parseReplaySeedInk(buffer: ArrayBuffer): Raster {
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+  let offset = 0;
+  const requireBytes = (count: number, label: string) => {
+    if (offset + count > buffer.byteLength)
+      throw new Error(`detect snapshot truncated at ${label}`);
+  };
+  const uint32 = (label: string) => {
+    requireBytes(4, label);
+    const value = view.getUint32(offset, true);
+    offset += 4;
+    return value;
+  };
+  const int32 = (label: string) => {
+    requireBytes(4, label);
+    const value = view.getInt32(offset, true);
+    offset += 4;
+    return value;
+  };
+  const float64 = (label: string) => {
+    requireBytes(8, label);
+    const value = view.getFloat64(offset, true);
+    offset += 8;
+    return value;
+  };
+  const skipString = (label: string) => {
+    let length = 0;
+    for (let shift = 0; shift < 35; shift += 7) {
+      requireBytes(1, `${label} length`);
+      const byte = bytes[offset++]!;
+      length |= (byte & 0x7f) << shift;
+      if ((byte & 0x80) === 0) {
+        requireBytes(length, label);
+        offset += length;
+        return;
+      }
+    }
+    throw new Error(`detect snapshot has invalid ${label} length`);
+  };
+
+  if (uint32("magic") !== 0x54414b53) throw new Error("not a detect snapshot");
+  int32("version");
+  skipString("level");
+  float64("elevation");
+  skipString("capture options");
+  const w = int32("width");
+  const h = int32("height");
+  const minX = float64("minX");
+  const minY = float64("minY");
+  const cellFt = float64("cellFt");
+  const cells = w * h;
+  if (w <= 0 || h <= 0 || !Number.isSafeInteger(cells)) {
+    throw new Error(`invalid detect snapshot grid: ${w}x${h}`);
+  }
+  requireBytes(8 * cells, "floor/ceiling grids");
+  offset += 8 * cells;
+  const bitBytes = Math.ceil(cells / 8);
+  requireBytes(bitBytes, "seed ink");
+  return { w, h, minX, minY, cellFt, bits: bytes.slice(offset, offset + bitBytes) };
+}
+
+const replayCache = new Map<string, Promise<Raster>>();
+export function loadReplaySeedInk(runId: string, inkPath: string): Promise<Raster> {
+  const relPath = replayPathForInk(inkPath);
+  const key = `${runId}/${relPath}`;
+  let cached = replayCache.get(key);
+  if (!cached) {
+    cached = fetch(`${BASE}/${key}`).then(async (res) => {
+      if (!res.ok) throw new Error(`replay ${key}: ${res.status}`);
+      if (!res.body) throw new Error(`replay ${key}: empty response`);
+      const stream = res.body.pipeThrough(new DecompressionStream("gzip"));
+      return parseReplaySeedInk(await new Response(stream).arrayBuffer());
+    });
+    replayCache.set(key, cached);
+  }
+  return cached;
+}
+
 export function rasterBit(raster: Raster, x: number, y: number): boolean {
   const i = y * raster.w + x;
-  return (raster.bits[i >> 3]! >> (i & 7) & 1) === 1;
+  return ((raster.bits[i >> 3]! >> (i & 7)) & 1) === 1;
 }
 
 const tsvCache = new Map<string, Promise<ZoneGeometry>>();
@@ -376,8 +465,7 @@ export function parseZoneTsv(text: string): ZoneGeometry {
         lx: Number(parts[4]),
         ly: Number(parts[5]),
         ceil: Number(parts[6]),
-        disposition:
-          parts[7] === "accepted" || parts[7] === "held" ? parts[7] : null,
+        disposition: parts[7] === "accepted" || parts[7] === "held" ? parts[7] : null,
       });
     } else if (parts[0] === "POLY") {
       const rings = polys.get(parts[1]!) ?? [];
@@ -431,13 +519,14 @@ export function toPx(vp: ZoneViewport, xFt: number, yFt: number): [number, numbe
 
 export function ringPath(vp: ZoneViewport, rings: [number, number][][]): string {
   return rings
-    .map((ring) =>
-      ring
-        .map((point, index) => {
-          const [x, y] = toPx(vp, point[0], point[1]);
-          return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
-        })
-        .join(" ") + " Z",
+    .map(
+      (ring) =>
+        ring
+          .map((point, index) => {
+            const [x, y] = toPx(vp, point[0], point[1]);
+            return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+          })
+          .join(" ") + " Z",
     )
     .join(" ");
 }
