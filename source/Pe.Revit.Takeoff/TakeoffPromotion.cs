@@ -76,6 +76,7 @@ public static class TakeoffPromotion
         ("evidence", RunEvidence),
         ("scope", RunScope),
         ("ink-backing", RunInkBacking),
+        ("closure-trust", RunClosureTrust),
         ("shared-audit", RunSharedAudit),
         ("editability", RunEditability),
         ("small-zone-fallback", RunSmallZoneFallback),
@@ -94,14 +95,16 @@ public static class TakeoffPromotion
         Func<double, double, double> distanceToInk,
         Action<string>? log = null,
         ZoneCensus? census = null,
-        Func<double, double, double>? distanceToWallInk = null)
+        Func<double, double, double>? distanceToWallInk = null,
+        Func<double, double, byte>? heuristicClosureAt = null)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (zone == null) throw new ArgumentNullException(nameof(zone));
         if (options == null) throw new ArgumentNullException(nameof(options));
         if (distanceToInk == null) throw new ArgumentNullException(nameof(distanceToInk));
         var state = new PromotionState(source, zone, options, distanceToInk, log)
-            { Census = census, DistanceToWallInk = distanceToWallInk ?? distanceToInk };
+            { Census = census, DistanceToWallInk = distanceToWallInk ?? distanceToInk,
+                HeuristicClosureAt = heuristicClosureAt };
         var timer = System.Diagnostics.Stopwatch.StartNew();
         long lastMilliseconds = 0;
         foreach (var stage in Stages)
@@ -134,6 +137,7 @@ public static class TakeoffPromotion
         // door is an opening, not a wall). Falls back to the evidence oracle when the caller has
         // no raw-ink oracle to give.
         internal Func<double, double, double> DistanceToWallInk = distanceToInk;
+        internal Func<double, double, byte>? HeuristicClosureAt;
         internal readonly Action<string>? Log = log;
 
         internal readonly TakeoffResult Result = Clone(source);
@@ -1580,6 +1584,28 @@ public static class TakeoffPromotion
         state.PreservedSharedPairs = shared.PreservedPairs;
         state.LostSharedPairs = shared.LostPairs;
         if (shared.LostPairs > 0) state.Rejections["shared:lost"] = shared.LostPairs;
+    }
+
+    private static void RunClosureTrust(PromotionState state)
+    {
+        if (state.HeuristicClosureAt == null) return;
+        int held = 0;
+        foreach (var room in state.Result.Rooms.OrderBy(item => item.Id, StringComparer.Ordinal).ToList())
+        {
+            var (runs, vertices) = TakeoffEvidenceFidelity.HeuristicClosureComplexity(
+                room, state.DistanceToWallInk, state.ZoneGeometry.Boundary,
+                state.HeuristicClosureAt, state.Options.CellFt);
+            state.Log?.Invoke($"[promotion] closure-trust room={room.Id} runs={runs} vertices={vertices}");
+            if (runs <= vertices) continue;
+            state.Result.Rooms.Remove(room);
+            MoveToRejectedResidue(state.Result, [room]);
+            state.RejectionDetails[$"closure/{room.Id}"] =
+                $"heuristic closure runs {runs} > polygon vertices {vertices}";
+            held++;
+        }
+        if (held == 0) return;
+        state.Rejections["closure:overstitched"] = held;
+        state.Result.TotalSqft = state.Result.Rooms.Sum(room => room.RawSqft);
     }
 
     private static void RunEditability(PromotionState state)

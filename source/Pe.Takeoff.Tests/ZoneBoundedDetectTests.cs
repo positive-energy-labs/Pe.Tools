@@ -379,7 +379,7 @@ public sealed class ZoneBoundedDetectTests
                 var promotion = TakeoffPromotion.PromoteZone(
                     result, zone, policy.Options, distanceToInk,
                     message => File.AppendAllText(progress, message + Environment.NewLine),
-                    census, distanceToWallInk);
+                    census, distanceToWallInk, snap.HeuristicClosureAt(profile));
                 var triage = promotion.Diagnostics.Triage ?? ZoneTriageVerdict.Solve;
                 long promotionMilliseconds = timer.ElapsedMilliseconds;
                 // Append, not overwrite: the promotion stage log written above this point is the

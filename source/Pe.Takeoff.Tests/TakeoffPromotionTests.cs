@@ -452,6 +452,31 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Promotion_holds_a_room_stitched_by_more_heuristic_closures_than_vertices()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("stitched", (1, 1), (11, 1), (11, 11), (1, 11)) },
+            DomainSqft = 100,
+        };
+
+        byte ClosureAt(double x, double y) =>
+            (int)Math.Floor(x + y) % 2 == 0
+                ? Detector.SealWallRunGap
+                : Detector.SealGapClose;
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (12, 0), (12, 12), (0, 12)),
+            Options(minimumRoomSqft: 0), (_, _) => 0,
+            distanceToWallInk: (_, _) => double.PositiveInfinity,
+            heuristicClosureAt: ClosureAt);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms, Is.Empty);
+            Assert.That(promotion.Diagnostics.Rejections["closure:overstitched"], Is.EqualTo(1));
+        });
+    }
+
+    [Test]
     public void Triage_census_without_an_armed_knob_changes_nothing()
     {
         var source = new TakeoffResult {

@@ -284,7 +284,8 @@ public static class TakeoffAtlas
         var profile = TakeoffPolicy.InferLevelProfile(snapshot);
         var promotion = TakeoffPromotion.PromoteZone(
             result, zone, profile.Options, snapshot.EvidenceInkDistance(profile), log,
-            distanceToWallInk: snapshot.SeedInkDistance());
+            distanceToWallInk: snapshot.SeedInkDistance(),
+            heuristicClosureAt: snapshot.HeuristicClosureAt(profile));
         result = promotion.Result;
 
         var view = FindView(doc, args.View);

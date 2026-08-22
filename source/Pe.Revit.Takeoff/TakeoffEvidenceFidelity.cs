@@ -101,6 +101,48 @@ internal static class TakeoffEvidenceFidelity
         return sampled == 0 ? 0 : (double)supported / sampled;
     }
 
+    internal static (int Runs, int Vertices) HeuristicClosureComplexity(
+        RoomResult room,
+        Func<double, double, double> distanceToWallInk,
+        Geometry zoneBoundary,
+        Func<double, double, byte> closureAt,
+        double sampleStepFt)
+    {
+        int runs = 0, vertices = 0;
+        var polygon = ToPolygon(room);
+        foreach (var ring in new[] { polygon.ExteriorRing }
+                     .Concat(Enumerable.Range(0, polygon.NumInteriorRings)
+                         .Select(polygon.GetInteriorRingN)))
+        {
+            var points = CollapseCollinear(ring.Coordinates.Take(ring.NumPoints - 1).ToList());
+            vertices += points.Count;
+            var classes = new List<byte>();
+            for (int edge = 0; edge < points.Count; edge++)
+            {
+                var start = points[edge];
+                var end = points[(edge + 1) % points.Count];
+                double length = start.Distance(end);
+                int count = Math.Max(1, (int)Math.Ceiling(length / sampleStepFt));
+                for (int index = 0; index < count; index++)
+                {
+                    double t = (index + 0.5) / count;
+                    var point = Factory.CreatePoint(new Coordinate(
+                        start.X + t * (end.X - start.X), start.Y + t * (end.Y - start.Y)));
+                    byte support = zoneBoundary.Distance(point) <= 0.75 + Epsilon
+                                   || distanceToWallInk(point.X, point.Y) <= 0.75 + Epsilon
+                        ? Detector.SealNone
+                        : closureAt(point.X, point.Y);
+                    classes.Add(support);
+                }
+            }
+            for (int index = 0; index < classes.Count; index++)
+                if (classes[index] is Detector.SealWallRunGap or Detector.SealGapClose
+                    && classes[index] != classes[(index + classes.Count - 1) % classes.Count])
+                    runs++;
+        }
+        return (runs, vertices);
+    }
+
     internal static IReadOnlyList<MisalignedExposedRail> Evaluate(
         IReadOnlyList<RoomResult> rooms,
         Func<double, double, double> distanceToInk)
