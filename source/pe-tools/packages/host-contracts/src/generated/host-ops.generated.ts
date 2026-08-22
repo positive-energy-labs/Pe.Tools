@@ -331,55 +331,6 @@ export namespace RevitApplyCommandExecute {
   }
 }
 
-/** Open and activate a local or Autodesk cloud Revit document in the connected Revit session; local workshared files can be opened detached. */
-export namespace RevitApplyDocumentOpen {
-  export namespace Req {
-    /**
-     * Worksharing detach behavior for opening a local workshared file. Mirrors Revit's
-     * DetachFromCentralOption (the contract assembly cannot reference RevitAPI). Detached
-     * opens are the sandbox-document story: DetachAndPreserveWorksets is the sensible
-     * detach flavor; DoNotDetach is the request default so ordinary opens stay untouched.
-     *
-     */
-    export type WorksharingDetachOption = "DoNotDetach" | "DetachAndPreserveWorksets" | "DetachAndDiscardWorksets";
-
-    export interface Request {
-      path?: null | string;
-      cloudRegion?: null | string;
-      cloudProjectGuid?: null | string;
-      cloudModelGuid?: null | string;
-      detach?: WorksharingDetachOption;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      document: RevitDocumentSummary;
-      session: RevitDocumentSessionContextData;
-      isDetached: boolean;
-    }
-    export interface RevitDocumentSummary {
-      documentKey: string;
-      title: string;
-      path?: null | string;
-      isFamilyDocument: boolean;
-      isWorkshared: boolean;
-      isActive: boolean;
-      isModifiable: boolean;
-      isReadOnly: boolean;
-      isModelInCloud: boolean;
-      cloudProjectGuid?: null | string;
-      cloudModelGuid?: null | string;
-      cloudModelUrn?: null | string;
-    }
-    export interface RevitDocumentSessionContextData {
-      hasActiveDocument: boolean;
-      activeDocument?: null | RevitDocumentSummary;
-      openDocumentCount: number;
-      openDocuments: RevitDocumentSummary[];
-    }
-  }
-}
-
 /** Build a new target-year Revit family from portable family.json and save it to an explicit .rfa output path. */
 export namespace RevitApplyFamilyModel {
   export namespace Req {
@@ -4957,7 +4908,6 @@ export interface HostOps {
   "familyfoundry.project": { request: FamilyfoundryProject.Req.Request; response: FamilyfoundryProject.Res.Response };
   "host.ops.catalog": { request: HostOpsCatalog.Req.Request; response: HostOpsCatalog.Res.Response };
   "revit.apply.command.execute": { request: RevitApplyCommandExecute.Req.Request; response: RevitApplyCommandExecute.Res.Response };
-  "revit.apply.document.open": { request: RevitApplyDocumentOpen.Req.Request; response: RevitApplyDocumentOpen.Res.Response };
   "revit.apply.family-model": { request: RevitApplyFamilyModel.Req.Request; response: RevitApplyFamilyModel.Res.Response };
   "revit.apply.parameter-links": { request: RevitApplyParameterLinks.Req.Request; response: RevitApplyParameterLinks.Res.Response };
   "revit.apply.parameter-values": { request: RevitApplyParameterValues.Req.Request; response: RevitApplyParameterValues.Res.Response };
@@ -5018,7 +4968,6 @@ export const hostOpKeys = [
   "familyfoundry.project",
   "host.ops.catalog",
   "revit.apply.command.execute",
-  "revit.apply.document.open",
   "revit.apply.family-model",
   "revit.apply.parameter-links",
   "revit.apply.parameter-values",

@@ -118,60 +118,6 @@ export const hostShellOpenDataSchema = Schema.Struct({
 });
 export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
 
-export const RevitRecentDocumentSource = {
-  RevitIni: "RevitIni",
-  RegistryProfileMru: "RegistryProfileMru",
-} as const;
-
-export type RevitRecentDocumentSource =
-  (typeof RevitRecentDocumentSource)[keyof typeof RevitRecentDocumentSource];
-
-export const revitRecentDocumentSourceSchema = Schema.Literals(["RevitIni", "RegistryProfileMru"]);
-
-export const RevitRecentDocumentPathKind = {
-  LocalPath: "LocalPath",
-  CloudPath: "CloudPath",
-  Unknown: "Unknown",
-} as const;
-
-export type RevitRecentDocumentPathKind =
-  (typeof RevitRecentDocumentPathKind)[keyof typeof RevitRecentDocumentPathKind];
-
-export const revitRecentDocumentPathKindSchema = Schema.Literals([
-  "LocalPath",
-  "CloudPath",
-  "Unknown",
-]);
-
-export type RevitRecentDocumentsRequest = Schema.Schema.Type<
-  typeof revitRecentDocumentsRequestSchema
->;
-
-export const revitRecentDocumentsRequestSchema = Schema.Struct({
-  includeRegistryMru: Schema.optional(Schema.Boolean),
-  localFilesOnly: Schema.optional(Schema.Boolean),
-  revitYear: Schema.optional(Schema.NullOr(Schema.String)),
-});
-
-export type RevitRecentDocumentEntry = Schema.Schema.Type<typeof revitRecentDocumentEntrySchema>;
-
-export const revitRecentDocumentEntrySchema = Schema.Struct({
-  exists: Schema.optional(Schema.NullOr(Schema.Boolean)),
-  path: Schema.String,
-  pathKind: revitRecentDocumentPathKindSchema,
-  profile: Schema.optional(Schema.NullOr(Schema.String)),
-  rank: Schema.optional(Schema.NullOr(Schema.Number)),
-  revitYear: Schema.String,
-  source: revitRecentDocumentSourceSchema,
-  title: Schema.String,
-});
-
-export type RevitRecentDocumentsData = Schema.Schema.Type<typeof revitRecentDocumentsDataSchema>;
-
-export const revitRecentDocumentsDataSchema = Schema.Struct({
-  documents: Schema.Array(revitRecentDocumentEntrySchema),
-});
-
 export const SettingsFileKind = {
   Profile: "Profile",
   Fragment: "Fragment",
@@ -803,10 +749,6 @@ export const tsOnlyOperationSchemas = {
     request: hostLogsRequestSchema,
     response: hostLogsDataSchema,
   },
-  "revit.catalog.recent-documents": {
-    request: revitRecentDocumentsRequestSchema,
-    response: revitRecentDocumentsDataSchema,
-  },
   "rhvac.open": {
     request: rhvacPathRequestSchema,
     response: rhvacExtractSchema,
@@ -905,28 +847,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "HostShellOpenRequest",
     responseTypeName: "HostShellOpenData",
     searchTerms: ["host", "shell", "open", "file", "directory", "default app", "artifact"],
-  },
-  {
-    key: "revit.catalog.recent-documents",
-    origin: "host-local",
-    displayName: "Recent Documents",
-    description:
-      "Recently opened Revit documents, read from Revit.ini and the per-profile registry MRU on this machine. Works without a connected Revit session.",
-    intent: "Read",
-    visibility: "DefaultVisible",
-    costTier: "Cheap",
-    requiresActiveDocument: false,
-    requestTypeName: "RevitRecentDocumentsRequest",
-    responseTypeName: "RevitRecentDocumentsData",
-    searchTerms: [
-      "recent",
-      "documents",
-      "recent files",
-      "mru",
-      "revit.ini",
-      "open recent",
-      "projects",
-    ],
   },
   {
     key: "rhvac.open",

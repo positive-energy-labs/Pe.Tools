@@ -60,7 +60,7 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
 // are appended so discovery (host_operation_search, pea `operations`, the web ops page)
 // sees both surfaces from one catalog; host-typegen skips them by their origin marker.
 // A disconnected bridge still lists the local ops (they need no Revit session) with a
-// bridgeCatalogError note, rather than a bare 503 — so discovery of e.g. recent-documents
+// bridgeCatalogError note, rather than a bare 503 — so discovery of e.g. settings workspaces
 // works with the host up and Revit closed. (host-typegen treats a bridge-op-less catalog
 // as "no session" and does not regenerate off the local ops alone.)
 const opsCatalogRoute = HttpRouter.add("GET", "/ops", (req) =>

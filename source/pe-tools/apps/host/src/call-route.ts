@@ -4,7 +4,6 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { RevitBridge, BridgeError, NoRevitSession, type BridgeSessionView } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import {
-  collectRecentDocuments,
   discoverSettingsTree,
   getBridgeSessionSummary,
   getHostStatus,
@@ -226,8 +225,6 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
         invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
           bridge.invoke(operationKey, payload, scopedBridgeSessionId),
       });
-    case "revit.catalog.recent-documents":
-      return yield* collectRecentDocuments(yield* decodeRequest(key, request));
     case "rhvac.open":
       return yield* rhvacOpen(yield* decodeRequest(key, request));
     case "rhvac.assemblies":
