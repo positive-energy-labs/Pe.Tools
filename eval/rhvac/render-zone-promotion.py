@@ -32,6 +32,8 @@ ACCEPTED = (24, 91, 122)
 ACCEPTED_FILL = (229, 237, 241)
 HELD = (219, 150, 55)
 HELD_FILL = (250, 238, 217)
+REVIEW_HELD = (190, 55, 145)
+REVIEW_HELD_FILL = (249, 224, 241)
 VOID = (145, 145, 145)
 VOID_FILL = (236, 236, 236)
 EXCLUDED = (92, 92, 92)
@@ -371,8 +373,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
             "paddingCells": padding_cells,
             "scale": scale,
             "layers": ["replay-seed-ink", "door-head-seal", "wall-run-seal",
-                       "gap-close", "accepted", "held", "void", "excluded",
-                       "zone-authority"],
+                       "gap-close", "accepted", "held", "review-held-ui-only",
+                       "void", "excluded", "zone-authority"],
         })
     if x1 <= x0 or y1 <= y0:
         panel = Image.new("RGB", (900, 700), "white")
@@ -384,6 +386,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         return panel
 
     rooms, polygons, residues = overlay.load_disposition_tsv(tsv_path)
+    domain_reflood = field(zone, "domainReflood", default={}) or {}
+    review_held = field(domain_reflood, "heldCandidates", default=[]) or []
 
     def point(value):
         return ((value[0] - min_x) / cell - x0,
@@ -406,6 +410,12 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
             if len(loop) >= 3:
                 fill_draw.polygon([point(value) for value in loop],
                                   fill=ACCEPTED_FILL if kind == "outer" else "white")
+    for candidate in review_held:
+        loops = field(candidate, "polygons", default=[]) or []
+        if loops:
+            fill_draw.polygon([point(value) for value in loops[0]], fill=REVIEW_HELD_FILL)
+            for hole in loops[1:]:
+                fill_draw.polygon([point(value) for value in hole], fill="white")
 
     # Raster layers over the fills: synthetic closures screened (checkerboard — never solid,
     # so they cannot read as drawn walls), then evidence ink solid black on top of everything.
@@ -449,6 +459,11 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
             if len(loop) >= 2 and not provenance:
                 draw.line([point(value) for value in loop] + [point(loop[0])],
                           fill=ACCEPTED, width=3 if kind == "outer" else 2)
+    for candidate in review_held:
+        for loop in field(candidate, "polygons", default=[]) or []:
+            if len(loop) >= 2 and not provenance:
+                _draw_dashed(draw, [point(value) for value in loop],
+                             REVIEW_HELD, 3, (7, 4))
     # Scope is a first-class review datum, not an inferred crop. Draw every outer/hole loop last
     # so a reviewer can see exactly what the accepted, held, and excluded areas must partition.
     for loop in zone["ZoneLoops"]:
@@ -472,6 +487,11 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
             ("held", residue["id"], "outer" if index == 0 else "hole", loop)
             for residue in residues if residue["reason"] == "rejected"
             for index, loop in enumerate(residue["loops"])
+        ] + [
+            ("review-held", field(candidate, "id"),
+             "outer" if index == 0 else "hole", loop)
+            for candidate in review_held
+            for index, loop in enumerate(field(candidate, "polygons", default=[]) or [])
         ]
         totals = {name: 0.0 for name in PROVENANCE}
         regions = {}
@@ -542,7 +562,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
     title = (f"{zone['Zone']}   zone {zone['ZoneSqft']:.0f} sf   raw {zone['RawRooms']}   "
              f"network-strict {zone.get('SharedNetworkStrictRooms', 0)}   "
              f"accepted {zone['AcceptedRooms']}   held {zone['HeldRooms']}   "
-             f"excluded {zone['ExcludedSqft']:.0f} sf")
+             + (f"review-held +{len(review_held)}   " if review_held else "")
+             + f"excluded {zone['ExcludedSqft']:.0f} sf")
     ratio = ink_ratio_of(zone)
     # "closure" used to name the accounting residual here, which collides with the closure the
     # sealers draw. The residual is a leak; closure is sealed area, split by which sealer claimed
@@ -615,6 +636,7 @@ PIXEL_LEGEND = (
 DECISION_LEGEND = (
     (ACCEPTED, "decision", "accepted", ACCEPTED_FILL),
     (HELD, "decision", "held", HELD_FILL),
+    (REVIEW_HELD, "decision", "review-held (UI-only)", REVIEW_HELD_FILL),
     (EXCLUDED, "decision", "excluded", EXCLUDED_FILL),
     (VOID, "decision", "void", VOID_FILL),
 )
@@ -720,7 +742,7 @@ def _atlas_label(draw, point, text, text_font):
 def _short_atlas_label(status, candidate_id):
     match = re.search(r"R(\d+)", candidate_id)
     suffix = f"{int(match.group(1)):02d}" if match else ""
-    return {"accepted": "A", "held": "H"}[status] + suffix
+    return {"accepted": "A", "held": "H", "review-held": "C"}[status] + suffix
 
 
 def _draw_atlas_key(draw, y, text_size=13):
@@ -740,6 +762,7 @@ def _draw_atlas_key(draw, y, text_size=13):
     styles = {
         "A accepted": (ACCEPTED, 4, None),
         "H held": (HELD, 4, (6, 4)),
+        "C review-held (UI-only)": (REVIEW_HELD, 3, (7, 4)),
         "X excluded": (EXCLUDED, 2, (2, 5)),
         "V void": (VOID, 2, (10, 4)),
     }
@@ -819,6 +842,14 @@ def render_level_atlas(root, level, zones, output):
                 xs, ys = zip(*loops[0])
                 label = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
                 candidates.append((status, zone, residue["id"], loops[:1], loops[1:], label))
+        domain_reflood = field(zone, "domainReflood", default={}) or {}
+        for candidate in field(domain_reflood, "heldCandidates", default=[]) or []:
+            loops = field(candidate, "polygons", default=[]) or []
+            if loops:
+                xs, ys = zip(*loops[0])
+                label = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+                candidates.append(("review-held", zone, field(candidate, "id"),
+                                   loops[:1], loops[1:], label))
 
     keys = [_atlas_candidate_key(zone, candidate_id)
             for _status, zone, candidate_id, *_rest in candidates]
@@ -852,6 +883,7 @@ def render_level_atlas(root, level, zones, output):
     styles = {
         "accepted": (ACCEPTED, 4, None, "A"),
         "held": (HELD, 4, (6, 4), "H"),
+        "review-held": (REVIEW_HELD, 3, (7, 4), "C"),
         "excluded": (EXCLUDED, 2, (2, 5), "X"),
         "void": (VOID, 2, (10, 4), "V"),
     }
@@ -861,7 +893,7 @@ def render_level_atlas(root, level, zones, output):
         for loop in [*outers, *holes]:
             if len(loop) >= 2:
                 _draw_dashed(draw, [point(value) for value in loop], color, line_width, dash)
-        if status in ("accepted", "held"):
+        if status in ("accepted", "held", "review-held"):
             _atlas_label(draw, point(label), _short_atlas_label(status, candidate_id), label_font)
 
     zone_font = font(14)

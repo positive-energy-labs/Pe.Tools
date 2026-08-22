@@ -4,10 +4,16 @@ internal sealed record ZoneDomainLossComponent(
     double AreaSqft,
     IReadOnlyList<List<double[]>> Polygons);
 
+internal sealed record ZoneDomainHeldCandidate(
+    string Id,
+    double AreaSqft,
+    IReadOnlyList<List<double[]>> Polygons);
+
 internal sealed record ZoneDomainDiagnostics(
     double PreparedDomainSqft,
     double CropRecomputedDomainSqft,
     IReadOnlyList<ZoneDomainLossComponent> LostComponents,
+    IReadOnlyList<ZoneDomainHeldCandidate> HeldCandidates,
     string? ExclusionProvenance);
 
 internal sealed class PreparedTakeoffDetection
@@ -70,7 +76,7 @@ internal sealed class PreparedTakeoffDetection
     {
         whiteoutCells = 0;
         diagnostics = collectDiagnostics
-            ? new ZoneDomainDiagnostics(0, 0, [], null)
+            ? new ZoneDomainDiagnostics(0, 0, [], [], null)
             : null!;
         if (zone == null) throw new ArgumentNullException(nameof(zone));
         const int paddingCells = 2;
@@ -215,12 +221,71 @@ internal sealed class PreparedTakeoffDetection
                 .ThenBy(item => item.Start)
                 .Select(item => item.Component)
                 .ToList();
+            var heldCandidates = DomainRefloodHeldCandidates(
+                ordered, this.levelName, this.levelElevation, this.options,
+                zone.ExactGeometry());
             return new ZoneDomainDiagnostics(
                 preparedDomain.Count(value => value) * cellArea,
                 recomputedDomain.Count(value => value) * cellArea,
                 ordered,
+                heldCandidates,
                 ordered.Count == 0 ? null : "crop-reflood");
         }
+    }
+
+    internal static IReadOnlyList<ZoneDomainHeldCandidate> DomainRefloodHeldCandidates(
+        IReadOnlyList<ZoneDomainLossComponent> components,
+        string levelName,
+        double levelElevation,
+        TakeoffOptions options,
+        NetTopologySuite.Geometries.Geometry? declaredZone = null)
+    {
+        var candidates = new List<ZoneDomainHeldCandidate>();
+        for (int index = 0; index < components.Count; index++)
+        {
+            var component = components[index];
+            if (component.AreaSqft < options.MinimumPromotedRoomSqft
+                || component.Polygons.Count != 1)
+                continue;
+            var room = new RoomResult {
+                Id = $"CROP-REFLOOD-HELD:{index + 1}",
+                RawSqft = component.AreaSqft,
+                Polygon = component.Polygons[0].Select(point => (double[])point.Clone()).ToList(),
+            };
+            try
+            {
+                var polygon = TakeoffGeometry.ToPolygon(room);
+                if (!polygon.IsValid || polygon.IsEmpty) continue;
+                room.PerimeterFt = polygon.Length;
+                room.LabelX = polygon.InteriorPoint.X;
+                room.LabelY = polygon.InteriorPoint.Y;
+                var source = new TakeoffResult {
+                    LevelName = levelName,
+                    LevelElevation = levelElevation,
+                    DomainSqft = component.AreaSqft,
+                    TotalSqft = component.AreaSqft,
+                    Rooms = { room },
+                };
+                var projected = FrameLocalProjector.Project(
+                    source, FrameLocalKnobs.From(options), declaredZone);
+                if (projected.Accepted.Rooms.Count != 1) continue;
+                var accepted = projected.Accepted.Rooms[0];
+                var acceptedPolygon = TakeoffGeometry.ToPolygon(accepted);
+                // This is a conservative crop-reflood review admission, not a claim that rooms
+                // are generally convex. Concavity here has no surviving ownership evidence.
+                if (acceptedPolygon.ConvexHull().Area - acceptedPolygon.Area
+                    > 1d / TakeoffGeometry.CoverageScale)
+                    continue;
+                candidates.Add(new ZoneDomainHeldCandidate(
+                    room.Id, accepted.RawSqft,
+                    new[] { accepted.Polygon }.Concat(accepted.Holes).ToList()));
+            }
+            catch (InvalidOperationException)
+            {
+                // Malformed diagnostic geometry is not reviewable room geometry.
+            }
+        }
+        return candidates;
     }
 }
 

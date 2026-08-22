@@ -235,6 +235,7 @@ public sealed class ZoneBoundedDetectTests
             WallClaimFt = 0,
         };
         var prepared = Detector.Prepare(field, ink, "Diagnostic", 0, options, _ => { });
+        var ordinary = prepared.Detect(RectZone("inside", 5, 5, 15, 15), _ => { });
 
         var result = prepared.Detect(
             RectZone("inside", 5, 5, 15, 15), _ => { },
@@ -248,9 +249,42 @@ public sealed class ZoneBoundedDetectTests
             Assert.That(diagnostics.LostComponents, Has.Count.EqualTo(1));
             Assert.That(diagnostics.LostComponents.Single().AreaSqft, Is.EqualTo(100));
             Assert.That(diagnostics.LostComponents.Single().Polygons, Has.Count.EqualTo(1));
+            Assert.That(diagnostics.HeldCandidates, Has.Count.EqualTo(1));
+            Assert.That(diagnostics.HeldCandidates.Single().AreaSqft, Is.EqualTo(100));
             Assert.That(result.DomainSqft, Is.EqualTo(diagnostics.CropRecomputedDomainSqft),
                 "diagnostics must observe, not alter, the effective partition domain");
+            Assert.That(result.ToTsv(), Is.EqualTo(ordinary.ToTsv()),
+                "review candidates must not change an incumbent disposition or polygon");
         });
+    }
+
+    [Test]
+    public void Domain_reflood_holds_a_rectangle_but_not_concave_or_scalloped_components()
+    {
+        var rectangle = new ZoneDomainLossComponent(120, [
+            [new[] { 0d, 0d }, new[] { 12d, 0d }, new[] { 12d, 10d }, new[] { 0d, 10d }],
+        ]);
+        var concave = new ZoneDomainLossComponent(64, [
+            [new[] { 0d, 20d }, new[] { 10d, 20d }, new[] { 10d, 24d },
+             new[] { 4d, 24d }, new[] { 4d, 30d }, new[] { 0d, 30d }],
+        ]);
+        var scalloped = new ZoneDomainLossComponent(110, [
+            [new[] { 20d, 0d }, new[] { 32d, 0d }, new[] { 32d, 10d },
+             new[] { 31.5, 10d }, new[] { 31.5, 4d }, new[] { 31d, 4d },
+             new[] { 31d, 10d }, new[] { 30.5, 10d }, new[] { 30.5, 4d },
+             new[] { 30d, 4d }, new[] { 30d, 10d }, new[] { 29.5, 10d },
+             new[] { 29.5, 4d }, new[] { 29d, 4d }, new[] { 29d, 10d },
+             new[] { 28.5, 10d }, new[] { 28.5, 4d }, new[] { 28d, 4d },
+             new[] { 28d, 10d }, new[] { 27.5, 10d }, new[] { 27.5, 4d },
+             new[] { 27d, 4d }, new[] { 27d, 10d }, new[] { 20d, 10d }],
+        ]);
+
+        var candidates = PreparedTakeoffDetection.DomainRefloodHeldCandidates(
+            [rectangle, concave, scalloped], "Diagnostic", 0,
+            new TakeoffOptions { MinimumPromotedRoomSqft = 30 });
+
+        Assert.That(candidates.Select(candidate => candidate.Id),
+            Is.EqualTo(new[] { "CROP-REFLOOD-HELD:1" }));
     }
 
     // ---- projectA: real capture x real designer zones ----
@@ -579,6 +613,11 @@ public sealed class ZoneBoundedDetectTests
                         lostComponents = domainDiagnostics.LostComponents.Select(component => new {
                             areaSqft = component.AreaSqft,
                             polygons = component.Polygons,
+                        }),
+                        heldCandidates = domainDiagnostics.HeldCandidates.Select(candidate => new {
+                            id = candidate.Id,
+                            areaSqft = candidate.AreaSqft,
+                            polygons = candidate.Polygons,
                         }),
                         exclusionProvenance = domainDiagnostics.ExclusionProvenance,
                     },
