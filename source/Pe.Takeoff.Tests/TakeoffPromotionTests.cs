@@ -426,6 +426,32 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Small_zone_holds_a_zone_only_room_recombined_from_three_candidates()
+    {
+        var room = Room("room", (0, 0), (10, 0), (10, 10), (0, 10));
+        room.MergedFrom = "a+b+c";
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { room },
+            DomainSqft = 100,
+        };
+        var options = Options(minimumRoomSqft: 0);
+        options.SmallZoneSqft = 750;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("room", (0, 0), (10, 0), (10, 10), (0, 10)),
+            options, (_, _) => 0, TestContext.Out.WriteLine,
+            new ZoneCensus(100, 10, 0.1, [], 0));
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.Triage!.IsHold, Is.True);
+            Assert.That(promotion.Result.Rooms, Is.Empty);
+            Assert.That(promotion.Result.Residues.Single().Id, Is.EqualTo("TRIAGE-HELD:small-zone"));
+            Assert.That(promotion.Diagnostics.Rejections["small-zone:ambiguous-merge"], Is.EqualTo(1));
+        });
+    }
+
+    [Test]
     public void Triage_census_without_an_armed_knob_changes_nothing()
     {
         var source = new TakeoffResult {

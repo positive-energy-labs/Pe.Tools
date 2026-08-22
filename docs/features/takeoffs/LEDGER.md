@@ -1,7 +1,7 @@
 # takeoffs ledger
 
 ## Decided
-- 2026-08-22 — Small-zone triage is solve-first with whole-zone Held fallback only when zero Accepted rooms survive: 7/16 zones keep 8 visually sound promotions (+2,959 sf); 9/16 retain prior geometry. Attic02 improves but remains FAIL; fresh board stays 35/45 PASS. (151/151; deterministic rerun 0 deltas.)
+- 2026-08-22 — Small-zone triage is solve-first, then falls back whole on zero Accepted or one zone-only room recombined from 3+ candidates: 5/16 zones keep 6 sound promotions (+1,610 sf); 11/16 retain prior geometry. Attic02 improves but remains FAIL; fresh board stays 35/45 PASS. (152/152.)
 - 2026-08-22 — Full-plan review atlas is the adjacency/macrotopology view; original-resolution zone panels remain close-up authority. Candidate fills key stably on zone+candidate, status stays in the outline, and zone authority stays magenta. (`2a5b9c8`, `be5c4cf`; 15/15.)
 - 2026-08-22 — Connected `RegionCores` seeding supersedes Hybrid as the recombined base: raw 219→195, Held 115→98, Accepted 58→60, and Accepted area stayed within 0.2%. Two fresh visual reviews found major LL08/Main08 cleanup and no new definitely-wrong Accepted topology; LL08's Accepted strip and Main05's credible hall demotion remain explicit tuning targets.
 - 2026-08-22 — Final plateau adjudication supersedes the provisional 34-zone audit: 32 PASS / 10 FAIL / 3 AMBIGUOUS. Two independent adjudicators agreed 11/13 disputed panels are PASS; a final tie-break confirms Lower Level#08 and Upper Level#01 FAIL. (`final-adjudicated-visual-verdict.md`; 45/45; 108/108 hashes.)

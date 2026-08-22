@@ -177,7 +177,25 @@ public static class TakeoffPromotion
 
     private static void RunSmallZoneFallback(PromotionState state)
     {
-        if (state.SmallZoneFallback == null || state.Result.Rooms.Count > 0) return;
+        if (state.SmallZoneFallback == null) return;
+        if (state.Result.Rooms.Count == 1)
+        {
+            var room = state.Result.Rooms[0];
+            int mergedSources = room.MergedFrom?
+                .Split('+', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+            double? support = TakeoffEvidenceFidelity.RoomBoundarySupportFraction(
+                room, state.DistanceToInk, state.ZoneGeometry.Boundary,
+                state.Options.InkBackedZoneEdgeExemptFt);
+            if (mergedSources >= 3 && support == null)
+            {
+                state.Rejections["small-zone:ambiguous-merge"] = 1;
+                state.Log?.Invoke($"[promotion] small-zone whole-boundary room held: " +
+                                  $"mergedSources={mergedSources}");
+                HoldWhole(state, state.SmallZoneFallback);
+                return;
+            }
+        }
+        if (state.Result.Rooms.Count > 0) return;
         HoldWhole(state, state.SmallZoneFallback);
     }
 

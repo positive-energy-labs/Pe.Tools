@@ -95,7 +95,7 @@ public sealed class TakeoffOptions
     // (SmallZoneLowInkSqft/MinZoneInkRatio) was deleted 2026-08-16: never armed, and inkRatio was
     // falsified as a per-zone discriminator on framing-clean bins (DECISIONS 2026-08-16).
     public double SmallZoneSqft = 750;      // at or under: solve, then hold whole if no room survives (0 = off);
-                                            // current projectA: 7 of 16 solve; the other 9 fall back whole
+                                            // current projectA: 5 of 16 solve; the other 11 fall back whole
     // ---- Pre-solve ink hygiene (InkHygiene.cs) ----
     public int InkClusterWhiteoutCells = 100; // drop floating in-zone ink clusters smaller than this (0 = off)
     // ---- Zone-edge ink pull (PartitionFormulation.Run) ----
