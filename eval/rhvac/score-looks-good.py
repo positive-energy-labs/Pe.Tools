@@ -21,7 +21,7 @@
 #     InkBackedEdgeFraction uses accepted rooms with NO exemption; we mirror that exactly
 #     for the agreement check.
 #
-# Saved-work score v1 (change freely; this is a gradient, not a contract):
+# Historical saved-work diagnostic v1 (never adoption authority):
 #   per oracle room r in the zoned area:
 #     contribution(r) = quality(P)        if rep-point lands in an accepted polygon P
 #                     = 0.25 * quality(P) if it lands only in a held polygon P
@@ -32,7 +32,7 @@
 #   need no ortho cleanup; a held room saves ~a quarter (it must be reviewed and promoted);
 #   a missing room saves nothing.
 #
-# Currency v1.1 — oracle hygiene (R3b, kaitpw-approved 2026-08-16, landed 2026-08-17):
+# Historical diagnostic v1.1 — oracle hygiene (R3b, landed 2026-08-17):
 #   R3b proved 25/118 oracle rooms are phantoms/duplicates: rooms whose sourcePdf names the
 #   Guest House (a separate building misregistered onto the main model), and same-floor
 #   duplicate pairs from overlapping enlarged-plan pages (floor-2 pages 12/13 overlap
@@ -46,6 +46,7 @@
 #   FALSIFIER: a dropped room later accepted cleanly at its exact footprint means the
 #   dedupe kept the wrong copy — reopen the hygiene rules, don't patch the solver.
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -233,11 +234,13 @@ def backed_stats(geometry, grid, zone_boundary=None, exempt_ft=EXEMPT_FT):
     return float(hits.mean()), int(keep.sum()), exempt
 
 
-def worst_unbacked_run_ft(geometry, grid, zone_boundary=None, exempt_ft=EXEMPT_FT):
-    """Longest per-segment run of lawful-evidence misses, in 0.25 ft sample currency."""
-    worst = 0
-    for part in _polygon_parts(geometry):
-        for ring in [part.exterior.coords] + [r.coords for r in part.interiors]:
+def worst_unbacked_run(geometry, grid, zone_boundary=None, exempt_ft=EXEMPT_FT):
+    """Longest per-segment run of lawful-evidence misses, with its review address."""
+    worst = None
+    for part_index, part in enumerate(_polygon_parts(geometry)):
+        rings = [("outer", part.exterior.coords)] + [
+            (f"hole:{i}", ring.coords) for i, ring in enumerate(part.interiors)]
+        for ring_name, ring in rings:
             pts = collapse_collinear(list(ring))
             for i in range(len(pts)):
                 (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % len(pts)]
@@ -253,11 +256,34 @@ def worst_unbacked_run_ft(geometry, grid, zone_boundary=None, exempt_ft=EXEMPT_F
                         shapely.points(np.column_stack([xs, ys])), zone_boundary)
                     keep = dist > exempt_ft + EPS
                 hits = grid.distance_ft(xs, ys) <= HIT_FT + EPS
-                run = 0
-                for eligible, hit in zip(keep, hits):
-                    run = run + 1 if eligible and not hit else 0
-                    worst = max(worst, run)
-    return round(worst * SAMPLE_STEP_FT, 4)
+                run_start = None
+                for sample_index, (eligible, hit) in enumerate(zip(keep, hits)):
+                    if eligible and not hit:
+                        if run_start is None:
+                            run_start = sample_index
+                        sample_count = sample_index - run_start + 1
+                        if worst is None or sample_count > worst["sampleCount"]:
+                            worst = dict(
+                                lengthFt=round(sample_count * SAMPLE_STEP_FT, 4),
+                                sampleCount=sample_count,
+                                part=part_index,
+                                ring=ring_name,
+                                edgeIndex=i,
+                                edge={"from": _point(x0, y0), "to": _point(x1, y1)},
+                                run={"from": _point(xs[run_start], ys[run_start]),
+                                     "to": _point(xs[sample_index], ys[sample_index])})
+                    else:
+                        run_start = None
+    return worst
+
+
+def worst_unbacked_run_ft(geometry, grid, zone_boundary=None, exempt_ft=EXEMPT_FT):
+    detail = worst_unbacked_run(geometry, grid, zone_boundary, exempt_ft)
+    return detail["lengthFt"] if detail else 0.0
+
+
+def _point(x, y):
+    return [round(float(x), 4), round(float(y), 4)]
 
 
 def zone_geometry(loops):
@@ -388,6 +414,217 @@ def interior_swallow(geometry, ink, zone_boundary=None, band_ft=WALL_BAND_FT):
         if core.is_empty:
             return 0.0
     return ink.ink_inside(core)
+
+
+# ---- addressed shape and wall-rail diagnostics ------------------------------
+
+MICRO_EDGE_MAX_FT = 1.0
+MICRO_RUN_MIN_EDGES = 3
+JOG_STEP_MAX_FT = 2.25
+SHAPE_ANGLE_TOL_DEG = 0.25
+PAIR_TOL_DEG = 3.0
+PAIR_NOISE_FT = 0.06
+PAIR_INK_TOL_FT = 0.3
+PAIR_STEP_FT = 0.25
+PAIR_MIN_LEN_FT = 1.0
+
+
+def _rings(geometry):
+    for part_index, part in enumerate(_polygon_parts(geometry)):
+        yield part_index, "outer", collapse_collinear(list(part.exterior.coords))
+        for ring_index, ring in enumerate(part.interiors):
+            yield part_index, f"hole:{ring_index}", collapse_collinear(list(ring.coords))
+
+
+def _edge(pts, index):
+    a, b = pts[index], pts[(index + 1) % len(pts)]
+    return a, b, math.hypot(b[0] - a[0], b[1] - a[1])
+
+
+def _angle_difference_degrees(a, b):
+    delta = abs(a - b) % math.pi
+    return math.degrees(min(delta, math.pi - delta))
+
+
+def shape_details(geometry):
+    """Census severe MicroStepRun chains separately from single DeJog-shaped steps."""
+    stairsteps, jogs = [], []
+    for part_index, ring_name, pts in _rings(geometry):
+        if len(pts) < 3:
+            continue
+        edges = [_edge(pts, i) for i in range(len(pts))]
+        short = [edge[2] <= MICRO_EDGE_MAX_FT + EPS for edge in edges]
+        runs = []
+        if all(short):
+            runs.append(list(range(len(edges))))
+        else:
+            for start in range(len(edges)):
+                if not short[start] or short[(start - 1) % len(edges)]:
+                    continue
+                indices = []
+                while len(indices) < len(edges) and short[(start + len(indices)) % len(edges)]:
+                    indices.append((start + len(indices)) % len(edges))
+                if len(indices) >= MICRO_RUN_MIN_EDGES:
+                    runs.append(indices)
+        severe_edges = {index for run in runs for index in run}
+        for indices in runs:
+            first, last = edges[indices[0]], edges[indices[-1]]
+            stairsteps.append(dict(
+                part=part_index, ring=ring_name, edgeIndexes=indices,
+                edgeCount=len(indices), spanFt=round(sum(edges[i][2] for i in indices), 4),
+                **{"from": _point(*first[0]), "to": _point(*last[1])}))
+
+        for index, (a, b, step) in enumerate(edges):
+            if index in severe_edges or step > JOG_STEP_MAX_FT + EPS:
+                continue
+            previous = edges[(index - 1) % len(edges)]
+            following = edges[(index + 1) % len(edges)]
+            prev_angle = math.atan2(previous[1][1] - previous[0][1],
+                                    previous[1][0] - previous[0][0])
+            step_angle = math.atan2(b[1] - a[1], b[0] - a[0])
+            next_angle = math.atan2(following[1][1] - following[0][1],
+                                    following[1][0] - following[0][0])
+            same_direction = (math.cos(prev_angle) * math.cos(next_angle)
+                              + math.sin(prev_angle) * math.sin(next_angle)) > 0
+            if (not same_direction
+                    or _angle_difference_degrees(prev_angle, next_angle) > SHAPE_ANGLE_TOL_DEG
+                    or abs(_angle_difference_degrees(prev_angle, step_angle) - 90)
+                    > SHAPE_ANGLE_TOL_DEG):
+                continue
+            jogs.append(dict(part=part_index, ring=ring_name, edgeIndex=index,
+                             stepFt=round(step, 4),
+                             **{"from": _point(*a), "to": _point(*b)}))
+    return dict(
+        stairstepRunCount=len(stairsteps),
+        stairstepEdges=sum(run["edgeCount"] for run in stairsteps),
+        maxStairstepSpanFt=max((run["spanFt"] for run in stairsteps), default=0.0),
+        stairstepRuns=stairsteps,
+        microJogCount=len(jogs),
+        microJogs=jogs)
+
+
+def zone_loop_segments(loops):
+    segments = []
+    for loop in loops:
+        pts = [tuple(p[:2]) for p in loop]
+        if len(pts) >= 2 and pts[0] == pts[-1]:
+            pts = pts[:-1]
+        for i in range(len(pts)):
+            a, b = pts[i], pts[(i + 1) % len(pts)]
+            if math.hypot(b[0] - a[0], b[1] - a[1]) > EPS:
+                segments.append((a, b))
+    return segments
+
+
+def geometry_segments(geometry):
+    return [(a, b) for _, _, pts in _rings(geometry)
+            for i in range(len(pts)) for a, b, length in [_edge(pts, i)] if length > EPS]
+
+
+def double_line_pairs(geometry, segments, ink, band_ft=WALL_BAND_FT):
+    """Room edges offset from another authority while both occupy one seed-ink wall band."""
+    pairs = []
+    for part_index, ring_name, pts in _rings(geometry):
+        for edge_index in range(len(pts)):
+            (x0, y0), (x1, y1), edge_len = _edge(pts, edge_index)
+            if edge_len <= EPS:
+                continue
+            edge_angle = math.atan2(y1 - y0, x1 - x0)
+            for segment_index, (sa, sb) in enumerate(segments):
+                ux, uy = sb[0] - sa[0], sb[1] - sa[1]
+                segment_len = math.hypot(ux, uy)
+                ux, uy = ux / segment_len, uy / segment_len
+                if _angle_difference_degrees(
+                        edge_angle, math.atan2(sb[1] - sa[1], sb[0] - sa[0])) > PAIR_TOL_DEG:
+                    continue
+
+                def offset_of(px, py):
+                    return (px - sa[0]) * -uy + (py - sa[1]) * ux
+
+                def along_of(px, py):
+                    return (px - sa[0]) * ux + (py - sa[1]) * uy
+
+                o0, o1 = offset_of(x0, y0), offset_of(x1, y1)
+                if max(abs(o0), abs(o1)) <= PAIR_NOISE_FT:
+                    continue
+                if min(abs(o0), abs(o1)) > band_ft:
+                    continue
+                t0, t1 = along_of(x0, y0), along_of(x1, y1)
+                if max(t0, t1) < 0 or min(t0, t1) > segment_len:
+                    continue
+                count = max(2, int(math.ceil(edge_len / PAIR_STEP_FT)) + 1)
+                qualifying = []
+                for edge_t in np.linspace(0.0, 1.0, count):
+                    px, py = x0 + (x1 - x0) * edge_t, y0 + (y1 - y0) * edge_t
+                    offset = o0 + (o1 - o0) * edge_t
+                    along = t0 + (t1 - t0) * edge_t
+                    if (along < -EPS or along > segment_len + EPS
+                            or abs(offset) <= PAIR_NOISE_FT or abs(offset) > band_ft):
+                        continue
+                    xs = [px - sweep * offset * -uy for sweep in (0, 0.25, 0.5, 0.75, 1.0)]
+                    ys = [py - sweep * offset * ux for sweep in (0, 0.25, 0.5, 0.75, 1.0)]
+                    if bool(np.all(ink.distance_ft(xs, ys) <= PAIR_INK_TOL_FT + EPS)):
+                        qualifying.append(abs(offset))
+                length = len(qualifying) * edge_len / (count - 1)
+                if length >= PAIR_MIN_LEN_FT:
+                    pairs.append(dict(
+                        part=part_index, ring=ring_name, edgeIndex=edge_index,
+                        **{"from": _point(x0, y0), "to": _point(x1, y1)},
+                        lengthFt=round(length, 1),
+                        meanOffsetFt=round(float(np.mean(qualifying)), 2),
+                        targetSegmentIndex=segment_index))
+                    break
+    return pairs
+
+
+def sibling_double_line_pairs(polygons, ink):
+    """Each unordered candidate pair is measured once; exact shared edges are excluded."""
+    details = []
+    ordered = sorted(polygons, key=lambda item: (item[0], item[1]))
+    for index, (disposition_a, id_a, geometry_a) in enumerate(ordered):
+        for disposition_b, id_b, geometry_b in ordered[index + 1:]:
+            for pair in double_line_pairs(geometry_a, geometry_segments(geometry_b), ink):
+                pair.update(room=id_a, disposition=disposition_a,
+                            siblingRoom=id_b, siblingDisposition=disposition_b)
+                details.append(pair)
+    return details
+
+
+def _sibling_pair_groups(pairs):
+    groups = {key: {"pairs": 0, "feet": 0.0}
+              for key in ("accepted-accepted", "accepted-held", "held-held")}
+    for pair in pairs:
+        key = "-".join(sorted((pair["disposition"], pair["siblingDisposition"])))
+        groups[key]["pairs"] += 1
+        groups[key]["feet"] += pair["lengthFt"]
+    for group in groups.values():
+        group["feet"] = round(group["feet"], 1)
+    return groups
+
+
+def _merge_group_totals(group_sets):
+    result = {key: {"pairs": 0, "feet": 0.0}
+              for key in ("accepted-accepted", "accepted-held", "held-held")}
+    for groups in group_sets:
+        for key, values in groups.items():
+            result[key]["pairs"] += values["pairs"]
+            result[key]["feet"] += values["feet"]
+    for group in result.values():
+        group["feet"] = round(group["feet"], 1)
+    return result
+
+
+def _shape_by_disposition(polygons):
+    result = {}
+    for disposition in ("accepted", "held"):
+        selected = [p for p in polygons if p["disposition"] == disposition]
+        result[disposition] = dict(
+            stairstepRuns=sum(p["stairstepRunCount"] for p in selected),
+            stairstepEdges=sum(p["stairstepEdges"] for p in selected),
+            maxStairstepSpanFt=max(
+                (p["maxStairstepSpanFt"] for p in selected), default=0.0),
+            microJogCount=sum(p["microJogCount"] for p in selected))
+    return result
 
 
 # ---- report loading ----------------------------------------------------------
@@ -566,8 +803,8 @@ def oracle_rooms_by_floor(oracle):
 # ---- score -------------------------------------------------------------------
 
 def score_report(report_path, clean=True):
-    """clean=True scores against the v1.1 hygiene-cleaned oracle (the current currency);
-    clean=False keeps the raw v1 oracle for the transition-rule dual board line."""
+    """clean=True uses the v1.1 hygiene-cleaned oracle; clean=False keeps raw v1.
+    Both savedWork variants are historical diagnostics, never adoption authority."""
     report, base = load_report(report_path)
     levels = load_levels(report, base)
     oracle = load_oracle()
@@ -592,6 +829,7 @@ def score_report(report_path, clean=True):
         zboundary = zgeom.boundary
         frame = frame_angle_deg(zone["ZoneLoops"])
         accepted, held = load_zone_polygons(os.path.join(base, zone["Tsv"]))
+        zone_segments = zone_loop_segments(zone["ZoneLoops"])
 
         polys_out = []
         agg = {"accepted": [0, 0], "held": [0, 0]}          # evidence-rail hits/samples
@@ -604,11 +842,13 @@ def score_report(report_path, clean=True):
                 if grids:
                     frac, sampled, exempt = backed_stats(geometry, grids["evidence"], zboundary)
                     frac_ink, _, _ = backed_stats(geometry, grids["ink"], zboundary)
+                    unbacked = worst_unbacked_run(
+                        geometry, grids["evidence"], zboundary)
                     row.update(edgeOnInk=None if frac is None else round(frac, 4),
                                edgeOnInkInkOnly=None if frac_ink is None else round(frac_ink, 4),
                                sampled=sampled, exemptSamples=exempt,
-                               worstUnbackedRunFt=worst_unbacked_run_ft(
-                                   geometry, grids["evidence"], zboundary))
+                               worstUnbackedRunFt=unbacked["lengthFt"] if unbacked else 0.0,
+                               worstUnbackedRun=unbacked)
                     if frac is not None:
                         agg[disposition][0] += frac * sampled
                         agg[disposition][1] += sampled
@@ -622,8 +862,25 @@ def score_report(report_path, clean=True):
                     row.update(swallowSf=round(swallow, 1),
                                swallowFraction=round(swallow / geometry.area, 4)
                                if geometry.area > EPS else 0.0)
+                    pairs = double_line_pairs(geometry, zone_segments, grids["ink"])
+                    row.update(doubleLinePairs=len(pairs),
+                               doubleLineFt=round(sum(p["lengthFt"] for p in pairs), 1),
+                               doubleLineDetails=pairs)
+                row.update(shape_details(geometry))
                 row.update(ortho_stats(geometry, frame))
                 polys_out.append(row)
+
+        sibling_pairs = (sibling_double_line_pairs(
+            [(disposition, pid, geometry)
+             for disposition, table in (("accepted", accepted), ("held", held))
+             for pid, geometry in table.items()], grids["ink"])
+            if grids else [])
+        stairstep_details = [dict(zone=zone["Zone"], room=p["id"],
+                                  disposition=p["disposition"], **detail)
+                             for p in polys_out for detail in p["stairstepRuns"]]
+        micro_jog_details = [dict(zone=zone["Zone"], room=p["id"],
+                                  disposition=p["disposition"], **detail)
+                             for p in polys_out for detail in p["microJogs"]]
 
         # room recall against oracle rooms whose representative point is in this zone
         zone_oracle = [r for r in oracle_rooms.get(floor, []) if zgeom.contains(r["point"])]
@@ -687,6 +944,7 @@ def score_report(report_path, clean=True):
                                  else 0.25 * quality if status == "held" else 0.0)
         zones_out.append(dict(
             zone=zone["Zone"], level=zone["Level"], verdict=zone["triage"]["verdict"],
+            zoneGeometryHash=_zone_geometry_hash(zone),
             zoneSqft=zone["ZoneSqft"], frameDeg=round(frame, 2),
             oracleRooms=len(zone_oracle), recallAccepted=recalled, recallHeld=held_count,
             missing=len(zone_oracle) - recalled - held_count,
@@ -704,6 +962,28 @@ def score_report(report_path, clean=True):
             if any(p["disposition"] == "accepted" for p in polys_out) else None,
             medianWorstUnbackedRunAccepted=_median_worst_run(polys_out, "accepted"),
             medianWorstUnbackedRunHeld=_median_worst_run(polys_out, "held"),
+            maxUnbackedRun=_max_unbacked_run(polys_out, zone["Zone"]),
+            doubleLinePairs=sum(p.get("doubleLinePairs", 0) for p in polys_out),
+            doubleLineFt=round(sum(p.get("doubleLineFt", 0.0) for p in polys_out), 1),
+            doubleLinePairsAccepted=sum(p.get("doubleLinePairs", 0) for p in polys_out
+                                        if p["disposition"] == "accepted"),
+            doubleLineFtAccepted=round(sum(p.get("doubleLineFt", 0.0) for p in polys_out
+                                           if p["disposition"] == "accepted"), 1),
+            doubleLinePairsHeld=sum(p.get("doubleLinePairs", 0) for p in polys_out
+                                    if p["disposition"] == "held"),
+            doubleLineFtHeld=round(sum(p.get("doubleLineFt", 0.0) for p in polys_out
+                                       if p["disposition"] == "held"), 1),
+            siblingDoubleLinePairs=len(sibling_pairs),
+            siblingDoubleLineFt=round(sum(p["lengthFt"] for p in sibling_pairs), 1),
+            siblingDoubleLineByDisposition=_sibling_pair_groups(sibling_pairs),
+            siblingDoubleLineDetails=sibling_pairs,
+            stairstepRuns=len(stairstep_details),
+            stairstepEdges=sum(detail["edgeCount"] for detail in stairstep_details),
+            maxStairstepSpanFt=max(
+                (detail["spanFt"] for detail in stairstep_details), default=0.0),
+            stairstepDetails=stairstep_details,
+            microJogCount=len(micro_jog_details), microJogDetails=micro_jog_details,
+            shapeByDisposition=_shape_by_disposition(polys_out),
             savedWork=round(float(np.mean(contributions)), 4) if contributions else None,
             polygons=polys_out, oracleRoomStatus=oracle_rows,
             oracleBoundaryDistance=distance_rows))
@@ -735,12 +1015,30 @@ def score_report(report_path, clean=True):
         if any(p["disposition"] == "accepted" for p in all_polys) else None,
         medianWorstUnbackedRunAccepted=_median_worst_run(all_polys, "accepted"),
         medianWorstUnbackedRunHeld=_median_worst_run(all_polys, "held"),
+        maxUnbackedRun=_max_unbacked_run(all_polys),
+        doubleLinePairs=sum(z["doubleLinePairs"] for z in zones_out),
+        doubleLineFt=round(sum(z["doubleLineFt"] for z in zones_out), 1),
+        doubleLinePairsAccepted=sum(z["doubleLinePairsAccepted"] for z in zones_out),
+        doubleLineFtAccepted=round(sum(z["doubleLineFtAccepted"] for z in zones_out), 1),
+        doubleLinePairsHeld=sum(z["doubleLinePairsHeld"] for z in zones_out),
+        doubleLineFtHeld=round(sum(z["doubleLineFtHeld"] for z in zones_out), 1),
+        siblingDoubleLinePairs=sum(z["siblingDoubleLinePairs"] for z in zones_out),
+        siblingDoubleLineFt=round(sum(z["siblingDoubleLineFt"] for z in zones_out), 1),
+        siblingDoubleLineByDisposition=_merge_group_totals(
+            [z["siblingDoubleLineByDisposition"] for z in zones_out]),
+        stairstepRuns=sum(z["stairstepRuns"] for z in zones_out),
+        stairstepEdges=sum(z["stairstepEdges"] for z in zones_out),
+        maxStairstepSpanFt=max((z["maxStairstepSpanFt"] for z in zones_out), default=0.0),
+        microJogCount=sum(z["microJogCount"] for z in zones_out),
+        shapeByDisposition=_shape_by_disposition(all_polys),
         distanceBuckets={b: sum(1 for d in all_dist if d["bucket"] == b)
                          for b in ("as-is", "nudge", "redraw")},
         unzonedOracleRooms=unzoned)
-    return dict(report=os.path.abspath(report_path),
-                generatedUtc=report.get("GeneratedUtc"),
-                currency="v1.1 (cleaned oracle)" if clean else "v1 (raw oracle)",
+    return dict(metricSchemaVersion=2,
+                identity=_score_identity(report),
+                currency="v1.1 (cleaned oracle; historical diagnostic)"
+                if clean else "v1 (raw oracle; historical diagnostic)",
+                savedWorkUse="historical-diagnostic-not-adoption",
                 oracleHygiene=hygiene, board=board, zones=zones_out)
 
 
@@ -760,6 +1058,32 @@ def _median_worst_run(polys, disposition):
     return round(float(np.median(values)), 4) if values else None
 
 
+def _max_unbacked_run(polys, zone=None):
+    candidates = [(p, p.get("worstUnbackedRun")) for p in polys
+                  if p.get("worstUnbackedRun")]
+    if not candidates:
+        return None
+    polygon, detail = max(candidates, key=lambda item: item[1]["lengthFt"])
+    return dict(zone=zone or polygon["zone"], room=polygon["id"],
+                disposition=polygon["disposition"], **detail)
+
+
+def _zone_geometry_hash(zone):
+    payload = json.dumps(
+        {"zone": zone["Zone"], "loops": zone["ZoneLoops"]},
+        ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _score_identity(report):
+    zone_hashes = [_zone_geometry_hash(zone) for zone in report["Zones"]]
+    digest = hashlib.sha256("\n".join(zone_hashes).encode("ascii")).hexdigest()
+    return dict(reportSchemaVersion=report.get("SchemaVersion"),
+                optionsHash=report.get("optionsHash"),
+                zoneFilter=report.get("zoneFilter"),
+                zoneGeometryHash=digest)
+
+
 def _print_board(label, board):
     print(f"{label} oracleRooms={board['oracleRoomsInZones']} "
           f"recall={board['roomRecall']} held={board['heldRecall']} "
@@ -770,17 +1094,25 @@ def _print_board(label, board):
           f"buckets={board['distanceBuckets']}")
     print(f"{' ' * len(label)} worstUnbackedRun median acc="
           f"{board['medianWorstUnbackedRunAccepted']} "
-          f"held={board['medianWorstUnbackedRunHeld']}")
+          f"held={board['medianWorstUnbackedRunHeld']} max={board['maxUnbackedRun']}")
+    print(f"{' ' * len(label)} doubleLine zone-room accepted="
+          f"{board['doubleLinePairsAccepted']} pairs / {board['doubleLineFtAccepted']} ft "
+          f"held={board['doubleLinePairsHeld']} pairs / {board['doubleLineFtHeld']} ft; "
+          f"sibling geometric={board['siblingDoubleLinePairs']} pairs / "
+          f"{board['siblingDoubleLineFt']} ft")
+    print(f"{' ' * len(label)} shape stairsteps={board['stairstepRuns']} runs / "
+          f"{board['stairstepEdges']} edges max={board['maxStairstepSpanFt']} ft "
+          f"microJogs={board['microJogCount']} by disposition={board['shapeByDisposition']}")
 
 
 def cmd_score(args):
-    # Transition rule (kaitpw-approved): both currencies print while v1.1 beds in —
-    # v1.1 first and labeled; the per-zone table below is v1.1.
+    # Retain both historical diagnostics so old experiment history stays readable.
     scores = score_report(args.report, clean=True)
     scores_v1 = score_report(args.report, clean=False)
     board = scores["board"]
     hygiene = scores["oracleHygiene"]
-    print(f"report: {scores['report']}  generated {scores['generatedUtc']}")
+    report, _ = load_report(args.report)
+    print(f"report: {os.path.abspath(args.report)}  generated {report.get('GeneratedUtc')}")
     _print_board("board v1.1 (cleaned oracle):", board)
     _print_board("board v1   (raw oracle):    ", scores_v1["board"])
     print(f"oracle hygiene v1.1: dropped "
@@ -810,7 +1142,8 @@ def cmd_score(args):
     if args.out:
         scores["boardV1RawOracle"] = scores_v1["board"]
         with open(args.out, "w", encoding="utf-8") as f:
-            json.dump(scores, f, indent=1)
+            json.dump(scores, f, indent=1, sort_keys=True, allow_nan=False)
+            f.write("\n")
         print(f"wrote {os.path.abspath(args.out)}")
     return scores
 
@@ -973,7 +1306,9 @@ def _card_zone_names(zone_names):
 
 COMPARE_KEYS = ["roomRecall", "heldRecall", "edgeOnInkAccepted", "edgeOnInkHeld",
                 "swallowSf", "meanEditCostAccepted", "medianWorstUnbackedRunAccepted",
-                "medianWorstUnbackedRunHeld", "savedWork"]
+                "medianWorstUnbackedRunHeld", "doubleLinePairs", "doubleLineFt",
+                "siblingDoubleLinePairs", "siblingDoubleLineFt", "stairstepRuns",
+                "stairstepEdges", "maxStairstepSpanFt", "microJogCount", "savedWork"]
 
 HONESTY_TOL = 0.005  # kaitpw round-3 wording: "beyond ~0.005 noise"
 
@@ -1031,8 +1366,10 @@ def cmd_compare(args):
     za = {z["zone"]: z for z in a["zones"]}
     zb = {z["zone"]: z for z in b["zones"]}
     matches = _card_zone_names(list(za))
-    print(f"A: {a['report']} ({a['generatedUtc']})")
-    print(f"B: {b['report']} ({b['generatedUtc']})")
+    report_a, _ = load_report(args.report_a)
+    report_b, _ = load_report(args.report_b)
+    print(f"A: {os.path.abspath(args.report_a)} ({report_a.get('GeneratedUtc')})")
+    print(f"B: {os.path.abspath(args.report_b)} ({report_b.get('GeneratedUtc')})")
     print(f"currency: {a['currency']} both sides")
     print("report-card zones: " + ", ".join(
         f"{code}->{name or 'NO MATCH'}" for code, name in matches))

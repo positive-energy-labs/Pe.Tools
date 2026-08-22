@@ -142,6 +142,15 @@ def test_worst_unbacked_run_uses_quarter_foot_samples_and_resets_at_exemption():
         room, empty, zone_boundary=room.boundary, exempt_ft=1.0) == 0.0
 
 
+def test_worst_unbacked_run_names_room_edge_and_run_endpoints():
+    empty = slg.Grid(np.zeros((40, 40), dtype=bool), 0.0, 0.0, 0.25)
+    detail = slg.worst_unbacked_run(Polygon([(0, 0), (4, 0), (4, 2), (0, 2)]), empty)
+    assert detail["lengthFt"] > 0
+    assert set(detail["edge"]) == {"from", "to"}
+    assert set(detail["run"]) == {"from", "to"}
+    assert detail["ring"] == "outer"
+
+
 def test_interior_swallow_detects_interior_ink_only():
     # 10x10 ft room on a 0.25 ft grid; ink stripe through the middle = swallowed wall;
     # ink hugging the boundary stays inside the 1.5 ft wall-claim band and is ignored.
@@ -225,6 +234,72 @@ def test_zone_geometry_even_odd():
     assert abs(geom.area - (100 - 16)) < 1e-6
     assert not geom.contains(slg.Point(5, 5))
     assert geom.contains(slg.Point(1, 1))
+
+
+def _wall_band_grid():
+    mask = np.zeros((84, 84), dtype=bool)
+    centers = (np.arange(84) + 0.5) * 0.25
+    mask[:, centers >= 19] = True
+    return slg.Grid(mask, 0.0, 0.0, 0.25)
+
+
+def test_double_line_pairs_prices_zone_room_edge_on_wall_band():
+    segments = slg.zone_loop_segments([[[0, 0], [20, 0], [20, 20], [0, 20]]])
+    room = Polygon([(2, 2), (19.4, 2), (19.4, 18), (2, 18)])
+    pairs = slg.double_line_pairs(room, segments, _wall_band_grid())
+    assert len(pairs) == 1
+    assert abs(pairs[0]["meanOffsetFt"] - 0.6) < 0.01
+    assert 14.0 <= pairs[0]["lengthFt"] <= 16.5
+    assert set(pairs[0]) >= {"from", "to", "edgeIndex", "targetSegmentIndex"}
+
+
+def test_double_line_pairs_ignores_unified_and_bare_floor_edges():
+    segments = slg.zone_loop_segments([[[0, 0], [20, 0], [20, 20], [0, 20]]])
+    unified = Polygon([(2, 2), (19.98, 2), (19.98, 18), (2, 18)])
+    assert slg.double_line_pairs(unified, segments, _wall_band_grid()) == []
+    bare = slg.Grid(np.zeros((84, 84), dtype=bool), 0.0, 0.0, 0.25)
+    offset = Polygon([(2, 2), (19.4, 2), (19.4, 18), (2, 18)])
+    assert slg.double_line_pairs(offset, segments, bare) == []
+
+
+def test_sibling_double_line_pairs_prices_each_room_pair_once():
+    room_a = Polygon([(2, 2), (19.4, 2), (19.4, 18), (2, 18)])
+    room_b = Polygon([(20, 2), (21, 2), (21, 18), (20, 18)])
+    pairs = slg.sibling_double_line_pairs(
+        [("accepted", "R01", room_a), ("held", "H01", room_b)], _wall_band_grid())
+    assert len(pairs) == 1
+    assert (pairs[0]["room"], pairs[0]["siblingRoom"]) == ("R01", "H01")
+    assert pairs[0]["lengthFt"] >= 14
+
+
+def test_shape_details_separates_stairstep_run_from_single_micro_jog():
+    stairstep = Polygon([
+        (0, 0), (4, 0), (4, 4), (3.5, 4), (3.5, 4.5), (3, 4.5), (3, 8), (0, 8)])
+    severe = slg.shape_details(stairstep)
+    assert severe["stairstepRunCount"] == 1
+    assert severe["stairstepEdges"] == 3
+    assert severe["microJogCount"] == 0
+
+    micro_jog = Polygon([(0, 0), (4, 0), (4, 1), (8, 1), (8, 8), (0, 8)])
+    moderate = slg.shape_details(micro_jog)
+    assert moderate["stairstepRunCount"] == 0
+    assert moderate["microJogCount"] == 1
+    assert moderate["microJogs"][0]["stepFt"] == 1.0
+
+
+def test_shape_details_clean_rectangle_has_no_offense():
+    details = slg.shape_details(Polygon([(0, 0), (10, 0), (10, 8), (0, 8)]))
+    assert details["stairstepRunCount"] == 0
+    assert details["microJogCount"] == 0
+
+
+def test_score_identity_excludes_generated_time_and_artifact_paths():
+    zone = {"Zone": "Z#00", "ZoneLoops": [[[0, 0], [1, 0], [1, 1], [0, 1]]]}
+    a = {"SchemaVersion": 4, "GeneratedUtc": "A", "optionsHash": "abc",
+         "zoneFilter": None, "Zones": [dict(zone, Tsv="one/rooms.tsv")]}
+    b = {"SchemaVersion": 4, "GeneratedUtc": "B", "optionsHash": "abc",
+         "zoneFilter": None, "Zones": [dict(zone, Tsv="two/rooms.tsv")]}
+    assert slg._score_identity(a) == slg._score_identity(b)
 
 
 def test_symmetric_boundary_distance_offset_squares():
