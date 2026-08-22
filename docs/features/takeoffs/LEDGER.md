@@ -171,5 +171,6 @@
 - `takeoffs.sync` as an atomic op.
 - Move geometry + assembly math out of the route.
 - Fixture-scaffolding hygiene prunes.
+- Reconcile the frozen 45-zone project-a fixture against the current 49 live candidates before recapture. LL00/LL01 are unstamped orphan regions outside their owner-view crop; Attic03 is a valid in-crop scope omitted by the old replay. Do not widen capture or classify until the authoritative expected set is settled (`p2capture/REPORT.md`).
 - Lower Level oracle registration is UNTRUSTED (median 1.95 ft chamfer, floor-mapping suspect).
 - Main 10 has 0 in-zone oracle rooms — cheap to resolve.
