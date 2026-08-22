@@ -1,6 +1,7 @@
 # takeoffs ledger
 
 ## Decided
+- 2026-08-22 — Connected `RegionCores` seeding supersedes Hybrid as the recombined base: raw 219→195, Held 115→98, Accepted 58→60, and Accepted area stayed within 0.2%. Two fresh visual reviews found major LL08/Main08 cleanup and no new definitely-wrong Accepted topology; LL08's Accepted strip and Main05's credible hall demotion remain explicit tuning targets.
 - 2026-08-22 — Final plateau adjudication supersedes the provisional 34-zone audit: 32 PASS / 10 FAIL / 3 AMBIGUOUS. Two independent adjudicators agreed 11/13 disputed panels are PASS; a final tie-break confirms Lower Level#08 and Upper Level#01 FAIL. (`final-adjudicated-visual-verdict.md`; 45/45; 108/108 hashes.)
 - 2026-08-22 — Semantic visual verdicts are external evaluation data bound to the exact review-manifest SHA and complete panel census; the harness refuses tamper or omission and reports separate disposition fractions, never a quality scalar or solver input. (`c9dd2dc`; 13/13; final census 32/10/3 with 108/108 hashes.)
 - 2026-08-22 — The first manifest-complete semantic audit reported 34 PASS / 8 FAIL / 3 AMBIGUOUS with 108/108 hashes, retiring the older 25/17/3 renderer count; its LL08 and UL01 PASS rulings were later overturned by final adjudication. (`r1-semantic-visual-verdict.md`, manifest `39826e88…`.)

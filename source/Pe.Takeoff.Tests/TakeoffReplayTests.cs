@@ -236,13 +236,9 @@ public sealed class TakeoffReplayTests
                 "profile-specific closing must not change replay evidence");
             Assert.That(doubleProfile.DoubleHeightFraction, Is.GreaterThan(0.4));
             Assert.That(doubleProfile.Options.StoryCapFt, Is.EqualTo(20));
-            // Seeding is Hybrid by DEFAULT since the 2026-08-14 fan-out; the stepped-ceiling
-            // upgrade branch (dead by override order once Hybrid became the default) was deleted
-            // 2026-08-16 per DECISIONS. Every inferred profile arrives Hybrid, and RegionCores is
-            // reachable only by asking for it explicitly.
-            Assert.That(hybridProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
-            Assert.That(basementProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
-            Assert.That(new TakeoffOptions().SeedSource, Is.EqualTo(TakeoffSeedSource.Hybrid));
+            Assert.That(hybridProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.RegionCores));
+            Assert.That(basementProfile.Options.SeedSource, Is.EqualTo(TakeoffSeedSource.RegionCores));
+            Assert.That(new TakeoffOptions().SeedSource, Is.EqualTo(TakeoffSeedSource.RegionCores));
         });
     }
 

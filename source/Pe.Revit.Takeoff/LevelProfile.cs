@@ -200,10 +200,8 @@ public static class TakeoffPolicy
             profile.Options.StoryCapFt = Math.Ceiling(maxCeilingAboveLevel);
         }
 
-        // SeedSource stays at the Hybrid default everywhere; the old stepped-ceiling upgrade rule
-        // (and the below-grade -> RegionCores steer it once guarded) was dead by override order
-        // once Hybrid became the default, and was deleted 2026-08-16 per the takeoffs ledger
-        // ("revive it consciously or delete it"). RegionCores is reachable only by explicit ask.
+        // SeedSource stays at the RegionCores default everywhere. Hybrid remains an explicit
+        // experiment; it created extra Held partitions without improving Accepted truth on projectA.
         if (profile.NoHabitableDomain)
             profile.Flags.Add("no-habitable-domain");
         return profile;

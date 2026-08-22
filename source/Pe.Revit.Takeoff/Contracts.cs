@@ -73,7 +73,7 @@ public sealed class TakeoffOptions
     // ---- Partition formulation knobs (PartitionFormulation.cs) ----
     // Defaults, not per-project constants: evidence weights are calibratable; widths follow building
     // conventions (door ~2.5 ft).
-    public TakeoffSeedSource SeedSource = TakeoffSeedSource.Hybrid;
+    public TakeoffSeedSource SeedSource = TakeoffSeedSource.RegionCores;
     public double SeedClearFt = 1.5;        // DistanceMaxima: seed plateau must sit this clear of strong evidence
     public double CeilStepEvidenceFt = 0.75;   // ceiling-height jump where boundary evidence starts
     public double CeilStepSaturationFt = 2.5;  // jump size at which it saturates to CeilStepWeight
