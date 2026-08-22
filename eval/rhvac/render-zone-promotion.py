@@ -23,7 +23,7 @@ import overlay
 #             SEAL_RUN is the heuristic wall-run gap sealer. Older artifacts fall back to
 #             the merged seals_*.bin drawn as one SEAL_DOOR-colored layer. CLOSE is the
 #             stud-gap morphological close, muted because it rims every wall by construction.
-#   DECIDED   accepted / held / void rooms — crisp outlines over pale solid fills that sit
+#   DECIDED   accepted / held / void / excluded areas — crisp outlines over pale solid fills
 #             UNDER the evidence, so a decision can never obscure the ink it was made on.
 #   REFERENCE the zone boundary.
 ACCEPTED = (24, 91, 122)
@@ -32,6 +32,8 @@ HELD = (219, 150, 55)
 HELD_FILL = (250, 238, 217)
 VOID = (145, 145, 145)
 VOID_FILL = (236, 236, 236)
+EXCLUDED = (92, 92, 92)
+EXCLUDED_FILL = overlay.DISPOSITION_EXCLUDED
 INK = (25, 25, 25)
 SEAL_DOOR = (222, 58, 20)      # door-head (+ oversize fringe) closure; also merged-bin fallback
 SEAL_RUN = (235, 130, 20)      # heuristic wall-run gap sealer (never backs a boundary)
@@ -254,7 +256,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
             "paddingCells": padding_cells,
             "scale": scale,
             "layers": ["replay-seed-ink", "door-head-seal", "wall-run-seal",
-                       "gap-close", "accepted", "held", "void", "zone-authority"],
+                       "gap-close", "accepted", "held", "void", "excluded",
+                       "zone-authority"],
         })
     if x1 <= x0 or y1 <= y0:
         panel = Image.new("RGB", (900, 700), "white")
@@ -278,7 +281,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         loops = residue["loops"]
         if not loops:
             continue
-        fill = HELD_FILL if residue["reason"] == "rejected" else VOID_FILL
+        fill = (HELD_FILL if residue["reason"] == "rejected" else
+                EXCLUDED_FILL if residue["reason"] == "excluded" else VOID_FILL)
         fill_draw.polygon([point(value) for value in loops[0]], fill=fill)
         for hole in loops[1:]:
             fill_draw.polygon([point(value) for value in hole], fill="white")
@@ -313,7 +317,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         loops = residue["loops"]
         if not loops:
             continue
-        color = HELD if residue["reason"] == "rejected" else VOID
+        color = (HELD if residue["reason"] == "rejected" else
+                 EXCLUDED if residue["reason"] == "excluded" else VOID)
         draw.line([point(value) for value in loops[0]] + [point(loops[0][0])],
                   fill=color, width=2)
         for hole in loops[1:]:
@@ -396,6 +401,7 @@ LEGEND_ROWS = (
     ((ACCEPTED, "outline", "accepted"),
      (HELD, "outline", "held"),
      (VOID, "outline", "void"),
+     (EXCLUDED, "outline", "excluded"),
      (ZONE, "outline", "zone")),
 )
 

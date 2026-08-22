@@ -308,6 +308,41 @@ class ReviewTakeoffTests(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("input/replay_Test.bin", rejected.stderr)
 
+    def test_zone_promotion_renderer_distinguishes_excluded_from_void(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            write_replay_bin(root / "input" / "replay_Test.bin", 80, 40, 0, 0, 0.25,
+                             bytes(400))
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "META\tlevel\tTest\nMETA\telev\t0\n"
+                "META\tresidue\tZONE-EXCLUDED\texcluded\t25\t7.5\t7.5\t0\t"
+                "5;5|10;5|10;10|5;10\n"
+                "META\tresidue\tVOID\tcrumb\t25\t12.5\t7.5\t0\t"
+                "10;5|15;5|15;10|10;10\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "MinX": 5, "MinY": 5,
+                "MaxX": 15, "MaxY": 10, "Tsv": "zones/rooms_Test.tsv",
+                "ZoneLoops": [[[5, 5], [15, 5], [15, 10], [5, 10]]],
+                "Ink": "input/ink_Test.bin", "RawRooms": 0, "AcceptedRooms": 0,
+                "HeldRooms": 0, "ExcludedSqft": 25, "ZoneSqft": 50,
+                "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+                "InkBackedEdgeFraction": 0, "ClosureErrorSqft": 0,
+            }
+            (root / "report.json").write_text(
+                json.dumps({"Zones": [zone]}), encoding="utf-8")
+
+            subprocess.run([sys.executable, str(ZONE_SCRIPT), str(root / "report.json")],
+                           check=True, cwd=HERE, capture_output=True, text=True)
+
+            # Excluded is accounting residue, not a physical void. The old renderer painted both
+            # near-white and labeled both "void", which made covered UL06 residue look blank.
+            with Image.open(root / "review" / "01_Test_00.png") as panel:
+                self.assertEqual(panel.getpixel((430, 360)), (220, 220, 220))
+                self.assertEqual(panel.getpixel((470, 360)), (236, 236, 236))
+
     def test_zone_promotion_renderer_refuses_missing_replay(self):
         # The stale ink_*.bin lane is deleted: no replay seed ink = hard error naming
         # the recapture runbook, never a silent render on stale evidence.
