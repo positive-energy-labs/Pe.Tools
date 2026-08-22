@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -56,6 +57,10 @@ def font(size):
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def panel_name(index, zone):
+    return f"{index:02d}_{zone.replace(' ', '_').replace('#', '_')}.png"
 
 
 def artifact_path(root, relative):
@@ -464,16 +469,154 @@ def verify(manifest_path):
     if failures:
         raise SystemExit("review verification failed:\n" + "\n".join(failures))
     print(f"verified {manifest['panelCount']} panels and {len(manifest['inputs'])} inputs: {root}")
+    return len(expected)
+
+
+def semantic_verdict_rows(verdict_path):
+    text = Path(verdict_path).read_text(encoding="utf-8")
+    declared = re.findall(r"Manifest SHA-256:\s*`([0-9a-fA-F]{64})`", text)
+    if len(declared) != 1:
+        raise SystemExit(
+            "semantic verdict must declare exactly one Manifest SHA-256")
+    pattern = re.compile(
+        r"^\|\s*(\d+)\s*\|\s*`([^`]+)`\s*\|\s*"
+        r"(PASS|FAIL|AMBIGUOUS)\s*\|\s*([^|]+?)\s*\|\s*"
+        r"([^|]+?)\s*\|\s*([^|]+?)\s*\|$", re.MULTILINE)
+    rows = [{
+        "ordinal": int(match.group(1)),
+        "panel": match.group(2),
+        "verdict": match.group(3),
+        "highestSeverity": match.group(4).strip(),
+        "namedDefect": match.group(5).strip(),
+        "concreteLocation": match.group(6).strip(),
+    } for match in pattern.finditer(text)]
+    panels = [row["panel"] for row in rows]
+    ordinals = [row["ordinal"] for row in rows]
+    if len(panels) != len(set(panels)) or len(ordinals) != len(set(ordinals)):
+        raise SystemExit("semantic verdict contains duplicate panel or ordinal rows")
+    return declared[0].lower(), rows
+
+
+def semantic_census(manifest_path, verdict_path):
+    manifest_path = Path(manifest_path).resolve()
+    verdict_path = Path(verdict_path).resolve()
+    declared_manifest_hash, rows = semantic_verdict_rows(verdict_path)
+    manifest_hash = digest(manifest_path)
+    if declared_manifest_hash != manifest_hash:
+        raise SystemExit(
+            "semantic verdict manifest mismatch: "
+            f"declared {declared_manifest_hash}, actual {manifest_hash}")
+    verified_hashes = verify(manifest_path)
+    root = manifest_path.parent
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    report_path = artifact_path(root, manifest["report"])
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    expected = [
+        f"review/{panel_name(index, zone['Zone'])}"
+        for index, zone in enumerate(report["Zones"], start=1)
+    ]
+    manifest_panels = {
+        relative for relative in manifest["files"]
+        if relative.startswith("review/")
+        and relative.endswith(".png")
+        and relative != manifest["contactSheet"]
+    }
+    verdict_panels = {f"review/{row['panel']}" for row in rows}
+    failures = []
+    for source, panels in (("manifest", manifest_panels), ("verdict", verdict_panels)):
+        missing = sorted(set(expected) - panels)
+        unexpected = sorted(panels - set(expected))
+        if missing:
+            failures.append(f"{source} missing: {', '.join(missing)}")
+        if unexpected:
+            failures.append(f"{source} unexpected: {', '.join(unexpected)}")
+    expected_ordinals = set(range(1, len(expected) + 1))
+    actual_ordinals = {row["ordinal"] for row in rows}
+    if actual_ordinals != expected_ordinals:
+        failures.append(
+            "verdict ordinals: expected "
+            f"{sorted(expected_ordinals)}, got {sorted(actual_ordinals)}")
+    if failures:
+        raise SystemExit(
+            "semantic verdict panel census failed:\n" + "\n".join(failures))
+
+    labels = {row["panel"]: row for row in rows}
+    counts = {
+        verdict: sum(row["verdict"] == verdict for row in rows)
+        for verdict in ("PASS", "FAIL", "AMBIGUOUS")
+    }
+    zones = []
+    for index, zone in enumerate(report["Zones"], start=1):
+        panel = panel_name(index, zone["Zone"])
+        zone_sqft = float(field(zone, "ZoneSqft", default=0.0))
+        if zone_sqft <= 0:
+            raise SystemExit(f"semantic census zone has no positive area: {zone['Zone']}")
+        dispositions = {}
+        for name, source in (
+                ("accepted", "AcceptedSqft"), ("held", "HeldSqft"),
+                ("void", "VoidSqft"), ("excluded", "ExcludedSqft")):
+            sqft = float(field(zone, source, default=0.0))
+            dispositions[name] = {"sqft": sqft, "fraction": sqft / zone_sqft}
+        label = labels[panel]
+        zones.append({
+            "ordinal": index,
+            "panel": panel,
+            "zone": zone["Zone"],
+            "zoneKey": field(zone, "zoneKey"),
+            "verdict": label["verdict"],
+            "highestSeverity": label["highestSeverity"],
+            "namedDefect": label["namedDefect"],
+            "concreteLocation": label["concreteLocation"],
+            "zoneSqft": zone_sqft,
+            "dispositions": dispositions,
+        })
+    return {
+        "schemaVersion": 1,
+        "scope": "external evaluation data; never solver or product input",
+        "reviewManifest": str(manifest_path),
+        "reviewManifestSha256": manifest_hash,
+        "semanticVerdict": str(verdict_path),
+        "semanticVerdictSha256": digest(verdict_path),
+        "verifiedHashes": verified_hashes,
+        "panelCount": len(expected),
+        "counts": counts,
+        "zones": zones,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("report", nargs="?")
     parser.add_argument("--verify", metavar="MANIFEST")
+    parser.add_argument("--semantic-verdict", metavar="VERDICT")
+    parser.add_argument("--manifest", metavar="MANIFEST")
+    parser.add_argument("--out", metavar="JSON")
     args = parser.parse_args()
+    if args.semantic_verdict:
+        if not args.manifest:
+            parser.error("--manifest is required with --semantic-verdict")
+        if args.report or args.verify:
+            parser.error("--semantic-verdict cannot be combined with report or --verify")
+        census = semantic_census(args.manifest, args.semantic_verdict)
+        payload = json.dumps(census, indent=2) + "\n"
+        if args.out:
+            output = Path(args.out).resolve()
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(payload, encoding="utf-8")
+            print(
+                f"semantic census PASS={census['counts']['PASS']} "
+                f"FAIL={census['counts']['FAIL']} "
+                f"AMBIGUOUS={census['counts']['AMBIGUOUS']}: {output}")
+        else:
+            print(payload, end="")
+        return
     if args.verify:
+        if args.manifest or args.out:
+            parser.error("--manifest and --out require --semantic-verdict")
         verify(args.verify)
         return
+    if args.manifest or args.out:
+        parser.error("--manifest and --out require --semantic-verdict")
     if not args.report:
         parser.error("report is required unless --verify is used")
     report_path = Path(args.report).resolve()
@@ -487,7 +630,7 @@ def main():
     review.mkdir(exist_ok=True)
     panels = []
     for index, zone in enumerate(report["Zones"]):
-        output = review / f"{index + 1:02d}_{zone['Zone'].replace(' ', '_').replace('#', '_')}.png"
+        output = review / panel_name(index + 1, zone["Zone"])
         render_zone(root, zone, output)
         panels.append(output)
 
