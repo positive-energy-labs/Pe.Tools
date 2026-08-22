@@ -343,6 +343,12 @@ class ReviewTakeoffTests(unittest.TestCase):
             self.assertEqual({item["status"] for item in provenance["zones"][0]["boundaries"]},
                              {"accepted", "held"})
             self.assertGreater(provenance["zones"][0]["totalsFeet"]["zone-backed"], 0)
+            self.assertEqual({item["status"] for item in provenance["zones"][0]["regions"]},
+                             {"accepted", "held"})
+            self.assertTrue(all(item["syntheticSplices"] == 0
+                                for item in provenance["zones"][0]["regions"]))
+            self.assertTrue(all(len(item["bounds"]) == 4
+                                for item in provenance["zones"][0]["regions"]))
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertIn("boundary-provenance.json", manifest["files"])
             self.assertTrue((root / manifest["provenanceContactSheet"]).is_file())

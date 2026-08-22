@@ -50,6 +50,7 @@ PROVENANCE = {
     "gap-close": (166, 121, 78),
     "free": (202, 32, 32),
 }
+SYNTHETIC_PROVENANCE = {"door-head", "wall-run", "gap-close"}
 # Closure components smaller than this carry no reviewable signal (single-cell ceiling-height
 # speckle); they are hidden from the CLOSURE layers only. Evidence ink is never denoised.
 SPECK_SQFT = 0.25
@@ -435,6 +436,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
             for index, loop in enumerate(residue["loops"])
         ]
         totals = {name: 0.0 for name in PROVENANCE}
+        regions = {}
         for status, boundary_id, kind, loop in candidates:
             runs = boundary_provenance(
                 loop, zone["ZoneLoops"], distances,
@@ -448,7 +450,27 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
                 "runs": [{"class": run["class"], "feet": round(run["feet"], 3)}
                          for run in runs],
             })
+            key = (status, boundary_id)
+            xs, ys = zip(*loop)
+            region = regions.setdefault(key, {
+                "status": status, "id": boundary_id, "holes": 0,
+                "syntheticSplices": 0, "syntheticFeet": 0.0,
+                "bounds": [min(xs), min(ys), max(xs), max(ys)],
+            })
+            region["holes"] += kind == "hole"
+            region["syntheticSplices"] += sum(
+                run["class"] in SYNTHETIC_PROVENANCE for run in runs)
+            region["syntheticFeet"] += sum(
+                run["feet"] for run in runs if run["class"] in SYNTHETIC_PROVENANCE)
+            region["bounds"] = [
+                min(region["bounds"][0], min(xs)), min(region["bounds"][1], min(ys)),
+                max(region["bounds"][2], max(xs)), max(region["bounds"][3], max(ys)),
+            ]
         metadata["boundaries"] = boundaries
+        metadata["regions"] = [
+            {**region, "syntheticFeet": round(region["syntheticFeet"], 3)}
+            for region in regions.values()
+        ]
         metadata["totalsFeet"] = {name: round(value, 3) for name, value in totals.items()}
         metadata["sampler"] = {"stepFeet": cell, "radiusFeet": 0.75,
                                "minimumCoherentInkRunFeet": 1.5}
