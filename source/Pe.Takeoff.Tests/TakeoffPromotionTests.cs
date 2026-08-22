@@ -69,6 +69,70 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Disposition_legality_detects_equal_area_gap_and_overlap()
+    {
+        var accepted = Room("accepted", (0, 0), (6, 0), (6, 10), (0, 10));
+        accepted.RawSqft = 60;
+        var result = new TakeoffResult {
+            Rooms = { accepted },
+            Residues = { Residue("held", ResidueReason.Rejected,
+                (5, 0), (9, 0), (9, 10), (5, 10)) },
+        };
+        var zone = Zone("zone", (0, 0), (10, 0), (10, 10), (0, 10));
+
+        var legality = TakeoffPromotion.MeasureDispositionLegality(result, zone.ExactGeometry());
+
+        Assert.Multiple(() => {
+            Assert.That(Math.Abs(result.Rooms.Sum(room => room.RawSqft)
+                + result.Residues.Sum(residue => residue.RawSqft) - 100), Is.Zero,
+                "the scalar closure is deliberately blind");
+            Assert.That(legality.GapSqft, Is.EqualTo(10).Within(1e-9));
+            Assert.That(legality.OverlapSqft, Is.EqualTo(10).Within(1e-9));
+            Assert.That(legality.OutsideZoneSqft, Is.Zero.Within(1e-9));
+        });
+    }
+
+    [TestCase(ResidueReason.Rejected)]
+    [TestCase(ResidueReason.Border)]
+    [TestCase(ResidueReason.Excluded)]
+    public void Disposition_legality_detects_residue_outside_zone(ResidueReason reason)
+    {
+        var result = new TakeoffResult {
+            Rooms = { Room("accepted", (0, 0), (9, 0), (9, 10), (0, 10)) },
+            Residues = { Residue("remainder", reason,
+                (9, 0), (11, 0), (11, 10), (9, 10)) },
+        };
+        var zone = Zone("zone", (0, 0), (10, 0), (10, 10), (0, 10));
+
+        var legality = TakeoffPromotion.MeasureDispositionLegality(result, zone.ExactGeometry());
+
+        Assert.Multiple(() => {
+            Assert.That(legality.GapSqft, Is.Zero.Within(1e-9));
+            Assert.That(legality.OverlapSqft, Is.Zero.Within(1e-9));
+            Assert.That(legality.OutsideZoneSqft, Is.EqualTo(10).Within(1e-9));
+        });
+    }
+
+    [Test]
+    public void Disposition_legality_accepts_clean_partition()
+    {
+        var result = new TakeoffResult {
+            Rooms = { Room("accepted", (0, 0), (6, 0), (6, 10), (0, 10)) },
+            Residues = { Residue("held", ResidueReason.Rejected,
+                (6, 0), (10, 0), (10, 10), (6, 10)) },
+        };
+        var zone = Zone("zone", (0, 0), (10, 0), (10, 10), (0, 10));
+
+        var legality = TakeoffPromotion.MeasureDispositionLegality(result, zone.ExactGeometry());
+
+        Assert.Multiple(() => {
+            Assert.That(legality.GapSqft, Is.Zero.Within(1e-9));
+            Assert.That(legality.OverlapSqft, Is.Zero.Within(1e-9));
+            Assert.That(legality.OutsideZoneSqft, Is.Zero.Within(1e-9));
+        });
+    }
+
+    [Test]
     public void Zone_promotion_represents_uncaptured_scope_as_explicit_excluded_residue()
     {
         var source = new TakeoffResult {
@@ -764,6 +828,17 @@ public sealed class TakeoffPromotionTests
         MeanCeilingFt = 10,
         LabelX = points.Average(point => point.X),
         LabelY = points.Average(point => point.Y),
+        Polygon = points.Select(point => new[] { point.X, point.Y }).ToList(),
+    };
+
+    private static ResidueResult Residue(
+        string id, ResidueReason reason, params (double X, double Y)[] points) => new()
+    {
+        Id = id,
+        Reason = reason,
+        RawSqft = Math.Abs(points.Select((point, index) =>
+            point.X * points[(index + 1) % points.Length].Y
+            - points[(index + 1) % points.Length].X * point.Y).Sum()) / 2,
         Polygon = points.Select(point => new[] { point.X, point.Y }).ToList(),
     };
 

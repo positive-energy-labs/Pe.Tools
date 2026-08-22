@@ -19,6 +19,9 @@ public sealed record ZonePromotionDiagnostics(
     double ExcludedSqft,
     double InkBackedEdgeFraction,
     double ClosureErrorSqft,
+    double GapSqft,
+    double OverlapSqft,
+    double OutsideZoneSqft,
     bool IsStrictlyEditable,
     bool IsContained,
     int SharedEdgePairs,
@@ -1572,13 +1575,16 @@ public static class TakeoffPromotion
             .Sum(residue => residue.RawSqft);
         double closureError = Math.Abs(
             acceptedSqft + heldSqft + voidSqft + excludedSqft - state.ZoneGeometry.Area);
+        var legality = MeasureDispositionLegality(result, state.ZoneGeometry);
         bool strict = TakeoffEditability.Evaluate(ToLevel(result, result.Rooms)).IsStrictlyEditable;
-        bool contained = result.Rooms.All(room =>
-            PolygonDifference(ToPolygon(room), state.ZoneGeometry).Area <= Epsilon);
-        if (!strict || !contained || closureError > AccountingEpsilonSqft)
+        bool contained = legality.OutsideZoneSqft <= Epsilon;
+        if (!strict || !contained || closureError > AccountingEpsilonSqft
+            || legality.GapSqft > Epsilon || legality.OverlapSqft > Epsilon)
             throw new InvalidOperationException(
                 $"zone promotion violated a binding law: strict={strict} contained={contained} " +
-                $"closure={closureError:F9}sf");
+                $"closure={closureError:F9}sf gap={legality.GapSqft:F9}sf " +
+                $"overlap={legality.OverlapSqft:F9}sf " +
+                $"outside={legality.OutsideZoneSqft:F9}sf");
         // The disposition is settled: surviving rooms are accepted, Rejected residues are the held
         // rooms. Marking the result makes ToTsv persist that fact as a ROOM column (SHIMS.md #3).
         result.DispositionsResolved = true;
@@ -1596,6 +1602,9 @@ public static class TakeoffPromotion
             excludedSqft,
             TakeoffEvidenceFidelity.BoundarySupportFraction(result.Rooms, state.DistanceToInk),
             closureError,
+            legality.GapSqft,
+            legality.OverlapSqft,
+            legality.OutsideZoneSqft,
             strict,
             contained,
             state.PreservedSharedPairs,
@@ -1605,6 +1614,20 @@ public static class TakeoffPromotion
             state.Census,
             state.Triage);
         return new ZonePromotionResult(result, diagnostics);
+    }
+
+    internal static (double GapSqft, double OverlapSqft, double OutsideZoneSqft)
+        MeasureDispositionLegality(TakeoffResult result, Geometry zoneGeometry)
+    {
+        var dispositions = result.Rooms.Select(room => (Geometry)ToPolygon(room))
+            .Concat(result.Residues.Select(ToGeometry)).ToList();
+        Geometry union = dispositions.Count == 0
+            ? GeometryFactory.CreatePolygon()
+            : Polygonal(OverlayNGRobust.Union(dispositions));
+        return (
+            PolygonDifference(zoneGeometry, union).Area,
+            Math.Max(0, dispositions.Sum(geometry => geometry.Area) - union.Area),
+            PolygonDifference(union, zoneGeometry).Area);
     }
 
     private static void NormalizeRoomMeasures(IEnumerable<RoomResult> rooms)
