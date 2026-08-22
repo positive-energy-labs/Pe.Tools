@@ -181,7 +181,6 @@ internal static class Detector
                     hf.MinX + vertex.x * hf.CellFt,
                     hf.MinY + vertex.y * hf.CellFt,
                 }).ToList())
-                .Select(CollapseCollinear)
                 .Where(polygon => polygon.Count >= 3)
                 .ToList();
             if (polys.Count == 0) continue;
