@@ -40,7 +40,186 @@ def write_replay_bin(path, w, h, minx, miny, cell, bits, level="Test"):
         f.write(blob)
 
 
+def write_zone_run(root, name, zones):
+    run = root / name
+    (run / "input").mkdir(parents=True)
+    (run / "zones").mkdir()
+    write_replay_bin(run / "input" / "replay_Test.bin", 128, 96, 0, 0, 0.25,
+                     bytes([0xFF]) * 1536)
+    report_zones = []
+    for index, (zone_name, loops) in enumerate(zones):
+        tsv = run / "zones" / f"rooms_Test_{index:02d}.tsv"
+        lines = ["META\tlevel\tTest\n", "META\telev\t0\n"]
+        for room_index, loop in enumerate(loops):
+            room = f"R{room_index + 1:02d}"
+            points = "|".join(f"{x};{y}" for x, y in loop)
+            lines.extend((f"ROOM\t{room}\t4\t8\t1\t1\t9\n",
+                          f"POLY\t{room}\touter\t{points}\n"))
+        tsv.write_text("".join(lines), encoding="utf-8")
+        zone_min_x = index * 12
+        zone_max_x = zone_min_x + 10
+        report_zones.append({
+            "Level": "Test", "Zone": zone_name, "MinX": zone_min_x, "MinY": 0,
+            "MaxX": zone_max_x, "MaxY": 10, "Tsv": f"zones/{tsv.name}",
+            "ZoneLoops": [[[zone_min_x, 0], [zone_max_x, 0],
+                            [zone_max_x, 10], [zone_min_x, 10]]],
+            "Ink": "input/ink_Test.bin", "RawRooms": len(loops),
+            "AcceptedRooms": len(loops), "AcceptedSqft": 4 * len(loops),
+            "HeldRooms": 0, "HeldSqft": 0, "ExcludedSqft": 100 - 4 * len(loops),
+            "ZoneSqft": 100, "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+            "InkBackedEdgeFraction": 1, "ClosureErrorSqft": 0,
+            "Rejections": {}, "RejectionDetails": {},
+        })
+    report = run / "report.json"
+    report.write_text(json.dumps({"Zones": report_zones}), encoding="utf-8")
+    return report
+
+
+def build_focus_atlas(before, after, output, expected_zones, *extra):
+    result = subprocess.run([
+        sys.executable, str(COMPARE_SCRIPT), str(before), str(after),
+        "--out-dir", str(output), "--expected-zone-count", str(expected_zones), *extra,
+    ], cwd=HERE, capture_output=True, text=True)
+    if result.returncode:
+        raise AssertionError(result.stderr)
+    return result
+
+
 class ReviewTakeoffTests(unittest.TestCase):
+    def test_focus_atlas_tiny_boundary_change_gets_one_tight_panel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [
+                ("Test#00", [[(1, 1), (5, 1), (5, 5), (1, 5)]])])
+            after = write_zone_run(root, "after", [
+                ("Test#00", [[(1, 1), (5, 1), (5, 4), (1, 4)]])])
+            output = root / "atlas"
+
+            build_focus_atlas(before, after, output, 1)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["changedComponents"], 1)
+            self.assertEqual(manifest["counts"]["focusPanels"], 1)
+            panel = manifest["panels"][0]
+            self.assertLess(panel["crop"]["maxX"] - panel["crop"]["minX"], 10)
+            rendered = panel["fit"]["renderedContent"]
+            self.assertTrue(rendered[0] == 900 or rendered[1] == 588)
+            self.assertTrue(Path(panel["absolutePath"]).is_file())
+
+    def test_focus_atlas_covers_two_disjoint_boundary_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [("Test#00", [
+                [(1, 1), (2, 1), (2, 3), (1, 3)],
+                [(8, 1), (9, 1), (9, 3), (8, 3)],
+            ])])
+            after = write_zone_run(root, "after", [("Test#00", [
+                [(1, 1), (2.25, 1), (2.25, 3), (1, 3)],
+                [(7.75, 1), (9, 1), (9, 3), (7.75, 3)],
+            ])])
+            output = root / "atlas"
+
+            build_focus_atlas(before, after, output, 1)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["changedComponents"], 2)
+            self.assertEqual(manifest["counts"]["focusPanels"], 2)
+            self.assertTrue(all(item["panelIds"] for item in manifest["changedComponents"]))
+
+    def test_focus_atlas_detects_boundary_only_move_with_same_count_and_area(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]])])
+            after = write_zone_run(root, "after", [
+                ("Test#00", [[(2, 1), (5, 1), (5, 4), (2, 4)]])])
+            output = root / "atlas"
+
+            build_focus_atlas(before, after, output, 1)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertGreater(manifest["counts"]["changedComponents"], 0)
+            self.assertEqual(manifest["counts"]["focusPanels"],
+                             manifest["counts"]["changedComponents"])
+
+    def test_focus_atlas_verify_rejects_missing_mapping_and_panel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]])])
+            after = write_zone_run(root, "after", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 3), (1, 3)]])])
+            output = root / "atlas"
+            build_focus_atlas(before, after, output, 1)
+            manifest_path = output / "focus-manifest.json"
+            original = manifest_path.read_text(encoding="utf-8")
+            manifest = json.loads(original)
+            manifest["changedComponents"][0]["panelIds"] = []
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            missing_mapping = subprocess.run([
+                sys.executable, str(COMPARE_SCRIPT), "--verify", str(manifest_path),
+            ], cwd=HERE, capture_output=True, text=True)
+
+            self.assertNotEqual(missing_mapping.returncode, 0)
+            self.assertIn("has no valid focus panel", missing_mapping.stderr)
+            manifest_path.write_text(original, encoding="utf-8")
+            panel = output / json.loads(original)["panels"][0]["path"]
+            panel.unlink()
+            missing_panel = subprocess.run([
+                sys.executable, str(COMPARE_SCRIPT), "--verify", str(manifest_path),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(missing_panel.returncode, 0)
+            self.assertIn("got missing", missing_panel.stderr)
+
+    def test_focus_atlas_aa_identity_has_full_census_and_no_focus_panels(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = write_zone_run(root, "same", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]]),
+                ("Test#01", [[(13, 1), (16, 1), (16, 4), (13, 4)]]),
+            ])
+            output = root / "atlas"
+
+            build_focus_atlas(report, report, output, 2)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(manifest["aaIdentity"])
+            self.assertEqual(manifest["census"]["zoneIds"], ["Test#00", "Test#01"])
+            self.assertEqual(manifest["census"]["actualContactPanels"], 2)
+            self.assertEqual(manifest["counts"]["changedComponents"], 0)
+            self.assertEqual(manifest["counts"]["focusPanels"], 0)
+            self.assertTrue(Path(manifest["contactSheet"]["absolutePath"]).is_file())
+
+    def test_focus_atlas_maps_explicit_flag_to_focus_panel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]])])
+            after = write_zone_run(root, "after", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]])])
+            flags = root / "flags.json"
+            flags.write_text(json.dumps({"flags": [{
+                "id": "stairstep-1", "zone": "Test#00",
+                "bounds": [3.5, 1, 4.5, 2], "detail": "stairstep edge",
+            }]}), encoding="utf-8")
+            output = root / "atlas"
+
+            build_focus_atlas(before, after, output, 1, "--flag-manifest", str(flags))
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["flags"], 1)
+            self.assertEqual(manifest["counts"]["focusPanels"], 1)
+            self.assertEqual(manifest["flags"][0]["panelIds"], ["focus:stairstep-1"])
+            manifest["flags"] = []
+            (output / "focus-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            stale = subprocess.run([
+                sys.executable, str(COMPARE_SCRIPT), "--verify",
+                str(output / "focus-manifest.json"),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn("flag manifest entries are stale", stale.stderr)
+
     def test_zone_run_compare_panels_boundary_only_changes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -73,11 +252,11 @@ class ReviewTakeoffTests(unittest.TestCase):
             output = root / "ab"
             result = subprocess.run([
                 sys.executable, str(COMPARE_SCRIPT), str(before), str(after),
-                "--out-dir", str(output),
+                "--out-dir", str(output), "--expected-zone-count", "1",
             ], check=True, cwd=HERE, capture_output=True, text=True)
 
-            self.assertIn("compare.md + 1 a/b panels", result.stdout)
-            self.assertEqual(len(list(output.glob("*_ab.png"))), 1)
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["changedComponents"], 1)
 
     def test_zone_promotion_renderer_crops_registered_disposition(self):
         with tempfile.TemporaryDirectory() as temporary:
