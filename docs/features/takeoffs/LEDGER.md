@@ -78,7 +78,6 @@
 - 2026-08-21 — Loop-2 taste (kaitpw): flat savedWork may adopt on eyes ADOPT + a named secondary (accepted double-line residue ft, r7 980.7) — parallel-on-ink reopened as a quality adoption, per-room honesty unchanged; segment-wise frames for ML09 in scope as code; no blanket zone-edge non-vacuity gate (vacuity = flag); rounds are 3 builders / 60 min / raster only / code-first.
 
 ## Tried & rejected
-- 2026-08-22 — Splitting the historical owner raster by exact zone masks immediately before independent tracing is falsified: 85 owners became 316 connected fragments, 13/45 zones still had no owned cells, and Main Level#01's first four-fragment input failed unchanged shared-coverage validation. Reopen only with one shared polygonization/noding pass across owner and zone rails; do not bypass `SpaceBoundaryNetwork`. (Evidence: H1 `p1h1/REPORT.md`.)
 - 2026-08-22 — Rasterizing authoritative zone rails into the historical pre-discovery obstruction is falsified: 7,292 open cells were consumed and 46 old components split; 17/20 nonpassing zones gained candidates, but all four levels failed unchanged shared-coverage validation because a wall-width raster band cannot represent an exact zero-width zone-owned rail. Reopen only at the post-owner disposition seam, not with more obstruction repair. (Evidence: H2 `p1h2/REPORT.md`.)
 - 2026-08-14 — Vector wall harvest: 47.7% recall vs raster 51.9%.
 - 2026-08-14 — Typed IFC openings: all 55,634 imported objects are untyped proxies.
