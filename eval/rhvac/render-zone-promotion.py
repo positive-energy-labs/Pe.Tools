@@ -41,6 +41,15 @@ SEAL_RUN = (235, 130, 20)      # heuristic wall-run gap sealer (never backs a bo
 CLOSE = (200, 165, 130)
 ZONE = (112, 44, 138)
 TRIAGE = (183, 46, 46)
+PROVENANCE = {
+    "zone-backed": (0, 125, 70),
+    "received": (0, 92, 184),
+    "bare-zone": (126, 47, 142),
+    "door-head": (230, 85, 13),
+    "wall-run": (238, 153, 36),
+    "gap-close": (166, 121, 78),
+    "free": (202, 32, 32),
+}
 # Closure components smaller than this carry no reviewable signal (single-cell ceiling-height
 # speckle); they are hidden from the CLOSURE layers only. Evidence ink is never denoised.
 SPECK_SQFT = 0.25
@@ -193,8 +202,74 @@ def despeckle(mask, cell):
     return keep[labels]
 
 
+def _point_segment_distance(point, start, end):
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    if dx == dy == 0:
+        return math.hypot(point[0] - start[0], point[1] - start[1])
+    t = max(0.0, min(1.0, ((point[0] - start[0]) * dx
+                           + (point[1] - start[1]) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(point[0] - (start[0] + t * dx),
+                      point[1] - (start[1] + t * dy))
+
+
+def boundary_provenance(loop, zone_loops, distances, grid, radius=0.75, min_ink_run=1.5):
+    """Return raw colored runs. Short ink crossings fall through to their next support class."""
+    width, height, min_x, min_y, cell = grid
+
+    def near(name, point):
+        distance = distances[name]
+        if distance is None:
+            return False
+        x = max(0, min(width - 1, round((point[0] - min_x) / cell)))
+        y = max(0, min(height - 1, round((point[1] - min_y) / cell)))
+        return distance[y, x] <= radius
+
+    def on_zone(point):
+        return any(_point_segment_distance(point, start, end) <= radius
+                   for zone_loop in zone_loops
+                   for start, end in zip(zone_loop, zone_loop[1:] + zone_loop[:1]))
+
+    pieces = []
+    for start, end in zip(loop, loop[1:] + loop[:1]):
+        length = math.dist(start, end)
+        count = max(1, math.ceil(length / cell))
+        for index in range(count):
+            a = index / count
+            b = (index + 1) / count
+            p0 = (start[0] + a * (end[0] - start[0]), start[1] + a * (end[1] - start[1]))
+            p1 = (start[0] + b * (end[0] - start[0]), start[1] + b * (end[1] - start[1]))
+            midpoint = ((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2)
+            zone = on_zone(midpoint)
+            fallback = ("bare-zone" if zone else "door-head" if near("door-head", midpoint)
+                        else "wall-run" if near("wall-run", midpoint)
+                        else "gap-close" if near("gap-close", midpoint) else "free")
+            ink = near("received", midpoint)
+            pieces.append({"class": "zone-backed" if ink and zone else "received" if ink
+                           else fallback, "fallback": fallback, "start": p0, "end": p1,
+                           "feet": math.dist(p0, p1)})
+
+    index = 0
+    while index < len(pieces):
+        end = index + 1
+        while end < len(pieces) and pieces[end]["class"] == pieces[index]["class"]:
+            end += 1
+        if (pieces[index]["class"] in ("received", "zone-backed")
+                and sum(piece["feet"] for piece in pieces[index:end]) < min_ink_run):
+            for piece in pieces[index:end]:
+                piece["class"] = piece["fallback"]
+        index = end
+
+    runs = []
+    for piece in pieces:
+        if not runs or runs[-1]["class"] != piece["class"]:
+            runs.append({"class": piece["class"], "feet": 0.0, "segments": []})
+        runs[-1]["feet"] += piece["feet"]
+        runs[-1]["segments"].append((piece["start"], piece["end"]))
+    return runs
+
+
 def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None,
-                metadata=None):
+                metadata=None, provenance=False):
     ink_path = artifact_path(root, zone["Ink"])
     tsv_path = artifact_path(root, zone["Tsv"])
     # Evidence authority: the replay snapshot's seed ink — the raster the solver actually
@@ -323,15 +398,16 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         if not loops:
             continue
         color = (HELD if residue["reason"] == "rejected" else
-                 EXCLUDED if residue["reason"] == "excluded" else VOID)
-        draw.line([point(value) for value in loops[0]] + [point(loops[0][0])],
-                  fill=color, width=2)
+                  EXCLUDED if residue["reason"] == "excluded" else VOID)
+        if not provenance or residue["reason"] != "rejected":
+            draw.line([point(value) for value in loops[0]] + [point(loops[0][0])],
+                      fill=color, width=2)
         for hole in loops[1:]:
             draw.line([point(value) for value in hole] + [point(hole[0])],
                       fill=color, width=1)
     for room_id in sorted(rooms):
         for kind, loop in polygons.get(room_id, []):
-            if len(loop) >= 2:
+            if len(loop) >= 2 and not provenance:
                 draw.line([point(value) for value in loop] + [point(loop[0])],
                           fill=ACCEPTED, width=3 if kind == "outer" else 2)
     # Scope is a first-class review datum, not an inferred crop. Draw every outer/hole loop last
@@ -340,6 +416,42 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         if len(loop) >= 2:
             draw.line([point(value) for value in loop] + [point(loop[0])],
                       fill=ZONE, width=3)
+
+    if provenance:
+        masks = {"received": ink_mask, "door-head": door_mask, "wall-run": run_mask,
+                 "gap-close": close_mask}
+        from scipy.ndimage import distance_transform_edt
+        distances = {
+            name: distance_transform_edt(~mask) * cell if mask is not None else None
+            for name, mask in masks.items()
+        }
+        boundaries = []
+        candidates = [
+            ("accepted", room_id, kind, loop)
+            for room_id in sorted(rooms) for kind, loop in polygons.get(room_id, [])
+        ] + [
+            ("held", residue["id"], "outer" if index == 0 else "hole", loop)
+            for residue in residues if residue["reason"] == "rejected"
+            for index, loop in enumerate(residue["loops"])
+        ]
+        totals = {name: 0.0 for name in PROVENANCE}
+        for status, boundary_id, kind, loop in candidates:
+            runs = boundary_provenance(
+                loop, zone["ZoneLoops"], distances,
+                (width, height, min_x, min_y, cell))
+            for run in runs:
+                totals[run["class"]] += run["feet"]
+                for start, end in run["segments"]:
+                    draw.line([point(start), point(end)], fill=PROVENANCE[run["class"]], width=4)
+            boundaries.append({
+                "status": status, "id": boundary_id, "kind": kind,
+                "runs": [{"class": run["class"], "feet": round(run["feet"], 3)}
+                         for run in runs],
+            })
+        metadata["boundaries"] = boundaries
+        metadata["totalsFeet"] = {name: round(value, 3) for name, value in totals.items()}
+        metadata["sampler"] = {"stepFeet": cell, "radiusFeet": 0.75,
+                               "minimumCoherentInkRunFeet": 1.5}
 
     if scale != 1:
         image = image.resize((image.width * scale, image.height * scale), Image.Resampling.NEAREST)
@@ -377,8 +489,9 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
     subtitle = (f"ink {zone['InkBackedEdgeFraction']:.0%}   "
                 + (f"ink-ratio {ratio:.0%}   " if ratio is not None else "")
                 + closure_text
-                + f"shared {zone['SharedEdgePairs']}/{zone['LostSharedEdgePairs']} lost   "
-                f"leak {zone['ClosureErrorSqft']:.3f} sf   {ink_source}")
+                 + f"shared {field(zone, 'SharedEdgePairs', default=0)}/"
+                 f"{field(zone, 'LostSharedEdgePairs', default=0)} lost   "
+                 f"leak {field(zone, 'ClosureErrorSqft', default=0.0):.3f} sf   {ink_source}")
     panel = Image.new("RGB", (900, 700), "white")
     panel.paste(image, ((900 - image.width) // 2, 66 + (588 - image.height) // 2))
     panel_draw = ImageDraw.Draw(panel)
@@ -392,7 +505,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         x += panel_draw.textlength(banner, font=font(size + 1))
     panel_draw.text((x, 10), title, fill=(30, 30, 30), font=font(size))
     panel_draw.text((14, 32), subtitle, fill=(70, 70, 70), font=font(16))
-    draw_legend(panel_draw)
+    draw_provenance_legend(panel_draw) if provenance else draw_legend(panel_draw)
     if output is not None:
         panel.save(output)
     return panel
@@ -438,6 +551,37 @@ def draw_legend(panel_draw):
                             fill=(140, 140, 140), font=legend_font)
 
 
+def draw_provenance_legend(panel_draw):
+    legend_font = font(14)
+    items = list(PROVENANCE.items())
+    for row, values in enumerate((items[:4], items[4:])):
+        x, y = 14, 656 + row * 21
+        for label, color in values:
+            panel_draw.line((x, y + 10, x + 16, y + 10), fill=color, width=4)
+            x += 21
+            panel_draw.text((x, y), label, fill=(60, 60, 60), font=legend_font)
+            x += panel_draw.textlength(label, font=legend_font) + 15
+
+
+def render_contact_sheet(report, panels, contact_path):
+    columns = 3
+    thumb_size = (600, 467)
+    rows = math.ceil(len(panels) / columns)
+    contact = Image.new("RGB", (columns * thumb_size[0],
+                                HEADER_HEIGHT + rows * thumb_size[1]), "white")
+    draw = ImageDraw.Draw(contact)
+    draw.rectangle((0, 0, contact.width, HEADER_HEIGHT - 1), fill=(244, 244, 246))
+    draw.line((0, HEADER_HEIGHT - 1, contact.width, HEADER_HEIGHT - 1), fill=(180, 180, 184))
+    for line_index, line in enumerate(header_lines(report)):
+        draw.text((16, 10 + line_index * 24), line, fill=(30, 30, 30), font=font(19))
+    for index, path in enumerate(panels):
+        with Image.open(path) as image:
+            thumb = ImageOps.contain(image.convert("RGB"), thumb_size, Image.Resampling.LANCZOS)
+        contact.paste(thumb, ((index % columns) * thumb_size[0],
+                              HEADER_HEIGHT + (index // columns) * thumb_size[1]))
+    contact.save(contact_path)
+
+
 def verify(manifest_path):
     manifest_path = Path(manifest_path).resolve()
     root = manifest_path.parent
@@ -460,9 +604,12 @@ def verify(manifest_path):
             failures.append(
                 f"panelCount: manifest {manifest['panelCount']}, report {zone_count}")
     expected_outputs = set(manifest["files"])
+    output_dirs = [root / "review"]
+    if manifest.get("provenanceContactSheet"):
+        output_dirs.append(root / "review-provenance")
     actual_outputs = {
         path.relative_to(root).as_posix()
-        for path in (root / "review").glob("*.png")
+        for directory in output_dirs for path in directory.glob("*.png")
     }
     for relative in sorted(actual_outputs - expected_outputs):
         failures.append(f"{relative}: unexpected output")
@@ -591,6 +738,7 @@ def main():
     parser.add_argument("--semantic-verdict", metavar="VERDICT")
     parser.add_argument("--manifest", metavar="MANIFEST")
     parser.add_argument("--out", metavar="JSON")
+    parser.add_argument("--provenance", action="store_true")
     args = parser.parse_args()
     if args.semantic_verdict:
         if not args.manifest:
@@ -611,7 +759,7 @@ def main():
             print(payload, end="")
         return
     if args.verify:
-        if args.manifest or args.out:
+        if args.manifest or args.out or args.provenance:
             parser.error("--manifest and --out require --semantic-verdict")
         verify(args.verify)
         return
@@ -634,23 +782,30 @@ def main():
         render_zone(root, zone, output)
         panels.append(output)
 
-    columns = 3
-    thumb_size = (600, 467)
-    rows = math.ceil(len(panels) / columns)
-    contact = Image.new("RGB", (columns * thumb_size[0],
-                                HEADER_HEIGHT + rows * thumb_size[1]), "white")
-    draw = ImageDraw.Draw(contact)
-    draw.rectangle((0, 0, contact.width, HEADER_HEIGHT - 1), fill=(244, 244, 246))
-    draw.line((0, HEADER_HEIGHT - 1, contact.width, HEADER_HEIGHT - 1), fill=(180, 180, 184))
-    for line_index, line in enumerate(header_lines(report)):
-        draw.text((16, 10 + line_index * 24), line, fill=(30, 30, 30), font=font(19))
-    for index, path in enumerate(panels):
-        with Image.open(path) as image:
-            thumb = ImageOps.contain(image.convert("RGB"), thumb_size, Image.Resampling.LANCZOS)
-        contact.paste(thumb, ((index % columns) * thumb_size[0],
-                              HEADER_HEIGHT + (index // columns) * thumb_size[1]))
     contact_path = review / "contact-sheet.png"
-    contact.save(contact_path)
+    render_contact_sheet(report, panels, contact_path)
+    provenance_files = []
+    provenance_contact = None
+    if args.provenance:
+        provenance_review = root / "review-provenance"
+        provenance_review.mkdir(exist_ok=True)
+        provenance_panels = []
+        provenance_zones = []
+        for index, zone in enumerate(report["Zones"]):
+            output = provenance_review / panel_name(index + 1, zone["Zone"])
+            metadata = {"zone": zone["Zone"]}
+            render_zone(root, zone, output, metadata=metadata, provenance=True)
+            provenance_panels.append(output)
+            provenance_zones.append(metadata)
+        provenance_contact = provenance_review / "contact-sheet.png"
+        render_contact_sheet(report, provenance_panels, provenance_contact)
+        provenance_path = root / "boundary-provenance.json"
+        provenance_path.write_text(json.dumps({
+            "schemaVersion": 1,
+            "scope": "external evaluation data; never solver input",
+            "zones": provenance_zones,
+        }, indent=2) + "\n", encoding="utf-8")
+        provenance_files = [*provenance_panels, provenance_contact, provenance_path]
     manifest = {
         "schemaVersion": 2,
         "report": report_path.name,
@@ -660,9 +815,11 @@ def main():
         "contactSheet": contact_path.relative_to(root).as_posix(),
         "files": {
             path.relative_to(root).as_posix(): digest(path)
-            for path in [*panels, contact_path]
+            for path in [*panels, contact_path, *provenance_files]
         },
     }
+    if provenance_contact:
+        manifest["provenanceContactSheet"] = provenance_contact.relative_to(root).as_posix()
     (root / "review-manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     verify(root / "review-manifest.json")
