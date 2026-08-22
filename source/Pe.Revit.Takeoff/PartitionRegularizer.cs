@@ -1,4 +1,4 @@
-namespace HistoricalF970;
+namespace Pe.Revit.Takeoff;
 
 // Verbatim f970088 partition regularizer. Only the namespace changed.
 internal static class PartitionRegularizer

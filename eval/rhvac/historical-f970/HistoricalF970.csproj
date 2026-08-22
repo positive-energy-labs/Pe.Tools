@@ -5,4 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../source/Pe.Revit.Takeoff/PartitionRegularizer.cs" Link="PartitionRegularizer.cs" />
+  </ItemGroup>
 </Project>

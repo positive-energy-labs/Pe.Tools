@@ -74,7 +74,7 @@ internal static class Detector
                 acceptedIds.Add(id);
         }
 
-        var partition = PartitionRegularizer.Propagate(
+        var partition = Pe.Revit.Takeoff.PartitionRegularizer.Propagate(
             label, acceptedIds.ToHashSet(), obst, W, H,
             (int)Math.Ceiling(opt.PartitionFillFt / opt.CellFt),
             (int)Math.Floor(opt.MaxEnclosedResidualSqft / cellArea), out var partitionStats);

@@ -73,14 +73,19 @@ internal static class PartitionFormulation
 
         // ---- 3. seeds ----
         int nSeeds;
-        var seed = opt.SeedSource switch {
-            TakeoffSeedSource.Hybrid => SeedsHybrid(evidence, obst, domain, W, H, opt, out nSeeds),
-            TakeoffSeedSource.DistanceMaxima => SeedsFromDistanceMaxima(evidence, domain, W, H, opt, out nSeeds),
-            _ => SeedsFromCores(obst, domain, W, H, out nSeeds),
-        };
+        var seed = SeedsFromCores(obst, domain, W, H, out nSeeds);
 
-        // ---- 4. watershed assignment ----
-        var owner = Flood(seed, evidence, domain, W, H);
+        // ---- 4. historical bounded ownership ----
+        var claimableObstruction = zoneMask == null ? obst : obst
+            .Select((value, index) => value && zoneMask[index]).ToArray();
+        var owner = PartitionRegularizer.Propagate(
+            seed, Enumerable.Range(1, nSeeds).ToHashSet(), claimableObstruction, W, H,
+            (int)Math.Ceiling(1.0 / opt.CellFt), (int)Math.Floor(25.0 / cellArea),
+            out var historicalOwnership);
+        log($"[partition] f970 ownership: claimed={historicalOwnership.ClaimedCells * cellArea:F0}sf " +
+            $"resolvedEnclosed={historicalOwnership.ResolvedEnclosedCells * cellArea:F0}sf " +
+            $"sharedEdges={historicalOwnership.SharedEdgeCells} " +
+            $"unclaimedInk={historicalOwnership.UnclaimedInkCells}");
 
         // seedless domain components (fully obstructed pockets, or DT plateaus that never formed):
         // big ones become their own flagged space; crumbs are dropped with their area logged.
@@ -89,7 +94,7 @@ internal static class PartitionFormulation
         double crumbSqft = 0;
         var comp = new List<int>();
         var bfs = new Queue<int>();
-        for (int i = 0; i < n; i++)
+        for (int i = n; i < n; i++)
         {
             if (!domain[i] || owner[i] != 0) continue;
             comp.Clear();
@@ -118,18 +123,7 @@ internal static class PartitionFormulation
 
         // ---- 5. explicit merges: unsupported shared boundaries are one open-plan space ----
         var uf = new UnionFind(nextId + 1);
-        var pairs = BoundaryPairs(owner, evidence, domain, W, H, opt.BoundaryEvidenceMin);
         int nMerges = 0;
-        foreach (var ((a, b), (edges, backed)) in pairs)
-        {
-            if ((double)backed / edges >= opt.MinBoundarySupport) continue;
-            int ra = uf.Find(a), rb = uf.Find(b);
-            if (ra == rb) continue;
-            int root = uf.Union(ra, rb);
-            Flag(flags, root, "open-plan-merge");
-            MergeFlags(flags, uf, ra, rb, root);
-            nMerges++;
-        }
         Relabel(owner, uf);
 
         // ---- 6. sliver dissolution: delete the sliver, re-flood its cells under the SAME
@@ -187,57 +181,8 @@ internal static class PartitionFormulation
         // distinct rooms within WallClaimFt, then split each band at its centerline via multi-source
         // BFS from the room frontiers. Exterior faces see a room on one side only and are never
         // claimed. RawSqft becomes centerline semantics where a band is claimed.
-        var claimed = new bool[n];
-        int claimedCellsTotal = 0;
-        if (opt.WallClaimFt > 0)
-        {
-            int reach = Math.Max(1, (int)Math.Round(opt.WallClaimFt / opt.CellFt));
-            var claimable = new bool[n];
-            for (int i = 0; i < n; i++)
-            {
-                int x = i % W, y = i / W;
-                if (domain[i] || owner[i] != 0 || !obst[i]) continue;
-                // Scope law: wall-band cells outside the declared zone stay unclaimed, so no room
-                // ever carries geometry past the Zoning Region boundary.
-                if (zoneMask != null && !zoneMask[i]) continue;
-                int firstOwner = 0;
-                for (int dy = -reach; dy <= reach && !claimable[i]; dy++)
-                for (int dx = -reach; dx <= reach && !claimable[i]; dx++)
-                {
-                    if (dx * dx + dy * dy > reach * reach) continue;
-                    int px = x + dx, py = y + dy;
-                    if (px < 0 || px >= W || py < 0 || py >= H) continue;
-                    int seenOwner = owner[py * W + px];
-                    if (seenOwner <= 0) continue;
-                    if (firstOwner == 0) firstOwner = seenOwner;
-                    else if (firstOwner != seenOwner) claimable[i] = true;
-                }
-            }
-            var band = new Queue<int>();
-            for (int i = 0; i < n; i++)
-            {
-                if (!claimable[i]) continue;
-                int x = i % W, y = i / W;
-                int by = x > 0 && owner[i - 1] > 0 ? owner[i - 1]
-                    : x < W - 1 && owner[i + 1] > 0 ? owner[i + 1]
-                    : y > 0 && owner[i - W] > 0 ? owner[i - W]
-                    : y < H - 1 && owner[i + W] > 0 ? owner[i + W] : 0;
-                if (by > 0) { owner[i] = by; claimed[i] = true; band.Enqueue(i); }
-            }
-            int claimedCells = band.Count;
-            while (band.Count > 0)
-            {
-                int c = band.Dequeue();
-                int cx = c % W, cy = c / W;
-                int me = owner[c];
-                if (cx > 0 && claimable[c - 1] && owner[c - 1] == 0) { owner[c - 1] = me; claimed[c - 1] = true; band.Enqueue(c - 1); claimedCells++; }
-                if (cx < W - 1 && claimable[c + 1] && owner[c + 1] == 0) { owner[c + 1] = me; claimed[c + 1] = true; band.Enqueue(c + 1); claimedCells++; }
-                if (cy > 0 && claimable[c - W] && owner[c - W] == 0) { owner[c - W] = me; claimed[c - W] = true; band.Enqueue(c - W); claimedCells++; }
-                if (cy < H - 1 && claimable[c + W] && owner[c + W] == 0) { owner[c + W] = me; claimed[c + W] = true; band.Enqueue(c + W); claimedCells++; }
-            }
-            log($"[partition] wall-band claim={claimedCells * cellArea:F0}sf ({claimedCells} cells, reach={reach})");
-            claimedCellsTotal = claimedCells;
-        }
+        var claimed = owner.Select((id, index) => id > 0 && !domain[index]).ToArray();
+        int claimedCellsTotal = claimed.Count(value => value);
         int diagonalFixes = ResolveDiagonalTouches(owner, evidence, domain, claimed, W, H);
         if (diagonalFixes > 0) log($"[partition] resolved {diagonalFixes} diagonal corner touches");
         // Diagonal fixes can pull non-domain corner cells into rooms; they are claimed area for
