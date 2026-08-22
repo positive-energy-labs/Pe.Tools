@@ -79,6 +79,7 @@ public sealed class ZoneBoundedDetectTests
         [property: JsonProperty("census")] object Census,
         [property: JsonProperty("triage")] object Triage,
         [property: JsonProperty("whiteoutCells")] int WhiteoutCells,
+        [property: JsonProperty("domainReflood")] object? DomainReflood,
         [property: JsonProperty("partition")] object Partition,
         [property: JsonProperty("adaptedKnobs")] IReadOnlyDictionary<string, string> AdaptedKnobs,
         // Closure accounting: how much of this zone's obstruction the sealers invented rather than
@@ -201,6 +202,54 @@ public sealed class ZoneBoundedDetectTests
                 "hygiene may delete ink but never accounting");
             Assert.That(armedPrepare.Detect(zone, _ => { }, out _).ToTsv(), Is.EqualTo(armed.ToTsv()),
                 "the cleaned raster stays deterministic");
+        });
+    }
+
+    [Test]
+    public void Zone_domain_diagnostics_explain_crop_reflood_loss()
+    {
+        const int width = 20, height = 20;
+        var field = new Heightfield {
+            W = width, H = height, CellFt = 1,
+            FloorZ = new float[width * height],
+            CeilZ = Enumerable.Repeat(9f, width * height).ToArray(),
+        };
+        var ink = new bool[width * height];
+        for (int x = 1; x < width - 1; x++)
+        {
+            ink[1 * width + x] = true;
+            ink[(height - 2) * width + x] = true;
+        }
+        for (int y = 1; y < height - 1; y++)
+        {
+            ink[y * width + 1] = true;
+            ink[y * width + width - 2] = true;
+        }
+        ink[10 * width + 10] = true;
+        var options = new TakeoffOptions {
+            CellFt = 1,
+            GapSealFt = 0.1,
+            InkClusterWhiteoutCells = 2,
+            MinSqft = 1,
+            MinFeatureWidthFt = 1,
+            WallClaimFt = 0,
+        };
+        var prepared = Detector.Prepare(field, ink, "Diagnostic", 0, options, _ => { });
+
+        var result = prepared.Detect(
+            RectZone("inside", 5, 5, 15, 15), _ => { },
+            out int whiteoutCells, out ZoneDomainDiagnostics diagnostics);
+
+        Assert.Multiple(() => {
+            Assert.That(whiteoutCells, Is.EqualTo(1));
+            Assert.That(diagnostics.PreparedDomainSqft, Is.EqualTo(100));
+            Assert.That(diagnostics.CropRecomputedDomainSqft, Is.Zero);
+            Assert.That(diagnostics.ExclusionProvenance, Is.EqualTo("crop-reflood"));
+            Assert.That(diagnostics.LostComponents, Has.Count.EqualTo(1));
+            Assert.That(diagnostics.LostComponents.Single().AreaSqft, Is.EqualTo(100));
+            Assert.That(diagnostics.LostComponents.Single().Polygons, Has.Count.EqualTo(1));
+            Assert.That(result.DomainSqft, Is.EqualTo(diagnostics.CropRecomputedDomainSqft),
+                "diagnostics must observe, not alter, the effective partition domain");
         });
     }
 
@@ -367,9 +416,11 @@ public sealed class ZoneBoundedDetectTests
                     snap.SeedInk, mask, snap.Field.W, snap.Field.H, snap.Field.CellFt);
                 var timer = System.Diagnostics.Stopwatch.StartNew();
                 int whiteoutCells = 0;
+                ZoneDomainDiagnostics? domainDiagnostics = null;
                 var result = prepared == null
                     ? TakeoffPolicy.Detect(snap, profile, _ => { }, zoneMask: mask)
-                    : prepared.Detect(zone, _ => { }, out whiteoutCells);
+                    : prepared.Detect(
+                        zone, _ => { }, out whiteoutCells, out domainDiagnostics);
                 long rawMilliseconds = timer.ElapsedMilliseconds;
                 File.WriteAllText(Path.Combine(rawZonesDir, $"rooms_{slug}.tsv"), result.ToTsv());
                 File.WriteAllText(progress, $"raw={rawMilliseconds}ms\nstage=promotion\n");
@@ -516,6 +567,15 @@ public sealed class ZoneBoundedDetectTests
                         reason = triage.Reason,
                     },
                     whiteoutCells,
+                    domainDiagnostics == null ? null : new {
+                        preparedDomainSqft = domainDiagnostics.PreparedDomainSqft,
+                        cropRecomputedDomainSqft = domainDiagnostics.CropRecomputedDomainSqft,
+                        lostComponents = domainDiagnostics.LostComponents.Select(component => new {
+                            areaSqft = component.AreaSqft,
+                            polygons = component.Polygons,
+                        }),
+                        exclusionProvenance = domainDiagnostics.ExclusionProvenance,
+                    },
                     new {
                         rawRooms = stats.RawRooms,
                         medianRawRoomSqft = stats.MedianRawRoomSqft,

@@ -1,5 +1,15 @@
 namespace Pe.Revit.Takeoff;
 
+internal sealed record ZoneDomainLossComponent(
+    double AreaSqft,
+    IReadOnlyList<List<double[]>> Polygons);
+
+internal sealed record ZoneDomainDiagnostics(
+    double PreparedDomainSqft,
+    double CropRecomputedDomainSqft,
+    IReadOnlyList<ZoneDomainLossComponent> LostComponents,
+    string? ExclusionProvenance);
+
 internal sealed class PreparedTakeoffDetection
 {
     private readonly Heightfield field;
@@ -38,7 +48,30 @@ internal sealed class PreparedTakeoffDetection
     /// </summary>
     internal TakeoffResult Detect(ZoneScope zone, Action<string> log, out int whiteoutCells)
     {
+        return this.DetectCore(zone, log, out whiteoutCells, out _, collectDiagnostics: false);
+    }
+
+    internal TakeoffResult Detect(
+        ZoneScope zone,
+        Action<string> log,
+        out int whiteoutCells,
+        out ZoneDomainDiagnostics diagnostics)
+    {
+        return this.DetectCore(
+            zone, log, out whiteoutCells, out diagnostics, collectDiagnostics: true);
+    }
+
+    private TakeoffResult DetectCore(
+        ZoneScope zone,
+        Action<string> log,
+        out int whiteoutCells,
+        out ZoneDomainDiagnostics diagnostics,
+        bool collectDiagnostics)
+    {
         whiteoutCells = 0;
+        diagnostics = collectDiagnostics
+            ? new ZoneDomainDiagnostics(0, 0, [], null)
+            : null!;
         if (zone == null) throw new ArgumentNullException(nameof(zone));
         const int paddingCells = 2;
         var points = zone.Loops.SelectMany(loop => loop).ToList();
@@ -67,7 +100,8 @@ internal sealed class PreparedTakeoffDetection
             CeilZ = Crop(this.field.CeilZ),
         };
         var croppedObstruction = Crop(this.obstruction);
-        bool[]? croppedFootprint = Crop(this.footprint);
+        var preparedFootprint = Crop(this.footprint);
+        bool[]? croppedFootprint = preparedFootprint;
         float[]? croppedEvidence = Crop(this.evidence);
         var croppedMask = zone.CellMask(croppedField);
         log($"[partition] zone crop {this.field.W}x{this.field.H} -> {width}x{height}");
@@ -86,12 +120,22 @@ internal sealed class PreparedTakeoffDetection
             if (hygiene.RemovedCells > 0)
             {
                 croppedObstruction = hygiene.Ink;
+                if (collectDiagnostics)
+                {
+                    var recomputedFootprint = Detector.InkBoundedFloor(
+                        croppedField, croppedObstruction, this.levelElevation, this.options.FloorTolFt);
+                    diagnostics = CompareDomains(
+                        croppedField, croppedMask, preparedFootprint, recomputedFootprint);
+                }
                 croppedFootprint = null;
                 croppedEvidence = null;
                 log($"[partition] ink hygiene whited out {hygiene.RemovedCells} floating cell(s) " +
                     $"= {hygiene.RemovedCells * this.field.CellFt * this.field.CellFt:F0}sf");
             }
         }
+        if (collectDiagnostics && whiteoutCells == 0)
+            diagnostics = CompareDomains(
+                croppedField, croppedMask, preparedFootprint, preparedFootprint);
         return PartitionFormulation.Run(
             croppedField, croppedObstruction, this.levelName, this.levelElevation, this.options,
             log, croppedMask, croppedFootprint, croppedEvidence);
@@ -103,6 +147,79 @@ internal sealed class PreparedTakeoffDetection
                 Array.Copy(source, (y0 + y) * this.field.W + x0,
                     cropped, y * width, width);
             return cropped;
+        }
+
+        ZoneDomainDiagnostics CompareDomains(
+            Heightfield domainField,
+            bool[] zoneDomainMask,
+            bool[] prepared,
+            bool[] recomputed)
+        {
+            var preparedDomain = PartitionFormulation.BuildDomain(
+                domainField, this.levelElevation, this.options, prepared);
+            var recomputedDomain = PartitionFormulation.BuildDomain(
+                domainField, this.levelElevation, this.options, recomputed);
+            for (int i = 0; i < preparedDomain.Length; i++)
+            {
+                preparedDomain[i] &= zoneDomainMask[i];
+                recomputedDomain[i] &= zoneDomainMask[i];
+            }
+
+            double cellArea = domainField.CellFt * domainField.CellFt;
+            var lost = new bool[preparedDomain.Length];
+            for (int i = 0; i < lost.Length; i++)
+                lost[i] = preparedDomain[i] && !recomputedDomain[i];
+            var labels = new int[lost.Length];
+            var components = new List<(int Start, ZoneDomainLossComponent Component)>();
+            var queue = new Queue<int>();
+            int id = 0;
+            for (int start = 0; start < lost.Length; start++)
+            {
+                if (!lost[start] || labels[start] != 0) continue;
+                id++;
+                labels[start] = id;
+                queue.Enqueue(start);
+                var cells = new List<int>();
+                while (queue.Count > 0)
+                {
+                    int cell = queue.Dequeue();
+                    cells.Add(cell);
+                    int x = cell % domainField.W, y = cell / domainField.W;
+                    Add(x - 1, y);
+                    Add(x + 1, y);
+                    Add(x, y - 1);
+                    Add(x, y + 1);
+                }
+                var polygons = Detector.TraceLoops(
+                        cells, labels, id, domainField.W, domainField.H)
+                    .Select(loop => Detector.CollapseCollinear(loop.Select(point => new[] {
+                        domainField.MinX + point.x * domainField.CellFt,
+                        domainField.MinY + point.y * domainField.CellFt,
+                    }).ToList()))
+                    .Where(polygon => polygon.Count >= 3)
+                    .ToList();
+                components.Add((start,
+                    new ZoneDomainLossComponent(cells.Count * cellArea, polygons)));
+
+                void Add(int x, int y)
+                {
+                    if (x < 0 || x >= domainField.W || y < 0 || y >= domainField.H) return;
+                    int neighbor = y * domainField.W + x;
+                    if (!lost[neighbor] || labels[neighbor] != 0) return;
+                    labels[neighbor] = id;
+                    queue.Enqueue(neighbor);
+                }
+            }
+            var ordered = components
+                .OrderByDescending(item => item.Component.AreaSqft)
+                .ThenBy(item => item.Start)
+                .Select(item => item.Component)
+                .ToList();
+            return new ZoneDomainDiagnostics(
+                preparedDomain.Count(value => value) * cellArea,
+                recomputedDomain.Count(value => value) * cellArea,
+                ordered,
+                ordered.Count == 0 ? null : "crop-reflood");
         }
     }
 }
