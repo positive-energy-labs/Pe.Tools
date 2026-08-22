@@ -78,6 +78,7 @@
 - 2026-08-21 — Loop-2 taste (kaitpw): flat savedWork may adopt on eyes ADOPT + a named secondary (accepted double-line residue ft, r7 980.7) — parallel-on-ink reopened as a quality adoption, per-room honesty unchanged; segment-wise frames for ML09 in scope as code; no blanket zone-edge non-vacuity gate (vacuity = flag); rounds are 3 builders / 60 min / raster only / code-first.
 
 ## Tried & rejected
+- 2026-08-22 — Replacing the current raw partition with faithful f970 connected-core ownership on current evidence/scope is falsified. It reached all 45 zones and exact union legality, but left 9.0 sf of current domain unassigned, failed three deterministic semantics, lost 28 incumbent acceptances, and reduced accepted recall 0.407→0.330. The old appearance did not come from ownership alone; do not transplant this mechanism. (Evidence: H3 `p1h3/REPORT.md`.)
 - 2026-08-22 — Rasterizing authoritative zone rails into the historical pre-discovery obstruction is falsified: 7,292 open cells were consumed and 46 old components split; 17/20 nonpassing zones gained candidates, but all four levels failed unchanged shared-coverage validation because a wall-width raster band cannot represent an exact zero-width zone-owned rail. Reopen only at the post-owner disposition seam, not with more obstruction repair. (Evidence: H2 `p1h2/REPORT.md`.)
 - 2026-08-14 — Vector wall harvest: 47.7% recall vs raster 51.9%.
 - 2026-08-14 — Typed IFC openings: all 55,634 imported objects are untyped proxies.
