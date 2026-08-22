@@ -37,9 +37,11 @@ internal sealed class PreparedLevelTakeoffDetection
         ZoneScope zone,
         Action<string> log,
         out int whiteoutCells,
-        out ZoneDomainDiagnostics diagnostics)
+        out ZoneDomainDiagnostics diagnostics,
+        Func<double, double, double>? distanceToReceivedInk = null)
     {
-        var result = this.detection.Detect(zone, log, out whiteoutCells, out diagnostics);
+        var result = this.detection.Detect(
+            zone, log, out whiteoutCells, out diagnostics, distanceToReceivedInk);
         result.ProfileProvenance = this.provenance;
         result.LevelFlags.AddRange(this.flags);
         return result;

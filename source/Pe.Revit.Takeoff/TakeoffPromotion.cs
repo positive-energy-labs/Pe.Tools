@@ -1938,6 +1938,47 @@ public static class TakeoffPromotion
         return rejected.Count;
     }
 
+    internal static IReadOnlyList<ZoneDomainHeldCandidate> NormalizeDomainRefloodHeldCandidates(
+        IReadOnlyList<ZoneDomainHeldCandidate> candidates,
+        TakeoffResult accepted)
+    {
+        if (candidates.Count == 0) return candidates;
+        Geometry acceptedGeometry = accepted.Rooms.Count == 0
+            ? GeometryFactory.CreatePolygon()
+            : OverlayNGRobust.Union(
+                accepted.Rooms.Select(room => (Geometry)ToPolygon(room)));
+        var normalized = new List<ZoneDomainHeldCandidate>();
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Polygons.Count == 0) continue;
+            var room = new RoomResult {
+                Id = candidate.Id,
+                RawSqft = candidate.AreaSqft,
+                Polygon = candidate.Polygons[0]
+                    .Select(point => new[] { point[0], point[1] }).ToList(),
+                Holes = candidate.Polygons.Skip(1).Select(hole => hole
+                    .Select(point => new[] { point[0], point[1] }).ToList()).ToList(),
+            };
+            Polygon original;
+            try { original = ToPolygon(room); }
+            catch (InvalidOperationException) { continue; }
+            Geometry remainder = acceptedGeometry.IsEmpty
+                || Intersection(original, acceptedGeometry).Area <= Epsilon
+                    ? original
+                    : PolygonDifference(original, acceptedGeometry);
+            if (remainder is not Polygon polygon || polygon.IsEmpty || !polygon.IsValid) continue;
+            var clipped = Clone(room, polygon);
+            clipped.LabelX = polygon.InteriorPoint.X;
+            clipped.LabelY = polygon.InteriorPoint.Y;
+            if (!TakeoffEditability.Evaluate(ToLevel(accepted, [clipped])).IsStrictlyEditable)
+                continue;
+            normalized.Add(new ZoneDomainHeldCandidate(
+                candidate.Id, polygon.Area,
+                new[] { clipped.Polygon }.Concat(clipped.Holes).ToList()));
+        }
+        return normalized;
+    }
+
     private static LevelTakeoff ToLevel(TakeoffResult result, IReadOnlyList<RoomResult> rooms) =>
         new(result.LevelName, result.LevelElevation, rooms.Select(room => new TakeoffRoomShape(
             room.Id, room.RawSqft, room.PerimeterFt, room.MeanCeilingFt,

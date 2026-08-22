@@ -61,10 +61,12 @@ internal sealed class PreparedTakeoffDetection
         ZoneScope zone,
         Action<string> log,
         out int whiteoutCells,
-        out ZoneDomainDiagnostics diagnostics)
+        out ZoneDomainDiagnostics diagnostics,
+        Func<double, double, double>? distanceToReceivedInk = null)
     {
         return this.DetectCore(
-            zone, log, out whiteoutCells, out diagnostics, collectDiagnostics: true);
+            zone, log, out whiteoutCells, out diagnostics, collectDiagnostics: true,
+            distanceToReceivedInk);
     }
 
     private TakeoffResult DetectCore(
@@ -72,7 +74,8 @@ internal sealed class PreparedTakeoffDetection
         Action<string> log,
         out int whiteoutCells,
         out ZoneDomainDiagnostics diagnostics,
-        bool collectDiagnostics)
+        bool collectDiagnostics,
+        Func<double, double, double>? distanceToReceivedInk = null)
     {
         whiteoutCells = 0;
         diagnostics = collectDiagnostics
@@ -223,7 +226,7 @@ internal sealed class PreparedTakeoffDetection
                 .ToList();
             var heldCandidates = DomainRefloodHeldCandidates(
                 ordered, this.levelName, this.levelElevation, this.options,
-                zone.ExactGeometry());
+                zone.ExactGeometry(), distanceToReceivedInk);
             return new ZoneDomainDiagnostics(
                 preparedDomain.Count(value => value) * cellArea,
                 recomputedDomain.Count(value => value) * cellArea,
@@ -238,7 +241,8 @@ internal sealed class PreparedTakeoffDetection
         string levelName,
         double levelElevation,
         TakeoffOptions options,
-        NetTopologySuite.Geometries.Geometry? declaredZone = null)
+        NetTopologySuite.Geometries.Geometry? declaredZone = null,
+        Func<double, double, double>? distanceToReceivedInk = null)
     {
         var candidates = new List<ZoneDomainHeldCandidate>();
         for (int index = 0; index < components.Count; index++)
@@ -268,13 +272,34 @@ internal sealed class PreparedTakeoffDetection
                 };
                 var projected = FrameLocalProjector.Project(
                     source, FrameLocalKnobs.From(options), declaredZone);
-                if (projected.Accepted.Rooms.Count != 1) continue;
-                var accepted = projected.Accepted.Rooms[0];
+                var accepted = projected.Accepted.Rooms.SingleOrDefault();
+                bool strictProjection = accepted != null;
+                accepted ??= projected.Rejected.SingleOrDefault(rejection =>
+                        rejection.Reason is FrameLocalRejectionReason.BoundaryDrift
+                            or FrameLocalRejectionReason.SourceFeatureDrop)
+                    ?.AttemptedProjection;
+                if (accepted == null) continue;
                 var acceptedPolygon = TakeoffGeometry.ToPolygon(accepted);
-                // This is a conservative crop-reflood review admission, not a claim that rooms
-                // are generally convex. Concavity here has no surviving ownership evidence.
-                if (acceptedPolygon.ConvexHull().Area - acceptedPolygon.Area
-                    > 1d / TakeoffGeometry.CoverageScale)
+                var shape = new TakeoffRoomShape(
+                    accepted.Id, accepted.RawSqft, accepted.PerimeterFt, accepted.MeanCeilingFt,
+                    accepted.Polygon, accepted.Holes) {
+                    Label = new[] { accepted.LabelX, accepted.LabelY },
+                };
+                if (!TakeoffEditability.Evaluate(
+                        new LevelTakeoff(levelName, levelElevation, [shape])).IsStrictlyEditable)
+                    continue;
+                bool convex = acceptedPolygon.ConvexHull().Area - acceptedPolygon.Area
+                    <= 1d / TakeoffGeometry.CoverageScale;
+                double? receivedSupport = distanceToReceivedInk == null
+                    ? null
+                    : TakeoffEvidenceFidelity.RoomBoundarySupportFraction(
+                        accepted, distanceToReceivedInk, declaredZone?.Boundary,
+                        options.InkBackedZoneEdgeExemptFt);
+                // Strict convex projections retain the original conservative lane. Any concavity,
+                // or an attempted projection refused for drift/drop, must instead stand on received
+                // drawing ink at the same support bar used by Accepted promotion.
+                if ((!strictProjection || !convex)
+                    && !(receivedSupport >= options.InkBackedAcceptMin))
                     continue;
                 candidates.Add(new ZoneDomainHeldCandidate(
                     room.Id, accepted.RawSqft,

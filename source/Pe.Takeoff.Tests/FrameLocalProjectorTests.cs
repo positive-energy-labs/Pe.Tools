@@ -206,6 +206,30 @@ public sealed class FrameLocalProjectorTests
     }
 
     [Test]
+    public void Boundary_drift_rejection_retains_attempted_geometry_for_review()
+    {
+        var room = Room("drift", new[]
+        {
+            (0d, 0d), (10d, 0d), (10d, 10d), (5d, 15d), (0d, 10d)
+        }, 5, 5);
+        var knobs = FrameLocalKnobs.Default with {
+            MaxBoundaryDriftFt = 0.1,
+            MaxSourceDropFt = 100,
+            MaxAreaDrift = 1,
+        };
+
+        var result = FrameLocalProjector.Project(Takeoff(room), knobs);
+        var rejected = result.Rejected.Single();
+
+        Assert.Multiple(() => {
+            Assert.That(rejected.Reason, Is.EqualTo(FrameLocalRejectionReason.BoundaryDrift));
+            Assert.That(rejected.AttemptedProjection, Is.Not.Null);
+            Assert.That(rejected.Room.Polygon, Is.EqualTo(room.Polygon),
+                "the strict rejection still conserves the original room");
+        });
+    }
+
+    [Test]
     public void Canonical_output_preserves_shared_network_nodes()
     {
         var room = Room("room", new[]

@@ -259,7 +259,7 @@ public sealed class ZoneBoundedDetectTests
     }
 
     [Test]
-    public void Domain_reflood_holds_a_rectangle_but_not_concave_or_scalloped_components()
+    public void Domain_reflood_requires_received_ink_for_nonconvex_review_geometry()
     {
         var rectangle = new ZoneDomainLossComponent(120, [
             [new[] { 0d, 0d }, new[] { 12d, 0d }, new[] { 12d, 10d }, new[] { 0d, 10d }],
@@ -279,12 +279,50 @@ public sealed class ZoneBoundedDetectTests
              new[] { 27d, 4d }, new[] { 27d, 10d }, new[] { 20d, 10d }],
         ]);
 
-        var candidates = PreparedTakeoffDetection.DomainRefloodHeldCandidates(
+        var unsupported = PreparedTakeoffDetection.DomainRefloodHeldCandidates(
             [rectangle, concave, scalloped], "Diagnostic", 0,
             new TakeoffOptions { MinimumPromotedRoomSqft = 30 });
+        var supported = PreparedTakeoffDetection.DomainRefloodHeldCandidates(
+            [rectangle, concave, scalloped], "Diagnostic", 0,
+            new TakeoffOptions { MinimumPromotedRoomSqft = 30 },
+            distanceToReceivedInk: (x, _) => x < 15 ? 0 : double.PositiveInfinity);
 
-        Assert.That(candidates.Select(candidate => candidate.Id),
-            Is.EqualTo(new[] { "CROP-REFLOOD-HELD:1" }));
+        Assert.Multiple(() => {
+            Assert.That(unsupported.Select(candidate => candidate.Id),
+                Is.EqualTo(new[] { "CROP-REFLOOD-HELD:1" }));
+            Assert.That(supported.Select(candidate => candidate.Id),
+                Is.EqualTo(new[] { "CROP-REFLOOD-HELD:1", "CROP-REFLOOD-HELD:2" }));
+        });
+    }
+
+    [Test]
+    public void Domain_reflood_review_geometry_subtracts_accepted_or_drops_a_split()
+    {
+        var candidates = new[] {
+            new ZoneDomainHeldCandidate("clip", 100,
+                [[new[] { 0d, 0d }, new[] { 10d, 0d }, new[] { 10d, 10d }, new[] { 0d, 10d }]]),
+            new ZoneDomainHeldCandidate("split", 100,
+                [[new[] { 0d, 20d }, new[] { 10d, 20d }, new[] { 10d, 30d }, new[] { 0d, 30d }]]),
+        };
+        var accepted = new TakeoffResult {
+            LevelName = "Diagnostic",
+            Rooms = {
+                new RoomResult { Id = "edge", RawSqft = 20,
+                    Polygon = [new[] { 8d, 0d }, new[] { 10d, 0d },
+                        new[] { 10d, 10d }, new[] { 8d, 10d }] },
+                new RoomResult { Id = "stripe", RawSqft = 20,
+                    Polygon = [new[] { 4d, 20d }, new[] { 6d, 20d },
+                        new[] { 6d, 30d }, new[] { 4d, 30d }] },
+            },
+        };
+
+        var normalized = TakeoffPromotion.NormalizeDomainRefloodHeldCandidates(
+            candidates, accepted);
+
+        Assert.Multiple(() => {
+            Assert.That(normalized.Select(candidate => candidate.Id), Is.EqualTo(new[] { "clip" }));
+            Assert.That(normalized.Single().AreaSqft, Is.EqualTo(80).Within(1e-6));
+        });
     }
 
     // ---- projectA: real capture x real designer zones ----
@@ -454,7 +492,8 @@ public sealed class ZoneBoundedDetectTests
                 var result = prepared == null
                     ? TakeoffPolicy.Detect(snap, profile, _ => { }, zoneMask: mask)
                     : prepared.Detect(
-                        zone, _ => { }, out whiteoutCells, out domainDiagnostics);
+                        zone, _ => { }, out whiteoutCells, out domainDiagnostics,
+                        distanceToWallInk);
                 long rawMilliseconds = timer.ElapsedMilliseconds;
                 File.WriteAllText(Path.Combine(rawZonesDir, $"rooms_{slug}.tsv"), result.ToTsv());
                 File.WriteAllText(progress, $"raw={rawMilliseconds}ms\nstage=promotion\n");
@@ -475,6 +514,10 @@ public sealed class ZoneBoundedDetectTests
                         File.WriteAllText(path, snapshot.ToTsv());
                     });
                 var triage = promotion.Diagnostics.Triage ?? ZoneTriageVerdict.Solve;
+                IReadOnlyList<ZoneDomainHeldCandidate> reviewHeldCandidates = domainDiagnostics == null
+                    ? []
+                    : TakeoffPromotion.NormalizeDomainRefloodHeldCandidates(
+                        domainDiagnostics.HeldCandidates, promotion.Result);
                 long promotionMilliseconds = timer.ElapsedMilliseconds;
                 // Append, not overwrite: the promotion stage log written above this point is the
                 // per-zone tuning evidence, and rewriting the file would erase it.
@@ -614,7 +657,7 @@ public sealed class ZoneBoundedDetectTests
                             areaSqft = component.AreaSqft,
                             polygons = component.Polygons,
                         }),
-                        heldCandidates = domainDiagnostics.HeldCandidates.Select(candidate => new {
+                        heldCandidates = reviewHeldCandidates.Select(candidate => new {
                             id = candidate.Id,
                             areaSqft = candidate.AreaSqft,
                             polygons = candidate.Polygons,

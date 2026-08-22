@@ -39,7 +39,8 @@ internal sealed record FrameLocalRejectedRoom(
     FrameLocalRejectionReason Reason,
     string Detail,
     double? AreaDrift = null,
-    double? BoundaryDriftFt = null);
+    double? BoundaryDriftFt = null,
+    RoomResult? AttemptedProjection = null);
 
 internal sealed record FrameLocalConservation(
     int SourceRooms,
@@ -461,14 +462,16 @@ internal static class FrameLocalProjector
             if (invention > knobs.MaxBoundaryDriftFt)
             {
                 Reject(room, FrameLocalRejectionReason.BoundaryDrift,
-                    $"boundary drift {boundaryDrift:F2} ft {probe}", areaDrift, boundaryDrift);
+                    $"boundary drift {boundaryDrift:F2} ft {probe}", areaDrift, boundaryDrift,
+                    polygon);
                 continue;
             }
 
             if (sourceDrop > knobs.MaxSourceDropFt)
             {
                 Reject(room, FrameLocalRejectionReason.SourceFeatureDrop,
-                    $"source feature drop {sourceDrop:F2} ft {probe}", areaDrift, boundaryDrift);
+                    $"source feature drop {sourceDrop:F2} ft {probe}", areaDrift, boundaryDrift,
+                    polygon);
                 continue;
             }
 
@@ -484,9 +487,13 @@ internal static class FrameLocalProjector
         }
 
         void Reject(Assignment room, FrameLocalRejectionReason reason, string detail,
-            double? areaDrift = null, double? boundaryDriftFt = null) =>
+            double? areaDrift = null, double? boundaryDriftFt = null,
+            Polygon? attemptedProjection = null) =>
             rejected.TryAdd(room.Index, new FrameLocalRejectedRoom(
-                CloneRoom(room.Source.Room), reason, detail, areaDrift, boundaryDriftFt));
+                CloneRoom(room.Source.Room), reason, detail, areaDrift, boundaryDriftFt,
+                attemptedProjection == null
+                    ? null
+                    : CloneRoom(room.Source.Room, attemptedProjection)));
 
         Geometry OtherOwnedCells(int index) => UnaryUnionOp.Union(component
             .Where(other => other.Index != index)
