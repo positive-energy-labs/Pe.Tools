@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Current = Pe.Revit.Takeoff;
 
 namespace HistoricalF970;
 
@@ -46,7 +47,11 @@ internal sealed class TakeoffResult
     internal double TotalSqft;
 }
 
-internal sealed record Detection(TakeoffResult Result, bool[] ClosedObstruction);
+internal sealed record Detection(
+    TakeoffResult Result,
+    bool[] ClosedObstruction,
+    int[] Owner,
+    IReadOnlyList<int> AcceptedIds);
 internal sealed record Replay(string LevelName, double LevelElevation, Heightfield Field, bool[] SeedInk);
 internal sealed record ZoneRecord(string View, double[][][] Loops);
 internal sealed record Zone(string Name, string Level, List<List<double[]>> Loops);
@@ -75,8 +80,9 @@ internal static class Program
         string pool = Required(args, "--pool");
         Directory.CreateDirectory(pool);
 
-        var options = new TakeoffOptions();
-        string optionsHash = Hash("f970088|" + JsonSerializer.Serialize(options, Json))[..12];
+        var historicalOptions = new TakeoffOptions();
+        Current.TakeoffOptions? canonicalOptions = null;
+        string optionsHash = Hash("p1h1|f970088|late-zone-split|current-gates")[..12];
         var stamp = DateTimeOffset.UtcNow;
         string runId = $"{stamp:yyyyMMdd-HHmmss}-{optionsHash}";
         string runDir = Path.Combine(pool, runId);
@@ -86,7 +92,7 @@ internal static class Program
         var sourceZones = JsonSerializer.Deserialize<List<ZoneRecord>>(File.ReadAllText(zonesPath), Json)
             ?? throw new InvalidDataException($"unreadable zones: {zonesPath}");
         var reportZones = new List<object>();
-        var unassigned = new List<string>();
+        var rejectionHistogram = new Dictionary<string, int>(StringComparer.Ordinal);
         int levelIndex = 0;
         foreach (var (level, token) in Levels)
         {
@@ -98,7 +104,11 @@ internal static class Program
                 throw new InvalidDataException($"{replayPath}: replay level '{replay.LevelName}' disagrees with {level}");
 
             var detection = Detector.Detect(replay.Field, replay.SeedInk, replay.LevelName,
-                replay.LevelElevation, options, Console.WriteLine);
+                replay.LevelElevation, historicalOptions, Console.WriteLine);
+            var snapshot = Current.DetectSnapshot.Load(replayPath);
+            var profile = Current.TakeoffPolicy.InferLevelProfile(snapshot);
+            canonicalOptions ??= profile.Options.Clone();
+            var distanceToInk = snapshot.SeedInkDistance();
             var zones = sourceZones
                 .Where(record => record.View.Contains(level, StringComparison.Ordinal))
                 .Select((record, index) => new Zone($"{level}#{index:D2}", level,
@@ -109,34 +119,62 @@ internal static class Program
             File.Copy(replayPath, replayTarget, true);
             SaveInk(Path.Combine(runDir, "input", $"ink_{token}.bin"), replay.Field, replay.SeedInk);
             SaveInk(Path.Combine(runDir, "input", $"seals_{token}.bin"), replay.Field, new bool[replay.SeedInk.Length]);
-            SaveInk(Path.Combine(runDir, "input", $"close_{token}.bin"), replay.Field,
-                detection.ClosedObstruction.Select((value, index) => value && !replay.SeedInk[index]).ToArray());
+            var gapClose = detection.ClosedObstruction
+                .Select((value, index) => value && !replay.SeedInk[index]).ToArray();
+            SaveInk(Path.Combine(runDir, "input", $"close_{token}.bin"), replay.Field, gapClose);
+            SaveClasses(Path.Combine(runDir, "input", $"classes_{token}.bin"), replay.Field,
+                gapClose.Select(value => value ? (byte)1 : (byte)0).ToArray());
 
-            var assignments = zones.ToDictionary(zone => zone.Name, _ => new List<RoomResult>());
-            foreach (var room in detection.Result.Rooms)
+            foreach (var zone in zones)
             {
-                var zone = zones.FirstOrDefault(candidate => ContainsEvenOdd(candidate.Loops, room.LabelX, room.LabelY));
-                if (zone == null) unassigned.Add($"{level}/{room.Id}");
-                else assignments[zone.Name].Add(room);
+                var mask = CellMask(zone.Loops, replay.Field);
+                var ownerIds = detection.Owner.Where((owner, cell) => owner > 0 && mask[cell])
+                    .Distinct().OrderBy(id => id).ToList();
+                int crossingOwners = ownerIds.Count(id => detection.Owner
+                    .Where(owner => owner == id).Count() > detection.Owner
+                    .Where((owner, cell) => owner == id && mask[cell]).Count());
+                int fragments = ownerIds.Sum(id => CountFragments(detection.Owner, id, mask,
+                    replay.Field.W, replay.Field.H));
+                int fragmentedOwners = ownerIds.Count(id => CountFragments(
+                    detection.Owner, id, mask, replay.Field.W, replay.Field.H) > 1);
+                Console.WriteLine($"[measure] {zone.Name}: owners={ownerIds.Count} " +
+                    $"crossing={crossingOwners} fragments={fragments} fragmentedOwners={fragmentedOwners} " +
+                    $"ownedCells={mask.Select((inside, cell) => inside && detection.Owner[cell] > 0 ? 1 : 0).Sum()}");
             }
 
             int zoneIndex = 0;
             foreach (var zone in zones)
             {
                 zoneIndex++;
-                var rooms = assignments[zone.Name];
+                var mask = CellMask(zone.Loops, replay.Field);
+                var split = Detector.SplitByMask(
+                    detection, replay.Field, mask, replay.LevelName, replay.LevelElevation);
+                var raw = ToCurrent(split);
+                var currentZone = new Current.ZoneScope { Name = zone.Name, Loops = zone.Loops };
+                var census = Current.ZoneCensus.Compute(
+                    replay.SeedInk, mask, replay.Field.W, replay.Field.H, replay.Field.CellFt);
+                var stats = Current.ZonePartitionStats.Of(raw, census.ZoneSqft);
+                var policy = Current.ZonePolicy.Adapt(census, stats, profile.Options);
                 string slug = $"{levelIndex:D2}_{zoneIndex:D2}_{Slug(zone.Name)}";
+                File.WriteAllText(Path.Combine(runDir, "zones", $"raw_{slug}.tsv"), raw.ToTsv());
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                Console.WriteLine($"[candidate] {zone.Name}: rawFragments={raw.Rooms.Count}");
+                var promotion = Current.TakeoffPromotion.PromoteZone(
+                    raw, currentZone, policy.Options, distanceToInk, null, census, distanceToInk);
+                long promotionMilliseconds = timer.ElapsedMilliseconds;
+                foreach (var rejection in promotion.Diagnostics.Rejections)
+                    rejectionHistogram[rejection.Key] = rejectionHistogram.GetValueOrDefault(rejection.Key) + rejection.Value;
                 string tsvRel = $"zones/rooms_{slug}.tsv";
                 File.WriteAllText(Path.Combine(runDir, tsvRel.Replace('/', Path.DirectorySeparatorChar)),
-                    ToTsv(detection.Result, rooms));
+                    promotion.Result.ToTsv());
                 var points = zone.Loops.SelectMany(loop => loop).ToList();
                 double minX = points.Min(point => point[0]);
                 double minY = points.Min(point => point[1]);
                 double maxX = points.Max(point => point[0]);
                 double maxY = points.Max(point => point[1]);
-                double acceptedSqft = rooms.Sum(room => room.RawSqft);
-                bool contained = rooms.All(room => room.Polygon.Concat(room.Holes.SelectMany(hole => hole))
-                    .All(point => ContainsOrBoundary(zone.Loops, point[0], point[1])));
+                var triage = promotion.Diagnostics.Triage ?? Current.ZoneTriageVerdict.Solve;
+                double closeSqft = CountInZone(detection.ClosedObstruction, replay.SeedInk,
+                    replay.Field, zone.Loops) * replay.Field.CellFt * replay.Field.CellFt;
                 reportZones.Add(new {
                     Level = level,
                     Zone = zone.Name,
@@ -149,69 +187,80 @@ internal static class Program
                     Ink = $"input/ink_{token}.bin",
                     Seals = $"input/seals_{token}.bin",
                     Close = $"input/close_{token}.bin",
+                    RawMilliseconds = 0L,
+                    PromotionMilliseconds = promotionMilliseconds,
                     OracleRooms = 0,
-                    RawRooms = rooms.Count,
-                    AcceptedRooms = rooms.Count,
-                    HeldRooms = 0,
-                    PartitionSqft = acceptedSqft,
-                    AcceptedSqft = acceptedSqft,
-                    HeldSqft = 0.0,
-                    VoidSqft = 0.0,
-                    ExcludedSqft = 0.0,
-                    ZoneSqft = Math.Abs(zone.Loops.Sum(SignedArea)),
-                    InkBackedEdgeFraction = 0.0,
-                    StrictlyEditable = rooms.All(IsOrthogonal),
-                    Contained = contained,
-                    Rejections = new Dictionary<string, int>(),
-                    RejectionDetails = new Dictionary<string, string>(),
-                    adaptedKnobs = new Dictionary<string, string>(),
-                    census = new { zoneSqft = Math.Abs(zone.Loops.Sum(SignedArea)), inkSqft = 0.0, inkRatio = 0.0, edgeBandInkFraction = 0.0 },
-                    triage = new {
-                        verdict = rooms.Count > 0 && contained ? "solve" : "hold",
-                        reason = rooms.Count == 0 ? "no f970 detector room label in zone"
-                            : contained ? "f970 detector rooms fit current zone"
-                            : "f970 whole-level rooms cross current zone; geometry shown unchanged",
+                    RawRooms = raw.Rooms.Count,
+                    promotion.Diagnostics.SharedNetworkStrictRooms,
+                    promotion.Diagnostics.AcceptedRooms,
+                    promotion.Diagnostics.HeldRooms,
+                    promotion.Diagnostics.TinyMerged,
+                    promotion.Diagnostics.PartitionSqft,
+                    promotion.Diagnostics.AcceptedSqft,
+                    promotion.Diagnostics.HeldSqft,
+                    promotion.Diagnostics.VoidSqft,
+                    promotion.Diagnostics.ExcludedSqft,
+                    promotion.Diagnostics.ZoneSqft,
+                    promotion.Diagnostics.HeldFraction,
+                    promotion.Diagnostics.VoidFraction,
+                    promotion.Diagnostics.InkBackedEdgeFraction,
+                    promotion.Diagnostics.ClosureErrorSqft,
+                    StrictlyEditable = promotion.Diagnostics.IsStrictlyEditable,
+                    Contained = promotion.Diagnostics.IsContained,
+                    promotion.Diagnostics.SharedEdgePairs,
+                    promotion.Diagnostics.LostSharedEdgePairs,
+                    Rejections = promotion.Diagnostics.Rejections,
+                    RejectionDetails = promotion.Diagnostics.RejectionDetails,
+                    adaptedKnobs = policy.AdaptedKnobs,
+                    census = new {
+                        zoneSqft = census.ZoneSqft,
+                        inkSqft = census.InkSqft,
+                        inkRatio = census.InkRatio,
+                        floatingClusterCells = census.InkClusterCells,
+                        edgeBandInkFraction = census.EdgeBandInkFraction,
                     },
+                    triage = new {
+                        verdict = triage.IsHold ? "hold" : "solve",
+                        reason = triage.Reason,
+                    },
+                    whiteoutCells = 0,
+                    partition = new {
+                        rawRooms = stats.RawRooms,
+                        medianRawRoomSqft = stats.MedianRawRoomSqft,
+                        roomsPer1000Sqft = stats.RoomsPer1000Sqft,
+                    },
+                    closureSqft = closeSqft,
                     closure = new {
                         doorHeadSqft = 0.0,
+                        doorHeadOversizeSqft = 0.0,
                         wallRunGapSqft = 0.0,
-                        gapCloseSqft = CountInZone(detection.ClosedObstruction, replay.SeedInk,
-                            replay.Field, zone.Loops) * replay.Field.CellFt * replay.Field.CellFt,
+                        gapCloseSqft = closeSqft,
                     },
                     zoneKey = ZoneKey(level, minX, minY, maxX, maxY),
                 });
             }
-            Console.WriteLine($"{level}: historical rooms={detection.Result.Rooms.Count} assigned={assignments.Values.Sum(value => value.Count)}");
+            Console.WriteLine($"{level}: historical owners={detection.Result.Rooms.Count}");
         }
 
         var report = new {
             SchemaVersion = 4,
             GeneratedUtc = stamp,
             optionsHash,
-            options = new {
-                sourceCommit = "f970088315d470d8ef5a49d3cc05088253f488ff",
-                baseCommit = "f67611f609f244f545c21f0f36e8bd7359015863",
-                reviewRange = "97497ee2c9c4732b69afbee4a80b13c585553329..f970088315d470d8ef5a49d3cc05088253f488ff",
-                acceptance = "f970 detector acceptance; current promotion gates were not applied",
-                assignment = "whole-level room label point into current designer zone; geometry unchanged",
-                options,
-                unassignedRooms = unassigned,
-            },
+            options = canonicalOptions ?? new Current.TakeoffOptions(),
             zoneFilter = (string?)null,
             Zones = reportZones,
-            RejectionHistogram = new Dictionary<string, int>(),
+            RejectionHistogram = new SortedDictionary<string, int>(rejectionHistogram, StringComparer.Ordinal),
         };
         File.WriteAllText(Path.Combine(runDir, "report.json"), JsonSerializer.Serialize(report, Json) + Environment.NewLine);
         File.WriteAllText(Path.Combine(runDir, "meta.json"), JsonSerializer.Serialize(new {
             runId,
             generatedUtc = stamp,
             optionsHash,
-            label = "historical f970088",
+            label = "P1H1 f970 owner grid split before trace; current gates",
             zoneFilter = (string?)null,
         }, Json) + Environment.NewLine);
         Console.WriteLine($"runId={runId}");
         Console.WriteLine($"optionsHash={optionsHash}");
-        Console.WriteLine($"unassigned={string.Join(',', unassigned)}");
         Console.WriteLine($"runDir={runDir}");
         return 0;
     }
@@ -229,11 +278,15 @@ internal static class Program
         for (int x = 2; x <= 11; x++) { Set(x, 2); Set(x, 9); }
         for (int y = 2; y <= 9; y++) { Set(2, y); Set(11, y); Set(7, y); }
         var options = new TakeoffOptions { CellFt = 1, MinSqft = 1, GapSealFt = 1.5, MinCompactness = 0 };
-        var first = Detector.Detect(field, ink, "Test", 0, options, _ => { }).Result;
-        var second = Detector.Detect(field, ink, "Test", 0, options, _ => { }).Result;
-        if (first.Rooms.Count != 2 || ToTsv(first, first.Rooms) != ToTsv(second, second.Rooms))
+        var first = Detector.Detect(field, ink, "Test", 0, options, _ => { });
+        var second = Detector.Detect(field, ink, "Test", 0, options, _ => { });
+        var leftMask = Enumerable.Range(0, width * height).Select(cell => cell % width < 7).ToArray();
+        var split = Detector.SplitByMask(first, field, leftMask, "Test", 0);
+        if (first.Result.Rooms.Count != 2
+            || ToTsv(first.Result, first.Result.Rooms) != ToTsv(second.Result, second.Result.Rooms)
+            || split.Rooms.Count != 1 || split.Rooms[0].Polygon.Any(point => point[0] > 7))
             throw new InvalidOperationException("historical detector self-check failed");
-        Console.WriteLine("self-check passed: 2 deterministic rooms");
+        Console.WriteLine("self-check passed: 2 deterministic rooms; exact pre-trace split preserved");
         return 0;
     }
 
@@ -288,6 +341,38 @@ internal static class Program
         var packed = new byte[(values.Length + 7) / 8];
         for (int i = 0; i < values.Length; i++) if (values[i]) packed[i >> 3] |= (byte)(1 << (i & 7));
         writer.Write(packed);
+    }
+
+    private static void SaveClasses(string path, Heightfield field, byte[] values)
+    {
+        if (values.Length != field.W * field.H) throw new ArgumentException("raster dimensions disagree");
+        using var writer = new BinaryWriter(File.Create(path));
+        writer.Write(0x434B4E49u); // INKC
+        writer.Write(field.W); writer.Write(field.H);
+        writer.Write(field.MinX); writer.Write(field.MinY); writer.Write(field.CellFt);
+        writer.Write(values);
+    }
+
+    private static Current.TakeoffResult ToCurrent(TakeoffResult source)
+    {
+        var result = new Current.TakeoffResult {
+            LevelName = source.LevelName,
+            LevelElevation = source.LevelElevation,
+            TotalSqft = source.TotalSqft,
+            DomainSqft = source.TotalSqft,
+        };
+        result.Rooms.AddRange(source.Rooms.Select(room => new Current.RoomResult {
+            Id = room.Id,
+            RawSqft = room.RawSqft,
+            PerimeterFt = room.PerimeterFt,
+            LabelX = room.LabelX,
+            LabelY = room.LabelY,
+            MeanCeilingFt = room.MeanCeilingFt,
+            Polygon = room.Polygon.Select(point => new[] { point[0], point[1] }).ToList(),
+            Holes = room.Holes.Select(hole => hole
+                .Select(point => new[] { point[0], point[1] }).ToList()).ToList(),
+        }));
+        return result;
     }
 
     private static string ToTsv(TakeoffResult result, IReadOnlyCollection<RoomResult> rooms)
@@ -368,6 +453,46 @@ internal static class Program
             if (ContainsEvenOdd(loops, x, y)) count++;
         }
         return count;
+    }
+
+    private static bool[] CellMask(List<List<double[]>> loops, Heightfield field)
+    {
+        var mask = new bool[field.W * field.H];
+        for (int cell = 0; cell < mask.Length; cell++)
+        {
+            double x = field.MinX + (cell % field.W + 0.5) * field.CellFt;
+            double y = field.MinY + (cell / field.W + 0.5) * field.CellFt;
+            mask[cell] = ContainsEvenOdd(loops, x, y);
+        }
+        return mask;
+    }
+
+    private static int CountFragments(int[] owner, int id, bool[] mask, int width, int height)
+    {
+        var seen = new bool[owner.Length];
+        var queue = new Queue<int>();
+        int count = 0;
+        for (int start = 0; start < owner.Length; start++)
+        {
+            if (seen[start] || !mask[start] || owner[start] != id) continue;
+            count++;
+            seen[start] = true;
+            queue.Enqueue(start);
+            while (queue.Count > 0)
+            {
+                int cell = queue.Dequeue(), x = cell % width, y = cell / width;
+                Visit(cell - 1, x > 0); Visit(cell + 1, x + 1 < width);
+                Visit(cell - width, y > 0); Visit(cell + width, y + 1 < height);
+            }
+        }
+        return count;
+
+        void Visit(int cell, bool valid)
+        {
+            if (!valid || seen[cell] || !mask[cell] || owner[cell] != id) return;
+            seen[cell] = true;
+            queue.Enqueue(cell);
+        }
     }
     private static string Slug(string value) => new(value.Select(character => char.IsLetterOrDigit(character) ? character : '_').ToArray());
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();

@@ -132,7 +132,87 @@ internal static class Detector
             result.Rooms.Add(room);
             result.TotalSqft += room.RawSqft;
         }
-        return new Detection(result, obst);
+        return new Detection(result, obst, partition, acceptedIds);
+    }
+
+    // H1 seam: preserve the historical level-wide owner grid, apply the exact zone mask, then
+    // trace each surviving connected owner fragment. No polygon clipping or repair occurs here.
+    internal static TakeoffResult SplitByMask(
+        Detection detection, Heightfield hf, bool[] zoneMask,
+        string levelName, double levelElevation)
+    {
+        if (detection.Owner.Length != zoneMask.Length || zoneMask.Length != hf.W * hf.H)
+            throw new ArgumentException("owner, zone, and heightfield dimensions disagree");
+        var labels = new int[zoneMask.Length];
+        var fragments = new List<(int Owner, int Id, List<int> Cells)>();
+        var queue = new Queue<int>();
+        int fragmentId = 0;
+        foreach (int ownerId in detection.AcceptedIds.OrderBy(id => id))
+        for (int start = 0; start < labels.Length; start++)
+        {
+            if (!zoneMask[start] || detection.Owner[start] != ownerId || labels[start] != 0) continue;
+            fragmentId++;
+            var cells = new List<int>();
+            labels[start] = fragmentId;
+            queue.Enqueue(start);
+            while (queue.Count > 0)
+            {
+                int cell = queue.Dequeue(), x = cell % hf.W, y = cell / hf.W;
+                cells.Add(cell);
+                Visit(cell - 1, x > 0); Visit(cell + 1, x + 1 < hf.W);
+                Visit(cell - hf.W, y > 0); Visit(cell + hf.W, y + 1 < hf.H);
+            }
+            fragments.Add((ownerId, fragmentId, cells));
+
+            void Visit(int cell, bool valid)
+            {
+                if (!valid || !zoneMask[cell] || detection.Owner[cell] != ownerId || labels[cell] != 0) return;
+                labels[cell] = fragmentId;
+                queue.Enqueue(cell);
+            }
+        }
+
+        var result = new TakeoffResult { LevelName = levelName, LevelElevation = levelElevation };
+        var ownerRanks = new Dictionary<int, int>();
+        foreach (var fragment in fragments)
+        {
+            var polys = TraceLoops(fragment.Cells, labels, fragment.Id, hf.W, hf.H)
+                .Select(loop => loop.Select(vertex => new[] {
+                    hf.MinX + vertex.x * hf.CellFt,
+                    hf.MinY + vertex.y * hf.CellFt,
+                }).ToList())
+                .Select(CollapseCollinear)
+                .Where(polygon => polygon.Count >= 3)
+                .ToList();
+            if (polys.Count == 0) continue;
+            int outerIndex = Enumerable.Range(0, polys.Count)
+                .OrderByDescending(index => Math.Abs(Shoelace(polys[index]))).First();
+            var outer = polys[outerIndex];
+            if (Shoelace(outer) < 0) outer.Reverse();
+            int rank = ownerRanks.TryGetValue(fragment.Owner, out int prior) ? prior + 1 : 1;
+            ownerRanks[fragment.Owner] = rank;
+            int labelCell = PoleOfInaccessibility(fragment.Cells, labels, fragment.Id, hf.W, hf.H);
+            var ceilings = fragment.Cells
+                .Where(cell => !float.IsNaN(hf.CeilZ[cell]) && !float.IsNaN(hf.FloorZ[cell]))
+                .Select(cell => (double)(hf.CeilZ[cell] - hf.FloorZ[cell])).ToList();
+            var room = new RoomResult {
+                Id = $"H{fragment.Owner:D3}F{rank:D2}",
+                RawSqft = fragment.Cells.Count * hf.CellFt * hf.CellFt,
+                PerimeterFt = Enumerable.Range(0, outer.Count).Sum(index => {
+                    var from = outer[index]; var to = outer[(index + 1) % outer.Count];
+                    return Math.Sqrt(Math.Pow(from[0] - to[0], 2) + Math.Pow(from[1] - to[1], 2));
+                }),
+                LabelX = hf.MinX + (labelCell % hf.W + 0.5) * hf.CellFt,
+                LabelY = hf.MinY + (labelCell / hf.W + 0.5) * hf.CellFt,
+                MeanCeilingFt = ceilings.Count == 0 ? 0 : ceilings.Average(),
+                Polygon = outer,
+            };
+            for (int index = 0; index < polys.Count; index++)
+                if (index != outerIndex) room.Holes.Add(polys[index]);
+            result.Rooms.Add(room);
+            result.TotalSqft += room.RawSqft;
+        }
+        return result;
     }
 
     private static int RasterPerimeterCells(int[] labels, int id, int width, int height)
