@@ -488,6 +488,36 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Held_rooms_keep_the_shared_network_candidate_not_the_raster_staircase()
+    {
+        var left = Room("left", (0, 0), (5, 0), (5, 2), (5.25, 2), (5.25, 4),
+            (5, 4), (5, 6), (5.25, 6), (5.25, 8), (5, 8), (5, 10), (0, 10));
+        var right = Room("right", (5, 0), (10, 0), (10, 10), (5, 10), (5, 8),
+            (5.25, 8), (5.25, 6), (5, 6), (5, 4), (5.25, 4), (5.25, 2), (5, 2));
+        left.RawSqft = right.RawSqft = 50;
+        var source = new TakeoffResult {
+            LevelName = "Level 1", Rooms = { left, right }, DomainSqft = 100,
+        };
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 2);
+        options.InkBackedAcceptMin = 1;
+        options.AbsorbNeighborMaxSqft = 0;
+        options.EdgeBandFt = 0;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (10, 0), (10, 10), (0, 10)),
+            options, (_, _) => 100, TestContext.Out.WriteLine);
+
+        var held = promotion.Result.Residues
+            .Where(residue => residue.Reason == ResidueReason.Rejected).ToList();
+        Assert.That(held, Has.Count.EqualTo(2));
+        Assert.Multiple(() => {
+            Assert.That(held.Max(residue => residue.Polygon.Count), Is.LessThan(12),
+                "Held is a review candidate; restoring the raw raster boundary makes it unsalvageable.");
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
     public void Absorb_neighbor_is_inert_when_disarmed()
     {
         var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);

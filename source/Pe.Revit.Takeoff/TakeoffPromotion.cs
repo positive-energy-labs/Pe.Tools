@@ -59,7 +59,7 @@ public static class TakeoffPromotion
     /// immediately after <c>shared-network</c> and BEFORE <c>frame-projector</c>, because the
     /// lattice cells they exist to absorb are exactly the rooms the projector rejects — running
     /// them later meant they never fired at all (measured: zero events across the 45-zone set);
-    /// and <c>disposition</c> must restore held source geometry before residues are rebuilt
+    /// and <c>disposition</c> restores held post-network candidate geometry before residue rebuild
     /// inside the zone. An experiment inserts, removes, or reorders entries — this array is the
     /// seam, not an interface.
     /// </summary>
@@ -139,8 +139,8 @@ public static class TakeoffPromotion
         internal ZoneCensus? Census;                 // supplied by the caller; null = no triage
         internal ZoneTriageVerdict Triage = ZoneTriageVerdict.Solve;
 
-        // The detector's selected partition is the disposition authority. Every downstream
-        // regularizer/projector may either improve a room or hold that exact source room whole.
+        // The detector's selected partition is the accounting authority. Held review geometry is
+        // the post-network candidate; raw raster coverage that it leaves behind stays residue.
         internal List<RoomResult> CompletePartition = [];
         internal List<RoomResult> EvidencePartition = [];
 
@@ -1555,8 +1555,7 @@ public static class TakeoffPromotion
     {
         state.HeldRooms = state.Result.Residues
             .Count(residue => residue.Reason == ResidueReason.Rejected);
-        RestoreHeldSourceGeometry(
-            state.Result, state.CompletePartition, state.EvidencePartition);
+        RestoreHeldCandidateGeometry(state.Result, state.EvidencePartition);
         RebuildResiduesInsideZone(state.Result, state.ZoneGeometry);
     }
 
@@ -1641,30 +1640,19 @@ public static class TakeoffPromotion
         }
     }
 
-    private static void RestoreHeldSourceGeometry(
-        TakeoffResult result,
-        IReadOnlyList<RoomResult> sourceRooms,
-        IReadOnlyList<RoomResult> currentPartition)
+    private static void RestoreHeldCandidateGeometry(
+        TakeoffResult result, IReadOnlyList<RoomResult> candidates)
     {
-        var sourceById = sourceRooms.ToDictionary(room => room.Id, StringComparer.Ordinal);
-        var currentById = currentPartition.ToDictionary(room => room.Id, StringComparer.Ordinal);
+        var candidateById = candidates.ToDictionary(room => room.Id, StringComparer.Ordinal);
         foreach (var residue in result.Residues
                      .Where(item => item.Reason == ResidueReason.Rejected))
         {
-            if (!sourceById.TryGetValue(residue.Id, out var source)) continue;
-            var sourceIds = currentById.TryGetValue(residue.Id, out var current)
-                && !string.IsNullOrWhiteSpace(current.MergedFrom)
-                ? current.MergedFrom!.Split('+', StringSplitOptions.RemoveEmptyEntries)
-                    .Prepend(residue.Id).Distinct(StringComparer.Ordinal).ToList()
-                : [residue.Id];
-            var geometry = OverlayNGRobust.Union(sourceIds
-                .Where(sourceById.ContainsKey)
-                .Select(id => (Geometry)ToPolygon(sourceById[id])).ToList());
-            if (geometry is not Polygon polygon) continue;
+            if (!candidateById.TryGetValue(residue.Id, out var candidate)) continue;
+            var polygon = ToPolygon(candidate);
             residue.RawSqft = polygon.Area;
-            residue.LabelX = source.LabelX;
-            residue.LabelY = source.LabelY;
-            residue.MeanCeilingFt = source.MeanCeilingFt;
+            residue.LabelX = candidate.LabelX;
+            residue.LabelY = candidate.LabelY;
+            residue.MeanCeilingFt = candidate.MeanCeilingFt;
             residue.Polygon = Coordinates(polygon.ExteriorRing, true);
             residue.Holes = Enumerable.Range(0, polygon.NumInteriorRings)
                 .Select(index => Coordinates(polygon.GetInteriorRingN(index), false)).ToList();
