@@ -53,8 +53,9 @@ public static class TakeoffPromotion
 
     /// <summary>
     /// The disposition pipeline, in the one order that is load-bearing. Ordering constraints that
-    /// used to live only in the reader's head are visible here: <c>triage</c> runs before anything
-    /// reads the partition because a held zone never has one; <c>evidence</c> reads the
+    /// used to live only in the reader's head are visible here: <c>triage</c> rejects a missing
+    /// raster before anything reads the partition and arms the small-zone fallback;
+    /// <c>evidence</c> reads the
     /// post-regularizer partition captured by <c>shared-network</c>; the recombination stages sit
     /// immediately after <c>shared-network</c> and BEFORE <c>frame-projector</c>, because the
     /// lattice cells they exist to absorb are exactly the rooms the projector rejects — running
@@ -77,6 +78,7 @@ public static class TakeoffPromotion
         ("ink-backing", RunInkBacking),
         ("shared-audit", RunSharedAudit),
         ("editability", RunEditability),
+        ("small-zone-fallback", RunSmallZoneFallback),
         ("disposition", RunDisposition),
     ];
 
@@ -109,8 +111,8 @@ public static class TakeoffPromotion
             log?.Invoke(
                 $"[promotion] stage={stage.Name} ms={elapsed - lastMilliseconds} total={elapsed}");
             lastMilliseconds = elapsed;
-            // A triage hold IS the disposition: the zone is already closed as one held residue and
-            // every later stage would be arguing about a partition that must not be trusted.
+            // A triage hold IS the disposition: either no raster existed, or a small-zone solve
+            // produced no Accepted room and fell back to the authoritative whole zone.
             if (state.Triage.IsHold) break;
         }
         return Close(state);
@@ -138,6 +140,7 @@ public static class TakeoffPromotion
         internal Geometry ZoneGeometry = null!;      // set by the zone-geometry stage
         internal ZoneCensus? Census;                 // supplied by the caller; null = no triage
         internal ZoneTriageVerdict Triage = ZoneTriageVerdict.Solve;
+        internal ZoneTriageVerdict? SmallZoneFallback;
 
         // The detector's selected partition is the accounting authority. Held review geometry is
         // the post-network candidate; raw raster coverage that it leaves behind stays residue.
@@ -156,15 +159,31 @@ public static class TakeoffPromotion
     }
 
     /// <summary>
-    /// Pre-solve abstention. A held zone emits no rooms and its entire area as one held residue —
-    /// the accounting law closes on the zone's own geometry, and the verdict reason travels as the
-    /// residue id so the artifact and the contact sheet both say WHY nothing was solved.
+    /// Missing raster holds immediately. A small-zone verdict instead arms a whole-zone fallback,
+    /// allowing a valid partition to win without turning a failed solve into excluded space.
     /// </summary>
     private static void RunTriage(PromotionState state)
     {
         if (state.Census == null) return;
-        state.Triage = ZoneTriage.Evaluate(state.Census, state.Options);
-        if (!state.Triage.IsHold) return;
+        var verdict = ZoneTriage.Evaluate(state.Census, state.Options);
+        if (verdict.Reason == "small-zone")
+        {
+            state.SmallZoneFallback = verdict;
+            return;
+        }
+        if (!verdict.IsHold) return;
+        HoldWhole(state, verdict);
+    }
+
+    private static void RunSmallZoneFallback(PromotionState state)
+    {
+        if (state.SmallZoneFallback == null || state.Result.Rooms.Count > 0) return;
+        HoldWhole(state, state.SmallZoneFallback);
+    }
+
+    private static void HoldWhole(PromotionState state, ZoneTriageVerdict verdict)
+    {
+        state.Triage = verdict;
         state.Result.Rooms.Clear();
         state.Result.Residues.Clear();
         AddResidues(
@@ -177,7 +196,7 @@ public static class TakeoffPromotion
         state.HeldRooms = state.Result.Residues.Count;
         state.Log?.Invoke($"[promotion] triage held zone whole: {state.Triage.Reason} " +
                           $"zone={state.ZoneGeometry.Area:F0}sf " +
-                          $"inkRatio={state.Census.InkRatio:P0}");
+                          $"inkRatio={state.Census?.InkRatio ?? 0:P0}");
     }
 
     /// <summary>

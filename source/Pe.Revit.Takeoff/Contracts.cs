@@ -94,8 +94,8 @@ public sealed class TakeoffOptions
     // wants ~750, typical projects smaller. Do not fixture-tune the default. The low-ink refinement
     // (SmallZoneLowInkSqft/MinZoneInkRatio) was deleted 2026-08-16: never armed, and inkRatio was
     // falsified as a per-zone discriminator on framing-clean bins (DECISIONS 2026-08-16).
-    public double SmallZoneSqft = 750;      // zone at or under this holds whole, unsolved (0 = off);
-                                            // 17 of 19 such project-a zones never produced an accepted room
+    public double SmallZoneSqft = 750;      // at or under: solve, then hold whole if no room survives (0 = off);
+                                            // current projectA: 7 of 16 solve; the other 9 fall back whole
     // ---- Pre-solve ink hygiene (InkHygiene.cs) ----
     public int InkClusterWhiteoutCells = 100; // drop floating in-zone ink clusters smaller than this (0 = off)
     // ---- Zone-edge ink pull (PartitionFormulation.Run) ----

@@ -373,12 +373,11 @@ public sealed class TakeoffPromotionTests
     // ---- pre-solve triage ----
 
     [Test]
-    public void Triage_hold_emits_the_whole_zone_as_one_reasoned_residue()
+    public void Small_zone_without_an_accepted_partition_falls_back_to_one_reasoned_residue()
     {
         var source = new TakeoffResult {
             LevelName = "Level 1",
-            Rooms = { Room("wander", (0, 0), (10, 0), (10, 10), (0, 10)) },
-            DomainSqft = 100,
+            DomainSqft = 200,
         };
         var zone = Zone("closet", (0, 0), (20, 0), (20, 10), (0, 10));
         var options = Options(minimumRoomSqft: 0);
@@ -399,6 +398,30 @@ public sealed class TakeoffPromotionTests
                 "the abstention accounts for the entire declared zone");
             Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
             Assert.That(promotion.Diagnostics.IsContained, Is.True);
+        });
+    }
+
+    [Test]
+    public void Small_zone_uses_a_valid_partition_before_falling_back_to_whole_zone()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("room", (0, 0), (10, 0), (10, 10), (0, 10)) },
+            DomainSqft = 100,
+        };
+        var zone = Zone("room", (0, 0), (10, 0), (10, 10), (0, 10));
+        var options = Options(minimumRoomSqft: 0);
+        options.SmallZoneSqft = 750;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, options, (_, _) => 0, TestContext.Out.WriteLine,
+            new ZoneCensus(100, 10, 0.1, [], 0));
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.Triage!.IsHold, Is.False);
+            Assert.That(promotion.Result.Rooms.Select(room => room.Id), Is.EqualTo(new[] { "room" }));
+            Assert.That(promotion.Result.Residues.Select(residue => residue.Id),
+                Has.No.Member("TRIAGE-HELD:small-zone"));
         });
     }
 
