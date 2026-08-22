@@ -186,7 +186,8 @@ def despeckle(mask, cell):
     return keep[labels]
 
 
-def render_zone(root, zone, output, padding_cells=12, scale=2):
+def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None,
+                metadata=None):
     ink_path = artifact_path(root, zone["Ink"])
     tsv_path = artifact_path(root, zone["Tsv"])
     # Evidence authority: the replay snapshot's seed ink — the raster the solver actually
@@ -237,10 +238,24 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
     split = class_masks()
     door_mask, run_mask = split if split is not None else (closure_mask("Seals"), None)
     close_mask = closure_mask("Close")
-    x0 = max(0, math.floor((zone["MinX"] - min_x) / cell) - padding_cells)
-    x1 = min(width, math.ceil((zone["MaxX"] - min_x) / cell) + padding_cells)
-    y0 = max(0, math.floor((zone["MinY"] - min_y) / cell) - padding_cells)
-    y1 = min(height, math.ceil((zone["MaxY"] - min_y) / cell) + padding_cells)
+    bounds = focus_bounds or (zone["MinX"], zone["MinY"], zone["MaxX"], zone["MaxY"])
+    x0 = max(0, math.floor((bounds[0] - min_x) / cell) - padding_cells)
+    x1 = min(width, math.ceil((bounds[2] - min_x) / cell) + padding_cells)
+    y0 = max(0, math.floor((bounds[1] - min_y) / cell) - padding_cells)
+    y1 = min(height, math.ceil((bounds[3] - min_y) / cell) + padding_cells)
+    if metadata is not None:
+        metadata.update({
+            "requestedBounds": [float(value) for value in bounds],
+            "gridCrop": {"x0": x0, "y0": y0, "x1": x1, "y1": y1},
+            "worldCrop": [min_x + x0 * cell, min_y + y0 * cell,
+                          min_x + x1 * cell, min_y + y1 * cell],
+            "sourceGrid": {"width": width, "height": height, "minX": min_x,
+                           "minY": min_y, "cell": cell},
+            "paddingCells": padding_cells,
+            "scale": scale,
+            "layers": ["replay-seed-ink", "door-head-seal", "wall-run-seal",
+                       "gap-close", "accepted", "held", "void", "zone-authority"],
+        })
     if x1 <= x0 or y1 <= y0:
         panel = Image.new("RGB", (900, 700), "white")
         draw = ImageDraw.Draw(panel)
@@ -318,7 +333,18 @@ def render_zone(root, zone, output, padding_cells=12, scale=2):
 
     if scale != 1:
         image = image.resize((image.width * scale, image.height * scale), Image.Resampling.NEAREST)
-    image.thumbnail((900, 588), Image.Resampling.LANCZOS)
+    if focus_bounds and image.width < 900 and image.height < 588:
+        fit = min(900 / image.width, 588 / image.height)
+        image = image.resize((round(image.width * fit), round(image.height * fit)),
+                             Image.Resampling.NEAREST)
+    else:
+        image.thumbnail((900, 588), Image.Resampling.LANCZOS)
+    if metadata is not None:
+        metadata["fit"] = {
+            "panel": [900, 700],
+            "contentMax": [900, 588],
+            "renderedContent": [image.width, image.height],
+        }
     verdict, reason = triage_of(zone)
     # A held zone still shows its raster and zone loops: triage is a routing verdict a reviewer
     # must be able to argue with, not a reason to hide the evidence.
