@@ -1,5 +1,6 @@
 using Pe.Dev.RevitAutomation;
 using Pe.Revit.Loader;
+using Pe.Revit.ServiceClient;
 using Pe.Shared.HostContracts.Scripting;
 using Pe.Shared.Product;
 using Pe.Shared.StorageRuntime;
@@ -243,6 +244,42 @@ public sealed class DeploymentRuntimeContractTests {
                 Is.EqualTo(HostProcessIdentity.SourceServiceName(sourceRoot))
             );
         });
+    }
+
+    [Test]
+    public void Vendored_service_discovery_reads_current_schema_three_receipts() {
+        var appBase = Path.Combine(Path.GetTempPath(), $"pe-service-discovery-{Guid.NewGuid():N}");
+        const string serviceName = "host-source-test";
+        var serviceFile = PeServiceDiscovery.ServiceFilePath(appBase, serviceName);
+
+        try {
+            Directory.CreateDirectory(Path.GetDirectoryName(serviceFile)!);
+            File.WriteAllText(
+                serviceFile,
+                $$"""
+                {
+                  "schemaVersion": 3,
+                  "pid": {{Environment.ProcessId}},
+                  "port": 58040,
+                  "version": "dev",
+                  "lane": "dev",
+                  "health": "/host/status",
+                  "sessionId": "tooling-proof"
+                }
+                """
+            );
+
+            var discovered = PeServiceDiscovery.TryDiscover(appBase, serviceName);
+
+            Assert.Multiple(() => {
+                Assert.That(discovered, Is.Not.Null);
+                Assert.That(discovered!.Port, Is.EqualTo(58040));
+                Assert.That(discovered.Health, Is.EqualTo("/host/status"));
+                Assert.That(discovered.SessionId, Is.EqualTo("tooling-proof"));
+            });
+        } finally {
+            TryDeleteDirectory(appBase);
+        }
     }
 
     [Test]

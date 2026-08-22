@@ -30,21 +30,36 @@ namespace Pe.Revit.ServiceClient;
 
 /// <summary>The live owner's coordinates projected from a service file: the actually bound port.</summary>
 public sealed class DiscoveredService {
-    public DiscoveredService(int pid, int port, string lane, string version) {
+    public DiscoveredService(int pid, int port, string lane, string version, string? health = null, string? sessionId = null) {
         Pid = pid;
         Port = port;
         Lane = lane;
         Version = version;
+        Health = health;
+        SessionId = sessionId;
     }
 
     public int Pid { get; }
     public int Port { get; }
     public string Lane { get; }
     public string Version { get; }
+
+    /// <summary>Schema 3, optional: the relative HTTP path that answers 2xx/3xx while the service is
+    /// up. Null on a schema-2 file, which is a reason to fall back to a TCP probe — never a reason to
+    /// call the service down.</summary>
+    public string? Health { get; }
+
+    /// <summary>Schema 3, optional: the Revit session this host belongs to, when the host knew it.</summary>
+    public string? SessionId { get; }
 }
 
 public static class PeServiceDiscovery {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
+
+    /// <summary>Every schema this reader accepts. A schema-2 file predates <c>health</c>/<c>sessionId</c>
+    /// and is read with both null; rejecting it would blind a consumer to every service that has not
+    /// restarted since the bump. Same rule as the loader's ServiceFile reader and pe-service.ts.</summary>
+    private static readonly int[] ReadableSchemaVersions = { 2, SchemaVersion };
 
     /// <summary>Canonical checkout-root form for identity hashing: absolute, forward slashes, no
     /// trailing slash, lowercase. Byte-identical to the TS client's <c>normalizeSourceRoot</c>.</summary>
@@ -88,7 +103,8 @@ public static class PeServiceDiscovery {
         var schema = IntField(text, "schemaVersion");
         var pid = IntField(text, "pid");
         var port = IntField(text, "port");
-        if (schema != SchemaVersion || pid is null || port is null || port.Value <= 0)
+        if (schema is null || Array.IndexOf(ReadableSchemaVersions, schema.Value) < 0
+            || pid is null || port is null || port.Value <= 0)
             return null;
         if (!PidIsAlive(pid.Value))
             return null;
@@ -96,7 +112,9 @@ public static class PeServiceDiscovery {
             pid.Value,
             port.Value,
             StringField(text, "lane") ?? "",
-            StringField(text, "version") ?? ""
+            StringField(text, "version") ?? "",
+            StringField(text, "health"),
+            StringField(text, "sessionId")
         );
     }
 
