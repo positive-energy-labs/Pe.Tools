@@ -402,6 +402,33 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Promotion_stage_trace_captures_shared_network_and_frame_projector()
+    {
+        var accepted = Room("good", (0, 0), (10, 0), (10, 8), (0, 8));
+        var rejected = Room("bad", (20, 0), (25, 5), (20, 10));
+        accepted.RawSqft = 80;
+        rejected.RawSqft = 50;
+        var source = new TakeoffResult {
+            LevelName = "Level 1", Rooms = { accepted, rejected }, DomainSqft = 130,
+        };
+        var snapshots = new List<(string Stage, TakeoffResult Result)>();
+
+        _ = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (0, 0), (30, 0), (30, 10), (0, 10)),
+            Options(minimumRoomSqft: 0), (_, _) => 0,
+            stageSnapshot: (stage, result) => snapshots.Add((stage, result)));
+
+        Assert.Multiple(() => {
+            Assert.That(snapshots.Select(item => item.Stage),
+                Is.EqualTo(new[] { "shared-network", "frame-projector" }));
+            Assert.That(snapshots[0].Result.Rooms, Has.Count.EqualTo(2));
+            Assert.That(snapshots[1].Result.Rooms, Has.Count.EqualTo(1));
+            Assert.That(snapshots[0].Result, Is.Not.SameAs(snapshots[1].Result));
+            Assert.That(source.Rooms, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
     public void Small_zone_uses_a_valid_partition_before_falling_back_to_whole_zone()
     {
         var source = new TakeoffResult {

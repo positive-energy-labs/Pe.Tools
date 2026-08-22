@@ -87,7 +87,9 @@ public static class TakeoffPromotion
     /// <summary>
     /// Runs the disposition pipeline over one zone. <c>census</c> is the pre-solve raster census,
     /// supplied by callers that hold the ink raster; omitting it disables triage, so the zone is
-    /// solved exactly as every caller did before the seam existed.
+    /// solved exactly as every caller did before the seam existed. <c>stageSnapshot</c> receives
+    /// defensive copies after shared-network and frame-projector for evaluation artifacts only;
+    /// omitting it performs no snapshot work.
     /// </summary>
     public static ZonePromotionResult PromoteZone(
         TakeoffResult source,
@@ -97,7 +99,8 @@ public static class TakeoffPromotion
         Action<string>? log = null,
         ZoneCensus? census = null,
         Func<double, double, double>? distanceToWallInk = null,
-        Func<double, double, byte>? heuristicClosureAt = null)
+        Func<double, double, byte>? heuristicClosureAt = null,
+        Action<string, TakeoffResult>? stageSnapshot = null)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (zone == null) throw new ArgumentNullException(nameof(zone));
@@ -114,6 +117,9 @@ public static class TakeoffPromotion
             long elapsed = timer.ElapsedMilliseconds;
             log?.Invoke(
                 $"[promotion] stage={stage.Name} ms={elapsed - lastMilliseconds} total={elapsed}");
+            if (stageSnapshot != null
+                && stage.Name is "shared-network" or "frame-projector")
+                stageSnapshot(stage.Name, Clone(state.Result));
             lastMilliseconds = elapsed;
             // A triage hold IS the disposition: either no raster existed, or a conservative
             // post-solve fallback retained the authoritative whole zone.

@@ -105,6 +105,13 @@ def zone_input_paths(root, zone):
     raw_tsv_path = artifact_path(root, Path("raw-zones") / tsv_path.name)
     if raw_tsv_path.exists():
         paths.append(raw_tsv_path)
+    # New diagnostic captures persist the promotion geometry on both sides of the projector.
+    # Historical and early-triage zones have neither file. Once either exists for a zone, both
+    # snapshots are required and manifest-bound so the trace cannot be silently partial or stale.
+    stage_paths = [artifact_path(root, Path("promotion-stages") / stage / tsv_path.name)
+                   for stage in ("shared-network", "frame-projector")]
+    if any(path.exists() for path in stage_paths):
+        paths.extend(stage_paths)
     for key in ("Seals", "Close"):
         if zone.get(key):
             paths.append(artifact_path(root, zone[key]))

@@ -340,6 +340,8 @@ class ReviewTakeoffTests(unittest.TestCase):
             (root / "input").mkdir()
             (root / "zones").mkdir()
             (root / "raw-zones").mkdir()
+            for stage in ("shared-network", "frame-projector"):
+                (root / "promotion-stages" / stage).mkdir(parents=True)
             write_replay_bin(root / "input" / "replay_Test.bin", 16, 16, 0, 0, 0.25,
                              bytes([0xFF]) * 32)
             (root / "zones" / "rooms_Test.tsv").write_text(
@@ -352,6 +354,11 @@ class ReviewTakeoffTests(unittest.TestCase):
                 "ROOM\tR01\t8\t12\t2\t1\t9\n"
                 "POLY\tR01\touter\t0;0|4;0|4;2|0;2\n",
                 encoding="utf-8")
+            stage_tsvs = []
+            for stage in ("shared-network", "frame-projector"):
+                stage_tsv = root / "promotion-stages" / stage / "rooms_Test.tsv"
+                stage_tsv.write_text(raw_tsv.read_text(encoding="utf-8"), encoding="utf-8")
+                stage_tsvs.append(stage_tsv)
             zone = {
                 "Level": "Test", "Zone": "Test#00", "MinX": 0, "MinY": 0,
                 "MaxX": 4, "MaxY": 2, "Tsv": "zones/rooms_Test.tsv",
@@ -392,11 +399,22 @@ class ReviewTakeoffTests(unittest.TestCase):
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertIn("boundary-provenance.json", manifest["files"])
             self.assertIn("raw-zones/rooms_Test.tsv", manifest["inputs"])
+            self.assertIn("promotion-stages/shared-network/rooms_Test.tsv", manifest["inputs"])
+            self.assertIn("promotion-stages/frame-projector/rooms_Test.tsv", manifest["inputs"])
             self.assertTrue((root / manifest["provenanceContactSheet"]).is_file())
             subprocess.run([
                 sys.executable, str(ZONE_SCRIPT), "--verify",
                 str(root / "review-manifest.json"),
             ], check=True, cwd=HERE, capture_output=True, text=True)
+            original_stage = stage_tsvs[1].read_text(encoding="utf-8")
+            stage_tsvs[1].write_text(original_stage + "# tampered\n", encoding="utf-8")
+            rejected = subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("promotion-stages/frame-projector/rooms_Test.tsv", rejected.stderr)
+            stage_tsvs[1].write_text(original_stage, encoding="utf-8")
             raw_tsv.write_text(raw_tsv.read_text(encoding="utf-8") + "# tampered\n",
                                encoding="utf-8")
             rejected = subprocess.run([
