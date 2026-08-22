@@ -1,6 +1,8 @@
 # takeoffs ledger
 
 ## Decided
+- 2026-08-22 — Semantic visual verdicts are external evaluation data bound to the exact review-manifest SHA and complete panel census; the harness refuses tamper or omission and reports separate disposition fractions, never a quality scalar or solver input. (`c9dd2dc`; 13/13; current census 34/8/3 with 108/108 hashes.)
+- 2026-08-22 — The manifest-complete semantic full audit is the visual frontier: 34 PASS / 8 FAIL / 3 AMBIGUOUS across all 45 panels, with 108/108 hashes verified. The old 25/17/3 count is retired because its renderer and review conflated unresolved `Excluded` with physical void and over-penalized reliable held geometry. (`r1-semantic-visual-verdict.md`, manifest `39826e88…`.)
 - 2026-08-22 — Visual adoption is zone-scoped and visual-first: `ceil(0.75 * expected zones)` must pass the full rubric; a contact sheet proves census, while a manifest-complete tight A/B focus atlas is the primary review surface.
 - 2026-08-22 — Visual defect precedence is illegal topology; wrong room topology and stairstep runs; wrong wall rails; then ordinary edit burden. `MicroStepRun` means the severe repeated handle-scale stairstep; a single `DeJog` micro-jog is moderate unless it damages topology.
 - 2026-08-22 — Keep every reliably drawn candidate in the UI through review; do not sync held-room Filled Regions or require their persistence while the algorithm is unstable. Emit `void` only from positive evidence; reevaluate persistence after the solve plateaus.
@@ -171,6 +173,6 @@
 - `takeoffs.sync` as an atomic op.
 - Move geometry + assembly math out of the route.
 - Fixture-scaffolding hygiene prunes.
-- Reconcile the frozen 45-zone project-a fixture against the current 49 live candidates before recapture. LL00/LL01 are unstamped orphan regions outside their owner-view crop; Attic03 is a valid in-crop scope omitted by the old replay. Do not widen capture or classify until the authoritative expected set is settled (`p2capture/REPORT.md`).
+- Stamp the current project-a Zoning Regions through the adoption flow, or explicitly approve the 47 in-crop candidates as the evaluation set, before refreshing the frozen 45-zone fixture. The cloud model has 49 unstamped Filled Regions, 47 in crop, and zero `role=zoning-region`; crop inclusion is not authority. LL00/LL01 are out of crop, Attic03 is in crop but unstamped. (`p2fixture-reconcile/REPORT.md`.)
 - Lower Level oracle registration is UNTRUSTED (median 1.95 ft chamfer, floor-mapping suspect).
 - Main 10 has 0 in-zone oracle rooms — cheap to resolve.
