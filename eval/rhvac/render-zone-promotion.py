@@ -57,8 +57,11 @@ SYNTHETIC_PROVENANCE = {"door-head", "wall-run", "gap-close"}
 SPECK_SQFT = 0.25
 
 HEADER_HEIGHT = 62
-ATLAS_HEADER_HEIGHT = 82
+PANEL_HEIGHT = 770
+LEGEND_Y = 658
+ATLAS_HEADER_HEIGHT = 190
 ATLAS_ZONE = (177, 0, 128)
+ATLAS_OUTSIDE_OPACITY = 0.30
 
 
 def font(size):
@@ -84,6 +87,18 @@ def artifact_path(root, relative):
     except ValueError:
         raise SystemExit(f"visual input escapes artifact root: {relative}")
     return path
+
+
+def polygon_mask(size, loops, point):
+    """Rasterize the report's even-odd loop contract."""
+    inside = np.zeros((size[1], size[0]), dtype=bool)
+    for loop in loops:
+        if len(loop) < 3:
+            continue
+        current = Image.new("1", size)
+        ImageDraw.Draw(current).polygon([point(value) for value in loop], fill=1)
+        inside ^= np.asarray(current, dtype=bool)
+    return inside
 
 
 def zone_input_paths(root, zone):
@@ -410,6 +425,10 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
     if door_mask is not None:
         paint(door_mask, SEAL_DOOR, screened=True)
     paint(ink_mask, INK, screened=False)
+    inside_zone = polygon_mask(image.size, zone["ZoneLoops"], point)
+    pixels[~inside_zone] = np.rint(
+        pixels[~inside_zone] * ATLAS_OUTSIDE_OPACITY
+        + 255 * (1 - ATLAS_OUTSIDE_OPACITY)).astype(np.uint8)
     image = Image.fromarray(pixels)
 
     draw = ImageDraw.Draw(image)
@@ -462,8 +481,10 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
                 (width, height, min_x, min_y, cell))
             for run in runs:
                 totals[run["class"]] += run["feet"]
-                for start, end in run["segments"]:
-                    draw.line([point(start), point(end)], fill=PROVENANCE[run["class"]], width=4)
+                if run["class"] != "bare-zone":
+                    for start, end in run["segments"]:
+                        draw.line([point(start), point(end)],
+                                  fill=PROVENANCE[run["class"]], width=4)
             boundaries.append({
                 "status": status, "id": boundary_id, "kind": kind,
                 "runs": [{
@@ -510,7 +531,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         image.thumbnail((900, 588), Image.Resampling.LANCZOS)
     if metadata is not None:
         metadata["fit"] = {
-            "panel": [900, 700],
+            "panel": [900, PANEL_HEIGHT],
             "contentMax": [900, 588],
             "renderedContent": [image.width, image.height],
         }
@@ -539,7 +560,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
                  + f"shared {field(zone, 'SharedEdgePairs', default=0)}/"
                  f"{field(zone, 'LostSharedEdgePairs', default=0)} lost   "
                  f"leak {field(zone, 'ClosureErrorSqft', default=0.0):.3f} sf   {ink_source}")
-    panel = Image.new("RGB", (900, 700), "white")
+    panel = Image.new("RGB", (900, PANEL_HEIGHT), "white")
     panel.paste(image, ((900 - image.width) // 2, 66 + (588 - image.height) // 2))
     panel_draw = ImageDraw.Draw(panel)
     # The banner is prominent but must not push the counts off the panel: shrink to fit instead.
@@ -558,56 +579,70 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
     return panel
 
 
-LEGEND_ROWS = (
-    ((INK, "solid", "received ink"),
-     (SEAL_DOOR, "screen", "added: door-head seal"),
-     (SEAL_RUN, "screen", "added: wall-run seal"),
-     (CLOSE, "screen", "added: gap-close")),
-    ((ACCEPTED, "outline", "accepted"),
-     (HELD, "outline", "held"),
-     (VOID, "outline", "void"),
-     (EXCLUDED, "outline", "excluded"),
-     (ZONE, "outline", "zone")),
+def _legend_swatch(draw, x, y, color, style, fill=None):
+    if style == "screen":
+        for sy in range(14):
+            for sx in range(14):
+                if (sx + sy) % 2 == 0:
+                    draw.point((x + sx, y + 2 + sy), fill=color)
+    elif style == "line":
+        draw.line((x, y + 9, x + 16, y + 9), fill=color, width=4)
+    elif style == "decision":
+        draw.rectangle((x, y + 2, x + 14, y + 16), fill=fill, outline=color, width=2)
+    else:
+        draw.rectangle((x, y + 2, x + 14, y + 16), fill=color)
+    return x + 20
+
+
+def _legend_items(draw, y, heading, items):
+    legend_font = font(12)
+    x = 14
+    draw.text((x, y), heading, fill=(45, 45, 45), font=legend_font)
+    x += draw.textlength(heading, font=legend_font) + 10
+    for color, style, label, item_fill in items:
+        x = _legend_swatch(draw, x, y, color, style, item_fill)
+        draw.text((x, y), label, fill=(60, 60, 60), font=legend_font)
+        x += draw.textlength(label, font=legend_font) + 13
+    return x
+
+
+PIXEL_LEGEND = (
+    (INK, "solid", "received (solid/pixelated)", None),
+    (SEAL_DOOR, "screen", "door-head (dithered)", None),
+    (SEAL_RUN, "screen", "wall-run (dithered)", None),
+    (CLOSE, "screen", "gap-close (dithered)", None),
+)
+DECISION_LEGEND = (
+    (ACCEPTED, "decision", "accepted", ACCEPTED_FILL),
+    (HELD, "decision", "held", HELD_FILL),
+    (EXCLUDED, "decision", "excluded", EXCLUDED_FILL),
+    (VOID, "decision", "void", VOID_FILL),
 )
 
 
 def draw_legend(panel_draw):
     """The in-image key every panel carries: received / added / decided / reference."""
-    legend_font = font(14)
-
-    def swatch(x, y, color, style):
-        if style == "outline":
-            panel_draw.rectangle((x, y + 3, x + 13, y + 16), outline=color, width=2)
-        elif style == "screen":
-            for sy in range(14):
-                for sx in range(14):
-                    if (sx + sy) % 2 == 0:
-                        panel_draw.point((x + sx, y + 3 + sy), fill=color)
-        else:
-            panel_draw.rectangle((x, y + 3, x + 13, y + 16), fill=color)
-        return x + 18
-
-    for row_index, row in enumerate(LEGEND_ROWS):
-        x, y = 14, 656 + row_index * 21
-        for color, style, label in row:
-            x = swatch(x, y, color, style)
-            panel_draw.text((x, y), label, fill=(60, 60, 60), font=legend_font)
-            x += panel_draw.textlength(label, font=legend_font) + 14
-        if row_index == 0:
-            panel_draw.text((x, y), f"(closure specks <{SPECK_SQFT} sf hidden)",
-                            fill=(140, 140, 140), font=legend_font)
+    _legend_items(panel_draw, LEGEND_Y, "PIXELS", PIXEL_LEGEND)
+    _legend_items(panel_draw, LEGEND_Y + 20, "FILL + OUTLINE", DECISION_LEGEND)
+    _legend_items(panel_draw, LEGEND_Y + 40, "ZONE", (
+        (ZONE, "line", "authority outline only; outside plan 30%", None),
+    ))
 
 
 def draw_provenance_legend(panel_draw):
-    legend_font = font(14)
-    items = list(PROVENANCE.items())
-    for row, values in enumerate((items[:4], items[4:])):
-        x, y = 14, 656 + row * 21
-        for label, color in values:
-            panel_draw.line((x, y + 10, x + 16, y + 10), fill=color, width=4)
-            x += 21
-            panel_draw.text((x, y), label, fill=(60, 60, 60), font=legend_font)
-            x += panel_draw.textlength(label, font=legend_font) + 15
+    _legend_items(panel_draw, LEGEND_Y, "PIXELS", PIXEL_LEGEND)
+    _legend_items(panel_draw, LEGEND_Y + 20, "DECISION FILL", DECISION_LEGEND)
+    _legend_items(panel_draw, LEGEND_Y + 40, "BOUNDARY SUPPORT", tuple(
+        (PROVENANCE[name], "line", name, None)
+        for name in ("zone-backed", "received", "door-head", "wall-run")))
+    x = _legend_items(panel_draw, LEGEND_Y + 60, "BOUNDARY SUPPORT", tuple(
+        (PROVENANCE[name], "line", name, None)
+        for name in ("gap-close", "free")))
+    panel_draw.text((x, LEGEND_Y + 60), "bare-zone = no overlay",
+                    fill=(60, 60, 60), font=font(12))
+    _legend_items(panel_draw, LEGEND_Y + 80, "ZONE", (
+        (ZONE, "line", "authority outline only; outside plan 30%", None),
+    ))
 
 
 def render_contact_sheet(report, panels, contact_path):
@@ -688,6 +723,58 @@ def _short_atlas_label(status, candidate_id):
     return {"accepted": "A", "held": "H"}[status] + suffix
 
 
+def _draw_atlas_key(draw, y, text_size=13):
+    key_font = font(text_size)
+    muted = (55, 55, 55)
+    x = 12
+    draw.text((x, y), "FILL", fill=muted, font=key_font)
+    x += draw.textlength("FILL", font=key_font) + 8
+    draw.rectangle((x, y + 2, x + 18, y + 15), fill=(144, 207, 238))
+    x += 24
+    label = "solid color = room identity (stable; not status)"
+    draw.text((x, y), label, fill=muted, font=key_font)
+
+    x, y = 12, y + 21
+    draw.text((x, y), "OUTLINE", fill=muted, font=key_font)
+    x += draw.textlength("OUTLINE", font=key_font) + 8
+    styles = {
+        "A accepted": (ACCEPTED, 4, None),
+        "H held": (HELD, 4, (6, 4)),
+        "X excluded": (EXCLUDED, 2, (2, 5)),
+        "V void": (VOID, 2, (10, 4)),
+    }
+    for label, (color, width, dash) in styles.items():
+        _draw_dashed(draw, [(x, y + 9), (x + 24, y + 9)], color, width, dash)
+        x += 30
+        draw.text((x, y), label, fill=muted, font=key_font)
+        x += draw.textlength(label, font=key_font) + 14
+
+    x, y = 12, y + 21
+    draw.text((x, y), "SOLID PIXELS", fill=muted, font=key_font)
+    x += draw.textlength("SOLID PIXELS", font=key_font) + 8
+    draw.rectangle((x, y + 2, x + 13, y + 15), fill=INK)
+    x += 19
+    label = "received plan raster (pixelated at source)"
+    draw.text((x, y), label, fill=muted, font=key_font)
+
+    x, y = 12, y + 21
+    draw.text((x, y), "DITHERED PIXELS", fill=muted, font=key_font)
+    x += draw.textlength("DITHERED PIXELS", font=key_font) + 8
+    for color, label in ((SEAL_DOOR, "door-head seal"),
+                         (SEAL_RUN, "wall-run seal"), (CLOSE, "gap-close")):
+        _legend_swatch(draw, x, y, color, "screen")
+        x += 20
+        draw.text((x, y), label, fill=muted, font=key_font)
+        x += draw.textlength(label, font=key_font) + 14
+    draw.text((x, y), "(closeups only)", fill=(120, 120, 120), font=key_font)
+
+    x, y = 12, y + 21
+    _draw_dashed(draw, [(x, y + 9), (x + 24, y + 9)], ATLAS_ZONE, 3, (14, 8))
+    x += 30
+    draw.text((x, y), "Z zone authority: outline only; bare-zone has no overlay; outside plan 30%",
+              fill=muted, font=key_font)
+
+
 def render_level_atlas(root, level, zones, output):
     ink_paths = {artifact_path(root, zone["Ink"]) for zone in zones}
     replay_paths = {
@@ -750,8 +837,16 @@ def render_level_atlas(root, level, zones, output):
                 mask_draw.polygon([point(value) for value in loop], fill=0)
         plan.paste(colors[key], mask=mask)
 
+    inside = np.zeros((plan.height, plan.width), dtype=bool)
+    for zone in zones:
+        inside |= polygon_mask(plan.size, zone["ZoneLoops"], point)
+
     pixels = np.asarray(plan).copy()
-    pixels[unpack_mask(bits, width, height)[y0:y1, x0:x1][::-1]] = INK
+    ink = unpack_mask(bits, width, height)[y0:y1, x0:x1][::-1]
+    outside_ink = tuple(round(channel * ATLAS_OUTSIDE_OPACITY
+                              + 255 * (1 - ATLAS_OUTSIDE_OPACITY)) for channel in INK)
+    pixels[ink & ~inside] = outside_ink
+    pixels[ink & inside] = INK
     plan = Image.fromarray(pixels)
     draw = ImageDraw.Draw(plan)
     styles = {
@@ -784,14 +879,7 @@ def render_level_atlas(root, level, zones, output):
     panel_draw.text((12, 33),
                     f"{len(zones)} zones   {len(candidates)} colored candidates   replay seed ink",
                     fill=(70, 70, 70), font=font(15))
-    x = 12
-    for status in ("accepted", "held", "excluded", "void"):
-        color, line_width, dash, prefix = styles[status]
-        _draw_dashed(panel_draw, [(x, 68), (x + 24, 68)], color, line_width, dash)
-        panel_draw.text((x + 30, 59), f"{prefix} {status}", fill=(55, 55, 55), font=font(13))
-        x += 118
-    _draw_dashed(panel_draw, [(x, 68), (x + 24, 68)], ATLAS_ZONE, 3, (14, 8))
-    panel_draw.text((x + 30, 59), "Z zone", fill=(55, 55, 55), font=font(13))
+    _draw_atlas_key(panel_draw, 57)
     panel.save(output)
     return len(candidates)
 
@@ -809,16 +897,24 @@ def render_level_atlases(root, report):
         outputs.append(output)
     contact = output_dir / "contact-sheet.png"
     columns, thumb_size = 2, (900, 700)
+    sheet_header = ATLAS_HEADER_HEIGHT
     sheet = Image.new("RGB", (columns * thumb_size[0],
-                              HEADER_HEIGHT + math.ceil(len(outputs) / columns) * thumb_size[1]),
+                              sheet_header + math.ceil(len(outputs) / columns) * thumb_size[1]),
                       "white")
     sheet_draw = ImageDraw.Draw(sheet)
     sheet_draw.text((16, 14), "Full-plan room atlas by level", fill=(30, 30, 30), font=font(22))
+    _draw_atlas_key(sheet_draw, 45, text_size=15)
     for index, path in enumerate(outputs):
         with Image.open(path) as image:
-            thumb = ImageOps.contain(image.convert("RGB"), thumb_size, Image.Resampling.LANCZOS)
+            image = image.convert("RGB")
+            tile = Image.new("RGB", (image.width, image.height - ATLAS_HEADER_HEIGHT + 56),
+                             "white")
+            tile.paste(image.crop((0, 0, image.width, 56)), (0, 0))
+            tile.paste(image.crop((0, ATLAS_HEADER_HEIGHT, image.width, image.height)),
+                       (0, 56))
+            thumb = ImageOps.contain(tile, thumb_size, Image.Resampling.LANCZOS)
         sheet.paste(thumb, ((index % columns) * thumb_size[0],
-                            HEADER_HEIGHT + (index // columns) * thumb_size[1]))
+                            sheet_header + (index // columns) * thumb_size[1]))
     sheet.save(contact)
     return outputs, contact
 

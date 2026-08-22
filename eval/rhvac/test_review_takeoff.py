@@ -105,6 +105,21 @@ class ReviewTakeoffTests(unittest.TestCase):
         self.assertEqual(before["stable-zone\0R03"], after["stable-zone\0R03"])
         self.assertEqual(len(set(after.values())), len(after))
 
+    def test_zone_mask_uses_even_odd_scope(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("zone_renderer_mask", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        mask = renderer.polygon_mask(
+            (12, 8),
+            [[(1, 1), (10, 1), (10, 7), (1, 7)],
+             [(4, 3), (7, 3), (7, 5), (4, 5)]],
+            lambda value: value)
+
+        self.assertTrue(mask[2, 2])
+        self.assertFalse(mask[4, 5])
+        self.assertFalse(mask[0, 0])
+
     def test_focus_atlas_tiny_boundary_change_gets_one_tight_panel(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -282,11 +297,11 @@ class ReviewTakeoffTests(unittest.TestCase):
             root = Path(temporary)
             (root / "input").mkdir()
             (root / "zones").mkdir()
-            bits = bytes([0b10011001, 0b10011001])
+            bits = bytes([0xFF]) * 100
             # zone["Ink"] stays in the report schema (C#-owned) but only locates the
             # replay alongside; the renderer reads replay_Test.bin exclusively.
             write_replay_bin(root / "input" / "replay_Test.bin", 40, 20, 0, 0, 1,
-                             bits + bytes(98))
+                             bits)
             (root / "zones" / "rooms_Test.tsv").write_text(
                 "META\tlevel\tTest\nMETA\telev\t0\n"
                 "ROOM\tR01\t4\t8\t1\t1\t9\n"
@@ -317,7 +332,8 @@ class ReviewTakeoffTests(unittest.TestCase):
             self.assertEqual(len(manifest["files"]), 5)
             with Image.open(root / manifest["levelAtlases"][0]) as atlas:
                 self.assertLess(atlas.width, 40)
-                self.assertLess(atlas.height, 20 + 82)
+                self.assertLess(atlas.height, 20 + 190)
+                self.assertEqual(atlas.getpixel((10, atlas.height - 9)), (186, 186, 186))
             self.assertEqual(manifest["panelCount"], 2)
             verified = subprocess.run([
                 sys.executable, str(ZONE_SCRIPT), "--verify",
