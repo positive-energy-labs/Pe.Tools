@@ -1,6 +1,7 @@
 """Render cropped per-zone promotion disposition panels from the offline report."""
 
 import argparse
+import colorsys
 import hashlib
 import json
 import math
@@ -56,6 +57,8 @@ SYNTHETIC_PROVENANCE = {"door-head", "wall-run", "gap-close"}
 SPECK_SQFT = 0.25
 
 HEADER_HEIGHT = 62
+ATLAS_HEADER_HEIGHT = 82
+ATLAS_ZONE = (177, 0, 128)
 
 
 def font(size):
@@ -604,6 +607,178 @@ def render_contact_sheet(report, panels, contact_path):
     contact.save(contact_path)
 
 
+def _atlas_color(index):
+    """Stable, distinct pastel fills; disposition stays in the outline channel."""
+    hue = (index * 0.618033988749895) % 1.0
+    rgb = colorsys.hsv_to_rgb(hue, 0.58, 0.93)
+    return tuple(round((component * 255) * 0.68 + 255 * 0.32) for component in rgb)
+
+
+def _draw_dashed(draw, points, fill, width, dash):
+    points = [*points, points[0]]
+    if dash is None:
+        draw.line(points, fill=fill, width=width, joint="curve")
+        return
+    on, off = dash
+    for start, end in zip(points, points[1:]):
+        length = math.dist(start, end)
+        if not length:
+            continue
+        dx, dy = (end[0] - start[0]) / length, (end[1] - start[1]) / length
+        distance = 0.0
+        while distance < length:
+            stop = min(distance + on, length)
+            draw.line((start[0] + dx * distance, start[1] + dy * distance,
+                       start[0] + dx * stop, start[1] + dy * stop),
+                      fill=fill, width=width)
+            distance += on + off
+
+
+def _atlas_label(draw, point, text, text_font):
+    box = draw.textbbox(point, text, font=text_font, anchor="mm")
+    draw.rectangle((box[0] - 2, box[1] - 1, box[2] + 2, box[3] + 1), fill="white")
+    draw.text(point, text, fill=(35, 35, 35), font=text_font, anchor="mm")
+
+
+def _short_atlas_label(status, candidate_id):
+    match = re.search(r"R(\d+)", candidate_id)
+    suffix = f"{int(match.group(1)):02d}" if match else ""
+    return {"accepted": "A", "held": "H"}[status] + suffix
+
+
+def render_level_atlas(root, level, zones, output):
+    ink_paths = {artifact_path(root, zone["Ink"]) for zone in zones}
+    replay_paths = {
+        path.parent / f"replay_{path.stem.removeprefix('ink_')}.bin"
+        for path in ink_paths
+    }
+    if len(replay_paths) != 1:
+        raise SystemExit(f"level {level} has {len(replay_paths)} replay rasters")
+    replay_path = replay_paths.pop()
+    if not replay_path.is_file():
+        raise SystemExit(f"missing replay seed ink: {replay_path}")
+    width, height, min_x, min_y, cell, bits = overlay.load_replay_seed_ink(replay_path)
+    bounds = (min(zone["MinX"] for zone in zones), min(zone["MinY"] for zone in zones),
+              max(zone["MaxX"] for zone in zones), max(zone["MaxY"] for zone in zones))
+    zone_width = (bounds[2] - bounds[0]) / cell
+    zone_height = (bounds[3] - bounds[1]) / cell
+    margin = max(12, round(max(zone_width, zone_height) * 0.04))
+    x0 = max(0, math.floor((bounds[0] - min_x) / cell) - margin)
+    x1 = min(width, math.ceil((bounds[2] - min_x) / cell) + margin)
+    y0 = max(0, math.floor((bounds[1] - min_y) / cell) - margin)
+    y1 = min(height, math.ceil((bounds[3] - min_y) / cell) + margin)
+
+    def point(value):
+        return ((value[0] - min_x) / cell - x0,
+                y1 - (value[1] - min_y) / cell)
+
+    candidates = []
+    for zone in zones:
+        rooms, polygons, residues = overlay.load_disposition_tsv(
+            artifact_path(root, zone["Tsv"]))
+        for room_id in sorted(rooms):
+            loops = polygons.get(room_id, [])
+            candidates.append(("accepted", zone, room_id,
+                               [loop for kind, loop in loops if kind == "outer"],
+                               [loop for kind, loop in loops if kind == "hole"],
+                               (rooms[room_id]["lx"], rooms[room_id]["ly"])))
+        for residue in residues:
+            status = {"rejected": "held", "excluded": "excluded"}.get(
+                residue["reason"], "void")
+            loops = residue["loops"]
+            if loops:
+                xs, ys = zip(*loops[0])
+                label = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+                candidates.append((status, zone, residue["id"], loops[:1], loops[1:], label))
+
+    colors = [_atlas_color(index) for index in range(len(candidates))]
+    if len(colors) != len(set(colors)):
+        raise SystemExit(f"level {level} candidate colors are not unique")
+    plan = Image.new("RGB", (x1 - x0, y1 - y0), "white")
+    for color, (_, _zone, _candidate_id, outers, holes, _label) in zip(colors, candidates):
+        mask = Image.new("L", plan.size)
+        mask_draw = ImageDraw.Draw(mask)
+        for loop in outers:
+            if len(loop) >= 3:
+                mask_draw.polygon([point(value) for value in loop], fill=255)
+        for loop in holes:
+            if len(loop) >= 3:
+                mask_draw.polygon([point(value) for value in loop], fill=0)
+        plan.paste(color, mask=mask)
+
+    pixels = np.asarray(plan).copy()
+    pixels[unpack_mask(bits, width, height)[y0:y1, x0:x1][::-1]] = INK
+    plan = Image.fromarray(pixels)
+    draw = ImageDraw.Draw(plan)
+    styles = {
+        "accepted": (ACCEPTED, 4, None, "A"),
+        "held": (HELD, 4, (6, 4), "H"),
+        "excluded": (EXCLUDED, 2, (2, 5), "X"),
+        "void": (VOID, 2, (10, 4), "V"),
+    }
+    label_font = font(11)
+    for status, _zone, candidate_id, outers, holes, label in candidates:
+        color, line_width, dash, prefix = styles[status]
+        for loop in [*outers, *holes]:
+            if len(loop) >= 2:
+                _draw_dashed(draw, [point(value) for value in loop], color, line_width, dash)
+        if status in ("accepted", "held"):
+            _atlas_label(draw, point(label), _short_atlas_label(status, candidate_id), label_font)
+
+    zone_font = font(14)
+    for zone in zones:
+        for loop in zone["ZoneLoops"]:
+            if len(loop) >= 2:
+                _draw_dashed(draw, [point(value) for value in loop], ATLAS_ZONE, 3, (14, 8))
+        _atlas_label(draw, point((zone["MinX"] + 1.0, zone["MaxY"] - 1.0)),
+                     f"Z{zone['Zone'].rsplit('#', 1)[-1]}", zone_font)
+
+    panel = Image.new("RGB", (plan.width, plan.height + ATLAS_HEADER_HEIGHT), "white")
+    panel.paste(plan, (0, ATLAS_HEADER_HEIGHT))
+    panel_draw = ImageDraw.Draw(panel)
+    panel_draw.text((12, 7), f"{level} full-plan atlas", fill=(25, 25, 25), font=font(20))
+    panel_draw.text((12, 33),
+                    f"{len(zones)} zones   {len(candidates)} colored candidates   replay seed ink",
+                    fill=(70, 70, 70), font=font(15))
+    x = 12
+    for status in ("accepted", "held", "excluded", "void"):
+        color, line_width, dash, prefix = styles[status]
+        _draw_dashed(panel_draw, [(x, 68), (x + 24, 68)], color, line_width, dash)
+        panel_draw.text((x + 30, 59), f"{prefix} {status}", fill=(55, 55, 55), font=font(13))
+        x += 118
+    _draw_dashed(panel_draw, [(x, 68), (x + 24, 68)], ATLAS_ZONE, 3, (14, 8))
+    panel_draw.text((x + 30, 59), "Z zone", fill=(55, 55, 55), font=font(13))
+    panel.save(output)
+    return len(candidates)
+
+
+def render_level_atlases(root, report):
+    levels = {}
+    for zone in report["Zones"]:
+        levels.setdefault(zone["Level"], []).append(zone)
+    output_dir = root / "review-atlas"
+    output_dir.mkdir(exist_ok=True)
+    outputs = []
+    for index, (level, zones) in enumerate(levels.items(), start=1):
+        output = output_dir / panel_name(index, level)
+        render_level_atlas(root, level, zones, output)
+        outputs.append(output)
+    contact = output_dir / "contact-sheet.png"
+    columns, thumb_size = 2, (900, 700)
+    sheet = Image.new("RGB", (columns * thumb_size[0],
+                              HEADER_HEIGHT + math.ceil(len(outputs) / columns) * thumb_size[1]),
+                      "white")
+    sheet_draw = ImageDraw.Draw(sheet)
+    sheet_draw.text((16, 14), "Full-plan room atlas by level", fill=(30, 30, 30), font=font(22))
+    for index, path in enumerate(outputs):
+        with Image.open(path) as image:
+            thumb = ImageOps.contain(image.convert("RGB"), thumb_size, Image.Resampling.LANCZOS)
+        sheet.paste(thumb, ((index % columns) * thumb_size[0],
+                            HEADER_HEIGHT + (index // columns) * thumb_size[1]))
+    sheet.save(contact)
+    return outputs, contact
+
+
 def verify(manifest_path):
     manifest_path = Path(manifest_path).resolve()
     root = manifest_path.parent
@@ -629,6 +804,8 @@ def verify(manifest_path):
     output_dirs = [root / "review"]
     if manifest.get("provenanceContactSheet"):
         output_dirs.append(root / "review-provenance")
+    if manifest.get("atlasContactSheet"):
+        output_dirs.append(root / "review-atlas")
     actual_outputs = {
         path.relative_to(root).as_posix()
         for directory in output_dirs for path in directory.glob("*.png")
@@ -806,6 +983,7 @@ def main():
 
     contact_path = review / "contact-sheet.png"
     render_contact_sheet(report, panels, contact_path)
+    atlas_panels, atlas_contact = render_level_atlases(root, report)
     provenance_files = []
     provenance_contact = None
     if args.provenance:
@@ -837,8 +1015,10 @@ def main():
         "contactSheet": contact_path.relative_to(root).as_posix(),
         "files": {
             path.relative_to(root).as_posix(): digest(path)
-            for path in [*panels, contact_path, *provenance_files]
+            for path in [*panels, contact_path, *atlas_panels, atlas_contact, *provenance_files]
         },
+        "levelAtlases": [path.relative_to(root).as_posix() for path in atlas_panels],
+        "atlasContactSheet": atlas_contact.relative_to(root).as_posix(),
     }
     if provenance_contact:
         manifest["provenanceContactSheet"] = provenance_contact.relative_to(root).as_posix()

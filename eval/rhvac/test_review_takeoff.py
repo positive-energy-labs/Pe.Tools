@@ -266,7 +266,8 @@ class ReviewTakeoffTests(unittest.TestCase):
             bits = bytes([0b10011001, 0b10011001])
             # zone["Ink"] stays in the report schema (C#-owned) but only locates the
             # replay alongside; the renderer reads replay_Test.bin exclusively.
-            write_replay_bin(root / "input" / "replay_Test.bin", 4, 4, 0, 0, 1, bits)
+            write_replay_bin(root / "input" / "replay_Test.bin", 40, 20, 0, 0, 1,
+                             bits + bytes(98))
             (root / "zones" / "rooms_Test.tsv").write_text(
                 "META\tlevel\tTest\nMETA\telev\t0\n"
                 "ROOM\tR01\t4\t8\t1\t1\t9\n"
@@ -291,7 +292,13 @@ class ReviewTakeoffTests(unittest.TestCase):
 
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertTrue((root / manifest["contactSheet"]).is_file())
-            self.assertEqual(len(manifest["files"]), 3)
+            self.assertTrue((root / manifest["atlasContactSheet"]).is_file())
+            self.assertEqual(len(manifest["levelAtlases"]), 1)
+            self.assertTrue((root / manifest["levelAtlases"][0]).is_file())
+            self.assertEqual(len(manifest["files"]), 5)
+            with Image.open(root / manifest["levelAtlases"][0]) as atlas:
+                self.assertLess(atlas.width, 40)
+                self.assertLess(atlas.height, 20 + 82)
             self.assertEqual(manifest["panelCount"], 2)
             verified = subprocess.run([
                 sys.executable, str(ZONE_SCRIPT), "--verify",
