@@ -133,6 +133,51 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Replacement_source_loss_only_moves_final_excluded_coverage_to_held()
+    {
+        var accepted = Room("accepted", (0, 0), (4, 0), (4, 4), (0, 4));
+        accepted.RawSqft = 16;
+        var incumbentHeld = Residue("held", ResidueReason.Rejected,
+            (4, 0), (6, 0), (6, 4), (4, 4));
+        var incumbentVoid = Residue("void", ResidueReason.Border,
+            (6, 0), (8, 0), (8, 4), (6, 4));
+        var excluded = Residue("ZONE-EXCLUDED", ResidueReason.Excluded,
+            (8, 0), (10, 0), (10, 4), (8, 4));
+        var result = new TakeoffResult {
+            Rooms = { accepted },
+            Residues = { incumbentHeld, incumbentVoid, excluded },
+        };
+        string acceptedBefore = Newtonsoft.Json.JsonConvert.SerializeObject(accepted);
+        string heldBefore = Newtonsoft.Json.JsonConvert.SerializeObject(incumbentHeld);
+        string voidBefore = Newtonsoft.Json.JsonConvert.SerializeObject(incumbentVoid);
+        var sourceLoss = TakeoffGeometry.ToPolygon(Residue("loss", ResidueReason.Rejected,
+            (3, 0), (9, 0), (9, 4), (3, 4)));
+
+        int added = TakeoffPromotion.HoldReplacementSourceLoss(result, [sourceLoss]);
+
+        var promoted = result.Residues.Single(item =>
+            item.Id == "ZONE-HELD-REPLACEMENT-SOURCE-LOSS");
+        var remaining = result.Residues.Single(item => item.Reason == ResidueReason.Excluded);
+        var legality = TakeoffPromotion.MeasureDispositionLegality(
+            result, Zone("zone", (0, 0), (10, 0), (10, 4), (0, 4)).ExactGeometry());
+        Assert.Multiple(() => {
+            Assert.That(added, Is.EqualTo(1));
+            Assert.That(promoted.Reason, Is.EqualTo(ResidueReason.Rejected));
+            Assert.That(promoted.RawSqft, Is.EqualTo(4).Within(1e-9));
+            Assert.That(remaining.RawSqft, Is.EqualTo(4).Within(1e-9));
+            Assert.That(Newtonsoft.Json.JsonConvert.SerializeObject(result.Rooms.Single()),
+                Is.EqualTo(acceptedBefore), "accepted geometry and honesty stay byte-exact");
+            Assert.That(Newtonsoft.Json.JsonConvert.SerializeObject(result.Residues
+                    .Single(item => item.Id == "held")), Is.EqualTo(heldBefore));
+            Assert.That(Newtonsoft.Json.JsonConvert.SerializeObject(result.Residues
+                    .Single(item => item.Id == "void")), Is.EqualTo(voidBefore));
+            Assert.That(legality.GapSqft, Is.Zero.Within(1e-9));
+            Assert.That(legality.OverlapSqft, Is.Zero.Within(1e-9));
+            Assert.That(legality.OutsideZoneSqft, Is.Zero.Within(1e-9));
+        });
+    }
+
+    [Test]
     public void Zone_promotion_represents_uncaptured_scope_as_explicit_excluded_residue()
     {
         var source = new TakeoffResult {

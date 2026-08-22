@@ -153,6 +153,7 @@ public static class TakeoffPromotion
 
         internal readonly Dictionary<string, int> Rejections = new(StringComparer.Ordinal);
         internal readonly Dictionary<string, string> RejectionDetails = new(StringComparer.Ordinal);
+        internal readonly List<Geometry> ReplacementSourceLoss = [];
     }
 
     /// <summary>
@@ -403,6 +404,8 @@ public static class TakeoffPromotion
         SpaceBoundaryNetwork.Regularize(
             state.Result.Rooms, state.Options, state.Log);
         NormalizeRoomMeasures(state.Result.Rooms);
+        CaptureReplacementSourceLoss(
+            state, state.CompletePartition, state.Result.Rooms);
         state.EvidencePartition = state.Result.Rooms.Select(room => Clone(room)).ToList();
         state.SharedNetworkStrictRooms = TakeoffEditability
             .Evaluate(ToLevel(state.Result, state.Result.Rooms))
@@ -413,6 +416,12 @@ public static class TakeoffPromotion
     {
         var projection = FrameLocalProjector.Project(
             state.Result, FrameLocalKnobs.From(state.Options), state.ZoneGeometry);
+        var acceptedIds = projection.Accepted.Rooms
+            .Select(room => room.Id).ToHashSet(StringComparer.Ordinal);
+        CaptureReplacementSourceLoss(
+            state,
+            state.Result.Rooms.Where(room => acceptedIds.Contains(room.Id)),
+            projection.Accepted.Rooms);
         foreach (var group in projection.Rejected.GroupBy(item => $"frame:{item.Reason}"))
             state.Rejections[group.Key] = group.Count();
         foreach (var item in projection.Rejected)
@@ -1558,6 +1567,54 @@ public static class TakeoffPromotion
         RestoreHeldSourceGeometry(
             state.Result, state.CompletePartition, state.EvidencePartition);
         RebuildResiduesInsideZone(state.Result, state.ZoneGeometry);
+        state.HeldRooms += HoldReplacementSourceLoss(
+            state.Result, state.ReplacementSourceLoss);
+    }
+
+    private static void CaptureReplacementSourceLoss(
+        PromotionState state,
+        IEnumerable<RoomResult> before,
+        IEnumerable<RoomResult> after)
+    {
+        Geometry source = UnionRooms(before);
+        Geometry replacement = UnionRooms(after);
+        Geometry loss = PolygonDifference(source, replacement);
+        if (loss.Area > Epsilon) state.ReplacementSourceLoss.Add(loss);
+    }
+
+    private static Geometry UnionRooms(IEnumerable<RoomResult> rooms)
+    {
+        var geometries = rooms.Select(room => (Geometry)ToPolygon(room)).ToList();
+        return geometries.Count == 0
+            ? GeometryFactory.CreatePolygon()
+            : Polygonal(OverlayNGRobust.Union(geometries));
+    }
+
+    internal static int HoldReplacementSourceLoss(
+        TakeoffResult result, IEnumerable<Geometry> sourceLoss)
+    {
+        var losses = sourceLoss.Where(geometry => geometry.Area > Epsilon).ToList();
+        if (losses.Count == 0) return 0;
+        var excluded = result.Residues
+            .Where(residue => residue.Reason == ResidueReason.Excluded).ToList();
+        if (excluded.Count == 0) return 0;
+        Geometry excludedGeometry = Polygonal(OverlayNGRobust.Union(
+            excluded.Select(ToGeometry).ToList()));
+        Geometry held = PolygonIntersection(
+            Polygonal(OverlayNGRobust.Union(losses)), excludedGeometry);
+        if (held.Area <= Epsilon) return 0;
+
+        result.Residues.RemoveAll(excluded.Contains);
+        int heldStart = result.Residues.Count;
+        AddResidues(result.Residues, "ZONE-HELD-REPLACEMENT-SOURCE-LOSS",
+            ResidueReason.Rejected, held, 0);
+        var emitted = result.Residues.Skip(heldStart).Select(ToGeometry).ToList();
+        Geometry emittedHeld = emitted.Count == 0
+            ? GeometryFactory.CreatePolygon()
+            : Polygonal(OverlayNGRobust.Union(emitted));
+        AddResidues(result.Residues, "ZONE-EXCLUDED", ResidueReason.Excluded,
+            PolygonDifference(excludedGeometry, emittedHeld), 0);
+        return emitted.Count;
     }
 
     /// <summary>Measures the finished disposition, enforces the binding laws, and reports.</summary>
