@@ -284,6 +284,8 @@ public sealed class ZoneBoundedDetectTests
         if (Directory.Exists(artifactDir)) Directory.Delete(artifactDir, recursive: true);
         Directory.CreateDirectory(Path.Combine(artifactDir, "input"));
         Directory.CreateDirectory(Path.Combine(artifactDir, "zones"));
+        string rawZonesDir = Path.Combine(artifactDir, "raw-zones");
+        Directory.CreateDirectory(rawZonesDir);
         string? zoneFilter = Environment.GetEnvironmentVariable("PE_TAKEOFF_ZONE");
         int zonesRun = 0, zonesWithRooms = 0, abstained = 0;
         var effectiveOptions = new ConcurrentDictionary<string, TakeoffOptions>(StringComparer.Ordinal);
@@ -369,6 +371,7 @@ public sealed class ZoneBoundedDetectTests
                     ? TakeoffPolicy.Detect(snap, profile, _ => { }, zoneMask: mask)
                     : prepared.Detect(zone, _ => { }, out whiteoutCells);
                 long rawMilliseconds = timer.ElapsedMilliseconds;
+                File.WriteAllText(Path.Combine(rawZonesDir, $"rooms_{slug}.tsv"), result.ToTsv());
                 File.WriteAllText(progress, $"raw={rawMilliseconds}ms\nstage=promotion\n");
                 timer.Restart();
                 // Per-zone policy reads the census and the raw partition — both settled before any
@@ -538,6 +541,9 @@ public sealed class ZoneBoundedDetectTests
             .OrderBy(report => Array.FindIndex(LevelMap, item => item.View == report.Level))
             .ThenBy(report => report.Zone, StringComparer.Ordinal)
             .ToList();
+        int rawTsvCount = Directory.GetFiles(rawZonesDir, "rooms_*.tsv").Length;
+        if (rawTsvCount != zonesRun)
+            failures.Add($"raw TSV census: expected {zonesRun}, found {rawTsvCount}");
         // Self-describing artifact: two runs are only comparable if the knobs that produced them
         // travel with them. The hash is over canonical (key-sorted, unindented) JSON of the
         // effective options, so a knob change is one visibly different token.

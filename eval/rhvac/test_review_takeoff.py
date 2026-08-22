@@ -339,12 +339,18 @@ class ReviewTakeoffTests(unittest.TestCase):
             root = Path(temporary)
             (root / "input").mkdir()
             (root / "zones").mkdir()
+            (root / "raw-zones").mkdir()
             write_replay_bin(root / "input" / "replay_Test.bin", 16, 16, 0, 0, 0.25,
                              bytes([0xFF]) * 32)
             (root / "zones" / "rooms_Test.tsv").write_text(
                 "ROOM\tR01\t4\t8\t1\t1\t9\n"
                 "POLY\tR01\touter\t0;0|2;0|2;2|0;2\n"
                 "META\tresidue\tR02\trejected\t4\t3\t1\t9\t2;0|4;0|4;2|2;2\n",
+                encoding="utf-8")
+            raw_tsv = root / "raw-zones" / "rooms_Test.tsv"
+            raw_tsv.write_text(
+                "ROOM\tR01\t8\t12\t2\t1\t9\n"
+                "POLY\tR01\touter\t0;0|4;0|4;2|0;2\n",
                 encoding="utf-8")
             zone = {
                 "Level": "Test", "Zone": "Test#00", "MinX": 0, "MinY": 0,
@@ -365,6 +371,7 @@ class ReviewTakeoffTests(unittest.TestCase):
 
             provenance = json.loads(
                 (root / "boundary-provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(provenance["schemaVersion"], 2)
             self.assertEqual(provenance["scope"], "external evaluation data; never solver input")
             self.assertEqual({item["status"] for item in provenance["zones"][0]["boundaries"]},
                              {"accepted", "held"})
@@ -375,13 +382,29 @@ class ReviewTakeoffTests(unittest.TestCase):
                                 for item in provenance["zones"][0]["regions"]))
             self.assertTrue(all(len(item["bounds"]) == 4
                                 for item in provenance["zones"][0]["regions"]))
+            runs = [run for boundary in provenance["zones"][0]["boundaries"]
+                    for run in boundary["runs"]]
+            self.assertTrue(all({"edgeIndex", "edgeIndexes", "from", "to"} <= run.keys()
+                                for run in runs))
+            self.assertTrue(all(run["edgeIndex"] == run["edgeIndexes"][0]
+                                and len(run["from"]) == len(run["to"]) == 2
+                                for run in runs))
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertIn("boundary-provenance.json", manifest["files"])
+            self.assertIn("raw-zones/rooms_Test.tsv", manifest["inputs"])
             self.assertTrue((root / manifest["provenanceContactSheet"]).is_file())
             subprocess.run([
                 sys.executable, str(ZONE_SCRIPT), "--verify",
                 str(root / "review-manifest.json"),
             ], check=True, cwd=HERE, capture_output=True, text=True)
+            raw_tsv.write_text(raw_tsv.read_text(encoding="utf-8") + "# tampered\n",
+                               encoding="utf-8")
+            rejected = subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("raw-zones/rooms_Test.tsv", rejected.stderr)
 
     def test_zone_promotion_renderer_distinguishes_excluded_from_void(self):
         with tempfile.TemporaryDirectory() as temporary:

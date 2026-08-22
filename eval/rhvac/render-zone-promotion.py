@@ -88,6 +88,7 @@ def artifact_path(root, relative):
 
 def zone_input_paths(root, zone):
     ink_path = artifact_path(root, zone["Ink"])
+    tsv_path = artifact_path(root, zone["Tsv"])
     replay_path = ink_path.parent / f"replay_{ink_path.stem.removeprefix('ink_')}.bin"
     if not replay_path.is_file():
         raise SystemExit(
@@ -96,9 +97,14 @@ def zone_input_paths(root, zone):
             f"deleted). Recapture: docs/features/takeoffs/manual-e2e-runbook.md "
             f"(Capture step writes replay_<level>.bin)")
     paths = [
-        artifact_path(root, zone["Tsv"]),
+        tsv_path,
         replay_path,
     ]
+    # New captures persist the detector result before promotion under this convention. Keep it
+    # optional so historical run packages remain renderable; when present it is manifest-bound.
+    raw_tsv_path = artifact_path(root, Path("raw-zones") / tsv_path.name)
+    if raw_tsv_path.exists():
+        paths.append(raw_tsv_path)
     for key in ("Seals", "Close"):
         if zone.get(key):
             paths.append(artifact_path(root, zone[key]))
@@ -234,7 +240,7 @@ def boundary_provenance(loop, zone_loops, distances, grid, radius=0.75, min_ink_
                    for start, end in zip(zone_loop, zone_loop[1:] + zone_loop[:1]))
 
     pieces = []
-    for start, end in zip(loop, loop[1:] + loop[:1]):
+    for edge_index, (start, end) in enumerate(zip(loop, loop[1:] + loop[:1])):
         length = math.dist(start, end)
         count = max(1, math.ceil(length / cell))
         for index in range(count):
@@ -250,7 +256,7 @@ def boundary_provenance(loop, zone_loops, distances, grid, radius=0.75, min_ink_
             ink = near("received", midpoint)
             pieces.append({"class": "zone-backed" if ink and zone else "received" if ink
                            else fallback, "fallback": fallback, "start": p0, "end": p1,
-                           "feet": math.dist(p0, p1)})
+                           "feet": math.dist(p0, p1), "edgeIndex": edge_index})
 
     index = 0
     while index < len(pieces):
@@ -266,9 +272,12 @@ def boundary_provenance(loop, zone_loops, distances, grid, radius=0.75, min_ink_
     runs = []
     for piece in pieces:
         if not runs or runs[-1]["class"] != piece["class"]:
-            runs.append({"class": piece["class"], "feet": 0.0, "segments": []})
+            runs.append({"class": piece["class"], "feet": 0.0,
+                         "segments": [], "edgeIndexes": []})
         runs[-1]["feet"] += piece["feet"]
         runs[-1]["segments"].append((piece["start"], piece["end"]))
+        if not runs[-1]["edgeIndexes"] or runs[-1]["edgeIndexes"][-1] != piece["edgeIndex"]:
+            runs[-1]["edgeIndexes"].append(piece["edgeIndex"])
     return runs
 
 
@@ -450,7 +459,13 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
                     draw.line([point(start), point(end)], fill=PROVENANCE[run["class"]], width=4)
             boundaries.append({
                 "status": status, "id": boundary_id, "kind": kind,
-                "runs": [{"class": run["class"], "feet": round(run["feet"], 3)}
+                "runs": [{
+                    "class": run["class"], "feet": round(run["feet"], 3),
+                    "edgeIndex": run["edgeIndexes"][0],
+                    "edgeIndexes": run["edgeIndexes"],
+                    "from": [round(value, 6) for value in run["segments"][0][0]],
+                    "to": [round(value, 6) for value in run["segments"][-1][1]],
+                }
                          for run in runs],
             })
             key = (status, boundary_id)
@@ -1023,7 +1038,7 @@ def main():
         render_contact_sheet(report, provenance_panels, provenance_contact)
         provenance_path = root / "boundary-provenance.json"
         provenance_path.write_text(json.dumps({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "scope": "external evaluation data; never solver input",
             "zones": provenance_zones,
         }, indent=2) + "\n", encoding="utf-8")
