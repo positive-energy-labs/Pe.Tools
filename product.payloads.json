@@ -112,7 +112,7 @@
       "type": "PathShim",
       "name": "pea",
       "target": "versionedApp:pea",
-      "dev": "pnpm --dir \"{root}/source/pe-tools\" --filter @pe/pea pea"
+      "dev": "corepack pnpm@11.13.1 --dir \"{root}/source/pe-tools\" --filter @pe/pea pea"
     },
     {
       "type": "PathShim",
