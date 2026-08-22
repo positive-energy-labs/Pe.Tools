@@ -460,6 +460,34 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Held_merged_room_restores_every_source_partition_partner()
+    {
+        var survivor = Room("survivor", (0, 0), (10, 5), (0, 10), (0, 8), (0, 2));
+        survivor.RawSqft = 50;
+        var partner = Room("partner", (-2, 2), (0, 2), (0, 8), (-2, 8));
+        partner.RawSqft = 12;
+        var source = new TakeoffResult {
+            LevelName = "Level 1", Rooms = { survivor, partner }, DomainSqft = 62,
+        };
+        var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);
+        options.AbsorbNeighborMaxSqft = 20;
+        options.AbsorbNeighborSharedPerimeterFraction = 0.3;
+        options.EdgeBandFt = 0;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("all", (-2, 0), (10, 0), (10, 10), (-2, 10)),
+            options, (_, _) => 0, TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.Rejections["absorb:merged"], Is.EqualTo(1));
+            Assert.That(promotion.Result.Rooms, Is.Empty);
+            Assert.That(promotion.Diagnostics.HeldSqft, Is.EqualTo(62).Within(1e-6));
+            Assert.That(promotion.Diagnostics.ExcludedSqft, Is.EqualTo(58).Within(1e-6));
+            Assert.That(promotion.Diagnostics.ClosureErrorSqft, Is.LessThan(1e-9));
+        });
+    }
+
+    [Test]
     public void Absorb_neighbor_is_inert_when_disarmed()
     {
         var options = Options(minimumRoomSqft: 0, boundarySimplifyFt: 0);

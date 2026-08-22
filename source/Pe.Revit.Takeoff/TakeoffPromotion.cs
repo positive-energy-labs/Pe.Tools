@@ -1555,7 +1555,8 @@ public static class TakeoffPromotion
     {
         state.HeldRooms = state.Result.Residues
             .Count(residue => residue.Reason == ResidueReason.Rejected);
-        RestoreHeldSourceGeometry(state.Result, state.CompletePartition);
+        RestoreHeldSourceGeometry(
+            state.Result, state.CompletePartition, state.EvidencePartition);
         RebuildResiduesInsideZone(state.Result, state.ZoneGeometry);
     }
 
@@ -1641,20 +1642,32 @@ public static class TakeoffPromotion
     }
 
     private static void RestoreHeldSourceGeometry(
-        TakeoffResult result, IReadOnlyList<RoomResult> sourceRooms)
+        TakeoffResult result,
+        IReadOnlyList<RoomResult> sourceRooms,
+        IReadOnlyList<RoomResult> currentPartition)
     {
         var sourceById = sourceRooms.ToDictionary(room => room.Id, StringComparer.Ordinal);
+        var currentById = currentPartition.ToDictionary(room => room.Id, StringComparer.Ordinal);
         foreach (var residue in result.Residues
                      .Where(item => item.Reason == ResidueReason.Rejected))
         {
             if (!sourceById.TryGetValue(residue.Id, out var source)) continue;
-            residue.RawSqft = ToPolygon(source).Area;
+            var sourceIds = currentById.TryGetValue(residue.Id, out var current)
+                && !string.IsNullOrWhiteSpace(current.MergedFrom)
+                ? current.MergedFrom!.Split('+', StringSplitOptions.RemoveEmptyEntries)
+                    .Prepend(residue.Id).Distinct(StringComparer.Ordinal).ToList()
+                : [residue.Id];
+            var geometry = OverlayNGRobust.Union(sourceIds
+                .Where(sourceById.ContainsKey)
+                .Select(id => (Geometry)ToPolygon(sourceById[id])).ToList());
+            if (geometry is not Polygon polygon) continue;
+            residue.RawSqft = polygon.Area;
             residue.LabelX = source.LabelX;
             residue.LabelY = source.LabelY;
             residue.MeanCeilingFt = source.MeanCeilingFt;
-            residue.Polygon = source.Polygon.Select(point => new[] { point[0], point[1] }).ToList();
-            residue.Holes = source.Holes.Select(hole => hole
-                .Select(point => new[] { point[0], point[1] }).ToList()).ToList();
+            residue.Polygon = Coordinates(polygon.ExteriorRing, true);
+            residue.Holes = Enumerable.Range(0, polygon.NumInteriorRings)
+                .Select(index => Coordinates(polygon.GetInteriorRingN(index), false)).ToList();
         }
     }
 
