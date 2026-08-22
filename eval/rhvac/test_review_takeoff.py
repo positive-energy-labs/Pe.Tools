@@ -1,5 +1,6 @@
 import gzip
 import hashlib
+import importlib.util
 import json
 import struct
 import subprocess
@@ -86,6 +87,24 @@ def build_focus_atlas(before, after, output, expected_zones, *extra):
 
 
 class ReviewTakeoffTests(unittest.TestCase):
+    def test_atlas_fill_color_survives_status_change_and_unrelated_insertion(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("zone_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        zone = {"Zone": "Test#00", "zoneKey": "stable-zone"}
+        accepted = ("accepted", zone, "R02")
+        held = ("held", zone, "R02")
+        key = lambda candidate: renderer._atlas_candidate_key(candidate[1], candidate[2])
+        before = renderer._atlas_colors([key(accepted), "stable-zone\0R03"])
+        after = renderer._atlas_colors(["another-zone\0R01", key(held),
+                                        "stable-zone\0R03"])
+
+        self.assertEqual(key(accepted), key(held))
+        self.assertEqual(before[key(accepted)], after[key(held)])
+        self.assertEqual(before["stable-zone\0R03"], after["stable-zone\0R03"])
+        self.assertEqual(len(set(after.values())), len(after))
+
     def test_focus_atlas_tiny_boundary_change_gets_one_tight_panel(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

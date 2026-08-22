@@ -607,11 +607,31 @@ def render_contact_sheet(report, panels, contact_path):
     contact.save(contact_path)
 
 
-def _atlas_color(index):
-    """Stable, distinct pastel fills; disposition stays in the outline channel."""
-    hue = (index * 0.618033988749895) % 1.0
-    rgb = colorsys.hsv_to_rgb(hue, 0.58, 0.93)
+def _atlas_color(key, salt=0):
+    """Stable pastel fill keyed independently of disposition and report order."""
+    value = hashlib.sha256(f"{key}\0{salt}".encode("utf-8")).digest()
+    hue = int.from_bytes(value[:8], "big") / (1 << 64)
+    saturation = 0.50 + value[8] / 255 * 0.14
+    brightness = 0.88 + value[9] / 255 * 0.08
+    rgb = colorsys.hsv_to_rgb(hue, saturation, brightness)
     return tuple(round((component * 255) * 0.68 + 255 * 0.32) for component in rgb)
+
+
+def _atlas_candidate_key(zone, candidate_id):
+    return f"{field(zone, 'zoneKey') or zone['Zone']}\0{candidate_id}"
+
+
+def _atlas_colors(keys):
+    colors, used = {}, set()
+    for key in sorted(keys):
+        salt = 0
+        color = _atlas_color(key, salt)
+        while color in used:
+            salt += 1
+            color = _atlas_color(key, salt)
+        colors[key] = color
+        used.add(color)
+    return colors
 
 
 def _draw_dashed(draw, points, fill, width, dash):
@@ -691,11 +711,13 @@ def render_level_atlas(root, level, zones, output):
                 label = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
                 candidates.append((status, zone, residue["id"], loops[:1], loops[1:], label))
 
-    colors = [_atlas_color(index) for index in range(len(candidates))]
-    if len(colors) != len(set(colors)):
-        raise SystemExit(f"level {level} candidate colors are not unique")
+    keys = [_atlas_candidate_key(zone, candidate_id)
+            for _status, zone, candidate_id, *_rest in candidates]
+    if len(keys) != len(set(keys)):
+        raise SystemExit(f"level {level} has duplicate candidate identity")
+    colors = _atlas_colors(keys)
     plan = Image.new("RGB", (x1 - x0, y1 - y0), "white")
-    for color, (_, _zone, _candidate_id, outers, holes, _label) in zip(colors, candidates):
+    for key, (_, _zone, _candidate_id, outers, holes, _label) in zip(keys, candidates):
         mask = Image.new("L", plan.size)
         mask_draw = ImageDraw.Draw(mask)
         for loop in outers:
@@ -704,7 +726,7 @@ def render_level_atlas(root, level, zones, output):
         for loop in holes:
             if len(loop) >= 3:
                 mask_draw.polygon([point(value) for value in loop], fill=0)
-        plan.paste(color, mask=mask)
+        plan.paste(colors[key], mask=mask)
 
     pixels = np.asarray(plan).copy()
     pixels[unpack_mask(bits, width, height)[y0:y1, x0:x1][::-1]] = INK
