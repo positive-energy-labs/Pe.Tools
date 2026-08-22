@@ -505,6 +505,95 @@ class ReviewTakeoffTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("stale audit", result.stderr)
 
+    def test_semantic_census_binds_manifest_and_refuses_tamper_or_missing_panel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            review = root / "review"
+            review.mkdir()
+            zones = [
+                ("Lower Level#00", 100.0, 40.0, 30.0, 10.0, 20.0),
+                ("Main Level#00", 200.0, 100.0, 80.0, 0.0, 20.0),
+                ("Attic Level#00", 50.0, 0.0, 50.0, 0.0, 0.0),
+            ]
+            report = root / "report.json"
+            report.write_text(json.dumps({"Zones": [{
+                "Zone": zone, "zoneKey": f"zone-{index}", "ZoneSqft": area,
+                "AcceptedSqft": accepted, "HeldSqft": held,
+                "VoidSqft": void, "ExcludedSqft": excluded,
+            } for index, (zone, area, accepted, held, void, excluded)
+                in enumerate(zones)]}), encoding="utf-8")
+            panel_paths = []
+            for index, (zone, *_rest) in enumerate(zones, start=1):
+                panel = review / (
+                    f"{index:02d}_{zone.replace(' ', '_').replace('#', '_')}.png")
+                panel.write_bytes(f"panel {index}".encode())
+                panel_paths.append(panel)
+            contact = review / "contact-sheet.png"
+            contact.write_bytes(b"contact")
+            manifest = root / "review-manifest.json"
+            manifest_data = {
+                "schemaVersion": 2,
+                "report": report.name,
+                "reportSha256": digest(report),
+                "panelCount": len(zones),
+                "inputs": {},
+                "contactSheet": "review/contact-sheet.png",
+                "files": {
+                    path.relative_to(root).as_posix(): digest(path)
+                    for path in [*panel_paths, contact]
+                },
+            }
+            manifest_text = json.dumps(manifest_data, indent=2) + "\n"
+            manifest.write_text(manifest_text, encoding="utf-8")
+            verdict = root / "verdict.md"
+
+            def verdict_text(rows):
+                return (
+                    "# Verdict\n\n"
+                    f"- Manifest SHA-256: `{digest(manifest)}`\n\n"
+                    "| # | Panel | Verdict | Highest severity | Named defect | Concrete location |\n"
+                    "|---:|---|---|---|---|---|\n"
+                    + "\n".join(rows) + "\n")
+
+            rows = [
+                "| 1 | `01_Lower_Level_00.png` | PASS | None | None visible | All |",
+                "| 2 | `02_Main_Level_00.png` | FAIL | 2 | Excluded space | Center |",
+                "| 3 | `03_Attic_Level_00.png` | AMBIGUOUS | N/A | No source | Whole |",
+            ]
+            verdict.write_text(verdict_text(rows), encoding="utf-8")
+            output = root / "semantic-census.json"
+            command = [
+                sys.executable, str(ZONE_SCRIPT),
+                "--semantic-verdict", str(verdict),
+                "--manifest", str(manifest),
+                "--out", str(output),
+            ]
+
+            result = subprocess.run(command, cwd=HERE, capture_output=True, text=True)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            census = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(census["counts"], {"PASS": 1, "FAIL": 1, "AMBIGUOUS": 1})
+            self.assertEqual(census["verifiedHashes"], 5)
+            self.assertEqual(census["zones"][0]["dispositions"], {
+                "accepted": {"sqft": 40.0, "fraction": 0.4},
+                "held": {"sqft": 30.0, "fraction": 0.3},
+                "void": {"sqft": 10.0, "fraction": 0.1},
+                "excluded": {"sqft": 20.0, "fraction": 0.2},
+            })
+
+            manifest.write_text(manifest_text + "\n", encoding="utf-8")
+            tampered = subprocess.run(command, cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(tampered.returncode, 0)
+            self.assertIn("semantic verdict manifest mismatch", tampered.stderr)
+
+            manifest.write_text(manifest_text, encoding="utf-8")
+            verdict.write_text(verdict_text(rows[:-1]), encoding="utf-8")
+            missing = subprocess.run(command, cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("semantic verdict panel census failed", missing.stderr)
+            self.assertIn("03_Attic_Level_00.png", missing.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
