@@ -477,6 +477,28 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Promotion_holds_the_zone_when_its_only_candidate_is_unbacked()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("partial", (0, 0), (5, 0), (5, 10), (0, 10)) },
+            DomainSqft = 50,
+        };
+        var options = Options(minimumRoomSqft: 0);
+        options.SmallZoneSqft = 0;
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, Zone("room", (0, 0), (10, 0), (10, 10), (0, 10)),
+            options, (_, _) => double.PositiveInfinity);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Diagnostics.Triage!.Reason, Is.EqualTo("single-unbacked-room"));
+            Assert.That(promotion.Result.Rooms, Is.Empty);
+            Assert.That(promotion.Result.Residues.Single().RawSqft, Is.EqualTo(100).Within(1e-9));
+        });
+    }
+
+    [Test]
     public void Triage_census_without_an_armed_knob_changes_nothing()
     {
         var source = new TakeoffResult {

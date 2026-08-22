@@ -80,6 +80,7 @@ public static class TakeoffPromotion
         ("shared-audit", RunSharedAudit),
         ("editability", RunEditability),
         ("small-zone-fallback", RunSmallZoneFallback),
+        ("single-unbacked-fallback", RunSingleUnbackedFallback),
         ("disposition", RunDisposition),
     ];
 
@@ -114,8 +115,8 @@ public static class TakeoffPromotion
             log?.Invoke(
                 $"[promotion] stage={stage.Name} ms={elapsed - lastMilliseconds} total={elapsed}");
             lastMilliseconds = elapsed;
-            // A triage hold IS the disposition: either no raster existed, or a small-zone solve
-            // produced no Accepted room and fell back to the authoritative whole zone.
+            // A triage hold IS the disposition: either no raster existed, or a conservative
+            // post-solve fallback retained the authoritative whole zone.
             if (state.Triage.IsHold) break;
         }
         return Close(state);
@@ -201,6 +202,15 @@ public static class TakeoffPromotion
         }
         if (state.Result.Rooms.Count > 0) return;
         HoldWhole(state, state.SmallZoneFallback);
+    }
+
+    private static void RunSingleUnbackedFallback(PromotionState state)
+    {
+        if (state.Result.Rooms.Count > 0 || state.Source.Rooms.Count != 1
+            || !state.Rejections.TryGetValue("ink:unbacked", out int rejected) || rejected != 1)
+            return;
+        HoldWhole(state,
+            new ZoneTriageVerdict(ZoneTriageAction.HoldWhole, "single-unbacked-room"));
     }
 
     private static void HoldWhole(PromotionState state, ZoneTriageVerdict verdict)

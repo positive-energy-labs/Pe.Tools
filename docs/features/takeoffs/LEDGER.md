@@ -1,6 +1,7 @@
 # takeoffs ledger
 
 ## Decided
+- 2026-08-22 — When a zone produces exactly one raw candidate and that sole candidate is rejected as ink-unbacked, the unsupported internal divider is not allowed to create Excluded scope: retain the authoritative zone whole as Held. This uniquely fixes Lower04 (+501 sf Held, −471 sf Excluded), preserves the 750 sf small-zone policy, and fresh A/B review passes it; board reaches 37/45 PASS. (154/154.)
 - 2026-08-22 — Accepted rooms are held when coherent wall-run/gap-close splice runs outnumber their actual polygon vertices: this uniquely demotes fabricated Main08/R04 (1/68 Accepted, zero collateral changes) while retaining its geometry as Held. Fresh A/B review passes R03, accounting, and the new disposition; board reaches 36/45 PASS. (153/153; 45/61 verified.)
 - 2026-08-22 — Small-zone triage is solve-first, then falls back whole on zero Accepted or one zone-only room recombined from 3+ candidates: 5/16 zones keep 6 sound promotions (+1,610 sf); 11/16 retain prior geometry. Attic02 improves but remains FAIL; fresh board stays 35/45 PASS. (152/152.)
 - 2026-08-22 — Full-plan review atlas is the adjacency/macrotopology view; original-resolution zone panels remain close-up authority. Candidate fills key stably on zone+candidate, status stays in the outline, and zone authority stays magenta. (`2a5b9c8`, `be5c4cf`; 15/15.)
