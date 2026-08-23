@@ -1,6 +1,8 @@
 // Shared feedback verb chrome: the export verb strip (all three verbs REAL), flag chips, the
 // one-line note input, and the post-export status block that proves what happened (dir, paths,
 // where the copy landed, the set's own ?set= URL).
+import type { ChangeEvent } from "react";
+
 import { cn } from "#/lib/utils";
 
 import { runExport } from "./export";
@@ -114,7 +116,9 @@ export function FlagChips(props: { item: StagedItem }) {
           key={el}
           type="button"
           onClick={() => fb.toggleFlag(props.item.key, el)}
-          title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Click to unflag.`}
+          onMouseEnter={() => fb.setHoverFlag(`${props.item.key}::${el}`)}
+          onMouseLeave={() => fb.setHoverFlag(null)}
+          title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
           className="tele border px-1 text-[10px]"
           style={{ borderColor: "var(--r-alarm)", color: "var(--r-alarm)", borderRadius: 2 }}
         >
@@ -125,21 +129,28 @@ export function FlagChips(props: { item: StagedItem }) {
   );
 }
 
-export function NoteInput(props: { item: StagedItem; className?: string; autoFocus?: boolean }) {
-  return (
-    <input
-      value={props.item.note}
-      onChange={(e) => fb.setNote(props.item.key, e.target.value)}
-      placeholder='note — verdict-shaped, e.g. "top wall of the thin room is bad"'
-      title="One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block."
-      autoFocus={props.autoFocus}
-      className={cn(
-        "tele w-full border bg-background px-1.5 py-0.5 text-[11px] placeholder:text-muted-foreground/50",
-        props.className,
-      )}
-      style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
-    />
-  );
+export function NoteInput(props: {
+  item: StagedItem;
+  className?: string;
+  autoFocus?: boolean;
+  /** Tray gets a textarea (verdicts run long); the sheet's inline copy stays one line. */
+  multiline?: boolean;
+}) {
+  const shared = {
+    value: props.item.note,
+    onChange: (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      fb.setNote(props.item.key, e.target.value),
+    placeholder: 'note — verdict-shaped, e.g. "top wall of the thin room is bad"',
+    title:
+      "One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block.",
+    autoFocus: props.autoFocus,
+    className: cn(
+      "tele w-full border bg-background px-1.5 py-0.5 text-[11px] placeholder:text-muted-foreground/50",
+      props.className,
+    ),
+    style: { borderColor: "var(--line-2)", borderRadius: 2 },
+  };
+  return props.multiline ? <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} /> : <input {...shared} />;
 }
 
 export const zoneShort = (name: string) => (name.includes("#") ? `#${name.split("#")[1]}` : name);

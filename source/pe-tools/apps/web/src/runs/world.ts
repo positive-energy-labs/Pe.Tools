@@ -4,12 +4,9 @@
 // Data source: the dev-only run-pool file server at `src/routes/api/runs-data.$.ts` (the
 // `pe:takeoff-runs-pool` role; it is a TanStack Start API route, not a vite plugin). It serves
 // the pool at .artifacts/takeoff-runs or PE_TAKEOFF_RUNS_DIR, and reports which directory that
-// resolved to. A run package is exactly what the C# harness persists: report.json +
-// zones/rooms_*.tsv + input/replay_*.bin + closure rasters.
-// Underlay law (kaitpw 2026-08-16): raster = the replay snapshot's seed ink, which is what the
-// solver actually partitioned on; the separately persisted ink_*.bin can be stale.
-// rooms/residues/zones = SVG on top. Revit export images are queued as a later alternate underlay
-// (docs/features/takeoff-runs/SHIMS.md #5).
+// resolved to. A run package contains report.json, zone TSVs, registered plan sidecars, and
+// replay/closure rasters. The Revit plan is the substrate. Replay seed ink is optional evidence;
+// the separately persisted ink_*.bin can be stale. Rooms, residues, and zones draw on top.
 
 export type RunMeta = {
   runId: string;
@@ -95,6 +92,21 @@ export type Raster = {
   minY: number;
   cellFt: number;
   bits: Uint8Array;
+};
+
+export type ClassRaster = Omit<Raster, "bits"> & { classes: Uint8Array };
+
+export type PlanRegistration = {
+  width: number;
+  height: number;
+  topLeft: [number, number];
+  topRight: [number, number];
+  bottomLeft: [number, number];
+};
+
+export type RegisteredPlan = {
+  image: ImageBitmap;
+  registration: PlanRegistration;
 };
 
 export type Ring = { kind: string; points: [number, number][] };
@@ -313,6 +325,76 @@ export function matchZone(candidates: ZoneRecord[], target: ZoneRecord): ZoneRec
 // INKP raster: magic "INKP" (0x504B4E49 LE), int32 w, int32 h, f64 minX/minY/cellFt, then a
 // row-major bitfield, LSB-first per byte (C# BitArray serialization order).
 const rasterCache = new Map<string, Promise<Raster>>();
+
+export function classesPathForSeals(sealsPath: string): string {
+  return sealsPath.replace(/(^|\/)seals_([^/]+)$/, "$1classes_$2");
+}
+
+const classRasterCache = new Map<string, Promise<ClassRaster | null>>();
+export function loadSealClasses(runId: string, sealsPath: string): Promise<ClassRaster | null> {
+  const relPath = classesPathForSeals(sealsPath);
+  const key = `${runId}/${relPath}`;
+  let cached = classRasterCache.get(key);
+  if (!cached) {
+    cached = fetch(`${BASE}/${key}`).then(async (res) => {
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`seal classes ${key}: ${res.status}`);
+      const buf = await res.arrayBuffer();
+      const view = new DataView(buf);
+      if (view.getUint32(0, true) !== 0x434b4e49) throw new Error(`${key}: not an INKC raster`);
+      const w = view.getInt32(4, true);
+      const h = view.getInt32(8, true);
+      return {
+        w,
+        h,
+        minX: view.getFloat64(12, true),
+        minY: view.getFloat64(20, true),
+        cellFt: view.getFloat64(28, true),
+        classes: new Uint8Array(buf, 36, w * h),
+      };
+    });
+    classRasterCache.set(key, cached);
+  }
+  return cached;
+}
+
+export function planSidecarPaths(inkPath: string): { image: string; registration: string } {
+  const slash = inkPath.lastIndexOf("/");
+  const directory = slash < 0 ? "" : inkPath.slice(0, slash + 1);
+  const file = inkPath.slice(slash + 1);
+  if (!file.startsWith("ink_") || !file.endsWith(".bin")) {
+    throw new Error(`${inkPath}: not an ink raster path`);
+  }
+  const stem = file.slice(4, -4);
+  return {
+    image: `${directory}plan_${stem}.png`,
+    registration: `${directory}plan_${stem}.json`,
+  };
+}
+
+const planCache = new Map<string, Promise<RegisteredPlan | null>>();
+export function loadPlan(runId: string, inkPath: string): Promise<RegisteredPlan | null> {
+  const paths = planSidecarPaths(inkPath);
+  const key = `${runId}/${paths.registration}`;
+  let cached = planCache.get(key);
+  if (!cached) {
+    cached = (async () => {
+      const registrationResponse = await fetch(`${BASE}/${key}`);
+      if (registrationResponse.status === 404) return null;
+      if (!registrationResponse.ok) {
+        throw new Error(`plan registration ${key}: ${registrationResponse.status}`);
+      }
+      const registration = (await registrationResponse.json()) as PlanRegistration;
+      const imageResponse = await fetch(`${BASE}/${runId}/${paths.image}`);
+      if (imageResponse.status === 404) return null;
+      if (!imageResponse.ok)
+        throw new Error(`plan image ${runId}/${paths.image}: ${imageResponse.status}`);
+      return { registration, image: await createImageBitmap(await imageResponse.blob()) };
+    })();
+    planCache.set(key, cached);
+  }
+  return cached;
+}
 export function loadRaster(runId: string, relPath: string): Promise<Raster> {
   const key = `${runId}/${relPath}`;
   let cached = rasterCache.get(key);
@@ -517,6 +599,83 @@ export function toPx(vp: ZoneViewport, xFt: number, yFt: number): [number, numbe
   return [(xFt - vp.minX) * vp.pxPerFt, (vp.maxY - yFt) * vp.pxPerFt];
 }
 
+/** Native plan pixels -> viewport pixels. Canvas setTransform consumes this tuple directly. */
+export function planCanvasTransform(
+  plan: PlanRegistration,
+  vp: ZoneViewport,
+): [number, number, number, number, number, number] {
+  return [
+    ((plan.topRight[0] - plan.topLeft[0]) * vp.pxPerFt) / plan.width,
+    (-(plan.topRight[1] - plan.topLeft[1]) * vp.pxPerFt) / plan.width,
+    ((plan.bottomLeft[0] - plan.topLeft[0]) * vp.pxPerFt) / plan.height,
+    (-(plan.bottomLeft[1] - plan.topLeft[1]) * vp.pxPerFt) / plan.height,
+    (plan.topLeft[0] - vp.minX) * vp.pxPerFt,
+    (vp.maxY - plan.topLeft[1]) * vp.pxPerFt,
+  ];
+}
+
+export function planFrame(plan: PlanRegistration): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+} {
+  const bottomRight: [number, number] = [
+    plan.topRight[0] + plan.bottomLeft[0] - plan.topLeft[0],
+    plan.topRight[1] + plan.bottomLeft[1] - plan.topLeft[1],
+  ];
+  const xs = [plan.topLeft[0], plan.topRight[0], plan.bottomLeft[0], bottomRight[0]];
+  const ys = [plan.topLeft[1], plan.topRight[1], plan.bottomLeft[1], bottomRight[1]];
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+}
+
+export function paintPlan(
+  ctx: CanvasRenderingContext2D,
+  plan: RegisteredPlan,
+  vp: ZoneViewport,
+  zones: [number, number][][][],
+  blackPoint: number,
+  whitePoint: number,
+  insideOpacity: number,
+  outsideOpacity: number,
+): void {
+  const zonePath = new Path2D(
+    ringPath(
+      vp,
+      zones.flatMap((zone) => zone),
+    ),
+  );
+  const stretch = 255 / (whitePoint - blackPoint);
+  const contrast = 1 + (2 * stretch * blackPoint) / 255;
+  const filter = `brightness(${stretch / contrast}) contrast(${contrast})`;
+  const draw = (opacity: number) => {
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.filter = filter;
+    ctx.setTransform(...planCanvasTransform(plan.registration, vp));
+    ctx.drawImage(plan.image, 0, 0);
+    ctx.restore();
+  };
+
+  ctx.save();
+  const outside = new Path2D();
+  outside.rect(0, 0, vp.widthPx, vp.heightPx);
+  outside.addPath(zonePath);
+  ctx.clip(outside, "evenodd");
+  draw(outsideOpacity);
+  ctx.restore();
+
+  ctx.save();
+  ctx.clip(zonePath, "evenodd");
+  draw(insideOpacity);
+  ctx.restore();
+}
+
 export function ringPath(vp: ZoneViewport, rings: [number, number][][]): string {
   return rings
     .map(
@@ -529,6 +688,23 @@ export function ringPath(vp: ZoneViewport, rings: [number, number][][]): string 
           .join(" ") + " Z",
     )
     .join(" ");
+}
+
+function blendPixel(
+  data: Uint8ClampedArray,
+  offset: number,
+  rgba: [number, number, number, number],
+): void {
+  const sourceAlpha = rgba[3] / 255;
+  const destinationAlpha = data[offset + 3]! / 255;
+  const alpha = sourceAlpha + destinationAlpha * (1 - sourceAlpha);
+  for (let channel = 0; channel < 3; channel++) {
+    data[offset + channel] =
+      (rgba[channel]! * sourceAlpha +
+        data[offset + channel]! * destinationAlpha * (1 - sourceAlpha)) /
+      alpha;
+  }
+  data[offset + 3] = alpha * 255;
 }
 
 /**
@@ -566,10 +742,42 @@ export function paintRaster(
           const iy = Math.round(py) + dy;
           if (ix < 0 || iy < 0 || ix >= vp.widthPx || iy >= vp.heightPx) continue;
           const offset = (iy * vp.widthPx + ix) * 4;
-          image.data[offset] = rgba[0];
-          image.data[offset + 1] = rgba[1];
-          image.data[offset + 2] = rgba[2];
-          image.data[offset + 3] = rgba[3];
+          blendPixel(image.data, offset, rgba);
+        }
+      }
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+export function paintClassRaster(
+  ctx: CanvasRenderingContext2D,
+  raster: ClassRaster,
+  vp: ZoneViewport,
+  classes: Set<number>,
+  rgba: [number, number, number, number],
+): void {
+  const image = ctx.getImageData(0, 0, vp.widthPx, vp.heightPx);
+  const cellPx = raster.cellFt * vp.pxPerFt;
+  const x0 = Math.max(0, Math.floor((vp.minX - raster.minX) / raster.cellFt));
+  const y0 = Math.max(0, Math.floor((vp.minY - raster.minY) / raster.cellFt));
+  const x1 = Math.min(raster.w, Math.ceil((vp.maxX - raster.minX) / raster.cellFt));
+  const y1 = Math.min(raster.h, Math.ceil((vp.maxY - raster.minY) / raster.cellFt));
+  for (let cy = y0; cy < y1; cy++) {
+    for (let cx = x0; cx < x1; cx++) {
+      if (!classes.has(raster.classes[cy * raster.w + cx]!)) continue;
+      const [px, py] = toPx(
+        vp,
+        raster.minX + cx * raster.cellFt,
+        raster.minY + (cy + 1) * raster.cellFt,
+      );
+      const size = Math.max(1, Math.round(cellPx));
+      for (let dy = 0; dy < size; dy++) {
+        for (let dx = 0; dx < size; dx++) {
+          const x = Math.round(px) + dx;
+          const y = Math.round(py) + dy;
+          if (x < 0 || y < 0 || x >= vp.widthPx || y >= vp.heightPx) continue;
+          blendPixel(image.data, (y * vp.widthPx + x) * 4, rgba);
         }
       }
     }

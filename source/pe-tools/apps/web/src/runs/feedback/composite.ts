@@ -1,5 +1,5 @@
 // Client-side PNG compositing for the /runs feedback export verbs: each staged item becomes
-// one PNG — canvas underlay (the run's own rasters, muted per the underlay law) + the
+// one PNG — registered plan + forensic evidence + the
 // serialized SVG decision overlay (flags in the alarm family) + a caption strip carrying the
 // DATA (zone, run ids, key stats, flagged element ids, the note). The caption makes each PNG
 // self-describing so an agent reading it off disk needs no manifest in-context.
@@ -10,21 +10,30 @@
 // ledgered as promotion debt in CLEANROOM's round-1 friction list.
 import {
   alarmColor,
+  candidateTone,
   CLOSE_M,
-  HELD_FILL,
-  HELD_STROKE,
+  EXCLUDED_FILL,
+  HELD_HATCH,
   INK_M,
+  LABEL,
+  LABEL_SIZE,
   PAPER,
-  roomTone,
-  SEAL_M,
+  PLAN_LAW,
+  SEAL_DOOR,
+  SEAL_RUN,
   VOID_FILL,
-  VOID_STROKE,
+  ZONE_DASH,
   ZONE_STROKE,
+  ZONE_WIDTH,
 } from "../palette";
 import {
+  loadPlan,
   loadRaster,
   loadReplaySeedInk,
+  loadSealClasses,
   loadZoneGeometry,
+  paintClassRaster,
+  paintPlan,
   paintRaster,
   ringPath,
   type ZoneGeometry,
@@ -38,8 +47,8 @@ import { flagLabel, type StagedItem } from "./staging";
 const TEXT = "#44403c";
 const MUTED = "#78716c";
 
-const PANEL_W = 640;
-const PANEL_H = 460;
+const PANEL_W = 1024;
+const PANEL_H = 768;
 const GAP = 12;
 const FONT = "12px Consolas, monospace";
 const LINE_H = 18;
@@ -61,22 +70,41 @@ function overlaySvg(
   flags: Set<string>,
 ): string {
   const alarm = alarmColor();
+  const defs: string[] = [];
   const parts: string[] = [];
+  const hatch = (id: string, color: string) => {
+    defs.push(
+      `<pattern id="${id}" width="${HELD_HATCH.spacingPx}" height="${HELD_HATCH.spacingPx}" patternUnits="userSpaceOnUse" patternTransform="rotate(${HELD_HATCH.angleDeg})"><line y2="${HELD_HATCH.spacingPx}" stroke="${color}" stroke-width="${HELD_HATCH.widthPx}"/></pattern>`,
+    );
+  };
   for (const room of geom.rooms) {
     const rings = geom.polys.get(room.id);
     if (!rings) continue;
     const flagged = flags.has(`room:${room.id}`);
     // Unflagged rooms wear their PERSISTED disposition, same as the screen — an unknown room is
     // a dashed neutral, never the accepted blue (SHIMS.md #3 close).
-    const unknown = room.disposition === null;
-    const stroke = flagged ? alarm : roomTone(room.disposition).stroke;
-    const dash = !flagged && unknown ? ' stroke-dasharray="2 2"' : "";
+    const tone = candidateTone(zone.Zone, room.id);
     parts.push(
       `<path d="${ringPath(
         vp,
         rings.map((r) => r.points),
-      )}" fill="${flagged ? alarm : "none"}" fill-opacity="${flagged ? 0.18 : 0}" stroke="${stroke}" stroke-width="${flagged ? 2.5 : unknown ? 1.25 : 1.75}"${dash}/>`,
+      )}" fill="${room.disposition === null ? VOID_FILL : tone.fill}" stroke="${flagged ? alarm : "none"}" stroke-width="${flagged ? 2.5 : 0}"/>`,
     );
+    if (room.disposition === "held") {
+      const id = `held-room-${room.id}`;
+      hatch(id, tone.dark);
+      parts.push(
+        `<path d="${ringPath(
+          vp,
+          rings.map((r) => r.points),
+        )}" fill="url(#${id})"/>`,
+      );
+    }
+    if (room.disposition) {
+      parts.push(
+        `<text x="${(room.lx - vp.minX) * vp.pxPerFt}" y="${(vp.maxY - room.ly) * vp.pxPerFt}" fill="${LABEL}" font-family="monospace" font-size="${LABEL_SIZE}" text-anchor="middle">${room.disposition === "held" ? "H" : "A"} ${svgEscape(room.id)}</text>`,
+      );
+    }
     if (flagged) {
       // Label the flagged element on the pixels too — the id in the manifest is the data,
       // the label keeps the PNG readable standalone.
@@ -92,9 +120,21 @@ function overlaySvg(
   for (const res of geom.residues) {
     const flagged = flags.has(`residue:${res.id}`);
     const held = res.reason === "rejected";
+    const tone = candidateTone(zone.Zone, res.id);
     parts.push(
-      `<path d="${ringPath(vp, res.loops)}" fill="${flagged ? alarm : "none"}" fill-opacity="${flagged ? 0.14 : 0}" stroke="${flagged ? alarm : held ? HELD_STROKE : VOID_STROKE}" stroke-width="${flagged ? 2.5 : held ? 1.6 : 0.75}"${held && !flagged ? ' stroke-dasharray="4 3"' : ""}/>`,
+      `<path d="${ringPath(vp, res.loops)}" fill="${held ? tone.fill : res.reason === "excluded" ? EXCLUDED_FILL : VOID_FILL}" stroke="${flagged ? alarm : "none"}" stroke-width="${flagged ? 2.5 : 0}"/>`,
     );
+    if (held) {
+      const id = `held-residue-${res.id}`;
+      hatch(id, tone.dark);
+      parts.push(`<path d="${ringPath(vp, res.loops)}" fill="url(#${id})"/>`);
+      const point = res.loops[0]?.[0];
+      if (point) {
+        parts.push(
+          `<text x="${(point[0] - vp.minX) * vp.pxPerFt}" y="${(vp.maxY - point[1]) * vp.pxPerFt}" fill="${LABEL}" font-family="monospace" font-size="${LABEL_SIZE}">H ${svgEscape(res.id)}</text>`,
+        );
+      }
+    }
     if (flagged) {
       const first = res.loops[0]?.[0];
       if (first) {
@@ -106,9 +146,9 @@ function overlaySvg(
     }
   }
   parts.push(
-    `<path d="${ringPath(vp, zone.ZoneLoops as [number, number][][])}" fill="none" stroke="${ZONE_STROKE}" stroke-width="1.5" opacity="0.9"${zone.triage.verdict === "hold" ? ' stroke-dasharray="7 4"' : ""}/>`,
+    `<path d="${ringPath(vp, zone.ZoneLoops as [number, number][][])}" fill="none" stroke="${ZONE_STROKE}" stroke-width="${ZONE_WIDTH}" stroke-dasharray="${ZONE_DASH}"/>`,
   );
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${vp.widthPx}" height="${vp.heightPx}" viewBox="0 0 ${vp.widthPx} ${vp.heightPx}">${parts.join("")}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${vp.widthPx}" height="${vp.heightPx}" viewBox="0 0 ${vp.widthPx} ${vp.heightPx}"><defs>${defs.join("")}</defs>${parts.join("")}</svg>`;
 }
 
 function svgToImage(svg: string): Promise<HTMLImageElement> {
@@ -120,9 +160,7 @@ function svgToImage(svg: string): Promise<HTMLImageElement> {
   });
 }
 
-/** One panel tile: PANEL_W×PANEL_H, paper ground, underlay per the paint-order law (decision
- * fills under, invented closures translucent, received ink LAST), then the serialized SVG
- * overlay. */
+/** One panel tile: registered plan, forensic evidence, then the serialized decision SVG. */
 async function paintPanelTile(
   runId: string,
   zone: ZoneRecord,
@@ -150,37 +188,40 @@ async function paintPanelTile(
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
-  const geom = await loadZoneGeometry(runId, zone.Tsv).catch(
-    (): ZoneGeometry => ({ rooms: [], polys: new Map(), residues: [] }),
-  );
-
-  // Decision fills under the evidence (a decision may never obscure ink).
-  for (const room of geom.rooms) {
-    const rings = geom.polys.get(room.id);
-    if (!rings) continue;
-    ctx.fillStyle = roomTone(room.disposition).fill;
-    ctx.fill(
-      new Path2D(
-        ringPath(
-          vp,
-          rings.map((r) => r.points),
-        ),
-      ),
-      "evenodd",
+  const [geom, plan] = await Promise.all([
+    loadZoneGeometry(runId, zone.Tsv).catch(
+      (): ZoneGeometry => ({ rooms: [], polys: new Map(), residues: [] }),
+    ),
+    loadPlan(runId, zone.Ink).catch(() => null),
+  ]);
+  if (plan) {
+    paintPlan(
+      ctx,
+      plan,
+      vp,
+      [zone.ZoneLoops as [number, number][][]],
+      PLAN_LAW.blackPoint,
+      PLAN_LAW.whitePoint,
+      PLAN_LAW.insideZoneOpacity,
+      PLAN_LAW.outsideZoneOpacity,
     );
-  }
-  for (const res of geom.residues) {
-    ctx.fillStyle = res.reason === "rejected" ? HELD_FILL : VOID_FILL;
-    ctx.fill(new Path2D(ringPath(vp, res.loops)), "evenodd");
+  } else {
+    ctx.fillStyle = MUTED;
+    ctx.font = FONT;
+    ctx.fillText("plan unavailable in this package", 12, 22);
   }
   try {
-    const [ink, seals, close] = await Promise.all([
+    const [ink, seals, close, sealClasses] = await Promise.all([
       loadReplaySeedInk(runId, zone.Ink).catch(() => null),
       zone.Seals ? loadRaster(runId, zone.Seals).catch(() => null) : null,
       zone.Close ? loadRaster(runId, zone.Close).catch(() => null) : null,
+      zone.Seals ? loadSealClasses(runId, zone.Seals).catch(() => null) : null,
     ]);
     if (close) paintRaster(ctx, close, vp, CLOSE_M);
-    if (seals) paintRaster(ctx, seals, vp, SEAL_M);
+    if (sealClasses) {
+      paintClassRaster(ctx, sealClasses, vp, new Set([2, 4]), SEAL_DOOR);
+      paintClassRaster(ctx, sealClasses, vp, new Set([3]), SEAL_RUN);
+    } else if (seals) paintRaster(ctx, seals, vp, SEAL_DOOR);
     if (ink) paintRaster(ctx, ink, vp, INK_M);
   } catch {
     // evidence layer failed — decisions stay visible

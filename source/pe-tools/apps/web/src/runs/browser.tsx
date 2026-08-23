@@ -11,12 +11,8 @@
 // "Review staged" flips the sheet to a single-column layout of the staged items at their
 // pinned pairs — same ZoneCard, two layouts (the deck's surviving UX).
 //
-// Underlay law (round-2 revision): every canvas underlay is DESATURATED — received ink is the
-// only near-opaque neutral; invented closures are translucent warm tints (the round-1
-// checkerboard screening died: "the dithering is confusing"). Honesty survives the change of
-// treatment: solid dark = drawn/received, pale translucent = synthetic/invented. SVG decisions
-// are rebalanced to read against the muted paper. The raster layer is togglable. Chrome is
-// light-mode role tokens.
+// visual-law.json owns the drawing: registered Revit plan substrate, optional replay evidence,
+// saturated candidate fills, held hatching, and hairline dashed zone authority.
 //
 // Promoted from the round-2 `combo` prototype at round close, 2026-08-17 — the three round-1
 // variants (sheet/ledger/light) and the variant switcher are deleted; git history holds them at
@@ -46,46 +42,53 @@ import { cn } from "#/lib/utils";
 
 import { hydrateFromSet } from "./feedback/hydrate";
 import { fb, itemKey, type StagedItem, useFb } from "./feedback/staging";
+import { NoteInput } from "./feedback/verbs";
 import { type Lens, Tray, TrayCollapsed } from "./feedback/tray";
 import {
-  ACCEPT_FILL,
-  ACCEPT_STROKE,
-  HELD_FILL,
-  HELD_STROKE,
+  candidateTone,
+  CLOSE_M,
+  EXCLUDED_FILL,
+  HELD_HATCH,
   INK_M,
   LABEL,
+  LABEL_SIZE,
   MIST,
   PAPER,
-  roomTone,
-  SEAL_M,
-  UNKNOWN_FILL,
-  UNKNOWN_STROKE,
+  PLAN_LAW,
+  SEAL_DOOR,
+  SEAL_RUN,
   VOID_FILL,
-  VOID_STROKE,
+  ZONE_DASH,
   ZONE_STROKE,
-  CLOSE_M,
+  ZONE_WIDTH,
 } from "./palette";
 import {
   boardSummary,
   fetchRunIndex,
+  loadPlan,
   loadReplaySeedInk,
   loadRaster,
   loadRunReport,
   loadRunScores,
+  loadSealClasses,
   loadZoneGeometry,
   matchZone,
   modalZoneCount,
+  paintPlan,
+  paintClassRaster,
   paintRaster,
   pairZones,
   type Partiality,
   partiality,
   poolModalZones,
   type Raster,
+  type RegisteredPlan,
   ringPath,
   type RunIndexEntry,
   type RunReport,
   type RunScores,
   scoreBoards,
+  planFrame,
   toPx,
   type ZoneGeometry,
   type ZonePair,
@@ -270,6 +273,23 @@ function Delta({
  * flaggable element, showing the element id (the DATA) and nothing else. */
 type PanelHover = { label: string; flaggable: boolean; flagged: boolean; x: number; y: number };
 
+function HatchPattern(props: { id: string; color: string }) {
+  return (
+    <pattern
+      id={props.id}
+      width={HELD_HATCH.spacingPx}
+      height={HELD_HATCH.spacingPx}
+      patternUnits="userSpaceOnUse"
+      patternTransform={`rotate(${HELD_HATCH.angleDeg})`}
+    >
+      <line y2={HELD_HATCH.spacingPx} stroke={props.color} strokeWidth={HELD_HATCH.widthPx} />
+    </pattern>
+  );
+}
+
+const heldPatternId = (runId: string, zone: ZoneRecord, candidateId: string) =>
+  `held-${encodeURIComponent(`${runId}/${zone.zoneKey ?? zone.Zone}/${candidateId}`)}`;
+
 export function ZonePanel(props: {
   runId: string;
   zone: ZoneRecord;
@@ -281,8 +301,11 @@ export function ZonePanel(props: {
   fbKey?: string;
 }) {
   const { runId, zone, maxW, maxH, underlay } = props;
-  const { items } = useFb();
+  const { items, hoverFlag } = useFb();
   const stagedItem = props.fbKey ? (items.find((i) => i.key === props.fbKey) ?? null) : null;
+  // A flag chip under the cursor lights its shape on THIS panel (chips are per staged item, so
+  // the item key is part of the token — room ids repeat across zones).
+  const lit = (el: string) => hoverFlag !== null && hoverFlag === `${props.fbKey}::${el}`;
   const flags = useMemo(() => new Set(stagedItem?.flags ?? []), [stagedItem]);
   const toggleFlag = (el: string) => {
     if (stagedItem) fb.toggleFlag(stagedItem.key, el);
@@ -310,6 +333,7 @@ export function ZonePanel(props: {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [geom, setGeom] = useState<ZoneGeometry | null>(null);
+  const [plan, setPlan] = useState<RegisteredPlan | null>();
 
   useEffect(() => {
     let live = true;
@@ -322,43 +346,55 @@ export function ZonePanel(props: {
   }, [runId, zone.Tsv]);
 
   useEffect(() => {
+    let live = true;
+    setPlan(undefined);
+    loadPlan(runId, zone.Ink)
+      .then((value) => live && setPlan(value))
+      .catch(() => live && setPlan(null));
+    return () => {
+      live = false;
+    };
+  }, [runId, zone.Ink]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !geom) return;
     let live = true;
     void (async () => {
-      const [ink, seals, close] = underlay
+      const [ink, seals, close, sealClasses] = underlay
         ? await Promise.all([
             loadReplaySeedInk(runId, zone.Ink).catch(() => null),
             zone.Seals ? loadRaster(runId, zone.Seals).catch(() => null) : null,
             zone.Close ? loadRaster(runId, zone.Close).catch(() => null) : null,
+            zone.Seals ? loadSealClasses(runId, zone.Seals).catch(() => null) : null,
           ])
-        : [null, null, null];
+        : [null, null, null, null];
       if (!live) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.fillStyle = PAPER;
       ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
-      const fill = (loops: [number, number][][], color: string) => {
-        ctx.fillStyle = color;
-        ctx.fill(new Path2D(ringPath(vp, loops)), "evenodd");
-      };
-      for (const room of geom.rooms) {
-        const rings = geom.polys.get(room.id);
-        if (rings)
-          fill(
-            rings.map((r) => r.points),
-            roomTone(room.disposition).fill,
-          );
-      }
-      for (const res of geom.residues) {
-        fill(res.loops, res.reason === "rejected" ? HELD_FILL : VOID_FILL);
+      if (plan) {
+        paintPlan(
+          ctx,
+          plan,
+          vp,
+          [zone.ZoneLoops as [number, number][][]],
+          PLAN_LAW.blackPoint,
+          PLAN_LAW.whitePoint,
+          PLAN_LAW.insideZoneOpacity,
+          PLAN_LAW.outsideZoneOpacity,
+        );
       }
       // gap (SHIMS.md #6): world.ts paintRaster has no speck filter — the python renderer hides
       // closure components < 0.25 sf; here single-cell closure speckle paints as-is (muted, at
       // least). The two renderers therefore disagree about what a closure "looks like".
       try {
         if (close) paintRaster(ctx, close, vp, CLOSE_M);
-        if (seals) paintRaster(ctx, seals, vp, SEAL_M);
+        if (sealClasses) {
+          paintClassRaster(ctx, sealClasses, vp, new Set([2, 4]), SEAL_DOOR);
+          paintClassRaster(ctx, sealClasses, vp, new Set([3]), SEAL_RUN);
+        } else if (seals) paintRaster(ctx, seals, vp, SEAL_DOOR);
         if (ink) paintRaster(ctx, ink, vp, INK_M);
       } catch {
         // evidence layer failed — the decision fills underneath stay visible
@@ -367,7 +403,7 @@ export function ZonePanel(props: {
     return () => {
       live = false;
     };
-  }, [runId, zone, vp, geom, underlay]);
+  }, [runId, zone, vp, geom, plan, underlay]);
 
   return (
     <div
@@ -386,70 +422,138 @@ export function ZonePanel(props: {
       >
         <canvas ref={canvasRef} width={vp.widthPx} height={vp.heightPx} />
         <svg className="absolute inset-0" width={vp.widthPx} height={vp.heightPx} aria-hidden>
+          <defs>
+            {geom?.rooms
+              .filter((room) => room.disposition === "held")
+              .map((room) => (
+                <HatchPattern
+                  key={`pattern:${room.id}`}
+                  id={heldPatternId(runId, zone, room.id)}
+                  color={candidateTone(zone.Zone, room.id).dark}
+                />
+              ))}
+            {geom?.residues
+              .filter((res) => res.reason === "rejected")
+              .map((res) => (
+                <HatchPattern
+                  key={`pattern:${res.id}`}
+                  id={heldPatternId(runId, zone, res.id)}
+                  color={candidateTone(zone.Zone, res.id).dark}
+                />
+              ))}
+          </defs>
           {geom?.rooms.map((room) => {
             const rings = geom.polys.get(room.id);
             if (!rings) return null;
             // A flag is DATA — the element id, not pixels. Hover-id is always live; the click
             // arms only when this exact pair is staged.
             const flagged = flags.has(`room:${room.id}`);
+            const hot = lit(`room:${room.id}`);
             // Unflagged, the room wears its PERSISTED disposition (SHIMS.md #3): unknown is a
             // dashed neutral that carries the caveat, never the accepted blue. Flagged, the
             // alarm overrides — a user's flag is louder than a provenance tint.
-            const unknown = room.disposition === null;
-            const tone = roomTone(room.disposition);
+            const tone = candidateTone(zone.Zone, room.id);
+            const d = ringPath(
+              vp,
+              rings.map((r) => r.points),
+            );
+            const [labelX, labelY] = toPx(vp, room.lx, room.ly);
             return (
-              <path
-                key={room.id}
-                d={ringPath(
-                  vp,
-                  rings.map((r) => r.points),
-                )}
-                fill={flagged ? "var(--r-alarm)" : "none"}
-                fillOpacity={flagged ? 0.18 : 0}
-                stroke={flagged ? "var(--r-alarm)" : tone.stroke}
-                strokeWidth={flagged ? 2.5 : unknown ? 1.25 : 1.75}
-                strokeDasharray={!flagged && unknown ? "2 2" : undefined}
-                pointerEvents="all"
-                style={{ cursor: stagedItem ? "crosshair" : "default" }}
-                onPointerMove={trackHover(`room ${room.id}`, flagged)}
-                onPointerLeave={() => setHover(null)}
-                onClick={stagedItem ? () => toggleFlag(`room:${room.id}`) : undefined}
-              >
-                {unknown ? <title>{UNKNOWN_TITLE}</title> : null}
-              </path>
+              <g key={room.id}>
+                <path
+                  d={d}
+                  fill={room.disposition === null ? VOID_FILL : tone.fill}
+                  stroke={hot || flagged ? "var(--r-alarm)" : "none"}
+                  strokeWidth={hot ? 4 : flagged ? 2.5 : 0}
+                  pointerEvents="all"
+                  style={{ cursor: stagedItem ? "crosshair" : "default" }}
+                  onPointerMove={trackHover(`room ${room.id}`, flagged)}
+                  onPointerLeave={() => setHover(null)}
+                  onClick={stagedItem ? () => toggleFlag(`room:${room.id}`) : undefined}
+                >
+                  {room.disposition === null ? <title>{UNKNOWN_TITLE}</title> : null}
+                </path>
+                {room.disposition === "held" ? (
+                  <path
+                    d={d}
+                    fill={`url(#${heldPatternId(runId, zone, room.id)})`}
+                    pointerEvents="none"
+                  />
+                ) : null}
+                {room.disposition ? (
+                  <text
+                    x={labelX}
+                    y={labelY}
+                    fill={LABEL}
+                    fontSize={LABEL_SIZE}
+                    fontFamily="monospace"
+                    textAnchor="middle"
+                    pointerEvents="none"
+                  >
+                    {room.disposition === "held" ? "H" : "A"} {room.id}
+                  </text>
+                ) : null}
+              </g>
             );
           })}
           {geom?.residues.map((res) => {
             const flagged = flags.has(`residue:${res.id}`);
+            const hot = lit(`residue:${res.id}`);
+            const held = res.reason === "rejected";
+            const tone = candidateTone(zone.Zone, res.id);
+            const d = ringPath(vp, res.loops);
+            const labelPoint = res.loops[0]?.[0];
             return (
-              <path
-                key={res.id}
-                d={ringPath(vp, res.loops)}
-                fill={flagged ? "var(--r-alarm)" : "none"}
-                fillOpacity={flagged ? 0.14 : 0}
-                stroke={
-                  flagged ? "var(--r-alarm)" : res.reason === "rejected" ? HELD_STROKE : VOID_STROKE
-                }
-                strokeWidth={flagged ? 2.5 : res.reason === "rejected" ? 1.6 : 0.75}
-                strokeDasharray={!flagged && res.reason === "rejected" ? "4 3" : undefined}
-                pointerEvents="all"
-                style={{ cursor: stagedItem ? "crosshair" : "default" }}
-                onPointerMove={trackHover(`residue ${res.id}`, flagged)}
-                onPointerLeave={() => setHover(null)}
-                onClick={stagedItem ? () => toggleFlag(`residue:${res.id}`) : undefined}
-              />
+              <g key={res.id}>
+                <path
+                  d={d}
+                  fill={held ? tone.fill : res.reason === "excluded" ? EXCLUDED_FILL : VOID_FILL}
+                  stroke={hot || flagged ? "var(--r-alarm)" : "none"}
+                  strokeWidth={hot ? 4 : flagged ? 2.5 : 0}
+                  pointerEvents="all"
+                  style={{ cursor: stagedItem ? "crosshair" : "default" }}
+                  onPointerMove={trackHover(`residue ${res.id}`, flagged)}
+                  onPointerLeave={() => setHover(null)}
+                  onClick={stagedItem ? () => toggleFlag(`residue:${res.id}`) : undefined}
+                />
+                {held ? (
+                  <>
+                    <path
+                      d={d}
+                      fill={`url(#${heldPatternId(runId, zone, res.id)})`}
+                      pointerEvents="none"
+                    />
+                    {labelPoint ? (
+                      <text
+                        x={toPx(vp, labelPoint[0], labelPoint[1])[0]}
+                        y={toPx(vp, labelPoint[0], labelPoint[1])[1]}
+                        fill={LABEL}
+                        fontSize={LABEL_SIZE}
+                        fontFamily="monospace"
+                        pointerEvents="none"
+                      >
+                        H {res.id}
+                      </text>
+                    ) : null}
+                  </>
+                ) : null}
+              </g>
             );
           })}
           <path
             d={ringPath(vp, zone.ZoneLoops as [number, number][][])}
             fill="none"
             stroke={ZONE_STROKE}
-            strokeWidth={1.5}
-            strokeDasharray={zone.triage.verdict === "hold" ? "7 4" : undefined}
-            opacity={0.9}
+            strokeWidth={ZONE_WIDTH}
+            strokeDasharray={ZONE_DASH}
           />
         </svg>
       </div>
+      {plan === null ? (
+        <div className="tele absolute bottom-1 left-1 border bg-background/90 px-1 text-[10px] text-muted-foreground">
+          plan unavailable in this package
+        </div>
+      ) : null}
       {/* Instant id popover — replaces the slow native tooltip on these elements. */}
       {hover && (
         <div
@@ -914,10 +1018,10 @@ function rasterFrame(r: Raster): Frame {
 // Level frame seeded by the FIRST raster seen and then held fixed → run stepping flip-books
 // in place instead of re-fitting.
 const frameCache = new Map<string, Frame>();
-function levelFrame(level: string, ink: Raster): Frame {
+function levelFrame(level: string, source: Frame): Frame {
   let f = frameCache.get(level);
   if (!f) {
-    f = rasterFrame(ink);
+    f = source;
     frameCache.set(level, f);
   }
   return f;
@@ -934,10 +1038,11 @@ function loadLevelCanvas(
   let cached = levelCanvasCache.get(key);
   if (!cached) {
     cached = (async () => {
-      const [ink, seals, close] = await Promise.all([
+      const [ink, seals, close, sealClasses] = await Promise.all([
         loadReplaySeedInk(runId, zone.Ink),
         zone.Seals ? loadRaster(runId, zone.Seals) : Promise.resolve(null),
         zone.Close ? loadRaster(runId, zone.Close) : Promise.resolve(null),
+        zone.Seals ? loadSealClasses(runId, zone.Seals) : Promise.resolve(null),
       ]);
       const vp: ZoneViewport = {
         ...rasterFrame(ink),
@@ -952,7 +1057,10 @@ function loadLevelCanvas(
       if (!ctx) throw new Error("2d context unavailable");
       // Paint order is the law: invented closures under, received ink LAST.
       if (close) paintRaster(ctx, close, vp, CLOSE_M);
-      if (seals) paintRaster(ctx, seals, vp, SEAL_M);
+      if (sealClasses) {
+        paintClassRaster(ctx, sealClasses, vp, new Set([2, 4]), SEAL_DOOR);
+        paintClassRaster(ctx, sealClasses, vp, new Set([3]), SEAL_RUN);
+      } else if (seals) paintRaster(ctx, seals, vp, SEAL_DOOR);
       paintRaster(ctx, ink, vp, INK_M);
       return { canvas, ink };
     })();
@@ -964,6 +1072,7 @@ function loadLevelCanvas(
 type LevelData = {
   report: RunReport;
   zones: ZoneRecord[];
+  plan: RegisteredPlan | null;
   ink: Raster | null;
   canvas: HTMLCanvasElement | null;
   geom: Map<string, ZoneGeometry>;
@@ -980,7 +1089,12 @@ function useLevelData(runId: string | null, level: string | null): LevelData | n
         const report = await loadRunReport(runId);
         const zones = report.Zones.filter((z) => z.Level === level);
         const anchor = zones.find((z) => z.Ink);
-        const painted = anchor ? await loadLevelCanvas(runId, anchor) : null;
+        const [plan, painted] = anchor
+          ? await Promise.all([
+              loadPlan(runId, anchor.Ink),
+              loadLevelCanvas(runId, anchor).catch(() => null),
+            ])
+          : [null, null];
         const geomEntries = await Promise.all(
           zones
             .filter((z) => z.Tsv)
@@ -990,6 +1104,7 @@ function useLevelData(runId: string | null, level: string | null): LevelData | n
         setData({
           report,
           zones,
+          plan,
           ink: painted?.ink ?? null,
           canvas: painted?.canvas ?? null,
           geom: new Map(geomEntries),
@@ -1027,6 +1142,7 @@ function PlanPane(props: {
   const { data, frame, view, setView, underlay } = props;
   const vp = useMemo(() => levelViewport(frame), [frame]);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const planCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drag = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null);
   const dragDist = useRef(0);
@@ -1054,6 +1170,25 @@ function PlanPane(props: {
     return () => el.removeEventListener("wheel", onWheel);
   }, [setView]);
 
+  useEffect(() => {
+    const canvas = planCanvasRef.current;
+    if (!canvas || !data?.plan) return;
+    canvas.width = vp.widthPx;
+    canvas.height = vp.heightPx;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    paintPlan(
+      ctx,
+      data.plan,
+      vp,
+      data.zones.map((zone) => zone.ZoneLoops as [number, number][][]),
+      PLAN_LAW.blackPoint,
+      PLAN_LAW.whitePoint,
+      PLAN_LAW.insideZoneOpacity,
+      PLAN_LAW.outsideZoneOpacity,
+    );
+  }, [data, vp]);
+
   // Blit the cached offscreen level canvas once per run/level — never on pan/zoom.
   useEffect(() => {
     const el = canvasRef.current;
@@ -1079,7 +1214,7 @@ function PlanPane(props: {
             key={`q:${zone.Zone}/${res.id}`}
             d={ringPath(vp, res.loops)}
             fillRule="evenodd"
-            fill={VOID_FILL}
+            fill={res.reason === "excluded" ? EXCLUDED_FILL : VOID_FILL}
             stroke="none"
           />,
         );
@@ -1087,22 +1222,25 @@ function PlanPane(props: {
       const dispositionById = new Map(geom.rooms.map((room) => [room.id, room.disposition]));
       for (const [roomId, rings] of geom.polys) {
         const disposition = dispositionById.get(roomId) ?? null;
-        const tone = roomTone(disposition);
+        const tone = candidateTone(zone.Zone, roomId);
+        const d = ringPath(
+          vp,
+          rings.map((ring) => ring.points),
+        );
         nodes.push(
-          <path
-            key={`r:${zone.Zone}/${roomId}`}
-            d={ringPath(
-              vp,
-              rings.map((ring) => ring.points),
-            )}
-            fillRule="evenodd"
-            fill={tone.fill}
-            stroke={tone.stroke}
-            strokeOpacity={0.85}
-            style={{ strokeWidth: "calc(var(--sw) * 1.4px)" }}
-          >
-            {disposition === null ? <title>{UNKNOWN_TITLE}</title> : null}
-          </path>,
+          <g key={`r:${zone.Zone}/${roomId}`}>
+            <path d={d} fillRule="evenodd" fill={disposition === null ? VOID_FILL : tone.fill}>
+              {disposition === null ? <title>{UNKNOWN_TITLE}</title> : null}
+            </path>
+            {disposition === "held" ? (
+              <>
+                <defs>
+                  <HatchPattern id={heldPatternId(props.runId, zone, roomId)} color={tone.dark} />
+                </defs>
+                <path d={d} fill={`url(#${heldPatternId(props.runId, zone, roomId)})`} />
+              </>
+            ) : null}
+          </g>,
         );
       }
     }
@@ -1119,16 +1257,28 @@ function PlanPane(props: {
       if (geom) {
         for (const res of geom.residues) {
           if (res.reason !== "rejected") continue;
+          const tone = candidateTone(zone.Zone, res.id);
+          const patternId = heldPatternId(props.runId, zone, res.id);
+          const labelPoint = res.loops[0]?.[0];
           held.push(
-            <path
-              key={`h:${zone.Zone}/${res.id}`}
-              d={ringPath(vp, res.loops)}
-              fillRule="evenodd"
-              fill="none"
-              stroke={HELD_STROKE}
-              strokeDasharray="6 4"
-              style={{ strokeWidth: "calc(var(--sw) * 1.6px)" }}
-            />,
+            <g key={`h:${zone.Zone}/${res.id}`}>
+              <defs>
+                <HatchPattern id={patternId} color={tone.dark} />
+              </defs>
+              <path d={ringPath(vp, res.loops)} fillRule="evenodd" fill={tone.fill} />
+              <path d={ringPath(vp, res.loops)} fillRule="evenodd" fill={`url(#${patternId})`} />
+              {labelPoint ? (
+                <text
+                  x={toPx(vp, labelPoint[0], labelPoint[1])[0]}
+                  y={toPx(vp, labelPoint[0], labelPoint[1])[1]}
+                  fill={LABEL}
+                  fontFamily="monospace"
+                  style={{ fontSize: `calc(var(--sw) * ${LABEL_SIZE}px)` }}
+                >
+                  H {res.id}
+                </text>
+              ) : null}
+            </g>,
           );
         }
       }
@@ -1143,8 +1293,8 @@ function PlanPane(props: {
             fillRule="evenodd"
             fill={lit ? MIST : "transparent"}
             stroke={ZONE_STROKE}
-            strokeDasharray={zone.triage.verdict === "hold" ? "8 5" : undefined}
-            style={{ strokeWidth: `calc(var(--sw) * ${lit ? 2.2 : 1.3}px)`, cursor: "pointer" }}
+            strokeDasharray={ZONE_DASH}
+            style={{ strokeWidth: `calc(var(--sw) * ${ZONE_WIDTH}px)`, cursor: "pointer" }}
             onPointerEnter={() => props.onHover(zone.Zone)}
             onPointerLeave={() => props.onHover(null)}
             onClick={() => {
@@ -1157,7 +1307,7 @@ function PlanPane(props: {
             pointerEvents="none"
             fill={LABEL}
             fontFamily="monospace"
-            style={{ fontSize: "calc(var(--sw) * 10px)" }}
+            style={{ fontSize: `calc(var(--sw) * ${LABEL_SIZE}px)` }}
           >
             {zone.Zone.split("#")[1] ?? zone.Zone} {zone.triage.verdict === "hold" ? "· hold" : ""}
           </text>
@@ -1207,16 +1357,12 @@ function PlanPane(props: {
       }}
     >
       <div style={worldStyle}>
-        <svg
-          width={vp.widthPx}
-          height={vp.heightPx}
-          viewBox={`0 0 ${vp.widthPx} ${vp.heightPx}`}
-          style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
-          role="img"
-          aria-label="accepted rooms"
-        >
-          {underLayer}
-        </svg>
+        {data?.plan ? (
+          <canvas
+            ref={planCanvasRef}
+            style={{ position: "absolute", inset: 0, width: vp.widthPx, height: vp.heightPx }}
+          />
+        ) : null}
         {inkTopLeft && data?.ink && (
           <canvas
             ref={canvasRef}
@@ -1232,6 +1378,16 @@ function PlanPane(props: {
             }}
           />
         )}
+        <svg
+          width={vp.widthPx}
+          height={vp.heightPx}
+          viewBox={`0 0 ${vp.widthPx} ${vp.heightPx}`}
+          style={{ position: "absolute", left: 0, top: 0, overflow: "visible" }}
+          role="img"
+          aria-label="candidate rooms"
+        >
+          {underLayer}
+        </svg>
         <svg
           width={vp.widthPx}
           height={vp.heightPx}
@@ -1256,6 +1412,11 @@ function PlanPane(props: {
           loading {props.runId}…
         </div>
       )}
+      {data && !data.plan ? (
+        <div className="tele absolute bottom-2 left-2 border bg-background/90 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+          plan unavailable in this package
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1309,17 +1470,17 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
       </span>
       <div className={cn("flex flex-col gap-0.5", !props.underlay && "opacity-40")}>
         {row(
-          sw("rgb(122,118,114)"),
+          sw(`rgba(${INK_M.join(",")})`),
           "received ink (solid)",
           "Wall pixels the solver actually received from the DWG. Solid + dark = drawn; muted so decisions stay readable.",
         )}
         {row(
-          sw("rgba(187,118,108,0.45)"),
+          sw(`rgba(${SEAL_DOOR.join(",")})`),
           "door-head seal (invented)",
           "Closure the solver INVENTED across door openings. Pale + translucent = synthetic — it can never read as a drawn wall.",
         )}
         {row(
-          sw("rgba(196,172,128,0.43)"),
+          sw(`rgba(${CLOSE_M.join(",")})`),
           "gap-close (invented)",
           "Closure the solver INVENTED across wall-run gaps. Pale + translucent = synthetic.",
         )}
@@ -1327,34 +1488,25 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
       <span className="mt-0.5 font-semibold uppercase tracking-wide">decisions — drawn on top</span>
       <div className="flex flex-col gap-0.5">
         {row(
-          sw(ACCEPT_FILL, { border: `1.5px solid ${ACCEPT_STROKE}` }),
+          sw(candidateTone("legend", "R01").fill),
           "accepted room",
           "A room the solver accepted into the takeoff — per the persisted disposition column.",
         )}
         {row(
-          line(HELD_STROKE, true),
+          sw(candidateTone("legend", "R02").fill),
           "held residue",
           "Area the solver found but did not trust — held for review, not counted.",
         )}
+        {row(sw(VOID_FILL), "room — disposition unknown", UNKNOWN_TITLE)}
         {row(
-          sw(UNKNOWN_FILL, { border: `1px dashed ${UNKNOWN_STROKE}` }),
-          "room — disposition unknown",
-          UNKNOWN_TITLE,
-        )}
-        {row(
-          sw(VOID_FILL, { border: `1px solid ${VOID_STROKE}` }),
+          sw(EXCLUDED_FILL),
           "void / excluded",
           "Area inside the zone the solver deliberately excluded.",
         )}
         {row(
-          line(ZONE_STROKE),
-          "zone — solid = solve",
-          "Zone boundary. Solid stroke: triage verdict solve.",
-        )}
-        {row(
           line(ZONE_STROKE, true),
-          "zone — dashed = hold",
-          "Zone boundary. Dashed stroke: triage verdict hold.",
+          "zone authority",
+          "Input zone boundary. Always a hairline dash; status never changes its stroke.",
         )}
       </div>
       <span className="mt-0.5 border-t pt-1 text-[9px]" style={{ borderColor: "var(--line-2)" }}>
@@ -1557,7 +1709,15 @@ function PlanDock(props: {
 
   const frame = useMemo(() => {
     if (!level) return null;
-    if (dataCur?.ink) return levelFrame(level, dataCur.ink);
+    if (dataCur?.plan) return levelFrame(level, planFrame(dataCur.plan.registration));
+    if (dataCur?.zones.length) {
+      return levelFrame(level, {
+        minX: Math.min(...dataCur.zones.map((zone) => zone.MinX)) - 4,
+        minY: Math.min(...dataCur.zones.map((zone) => zone.MinY)) - 4,
+        maxX: Math.max(...dataCur.zones.map((zone) => zone.MaxX)) + 4,
+        maxY: Math.max(...dataCur.zones.map((zone) => zone.MaxY)) + 4,
+      });
+    }
     return frameCache.get(level) ?? null;
   }, [level, dataCur]);
 
@@ -2271,7 +2431,7 @@ export default function RunBrowser() {
   const [error, setError] = useState<string | null>(null);
   const [curId, setCurId] = useState<string | null>(null);
   const [baseline, setBaseline] = useState<Baseline>("auto");
-  const [underlay, setUnderlay] = useState(true);
+  const [underlay, setUnderlay] = useState(false);
   const [changedOnly, setChangedOnly] = useState(false);
   const [planOpen, setPlanOpen] = useState(true);
   const [ledgerOpen, setLedgerOpen] = useState(false);
@@ -2683,6 +2843,7 @@ export default function RunBrowser() {
                   onToggleHighlight={toggleHighlight}
                   onSwing={swingLens}
                 />
+                <NoteInput item={item} />
               </div>
             );
           })}
@@ -2891,7 +3052,7 @@ export default function RunBrowser() {
             <button
               type="button"
               onClick={() => setUnderlay((u) => !u)}
-              title="Show/hide the raster evidence underlay (received ink + invented closures) on every panel and the plan."
+              title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
               className={cn(
                 "tele rounded-[2px] px-1.5 py-0.5 text-[10px]",
                 underlay
@@ -2900,7 +3061,7 @@ export default function RunBrowser() {
               )}
               style={underlay ? undefined : { borderColor: "var(--line-2)" }}
             >
-              underlay
+              ink evidence
             </button>
             <button
               type="button"

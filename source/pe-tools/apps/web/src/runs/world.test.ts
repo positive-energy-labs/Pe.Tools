@@ -5,11 +5,14 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  classesPathForSeals,
   modalZoneCount,
   pairZones,
   parseReplaySeedInk,
   parseZoneTsv,
   partiality,
+  planCanvasTransform,
+  planSidecarPaths,
   reportKeyed,
   replayPathForInk,
   type RunReport,
@@ -17,6 +20,30 @@ import {
   scoreBoards,
   type ZoneRecord,
 } from "./world";
+
+describe("registered plan substrate", () => {
+  it("derives the plan sidecars and maps native plan pixels into the zone viewport", () => {
+    expect(planSidecarPaths("input/ink_Level_0_Lower_Level.bin")).toEqual({
+      image: "input/plan_Level_0_Lower_Level.png",
+      registration: "input/plan_Level_0_Lower_Level.json",
+    });
+    expect(classesPathForSeals("input/seals_Level_0_Lower_Level.bin")).toBe(
+      "input/classes_Level_0_Lower_Level.bin",
+    );
+    expect(
+      planCanvasTransform(
+        {
+          width: 100,
+          height: 200,
+          topLeft: [10, 40],
+          topRight: [30, 40],
+          bottomLeft: [10, 0],
+        },
+        { minX: 0, minY: 0, maxX: 50, maxY: 50, pxPerFt: 2, widthPx: 100, heightPx: 100 },
+      ),
+    ).toEqual([0.4, -0, 0, 0.4, 20, 20]);
+  });
+});
 
 describe("replay seed ink", () => {
   it("reads the solver's SKAT seed bits and derives the replay path from the legacy Ink locator", () => {
