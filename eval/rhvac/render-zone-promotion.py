@@ -47,6 +47,10 @@ ZONE = rgba(LAW["zone"]["stroke"]["rgba"])
 ZONE_WIDTH = LAW["zone"]["stroke"]["widthPx"]
 ZONE_DASH = tuple(LAW["zone"]["stroke"]["dash"])
 CANDIDATE_ALPHA = LAW["candidate"]["fill"]["alpha"]
+CANDIDATE_HUE = LAW["candidate"]["fill"]["hue"]
+CANDIDATE_SATURATION = LAW["candidate"]["fill"]["saturationPct"] / 100
+CANDIDATE_LIGHTNESS = LAW["candidate"]["fill"]["lightnessPct"] / 100
+CANDIDATE_DARK_LIGHTNESS = LAW["candidate"]["fill"]["darkenedLightnessPct"] / 100
 LABEL_COLOR = rgba(LAW["label"]["rgba"])
 LABEL_SIZE = LAW["label"]["sizePx"]
 
@@ -201,17 +205,40 @@ def composite_mask(image, mask, color, box=(0, 0)):
 
 
 def darkened(color):
-    return tuple(round(channel * 0.58) for channel in color[:3]) + (255,)
+    hue = colorsys.rgb_to_hls(*(channel / 255 for channel in color[:3]))[0]
+    return tuple(round(channel * 255) for channel in colorsys.hls_to_rgb(
+        hue, CANDIDATE_DARK_LIGHTNESS, CANDIDATE_SATURATION)) + (255,)
+
+
+def candidate_style_color(name, fill):
+    if name == "fillDarkened":
+        return darkened(fill)
+    raise SystemExit(f"unsupported candidate style color: {name}")
+
+
+def _atlas_color(key):
+    """Law-defined SHA-256 seed stepped around the HSL wheel by the golden angle."""
+    if CANDIDATE_HUE["generator"] != "golden-angle" \
+            or CANDIDATE_HUE["seed"] != "sha256(zone+candidateId)":
+        raise SystemExit("unsupported candidate hue law")
+    seed = int.from_bytes(hashlib.sha256(key.encode("utf-8")).digest(), "big")
+    step_millidegrees = round(CANDIDATE_HUE["stepDeg"] * 1000)
+    hue = (seed * step_millidegrees % 360_000) / 360_000
+    return tuple(round(component * 255) for component in colorsys.hls_to_rgb(
+        hue, CANDIDATE_LIGHTNESS, CANDIDATE_SATURATION))
 
 
 def draw_hatch(image, mask, color, hatch, box=(0, 0)):
     spacing = hatch["spacingPx"]
     lines = Image.new("RGBA", mask.size)
     draw = ImageDraw.Draw(lines)
-    # The law currently declares 45 degrees. The formula supports either diagonal direction.
-    slope = -1 if hatch["angleDeg"] % 180 == 45 else 1
-    for offset in range(-mask.height, mask.width + mask.height, spacing):
-        draw.line((offset, 0, offset + slope * mask.height, mask.height),
+    tangent = math.tan(math.radians(hatch["angleDeg"]))
+    if abs(tangent) < 1e-9:
+        raise SystemExit("candidate hatch angle must not be horizontal")
+    delta_x = -round(mask.height / tangent)
+    margin = abs(delta_x)
+    for offset in range(-margin, mask.width + margin, spacing):
+        draw.line((offset, 0, offset + delta_x, mask.height),
                   fill=color, width=hatch["widthPx"])
     image.paste(lines, box, ImageChops.multiply(mask, lines.getchannel("A")))
 
@@ -647,17 +674,21 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
 
     def candidate_outline_layer():
         outline = LAW["candidate"]["outline"]["forensic"]
-        for key, (status, _candidate_id, loops) in zip(keys, candidate_rows):
-            color = darkened(colors[key])
-            if status in ("held", "reviewHeld"):
-                mask, box = candidate_masks[key]
-                draw_hatch(image, mask, color,
-                           LAW["candidate"]["status"][status]["hatch"], box)
+        for key, (_status, _candidate_id, loops) in zip(keys, candidate_rows):
+            color = candidate_style_color(outline["color"], colors[key])
             draw = ImageDraw.Draw(image)
             for loop in loops:
                 if len(loop) >= 2:
                     draw.line([point(value) for value in loop] + [point(loop[0])],
                               fill=color, width=outline["widthPx"])
+
+    def candidate_hatch_layer():
+        for key, (status, _candidate_id, _loops) in zip(keys, candidate_rows):
+            hatch = LAW["candidate"]["status"][status]["hatch"]
+            if hatch:
+                mask, box = candidate_masks[key]
+                draw_hatch(image, mask,
+                           candidate_style_color(hatch["color"], colors[key]), hatch, box)
 
     def zone_layer():
         draw = ImageDraw.Draw(image)
@@ -684,6 +715,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         "voidWash": lambda: wash_layer("void", VOID),
         "excludedWash": lambda: wash_layer("excluded", EXCLUDED),
         "candidateFill": candidate_fill_layer,
+        "candidateHatch": candidate_hatch_layer,
         "candidateOutline": candidate_outline_layer,
         "zoneOutline": zone_layer,
         "label": label_layer,
@@ -856,9 +888,17 @@ PIXEL_LEGEND = (
     (SEAL_RUN, "solid", "wall-run tint", None),
     (CLOSE, "solid", "gap-close tint", None),
 )
+_LEGEND_CANDIDATE = _atlas_color("visual-law legend")
+_LEGEND_CANDIDATE_FILL = tuple(round(
+    channel * CANDIDATE_ALPHA + 255 * (1 - CANDIDATE_ALPHA))
+    for channel in _LEGEND_CANDIDATE)
 DECISION_LEGEND = (
-    ((30, 80, 130), "decision", "candidate", (80, 170, 240)),
-    ((30, 80, 130), "hatch", "held", (80, 170, 240)),
+    (candidate_style_color(LAW["candidate"]["outline"]["forensic"]["color"],
+                           _LEGEND_CANDIDATE),
+     "decision", "candidate", _LEGEND_CANDIDATE_FILL),
+    (candidate_style_color(LAW["candidate"]["status"]["held"]["hatch"]["color"],
+                           _LEGEND_CANDIDATE),
+     "hatch", "held", _LEGEND_CANDIDATE_FILL),
     (EXCLUDED, "solid", "excluded wash", None),
     (VOID, "solid", "void wash", None),
 )
@@ -908,58 +948,18 @@ def render_contact_sheet(report, panels, contact_path):
     contact.save(contact_path)
 
 
-def _atlas_color(key, salt=0):
-    """Stable hue keyed independently of disposition, neighbors, and report order."""
-    value = hashlib.sha256(key.encode("utf-8")).digest()
-    hue = int.from_bytes(value[:8], "big") / (1 << 64)
-    variants = ((0.84, 0.94), (1.00, 0.62), (0.72, 0.78), (0.92, 0.72),
-                (0.76, 0.98), (1.00, 0.82), (0.68, 0.66), (0.88, 0.56))
-    saturation, brightness = variants[salt % len(variants)]
-    rgb = colorsys.hsv_to_rgb(hue, saturation, brightness)
-    return tuple(round(component * 255) for component in rgb)
-
-
 def _atlas_candidate_key(zone, candidate_id):
-    return f"{field(zone, 'zoneKey') or zone['Zone']}\0{candidate_id}"
+    return f"{zone['Zone']}{candidate_id}"
 
 
 def _atlas_colors(keys):
-    colors, used = {}, set()
-    for key in sorted(keys):
-        choices = [_atlas_color(key, salt) for salt in range(8)]
-        color = next((choice for choice in choices if choice not in used), choices[0])
-        colors[key] = color
-        used.add(color)
-    return colors
+    return {key: _atlas_color(key) for key in keys}
 
 
 def _adjacent_colors(candidates, pixel_feet):
-    rows = []
-    for candidate in candidates:
-        points = [point for loop in candidate["loops"] for point in loop]
-        bounds = None if not points else (
-            min(point[0] for point in points), min(point[1] for point in points),
-            max(point[0] for point in points), max(point[1] for point in points))
-        rows.append((_atlas_candidate_key(candidate["zone"], candidate["id"]), bounds))
-    colors = {}
-    # ponytail: conservative O(n^2) bounding-box adjacency is exact enough for tens of rooms;
-    # use a spatial index only when a level reaches hundreds of candidates.
-    for index, (key, bounds) in enumerate(rows):
-        adjacent = []
-        for other_key, other in rows[:index]:
-            if other_key not in colors or bounds is None or other is None:
-                continue
-            dx = max(other[0] - bounds[2], bounds[0] - other[2], 0)
-            dy = max(other[1] - bounds[3], bounds[1] - other[3], 0)
-            if math.hypot(dx, dy) <= pixel_feet * 1.5:
-                adjacent.append(colors[other_key])
-        choices = [_atlas_color(key, salt) for salt in range(8)]
-        color = next((choice for choice in choices
-                      if all(math.dist(choice, other) >= 80 for other in adjacent)),
-                     max(choices, key=lambda choice: min(
-                         (math.dist(choice, other) for other in adjacent), default=math.inf)))
-        colors[key] = color
-    return colors
+    del pixel_feet
+    return _atlas_colors(_atlas_candidate_key(candidate["zone"], candidate["id"])
+                         for candidate in candidates)
 
 
 def _draw_dashed(draw, points, fill, width, dash):
@@ -1088,7 +1088,8 @@ def render_level_verdict(root, level, zones, output=None, law=None):
             hatch = law["candidate"]["status"][candidate["status"]]["hatch"]
             if hatch:
                 mask, box = candidate_mask(candidate)
-                draw_hatch(image, mask, darkened(colors[key]), hatch, box)
+                draw_hatch(image, mask,
+                           candidate_style_color(hatch["color"], colors[key]), hatch, box)
 
     def zone_layer():
         draw = ImageDraw.Draw(image)

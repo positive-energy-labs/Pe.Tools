@@ -128,6 +128,7 @@ class ReviewTakeoffTests(unittest.TestCase):
         after = renderer._atlas_colors(["another-zone\0R01", key(held),
                                         "stable-zone\0R03"])
 
+        self.assertEqual(key(accepted), "Test#00R02")
         self.assertEqual(key(accepted), key(held))
         self.assertEqual(before[key(accepted)], after[key(held)])
         self.assertEqual(before["stable-zone\0R03"], after["stable-zone\0R03"])
@@ -573,11 +574,24 @@ class ReviewTakeoffTests(unittest.TestCase):
             subprocess.run([sys.executable, str(ZONE_SCRIPT), str(root / "report.json")],
                            check=True, cwd=HERE, capture_output=True, text=True)
 
-            # The renderer follows the law even though its current gray/alpha pairs both
-            # composite to 226 over white. Lane R reports that declaration-level collision.
             with Image.open(root / "review" / "01_Test_00.png") as panel:
-                self.assertEqual(panel.getpixel((430, 360)), (226, 226, 226))
-                self.assertEqual(panel.getpixel((470, 360)), (226, 226, 226))
+                self.assertEqual(panel.getpixel((430, 360)), (237, 186, 159))
+                self.assertEqual(panel.getpixel((470, 360)), (214, 214, 214))
+
+    def test_visual_law_washes_never_composite_to_the_same_rgb_over_white(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("wash_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        pixels = []
+        for name in ("voidWash", "excludedWash"):
+            image = Image.new("RGBA", (1, 1), "white")
+            renderer.composite_mask(image, Image.new("L", (1, 1), 255),
+                                    renderer.LAW[name]["rgba"])
+            pixel = image.convert("RGB").getpixel((0, 0))
+            self.assertEqual(list(pixel), renderer.LAW[name]["compositesOverWhiteTo"])
+            pixels.append(pixel)
+        self.assertNotEqual(*pixels)
 
     def test_zone_promotion_renderer_refuses_missing_replay(self):
         # The stale ink_*.bin lane is deleted: no replay seed ink = hard error naming
