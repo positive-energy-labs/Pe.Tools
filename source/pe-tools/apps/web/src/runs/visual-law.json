@@ -42,6 +42,11 @@
       "alpha": 0.45,
       "hueKey": "zone+candidateId",
       "adjacentDistinct": true,
+      "$amendment": "v1.1 2026-08-23. v1 said 'saturated' and 'fillDarkened' without numbers, so each consumer would have invented its own and the two surfaces would have drifted on day one. These are the values lane W shipped; they are now the law.",
+      "hue": { "generator": "golden-angle", "stepDeg": 137.507, "seed": "sha256(zone+candidateId)" },
+      "saturationPct": 82,
+      "lightnessPct": 48,
+      "darkenedLightnessPct": 28,
       "$comment": "Saturated translucent, stable across runs so an A/B keeps its colours. Adjacent candidates must differ enough that the seam between two fills reads as a boundary at 1px."
     },
     "outline": {
