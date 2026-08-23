@@ -11,22 +11,25 @@ export const CLOSE_M = law.invented.close as Rgba;
 export const ZONE_STROKE = `rgba(${law.zone.stroke.rgba.join(",")})`;
 export const ZONE_WIDTH = law.zone.stroke.widthPx;
 export const ZONE_DASH = law.zone.stroke.dash.join(" ");
-export const VOID_OUTLINE = `rgba(${law.void.outline.rgba.join(",")})`;
-export const VOID_HATCH = law.void.hatch;
-export const EXCLUDED_OUTLINE = `rgba(${law.excluded.outline.rgba.join(",")})`;
-export const EXCLUDED_HATCH = law.excluded.hatch;
+const residueTreatment = (residue: typeof law.void) => ({
+  fill: residue.fill,
+  outline: {
+    color: `rgba(${residue.outline.rgba.join(",")})`,
+    widthPx: residue.outline.widthPx,
+  },
+  hatch: {
+    angleDeg: residue.hatch.angleDeg,
+    color: `rgba(${residue.hatch.rgba.join(",")})`,
+    spacingPx: residue.hatch.spacingPx,
+    widthPx: residue.hatch.widthPx,
+  },
+});
 
-// COMPILE BRIDGE - delete with the v1.3 outline+hatch round.
-// Law v1.3 sets `fill: null` for void and excluded: they are outline + hatch now, because a
-// solid wash cannot be both legible on a 1 ft sliver and transparent on a 2,579 sf blob
-// (Lower Level#03 rendered opaque and hid 85% of its own zone). The viewer still paints a
-// solid, so until it draws the real treatment these derive a MUCH weaker fill from the hatch
-// colour - excluded drops alpha 110 -> 68 - so the plan stays visible in the meantime.
-// Consumers to migrate: browser.tsx (ZonePanel, plan dock, legend), feedback/composite.ts.
-const bridgeFill = (hatch: { rgba: number[] }) =>
-  `rgba(${hatch.rgba[0]},${hatch.rgba[1]},${hatch.rgba[2]},${Math.round(hatch.rgba[3] * 0.4)})`;
-export const VOID_FILL = bridgeFill(law.void.hatch);
-export const EXCLUDED_FILL = bridgeFill(law.excluded.hatch);
+export const RESIDUE_TREATMENT = {
+  void: residueTreatment(law.void),
+  excluded: residueTreatment(law.excluded),
+};
+export type ResidueKind = keyof typeof RESIDUE_TREATMENT;
 export const LABEL = `rgba(${law.label.rgba.join(",")})`;
 export const LABEL_SIZE = law.label.sizePx;
 export const HELD_HATCH = law.candidate.status.held.hatch;

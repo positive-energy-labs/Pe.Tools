@@ -12,16 +12,16 @@ import {
   alarmColor,
   candidateTone,
   CLOSE_M,
-  EXCLUDED_FILL,
   HELD_HATCH,
   INK_M,
   LABEL,
   LABEL_SIZE,
   PAPER,
   PLAN_LAW,
+  RESIDUE_TREATMENT,
+  type ResidueKind,
   SEAL_DOOR,
   SEAL_RUN,
-  VOID_FILL,
   ZONE_DASH,
   ZONE_STROKE,
   ZONE_WIDTH,
@@ -72,9 +72,12 @@ function overlaySvg(
   const alarm = alarmColor();
   const defs: string[] = [];
   const parts: string[] = [];
-  const hatch = (id: string, color: string) => {
+  const hatch = (
+    id: string,
+    treatment: { angleDeg: number; color: string; spacingPx: number; widthPx: number },
+  ) => {
     defs.push(
-      `<pattern id="${id}" width="${HELD_HATCH.spacingPx}" height="${HELD_HATCH.spacingPx}" patternUnits="userSpaceOnUse" patternTransform="rotate(${HELD_HATCH.angleDeg})"><line y2="${HELD_HATCH.spacingPx}" stroke="${color}" stroke-width="${HELD_HATCH.widthPx}"/></pattern>`,
+      `<pattern id="${id}" width="${treatment.spacingPx}" height="${treatment.spacingPx}" patternUnits="userSpaceOnUse" patternTransform="rotate(${treatment.angleDeg})"><line y2="${treatment.spacingPx}" stroke="${treatment.color}" stroke-width="${treatment.widthPx}"/></pattern>`,
     );
   };
   for (const room of geom.rooms) {
@@ -84,21 +87,23 @@ function overlaySvg(
     // Unflagged rooms wear their PERSISTED disposition, same as the screen — an unknown room is
     // a dashed neutral, never the accepted blue (SHIMS.md #3 close).
     const tone = candidateTone(zone.Zone, room.id);
-    parts.push(
-      `<path d="${ringPath(
-        vp,
-        rings.map((r) => r.points),
-      )}" fill="${room.disposition === null ? VOID_FILL : tone.fill}" stroke="${flagged ? alarm : "none"}" stroke-width="${flagged ? 2.5 : 0}"/>`,
+    const residue = room.disposition === null ? RESIDUE_TREATMENT.void : null;
+    const d = ringPath(
+      vp,
+      rings.map((r) => r.points),
     );
+    parts.push(
+      `<path d="${d}" fill="${residue ? "none" : tone.fill}" stroke="${flagged ? alarm : (residue?.outline.color ?? "none")}" stroke-width="${flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}"/>`,
+    );
+    if (residue) {
+      const id = `void-room-${room.id}`;
+      hatch(id, residue.hatch);
+      parts.push(`<path d="${d}" fill="url(#${id})"/>`);
+    }
     if (room.disposition === "held") {
       const id = `held-room-${room.id}`;
-      hatch(id, tone.dark);
-      parts.push(
-        `<path d="${ringPath(
-          vp,
-          rings.map((r) => r.points),
-        )}" fill="url(#${id})"/>`,
-      );
+      hatch(id, { ...HELD_HATCH, color: tone.dark });
+      parts.push(`<path d="${d}" fill="url(#${id})"/>`);
     }
     if (room.disposition) {
       parts.push(
@@ -120,14 +125,22 @@ function overlaySvg(
   for (const res of geom.residues) {
     const flagged = flags.has(`residue:${res.id}`);
     const held = res.reason === "rejected";
+    const kind: ResidueKind = res.reason === "excluded" ? "excluded" : "void";
+    const residue = held ? null : RESIDUE_TREATMENT[kind];
     const tone = candidateTone(zone.Zone, res.id);
+    const d = ringPath(vp, res.loops);
     parts.push(
-      `<path d="${ringPath(vp, res.loops)}" fill="${held ? tone.fill : res.reason === "excluded" ? EXCLUDED_FILL : VOID_FILL}" stroke="${flagged ? alarm : "none"}" stroke-width="${flagged ? 2.5 : 0}"/>`,
+      `<path d="${d}" fill="${held ? tone.fill : "none"}" stroke="${flagged ? alarm : (residue?.outline.color ?? "none")}" stroke-width="${flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}"/>`,
     );
+    if (residue) {
+      const id = `${kind}-residue-${res.id}`;
+      hatch(id, residue.hatch);
+      parts.push(`<path d="${d}" fill="url(#${id})"/>`);
+    }
     if (held) {
       const id = `held-residue-${res.id}`;
-      hatch(id, tone.dark);
-      parts.push(`<path d="${ringPath(vp, res.loops)}" fill="url(#${id})"/>`);
+      hatch(id, { ...HELD_HATCH, color: tone.dark });
+      parts.push(`<path d="${d}" fill="url(#${id})"/>`);
       const point = res.loops[0]?.[0];
       if (point) {
         parts.push(
