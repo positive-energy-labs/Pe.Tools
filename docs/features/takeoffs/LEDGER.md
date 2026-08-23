@@ -1,6 +1,7 @@
 # takeoffs ledger
 
 ## Decided
+- 2026-08-23 — A disconnected exact Zone component untouched by Accepted, Held, or void is retained whole as Held only when it meets the existing room minimum and strict editability contract. LL06 is the sole case across 46 components: +90.1 sf Held, −90.1 sf Excluded, Accepted byte-invariant; blind review promotes the whole zone to PASS and the board reaches 39/45 PASS. (161/161.)
 - 2026-08-22 — Visual keys separate candidate identity fill, disposition fill/outline, received solid raster, synthetic dither, boundary support, and zone authority. Zone is an outline-only mask: plan outside is 30%; bare-zone provenance adds no overlay. The atlas contact carries one global key while standalone panels retain the full key. (16/16; 45 panels / 190 inputs verified.)
 - 2026-08-22 — When a zone produces exactly one raw candidate and that sole candidate is rejected as ink-unbacked, the unsupported internal divider is not allowed to create Excluded scope: retain the authoritative zone whole as Held. This uniquely fixes Lower04 (+501 sf Held, −471 sf Excluded), preserves the 750 sf small-zone policy, and fresh A/B review passes it; board reaches 37/45 PASS. (154/154.)
 - 2026-08-22 — Accepted rooms are held when coherent wall-run/gap-close splice runs outnumber their actual polygon vertices: this uniquely demotes fabricated Main08/R04 (1/68 Accepted, zero collateral changes) while retaining its geometry as Held. Fresh A/B review passes R03, accounting, and the new disposition; board reaches 36/45 PASS. (153/153; 45/61 verified.)

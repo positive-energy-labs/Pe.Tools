@@ -219,6 +219,37 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Unclaimed_disconnected_zone_component_is_held_whole()
+    {
+        var source = new TakeoffResult {
+            LevelName = "Level 1",
+            Rooms = { Room("covered", (20, 0), (30, 0), (30, 10), (20, 10)) },
+            DomainSqft = 100,
+        };
+        var zone = new ZoneScope {
+            Name = "two islands",
+            Loops = {
+                new List<double[]> { new[] { 0d, 0d }, new[] { 10d, 0d },
+                    new[] { 10d, 10d }, new[] { 0d, 10d } },
+                new List<double[]> { new[] { 20d, 0d }, new[] { 30d, 0d },
+                    new[] { 30d, 10d }, new[] { 20d, 10d } },
+            },
+        };
+
+        var promotion = TakeoffPromotion.PromoteZone(
+            source, zone, Options(minimumRoomSqft: 30, boundarySimplifyFt: 0), (_, _) => 0);
+
+        Assert.Multiple(() => {
+            Assert.That(promotion.Result.Rooms.Single().Id, Is.EqualTo("covered"));
+            Assert.That(promotion.Result.Residues.Count(residue =>
+                residue.Reason == ResidueReason.Rejected), Is.EqualTo(1));
+            Assert.That(promotion.Diagnostics.HeldSqft, Is.EqualTo(100).Within(1e-6));
+            Assert.That(promotion.Diagnostics.ExcludedSqft, Is.Zero.Within(1e-6));
+            Assert.That(promotion.Diagnostics.Rejections["zone-component:held"], Is.EqualTo(1));
+        });
+    }
+
+    [Test]
     public void Adjacent_promoted_rooms_keep_one_exact_shared_orthogonal_edge()
     {
         var source = new TakeoffResult {

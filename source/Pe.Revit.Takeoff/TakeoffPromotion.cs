@@ -1637,10 +1637,46 @@ public static class TakeoffPromotion
 
     private static void RunDisposition(PromotionState state)
     {
+        RestoreHeldCandidateGeometry(state.Result, state.EvidencePartition);
         state.HeldRooms = state.Result.Residues
             .Count(residue => residue.Reason == ResidueReason.Rejected);
-        RestoreHeldCandidateGeometry(state.Result, state.EvidencePartition);
+        int heldComponents = HoldUnclaimedZoneComponents(state);
+        state.HeldRooms += heldComponents;
+        if (heldComponents > 0)
+            state.Rejections["zone-component:held"] = heldComponents;
         RebuildResiduesInsideZone(state.Result, state.ZoneGeometry);
+    }
+
+    private static int HoldUnclaimedZoneComponents(PromotionState state)
+    {
+        var claimed = state.Result.Rooms.Select(room => (Geometry)ToPolygon(room))
+            .Concat(state.Result.Residues
+                .Where(residue => residue.Reason != ResidueReason.Excluded)
+                .Select(ToGeometry)).ToList();
+        Geometry claimedGeometry = claimed.Count == 0
+            ? GeometryFactory.CreatePolygon()
+            : Polygonal(OverlayNGRobust.Union(claimed));
+        int held = 0;
+        foreach (var component in PolygonParts(state.ZoneGeometry))
+        {
+            if (component.Area < state.Options.MinimumPromotedRoomSqft
+                || (!claimedGeometry.IsEmpty
+                    && Intersection(component, claimedGeometry).Area > Epsilon))
+                continue;
+            var label = component.InteriorPoint;
+            var candidate = Clone(new RoomResult {
+                Id = $"ZONE-COMPONENT-HELD:{held + 1}",
+                LabelX = label.X,
+                LabelY = label.Y,
+            }, component);
+            if (!TakeoffEditability.Evaluate(ToLevel(state.Result, [candidate]))
+                    .IsStrictlyEditable)
+                continue;
+            AddResidues(state.Result.Residues, candidate.Id, ResidueReason.Rejected,
+                component, 0);
+            held++;
+        }
+        return held;
     }
 
     /// <summary>Measures the finished disposition, enforces the binding laws, and reports.</summary>
