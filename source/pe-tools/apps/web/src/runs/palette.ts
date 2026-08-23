@@ -1,53 +1,44 @@
-// The one /runs palette — shared by the on-screen surface (browser.tsx) and the export
-// compositor (feedback/composite.ts) so the PNG an agent reads matches the screen kaitpw ruled
-// on. Light-mode literals: /runs pins light chrome (kaitpw ruling, promotion round 2).
-//
-// Underlay law, round-2 revision (kaitpw ruling, feedback round 2 2026-08-17): the checkerboard
-// screening for invented closures DIED — "the dithering or whatever on the plan image is
-// confusing. try another approach like simple opacity." The honesty semantics survive the new
-// treatment: received ink is the only near-opaque neutral raster; invented closures paint
-// continuous but TRANSLUCENT and warm-tinted. Solid dark = received/drawn; pale translucent
-// tint = invented/synthetic. Volume changed, claim did not.
+import law from "./visual-law.json";
 
-export const PAPER = "#fcfbf9";
+type Rgba = [number, number, number, number];
 
-// evidence (muted): received ink near-opaque neutral; invented closures translucent warm tints
-export const INK_M: [number, number, number, number] = [122, 118, 114, 235];
-export const SEAL_M: [number, number, number, number] = [187, 118, 108, 115];
-export const CLOSE_M: [number, number, number, number] = [196, 172, 128, 110];
+export const VISUAL_LAW = law;
+export const PLAN_LAW = law.substrate.plan;
+export const INK_M = law.substrate.ink.rgba as Rgba;
+export const SEAL_DOOR = law.invented.sealDoor as Rgba;
+export const SEAL_RUN = law.invented.sealRun as Rgba;
+export const CLOSE_M = law.invented.close as Rgba;
+export const ZONE_STROKE = `rgba(${law.zone.stroke.rgba.join(",")})`;
+export const ZONE_WIDTH = law.zone.stroke.widthPx;
+export const ZONE_DASH = law.zone.stroke.dash.join(" ");
+export const VOID_FILL = `rgba(${law.voidWash.rgba.join(",")})`;
+export const EXCLUDED_FILL = `rgba(${law.excludedWash.rgba.join(",")})`;
+export const LABEL = `rgba(${law.label.rgba.join(",")})`;
+export const LABEL_SIZE = law.label.sizePx;
+export const HELD_HATCH = law.candidate.status.held.hatch;
 
-// decisions (rebalanced UP against the muted paper)
-export const ACCEPT_STROKE = "rgb(23,98,135)";
-export const ACCEPT_FILL = "rgba(35,118,158,0.12)";
-export const HELD_STROKE = "#a97e16";
-export const HELD_FILL = "rgba(196,150,44,0.10)";
-export const VOID_STROKE = "rgba(146,142,138,0.7)";
-export const VOID_FILL = "rgba(146,142,138,0.07)";
-export const ZONE_STROKE = "rgb(108,52,140)";
-export const MIST = "rgba(100,116,139,0.14)"; // focus-is-mist law, even on the drawing
-export const LABEL = "rgba(120,113,108,0.85)";
+export const PAPER = "#fff";
+export const MIST = "rgba(100,116,139,0.14)";
 
-/** The one alarm, resolved from the live tokens so exports match the screen; light-mode
- * literal when the DOM is not around. */
 export function alarmColor(): string {
   if (typeof document === "undefined") return "#8e4120";
-  const v = getComputedStyle(document.documentElement).getPropertyValue("--r-alarm").trim();
-  return v || "#8e4120";
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue("--r-alarm").trim() || "#8e4120"
+  );
 }
 
-// disposition-unknown rooms: pre-column packages (SHIMS.md #3 close). Neutral warm gray —
-// deliberately NOT the accepted blue; unknown must never dress as accepted, on screen OR in an
-// exported PNG.
-export const UNKNOWN_STROKE = "rgba(120,113,108,0.9)";
-export const UNKNOWN_FILL = "rgba(120,113,108,0.08)";
+function hash(value: string): number {
+  let result = 2166136261;
+  for (let i = 0; i < value.length; i++) result = Math.imul(result ^ value.charCodeAt(i), 16777619);
+  return result >>> 0;
+}
 
-/** Room tones follow the PERSISTED disposition column only. Lives here, not in browser.tsx, so
- * the export compositor cannot drift back to painting every room as accepted. */
-export function roomTone(disposition: "accepted" | "held" | null): {
-  stroke: string;
-  fill: string;
-} {
-  if (disposition === "accepted") return { stroke: ACCEPT_STROKE, fill: ACCEPT_FILL };
-  if (disposition === "held") return { stroke: HELD_STROKE, fill: HELD_FILL };
-  return { stroke: UNKNOWN_STROKE, fill: UNKNOWN_FILL };
+/** Stable saturated candidate color. The golden-angle step keeps consecutive candidate ids apart. */
+export function candidateTone(zone: string, candidateId: string): { fill: string; dark: string } {
+  const ordinal = Number(candidateId.match(/\d+/)?.[0] ?? hash(candidateId));
+  const hue = ((hash(zone) % 360) + ordinal * 137.508) % 360;
+  return {
+    fill: `hsl(${hue} 82% 48% / ${law.candidate.fill.alpha})`,
+    dark: `hsl(${hue} 82% 28%)`,
+  };
 }
