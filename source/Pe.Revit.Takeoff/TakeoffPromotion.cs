@@ -1650,19 +1650,20 @@ public static class TakeoffPromotion
         if (heldComponents > 0)
             state.Rejections["zone-component:held"] = heldComponents;
         RebuildResiduesInsideZone(state.Result, state.ZoneGeometry);
-        int filled = FillHeldInteriorGaps(state.Result, state.ZoneGeometry);
-        if (filled > 0) state.Rejections["disposition:held-gap-filled"] = filled;
+        int filled = FillInteriorResidueGaps(state.Result, state.ZoneGeometry);
+        if (filled > 0) state.Rejections["disposition:interior-gap-filled"] = filled;
     }
 
     /// <summary>
-    /// Rejoins an internal Excluded component to an existing Held room. The zone-edge refusal
+    /// Rejoins an internal Excluded component to an existing non-Excluded owner. Held wins when
+    /// several owners qualify. The zone-edge refusal
     /// leaves the exterior narrow band untouched; choosing the longest shared boundary resolves
     /// multi-room junction nuclei without changing any Accepted geometry or inventing a room.
     /// </summary>
-    internal static int FillHeldInteriorGaps(TakeoffResult result, Geometry zone)
+    internal static int FillInteriorResidueGaps(TakeoffResult result, Geometry zone)
     {
         var held = result.Residues
-            .Where(residue => residue.Reason == ResidueReason.Rejected).ToList();
+            .Where(residue => residue.Reason != ResidueReason.Excluded).ToList();
         var excluded = result.Residues
             .Where(residue => residue.Reason == ResidueReason.Excluded).ToList();
         int filled = 0;
@@ -1676,7 +1677,8 @@ public static class TakeoffPromotion
                 .Select(item => (item.residue, item.geometry,
                     shared: Intersection(polygon.Boundary, item.geometry.Boundary).Length))
                 .Where(item => item.shared > Epsilon)
-                .OrderByDescending(item => item.shared)
+                .OrderBy(item => item.residue.Reason == ResidueReason.Rejected ? 0 : 1)
+                .ThenByDescending(item => item.shared)
                 .ThenBy(item => item.residue.Id, StringComparer.Ordinal).ToList();
             Geometry? joined = owners.Count == 0 ? null : OverlayNGRobust.Overlay(
                 owners[0].geometry, polygon, SpatialFunction.Union);

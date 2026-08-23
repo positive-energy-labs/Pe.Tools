@@ -238,7 +238,7 @@ public sealed class TakeoffPromotionTests
         };
         var zone = Zone("zone", (0, 0), (12, 0), (12, 10), (0, 10)).ExactGeometry();
 
-        int filled = TakeoffPromotion.FillHeldInteriorGaps(result, zone);
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone);
         var legality = TakeoffPromotion.MeasureDispositionLegality(result, zone);
 
         Assert.Multiple(() => {
@@ -249,6 +249,33 @@ public sealed class TakeoffPromotionTests
                 residue.Reason == ResidueReason.Excluded).Id, Is.EqualTo("outside"));
             Assert.That(legality.GapSqft, Is.Zero.Within(1e-9));
             Assert.That(legality.OverlapSqft, Is.Zero.Within(1e-9));
+        });
+    }
+
+    [Test]
+    public void Excluded_hole_rejoins_its_non_room_residue_owner()
+    {
+        var voidOwner = Residue("void", ResidueReason.Crumb,
+            (0, 0), (10, 0), (10, 10), (0, 10));
+        voidOwner.Holes.Add(new[] { (3d, 3d), (3d, 7d), (7d, 7d), (7d, 3d) }
+            .Select(point => new[] { point.Item1, point.Item2 }).ToList());
+        voidOwner.RawSqft = 84;
+        var result = new TakeoffResult {
+            Residues = {
+                voidOwner,
+                Residue("hole", ResidueReason.Excluded,
+                    (3, 3), (7, 3), (7, 7), (3, 7)),
+            },
+        };
+        var zone = Zone("zone", (0, 0), (10, 0), (10, 10), (0, 10)).ExactGeometry();
+
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone);
+
+        Assert.Multiple(() => {
+            Assert.That(filled, Is.EqualTo(1));
+            Assert.That(voidOwner.RawSqft, Is.EqualTo(100).Within(1e-9));
+            Assert.That(voidOwner.Holes, Is.Empty);
+            Assert.That(result.Residues, Has.Count.EqualTo(1));
         });
     }
 
@@ -271,7 +298,7 @@ public sealed class TakeoffPromotionTests
         };
         var zone = Zone("zone", (0, 0), (12, 0), (12, 10), (0, 10)).ExactGeometry();
 
-        int filled = TakeoffPromotion.FillHeldInteriorGaps(result, zone);
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone);
 
         Assert.Multiple(() => {
             Assert.That(filled, Is.EqualTo(1));
