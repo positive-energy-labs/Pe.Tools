@@ -11,7 +11,7 @@
     "generate-routes": "tsr generate",
     "build": "vp build",
     "preview": "vp preview",
-    "test": "vp run",
+    "test": "vp test",
     "check": "vp check"
   },
   "dependencies": {
