@@ -2026,7 +2026,7 @@ public static class TakeoffPromotion
                 .Select(core => core.Buffer(radiusFt, buffer).Intersection(polygon))));
             var mainGeometry = PolygonDifference(polygon, detached).Buffer(0);
             var mainParts = PolygonParts(mainGeometry).ToList();
-            var main = mainParts.FirstOrDefault(part => part.Covers(label));
+            var main = mainParts.FirstOrDefault(part => part.IsValid && part.Covers(label));
             if (main != null && mainParts.Count > 1)
                 detached = Polygonal(OverlayNGRobust.Union(
                     mainParts.Where(part => !ReferenceEquals(part, main)).Cast<Geometry>()
@@ -2041,7 +2041,7 @@ public static class TakeoffPromotion
             {
                 log?.Invoke($"[promotion] frame-local neck refused room={room.Id} " +
                             $"main={mainGeometry.GeometryType}/{mainGeometry.Area:F1}sf " +
-                            $"label={mainGeometry.Covers(label)}");
+                            $"label={mainGeometry.IsValid && mainGeometry.Covers(label)}");
                 continue;
             }
 
