@@ -1649,15 +1649,16 @@ public static class TakeoffPromotion
         if (heldComponents > 0)
             state.Rejections["zone-component:held"] = heldComponents;
         RebuildResiduesInsideZone(state.Result, state.ZoneGeometry);
-        int filled = FillSingleOwnerHeldHoles(state.Result, state.ZoneGeometry);
-        if (filled > 0) state.Rejections["disposition:held-hole-filled"] = filled;
+        int filled = FillHeldInteriorGaps(state.Result, state.ZoneGeometry);
+        if (filled > 0) state.Rejections["disposition:held-gap-filled"] = filled;
     }
 
     /// <summary>
-    /// Rejoins Excluded islands that are only interior rings of one Held room. The exterior-ring
-    /// equality check makes this a disposition repair, never a new room-boundary inference.
+    /// Rejoins an internal Excluded component to an existing Held room. The zone-edge refusal
+    /// leaves the exterior narrow band untouched; choosing the longest shared boundary resolves
+    /// multi-room junction nuclei without changing any Accepted geometry or inventing a room.
     /// </summary>
-    internal static int FillSingleOwnerHeldHoles(TakeoffResult result, Geometry zone)
+    internal static int FillHeldInteriorGaps(TakeoffResult result, Geometry zone)
     {
         var held = result.Residues
             .Where(residue => residue.Reason == ResidueReason.Rejected).ToList();
@@ -1667,21 +1668,19 @@ public static class TakeoffPromotion
         foreach (var hole in excluded)
         {
             Geometry geometry = ToGeometry(hole);
-            if (geometry is not Polygon polygon
-                || Intersection(polygon.Boundary, zone.Boundary).Length > Epsilon)
+            double zoneContact = Intersection(geometry.Boundary, zone.Boundary).Length;
+            if (geometry is not Polygon polygon || zoneContact > Epsilon)
                 continue;
             var owners = held.Select(residue => (residue, geometry: (Polygon)ToGeometry(residue)))
-                .Where(item => Intersection(polygon.Boundary, item.geometry.Boundary).Length
-                               >= polygon.Length - Epsilon)
-                .ToList();
-            if (owners.Count != 1
-                || OverlayNGRobust.Overlay(
-                    owners[0].geometry, polygon, SpatialFunction.Union) is not Polygon completed
-                || !completed.IsValid
-                || Math.Abs(owners[0].geometry.ExteriorRing.Length
-                            - completed.ExteriorRing.Length) > Epsilon
-                || Intersection(owners[0].geometry.ExteriorRing, completed.ExteriorRing).Length
-                   < completed.ExteriorRing.Length - Epsilon)
+                .Select(item => (item.residue, item.geometry,
+                    shared: Intersection(polygon.Boundary, item.geometry.Boundary).Length))
+                .Where(item => item.shared > Epsilon)
+                .OrderByDescending(item => item.shared)
+                .ThenBy(item => item.residue.Id, StringComparer.Ordinal).ToList();
+            Geometry? joined = owners.Count == 0 ? null : OverlayNGRobust.Overlay(
+                owners[0].geometry, polygon, SpatialFunction.Union);
+            if (joined is not Polygon completed || !completed.IsValid
+                || Math.Abs(completed.Area - owners[0].geometry.Area - polygon.Area) > Epsilon)
                 continue;
 
             var owner = owners[0].residue;

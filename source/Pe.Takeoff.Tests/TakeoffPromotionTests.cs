@@ -237,7 +237,7 @@ public sealed class TakeoffPromotionTests
         };
         var zone = Zone("zone", (0, 0), (12, 0), (12, 10), (0, 10)).ExactGeometry();
 
-        int filled = TakeoffPromotion.FillSingleOwnerHeldHoles(result, zone);
+        int filled = TakeoffPromotion.FillHeldInteriorGaps(result, zone);
         var legality = TakeoffPromotion.MeasureDispositionLegality(result, zone);
 
         Assert.Multiple(() => {
@@ -248,6 +248,35 @@ public sealed class TakeoffPromotionTests
                 residue.Reason == ResidueReason.Excluded).Id, Is.EqualTo("outside"));
             Assert.That(legality.GapSqft, Is.Zero.Within(1e-9));
             Assert.That(legality.OverlapSqft, Is.Zero.Within(1e-9));
+        });
+    }
+
+    [Test]
+    public void Internal_excluded_sliver_joins_a_held_owner_but_zone_edge_band_stays_excluded()
+    {
+        var left = Residue("left", ResidueReason.Rejected,
+            (0, 0), (5, 0), (5, 10), (0, 10));
+        var right = Residue("right", ResidueReason.Rejected,
+            (7, 0), (12, 0), (12, 10), (7, 10));
+        var result = new TakeoffResult {
+            Residues = {
+                left,
+                right,
+                Residue("internal", ResidueReason.Excluded,
+                    (5, 2), (7, 2), (7, 8), (5, 8)),
+                Residue("edge", ResidueReason.Excluded,
+                    (5, 0), (7, 0), (7, 2), (5, 2)),
+            },
+        };
+        var zone = Zone("zone", (0, 0), (12, 0), (12, 10), (0, 10)).ExactGeometry();
+
+        int filled = TakeoffPromotion.FillHeldInteriorGaps(result, zone);
+
+        Assert.Multiple(() => {
+            Assert.That(filled, Is.EqualTo(1));
+            Assert.That(left.RawSqft, Is.EqualTo(62).Within(1e-9));
+            Assert.That(result.Residues.Single(residue =>
+                residue.Reason == ResidueReason.Excluded).Id, Is.EqualTo("edge"));
         });
     }
 
