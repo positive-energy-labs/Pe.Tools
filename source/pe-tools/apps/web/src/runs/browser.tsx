@@ -46,6 +46,7 @@ import { cn } from "#/lib/utils";
 
 import { hydrateFromSet } from "./feedback/hydrate";
 import { fb, itemKey, type StagedItem, useFb } from "./feedback/staging";
+import { NoteInput } from "./feedback/verbs";
 import { type Lens, Tray, TrayCollapsed } from "./feedback/tray";
 import {
   ACCEPT_FILL,
@@ -281,8 +282,11 @@ export function ZonePanel(props: {
   fbKey?: string;
 }) {
   const { runId, zone, maxW, maxH, underlay } = props;
-  const { items } = useFb();
+  const { items, hoverFlag } = useFb();
   const stagedItem = props.fbKey ? (items.find((i) => i.key === props.fbKey) ?? null) : null;
+  // A flag chip under the cursor lights its shape on THIS panel (chips are per staged item, so
+  // the item key is part of the token — room ids repeat across zones).
+  const lit = (el: string) => hoverFlag !== null && hoverFlag === `${props.fbKey}::${el}`;
   const flags = useMemo(() => new Set(stagedItem?.flags ?? []), [stagedItem]);
   const toggleFlag = (el: string) => {
     if (stagedItem) fb.toggleFlag(stagedItem.key, el);
@@ -392,6 +396,7 @@ export function ZonePanel(props: {
             // A flag is DATA — the element id, not pixels. Hover-id is always live; the click
             // arms only when this exact pair is staged.
             const flagged = flags.has(`room:${room.id}`);
+            const hot = lit(`room:${room.id}`);
             // Unflagged, the room wears its PERSISTED disposition (SHIMS.md #3): unknown is a
             // dashed neutral that carries the caveat, never the accepted blue. Flagged, the
             // alarm overrides — a user's flag is louder than a provenance tint.
@@ -405,9 +410,9 @@ export function ZonePanel(props: {
                   rings.map((r) => r.points),
                 )}
                 fill={flagged ? "var(--r-alarm)" : "none"}
-                fillOpacity={flagged ? 0.18 : 0}
+                fillOpacity={hot ? 0.45 : flagged ? 0.18 : 0}
                 stroke={flagged ? "var(--r-alarm)" : tone.stroke}
-                strokeWidth={flagged ? 2.5 : unknown ? 1.25 : 1.75}
+                strokeWidth={hot ? 4 : flagged ? 2.5 : unknown ? 1.25 : 1.75}
                 strokeDasharray={!flagged && unknown ? "2 2" : undefined}
                 pointerEvents="all"
                 style={{ cursor: stagedItem ? "crosshair" : "default" }}
@@ -421,16 +426,17 @@ export function ZonePanel(props: {
           })}
           {geom?.residues.map((res) => {
             const flagged = flags.has(`residue:${res.id}`);
+            const hot = lit(`residue:${res.id}`);
             return (
               <path
                 key={res.id}
                 d={ringPath(vp, res.loops)}
                 fill={flagged ? "var(--r-alarm)" : "none"}
-                fillOpacity={flagged ? 0.14 : 0}
+                fillOpacity={hot ? 0.4 : flagged ? 0.14 : 0}
                 stroke={
                   flagged ? "var(--r-alarm)" : res.reason === "rejected" ? HELD_STROKE : VOID_STROKE
                 }
-                strokeWidth={flagged ? 2.5 : res.reason === "rejected" ? 1.6 : 0.75}
+                strokeWidth={hot ? 4 : flagged ? 2.5 : res.reason === "rejected" ? 1.6 : 0.75}
                 strokeDasharray={!flagged && res.reason === "rejected" ? "4 3" : undefined}
                 pointerEvents="all"
                 style={{ cursor: stagedItem ? "crosshair" : "default" }}
@@ -2683,6 +2689,7 @@ export default function RunBrowser() {
                   onToggleHighlight={toggleHighlight}
                   onSwing={swingLens}
                 />
+                <NoteInput item={item} />
               </div>
             );
           })}

@@ -54,6 +54,8 @@ export type ExportRecord = {
 
 type FbState = {
   items: StagedItem[];
+  /** `${itemKey}::${el}` of the flag chip under the cursor — the panel lights that shape. */
+  hoverFlag: string | null;
   /** The ?set= stamp this staging was rehydrated from, if any — provenance, not a lock. */
   loadedSet: string | null;
   exporting: ExportRecord["verb"] | null;
@@ -69,7 +71,7 @@ type Store = { state: FbState; listeners: Set<() => void> };
 
 const g = globalThis as { __peRunsFeedback?: Store };
 const store: Store = (g.__peRunsFeedback ??= {
-  state: { items: [], loadedSet: null, exporting: null, lastExport: null, exportError: null },
+  state: { items: [], hoverFlag: null, loadedSet: null, exporting: null, lastExport: null, exportError: null },
   listeners: new Set(),
 });
 
@@ -120,6 +122,10 @@ export const fb = {
           : i,
       ),
     });
+  },
+
+  setHoverFlag(hoverFlag: string | null) {
+    if (store.state.hoverFlag !== hoverFlag) emit({ hoverFlag });
   },
 
   setNote(key: string, note: string) {

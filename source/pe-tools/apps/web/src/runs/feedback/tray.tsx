@@ -59,7 +59,7 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
         </button>
       </div>
       <FlagChips item={item} />
-      <NoteInput item={item} />
+      <NoteInput item={item} multiline />
     </div>
   );
 }
