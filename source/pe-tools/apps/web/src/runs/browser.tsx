@@ -47,7 +47,6 @@ import { type Lens, Tray, TrayCollapsed } from "./feedback/tray";
 import {
   candidateTone,
   CLOSE_M,
-  EXCLUDED_FILL,
   HELD_HATCH,
   INK_M,
   LABEL,
@@ -55,9 +54,10 @@ import {
   MIST,
   PAPER,
   PLAN_LAW,
+  RESIDUE_TREATMENT,
+  type ResidueKind,
   SEAL_DOOR,
   SEAL_RUN,
-  VOID_FILL,
   ZONE_DASH,
   ZONE_STROKE,
   ZONE_WIDTH,
@@ -273,22 +273,30 @@ function Delta({
  * flaggable element, showing the element id (the DATA) and nothing else. */
 type PanelHover = { label: string; flaggable: boolean; flagged: boolean; x: number; y: number };
 
-function HatchPattern(props: { id: string; color: string }) {
+function HatchPattern(props: {
+  id: string;
+  color: string;
+  hatch?: { angleDeg: number; spacingPx: number; widthPx: number };
+}) {
+  const hatch = props.hatch ?? HELD_HATCH;
   return (
     <pattern
       id={props.id}
-      width={HELD_HATCH.spacingPx}
-      height={HELD_HATCH.spacingPx}
+      width={hatch.spacingPx}
+      height={hatch.spacingPx}
       patternUnits="userSpaceOnUse"
-      patternTransform={`rotate(${HELD_HATCH.angleDeg})`}
+      patternTransform={`rotate(${hatch.angleDeg})`}
     >
-      <line y2={HELD_HATCH.spacingPx} stroke={props.color} strokeWidth={HELD_HATCH.widthPx} />
+      <line y2={hatch.spacingPx} stroke={props.color} strokeWidth={hatch.widthPx} />
     </pattern>
   );
 }
 
 const heldPatternId = (runId: string, zone: ZoneRecord, candidateId: string) =>
   `held-${encodeURIComponent(`${runId}/${zone.zoneKey ?? zone.Zone}/${candidateId}`)}`;
+const residuePatternId = (runId: string, zone: ZoneRecord, elementId: string, kind: ResidueKind) =>
+  `residue-${kind}-${encodeURIComponent(`${runId}/${zone.zoneKey ?? zone.Zone}/${elementId}`)}`;
+const residueKind = (reason: string): ResidueKind => (reason === "excluded" ? "excluded" : "void");
 
 export function ZonePanel(props: {
   runId: string;
@@ -432,6 +440,16 @@ export function ZonePanel(props: {
                   color={candidateTone(zone.Zone, room.id).dark}
                 />
               ))}
+            {geom?.rooms
+              .filter((room) => room.disposition === null)
+              .map((room) => (
+                <HatchPattern
+                  key={`void-room-pattern:${room.id}`}
+                  id={residuePatternId(runId, zone, `room:${room.id}`, "void")}
+                  color={RESIDUE_TREATMENT.void.hatch.color}
+                  hatch={RESIDUE_TREATMENT.void.hatch}
+                />
+              ))}
             {geom?.residues
               .filter((res) => res.reason === "rejected")
               .map((res) => (
@@ -441,6 +459,19 @@ export function ZonePanel(props: {
                   color={candidateTone(zone.Zone, res.id).dark}
                 />
               ))}
+            {geom?.residues
+              .filter((res) => res.reason !== "rejected")
+              .map((res) => {
+                const kind = residueKind(res.reason);
+                return (
+                  <HatchPattern
+                    key={`${kind}-residue-pattern:${res.id}`}
+                    id={residuePatternId(runId, zone, `residue:${res.id}`, kind)}
+                    color={RESIDUE_TREATMENT[kind].hatch.color}
+                    hatch={RESIDUE_TREATMENT[kind].hatch}
+                  />
+                );
+              })}
           </defs>
           {geom?.rooms.map((room) => {
             const rings = geom.polys.get(room.id);
@@ -453,6 +484,7 @@ export function ZonePanel(props: {
             // dashed neutral that carries the caveat, never the accepted blue. Flagged, the
             // alarm overrides — a user's flag is louder than a provenance tint.
             const tone = candidateTone(zone.Zone, room.id);
+            const residue = room.disposition === null ? RESIDUE_TREATMENT.void : null;
             const d = ringPath(
               vp,
               rings.map((r) => r.points),
@@ -462,9 +494,9 @@ export function ZonePanel(props: {
               <g key={room.id}>
                 <path
                   d={d}
-                  fill={room.disposition === null ? VOID_FILL : tone.fill}
-                  stroke={hot || flagged ? "var(--r-alarm)" : "none"}
-                  strokeWidth={hot ? 4 : flagged ? 2.5 : 0}
+                  fill={residue ? "none" : tone.fill}
+                  stroke={hot || flagged ? "var(--r-alarm)" : (residue?.outline.color ?? "none")}
+                  strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
                   pointerEvents="all"
                   style={{ cursor: stagedItem ? "crosshair" : "default" }}
                   onPointerMove={trackHover(`room ${room.id}`, flagged)}
@@ -473,6 +505,13 @@ export function ZonePanel(props: {
                 >
                   {room.disposition === null ? <title>{UNKNOWN_TITLE}</title> : null}
                 </path>
+                {residue ? (
+                  <path
+                    d={d}
+                    fill={`url(#${residuePatternId(runId, zone, `room:${room.id}`, "void")})`}
+                    pointerEvents="none"
+                  />
+                ) : null}
                 {room.disposition === "held" ? (
                   <path
                     d={d}
@@ -500,6 +539,8 @@ export function ZonePanel(props: {
             const flagged = flags.has(`residue:${res.id}`);
             const hot = lit(`residue:${res.id}`);
             const held = res.reason === "rejected";
+            const kind = residueKind(res.reason);
+            const residue = held ? null : RESIDUE_TREATMENT[kind];
             const tone = candidateTone(zone.Zone, res.id);
             const d = ringPath(vp, res.loops);
             const labelPoint = res.loops[0]?.[0];
@@ -507,15 +548,22 @@ export function ZonePanel(props: {
               <g key={res.id}>
                 <path
                   d={d}
-                  fill={held ? tone.fill : res.reason === "excluded" ? EXCLUDED_FILL : VOID_FILL}
-                  stroke={hot || flagged ? "var(--r-alarm)" : "none"}
-                  strokeWidth={hot ? 4 : flagged ? 2.5 : 0}
+                  fill={held ? tone.fill : "none"}
+                  stroke={hot || flagged ? "var(--r-alarm)" : (residue?.outline.color ?? "none")}
+                  strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
                   pointerEvents="all"
                   style={{ cursor: stagedItem ? "crosshair" : "default" }}
                   onPointerMove={trackHover(`residue ${res.id}`, flagged)}
                   onPointerLeave={() => setHover(null)}
                   onClick={stagedItem ? () => toggleFlag(`residue:${res.id}`) : undefined}
                 />
+                {residue ? (
+                  <path
+                    d={d}
+                    fill={`url(#${residuePatternId(runId, zone, `residue:${res.id}`, kind)})`}
+                    pointerEvents="none"
+                  />
+                ) : null}
                 {held ? (
                   <>
                     <path
@@ -1209,29 +1257,61 @@ function PlanPane(props: {
       if (!geom) continue;
       for (const res of geom.residues) {
         if (res.reason === "rejected") continue;
+        const kind = residueKind(res.reason);
+        const treatment = RESIDUE_TREATMENT[kind];
+        const patternId = residuePatternId(props.runId, zone, `residue:${res.id}`, kind);
+        const d = ringPath(vp, res.loops);
         nodes.push(
-          <path
-            key={`q:${zone.Zone}/${res.id}`}
-            d={ringPath(vp, res.loops)}
-            fillRule="evenodd"
-            fill={res.reason === "excluded" ? EXCLUDED_FILL : VOID_FILL}
-            stroke="none"
-          />,
+          <g key={`q:${zone.Zone}/${res.id}`}>
+            <defs>
+              <HatchPattern id={patternId} color={treatment.hatch.color} hatch={treatment.hatch} />
+            </defs>
+            <path
+              d={d}
+              fillRule="evenodd"
+              fill="none"
+              stroke={treatment.outline.color}
+              style={{ strokeWidth: `calc(var(--sw) * ${treatment.outline.widthPx}px)` }}
+            />
+            <path d={d} fillRule="evenodd" fill={`url(#${patternId})`} />
+          </g>,
         );
       }
       const dispositionById = new Map(geom.rooms.map((room) => [room.id, room.disposition]));
       for (const [roomId, rings] of geom.polys) {
         const disposition = dispositionById.get(roomId) ?? null;
         const tone = candidateTone(zone.Zone, roomId);
+        const treatment = disposition === null ? RESIDUE_TREATMENT.void : null;
+        const patternId = residuePatternId(props.runId, zone, `room:${roomId}`, "void");
         const d = ringPath(
           vp,
           rings.map((ring) => ring.points),
         );
         nodes.push(
           <g key={`r:${zone.Zone}/${roomId}`}>
-            <path d={d} fillRule="evenodd" fill={disposition === null ? VOID_FILL : tone.fill}>
+            {treatment ? (
+              <defs>
+                <HatchPattern
+                  id={patternId}
+                  color={treatment.hatch.color}
+                  hatch={treatment.hatch}
+                />
+              </defs>
+            ) : null}
+            <path
+              d={d}
+              fillRule="evenodd"
+              fill={treatment ? "none" : tone.fill}
+              stroke={treatment?.outline.color}
+              style={
+                treatment
+                  ? { strokeWidth: `calc(var(--sw) * ${treatment.outline.widthPx}px)` }
+                  : undefined
+              }
+            >
               {disposition === null ? <title>{UNKNOWN_TITLE}</title> : null}
             </path>
+            {treatment ? <path d={d} fill={`url(#${patternId})`} /> : null}
             {disposition === "held" ? (
               <>
                 <defs>
@@ -1245,7 +1325,7 @@ function PlanPane(props: {
       }
     }
     return nodes;
-  }, [data, vp]);
+  }, [data, vp, props.runId]);
 
   // Held residues + zone boundaries + hover/hit + labels ABOVE the ink canvas.
   const overLayer = useMemo(() => {
@@ -1439,6 +1519,39 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
       style={{ borderTop: `2px ${dashed ? "dashed" : "solid"} ${border}` }}
     />
   );
+  const hatchedSwatch = (
+    id: string,
+    hatch: { angleDeg: number; color: string; spacingPx: number; widthPx: number },
+    fill: string,
+    stroke: string,
+    strokeWidth: number,
+  ) => (
+    <svg className="h-2.5 w-4 shrink-0" viewBox="0 0 16 10" aria-hidden>
+      <defs>
+        <HatchPattern id={id} color={hatch.color} hatch={hatch} />
+      </defs>
+      <rect
+        x={strokeWidth / 2}
+        y={strokeWidth / 2}
+        width={16 - strokeWidth}
+        height={10 - strokeWidth}
+        fill={fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+      <rect width="16" height="10" fill={`url(#${id})`} />
+    </svg>
+  );
+  const residueSwatch = (kind: ResidueKind) => {
+    const treatment = RESIDUE_TREATMENT[kind];
+    return hatchedSwatch(
+      `legend-${kind}`,
+      treatment.hatch,
+      "none",
+      treatment.outline.color,
+      treatment.outline.widthPx,
+    );
+  };
   const row = (mark: ReactNode, label: string, meaning: string) => (
     <span className="flex items-center gap-1.5" title={meaning}>
       {mark}
@@ -1493,14 +1606,20 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
           "A room the solver accepted into the takeoff — per the persisted disposition column.",
         )}
         {row(
-          sw(candidateTone("legend", "R02").fill),
+          hatchedSwatch(
+            "legend-held",
+            { ...HELD_HATCH, color: candidateTone("legend", "R02").dark },
+            candidateTone("legend", "R02").fill,
+            "none",
+            0,
+          ),
           "held residue",
           "Area the solver found but did not trust — held for review, not counted.",
         )}
-        {row(sw(VOID_FILL), "room — disposition unknown", UNKNOWN_TITLE)}
+        {row(residueSwatch("void"), "void / disposition unknown", UNKNOWN_TITLE)}
         {row(
-          sw(EXCLUDED_FILL),
-          "void / excluded",
+          residueSwatch("excluded"),
+          "excluded residue",
           "Area inside the zone the solver deliberately excluded.",
         )}
         {row(
