@@ -355,6 +355,15 @@ public sealed class ZoneBoundedDetectTests
             .Select(dir => Path.Combine(dir, $"ink_{token}.bin"))
             .FirstOrDefault(File.Exists);
 
+    private static string? FindPlanReference(string token, string extension) =>
+        new[] {
+                Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\OneDrive\Documents\Pe.Tools\takeoff"),
+                Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\Documents\Pe.Tools\takeoff"),
+            }
+            .Where(Directory.Exists)
+            .Select(dir => Path.Combine(dir, $"plan_{token}.{extension}"))
+            .FirstOrDefault(File.Exists);
+
     private static List<ZoneScope> ZonesFor(string viewFragment)
     {
         string path = Path.Combine(RhvacEvalTests.FindFixtureDir(), "zones-mech.json");
@@ -431,15 +440,29 @@ public sealed class ZoneBoundedDetectTests
             effectiveOptions[view] = profile.Options;
             string token = LevelMap.Single(item => item.View == view).BinToken;
             string? ink = FindInkBin(token);
+            string? planImage = FindPlanReference(token, "png");
+            string? planManifest = FindPlanReference(token, "json");
             if (ink == null)
             {
                 failures.Add($"{view}: missing ink_{token}.bin for registered promotion review");
+                return;
+            }
+            if ((planImage == null) != (planManifest == null))
+            {
+                failures.Add($"{view}: incomplete plan_{token}.png/json review reference");
                 return;
             }
             string copiedInk = Path.Combine(artifactDir, "input", $"ink_{token}.bin");
             string copiedReplay = Path.Combine(artifactDir, "input", $"replay_{token}.bin");
             File.Copy(ink!, copiedInk, overwrite: true);
             File.Copy(bin!, copiedReplay, overwrite: true);
+            if (planImage != null)
+            {
+                File.Copy(planImage, Path.Combine(artifactDir, "input", $"plan_{token}.png"),
+                    overwrite: true);
+                File.Copy(planManifest!, Path.Combine(artifactDir, "input", $"plan_{token}.json"),
+                    overwrite: true);
+            }
             // Sealed cells are obstruction the drawing never drew. Persisting them next to the raw
             // ink is what makes a closure arguable in review instead of an invisible policy effect.
             var sealClasses = TakeoffPolicy.SealClasses(snap, profile);

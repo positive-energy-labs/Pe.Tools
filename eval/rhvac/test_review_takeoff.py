@@ -350,6 +350,52 @@ class ReviewTakeoffTests(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("input/replay_Test.bin", rejected.stderr)
 
+    def test_zone_promotion_renderer_uses_registered_plan_outside_replay(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            write_replay_bin(root / "input" / "replay_Test.bin", 4, 4, 0, 0, 1,
+                             bytes(2))
+            plan_path = root / "input" / "plan_Test.png"
+            Image.new("RGB", (300, 100), (20, 120, 200)).save(plan_path)
+            (root / "input" / "plan_Test.json").write_text(json.dumps({
+                "schemaVersion": 1, "sourceView": "Mechanical Zoning Plan - Test",
+                "token": "Test", "image": plan_path.name,
+                "imageSha256": digest(plan_path), "width": 300, "height": 100,
+                "topLeft": [0, 10], "topRight": [30, 10], "bottomLeft": [0, 0],
+            }), encoding="utf-8")
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "META\tlevel\tTest\nMETA\telev\t0\n"
+                "META\tresidue\tR01\trejected\t64\t24\t5\t9\t20;1|28;1|28;9|20;9\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "MinX": 20, "MinY": 1,
+                "MaxX": 28, "MaxY": 9, "Tsv": "zones/rooms_Test.tsv",
+                "ZoneLoops": [[[20, 1], [28, 1], [28, 9], [20, 9]]],
+                "Ink": "input/ink_Test.bin", "RawRooms": 1, "AcceptedRooms": 0,
+                "HeldRooms": 1, "ExcludedSqft": 0, "ZoneSqft": 64,
+                "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+                "InkBackedEdgeFraction": 0, "ClosureErrorSqft": 0,
+                "triage": {"verdict": "hold", "reason": "no-raster"},
+            }
+            (root / "report.json").write_text(
+                json.dumps({"Zones": [zone]}), encoding="utf-8")
+
+            subprocess.run([sys.executable, str(ZONE_SCRIPT), str(root / "report.json"),
+                            "--require-plan"],
+                           check=True, cwd=HERE)
+
+            manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["rasterBackedPanels"], 1)
+            self.assertIn("input/plan_Test.png", manifest["inputs"])
+            self.assertIn("input/plan_Test.json", manifest["inputs"])
+            panel_path = root / "review" / "01_Test_00.png"
+            with Image.open(panel_path) as panel:
+                colors = {color for _count, color in panel.getcolors(panel.width * panel.height)}
+                self.assertIn((20, 120, 200), colors)
+                self.assertEqual(panel.getpixel((450, 360)), (20, 120, 200))
+
     def test_zone_promotion_renderer_emits_verifiable_boundary_provenance(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -471,9 +517,10 @@ class ReviewTakeoffTests(unittest.TestCase):
 
             # Excluded is accounting residue, not a physical void. The old renderer painted both
             # near-white and labeled both "void", which made covered UL06 residue look blank.
+            # Decision fills are translucent so the registered plan remains visible beneath them.
             with Image.open(root / "review" / "01_Test_00.png") as panel:
-                self.assertEqual(panel.getpixel((430, 360)), (220, 220, 220))
-                self.assertEqual(panel.getpixel((470, 360)), (236, 236, 236))
+                self.assertEqual(panel.getpixel((430, 360)), (235, 235, 235))
+                self.assertEqual(panel.getpixel((470, 360)), (244, 244, 244))
 
     def test_zone_promotion_renderer_refuses_missing_replay(self):
         # The stale ink_*.bin lane is deleted: no replay seed ink = hard error naming
