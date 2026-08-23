@@ -19,7 +19,7 @@
       "unit": "zone",
       "question": "why is it wrong?",
       "resolution": "plan-native crop",
-      "layers": ["plan", "close", "sealRun", "sealDoor", "ink", "voidWash", "excludedWash", "candidateFill", "candidateOutline", "zoneOutline", "label"]
+      "layers": ["plan", "close", "sealRun", "sealDoor", "ink", "voidWash", "excludedWash", "candidateFill", "candidateHatch", "candidateOutline", "zoneOutline", "label"]
     }
   },
   "substrate": {
@@ -70,8 +70,9 @@
     "sealRun":  [235, 130, 20, 110],
     "close":    [200, 165, 130, 90]
   },
-  "voidWash":     { "rgba": [150, 150, 150, 70] },
-  "excludedWash": { "rgba": [120, 120, 120, 55] },
+  "$washAmendment": "v1.2 2026-08-23. v1 was WRONG: voidWash and excludedWash both composited to RGB 226 over white and were indistinguishable (found by lane R implementing them faithfully). Worse, kaitpw's first annotation pass flagged excluded residue in 4 of 4 zones - it is the top-ranked defect class - so it must be the more legible of the two, never a near-invisible wash. Void stays a neutral grey; excluded becomes a warm tint that a 1 ft sliver still shows.",
+  "voidWash":     { "rgba": [140, 140, 140, 90],  "compositesOverWhiteTo": [214, 214, 214] },
+  "excludedWash": { "rgba": [214, 96, 32, 110],   "compositesOverWhiteTo": [237, 186, 159] },
   "label": {
     "$comment": "Status letter + candidate id. Small, on the fill, never on the boundary.",
     "sizePx": 13,
