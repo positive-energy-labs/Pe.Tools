@@ -248,6 +248,17 @@ def ink_ratio_of(zone):
     return field(census, "inkRatio")
 
 
+def zone_title(zone, review_held, bare_zone=False):
+    held = 0 if bare_zone else zone["HeldRooms"]
+    review = [] if bare_zone else review_held
+    return (f"{zone['Zone']}   zone {zone['ZoneSqft']:.0f} sf   raw {zone['RawRooms']}   "
+            f"network-strict {zone.get('SharedNetworkStrictRooms', 0)}   "
+            f"accepted {zone['AcceptedRooms']}   held {held}   "
+            + (f"review-held +{len(review)}   " if review else "")
+            + ("zone-status held   " if bare_zone else "")
+            + f"excluded {zone['ExcludedSqft']:.0f} sf")
+
+
 def rejection_histogram(report):
     histogram = field(report, "RejectionHistogram") or {}
     if histogram:
@@ -653,11 +664,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
     # must be able to argue with, not a reason to hide the evidence.
     display_reason = "no-replay-evidence" if reason == "no-raster" and plan_reference else reason
     banner = f"TRIAGE-HELD {display_reason}".strip() + "   " if verdict == "hold" else ""
-    title = (f"{zone['Zone']}   zone {zone['ZoneSqft']:.0f} sf   raw {zone['RawRooms']}   "
-             f"network-strict {zone.get('SharedNetworkStrictRooms', 0)}   "
-             f"accepted {zone['AcceptedRooms']}   held {zone['HeldRooms']}   "
-             + (f"review-held +{len(review_held)}   " if review_held else "")
-             + f"excluded {zone['ExcludedSqft']:.0f} sf")
+    title = zone_title(zone, review_held, bare_zone)
     ratio = ink_ratio_of(zone)
     # "closure" used to name the accounting residual here, which collides with the closure the
     # sealers draw. The residual is a leak; closure is sealed area, split by which sealer claimed

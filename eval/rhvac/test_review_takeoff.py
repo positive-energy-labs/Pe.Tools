@@ -87,6 +87,22 @@ def build_focus_atlas(before, after, output, expected_zones, *extra):
 
 
 class ReviewTakeoffTests(unittest.TestCase):
+    def test_bare_zone_title_separates_zone_status_from_candidates(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("zone_renderer_title", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        zone = {
+            "Zone": "Attic Level#03", "ZoneSqft": 5609, "RawRooms": 0,
+            "AcceptedRooms": 0, "HeldRooms": 1, "ExcludedSqft": 0,
+        }
+
+        title = renderer.zone_title(zone, [], bare_zone=True)
+
+        self.assertIn("held 0", title)
+        self.assertIn("zone-status held", title)
+        self.assertNotIn("held 1", title)
+
     def test_atlas_fill_color_survives_status_change_and_unrelated_insertion(self):
         sys.path.insert(0, str(HERE))
         spec = importlib.util.spec_from_file_location("zone_renderer", ZONE_SCRIPT)
