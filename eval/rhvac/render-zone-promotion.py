@@ -5,6 +5,7 @@
 
 import argparse
 import colorsys
+import functools
 import hashlib
 import json
 import math
@@ -12,7 +13,7 @@ import re
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 import overlay
 
@@ -41,8 +42,8 @@ INK = rgba(LAW["substrate"]["ink"]["rgba"])
 SEAL_DOOR = rgba(LAW["invented"]["sealDoor"])
 SEAL_RUN = rgba(LAW["invented"]["sealRun"])
 CLOSE = rgba(LAW["invented"]["close"])
-VOID = rgba(LAW["voidWash"]["rgba"])
-EXCLUDED = rgba(LAW["excludedWash"]["rgba"])
+VOID = LAW["void"]
+EXCLUDED = LAW["excluded"]
 ZONE = rgba(LAW["zone"]["stroke"]["rgba"])
 ZONE_WIDTH = LAW["zone"]["stroke"]["widthPx"]
 ZONE_DASH = tuple(LAW["zone"]["stroke"]["dash"])
@@ -153,19 +154,16 @@ def plan_reference_paths(root, zone):
             ink_path.parent / f"plan_{token}.json")
 
 
-def load_plan_reference(root, zone):
-    image_path, manifest_path = plan_reference_paths(root, zone)
-    if not image_path.exists() and not manifest_path.exists():
-        return None
-    if not image_path.is_file() or not manifest_path.is_file():
-        raise SystemExit(f"incomplete plan reference: {image_path}, {manifest_path}")
+@functools.lru_cache(maxsize=8)
+def _load_plan_reference(image_path, manifest_path, token):
+    image_path, manifest_path = Path(image_path), Path(manifest_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    token = artifact_path(root, zone["Ink"]).stem.removeprefix("ink_")
     if manifest.get("schemaVersion") != 1 or manifest.get("token") != token:
         raise SystemExit(f"invalid plan reference manifest: {manifest_path}")
     if manifest.get("image") != image_path.name or manifest.get("imageSha256") != digest(image_path):
         raise SystemExit(f"stale plan reference manifest: {manifest_path}")
-    image = Image.open(image_path).convert("RGB")
+    with Image.open(image_path) as source:
+        image = source.convert("RGB")
     if [image.width, image.height] != [manifest.get("width"), manifest.get("height")]:
         raise SystemExit(f"plan reference dimensions do not match manifest: {manifest_path}")
     for key in ("topLeft", "topRight", "bottomLeft"):
@@ -175,14 +173,49 @@ def load_plan_reference(root, zone):
             "imagePath": image_path, "manifestPath": manifest_path}
 
 
-def stretch_plan(image):
-    black, white = PLAN_LAW["blackPoint"], PLAN_LAW["whitePoint"]
+def load_plan_reference(root, zone):
+    image_path, manifest_path = plan_reference_paths(root, zone)
+    if not image_path.exists() and not manifest_path.exists():
+        return None
+    if not image_path.is_file() or not manifest_path.is_file():
+        raise SystemExit(f"incomplete plan reference: {image_path}, {manifest_path}")
+    token = artifact_path(root, zone["Ink"]).stem.removeprefix("ink_")
+    return _load_plan_reference(str(image_path), str(manifest_path), token)
+
+
+def stretch_plan(image, native=True, law=PLAN_LAW):
+    suffix = "Native" if native else ""
+    black, white = law[f"blackPoint{suffix}"], law[f"whitePoint{suffix}"]
     if white <= black:
         raise SystemExit("visual law plan whitePoint must exceed blackPoint")
     lut = [0 if value <= black else 255 if value >= white
            else round((value - black) * 255 / (white - black))
            for value in range(256)]
     return image.point(lut * len(image.getbands()))
+
+
+def reduced_size(size, target):
+    fit = min(target[0] / size[0], target[1] / size[1], 1)
+    return max(1, round(size[0] * fit)), max(1, round(size[1] * fit))
+
+
+def plan_resample(law=PLAN_LAW):
+    name = law["resample"]["filter"].lower()
+    if name in {value.lower() for value in law["resample"]["neverUse"]}:
+        raise SystemExit(f"visual law bans plan resample filter: {name}")
+    try:
+        return {"lanczos": Image.Resampling.LANCZOS}[name]
+    except KeyError:
+        raise SystemExit(f"unsupported visual-law plan resample filter: {name}")
+
+
+def reduce_plan(image, target, law=PLAN_LAW):
+    size = reduced_size(image.size, target)
+    if size == image.size:
+        return stretch_plan(image, native=True, law=law)
+    if law["resample"]["order"] != "reduce-then-stretch":
+        raise SystemExit("unsupported visual-law plan resample order")
+    return stretch_plan(image.resize(size, plan_resample(law)), native=False, law=law)
 
 
 def plan_point(reference, value):
@@ -229,6 +262,7 @@ def _atlas_color(key):
 
 
 def draw_hatch(image, mask, color, hatch, box=(0, 0)):
+    color = rgba(color)
     spacing = hatch["spacingPx"]
     lines = Image.new("RGBA", mask.size)
     draw = ImageDraw.Draw(lines)
@@ -243,7 +277,26 @@ def draw_hatch(image, mask, color, hatch, box=(0, 0)):
     image.paste(lines, box, ImageChops.multiply(mask, lines.getchannel("A")))
 
 
-def crop_plan_reference(reference, world_crop, size):
+def draw_residue(image, loops, point, style):
+    if style["fill"] is not None:
+        raise SystemExit("visual law residue fill must be null")
+    mask, box = cropped_polygon_mask(image.size, loops, point)
+    draw_hatch(image, mask, style["hatch"]["rgba"], style["hatch"], box)
+    draw_residue_outline(image, loops, point, style["outline"], mask.size, box)
+
+
+def draw_residue_outline(image, loops, point, outline, size, box):
+    outline_mask = Image.new("L", size)
+    draw = ImageDraw.Draw(outline_mask)
+    for loop in loops:
+        if len(loop) >= 2:
+            points = [(point(value)[0] - box[0], point(value)[1] - box[1])
+                      for value in loop]
+            draw.line(points + [points[0]], fill=255, width=outline["widthPx"])
+    composite_mask(image, outline_mask, outline["rgba"], box)
+
+
+def crop_plan_reference(reference, world_crop, size, native_size=None):
     """Resample the registered Revit plan into a north-up world-coordinate crop."""
     manifest = reference["manifest"]
     top_left = np.asarray(manifest["topLeft"], dtype=float)
@@ -262,7 +315,8 @@ def crop_plan_reference(reference, world_crop, size):
     source_tl = source((min_x, max_y))
     source_tr = source((max_x, max_y))
     source_bl = source((min_x, min_y))
-    out_width, out_height = size
+    native_size = native_size or size
+    out_width, out_height = native_size
     coefficients = (
         (source_tr[0] - source_tl[0]) / out_width,
         (source_bl[0] - source_tl[0]) / out_height,
@@ -271,9 +325,14 @@ def crop_plan_reference(reference, world_crop, size):
         (source_bl[1] - source_tl[1]) / out_height,
         source_tl[1],
     )
-    return stretch_plan(reference["image"]).transform(
-        size, Image.Transform.AFFINE, coefficients,
+    crop = reference["image"].transform(
+        native_size, Image.Transform.AFFINE, coefficients,
         resample=Image.Resampling.BILINEAR, fillcolor="white")
+    if size == native_size:
+        return stretch_plan(crop, native=True)
+    if PLAN_LAW["resample"]["order"] != "reduce-then-stretch":
+        raise SystemExit("unsupported visual-law plan resample order")
+    return stretch_plan(crop.resize(size, plan_resample()), native=False)
 
 
 def crop_grid_mask(mask, x0, y0, x1, y1):
@@ -506,7 +565,7 @@ def boundary_provenance(loop, zone_loops, distances, grid, radius=0.75, min_ink_
 
 
 def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None,
-                metadata=None, provenance=False):
+                metadata=None, provenance=False, target_size=None, content_only=False):
     ink_path = artifact_path(root, zone["Ink"])
     tsv_path = artifact_path(root, zone["Tsv"])
     # Evidence authority: the replay snapshot's seed ink — the raster the solver actually
@@ -574,10 +633,12 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         plan_tl = plan_point(plan_reference, (world_crop[0], world_crop[3]))
         plan_tr = plan_point(plan_reference, (world_crop[2], world_crop[3]))
         plan_bl = plan_point(plan_reference, (world_crop[0], world_crop[1]))
-        render_size = (max(1, round(math.dist(plan_tl, plan_tr))),
-                       max(1, round(math.dist(plan_tl, plan_bl))))
+        native_render_size = (max(1, round(math.dist(plan_tl, plan_tr))),
+                              max(1, round(math.dist(plan_tl, plan_bl))))
     else:
-        render_size = grid_size
+        native_render_size = grid_size
+    render_size = (reduced_size(native_render_size, target_size)
+                   if target_size else native_render_size)
     render_scale = (render_size[0] / grid_size[0], render_size[1] / grid_size[1])
     if metadata is not None:
         metadata.update({
@@ -611,7 +672,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
                 (y1 - (value[1] - min_y) / cell) * render_scale[1])
 
     # Layer order comes from LAW.renders.forensic.layers.
-    base_plan = (crop_plan_reference(plan_reference, world_crop, render_size)
+    base_plan = (crop_plan_reference(plan_reference, world_crop, render_size,
+                                     native_render_size)
                  if plan_reference is not None
                  else Image.new("RGB", render_size, "white"))
     inside_zone = polygon_mask(base_plan.size, zone["ZoneLoops"], point)
@@ -660,11 +722,10 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
                 pixels[selected] * opacity + 255 * (1 - opacity)).astype(np.uint8)
         image = Image.fromarray(pixels).convert("RGBA")
 
-    def wash_layer(kind, color):
+    def residue_layer(kind, style):
         for wash_kind, loops in wash_rows:
             if wash_kind == kind:
-                mask, box = cropped_polygon_mask(image.size, loops, point)
-                composite_mask(image, mask, color, box)
+                draw_residue(image, loops, point, style)
 
     def candidate_fill_layer():
         for key in keys:
@@ -712,8 +773,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         "sealRun": lambda: paint(run_mask, SEAL_RUN),
         "sealDoor": lambda: paint(door_mask, SEAL_DOOR),
         "ink": lambda: paint(ink_mask, INK),
-        "voidWash": lambda: wash_layer("void", VOID),
-        "excludedWash": lambda: wash_layer("excluded", EXCLUDED),
+        "void": lambda: residue_layer("void", VOID),
+        "excluded": lambda: residue_layer("excluded", EXCLUDED),
         "candidateFill": candidate_fill_layer,
         "candidateHatch": candidate_hatch_layer,
         "candidateOutline": candidate_outline_layer,
@@ -801,6 +862,8 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
     forensic_image = image.convert("RGB")
     if output is not None and plan_reference is not None and not provenance:
         forensic_image.save(output)
+    if content_only:
+        return forensic_image
     image = forensic_image
     if scale != 1:
         image = image.resize((image.width * scale, image.height * scale), Image.Resampling.NEAREST)
@@ -865,6 +928,15 @@ def _legend_swatch(draw, x, y, color, style, fill=None):
         draw.line((x, y + 9, x + 16, y + 9), fill=color, width=4)
     elif style == "decision":
         draw.rectangle((x, y + 2, x + 14, y + 16), fill=fill, outline=color, width=2)
+    elif style == "residue":
+        outline, hatch = color["outline"], color["hatch"]
+        tangent = math.tan(math.radians(hatch["angleDeg"]))
+        delta_x = -round(14 / tangent)
+        for offset in range(-abs(delta_x), 15 + abs(delta_x), hatch["spacingPx"]):
+            draw.line((x + offset, y + 2, x + offset + delta_x, y + 16),
+                      fill=rgb(hatch["rgba"]), width=hatch["widthPx"])
+        draw.rectangle((x, y + 2, x + 14, y + 16), outline=rgb(outline["rgba"]),
+                       width=outline["widthPx"])
     else:
         draw.rectangle((x, y + 2, x + 14, y + 16), fill=color)
     return x + 20
@@ -899,8 +971,8 @@ DECISION_LEGEND = (
     (candidate_style_color(LAW["candidate"]["status"]["held"]["hatch"]["color"],
                            _LEGEND_CANDIDATE),
      "hatch", "held", _LEGEND_CANDIDATE_FILL),
-    (EXCLUDED, "solid", "excluded wash", None),
-    (VOID, "solid", "void wash", None),
+    (EXCLUDED, "residue", "excluded", None),
+    (VOID, "residue", "void", None),
 )
 
 
@@ -929,10 +1001,10 @@ def draw_provenance_legend(panel_draw):
     ))
 
 
-def render_contact_sheet(report, panels, contact_path):
+def render_contact_sheet(root, report, contact_path, provenance=False):
     columns = 3
     thumb_size = (600, 467)
-    rows = math.ceil(len(panels) / columns)
+    rows = math.ceil(len(report["Zones"]) / columns)
     contact = Image.new("RGB", (columns * thumb_size[0],
                                 HEADER_HEIGHT + rows * thumb_size[1]), "white")
     draw = ImageDraw.Draw(contact)
@@ -940,9 +1012,10 @@ def render_contact_sheet(report, panels, contact_path):
     draw.line((0, HEADER_HEIGHT - 1, contact.width, HEADER_HEIGHT - 1), fill=(180, 180, 184))
     for line_index, line in enumerate(header_lines(report)):
         draw.text((16, 10 + line_index * 24), line, fill=(30, 30, 30), font=font(19))
-    for index, path in enumerate(panels):
-        with Image.open(path) as image:
-            thumb = ImageOps.contain(image.convert("RGB"), thumb_size, Image.Resampling.LANCZOS)
+    for index, zone in enumerate(report["Zones"]):
+        thumb = render_zone(root, zone, None, scale=1, target_size=thumb_size,
+                            content_only=True, provenance=provenance,
+                            metadata={} if provenance else None)
         contact.paste(thumb, ((index % columns) * thumb_size[0],
                               HEADER_HEIGHT + (index // columns) * thumb_size[1]))
     contact.save(contact_path)
@@ -1030,7 +1103,7 @@ def _verdict_items(root, zones):
     return candidates, washes
 
 
-def render_level_verdict(root, level, zones, output=None, law=None):
+def render_level_verdict(root, level, zones, output=None, law=None, target_size=None):
     law = law or LAW
     references = [load_plan_reference(root, zone) for zone in zones]
     if not all(references):
@@ -1038,12 +1111,19 @@ def render_level_verdict(root, level, zones, output=None, law=None):
     if len({reference["imagePath"] for reference in references}) != 1:
         raise SystemExit(f"level {level} has multiple plan references")
     reference = references[0]
-    point = lambda value: plan_point(reference, value)
-    base_plan = stretch_plan(reference["image"])
+    base_plan = (reduce_plan(reference["image"], target_size, law["substrate"]["plan"])
+                 if target_size else stretch_plan(
+                     reference["image"], native=True, law=law["substrate"]["plan"]))
+    scale_x = base_plan.width / reference["image"].width
+    scale_y = base_plan.height / reference["image"].height
+    point = lambda value: (plan_point(reference, value)[0] * scale_x,
+                           plan_point(reference, value)[1] * scale_y)
     inside_image = Image.new("1", base_plan.size)
     for zone in zones:
-        inside_image = ImageChops.logical_or(
-            inside_image, polygon_mask_image(base_plan.size, zone["ZoneLoops"], point).convert("1"))
+        zone_mask, box = cropped_polygon_mask(base_plan.size, zone["ZoneLoops"], point)
+        bounds = (box[0], box[1], box[0] + zone_mask.width, box[1] + zone_mask.height)
+        inside_image.paste(ImageChops.logical_or(
+            inside_image.crop(bounds), zone_mask.convert("1")), box)
     inside = np.asarray(inside_image, dtype=bool)
     candidates, washes = _verdict_items(root, zones)
     keys = [_atlas_candidate_key(candidate["zone"], candidate["id"])
@@ -1070,11 +1150,10 @@ def render_level_verdict(root, level, zones, output=None, law=None):
                                         + 255 * (1 - opacity)).astype(np.uint8)
         image = Image.fromarray(pixels).convert("RGBA")
 
-    def wash_layer(kind):
+    def residue_layer(kind):
         for wash_kind, loops in washes:
             if wash_kind == kind:
-                mask, box = cropped_polygon_mask(image.size, loops, point)
-                composite_mask(image, mask, law[f"{kind}Wash"]["rgba"], box)
+                draw_residue(image, loops, point, law[kind])
 
     def candidate_fill_layer():
         for key, candidate in zip(keys, candidates):
@@ -1110,8 +1189,8 @@ def render_level_verdict(root, level, zones, output=None, law=None):
 
     layers = {
         "plan": plan_layer,
-        "voidWash": lambda: wash_layer("void"),
-        "excludedWash": lambda: wash_layer("excluded"),
+        "void": lambda: residue_layer("void"),
+        "excluded": lambda: residue_layer("excluded"),
         "candidateFill": candidate_fill_layer,
         "candidateHatch": candidate_hatch_layer,
         "zoneOutline": zone_layer,
@@ -1147,10 +1226,8 @@ def render_level_verdicts(root, report):
                       "white")
     sheet_draw = ImageDraw.Draw(sheet)
     sheet_draw.text((16, 14), "Verdict renders by level", fill=rgb(LABEL_COLOR), font=font(22))
-    for index, path in enumerate(outputs):
-        with Image.open(path) as image:
-            thumb = ImageOps.contain(image.convert("RGB"), thumb_size,
-                                     Image.Resampling.LANCZOS)
+    for index, level in enumerate(levels):
+        thumb = render_level_verdict(root, level, levels[level], target_size=thumb_size)
         sheet.paste(thumb, ((index % columns) * thumb_size[0],
                             sheet_header + (index // columns) * thumb_size[1]))
     sheet.save(contact)
@@ -1166,7 +1243,8 @@ def render_verdict_pair(report_a_path, report_b_path, level, output,
         zones = [zone for zone in report["Zones"] if zone["Level"] == level]
         if not zones:
             raise SystemExit(f"level {level!r} not found in {path}")
-        images.append(render_level_verdict(path.parent, level, zones))
+        images.append(render_level_verdict(path.parent, level, zones,
+                                           target_size=(1000, 750)))
     if images[0].size != images[1].size:
         raise SystemExit(f"non-comparable verdict plan size for {level}: "
                          f"{images[0].size} vs {images[1].size}")
@@ -1406,7 +1484,7 @@ def main():
         panels.append(output)
 
     contact_path = review / "contact-sheet.png"
-    render_contact_sheet(report, panels, contact_path)
+    render_contact_sheet(root, report, contact_path)
     verdict_panels, verdict_contact = (render_level_verdicts(root, report)
                                        if raster_backed_panels == len(plan_references)
                                        else ([], None))
@@ -1424,7 +1502,7 @@ def main():
             provenance_panels.append(output)
             provenance_zones.append(metadata)
         provenance_contact = provenance_review / "contact-sheet.png"
-        render_contact_sheet(report, provenance_panels, provenance_contact)
+        render_contact_sheet(root, report, provenance_contact, provenance=True)
         provenance_path = root / "boundary-provenance.json"
         provenance_path.write_text(json.dumps({
             "schemaVersion": 2,
