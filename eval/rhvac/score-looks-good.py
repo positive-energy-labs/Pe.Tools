@@ -54,7 +54,7 @@ import sys
 
 import numpy as np
 import shapely
-from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import distance_transform_edt, label
 from shapely.geometry import GeometryCollection, LineString, MultiPolygon, Point, Polygon
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -80,6 +80,8 @@ HIT_FT = 0.25
 AUDIT_COVER_FT = 6.0
 EXEMPT_FT = 1.0          # InkBackedZoneEdgeExemptFt in the report options
 WALL_BAND_FT = 1.5       # interior-containment wall-claim band
+INTERIOR_WALL_MIN_FT = 3.0
+INTERIOR_WALL_SPAN_FRACTION = 0.5
 OFF_FRAME_DEG = 3.0
 EPS = 1e-7
 
@@ -416,6 +418,105 @@ def interior_swallow(geometry, ink, zone_boundary=None, band_ft=WALL_BAND_FT):
     return ink.ink_inside(core)
 
 
+def interior_wall_run_ft(geometry, ink, zone_boundary=None, band_ft=WALL_BAND_FT):
+    """Total span of connected seed-ink runs that read as interior walls."""
+    core = geometry.buffer(-band_ft)
+    if zone_boundary is not None and not zone_boundary.is_empty:
+        core = core.difference(zone_boundary.buffer(band_ft))
+    if core.is_empty:
+        return 0.0
+    minx, miny, maxx, maxy = geometry.bounds
+    required = max(INTERIOR_WALL_MIN_FT,
+                   INTERIOR_WALL_SPAN_FRACTION * min(maxx - minx, maxy - miny))
+    rr, cc = np.nonzero(ink.mask)
+    xs = ink.minx + (cc + 0.5) * ink.cell
+    ys = ink.miny + (rr + 0.5) * ink.cell
+    keep = shapely.contains_xy(core, xs, ys)
+    interior = np.zeros_like(ink.mask)
+    interior[rr[keep], cc[keep]] = True
+    components, count = label(interior, structure=np.ones((3, 3), dtype=int))
+    total = 0.0
+    for component in range(1, count + 1):
+        rows, cols = np.nonzero(components == component)
+        span = max(np.ptp(rows) + 1, np.ptp(cols) + 1) * ink.cell
+        if span + EPS >= required:
+            total += span
+    return round(float(total), 1)
+
+
+def _line_parts(geometry):
+    if isinstance(geometry, LineString):
+        return [geometry]
+    return [part for part in getattr(geometry, "geoms", ())
+            if isinstance(part, LineString)]
+
+
+def sibling_shared_edge_stats(polygons, ink):
+    """Length of exact sibling boundaries, and the part unsupported by seed ink."""
+    shared = unbacked = 0.0
+    details = []
+    ordered = sorted(polygons, key=lambda item: (item[0], item[1]))
+    for index, (disposition_a, id_a, geometry_a) in enumerate(ordered):
+        for disposition_b, id_b, geometry_b in ordered[index + 1:]:
+            for line in _line_parts(geometry_a.boundary.intersection(geometry_b.boundary)):
+                length = line.length
+                if length <= EPS:
+                    continue
+                count = max(2, int(math.ceil(length / SAMPLE_STEP_FT)) + 1)
+                distances = np.linspace(0.0, length, count)
+                points = [line.interpolate(float(distance)) for distance in distances]
+                hits = ink.distance_ft(
+                    [point.x for point in points], [point.y for point in points]) <= HIT_FT + EPS
+                unsupported = length * float((~hits).mean())
+                shared += length
+                unbacked += unsupported
+                details.append(dict(room=id_a, disposition=disposition_a,
+                                    siblingRoom=id_b, siblingDisposition=disposition_b,
+                                    sharedFt=round(length, 1),
+                                    unbackedFt=round(unsupported, 1)))
+    return dict(sharedFt=round(shared, 1), unbackedFt=round(unbacked, 1), details=details)
+
+
+def oracle_existence_stats(polygons, oracle_rooms):
+    """Oracle-only cross-checks. These may rank runs, never select one."""
+    split_details = []
+    ordered = sorted(polygons, key=lambda item: (item[0], item[1]))
+    for index, (disposition_a, id_a, geometry_a) in enumerate(ordered):
+        for disposition_b, id_b, geometry_b in ordered[index + 1:]:
+            shared = geometry_a.boundary.intersection(geometry_b.boundary)
+            shared_ft = sum(line.length for line in _line_parts(shared))
+            if shared_ft <= EPS:
+                continue
+            split_ft = max((shared.intersection(room["geometry"].buffer(-WALL_BAND_FT)).length
+                            for room in oracle_rooms), default=0.0)
+            split_details.append(dict(
+                room=id_a, disposition=disposition_a,
+                siblingRoom=id_b, siblingDisposition=disposition_b,
+                sharedFt=round(shared_ft, 1), oracleSplitFt=round(split_ft, 1)))
+    merged = []
+    for disposition, candidate_id, geometry in ordered:
+        matches = [room["number"] for room in oracle_rooms
+                   if geometry.contains(room["point"])]
+        merged.append(dict(disposition=disposition, room=candidate_id,
+                           matchedOracleRooms=len(matches),
+                           excessOracleRooms=max(0, len(matches) - 1)))
+    return dict(splitDetails=split_details, mergedCandidates=merged)
+
+
+def ratio_measure(value, denominator_value, denominator, tier):
+    return dict(tier=tier, kind="ratio",
+                pct=round(100 * value / denominator_value, 2) if denominator_value else None,
+                value=value, denominator=denominator)
+
+
+def absolute_measure(value, unit, tier):
+    return dict(tier=tier, kind="absolute", value=value, unit=unit)
+
+
+def unavailable_measure(tier, reason):
+    return dict(tier=tier, kind="unavailable", unavailable=reason)
+
+
 # ---- addressed shape and wall-rail diagnostics ------------------------------
 
 MICRO_EDGE_MAX_FT = 1.0
@@ -664,7 +765,10 @@ def load_levels(report, base):
         classes_path = os.path.join(os.path.dirname(seals_path),
                                     os.path.basename(seals_path).replace("seals_", "classes_", 1))
         if not os.path.isfile(classes_path):
-            raise SystemExit(f"missing INKC seal attribution: {classes_path}")
+            levels[token] = dict(
+                ink=ink, evidence=None,
+                evidenceUnavailable=f"missing INKC seal attribution: {classes_path}")
+            continue
         w, h, minx, miny, cell, data = overlay.load_classes(classes_path)
         classes = np.frombuffer(data, dtype=np.uint8)
         if classes.size != w * h:
@@ -673,7 +777,8 @@ def load_levels(report, base):
         if (ink.h, ink.w, ink.minx, ink.miny, ink.cell) \
                 != (door_heads.h, door_heads.w, door_heads.minx, door_heads.miny, door_heads.cell):
             raise SystemExit(f"INKC seal attribution disagrees with replay grid: {classes_path}")
-        levels[token] = dict(ink=ink, evidence=Grid.union(ink, door_heads))
+        levels[token] = dict(ink=ink, evidence=Grid.union(ink, door_heads),
+                             evidenceUnavailable=None)
     return levels
 
 
@@ -837,22 +942,34 @@ def score_report(report_path, clean=True):
         agg_no_exempt_ink = [0, 0]
         for disposition, table in (("accepted", accepted), ("held", held)):
             for pid, geometry in sorted(table.items()):
+                segments = geometry_segments(geometry)
                 row = dict(zone=zone["Zone"], id=pid, disposition=disposition,
-                           sqft=round(geometry.area, 1))
+                           sqft=round(geometry.area, 1),
+                           boundaryFt=round(sum(LineString(segment).length
+                                                for segment in segments), 1),
+                           boundaryEdges=len(segments),
+                           leakSf=round(geometry.difference(zgeom).area, 1))
                 if grids:
-                    frac, sampled, exempt = backed_stats(geometry, grids["evidence"], zboundary)
                     frac_ink, _, _ = backed_stats(geometry, grids["ink"], zboundary)
-                    unbacked = worst_unbacked_run(
-                        geometry, grids["evidence"], zboundary)
-                    row.update(edgeOnInk=None if frac is None else round(frac, 4),
-                               edgeOnInkInkOnly=None if frac_ink is None else round(frac_ink, 4),
-                               sampled=sampled, exemptSamples=exempt,
-                               worstUnbackedRunFt=unbacked["lengthFt"] if unbacked else 0.0,
-                               worstUnbackedRun=unbacked)
-                    if frac is not None:
-                        agg[disposition][0] += frac * sampled
-                        agg[disposition][1] += sampled
-                    if disposition == "accepted":
+                    row["edgeOnInkInkOnly"] = (None if frac_ink is None
+                                                else round(frac_ink, 4))
+                    if grids["evidence"] is not None:
+                        frac, sampled, exempt = backed_stats(
+                            geometry, grids["evidence"], zboundary)
+                        unbacked = worst_unbacked_run(
+                            geometry, grids["evidence"], zboundary)
+                        row.update(edgeOnInk=None if frac is None else round(frac, 4),
+                                   sampled=sampled, exemptSamples=exempt,
+                                   backedSamples=(int(round(frac * sampled))
+                                                  if frac is not None else 0),
+                                   worstUnbackedRunFt=unbacked["lengthFt"] if unbacked else 0.0,
+                                   worstUnbackedRun=unbacked)
+                        if frac is not None:
+                            agg[disposition][0] += frac * sampled
+                            agg[disposition][1] += sampled
+                    else:
+                        row["evidenceUnavailable"] = grids["evidenceUnavailable"]
+                    if disposition == "accepted" and grids["evidence"] is not None:
                         xs, ys = edge_sample_points(geometry)
                         hits = grids["evidence"].distance_ft(xs, ys) <= HIT_FT + EPS
                         agg_no_exempt[0] += int(hits.sum()); agg_no_exempt[1] += hits.size
@@ -861,7 +978,9 @@ def score_report(report_path, clean=True):
                     swallow = interior_swallow(geometry, grids["ink"], zboundary)
                     row.update(swallowSf=round(swallow, 1),
                                swallowFraction=round(swallow / geometry.area, 4)
-                               if geometry.area > EPS else 0.0)
+                               if geometry.area > EPS else 0.0,
+                               interiorWallRunFt=interior_wall_run_ft(
+                                   geometry, grids["ink"], zboundary))
                     pairs = double_line_pairs(geometry, zone_segments, grids["ink"])
                     row.update(doubleLinePairs=len(pairs),
                                doubleLineFt=round(sum(p["lengthFt"] for p in pairs), 1),
@@ -875,6 +994,11 @@ def score_report(report_path, clean=True):
              for disposition, table in (("accepted", accepted), ("held", held))
              for pid, geometry in table.items()], grids["ink"])
             if grids else [])
+        shared_edges = (sibling_shared_edge_stats(
+            [(disposition, pid, geometry)
+             for disposition, table in (("accepted", accepted), ("held", held))
+             for pid, geometry in table.items()], grids["ink"])
+            if grids else dict(sharedFt=0.0, unbackedFt=0.0, details=[]))
         stairstep_details = [dict(zone=zone["Zone"], room=p["id"],
                                   disposition=p["disposition"], **detail)
                              for p in polys_out for detail in p["stairstepRuns"]]
@@ -884,6 +1008,10 @@ def score_report(report_path, clean=True):
 
         # room recall against oracle rooms whose representative point is in this zone
         zone_oracle = [r for r in oracle_rooms.get(floor, []) if zgeom.contains(r["point"])]
+        oracle_existence = oracle_existence_stats(
+            [(disposition, pid, geometry)
+             for disposition, table in (("accepted", accepted), ("held", held))
+             for pid, geometry in table.items()], zone_oracle)
         recalled = held_count = 0
         oracle_rows = []
         for room in zone_oracle:
@@ -900,19 +1028,24 @@ def score_report(report_path, clean=True):
             row_for = next((p for p in polys_out if p["id"] == match
                             and p["disposition"] == status), None) if match else None
             if row_for is not None:
-                edge = row_for.get("edgeOnInk") or 0.0
-                quality = 0.7 * edge + 0.3 * row_for["onFrameLenFraction"]
+                edge = row_for.get("edgeOnInk")
+                quality = (None if row_for.get("evidenceUnavailable") else
+                           0.7 * (edge or 0.0) + 0.3 * row_for["onFrameLenFraction"])
             if status == "accepted":
                 recalled += 1
             elif status == "held":
                 held_count += 1
-            contribution = quality if status == "accepted" else (
-                0.25 * quality if status == "held" else 0.0)
+            contribution = (quality if status == "accepted" else
+                            0.25 * quality if status == "held" and quality is not None else
+                            0.0 if status == "missing" else None)
             oracle_rows.append(dict(number=room["number"], name=room["name"],
                                     confidence=room["confidence"], status=status,
-                                    matchedId=match, quality=round(quality, 4)))
+                                    matchedId=match,
+                                    quality=None if quality is None else round(quality, 4)))
             previous = room_status.get(room["number"])
-            if previous is None or contribution > previous[1]:
+            if (previous is None or
+                    (contribution is not None
+                     and (previous[1] is None or contribution > previous[1]))):
                 room_status[room["number"]] = (status, contribution)
 
         # oracle boundary distance, confidence=high only, matched by max overlap
@@ -941,11 +1074,17 @@ def score_report(report_path, clean=True):
             status = next(r["status"] for r in oracle_rows if r["number"] == room["number"])
             quality = next(r["quality"] for r in oracle_rows if r["number"] == room["number"])
             contributions.append(quality if status == "accepted"
-                                 else 0.25 * quality if status == "held" else 0.0)
+                                 else 0.25 * quality
+                                 if status == "held" and quality is not None
+                                 else 0.0 if status == "missing" else None)
         zones_out.append(dict(
             zone=zone["Zone"], level=zone["Level"], verdict=zone["triage"]["verdict"],
             zoneGeometryHash=_zone_geometry_hash(zone),
             zoneSqft=zone["ZoneSqft"], frameDeg=round(frame, 2),
+            evidenceUnavailable=grids.get("evidenceUnavailable") if grids else None,
+            StrictlyEditable=zone.get("StrictlyEditable"), Contained=zone.get("Contained"),
+            ClosureErrorSqft=zone.get("ClosureErrorSqft"), GapSqft=zone.get("GapSqft"),
+            OverlapSqft=zone.get("OverlapSqft"),
             oracleRooms=len(zone_oracle), recallAccepted=recalled, recallHeld=held_count,
             missing=len(zone_oracle) - recalled - held_count,
             roomRecall=round(recalled / len(zone_oracle), 4) if zone_oracle else None,
@@ -977,6 +1116,8 @@ def score_report(report_path, clean=True):
             siblingDoubleLineFt=round(sum(p["lengthFt"] for p in sibling_pairs), 1),
             siblingDoubleLineByDisposition=_sibling_pair_groups(sibling_pairs),
             siblingDoubleLineDetails=sibling_pairs,
+            siblingSharedEdges=shared_edges,
+            oracleExistence=oracle_existence,
             stairstepRuns=len(stairstep_details),
             stairstepEdges=sum(detail["edgeCount"] for detail in stairstep_details),
             maxStairstepSpanFt=max(
@@ -984,7 +1125,8 @@ def score_report(report_path, clean=True):
             stairstepDetails=stairstep_details,
             microJogCount=len(micro_jog_details), microJogDetails=micro_jog_details,
             shapeByDisposition=_shape_by_disposition(polys_out),
-            savedWork=round(float(np.mean(contributions)), 4) if contributions else None,
+            savedWork=(round(float(np.mean(contributions)), 4)
+                       if contributions and all(v is not None for v in contributions) else None),
             polygons=polys_out, oracleRoomStatus=oracle_rows,
             oracleBoundaryDistance=distance_rows))
 
@@ -1005,7 +1147,8 @@ def score_report(report_path, clean=True):
         roomRecall=round(accepted_total / total, 4) if total else None,
         heldRecall=round(held_total / total, 4) if total else None,
         missing=total - accepted_total - held_total,
-        savedWork=round(sum(q for _, q in room_status.values()) / total, 4) if total else None,
+        savedWork=(round(sum(q for _, q in room_status.values()) / total, 4)
+                   if total and all(q is not None for _, q in room_status.values()) else None),
         edgeOnInkAccepted=_weighted_edge(all_polys, "accepted"),
         edgeOnInkHeld=_weighted_edge(all_polys, "held"),
         swallowSf=round(sum(p.get("swallowSf", 0.0) for p in all_polys
@@ -1084,6 +1227,219 @@ def _score_identity(report):
                 zoneGeometryHash=digest)
 
 
+def _ratio_by_disposition(zones, value_key, denominator_key, tier=1):
+    result = {}
+    for disposition in ("accepted", "held"):
+        polys = [p for zone in zones for p in zone["polygons"]
+                 if p["disposition"] == disposition]
+        value = round(sum(p.get(value_key, 0.0) for p in polys), 1)
+        denominator = round(sum(p.get(denominator_key, 0.0) for p in polys), 1)
+        result[disposition] = ratio_measure(
+            value, denominator, denominator_key, tier)
+    return result
+
+
+def _shared_edge_measures(zones, oracle=False):
+    result = {}
+    key = "oracleSplitFt" if oracle else "unbackedFt"
+    details_key = "splitDetails" if oracle else "details"
+    container = "oracleExistence" if oracle else "siblingSharedEdges"
+    for disposition in ("accepted", "held"):
+        details = [detail for zone in zones for detail in zone[container][details_key]
+                   if disposition in (detail["disposition"], detail["siblingDisposition"])]
+        result[disposition] = ratio_measure(
+            round(sum(detail[key] for detail in details), 1),
+            round(sum(detail["sharedFt"] for detail in details), 1),
+            "siblingSharedEdgeFt", 2 if oracle else 1)
+    return result
+
+
+def _edge_on_ink_measures(zones):
+    result = {}
+    zone_reasons = sorted({zone["evidenceUnavailable"] for zone in zones
+                           if zone.get("evidenceUnavailable")})
+    for disposition in ("accepted", "held"):
+        polys = [p for zone in zones for p in zone["polygons"]
+                 if p["disposition"] == disposition]
+        reasons = sorted(set(zone_reasons) | {p["evidenceUnavailable"] for p in polys
+                                              if p.get("evidenceUnavailable")})
+        if reasons:
+            result[disposition] = unavailable_measure(1, "; ".join(reasons))
+            continue
+        denominator = sum(p.get("sampled") or 0 for p in polys)
+        value = sum(p.get("backedSamples") or 0 for p in polys)
+        result[disposition] = ratio_measure(
+            value, denominator, "eligibleBoundarySamples", 1)
+    return result
+
+
+def _worst_run_measures(zones):
+    result = {}
+    zone_reasons = sorted({zone["evidenceUnavailable"] for zone in zones
+                           if zone.get("evidenceUnavailable")})
+    for disposition in ("accepted", "held"):
+        polys = [p for zone in zones for p in zone["polygons"]
+                 if p["disposition"] == disposition]
+        reasons = sorted(set(zone_reasons) | {p["evidenceUnavailable"] for p in polys
+                                              if p.get("evidenceUnavailable")})
+        if reasons:
+            result[disposition] = unavailable_measure(1, "; ".join(reasons))
+            continue
+        worst = max(polys, key=lambda p: p.get("worstUnbackedRunFt", 0.0), default=None)
+        result[disposition] = ratio_measure(
+            worst.get("worstUnbackedRunFt", 0.0) if worst else 0.0,
+            worst.get("boundaryFt", 0.0) if worst else 0.0,
+            "boundaryFtOfWorstCandidate", 1)
+    return result
+
+
+def _shape_measures(zones, key, denominator, tier=1):
+    result = {}
+    for disposition in ("accepted", "held"):
+        polys = [p for zone in zones for p in zone["polygons"]
+                 if p["disposition"] == disposition]
+        result[disposition] = ratio_measure(
+            sum(p.get(key, 0) for p in polys),
+            sum(p.get(denominator, 0) for p in polys), denominator, tier)
+    return result
+
+
+def _max_shape_span_measures(zones):
+    result = {}
+    for disposition in ("accepted", "held"):
+        polys = [p for zone in zones for p in zone["polygons"]
+                 if p["disposition"] == disposition]
+        worst = max(polys, key=lambda p: p.get("maxStairstepSpanFt", 0.0), default=None)
+        result[disposition] = ratio_measure(
+            worst.get("maxStairstepSpanFt", 0.0) if worst else 0.0,
+            worst.get("boundaryFt", 0.0) if worst else 0.0,
+            "boundaryFtOfWorstCandidate", 1)
+    return result
+
+
+def _oracle_merged_measures(zones):
+    result = {}
+    for disposition in ("accepted", "held"):
+        rows = [row for zone in zones
+                for row in zone["oracleExistence"]["mergedCandidates"]
+                if row["disposition"] == disposition]
+        result[disposition] = ratio_measure(
+            sum(row["excessOracleRooms"] for row in rows),
+            sum(row["matchedOracleRooms"] for row in rows),
+            "matchedOracleRooms", 2)
+    return result
+
+
+def _measure_axes(zones):
+    polys = [p for zone in zones for p in zone["polygons"]]
+    oracle_rows = [row for zone in zones for row in zone["oracleRoomStatus"]]
+    total_candidate_area = sum(p["sqft"] for p in polys)
+    area_share = {
+        disposition: ratio_measure(
+            round(sum(p["sqft"] for p in polys if p["disposition"] == disposition), 1),
+            round(total_candidate_area, 1), "candidateAreaSf", 1)
+        for disposition in ("accepted", "held")}
+    empty = {
+        disposition: ratio_measure(
+            sum(not any(p["disposition"] == disposition for p in zone["polygons"])
+                for zone in zones), len(zones), "zones", 1)
+        for disposition in ("accepted", "held")}
+    matched = {
+        disposition: absolute_measure(
+            sum(row["status"] == disposition for row in oracle_rows), "rooms", 2)
+        for disposition in ("accepted", "held")}
+    honesty = {}
+    for name, field in (("strictlyEditable", "StrictlyEditable"),
+                        ("contained", "Contained")):
+        honesty[name] = (unavailable_measure(1, f"report predates {field}")
+                         if any(zone.get(field) is None for zone in zones) else
+                         ratio_measure(sum(bool(zone[field]) for zone in zones),
+                                       len(zones), "zones", 1))
+    for name, field in (("closureError", "ClosureErrorSqft"),
+                        ("gap", "GapSqft"), ("overlap", "OverlapSqft")):
+        honesty[name] = (unavailable_measure(1, f"report predates {field}")
+                         if any(zone.get(field) is None for zone in zones) else
+                         ratio_measure(
+                             round(sum(zone[field] for zone in zones), 4),
+                             round(sum(zone["zoneSqft"] for zone in zones), 1),
+                             "zoneAreaSf", 1))
+    return {
+        "A_existence": {
+            "overSegmentationInk": _shared_edge_measures(zones),
+            "underSegmentationInk": _ratio_by_disposition(
+                zones, "interiorWallRunFt", "boundaryFt"),
+            "overSegmentationOracleCrossCheck": _shared_edge_measures(zones, oracle=True),
+            "underSegmentationOracleCrossCheck": _oracle_merged_measures(zones),
+            "matched": matched,
+            "missing": absolute_measure(
+                sum(row["status"] == "missing" for row in oracle_rows), "rooms", 2)},
+        "B_extent": {
+            "swallow": _ratio_by_disposition(zones, "swallowSf", "sqft"),
+            "leak": _ratio_by_disposition(zones, "leakSf", "sqft")},
+        "C_boundary": {
+            "edgeOnInk": _edge_on_ink_measures(zones),
+            "worstUnbackedRun": _worst_run_measures(zones),
+            "doubleLine": _ratio_by_disposition(zones, "doubleLineFt", "boundaryFt")},
+        "D_regularity": {
+            "stairstepEdges": _shape_measures(zones, "stairstepEdges", "boundaryEdges"),
+            "maxStairstepSpan": _max_shape_span_measures(zones),
+            "microJogs": _shape_measures(zones, "microJogCount", "boundaryEdges")},
+        "E_coverage": {"emptyZones": empty, "areaShare": area_share},
+        "F_honesty": honesty}
+
+
+def measure_vector(scores, scores_raw_oracle):
+    return {
+        "metricSchemaVersion": 3,
+        "identity": scores["identity"],
+        "thresholds": {
+            "inkBackedDistanceFt": {"value": HIT_FT,
+                                    "why": "same one-cell evidence tolerance as edgeOnInk"},
+            "interiorBoundaryBandFt": {"value": WALL_BAND_FT,
+                                       "why": "reuses interior_swallow wall-claim band"},
+            "interiorWallMinFt": {"value": INTERIOR_WALL_MIN_FT,
+                                  "why": "rejects isolated marks shorter than a doorway-scale wall"},
+            "interiorWallMinCandidateSpanPct": {
+                "value": 100 * INTERIOR_WALL_SPAN_FRACTION,
+                "why": "requires the ink run to cross half the candidate short span"},
+            "sampleStepFt": {"value": SAMPLE_STEP_FT,
+                             "why": "matches existing edge evidence sampling"}},
+        "board": {"axes": _measure_axes(scores["zones"])},
+        "zones": [{"zone": zone["zone"], "level": zone["level"],
+                   "axes": _measure_axes([zone])} for zone in scores["zones"]],
+        "historicalDiagnostics": {
+            "savedWorkCleanedOracle": (
+                unavailable_measure(2, "lawful edge evidence unavailable")
+                if scores["board"]["savedWork"] is None else
+                ratio_measure(
+                    round(scores["board"]["savedWork"]
+                          * scores["board"]["oracleRoomsInZones"], 2),
+                    scores["board"]["oracleRoomsInZones"], "oracleRoomsInZones", 2)),
+            "savedWorkRawOracle": (
+                unavailable_measure(2, "lawful edge evidence unavailable")
+                if scores_raw_oracle["board"]["savedWork"] is None else
+                ratio_measure(
+                    round(scores_raw_oracle["board"]["savedWork"]
+                          * scores_raw_oracle["board"]["oracleRoomsInZones"], 2),
+                    scores_raw_oracle["board"]["oracleRoomsInZones"],
+                    "rawOracleRoomsInZones", 2))}}
+
+
+def _print_measure_lines(node, path=""):
+    if isinstance(node, dict) and "tier" in node and "kind" in node:
+        if node["kind"] == "ratio":
+            value = f"{node['pct']}% ({node['value']} / {node['denominator']})"
+        elif node["kind"] == "absolute":
+            value = f"{node['value']} {node['unit']} (absolute)"
+        else:
+            value = f"unavailable: {node['unavailable']}"
+        print(f"[tier {node['tier']}] {path}: {value}")
+        return
+    if isinstance(node, dict):
+        for key, value in node.items():
+            _print_measure_lines(value, f"{path}.{key}" if path else key)
+
+
 def _print_board(label, board):
     print(f"{label} oracleRooms={board['oracleRoomsInZones']} "
           f"recall={board['roomRecall']} held={board['heldRecall']} "
@@ -1106,46 +1462,21 @@ def _print_board(label, board):
 
 
 def cmd_score(args):
-    # Retain both historical diagnostics so old experiment history stays readable.
     scores = score_report(args.report, clean=True)
     scores_v1 = score_report(args.report, clean=False)
-    board = scores["board"]
-    hygiene = scores["oracleHygiene"]
+    vector = measure_vector(scores, scores_v1)
     report, _ = load_report(args.report)
     print(f"report: {os.path.abspath(args.report)}  generated {report.get('GeneratedUtc')}")
-    _print_board("board v1.1 (cleaned oracle):", board)
-    _print_board("board v1   (raw oracle):    ", scores_v1["board"])
-    print(f"oracle hygiene v1.1: dropped "
-          f"{len(hygiene['droppedRooms'])}/{hygiene['rawOracleRooms']} rooms "
-          f"({hygiene['droppedGuestHouse']} guest-house-sourced, "
-          f"{hygiene['droppedDuplicates']} same-floor duplicates)")
-    if board.get("unzonedOracleRooms"):
-        names = ", ".join(f"{r['name']} (floor {r['floor']})"
-                          for r in board["unzonedOracleRooms"])
-        print(f"       unzoned oracle rooms (in no zone, excluded from recall): {names}")
-    header = (f"{'zone':<18}{'orc':>4}{'acc':>4}{'held':>5}{'miss':>5}{'recall':>8}"
-              f"{'edgeAcc':>9}{'edgeHeld':>9}{'C#ibef':>8}{'agree':>8}{'swallow':>9}"
-              f"{'edit':>6}{'saved':>7}")
-    print(header)
-    for z in scores["zones"]:
-        if z["oracleRooms"] == 0 and not z["polygons"]:
-            continue
-        mine = z["edgeOnInkAcceptedNoExempt"]
-        theirs = z["reportedInkBackedEdgeFraction"]
-        agree = "" if mine is None else f"{mine - theirs:+.3f}"
-        print(f"{z['zone']:<18}{z['oracleRooms']:>4}{z['recallAccepted']:>4}"
-              f"{z['recallHeld']:>5}{z['missing']:>5}"
-              f"{_fmt(z['roomRecall']):>8}{_fmt(z['edgeOnInkAccepted']):>9}"
-              f"{_fmt(z['edgeOnInkHeld']):>9}{theirs:>8.3f}{agree:>8}"
-              f"{z['swallowSf']:>9}{_fmt(z['meanEditCostAccepted']):>6}"
-              f"{_fmt(z['savedWork']):>7}")
+    for name, threshold in vector["thresholds"].items():
+        print(f"threshold {name}={threshold['value']}: {threshold['why']}")
+    _print_measure_lines(vector["board"])
+    _print_measure_lines(vector["historicalDiagnostics"], "historicalDiagnostics")
     if args.out:
-        scores["boardV1RawOracle"] = scores_v1["board"]
         with open(args.out, "w", encoding="utf-8") as f:
-            json.dump(scores, f, indent=1, sort_keys=True, allow_nan=False)
+            json.dump(vector, f, indent=1, sort_keys=True, allow_nan=False)
             f.write("\n")
         print(f"wrote {os.path.abspath(args.out)}")
-    return scores
+    return vector
 
 
 def _fmt(value):

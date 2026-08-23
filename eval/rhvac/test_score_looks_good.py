@@ -112,6 +112,21 @@ def test_load_levels_only_door_head_class_backs_edges():
         assert not grids["ink"].mask.any()
 
 
+def test_load_levels_degrades_when_inkc_sidecar_is_missing():
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        input_dir = root / "input"
+        input_dir.mkdir()
+        _write_replay(input_dir / "replay_Level_1_Main_Level.bin",
+                      np.zeros((1, 4), dtype=bool))
+        report = {"Zones": [{
+            "Level": "Main Level", "Ink": "input/ink_Level_1_Main_Level.bin",
+            "Seals": "input/seals_Level_1_Main_Level.bin"}]}
+        grids = slg.load_levels(report, str(root))["Level_1_Main_Level"]
+        assert grids["evidence"] is None
+        assert "missing INKC seal attribution" in grids["evidenceUnavailable"]
+
+
 def test_backed_fraction_full_and_empty():
     # ink everywhere -> fully backed; no ink -> zero
     full = slg.Grid(np.ones((40, 40), dtype=bool), 0.0, 0.0, 0.25)
@@ -172,6 +187,80 @@ def test_interior_swallow_exempts_zone_rim():
     far_zone = Polygon([(-20, -20), (30, -20), (30, 30), (-20, 30)])
     assert slg.interior_swallow(room, stripe, near_zone.boundary) == 0.0
     assert slg.interior_swallow(room, stripe, far_zone.boundary) > 0
+
+
+def test_interior_wall_runs_require_a_long_connected_run():
+    room = Polygon([(0, 0), (10, 0), (10, 10), (0, 10)])
+    long_wall = _grid_with_ink([(20, c) for c in range(10, 30)])
+    specks = _grid_with_ink([(20, 20), (22, 22)])
+    assert slg.interior_wall_run_ft(room, long_wall) >= 4.5
+    assert slg.interior_wall_run_ft(room, specks) == 0.0
+
+
+def test_sibling_shared_edges_measure_unbacked_split_length():
+    left = Polygon([(0, 0), (5, 0), (5, 10), (0, 10)])
+    right = Polygon([(5, 0), (10, 0), (10, 10), (5, 10)])
+    empty = _grid_with_ink([])
+    full = _grid_with_ink([(r, 20) for r in range(41)], h=44)
+    unbacked = slg.sibling_shared_edge_stats(
+        [("accepted", "L", left), ("held", "R", right)], empty)
+    backed = slg.sibling_shared_edge_stats(
+        [("accepted", "L", left), ("held", "R", right)], full)
+    assert unbacked["sharedFt"] == 10.0
+    assert unbacked["unbackedFt"] == 10.0
+    assert backed["unbackedFt"] == 0.0
+
+
+def test_measure_shape_carries_tier_absolute_and_denominator():
+    assert slg.ratio_measure(2, 8, "candidateBoundaryFt", tier=1) == {
+        "tier": 1, "kind": "ratio", "pct": 25.0, "value": 2,
+        "denominator": "candidateBoundaryFt"}
+    assert slg.absolute_measure(3, "rooms", tier=2) == {
+        "tier": 2, "kind": "absolute", "value": 3, "unit": "rooms"}
+    assert slg.unavailable_measure(1, "missing INKC seal attribution") == {
+        "tier": 1, "kind": "unavailable", "unavailable": "missing INKC seal attribution"}
+
+
+def test_measure_axes_bins_every_measure_and_separates_dispositions():
+    polygon = dict(
+        disposition="accepted", sqft=100.0, boundaryFt=40.0, boundaryEdges=4,
+        leakSf=0.0, swallowSf=5.0, interiorWallRunFt=4.0,
+        sampled=40, backedSamples=30, edgeOnInk=0.75, worstUnbackedRunFt=5.0,
+        doubleLineFt=10.0, stairstepEdges=1, maxStairstepSpanFt=2.0,
+        microJogCount=1)
+    zone = dict(
+        zone="Main Level#00", level="Main Level", zoneSqft=100.0,
+        StrictlyEditable=True, Contained=True, ClosureErrorSqft=0.0,
+        GapSqft=0.0, OverlapSqft=0.0, polygons=[polygon],
+        siblingSharedEdges={"details": []},
+        oracleExistence={"splitDetails": [], "mergedCandidates": []},
+        oracleRoomStatus=[{"status": "accepted"}])
+    axes = slg._measure_axes([zone])
+    assert list(axes) == ["A_existence", "B_extent", "C_boundary",
+                          "D_regularity", "E_coverage", "F_honesty"]
+    assert axes["B_extent"]["swallow"]["accepted"]["pct"] == 5.0
+    assert axes["C_boundary"]["edgeOnInk"]["accepted"]["value"] == 30.0
+    assert axes["E_coverage"]["areaShare"]["held"]["pct"] == 0.0
+
+    leaves = []
+    def collect(node):
+        if "tier" in node:
+            leaves.append(node)
+        else:
+            for child in node.values():
+                collect(child)
+    collect(axes)
+    assert leaves
+    assert all(measure["tier"] in (1, 2) for measure in leaves)
+    assert all(
+        set(measure) >= ({"tier", "kind", "pct", "value", "denominator"}
+                         if measure["kind"] == "ratio" else
+                         {"tier", "kind", "value", "unit"})
+        for measure in leaves)
+
+    polygon["evidenceUnavailable"] = "missing INKC seal attribution"
+    assert slg._measure_axes([zone])["C_boundary"]["edgeOnInk"]["accepted"][
+        "kind"] == "unavailable"
 
 
 def _mark_boundary_cells(grid, geometry):
