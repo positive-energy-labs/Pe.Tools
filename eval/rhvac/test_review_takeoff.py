@@ -41,6 +41,18 @@ def write_replay_bin(path, w, h, minx, miny, cell, bits, level="Test"):
         f.write(blob)
 
 
+def write_plan_reference(root, token="Test", size=(100, 100), color=(220, 220, 220)):
+    path = root / "input" / f"plan_{token}.png"
+    Image.new("RGB", size, color).save(path)
+    (root / "input" / f"plan_{token}.json").write_text(json.dumps({
+        "schemaVersion": 1, "sourceView": f"Plan - {token}", "token": token,
+        "image": path.name, "imageSha256": digest(path),
+        "width": size[0], "height": size[1],
+        "topLeft": [0, 10], "topRight": [10, 10], "bottomLeft": [0, 0],
+    }), encoding="utf-8")
+    return path
+
+
 def write_zone_run(root, name, zones):
     run = root / name
     (run / "input").mkdir(parents=True)
@@ -342,14 +354,9 @@ class ReviewTakeoffTests(unittest.TestCase):
 
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertTrue((root / manifest["contactSheet"]).is_file())
-            self.assertTrue((root / manifest["atlasContactSheet"]).is_file())
-            self.assertEqual(len(manifest["levelAtlases"]), 1)
-            self.assertTrue((root / manifest["levelAtlases"][0]).is_file())
-            self.assertEqual(len(manifest["files"]), 5)
-            with Image.open(root / manifest["levelAtlases"][0]) as atlas:
-                self.assertLess(atlas.width, 40)
-                self.assertLess(atlas.height, 20 + 190)
-                self.assertEqual(atlas.getpixel((10, atlas.height - 9)), (186, 186, 186))
+            self.assertNotIn("verdictContactSheet", manifest)
+            self.assertEqual(manifest["verdictRenders"], [])
+            self.assertEqual(len(manifest["files"]), 3)
             self.assertEqual(manifest["panelCount"], 2)
             verified = subprocess.run([
                 sys.executable, str(ZONE_SCRIPT), "--verify",
@@ -409,8 +416,43 @@ class ReviewTakeoffTests(unittest.TestCase):
             panel_path = root / "review" / "01_Test_00.png"
             with Image.open(panel_path) as panel:
                 colors = {color for _count, color in panel.getcolors(panel.width * panel.height)}
-                self.assertIn((20, 120, 200), colors)
-                self.assertEqual(panel.getpixel((450, 360)), (20, 120, 200))
+                self.assertIn((0, 0, 76), colors)
+
+    def test_verdict_uses_law_and_has_no_invented_or_ink_layer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            write_plan_reference(root)
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "ROOM\tR01\t50\t30\t2\t5\t5\n"
+                "POLY\tR01\touter\t0;0|5;0|5;10|0;10\n"
+                "META\tresidue\tV01\tcrumb\t50\t30\t5\t9\t5;0|10;0|10;10|5;10\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "zoneKey": "stable-zone",
+                "MinX": 0, "MinY": 0, "MaxX": 10, "MaxY": 10,
+                "Tsv": "zones/rooms_Test.tsv", "Ink": "input/ink_Test.bin",
+                "ZoneLoops": [[[0, 0], [10, 0], [10, 10], [0, 10]]],
+            }
+            spec = importlib.util.spec_from_file_location("verdict_renderer", ZONE_SCRIPT)
+            renderer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(renderer)
+            baseline = renderer.render_level_verdict(root, "Test", [zone])
+
+            no_invented = json.loads(json.dumps(renderer.LAW))
+            no_invented["substrate"]["ink"]["rgba"] = [255, 0, 255, 255]
+            no_invented["invented"]["close"] = [0, 255, 0, 255]
+            no_invented["invented"]["sealRun"] = [0, 255, 0, 255]
+            no_invented["invented"]["sealDoor"] = [0, 255, 0, 255]
+            self.assertEqual(baseline.tobytes(), renderer.render_level_verdict(
+                root, "Test", [zone], law=no_invented).tobytes())
+
+            changed = json.loads(json.dumps(renderer.LAW))
+            changed["voidWash"]["rgba"] = [255, 0, 255, 255]
+            self.assertNotEqual(baseline.tobytes(), renderer.render_level_verdict(
+                root, "Test", [zone], law=changed).tobytes())
+            self.assertEqual(baseline.size, (100, 100))
 
     def test_zone_promotion_renderer_emits_verifiable_boundary_provenance(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -502,7 +544,7 @@ class ReviewTakeoffTests(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("raw-zones/rooms_Test.tsv", rejected.stderr)
 
-    def test_zone_promotion_renderer_distinguishes_excluded_from_void(self):
+    def test_zone_promotion_renderer_uses_declared_excluded_and_void_washes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "input").mkdir()
@@ -531,12 +573,11 @@ class ReviewTakeoffTests(unittest.TestCase):
             subprocess.run([sys.executable, str(ZONE_SCRIPT), str(root / "report.json")],
                            check=True, cwd=HERE, capture_output=True, text=True)
 
-            # Excluded is accounting residue, not a physical void. The old renderer painted both
-            # near-white and labeled both "void", which made covered UL06 residue look blank.
-            # Decision fills are translucent so the registered plan remains visible beneath them.
+            # The renderer follows the law even though its current gray/alpha pairs both
+            # composite to 226 over white. Lane R reports that declaration-level collision.
             with Image.open(root / "review" / "01_Test_00.png") as panel:
-                self.assertEqual(panel.getpixel((430, 360)), (235, 235, 235))
-                self.assertEqual(panel.getpixel((470, 360)), (244, 244, 244))
+                self.assertEqual(panel.getpixel((430, 360)), (226, 226, 226))
+                self.assertEqual(panel.getpixel((470, 360)), (226, 226, 226))
 
     def test_zone_promotion_renderer_refuses_missing_replay(self):
         # The stale ink_*.bin lane is deleted: no replay seed ink = hard error naming

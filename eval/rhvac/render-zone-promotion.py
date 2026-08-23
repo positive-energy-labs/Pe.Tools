@@ -1,4 +1,7 @@
-"""Render cropped per-zone promotion disposition panels from the offline report."""
+"""Render law-bound verdict and forensic views from an offline takeoff report."""
+
+# COUPLING: source/pe-tools/apps/web/src/runs/visual-law.json is the single visual-law
+# declaration shared with the /runs TypeScript renderer. Do not restate its values here.
 
 import argparse
 import colorsys
@@ -9,17 +12,49 @@ import re
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
 import overlay
 
 
-# The panel answers four questions, and every color belongs to exactly one of them:
+LAW_PATH = (Path(__file__).resolve().parents[2]
+            / "source/pe-tools/apps/web/src/runs/visual-law.json")
+
+
+def load_visual_law(path=LAW_PATH):
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+LAW = load_visual_law()
+
+
+def rgb(value):
+    return tuple(value[:3])
+
+
+def rgba(value):
+    return tuple(value)
+
+
+PLAN_LAW = LAW["substrate"]["plan"]
+INK = rgba(LAW["substrate"]["ink"]["rgba"])
+SEAL_DOOR = rgba(LAW["invented"]["sealDoor"])
+SEAL_RUN = rgba(LAW["invented"]["sealRun"])
+CLOSE = rgba(LAW["invented"]["close"])
+VOID = rgba(LAW["voidWash"]["rgba"])
+EXCLUDED = rgba(LAW["excludedWash"]["rgba"])
+ZONE = rgba(LAW["zone"]["stroke"]["rgba"])
+ZONE_WIDTH = LAW["zone"]["stroke"]["widthPx"]
+ZONE_DASH = tuple(LAW["zone"]["stroke"]["dash"])
+CANDIDATE_ALPHA = LAW["candidate"]["fill"]["alpha"]
+LABEL_COLOR = rgba(LAW["label"]["rgba"])
+LABEL_SIZE = LAW["label"]["sizePx"]
+
+# The forensic panel answers four questions, and every color belongs to exactly one of them:
 #   RECEIVED  what the solver partitioned on as captured evidence — replay seed ink, solid
 #             near-black, never denoised, never painted over. If the input is noisy (attic
 #             framing lattice), showing that noise is the point.
-#   ADDED     obstruction the sealers invented — screened (checkerboard), never solid, so
-#             synthetic cells cannot be mistaken for drawn walls. When the INKC sidecar
+#   ADDED     obstruction the sealers invented — translucent warm tints. When the INKC sidecar
 #             (classes_<token>.bin, derived from the zone's Seals path) is present the seal
 #             layer splits honestly: SEAL_DOOR is door-head (+ oversize fringe) closure,
 #             SEAL_RUN is the heuristic wall-run gap sealer. Older artifacts fall back to
@@ -28,21 +63,6 @@ import overlay
 #   DECIDED   accepted / held / void / excluded areas — crisp outlines over pale solid fills
 #             UNDER the evidence, so a decision can never obscure the ink it was made on.
 #   REFERENCE the zone boundary.
-ACCEPTED = (24, 91, 122)
-ACCEPTED_FILL = (229, 237, 241)
-HELD = (219, 150, 55)
-HELD_FILL = (250, 238, 217)
-REVIEW_HELD = (190, 55, 145)
-REVIEW_HELD_FILL = (249, 224, 241)
-VOID = (145, 145, 145)
-VOID_FILL = (236, 236, 236)
-EXCLUDED = (92, 92, 92)
-EXCLUDED_FILL = overlay.DISPOSITION_EXCLUDED
-INK = (25, 25, 25)
-SEAL_DOOR = (222, 58, 20)      # door-head (+ oversize fringe) closure; also merged-bin fallback
-SEAL_RUN = (235, 130, 20)      # heuristic wall-run gap sealer (never backs a boundary)
-CLOSE = (200, 165, 130)
-ZONE = (112, 44, 138)
 TRIAGE = (183, 46, 46)
 PROVENANCE = {
     "zone-backed": (0, 125, 70),
@@ -61,11 +81,7 @@ SPECK_SQFT = 0.25
 HEADER_HEIGHT = 62
 PANEL_HEIGHT = 770
 LEGEND_Y = 658
-ATLAS_HEADER_HEIGHT = 190
-ATLAS_ZONE = (177, 0, 128)
-ATLAS_OUTSIDE_OPACITY = 0.30
-DISPOSITION_FILL_OPACITY = 0.55
-ATLAS_FILL_OPACITY = 0.42
+VERDICT_CONTACT_HEADER_HEIGHT = 56
 
 
 def font(size):
@@ -95,14 +111,35 @@ def artifact_path(root, relative):
 
 def polygon_mask(size, loops, point):
     """Rasterize the report's even-odd loop contract."""
-    inside = np.zeros((size[1], size[0]), dtype=bool)
+    return np.asarray(polygon_mask_image(size, loops, point), dtype=bool)
+
+
+def polygon_mask_image(size, loops, point):
+    """Rasterize even-odd loops without expanding a plan-native NumPy frame."""
+    inside = Image.new("1", size)
     for loop in loops:
         if len(loop) < 3:
             continue
         current = Image.new("1", size)
         ImageDraw.Draw(current).polygon([point(value) for value in loop], fill=1)
-        inside ^= np.asarray(current, dtype=bool)
-    return inside
+        inside = ImageChops.logical_xor(inside, current)
+    return inside.convert("L")
+
+
+def cropped_polygon_mask(size, loops, point):
+    points = [point(value) for loop in loops for value in loop]
+    if not points:
+        return Image.new("L", (1, 1)), (0, 0)
+    left = max(0, math.floor(min(value[0] for value in points)))
+    top = max(0, math.floor(min(value[1] for value in points)))
+    right = min(size[0], math.ceil(max(value[0] for value in points)) + 1)
+    bottom = min(size[1], math.ceil(max(value[1] for value in points)) + 1)
+    if right <= left or bottom <= top:
+        return Image.new("L", (1, 1)), (0, 0)
+    return (polygon_mask_image((right - left, bottom - top), loops,
+                               lambda value: (point(value)[0] - left,
+                                              point(value)[1] - top)),
+            (left, top))
 
 
 def plan_reference_paths(root, zone):
@@ -134,6 +171,51 @@ def load_plan_reference(root, zone):
             "imagePath": image_path, "manifestPath": manifest_path}
 
 
+def stretch_plan(image):
+    black, white = PLAN_LAW["blackPoint"], PLAN_LAW["whitePoint"]
+    if white <= black:
+        raise SystemExit("visual law plan whitePoint must exceed blackPoint")
+    lut = [0 if value <= black else 255 if value >= white
+           else round((value - black) * 255 / (white - black))
+           for value in range(256)]
+    return image.point(lut * len(image.getbands()))
+
+
+def plan_point(reference, value):
+    manifest = reference["manifest"]
+    top_left = np.asarray(manifest["topLeft"], dtype=float)
+    basis = np.column_stack((np.asarray(manifest["topRight"], dtype=float) - top_left,
+                             np.asarray(manifest["bottomLeft"], dtype=float) - top_left))
+    if abs(np.linalg.det(basis)) < 1e-9:
+        raise SystemExit(f"degenerate plan reference registration: {reference['manifestPath']}")
+    uv = np.linalg.solve(basis, np.asarray(value, dtype=float) - top_left)
+    return (float(uv[0] * reference["image"].width),
+            float(uv[1] * reference["image"].height))
+
+
+def composite_mask(image, mask, color, box=(0, 0)):
+    color = rgba(color)
+    opacity = mask if color[3] == 255 else mask.point(
+        lambda value: round(value * color[3] / 255))
+    image.paste((*color[:3], 255), box, opacity)
+
+
+def darkened(color):
+    return tuple(round(channel * 0.58) for channel in color[:3]) + (255,)
+
+
+def draw_hatch(image, mask, color, hatch, box=(0, 0)):
+    spacing = hatch["spacingPx"]
+    lines = Image.new("RGBA", mask.size)
+    draw = ImageDraw.Draw(lines)
+    # The law currently declares 45 degrees. The formula supports either diagonal direction.
+    slope = -1 if hatch["angleDeg"] % 180 == 45 else 1
+    for offset in range(-mask.height, mask.width + mask.height, spacing):
+        draw.line((offset, 0, offset + slope * mask.height, mask.height),
+                  fill=color, width=hatch["widthPx"])
+    image.paste(lines, box, ImageChops.multiply(mask, lines.getchannel("A")))
+
+
 def crop_plan_reference(reference, world_crop, size):
     """Resample the registered Revit plan into a north-up world-coordinate crop."""
     manifest = reference["manifest"]
@@ -162,7 +244,7 @@ def crop_plan_reference(reference, world_crop, size):
         (source_bl[1] - source_tl[1]) / out_height,
         source_tl[1],
     )
-    return reference["image"].transform(
+    return stretch_plan(reference["image"]).transform(
         size, Image.Transform.AFFINE, coefficients,
         resample=Image.Resampling.BILINEAR, fillcolor="white")
 
@@ -460,6 +542,16 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         y0, y1 = max(0, y0), min(height, y1)
     world_crop = (min_x + x0 * cell, min_y + y0 * cell,
                   min_x + x1 * cell, min_y + y1 * cell)
+    grid_size = (x1 - x0, y1 - y0)
+    if plan_reference is not None:
+        plan_tl = plan_point(plan_reference, (world_crop[0], world_crop[3]))
+        plan_tr = plan_point(plan_reference, (world_crop[2], world_crop[3]))
+        plan_bl = plan_point(plan_reference, (world_crop[0], world_crop[1]))
+        render_size = (max(1, round(math.dist(plan_tl, plan_tr))),
+                       max(1, round(math.dist(plan_tl, plan_bl))))
+    else:
+        render_size = grid_size
+    render_scale = (render_size[0] / grid_size[0], render_size[1] / grid_size[1])
     if metadata is not None:
         metadata.update({
             "requestedBounds": [float(value) for value in bounds],
@@ -469,10 +561,7 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
                            "minY": min_y, "cell": cell},
             "paddingCells": padding_cells,
             "scale": scale,
-            "layers": (["plan-reference"] if plan_reference is not None else []) +
-                      ["replay-seed-ink", "door-head-seal", "wall-run-seal",
-                       "gap-close", "accepted", "held", "review-held-ui-only",
-                       "void", "excluded", "zone-authority"],
+            "layers": LAW["renders"]["forensic"]["layers"],
         })
     if x1 <= x0 or y1 <= y0:
         panel = Image.new("RGB", (900, 700), "white")
@@ -491,91 +580,122 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
                                                    "no-replay-evidence")
 
     def point(value):
-        return ((value[0] - min_x) / cell - x0,
-                y1 - (value[1] - min_y) / cell)
+        return (((value[0] - min_x) / cell - x0) * render_scale[0],
+                (y1 - (value[1] - min_y) / cell) * render_scale[1])
 
-    # Decision fills go down FIRST so nothing they claim can hide a single evidence cell.
-    image = (crop_plan_reference(plan_reference, world_crop, (x1 - x0, y1 - y0))
-             if plan_reference is not None
-             else Image.new("RGB", (x1 - x0, y1 - y0), "white"))
+    # Layer order comes from LAW.renders.forensic.layers.
+    base_plan = (crop_plan_reference(plan_reference, world_crop, render_size)
+                 if plan_reference is not None
+                 else Image.new("RGB", render_size, "white"))
+    inside_zone = polygon_mask(base_plan.size, zone["ZoneLoops"], point)
+    image = Image.new("RGBA", base_plan.size)
 
-    def fill_loops(loops, color):
-        # The loop contract is even-odd, not assumed outer-first.
-        if loops:
-            even_odd = polygon_mask(image.size, loops, point)
-            tint = Image.blend(image, Image.new("RGB", image.size, color),
-                               DISPOSITION_FILL_OPACITY)
-            image.paste(tint, mask=Image.fromarray(even_odd.astype(np.uint8) * 255))
+    def paint(mask, color):
+        if mask is not None:
+            crop = crop_grid_mask(mask, x0, y0, x1, y1)[::-1]
+            layer_mask = Image.fromarray(crop.astype(np.uint8) * 255)
+            if layer_mask.size != image.size:
+                layer_mask = layer_mask.resize(image.size, Image.Resampling.NEAREST)
+            composite_mask(image, layer_mask, color)
 
+    candidate_rows, wash_rows = [], []
     for residue in ([] if bare_zone else residues):
-        loops = residue["loops"]
-        if not loops:
+        if not residue["loops"]:
             continue
-        fill = (HELD_FILL if residue["reason"] == "rejected" else
-                EXCLUDED_FILL if residue["reason"] == "excluded" else VOID_FILL)
-        fill_loops(loops, fill)
+        if residue["reason"] == "excluded":
+            wash_rows.append(("excluded", residue["loops"]))
+        elif residue["reason"] != "rejected":
+            wash_rows.append(("void", residue["loops"]))
+        else:
+            candidate_rows.append(("held", residue["id"], residue["loops"]))
     for room_id in ([] if bare_zone else sorted(rooms)):
-        fill_loops([loop for _kind, loop in polygons.get(room_id, [])], ACCEPTED_FILL)
+        candidate_rows.append(("accepted", room_id,
+                               [loop for _kind, loop in polygons.get(room_id, [])]))
     for candidate in ([] if bare_zone else review_held):
-        loops = field(candidate, "polygons", default=[]) or []
-        if loops:
-            fill_loops(loops, REVIEW_HELD_FILL)
+        candidate_rows.append(("reviewHeld", field(candidate, "id"),
+                               field(candidate, "polygons", default=[]) or []))
+    keys = [_atlas_candidate_key(zone, candidate_id)
+            for _status, candidate_id, _loops in candidate_rows]
+    colors = _adjacent_colors([
+        {"zone": zone, "id": candidate_id, "loops": loops}
+        for _status, candidate_id, loops in candidate_rows
+    ], cell / min(render_scale))
+    candidate_masks = {}
+    for key, (status, candidate_id, loops) in zip(keys, candidate_rows):
+        candidate_masks[key] = cropped_polygon_mask(image.size, loops, point)
 
-    # Raster layers over the fills: synthetic closures screened (checkerboard — never solid,
-    # so they cannot read as drawn walls), then evidence ink solid black on top of everything.
-    pixels = np.asarray(image).copy()          # rows top-down; grid rows bottom-up
+    def plan_layer():
+        nonlocal image
+        pixels = np.asarray(base_plan).copy()
+        for selected, opacity in ((inside_zone, PLAN_LAW["insideZoneOpacity"]),
+                                  (~inside_zone, PLAN_LAW["outsideZoneOpacity"])):
+            pixels[selected] = np.rint(
+                pixels[selected] * opacity + 255 * (1 - opacity)).astype(np.uint8)
+        image = Image.fromarray(pixels).convert("RGBA")
 
-    def paint(mask, color, screened):
-        crop = crop_grid_mask(mask, x0, y0, x1, y1)
-        if screened:
-            yy, xx = np.mgrid[y0:y1, x0:x1]
-            crop = crop & ((yy + xx) % 2 == 0)
-        pixels[crop[::-1]] = color
+    def wash_layer(kind, color):
+        for wash_kind, loops in wash_rows:
+            if wash_kind == kind:
+                mask, box = cropped_polygon_mask(image.size, loops, point)
+                composite_mask(image, mask, color, box)
 
-    if close_mask is not None:
-        paint(close_mask, CLOSE, screened=True)
-    if run_mask is not None:
-        paint(run_mask, SEAL_RUN, screened=True)
-    if door_mask is not None:
-        paint(door_mask, SEAL_DOOR, screened=True)
-    paint(ink_mask, INK, screened=False)
-    inside_zone = polygon_mask(image.size, zone["ZoneLoops"], point)
-    pixels[~inside_zone] = np.rint(
-        pixels[~inside_zone] * ATLAS_OUTSIDE_OPACITY
-        + 255 * (1 - ATLAS_OUTSIDE_OPACITY)).astype(np.uint8)
-    image = Image.fromarray(pixels)
+    def candidate_fill_layer():
+        for key in keys:
+            mask, box = candidate_masks[key]
+            composite_mask(image, mask,
+                           (*colors[key], round(CANDIDATE_ALPHA * 255)), box)
 
-    draw = ImageDraw.Draw(image)
-    for residue in ([] if bare_zone else residues):
-        loops = residue["loops"]
-        if not loops:
-            continue
-        color = (HELD if residue["reason"] == "rejected" else
-                  EXCLUDED if residue["reason"] == "excluded" else VOID)
-        if not provenance or residue["reason"] != "rejected":
-            draw.line([point(value) for value in loops[0]] + [point(loops[0][0])],
-                      fill=color, width=2)
-        for hole in loops[1:]:
-            draw.line([point(value) for value in hole] + [point(hole[0])],
-                      fill=color, width=1)
-    for room_id in ([] if bare_zone else sorted(rooms)):
-        for kind, loop in polygons.get(room_id, []):
-            if len(loop) >= 2 and not provenance:
-                draw.line([point(value) for value in loop] + [point(loop[0])],
-                          fill=ACCEPTED, width=3 if kind == "outer" else 2)
-    for candidate in ([] if bare_zone else review_held):
-        for loop in field(candidate, "polygons", default=[]) or []:
-            if len(loop) >= 2 and not provenance:
-                _draw_dashed(draw, [point(value) for value in loop],
-                             REVIEW_HELD, 3, (7, 4))
-    # Scope is a first-class review datum, not an inferred crop. Draw every outer/hole loop last
-    # so a reviewer can see exactly what the accepted, held, and excluded areas must partition.
-    for loop in zone["ZoneLoops"]:
-        if len(loop) >= 2:
-            draw.line([point(value) for value in loop] + [point(loop[0])],
-                      fill=ZONE, width=3)
+    def candidate_outline_layer():
+        outline = LAW["candidate"]["outline"]["forensic"]
+        for key, (status, _candidate_id, loops) in zip(keys, candidate_rows):
+            color = darkened(colors[key])
+            if status in ("held", "reviewHeld"):
+                mask, box = candidate_masks[key]
+                draw_hatch(image, mask, color,
+                           LAW["candidate"]["status"][status]["hatch"], box)
+            draw = ImageDraw.Draw(image)
+            for loop in loops:
+                if len(loop) >= 2:
+                    draw.line([point(value) for value in loop] + [point(loop[0])],
+                              fill=color, width=outline["widthPx"])
+
+    def zone_layer():
+        draw = ImageDraw.Draw(image)
+        for loop in zone["ZoneLoops"]:
+            if len(loop) >= 2:
+                _draw_dashed(draw, [point(value) for value in loop], ZONE,
+                             ZONE_WIDTH, ZONE_DASH)
+
+    def label_layer():
+        draw = ImageDraw.Draw(image)
+        for _key, (status, candidate_id, loops) in zip(keys, candidate_rows):
+            if loops and loops[0]:
+                xs, ys = zip(*loops[0])
+                label = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+                _atlas_label(draw, point(label), _short_atlas_label(status, candidate_id),
+                             font(LABEL_SIZE))
+
+    layers = {
+        "plan": plan_layer,
+        "close": lambda: paint(close_mask, CLOSE),
+        "sealRun": lambda: paint(run_mask, SEAL_RUN),
+        "sealDoor": lambda: paint(door_mask, SEAL_DOOR),
+        "ink": lambda: paint(ink_mask, INK),
+        "voidWash": lambda: wash_layer("void", VOID),
+        "excludedWash": lambda: wash_layer("excluded", EXCLUDED),
+        "candidateFill": candidate_fill_layer,
+        "candidateOutline": candidate_outline_layer,
+        "zoneOutline": zone_layer,
+        "label": label_layer,
+    }
+    for layer in LAW["renders"]["forensic"]["layers"]:
+        try:
+            layers[layer]()
+        except KeyError:
+            raise SystemExit(f"unsupported forensic visual-law layer: {layer}")
 
     if provenance:
+        draw = ImageDraw.Draw(image)
         masks = {"received": ink_mask, "door-head": door_mask, "wall-run": run_mask,
                  "gap-close": close_mask}
         from scipy.ndimage import distance_transform_edt
@@ -646,6 +766,10 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
         metadata["sampler"] = {"stepFeet": cell, "radiusFeet": 0.75,
                                "minimumCoherentInkRunFeet": 1.5}
 
+    forensic_image = image.convert("RGB")
+    if output is not None and plan_reference is not None and not provenance:
+        forensic_image.save(output)
+    image = forensic_image
     if scale != 1:
         image = image.resize((image.width * scale, image.height * scale), Image.Resampling.NEAREST)
     if focus_bounds and image.width < 900 and image.height < 588:
@@ -696,17 +820,15 @@ def render_zone(root, zone, output, padding_cells=12, scale=2, focus_bounds=None
     panel_draw.text((x, 10), title, fill=(30, 30, 30), font=font(size))
     panel_draw.text((14, 32), subtitle, fill=(70, 70, 70), font=font(16))
     draw_provenance_legend(panel_draw) if provenance else draw_legend(panel_draw)
-    if output is not None:
+    if output is not None and (plan_reference is None or provenance):
         panel.save(output)
     return panel
 
 
 def _legend_swatch(draw, x, y, color, style, fill=None):
-    if style == "screen":
-        for sy in range(14):
-            for sx in range(14):
-                if (sx + sy) % 2 == 0:
-                    draw.point((x + sx, y + 2 + sy), fill=color)
+    if style == "hatch":
+        draw.rectangle((x, y + 2, x + 14, y + 16), fill=fill)
+        draw.line((x, y + 16, x + 14, y + 2), fill=color)
     elif style == "line":
         draw.line((x, y + 9, x + 16, y + 9), fill=color, width=4)
     elif style == "decision":
@@ -729,17 +851,16 @@ def _legend_items(draw, y, heading, items):
 
 
 PIXEL_LEGEND = (
-    (INK, "solid", "received (solid/pixelated)", None),
-    (SEAL_DOOR, "screen", "door-head (dithered)", None),
-    (SEAL_RUN, "screen", "wall-run (dithered)", None),
-    (CLOSE, "screen", "gap-close (dithered)", None),
+    (INK, "solid", "received", None),
+    (SEAL_DOOR, "solid", "door-head tint", None),
+    (SEAL_RUN, "solid", "wall-run tint", None),
+    (CLOSE, "solid", "gap-close tint", None),
 )
 DECISION_LEGEND = (
-    (ACCEPTED, "decision", "accepted", ACCEPTED_FILL),
-    (HELD, "decision", "held", HELD_FILL),
-    (REVIEW_HELD, "decision", "review-held (UI-only)", REVIEW_HELD_FILL),
-    (EXCLUDED, "decision", "excluded", EXCLUDED_FILL),
-    (VOID, "decision", "void", VOID_FILL),
+    ((30, 80, 130), "decision", "candidate", (80, 170, 240)),
+    ((30, 80, 130), "hatch", "held", (80, 170, 240)),
+    (EXCLUDED, "solid", "excluded wash", None),
+    (VOID, "solid", "void wash", None),
 )
 
 
@@ -748,7 +869,7 @@ def draw_legend(panel_draw):
     _legend_items(panel_draw, LEGEND_Y, "PIXELS", PIXEL_LEGEND)
     _legend_items(panel_draw, LEGEND_Y + 20, "FILL + OUTLINE", DECISION_LEGEND)
     _legend_items(panel_draw, LEGEND_Y + 40, "ZONE", (
-        (ZONE, "line", "authority outline only; outside plan 30%", None),
+        (ZONE, "line", "authority hairline; outside plan faded", None),
     ))
 
 
@@ -764,7 +885,7 @@ def draw_provenance_legend(panel_draw):
     panel_draw.text((x, LEGEND_Y + 60), "bare-zone = no overlay",
                     fill=(60, 60, 60), font=font(12))
     _legend_items(panel_draw, LEGEND_Y + 80, "ZONE", (
-        (ZONE, "line", "authority outline only; outside plan 30%", None),
+        (ZONE, "line", "authority hairline; outside plan faded", None),
     ))
 
 
@@ -788,13 +909,14 @@ def render_contact_sheet(report, panels, contact_path):
 
 
 def _atlas_color(key, salt=0):
-    """Stable pastel fill keyed independently of disposition and report order."""
-    value = hashlib.sha256(f"{key}\0{salt}".encode("utf-8")).digest()
+    """Stable hue keyed independently of disposition, neighbors, and report order."""
+    value = hashlib.sha256(key.encode("utf-8")).digest()
     hue = int.from_bytes(value[:8], "big") / (1 << 64)
-    saturation = 0.50 + value[8] / 255 * 0.14
-    brightness = 0.88 + value[9] / 255 * 0.08
+    variants = ((0.84, 0.94), (1.00, 0.62), (0.72, 0.78), (0.92, 0.72),
+                (0.76, 0.98), (1.00, 0.82), (0.68, 0.66), (0.88, 0.56))
+    saturation, brightness = variants[salt % len(variants)]
     rgb = colorsys.hsv_to_rgb(hue, saturation, brightness)
-    return tuple(round((component * 255) * 0.68 + 255 * 0.32) for component in rgb)
+    return tuple(round(component * 255) for component in rgb)
 
 
 def _atlas_candidate_key(zone, candidate_id):
@@ -804,13 +926,39 @@ def _atlas_candidate_key(zone, candidate_id):
 def _atlas_colors(keys):
     colors, used = {}, set()
     for key in sorted(keys):
-        salt = 0
-        color = _atlas_color(key, salt)
-        while color in used:
-            salt += 1
-            color = _atlas_color(key, salt)
+        choices = [_atlas_color(key, salt) for salt in range(8)]
+        color = next((choice for choice in choices if choice not in used), choices[0])
         colors[key] = color
         used.add(color)
+    return colors
+
+
+def _adjacent_colors(candidates, pixel_feet):
+    rows = []
+    for candidate in candidates:
+        points = [point for loop in candidate["loops"] for point in loop]
+        bounds = None if not points else (
+            min(point[0] for point in points), min(point[1] for point in points),
+            max(point[0] for point in points), max(point[1] for point in points))
+        rows.append((_atlas_candidate_key(candidate["zone"], candidate["id"]), bounds))
+    colors = {}
+    # ponytail: conservative O(n^2) bounding-box adjacency is exact enough for tens of rooms;
+    # use a spatial index only when a level reaches hundreds of candidates.
+    for index, (key, bounds) in enumerate(rows):
+        adjacent = []
+        for other_key, other in rows[:index]:
+            if other_key not in colors or bounds is None or other is None:
+                continue
+            dx = max(other[0] - bounds[2], bounds[0] - other[2], 0)
+            dy = max(other[1] - bounds[3], bounds[1] - other[3], 0)
+            if math.hypot(dx, dy) <= pixel_feet * 1.5:
+                adjacent.append(colors[other_key])
+        choices = [_atlas_color(key, salt) for salt in range(8)]
+        color = next((choice for choice in choices
+                      if all(math.dist(choice, other) >= 80 for other in adjacent)),
+                     max(choices, key=lambda choice: min(
+                         (math.dist(choice, other) for other in adjacent), default=math.inf)))
+        colors[key] = color
     return colors
 
 
@@ -835,249 +983,204 @@ def _draw_dashed(draw, points, fill, width, dash):
 
 
 def _atlas_label(draw, point, text, text_font):
-    box = draw.textbbox(point, text, font=text_font, anchor="mm")
-    draw.rectangle((box[0] - 2, box[1] - 1, box[2] + 2, box[3] + 1), fill="white")
-    draw.text(point, text, fill=(35, 35, 35), font=text_font, anchor="mm")
+    draw.text(point, text, fill=LABEL_COLOR, font=text_font, anchor="mm")
 
 
 def _short_atlas_label(status, candidate_id):
     match = re.search(r"R(\d+)", candidate_id)
     suffix = f"{int(match.group(1)):02d}" if match else ""
-    return {"accepted": "A", "held": "H", "review-held": "C"}[status] + suffix
+    return {"accepted": "A", "held": "H", "review-held": "C",
+            "reviewHeld": "C"}[status] + suffix
 
 
-def _draw_atlas_key(draw, y, text_size=13):
-    key_font = font(text_size)
-    muted = (55, 55, 55)
-    x = 12
-    draw.text((x, y), "FILL", fill=muted, font=key_font)
-    x += draw.textlength("FILL", font=key_font) + 8
-    draw.rectangle((x, y + 2, x + 18, y + 15), fill=(144, 207, 238))
-    x += 24
-    label = "solid color = room identity (stable; not status)"
-    draw.text((x, y), label, fill=muted, font=key_font)
-
-    x, y = 12, y + 21
-    draw.text((x, y), "OUTLINE", fill=muted, font=key_font)
-    x += draw.textlength("OUTLINE", font=key_font) + 8
-    styles = {
-        "A accepted": (ACCEPTED, 4, None),
-        "H held": (HELD, 4, (6, 4)),
-        "C review-held (UI-only)": (REVIEW_HELD, 3, (7, 4)),
-        "X excluded": (EXCLUDED, 2, (2, 5)),
-        "V void": (VOID, 2, (10, 4)),
-    }
-    for label, (color, width, dash) in styles.items():
-        _draw_dashed(draw, [(x, y + 9), (x + 24, y + 9)], color, width, dash)
-        x += 30
-        draw.text((x, y), label, fill=muted, font=key_font)
-        x += draw.textlength(label, font=key_font) + 14
-
-    x, y = 12, y + 21
-    draw.text((x, y), "SOLID PIXELS", fill=muted, font=key_font)
-    x += draw.textlength("SOLID PIXELS", font=key_font) + 8
-    draw.rectangle((x, y + 2, x + 13, y + 15), fill=INK)
-    x += 19
-    label = "received plan raster (pixelated at source)"
-    draw.text((x, y), label, fill=muted, font=key_font)
-
-    x, y = 12, y + 21
-    draw.text((x, y), "DITHERED PIXELS", fill=muted, font=key_font)
-    x += draw.textlength("DITHERED PIXELS", font=key_font) + 8
-    for color, label in ((SEAL_DOOR, "door-head seal"),
-                         (SEAL_RUN, "wall-run seal"), (CLOSE, "gap-close")):
-        _legend_swatch(draw, x, y, color, "screen")
-        x += 20
-        draw.text((x, y), label, fill=muted, font=key_font)
-        x += draw.textlength(label, font=key_font) + 14
-    draw.text((x, y), "(closeups only)", fill=(120, 120, 120), font=key_font)
-
-    x, y = 12, y + 21
-    _draw_dashed(draw, [(x, y + 9), (x + 24, y + 9)], ATLAS_ZONE, 3, (14, 8))
-    x += 30
-    draw.text((x, y), "Z zone authority: outline only; bare-zone has no overlay; outside plan 30%",
-              fill=muted, font=key_font)
-
-
-def render_level_atlas(root, level, zones, output):
-    ink_paths = {artifact_path(root, zone["Ink"]) for zone in zones}
-    replay_paths = {
-        path.parent / f"replay_{path.stem.removeprefix('ink_')}.bin"
-        for path in ink_paths
-    }
-    if len(replay_paths) != 1:
-        raise SystemExit(f"level {level} has {len(replay_paths)} replay rasters")
-    replay_path = replay_paths.pop()
-    if not replay_path.is_file():
-        raise SystemExit(f"missing replay seed ink: {replay_path}")
-    width, height, min_x, min_y, cell, bits = overlay.load_replay_seed_ink(replay_path)
-    references = [load_plan_reference(root, zone) for zone in zones]
-    if any(reference is not None for reference in references):
-        if not all(reference is not None for reference in references):
-            raise SystemExit(f"level {level} has partial plan-reference coverage")
-        reference_paths = {reference["imagePath"] for reference in references}
-        if len(reference_paths) != 1:
-            raise SystemExit(f"level {level} has multiple plan references")
-        plan_reference = references[0]
-    else:
-        plan_reference = None
-    bounds = (min(zone["MinX"] for zone in zones), min(zone["MinY"] for zone in zones),
-              max(zone["MaxX"] for zone in zones), max(zone["MaxY"] for zone in zones))
-    zone_width = (bounds[2] - bounds[0]) / cell
-    zone_height = (bounds[3] - bounds[1]) / cell
-    margin = max(12, round(max(zone_width, zone_height) * 0.04))
-    x0 = math.floor((bounds[0] - min_x) / cell) - margin
-    x1 = math.ceil((bounds[2] - min_x) / cell) + margin
-    y0 = math.floor((bounds[1] - min_y) / cell) - margin
-    y1 = math.ceil((bounds[3] - min_y) / cell) + margin
-    if plan_reference is None:
-        x0, x1 = max(0, x0), min(width, x1)
-        y0, y1 = max(0, y0), min(height, y1)
-    world_crop = (min_x + x0 * cell, min_y + y0 * cell,
-                  min_x + x1 * cell, min_y + y1 * cell)
-
-    def point(value):
-        return ((value[0] - min_x) / cell - x0,
-                y1 - (value[1] - min_y) / cell)
-
-    candidates = []
+def _verdict_items(root, zones):
+    candidates, washes = [], []
     for zone in zones:
         rooms, polygons, residues = overlay.load_disposition_tsv(
             artifact_path(root, zone["Tsv"]))
         verdict, reason = triage_of(zone)
-        if verdict == "hold" and reason in ("no-raster", "no-evidence",
-                                              "no-replay-evidence"):
-            continue
-        for room_id in sorted(rooms):
-            loops = polygons.get(room_id, [])
-            candidates.append(("accepted", zone, room_id,
-                               [loop for kind, loop in loops if kind == "outer"],
-                               [loop for kind, loop in loops if kind == "hole"],
-                               (rooms[room_id]["lx"], rooms[room_id]["ly"])))
-        for residue in residues:
-            status = {"rejected": "held", "excluded": "excluded"}.get(
-                residue["reason"], "void")
-            loops = residue["loops"]
-            if loops:
-                xs, ys = zip(*loops[0])
-                label = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
-                candidates.append((status, zone, residue["id"], loops[:1], loops[1:], label))
+        bare = verdict == "hold" and reason in ("no-raster", "no-evidence",
+                                                   "no-replay-evidence")
+        for room_id in ([] if bare else sorted(rooms)):
+            candidates.append({"status": "accepted", "zone": zone, "id": room_id,
+                               "loops": [loop for _kind, loop in polygons.get(room_id, [])],
+                               "label": (rooms[room_id]["lx"], rooms[room_id]["ly"])})
+        for residue in ([] if bare else residues):
+            if not residue["loops"]:
+                continue
+            if residue["reason"] == "rejected":
+                xs, ys = zip(*residue["loops"][0])
+                candidates.append({"status": "held", "zone": zone, "id": residue["id"],
+                                   "loops": residue["loops"],
+                                   "label": ((min(xs) + max(xs)) / 2,
+                                             (min(ys) + max(ys)) / 2)})
+            else:
+                washes.append(("excluded" if residue["reason"] == "excluded" else "void",
+                               residue["loops"]))
         domain_reflood = field(zone, "domainReflood", default={}) or {}
-        for candidate in field(domain_reflood, "heldCandidates", default=[]) or []:
+        for candidate in ([] if bare else field(
+                domain_reflood, "heldCandidates", default=[]) or []):
             loops = field(candidate, "polygons", default=[]) or []
             if loops:
                 xs, ys = zip(*loops[0])
-                label = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
-                candidates.append(("review-held", zone, field(candidate, "id"),
-                                   loops[:1], loops[1:], label))
+                candidates.append({"status": "reviewHeld", "zone": zone,
+                                   "id": field(candidate, "id"), "loops": loops,
+                                   "label": ((min(xs) + max(xs)) / 2,
+                                             (min(ys) + max(ys)) / 2)})
+    return candidates, washes
 
-    keys = [_atlas_candidate_key(zone, candidate_id)
-            for _status, zone, candidate_id, *_rest in candidates]
+
+def render_level_verdict(root, level, zones, output=None, law=None):
+    law = law or LAW
+    references = [load_plan_reference(root, zone) for zone in zones]
+    if not all(references):
+        raise SystemExit(f"verdict render requires a registered plan for level {level}")
+    if len({reference["imagePath"] for reference in references}) != 1:
+        raise SystemExit(f"level {level} has multiple plan references")
+    reference = references[0]
+    point = lambda value: plan_point(reference, value)
+    base_plan = stretch_plan(reference["image"])
+    inside_image = Image.new("1", base_plan.size)
+    for zone in zones:
+        inside_image = ImageChops.logical_or(
+            inside_image, polygon_mask_image(base_plan.size, zone["ZoneLoops"], point).convert("1"))
+    inside = np.asarray(inside_image, dtype=bool)
+    candidates, washes = _verdict_items(root, zones)
+    keys = [_atlas_candidate_key(candidate["zone"], candidate["id"])
+            for candidate in candidates]
     if len(keys) != len(set(keys)):
         raise SystemExit(f"level {level} has duplicate candidate identity")
-    colors = _atlas_colors(keys)
-    plan = (crop_plan_reference(plan_reference, world_crop, (x1 - x0, y1 - y0))
-            if plan_reference is not None
-            else Image.new("RGB", (x1 - x0, y1 - y0), "white"))
-    for key, (_, _zone, _candidate_id, outers, holes, _label) in zip(keys, candidates):
-        mask = Image.new("L", plan.size)
-        mask_draw = ImageDraw.Draw(mask)
-        for loop in outers:
-            if len(loop) >= 3:
-                mask_draw.polygon([point(value) for value in loop], fill=255)
-        for loop in holes:
-            if len(loop) >= 3:
-                mask_draw.polygon([point(value) for value in loop], fill=0)
-        tint = Image.blend(plan, Image.new("RGB", plan.size, colors[key]),
-                           ATLAS_FILL_OPACITY)
-        plan.paste(tint, mask=mask)
+    manifest = reference["manifest"]
+    pixel_feet = max(
+        math.dist(manifest["topLeft"], manifest["topRight"]) / reference["image"].width,
+        math.dist(manifest["topLeft"], manifest["bottomLeft"]) / reference["image"].height)
+    colors = _adjacent_colors(candidates, pixel_feet)
+    image = Image.new("RGBA", base_plan.size)
 
-    inside = np.zeros((plan.height, plan.width), dtype=bool)
-    for zone in zones:
-        inside |= polygon_mask(plan.size, zone["ZoneLoops"], point)
+    def candidate_mask(candidate):
+        return cropped_polygon_mask(base_plan.size, candidate["loops"], point)
 
-    pixels = np.asarray(plan).copy()
-    pixels[~inside] = np.rint(
-        pixels[~inside] * ATLAS_OUTSIDE_OPACITY
-        + 255 * (1 - ATLAS_OUTSIDE_OPACITY)).astype(np.uint8)
-    ink = crop_grid_mask(unpack_mask(bits, width, height), x0, y0, x1, y1)[::-1]
-    outside_ink = tuple(round(channel * ATLAS_OUTSIDE_OPACITY
-                              + 255 * (1 - ATLAS_OUTSIDE_OPACITY)) for channel in INK)
-    pixels[ink & ~inside] = outside_ink
-    pixels[ink & inside] = INK
-    plan = Image.fromarray(pixels)
-    draw = ImageDraw.Draw(plan)
-    styles = {
-        "accepted": (ACCEPTED, 4, None, "A"),
-        "held": (HELD, 4, (6, 4), "H"),
-        "review-held": (REVIEW_HELD, 3, (7, 4), "C"),
-        "excluded": (EXCLUDED, 2, (2, 5), "X"),
-        "void": (VOID, 2, (10, 4), "V"),
+    def plan_layer():
+        nonlocal image
+        pixels = np.asarray(base_plan).copy()
+        for selected, opacity in (
+                (inside, law["substrate"]["plan"]["insideZoneOpacity"]),
+                (~inside, law["substrate"]["plan"]["outsideZoneOpacity"])):
+            pixels[selected] = np.rint(pixels[selected] * opacity
+                                        + 255 * (1 - opacity)).astype(np.uint8)
+        image = Image.fromarray(pixels).convert("RGBA")
+
+    def wash_layer(kind):
+        for wash_kind, loops in washes:
+            if wash_kind == kind:
+                mask, box = cropped_polygon_mask(image.size, loops, point)
+                composite_mask(image, mask, law[f"{kind}Wash"]["rgba"], box)
+
+    def candidate_fill_layer():
+        for key, candidate in zip(keys, candidates):
+            mask, box = candidate_mask(candidate)
+            composite_mask(image, mask,
+                           (*colors[key], round(law["candidate"]["fill"]["alpha"] * 255)),
+                           box)
+
+    def candidate_hatch_layer():
+        for key, candidate in zip(keys, candidates):
+            hatch = law["candidate"]["status"][candidate["status"]]["hatch"]
+            if hatch:
+                mask, box = candidate_mask(candidate)
+                draw_hatch(image, mask, darkened(colors[key]), hatch, box)
+
+    def zone_layer():
+        draw = ImageDraw.Draw(image)
+        stroke = law["zone"]["stroke"]
+        for zone in zones:
+            for loop in zone["ZoneLoops"]:
+                if len(loop) >= 2:
+                    _draw_dashed(draw, [point(value) for value in loop],
+                                 tuple(stroke["rgba"]), stroke["widthPx"],
+                                 tuple(stroke["dash"]))
+
+    def label_layer():
+        draw, label_font = ImageDraw.Draw(image), font(law["label"]["sizePx"])
+        for candidate in candidates:
+            draw.text(point(candidate["label"]),
+                      _short_atlas_label(candidate["status"], candidate["id"]),
+                      fill=tuple(law["label"]["rgba"]), font=label_font, anchor="mm")
+
+    layers = {
+        "plan": plan_layer,
+        "voidWash": lambda: wash_layer("void"),
+        "excludedWash": lambda: wash_layer("excluded"),
+        "candidateFill": candidate_fill_layer,
+        "candidateHatch": candidate_hatch_layer,
+        "zoneOutline": zone_layer,
+        "label": label_layer,
     }
-    label_font = font(11)
-    for status, _zone, candidate_id, outers, holes, label in candidates:
-        color, line_width, dash, prefix = styles[status]
-        for loop in [*outers, *holes]:
-            if len(loop) >= 2:
-                _draw_dashed(draw, [point(value) for value in loop], color, line_width, dash)
-        if status in ("accepted", "held", "review-held"):
-            _atlas_label(draw, point(label), _short_atlas_label(status, candidate_id), label_font)
-
-    zone_font = font(14)
-    for zone in zones:
-        for loop in zone["ZoneLoops"]:
-            if len(loop) >= 2:
-                _draw_dashed(draw, [point(value) for value in loop], ATLAS_ZONE, 3, (14, 8))
-        _atlas_label(draw, point((zone["MinX"] + 1.0, zone["MaxY"] - 1.0)),
-                     f"Z{zone['Zone'].rsplit('#', 1)[-1]}", zone_font)
-
-    panel = Image.new("RGB", (plan.width, plan.height + ATLAS_HEADER_HEIGHT), "white")
-    panel.paste(plan, (0, ATLAS_HEADER_HEIGHT))
-    panel_draw = ImageDraw.Draw(panel)
-    panel_draw.text((12, 7), f"{level} full-plan atlas", fill=(25, 25, 25), font=font(20))
-    panel_draw.text((12, 33),
-                    f"{len(zones)} zones   {len(candidates)} colored candidates   "
-                    + ("real plan reference + replay seed ink" if plan_reference is not None
-                       else "replay seed ink"),
-                    fill=(70, 70, 70), font=font(15))
-    _draw_atlas_key(panel_draw, 57)
-    panel.save(output)
-    return len(candidates)
+    for layer in law["renders"]["verdict"]["layers"]:
+        try:
+            layers[layer]()
+        except KeyError:
+            raise SystemExit(f"unsupported verdict visual-law layer: {layer}")
+    image = image.convert("RGB")
+    if output:
+        image.save(output)
+    return image
 
 
-def render_level_atlases(root, report):
+def render_level_verdicts(root, report):
     levels = {}
     for zone in report["Zones"]:
         levels.setdefault(zone["Level"], []).append(zone)
-    output_dir = root / "review-atlas"
+    output_dir = root / "review-verdict"
     output_dir.mkdir(exist_ok=True)
     outputs = []
     for index, (level, zones) in enumerate(levels.items(), start=1):
         output = output_dir / panel_name(index, level)
-        render_level_atlas(root, level, zones, output)
+        render_level_verdict(root, level, zones, output)
         outputs.append(output)
     contact = output_dir / "contact-sheet.png"
-    columns, thumb_size = 2, (900, 700)
-    sheet_header = ATLAS_HEADER_HEIGHT
+    columns, thumb_size = 2, (1000, 750)
+    sheet_header = VERDICT_CONTACT_HEADER_HEIGHT
     sheet = Image.new("RGB", (columns * thumb_size[0],
                               sheet_header + math.ceil(len(outputs) / columns) * thumb_size[1]),
                       "white")
     sheet_draw = ImageDraw.Draw(sheet)
-    sheet_draw.text((16, 14), "Full-plan room atlas by level", fill=(30, 30, 30), font=font(22))
-    _draw_atlas_key(sheet_draw, 45, text_size=15)
+    sheet_draw.text((16, 14), "Verdict renders by level", fill=rgb(LABEL_COLOR), font=font(22))
     for index, path in enumerate(outputs):
         with Image.open(path) as image:
-            image = image.convert("RGB")
-            tile = Image.new("RGB", (image.width, image.height - ATLAS_HEADER_HEIGHT + 56),
-                             "white")
-            tile.paste(image.crop((0, 0, image.width, 56)), (0, 0))
-            tile.paste(image.crop((0, ATLAS_HEADER_HEIGHT, image.width, image.height)),
-                       (0, 56))
-            thumb = ImageOps.contain(tile, thumb_size, Image.Resampling.LANCZOS)
+            thumb = ImageOps.contain(image.convert("RGB"), thumb_size,
+                                     Image.Resampling.LANCZOS)
         sheet.paste(thumb, ((index % columns) * thumb_size[0],
                             sheet_header + (index // columns) * thumb_size[1]))
     sheet.save(contact)
     return outputs, contact
+
+
+def render_verdict_pair(report_a_path, report_b_path, level, output,
+                        label_a="A", label_b="B"):
+    paths = [Path(report_a_path).resolve(), Path(report_b_path).resolve()]
+    reports = [json.loads(path.read_text(encoding="utf-8")) for path in paths]
+    images = []
+    for path, report in zip(paths, reports):
+        zones = [zone for zone in report["Zones"] if zone["Level"] == level]
+        if not zones:
+            raise SystemExit(f"level {level!r} not found in {path}")
+        images.append(render_level_verdict(path.parent, level, zones))
+    if images[0].size != images[1].size:
+        raise SystemExit(f"non-comparable verdict plan size for {level}: "
+                         f"{images[0].size} vs {images[1].size}")
+    header = max(36, LABEL_SIZE + 16)
+    pair = Image.new("RGB", (images[0].width * 2, images[0].height + header), "white")
+    pair.paste(images[0], (0, header))
+    pair.paste(images[1], (images[0].width, header))
+    draw = ImageDraw.Draw(pair)
+    draw.text((12, 8), label_a, fill=rgb(LABEL_COLOR), font=font(LABEL_SIZE + 4))
+    draw.text((images[0].width + 12, 8), label_b,
+              fill=rgb(LABEL_COLOR), font=font(LABEL_SIZE + 4))
+    output = Path(output).resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    pair.save(output)
+    return output
 
 
 def verify(manifest_path):
@@ -1105,8 +1208,8 @@ def verify(manifest_path):
     output_dirs = [root / "review"]
     if manifest.get("provenanceContactSheet"):
         output_dirs.append(root / "review-provenance")
-    if manifest.get("atlasContactSheet"):
-        output_dirs.append(root / "review-atlas")
+    if manifest.get("verdictContactSheet"):
+        output_dirs.append(root / "review-verdict")
     actual_outputs = {
         path.relative_to(root).as_posix()
         for directory in output_dirs for path in directory.glob("*.png")
@@ -1238,10 +1341,21 @@ def main():
     parser.add_argument("--semantic-verdict", metavar="VERDICT")
     parser.add_argument("--manifest", metavar="MANIFEST")
     parser.add_argument("--out", metavar="JSON")
+    parser.add_argument("--verdict-pair", nargs=2, metavar=("REPORT_A", "REPORT_B"))
+    parser.add_argument("--level")
+    parser.add_argument("--label-a", default="A")
+    parser.add_argument("--label-b", default="B")
     parser.add_argument("--provenance", action="store_true")
     parser.add_argument("--require-plan", action="store_true",
                         help="fail unless every panel has a registered real-plan raster")
     args = parser.parse_args()
+    if args.verdict_pair:
+        if not args.level or not args.out:
+            parser.error("--verdict-pair requires --level and --out")
+        render_verdict_pair(*args.verdict_pair, args.level, args.out,
+                            args.label_a, args.label_b)
+        print(Path(args.out).resolve())
+        return
     if args.semantic_verdict:
         if not args.manifest:
             parser.error("--manifest is required with --semantic-verdict")
@@ -1292,7 +1406,9 @@ def main():
 
     contact_path = review / "contact-sheet.png"
     render_contact_sheet(report, panels, contact_path)
-    atlas_panels, atlas_contact = render_level_atlases(root, report)
+    verdict_panels, verdict_contact = (render_level_verdicts(root, report)
+                                       if raster_backed_panels == len(plan_references)
+                                       else ([], None))
     provenance_files = []
     provenance_contact = None
     if args.provenance:
@@ -1325,11 +1441,13 @@ def main():
         "contactSheet": contact_path.relative_to(root).as_posix(),
         "files": {
             path.relative_to(root).as_posix(): digest(path)
-            for path in [*panels, contact_path, *atlas_panels, atlas_contact, *provenance_files]
+            for path in [*panels, contact_path, *verdict_panels,
+                         *([verdict_contact] if verdict_contact else []), *provenance_files]
         },
-        "levelAtlases": [path.relative_to(root).as_posix() for path in atlas_panels],
-        "atlasContactSheet": atlas_contact.relative_to(root).as_posix(),
+        "verdictRenders": [path.relative_to(root).as_posix() for path in verdict_panels],
     }
+    if verdict_contact:
+        manifest["verdictContactSheet"] = verdict_contact.relative_to(root).as_posix()
     if provenance_contact:
         manifest["provenanceContactSheet"] = provenance_contact.relative_to(root).as_posix()
     (root / "review-manifest.json").write_text(
