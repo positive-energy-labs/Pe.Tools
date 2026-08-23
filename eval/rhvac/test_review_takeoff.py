@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 HERE = Path(__file__).resolve().parent
@@ -39,6 +39,18 @@ def write_replay_bin(path, w, h, minx, miny, cell, bits, level="Test"):
     blob += bits
     with gzip.open(path, "wb") as f:
         f.write(blob)
+
+
+def write_plan_reference(root, token="Test", size=(100, 100), color=(220, 220, 220)):
+    path = root / "input" / f"plan_{token}.png"
+    Image.new("RGB", size, color).save(path)
+    (root / "input" / f"plan_{token}.json").write_text(json.dumps({
+        "schemaVersion": 1, "sourceView": f"Plan - {token}", "token": token,
+        "image": path.name, "imageSha256": digest(path),
+        "width": size[0], "height": size[1],
+        "topLeft": [0, 10], "topRight": [10, 10], "bottomLeft": [0, 0],
+    }), encoding="utf-8")
+    return path
 
 
 def write_zone_run(root, name, zones):
@@ -116,6 +128,7 @@ class ReviewTakeoffTests(unittest.TestCase):
         after = renderer._atlas_colors(["another-zone\0R01", key(held),
                                         "stable-zone\0R03"])
 
+        self.assertEqual(key(accepted), "Test#00R02")
         self.assertEqual(key(accepted), key(held))
         self.assertEqual(before[key(accepted)], after[key(held)])
         self.assertEqual(before["stable-zone\0R03"], after["stable-zone\0R03"])
@@ -342,14 +355,9 @@ class ReviewTakeoffTests(unittest.TestCase):
 
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertTrue((root / manifest["contactSheet"]).is_file())
-            self.assertTrue((root / manifest["atlasContactSheet"]).is_file())
-            self.assertEqual(len(manifest["levelAtlases"]), 1)
-            self.assertTrue((root / manifest["levelAtlases"][0]).is_file())
-            self.assertEqual(len(manifest["files"]), 5)
-            with Image.open(root / manifest["levelAtlases"][0]) as atlas:
-                self.assertLess(atlas.width, 40)
-                self.assertLess(atlas.height, 20 + 190)
-                self.assertEqual(atlas.getpixel((10, atlas.height - 9)), (186, 186, 186))
+            self.assertNotIn("verdictContactSheet", manifest)
+            self.assertEqual(manifest["verdictRenders"], [])
+            self.assertEqual(len(manifest["files"]), 3)
             self.assertEqual(manifest["panelCount"], 2)
             verified = subprocess.run([
                 sys.executable, str(ZONE_SCRIPT), "--verify",
@@ -409,8 +417,43 @@ class ReviewTakeoffTests(unittest.TestCase):
             panel_path = root / "review" / "01_Test_00.png"
             with Image.open(panel_path) as panel:
                 colors = {color for _count, color in panel.getcolors(panel.width * panel.height)}
-                self.assertIn((20, 120, 200), colors)
-                self.assertEqual(panel.getpixel((450, 360)), (20, 120, 200))
+                self.assertIn((0, 0, 76), colors)
+
+    def test_verdict_uses_law_and_has_no_invented_or_ink_layer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            write_plan_reference(root)
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "ROOM\tR01\t50\t30\t2\t5\t5\n"
+                "POLY\tR01\touter\t0;0|5;0|5;10|0;10\n"
+                "META\tresidue\tV01\tcrumb\t50\t30\t5\t9\t5;0|10;0|10;10|5;10\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "zoneKey": "stable-zone",
+                "MinX": 0, "MinY": 0, "MaxX": 10, "MaxY": 10,
+                "Tsv": "zones/rooms_Test.tsv", "Ink": "input/ink_Test.bin",
+                "ZoneLoops": [[[0, 0], [10, 0], [10, 10], [0, 10]]],
+            }
+            spec = importlib.util.spec_from_file_location("verdict_renderer", ZONE_SCRIPT)
+            renderer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(renderer)
+            baseline = renderer.render_level_verdict(root, "Test", [zone])
+
+            no_invented = json.loads(json.dumps(renderer.LAW))
+            no_invented["substrate"]["ink"]["rgba"] = [255, 0, 255, 255]
+            no_invented["invented"]["close"] = [0, 255, 0, 255]
+            no_invented["invented"]["sealRun"] = [0, 255, 0, 255]
+            no_invented["invented"]["sealDoor"] = [0, 255, 0, 255]
+            self.assertEqual(baseline.tobytes(), renderer.render_level_verdict(
+                root, "Test", [zone], law=no_invented).tobytes())
+
+            changed = json.loads(json.dumps(renderer.LAW))
+            changed["void"]["outline"]["rgba"] = [255, 0, 255, 255]
+            self.assertNotEqual(baseline.tobytes(), renderer.render_level_verdict(
+                root, "Test", [zone], law=changed).tobytes())
+            self.assertEqual(baseline.size, (100, 100))
 
     def test_zone_promotion_renderer_emits_verifiable_boundary_provenance(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -502,7 +545,7 @@ class ReviewTakeoffTests(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("raw-zones/rooms_Test.tsv", rejected.stderr)
 
-    def test_zone_promotion_renderer_distinguishes_excluded_from_void(self):
+    def test_zone_promotion_renderer_uses_declared_excluded_and_void_residue(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "input").mkdir()
@@ -531,12 +574,124 @@ class ReviewTakeoffTests(unittest.TestCase):
             subprocess.run([sys.executable, str(ZONE_SCRIPT), str(root / "report.json")],
                            check=True, cwd=HERE, capture_output=True, text=True)
 
-            # Excluded is accounting residue, not a physical void. The old renderer painted both
-            # near-white and labeled both "void", which made covered UL06 residue look blank.
-            # Decision fills are translucent so the registered plan remains visible beneath them.
+            spec = importlib.util.spec_from_file_location("residue_panel_renderer", ZONE_SCRIPT)
+            renderer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(renderer)
             with Image.open(root / "review" / "01_Test_00.png") as panel:
-                self.assertEqual(panel.getpixel((430, 360)), (235, 235, 235))
-                self.assertEqual(panel.getpixel((470, 360)), (244, 244, 244))
+                colors = {color for _count, color in panel.getcolors(panel.width * panel.height)}
+            for name in ("void", "excluded"):
+                for stroke in ("outline", "hatch"):
+                    image = Image.new("RGBA", (1, 1), "white")
+                    renderer.composite_mask(image, Image.new("L", (1, 1), 255),
+                                            renderer.LAW[name][stroke]["rgba"])
+                    self.assertIn(image.convert("RGB").getpixel((0, 0)), colors)
+
+    def test_visual_law_residue_styles_are_distinct_and_unfilled(self):
+        law = json.loads((HERE.parents[1]
+                          / "source/pe-tools/apps/web/src/runs/visual-law.json").read_text())
+        for name in ("voidWash", "excludedWash"):
+            self.assertNotIn(name, law)
+        self.assertIsNone(law["void"]["fill"])
+        self.assertIsNone(law["excluded"]["fill"])
+        self.assertNotEqual(law["void"]["outline"]["rgba"],
+                            law["excluded"]["outline"]["rgba"])
+        self.assertNotEqual(law["void"]["hatch"]["rgba"],
+                            law["excluded"]["hatch"]["rgba"])
+
+    def test_reduced_plan_uses_declared_filtered_resample_before_tone_stretch(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("reduced_plan_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        source = Image.new("RGB", (16, 16), "white")
+        for x in (3, 7, 11):
+            for y in range(16):
+                source.putpixel((x, y), (0, 0, 0))
+        law = renderer.LAW["substrate"]["plan"]
+
+        reduced = renderer.reduce_plan(source, (4, 4), law)
+        expected = renderer.stretch_plan(
+            source.resize((4, 4), Image.Resampling.LANCZOS), native=False, law=law)
+        nearest = renderer.stretch_plan(
+            source.resize((4, 4), Image.Resampling.NEAREST), native=False, law=law)
+
+        self.assertEqual(reduced.tobytes(), expected.tobytes())
+        self.assertNotEqual(reduced.tobytes(), nearest.tobytes())
+        self.assertNotEqual(renderer.plan_resample(law), Image.Resampling.NEAREST)
+
+    def test_void_and_excluded_draw_outline_and_hatch_without_solid_fill(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("residue_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        loop = [[(3, 3), (36, 3), (36, 36), (3, 36)]]
+        for name in ("void", "excluded"):
+            image = Image.new("RGBA", (40, 40), "white")
+            renderer.draw_residue(image, loop, lambda value: value, renderer.LAW[name])
+            inside = [image.convert("RGB").getpixel((x, y))
+                      for y in range(5, 35) for x in range(5, 35)]
+            self.assertIn((255, 255, 255), inside)
+            self.assertTrue(any(pixel != (255, 255, 255) for pixel in inside))
+            self.assertIsNone(renderer.LAW[name]["fill"])
+
+    def test_cropped_residue_outline_matches_full_frame_oracle(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("outline_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        outline = renderer.LAW["excluded"]["outline"]
+        point = lambda value: (value[0] * 1.17 + 0.31, value[1] * 0.91 + 0.47)
+        cases = {
+            "outer": [[(3, 3), (29, 4), (27, 22), (4, 20)]],
+            "hole": [[(2, 2), (31, 2), (31, 23), (2, 23)],
+                     [(9, 8), (23, 8), (23, 17), (9, 17)]],
+            "fractional": [[(4.2, 3.7), (25.8, 5.1), (21.4, 21.6), (5.3, 18.9)]],
+            "image-edges": [[(-3.4, -2.1), (34.7, 0.2), (35.1, 25.8), (-1.2, 24.6)]],
+        }
+
+        def oracle(image, loops):
+            mask = Image.new("L", image.size)
+            draw = ImageDraw.Draw(mask)
+            for loop in loops:
+                points = [point(value) for value in loop]
+                draw.line(points + [points[0]], fill=255, width=outline["widthPx"])
+            renderer.composite_mask(image, mask, outline["rgba"])
+
+        for name, loops in cases.items():
+            with self.subTest(name=name):
+                expected = Image.new("RGBA", (40, 28), (211, 223, 227, 255))
+                actual = expected.copy()
+                oracle(expected, loops)
+                mask, box = renderer.cropped_polygon_mask(actual.size, loops, point)
+                renderer.draw_residue_outline(
+                    actual, loops, point, outline, mask.size, box)
+                self.assertEqual((actual.mode, actual.size), (expected.mode, expected.size))
+                self.assertEqual(actual.tobytes(), expected.tobytes())
+
+    def test_cropped_residue_outline_matches_full_frame_oracle_when_residues_overlap(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("overlap_outline_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        outline = renderer.LAW["excluded"]["outline"]
+        point = lambda value: value
+        residues = [
+            [[(2.4, 2.6), (24.8, 2.1), (24.2, 20.7), (2.9, 20.4)]],
+            [[(14.3, 0.4), (37.6, 1.2), (36.9, 25.9), (14.1, 24.8)]],
+        ]
+        expected = Image.new("RGBA", (40, 28), (211, 223, 227, 255))
+        actual = expected.copy()
+        for loops in residues:
+            full_mask = Image.new("L", expected.size)
+            draw = ImageDraw.Draw(full_mask)
+            for loop in loops:
+                draw.line(loop + [loop[0]], fill=255, width=outline["widthPx"])
+            renderer.composite_mask(expected, full_mask, outline["rgba"])
+            mask, box = renderer.cropped_polygon_mask(actual.size, loops, point)
+            renderer.draw_residue_outline(actual, loops, point, outline, mask.size, box)
+
+        self.assertEqual((actual.mode, actual.size), (expected.mode, expected.size))
+        self.assertEqual(actual.tobytes(), expected.tobytes())
 
     def test_zone_promotion_renderer_refuses_missing_replay(self):
         # The stale ink_*.bin lane is deleted: no replay seed ink = hard error naming
