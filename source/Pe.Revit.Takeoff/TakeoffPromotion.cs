@@ -193,8 +193,10 @@ public static class TakeoffPromotion
         if (state.Result.Rooms.Count == 1)
         {
             var room = state.Result.Rooms[0];
+            // net48 (R2023/24) has no Split(char, StringSplitOptions) overload; the char[] one is
+            // identical and exists everywhere.
             int mergedSources = room.MergedFrom?
-                .Split('+', StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
+                .Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries).Length ?? 0;
             double? support = TakeoffEvidenceFidelity.RoomBoundarySupportFraction(
                 room, state.DistanceToInk, state.ZoneGeometry.Boundary,
                 state.Options.InkBackedZoneEdgeExemptFt);
@@ -753,7 +755,8 @@ public static class TakeoffPromotion
         }
 
         var together = state.Result.Rooms
-            .Select(room => replacements.GetValueOrDefault(room.Id, room)).ToList();
+            // net48 has no 2-arg GetValueOrDefault; TryGetValue is the same thing everywhere.
+            .Select(room => replacements.TryGetValue(room.Id, out var swap) ? swap : room).ToList();
         if (!TakeoffEditability.Evaluate(ToLevel(state.Result, together)).IsStrictlyEditable)
             return false;
 
@@ -763,7 +766,8 @@ public static class TakeoffPromotion
             if (Intersection(ToPolygon(room).Boundary, ToPolygon(other).Boundary).Length <= Epsilon)
                 continue;
             if (Intersection(ToPolygon(replacements[room.Id]).Boundary,
-                    ToPolygon(replacements.GetValueOrDefault(other.Id, other)).Boundary).Length
+                    ToPolygon(replacements.TryGetValue(other.Id, out var swapOther) ? swapOther : other)
+                        .Boundary).Length
                 <= Epsilon)
                 return false;
         }
