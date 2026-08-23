@@ -277,6 +277,47 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Frame_local_narrow_neck_keeps_label_owned_room_and_holds_other_lobe()
+    {
+        RoomResult Candidate() => Room("dumbbell",
+            (288.610510, 609.721599), (290.516748, 611.627843),
+            (292.757185, 613.868287), (295.173002, 616.284112),
+            (296.235494, 617.346607), (293.905873, 619.676221),
+            (293.171515, 620.410576), (292.421470, 621.160619),
+            (290.562119, 623.019964), (292.410115, 624.867966),
+            (290.978085, 626.299991), (289.910105, 627.367968),
+            (288.062109, 625.519966), (286.999617, 624.457471),
+            (288.067597, 623.389494), (289.499627, 621.957469),
+            (287.083810, 619.541644), (284.843373, 617.301200),
+            (282.937135, 615.394955), (278.218384, 610.676189),
+            (277.312133, 609.769935), (276.874624, 609.332425),
+            (276.293619, 608.751418), (278.152970, 606.892073),
+            (278.733975, 607.473080), (279.484020, 606.723037),
+            (280.218378, 605.988682), (280.655887, 606.426192),
+            (281.562138, 607.332445), (283.891759, 605.002832));
+        var room = Candidate();
+        room.LabelX = 289.405904;
+        room.LabelY = 616.301187;
+        double sourceArea = TakeoffGeometry.ToPolygon(room).Area;
+        var result = new TakeoffResult { LevelName = "Level 1", Rooms = { room } };
+
+        var detached = TakeoffPromotion.DetachNarrowNecks(
+            result, 1, 30, TestContext.Out.WriteLine);
+
+        Assert.Multiple(() => {
+            Assert.That(detached, Is.EqualTo(1));
+            Assert.That(result.Rooms.Single().LabelX, Is.EqualTo(289.405904));
+            Assert.That(result.Residues.Select(item => item.Id),
+                Is.All.StartsWith("dumbbell~neck"));
+            Assert.That(result.Residues.Select(item => item.Reason),
+                Is.All.EqualTo(ResidueReason.Rejected));
+            Assert.That(result.Rooms.Single().RawSqft, Is.EqualTo(151.208).Within(0.01));
+            Assert.That(result.Rooms.Single().RawSqft + result.Residues.Sum(item => item.RawSqft),
+                Is.EqualTo(sourceArea).Within(1e-5));
+        });
+    }
+
+    [Test]
     public void Tiny_room_with_one_neighbor_merges_when_union_remains_strict()
     {
         var result = new TakeoffResult {

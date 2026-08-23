@@ -1,5 +1,6 @@
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Utilities;
+using NetTopologySuite.Operation.Buffer;
 using NetTopologySuite.Operation.Overlay;
 using NetTopologySuite.Operation.OverlayNG;
 
@@ -484,6 +485,10 @@ public static class TakeoffPromotion
                     $"boundary={item.BoundaryDriftFt ?? double.NaN:F3}ft";
         }
         ApplyFrameLocal(state.Result, projection, state.Log);
+        int detached = DetachNarrowNecks(
+            state.Result, state.Options.FrameDeStaircaseFt,
+            state.Options.MinimumPromotedRoomSqft, state.Log);
+        if (detached > 0) state.Rejections["frame:neck-detached"] = detached;
     }
 
     /// <summary>
@@ -1889,6 +1894,105 @@ public static class TakeoffPromotion
                         $"rejected={projection.Rejected.Count} {reasons}");
         }
         return projection.Rejected.Count;
+    }
+
+    private const double MinimumDetachedNeckSqft = 10;
+
+    internal static int DetachNarrowNecks(
+        TakeoffResult result, double radiusFt, double minimumRoomSqft,
+        Action<string>? log = null)
+    {
+        if (radiusFt <= 0 || minimumRoomSqft <= 0) return 0;
+        var buffer = new BufferParameters { JoinStyle = JoinStyle.Mitre };
+        static List<double[]> Collapse(List<double[]> points)
+        {
+            bool changed;
+            do
+            {
+                changed = false;
+                for (int index = 0; index < points.Count && points.Count >= 3; index++)
+                {
+                    var previous = points[(index + points.Count - 1) % points.Count];
+                    var current = points[index];
+                    var next = points[(index + 1) % points.Count];
+                    double ax = current[0] - previous[0], ay = current[1] - previous[1];
+                    double bx = next[0] - current[0], by = next[1] - current[1];
+                    double lengths = Math.Sqrt(ax * ax + ay * ay) * Math.Sqrt(bx * bx + by * by);
+                    if (lengths > Epsilon
+                        && Math.Abs(ax * by - ay * bx)
+                        > Math.Sin(TakeoffEditability.AngleTolerance) * lengths)
+                        continue;
+                    points.RemoveAt(index);
+                    changed = true;
+                    break;
+                }
+            } while (changed);
+            return points;
+        }
+        int detachedCount = 0;
+        foreach (var room in result.Rooms.OrderBy(item => item.Id, StringComparer.Ordinal).ToList())
+        {
+            var polygon = ToPolygon(room);
+            var cores = PolygonParts(polygon.Buffer(-radiusFt, buffer)).ToList();
+            if (cores.Count < 2) continue;
+
+            var label = GeometryFactory.CreatePoint(new Coordinate(room.LabelX, room.LabelY));
+            var owner = cores.OrderBy(core => core.Distance(label)).First();
+            Geometry detached = Polygonal(OverlayNGRobust.Union(cores
+                .Where(core => !ReferenceEquals(core, owner))
+                .Select(core => core.Buffer(radiusFt, buffer).Intersection(polygon))));
+            var mainGeometry = PolygonDifference(polygon, detached).Buffer(0);
+            var mainParts = PolygonParts(mainGeometry).ToList();
+            var main = mainParts.FirstOrDefault(part => part.Covers(label));
+            if (main != null && mainParts.Count > 1)
+                detached = Polygonal(OverlayNGRobust.Union(
+                    mainParts.Where(part => !ReferenceEquals(part, main)).Cast<Geometry>()
+                        .Prepend(detached)));
+            if (detached.Area < MinimumDetachedNeckSqft)
+            {
+                log?.Invoke($"[promotion] frame-local neck refused room={room.Id} " +
+                            $"held={detached.Area:F1}sf < {MinimumDetachedNeckSqft:F1}sf");
+                continue;
+            }
+            if (main == null || !main.IsValid)
+            {
+                log?.Invoke($"[promotion] frame-local neck refused room={room.Id} " +
+                            $"main={mainGeometry.GeometryType}/{mainGeometry.Area:F1}sf " +
+                            $"label={mainGeometry.Covers(label)}");
+                continue;
+            }
+
+            var replacement = Clone(room, main);
+            replacement.Polygon = Collapse(replacement.Polygon);
+            replacement.Holes = replacement.Holes.Select(Collapse).ToList();
+            main = ToPolygon(replacement);
+            replacement = Clone(room, main);
+            detached = PolygonDifference(polygon, main);
+            if (main.Area < minimumRoomSqft || !main.Covers(label)) continue;
+            var together = result.Rooms
+                .Select(candidate => ReferenceEquals(candidate, room) ? replacement : candidate)
+                .ToList();
+            var audit = TakeoffEditability.Evaluate(ToLevel(result, together));
+            if (!audit.IsStrictlyEditable)
+            {
+                string violations = string.Join(",", audit.Rooms
+                    .Where(item => !item.IsStrictlyEditable)
+                    .SelectMany(item => item.Violations.Select(violation =>
+                        $"{item.RoomId}:{violation.Kind}:{violation.Measured:F2}")));
+                log?.Invoke($"[promotion] frame-local neck refused room={room.Id} " +
+                            $"editability={violations}");
+                continue;
+            }
+
+            result.Rooms[result.Rooms.IndexOf(room)] = replacement;
+            AddResidues(result.Residues, $"{room.Id}~neck", ResidueReason.Rejected,
+                detached, room.MeanCeilingFt);
+            detachedCount++;
+            log?.Invoke($"[promotion] frame-local detached neck room={room.Id} " +
+                        $"accepted={main.Area:F1}sf held={detached.Area:F1}sf");
+        }
+        result.TotalSqft = result.Rooms.Sum(room => room.RawSqft);
+        return detachedCount;
     }
 
     internal static int MergeOrHoldTinyRooms(
