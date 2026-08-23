@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using NetTopologySuite.Geometries;
 using Pe.Revit.Takeoff;
 
 namespace Pe.Takeoff.Tests;
@@ -277,6 +278,26 @@ public sealed class TakeoffPromotionTests
             Assert.That(left.RawSqft, Is.EqualTo(62).Within(1e-9));
             Assert.That(result.Residues.Single(residue =>
                 residue.Reason == ResidueReason.Excluded).Id, Is.EqualTo("edge"));
+        });
+    }
+
+    [Test]
+    public void Zone_snap_keeps_collinear_runs_collinear()
+    {
+        var factory = new GeometryFactory();
+        var room = factory.CreatePolygon([
+            new(10, 0), new(0.5, 0), new(0.5, 5),
+            new(0.5, 10), new(10, 10), new(10, 0),
+        ]);
+        var zone = Zone("zone", (0, 0), (10, 0), (10, 10), (0, 10)).ExactGeometry();
+
+        var snapped = TakeoffPromotion.SnapToZone(room, zone.Boundary, [], 1);
+
+        Assert.Multiple(() => {
+            Assert.That(snapped, Is.Not.Null);
+            Assert.That(snapped!.Coordinates.Where(point => point.X < 1)
+                .Select(point => point.X), Is.All.Zero.Within(1e-9));
+            Assert.That(snapped.Area, Is.EqualTo(100).Within(1e-9));
         });
     }
 

@@ -791,7 +791,7 @@ public static class TakeoffPromotion
     /// onto that segment's line, and returns null when nothing moved. An edge with an endpoint on a
     /// neighbour's boundary is pinned: it is a shared wall, and the zone has no authority there.
     /// </summary>
-    private static Polygon? SnapToZone(
+    internal static Polygon? SnapToZone(
         Polygon room, Geometry zoneBoundary,
         List<(string Id, Polygon Geometry)> neighbors, double snapFt,
         Func<double, double, double>? distanceToInk = null, double inkTolFt = 0)
@@ -819,12 +819,13 @@ public static class TakeoffPromotion
 
         LinearRing SnapRing(LineString ring)
         {
-            var points = ring.Coordinates.Take(ring.NumPoints - 1).Select(p => p.Copy()).ToList();
+            var source = ring.Coordinates.Take(ring.NumPoints - 1).Select(p => p.Copy()).ToList();
+            var points = source.Select(point => point.Copy()).ToList();
             int count = points.Count;
             for (int i = 0; i < count; i++)
             {
-                var a = points[i];
-                var b = points[(i + 1) % count];
+                var a = source[i];
+                var b = source[(i + 1) % count];
                 if (Pinned(a) || Pinned(b)) continue;
                 foreach (var segment in zoneSegments)
                 {
