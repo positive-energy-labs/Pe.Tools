@@ -1,0 +1,75 @@
+{
+  "$comment": "The takeoff review visual law. ONE declaration, two consumers: apps/web/src/runs/palette.ts (the /runs screen and its PNG export) and eval/rhvac/render-zone-promotion.py (the offline agent-review renderer). Neither may hold a colour or a layer rule the other cannot see. Before this file existed the two surfaces had already diverged: /runs deleted the invented-closure dither at feedback round 2 ('read as confusion, not honesty') and the python renderer kept drawing it, so the human and the delegated eyes were judging different claims.",
+  "version": 1,
+  "laws": [
+    "The VERDICT render draws only what the solver claims exists, over what is actually there. Nothing invented. No input layer except the zone outline.",
+    "Decisions, evidence, and inputs never share a hue family.",
+    "Status is never carried by the candidate boundary. The candidate fill edge IS the boundary.",
+    "Received ink is the only near-opaque neutral. Invented closure is a translucent warm tint, never dithered, never screened.",
+    "The plan is what is there. The ink raster is what the solver saw. Judge against what is there; adjudicate against what it saw."
+  ],
+  "renders": {
+    "verdict": {
+      "unit": "level",
+      "question": "is this right?",
+      "resolution": "plan-native",
+      "layers": ["plan", "voidWash", "excludedWash", "candidateFill", "candidateHatch", "zoneOutline", "label"]
+    },
+    "forensic": {
+      "unit": "zone",
+      "question": "why is it wrong?",
+      "resolution": "plan-native crop",
+      "layers": ["plan", "close", "sealRun", "sealDoor", "ink", "voidWash", "excludedWash", "candidateFill", "candidateOutline", "zoneOutline", "label"]
+    }
+  },
+  "substrate": {
+    "plan": {
+      "image": "input/plan_<token>.png",
+      "registration": "input/plan_<token>.json",
+      "$comment": "6000px Revit export with an exact affine (topLeft/topRight/bottomLeft in model feet). The export is halftone-light: measured, 1.44% of pixels sit at or below 185 and that band is the whole linework. Stretch it.",
+      "blackPoint": 185,
+      "whitePoint": 235,
+      "insideZoneOpacity": 1.0,
+      "outsideZoneOpacity": 0.45
+    },
+    "ink": {
+      "$comment": "replay seed ink, 0.5ft cells. EVIDENCE, not substrate. Forensic render only.",
+      "rgba": [20, 20, 20, 235]
+    }
+  },
+  "candidate": {
+    "fill": {
+      "alpha": 0.45,
+      "hueKey": "zone+candidateId",
+      "adjacentDistinct": true,
+      "$comment": "Saturated translucent, stable across runs so an A/B keeps its colours. Adjacent candidates must differ enough that the seam between two fills reads as a boundary at 1px."
+    },
+    "outline": {
+      "verdict": null,
+      "forensic": { "widthPx": 1, "color": "fillDarkened" }
+    },
+    "status": {
+      "accepted":   { "hatch": null },
+      "held":       { "hatch": { "angleDeg": 45, "spacingPx": 6, "widthPx": 1, "color": "fillDarkened" } },
+      "reviewHeld": { "hatch": { "angleDeg": 45, "spacingPx": 6, "widthPx": 1, "color": "fillDarkened" }, "chip": "C" }
+    }
+  },
+  "zone": {
+    "$comment": "kaitpw ruling 2026-08-23: zone authority stays visible in the verdict render, but hairline. It is an input, not a result, and it may never be the heaviest stroke in the image.",
+    "stroke": { "widthPx": 1, "dash": [6, 4], "rgba": [112, 44, 138, 230] }
+  },
+  "invented": {
+    "$comment": "Sealers manufacture obstruction. Forensic render only, translucent warm tint, never dithered.",
+    "drawnIn": ["forensic"],
+    "sealDoor": [222, 58, 20, 110],
+    "sealRun":  [235, 130, 20, 110],
+    "close":    [200, 165, 130, 90]
+  },
+  "voidWash":     { "rgba": [150, 150, 150, 70] },
+  "excludedWash": { "rgba": [120, 120, 120, 55] },
+  "label": {
+    "$comment": "Status letter + candidate id. Small, on the fill, never on the boundary.",
+    "sizePx": 13,
+    "rgba": [25, 25, 25, 255]
+  }
+}
