@@ -1649,6 +1649,50 @@ public static class TakeoffPromotion
         if (heldComponents > 0)
             state.Rejections["zone-component:held"] = heldComponents;
         RebuildResiduesInsideZone(state.Result, state.ZoneGeometry);
+        int filled = FillSingleOwnerHeldHoles(state.Result, state.ZoneGeometry);
+        if (filled > 0) state.Rejections["disposition:held-hole-filled"] = filled;
+    }
+
+    /// <summary>
+    /// Rejoins Excluded islands that are only interior rings of one Held room. The exterior-ring
+    /// equality check makes this a disposition repair, never a new room-boundary inference.
+    /// </summary>
+    internal static int FillSingleOwnerHeldHoles(TakeoffResult result, Geometry zone)
+    {
+        var held = result.Residues
+            .Where(residue => residue.Reason == ResidueReason.Rejected).ToList();
+        var excluded = result.Residues
+            .Where(residue => residue.Reason == ResidueReason.Excluded).ToList();
+        int filled = 0;
+        foreach (var hole in excluded)
+        {
+            Geometry geometry = ToGeometry(hole);
+            if (geometry is not Polygon polygon
+                || Intersection(polygon.Boundary, zone.Boundary).Length > Epsilon)
+                continue;
+            var owners = held.Select(residue => (residue, geometry: (Polygon)ToGeometry(residue)))
+                .Where(item => Intersection(polygon.Boundary, item.geometry.Boundary).Length
+                               >= polygon.Length - Epsilon)
+                .ToList();
+            if (owners.Count != 1
+                || OverlayNGRobust.Overlay(
+                    owners[0].geometry, polygon, SpatialFunction.Union) is not Polygon completed
+                || !completed.IsValid
+                || Math.Abs(owners[0].geometry.ExteriorRing.Length
+                            - completed.ExteriorRing.Length) > Epsilon
+                || Intersection(owners[0].geometry.ExteriorRing, completed.ExteriorRing).Length
+                   < completed.ExteriorRing.Length - Epsilon)
+                continue;
+
+            var owner = owners[0].residue;
+            owner.RawSqft = completed.Area;
+            owner.Polygon = Coordinates(completed.ExteriorRing, true);
+            owner.Holes = Enumerable.Range(0, completed.NumInteriorRings)
+                .Select(index => Coordinates(completed.GetInteriorRingN(index), false)).ToList();
+            result.Residues.Remove(hole);
+            filled++;
+        }
+        return filled;
     }
 
     private static int HoldUnclaimedZoneComponents(PromotionState state)
