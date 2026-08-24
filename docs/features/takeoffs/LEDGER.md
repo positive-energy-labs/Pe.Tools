@@ -1,6 +1,7 @@
 # takeoffs ledger
 
 ## Decided
+- 2026-08-23 — A zone-edge Excluded gap rejoins Held only when every sampled detector cell names that same touching room and robust union returns one valid polygon. This removes 9 string components / 16.7 sf across seven zones, cuts double-line residue 37.5 ft and microjogs by 2, leaves Accepted geometry and honesty unchanged, and improves all 10 original-resolution changed panels. The apparent +33 stairstep edges are pre-existing zone-edge steps changing disposition, not new physical edges. (168/168.)
 - 2026-08-23 — The review visual law is ONE declaration, `source/pe-tools/apps/web/src/runs/visual-law.json`, read by both consumers: `/runs` through `palette.ts`, and `eval/rhvac/render-zone-promotion.py` by repo-relative path. The two surfaces had already diverged — `/runs` deleted the invented-closure dither at feedback round 2 and the python renderer kept drawing it — so kaitpw and the delegated reviewers judged different claims.
 - 2026-08-23 — Two renders with separate jobs. VERDICT is per level, at plan-native resolution, and draws ONLY what the solver claims exists plus the hairline zone dash; it never draws ink, seals, or close. FORENSIC is per zone and carries the evidence layers. A verdict render that draws an invented layer is a defect.
 - 2026-08-23 — The registered plan raster (`input/plan_<token>.png` + `.json` affine) is the review substrate. Replay seed ink demotes to an evidence layer, off by default. Ink is what the solver saw; the plan is what is there. Judge against the plan, adjudicate against the ink.

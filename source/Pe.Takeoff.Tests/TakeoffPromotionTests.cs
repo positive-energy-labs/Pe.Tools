@@ -309,6 +309,41 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Zone_edge_sliver_rejoins_its_exact_detector_room_owner()
+    {
+        var left = Residue("left", ResidueReason.Rejected,
+            (0, 0), (5, 0), (5, 10), (0, 10));
+        var right = Residue("right", ResidueReason.Rejected,
+            (7, 0), (12, 0), (12, 10), (7, 10));
+        var cells = new int[12 * 10];
+        for (int y = 0; y < 2; y++)
+        for (int x = 5; x < 7; x++) cells[y * 12 + x] = 1;
+        var result = new TakeoffResult {
+            Residues = {
+                left,
+                right,
+                Residue("edge", ResidueReason.Excluded,
+                    (5, 0), (7, 0), (7, 2), (5, 2)),
+            },
+            Ownership = new DetectorOwnership(
+                12, 10, 0, 0, 1, cells, new bool[cells.Length],
+                new DetectorUnownedCause[cells.Length],
+                new Dictionary<int, DetectorOwnerMetadata> {
+                    [1] = new(1, "left", DetectorOwnerDisposition.Room, null),
+                }),
+        };
+        var zone = Zone("zone", (0, 0), (12, 0), (12, 10), (0, 10)).ExactGeometry();
+
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone);
+
+        Assert.Multiple(() => {
+            Assert.That(filled, Is.EqualTo(1));
+            Assert.That(left.RawSqft, Is.EqualTo(54).Within(1e-9));
+            Assert.That(result.Residues, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
     public void Zone_snap_keeps_collinear_runs_collinear()
     {
         var factory = new GeometryFactory();

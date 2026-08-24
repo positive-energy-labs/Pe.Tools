@@ -1671,12 +1671,17 @@ public static class TakeoffPromotion
         {
             Geometry geometry = ToGeometry(hole);
             double zoneContact = Intersection(geometry.Boundary, zone.Boundary).Length;
-            if (geometry is not Polygon polygon || zoneContact > Epsilon)
+            string? detectorOwner = zoneContact > Epsilon && result.Ownership is { } ownership
+                ? SoleDetectorRoomOwner(geometry, ownership)
+                : null;
+            if (geometry is not Polygon polygon
+                || (zoneContact > Epsilon && detectorOwner == null))
                 continue;
             var owners = held.Select(residue => (residue, geometry: (Polygon)ToGeometry(residue)))
                 .Select(item => (item.residue, item.geometry,
                     shared: Intersection(polygon.Boundary, item.geometry.Boundary).Length))
-                .Where(item => item.shared > Epsilon)
+                .Where(item => item.shared > Epsilon
+                    && (detectorOwner == null || item.residue.Id == detectorOwner))
                 .OrderBy(item => item.residue.Reason == ResidueReason.Rejected ? 0 : 1)
                 .ThenByDescending(item => item.shared)
                 .ThenBy(item => item.residue.Id, StringComparer.Ordinal).ToList();
@@ -1695,6 +1700,34 @@ public static class TakeoffPromotion
             filled++;
         }
         return filled;
+    }
+
+    private static string? SoleDetectorRoomOwner(
+        Geometry geometry, DetectorOwnership ownership)
+    {
+        var roomIds = ownership.Owners.ToDictionary(owner => owner.Label, owner =>
+            owner.Disposition == DetectorOwnerDisposition.Room ? owner.OutputId : null);
+        string? sole = null;
+        for (int y = Math.Max(0, (int)Math.Floor((geometry.EnvelopeInternal.MinY - ownership.MinY)
+                                               / ownership.CellFt));
+             y < Math.Min(ownership.Height, (int)Math.Ceiling(
+                 (geometry.EnvelopeInternal.MaxY - ownership.MinY) / ownership.CellFt)); y++)
+        for (int x = Math.Max(0, (int)Math.Floor((geometry.EnvelopeInternal.MinX - ownership.MinX)
+                                               / ownership.CellFt));
+             x < Math.Min(ownership.Width, (int)Math.Ceiling(
+                 (geometry.EnvelopeInternal.MaxX - ownership.MinX) / ownership.CellFt)); x++)
+        {
+            var center = GeometryFactory.CreatePoint(new Coordinate(
+                ownership.MinX + (x + 0.5) * ownership.CellFt,
+                ownership.MinY + (y + 0.5) * ownership.CellFt));
+            if (!geometry.Covers(center)) continue;
+            int label = ownership.OwnerAt(y * ownership.Width + x);
+            if (!roomIds.TryGetValue(label, out string? roomId) || roomId == null
+                || (sole != null && sole != roomId))
+                return null;
+            sole = roomId;
+        }
+        return sole;
     }
 
     private static int HoldUnclaimedZoneComponents(PromotionState state)
