@@ -324,8 +324,8 @@ public sealed class TakeoffResult
     // stays false — its rooms have no disposition yet, and its TSV honestly omits the column.
     public bool DispositionsResolved;
 
-    // Tab-separated payload; F6 precision is load-bearing — rounding flips geometric tie-breaks and
-    // changes room counts. Never serialize detection geometry at display precision.
+    // Tab-separated payload. Polygon coordinates use round-trip precision: six-decimal rounding
+    // made valid overlay residue self-intersect on reload. Never serialize geometry at display precision.
     public string ToTsv()
     {
         var ic = CultureInfo.InvariantCulture;
@@ -361,5 +361,5 @@ public sealed class TakeoffResult
     }
 
     private static string PolyStr(List<double[]> p) =>
-        string.Join("|", p.Select(v => v[0].ToString("F6", CultureInfo.InvariantCulture) + ";" + v[1].ToString("F6", CultureInfo.InvariantCulture)));
+        string.Join("|", p.Select(v => v[0].ToString("R", CultureInfo.InvariantCulture) + ";" + v[1].ToString("R", CultureInfo.InvariantCulture)));
 }
