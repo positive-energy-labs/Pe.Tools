@@ -415,15 +415,17 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
-    public void Multi_room_residue_rejoins_only_its_single_owner_branches()
+    public void Multi_room_residue_rejoins_owned_and_single_owner_obstruction_branches()
     {
         var left = Residue("left", ResidueReason.Rejected,
             (0, 0), (3, 0), (3, 5), (0, 5));
         var right = Residue("right", ResidueReason.Rejected,
             (10, 0), (13, 0), (13, 5), (10, 5));
         var cells = new int[13 * 5];
-        cells[3] = cells[4] = 1;
+        cells[13 + 5] = 1;
         cells[3 * 13 + 8] = cells[3 * 13 + 9] = 2;
+        var causes = new DetectorUnownedCause[cells.Length];
+        causes[3] = causes[4] = DetectorUnownedCause.Obstruction;
         var result = new TakeoffResult {
             Residues = {
                 left,
@@ -434,7 +436,7 @@ public sealed class TakeoffPromotionTests
             },
             Ownership = new DetectorOwnership(
                 13, 5, 0, 0, 1, cells, new bool[cells.Length],
-                new DetectorUnownedCause[cells.Length],
+                causes,
                 new Dictionary<int, DetectorOwnerMetadata> {
                     [1] = new(1, "left", DetectorOwnerDisposition.Room, null),
                     [2] = new(2, "right", DetectorOwnerDisposition.Room, null),
@@ -450,6 +452,42 @@ public sealed class TakeoffPromotionTests
             Assert.That(right.RawSqft, Is.EqualTo(17).Within(1e-9));
             Assert.That(result.Residues.Single(item => item.Id == "compound").RawSqft,
                 Is.EqualTo(15).Within(1e-9));
+        });
+    }
+
+    [Test]
+    public void Obstruction_branch_can_split_the_remaining_residue()
+    {
+        var owner = Residue("owner", ResidueReason.Rejected,
+            (4, 0), (6, 0), (6, 3), (4, 3));
+        var cells = new int[10 * 6];
+        cells[4 * 10 + 1] = 1;
+        cells[4 * 10 + 8] = 2;
+        var causes = new DetectorUnownedCause[cells.Length];
+        causes[3 * 10 + 4] = causes[3 * 10 + 5] = DetectorUnownedCause.Obstruction;
+        var result = new TakeoffResult {
+            Residues = {
+                owner,
+                Residue("compound", ResidueReason.Excluded,
+                    (0, 2), (4, 2), (4, 3), (6, 3), (6, 2), (10, 2),
+                    (10, 6), (6, 6), (6, 4), (4, 4), (4, 6), (0, 6)),
+            },
+            Ownership = new DetectorOwnership(
+                10, 6, 0, 0, 1, cells, new bool[cells.Length], causes,
+                new Dictionary<int, DetectorOwnerMetadata> {
+                    [1] = new(1, "left", DetectorOwnerDisposition.Room, null),
+                    [2] = new(2, "right", DetectorOwnerDisposition.Room, null),
+                }),
+        };
+        var zone = Zone("zone", (0, 0), (10, 0), (10, 6), (0, 6)).ExactGeometry();
+
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone, wallClaimFt: 1.5);
+
+        Assert.Multiple(() => {
+            Assert.That(filled, Is.EqualTo(1));
+            Assert.That(owner.RawSqft, Is.EqualTo(8).Within(1e-9));
+            Assert.That(result.Residues.Where(item => item.Reason == ResidueReason.Excluded)
+                .Select(item => item.RawSqft), Is.EquivalentTo(new[] { 16d, 16d }));
         });
     }
 

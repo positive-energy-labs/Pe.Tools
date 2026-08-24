@@ -1736,18 +1736,24 @@ public static class TakeoffPromotion
             var absorbed = new List<Polygon>();
             foreach (var branch in branches)
             {
-                var detector = DetectorRoomOwnership(branch, ownership);
-                if (detector is not { } branchOwnership
-                    || branchOwnership.RoomIds.Count != 1
-                    || branchOwnership.MaxOtherAxisFt > 2 * wallClaimFt + Epsilon)
-                    continue;
-                string root = branchOwnership.RoomIds.Single();
-                var owner = held.Select(item => (item, geometry: updates.TryGetValue(item, out var prior)
+                var owners = held.Select(item => (item, geometry: updates.TryGetValue(item, out var prior)
                             ? prior : (Polygon)ToGeometry(item)))
                     .Select(item => (item.item, item.geometry,
                         shared: Intersection(branch.Boundary, item.geometry.Boundary).Length))
-                    .Where(item => item.shared > Epsilon
-                        && item.item.Id.Split('~')[0] == root)
+                    .Where(item => item.shared > Epsilon).ToList();
+                var roots = owners.Select(item => item.item.Id.Split('~')[0])
+                    .Distinct(StringComparer.Ordinal).ToList();
+                var detector = DetectorRoomOwnership(branch, ownership);
+                string? root = detector is { } branchOwnership
+                    && branchOwnership.RoomIds.Count == 1
+                    && branchOwnership.MaxOtherAxisFt <= 2 * wallClaimFt + Epsilon
+                    ? branchOwnership.RoomIds.Single()
+                    : detector is { RoomIds.Count: 0, AllOtherObstruction: true }
+                        && roots.Count == 1 ? roots[0] : null;
+                if (root == null)
+                    continue;
+                var owner = owners
+                    .Where(item => item.item.Id.Split('~')[0] == root)
                     .OrderBy(item => item.item.Reason == ResidueReason.Rejected ? 0 : 1)
                     .ThenByDescending(item => item.shared)
                     .ThenBy(item => item.item.Id, StringComparer.Ordinal)
@@ -1764,8 +1770,9 @@ public static class TakeoffPromotion
             if (absorbed.Count == 0) continue;
             Geometry absorbedGeometry = Polygonal(OverlayNGRobust.Union(absorbed));
             Geometry remainder = PolygonDifference(polygon, absorbedGeometry);
-            if (remainder is not Polygon remaining || !remaining.IsValid
-                || Math.Abs(remaining.Area + absorbedGeometry.Area - polygon.Area) > Epsilon)
+            var remaining = PolygonParts(remainder).ToList();
+            if (remaining.Count == 0 || remaining.Any(part => !part.IsValid)
+                || Math.Abs(remainder.Area + absorbedGeometry.Area - polygon.Area) > Epsilon)
                 continue;
 
             foreach (var (owner, completed) in updates)
@@ -1775,22 +1782,16 @@ public static class TakeoffPromotion
                 owner.Holes = Enumerable.Range(0, completed.NumInteriorRings)
                     .Select(index => Coordinates(completed.GetInteriorRingN(index), false)).ToList();
             }
-            residue.RawSqft = remaining.Area;
-            residue.Polygon = Coordinates(remaining.ExteriorRing, true);
-            residue.Holes = Enumerable.Range(0, remaining.NumInteriorRings)
-                .Select(index => Coordinates(remaining.GetInteriorRingN(index), false)).ToList();
-            if (!remaining.Covers(GeometryFactory.CreatePoint(
-                    new Coordinate(residue.LabelX, residue.LabelY))))
-            {
-                residue.LabelX = remaining.InteriorPoint.X;
-                residue.LabelY = remaining.InteriorPoint.Y;
-            }
+            result.Residues.Remove(residue);
+            AddResidues(result.Residues, residue.Id, residue.Reason,
+                remainder, residue.MeanCeilingFt);
             filled += absorbed.Count;
         }
         return filled;
     }
 
-    private static (HashSet<string> RoomIds, bool AllRoom, double MaxOtherAxisFt)?
+    private static (HashSet<string> RoomIds, bool AllRoom, double MaxOtherAxisFt,
+        bool AllOtherObstruction)?
         DetectorRoomOwnership(
         Geometry geometry, DetectorOwnership ownership)
     {
@@ -1820,11 +1821,13 @@ public static class TakeoffPromotion
             }
             else otherCells.Add((x, y));
         }
-        if (roomCells.Count == 0) return null;
+        if (roomCells.Count == 0 && otherCells.Count == 0) return null;
         double maxOtherAxisFt = otherCells.Count == 0 ? 0 : otherCells.Max(cell =>
-            roomCells.Min(room => Math.Max(
+            roomCells.Count == 0 ? double.PositiveInfinity : roomCells.Min(room => Math.Max(
                 Math.Abs(cell.X - room.X), Math.Abs(cell.Y - room.Y))) * ownership.CellFt);
-        return (found, otherCells.Count == 0, maxOtherAxisFt);
+        return (found, otherCells.Count == 0, maxOtherAxisFt,
+            otherCells.All(cell => ownership.UnownedCauseAt(cell.Y * ownership.Width + cell.X)
+                == DetectorUnownedCause.Obstruction));
     }
 
     private static int HoldUnclaimedZoneComponents(PromotionState state)
