@@ -325,6 +325,7 @@ internal static class PartitionFormulation
             $"borderDropped={touchesBorder.Count} ({borderSqft:F0}sf) rooms={emitIds.Count}");
 
         var result = new TakeoffResult { LevelName = levelName, LevelElevation = lvlZ };
+        var ownerMetadata = new Dictionary<int, DetectorOwnerMetadata>();
         int rank = 0;
         foreach (int id in emitIds)
         {
@@ -362,6 +363,8 @@ internal static class PartitionFormulation
             for (int i = 0; i < polys.Count; i++) if (i != outerIdx) room.Holes.Add(polys[i]);
             if (flags.TryGetValue(id, out var fl)) room.Flags.AddRange(fl);
             result.Rooms.Add(room);
+            ownerMetadata.Add(id, new DetectorOwnerMetadata(
+                id, room.Id, DetectorOwnerDisposition.Room, null));
         }
         int residueRank = 0, excludedResidues = 0;
         double excludedResidueSqft = 0;
@@ -372,6 +375,8 @@ internal static class PartitionFormulation
             {
                 excludedResidues++;
                 excludedResidueSqft += sqft;
+                ownerMetadata.Add(id, new DetectorOwnerMetadata(
+                    id, null, DetectorOwnerDisposition.Excluded, reason));
                 continue;
             }
             var polys = Detector.TraceLoops(cells, owner, id, W, H)
@@ -393,6 +398,8 @@ internal static class PartitionFormulation
             };
             for (int i = 0; i < polys.Count; i++) if (i != outerIdx) residue.Holes.Add(polys[i]);
             result.Residues.Add(residue);
+            ownerMetadata.Add(id, new DetectorOwnerMetadata(
+                id, residue.Id, DetectorOwnerDisposition.Residue, reason));
         }
         log($"[partition] residue={result.Residues.Count} ({result.Residues.Sum(r => r.RawSqft):F0}sf) " +
             $"excluded<{opt.MinResidueSqft:F0}sf={excludedResidues} ({excludedResidueSqft:F0}sf)");
@@ -400,6 +407,19 @@ internal static class PartitionFormulation
         result.DomainSqft = domainCells * cellArea;
         result.ClaimedWallSqft = claimedCellsTotal * cellArea;
         result.ExcludedResidueSqft = excludedResidueSqft;
+        var unownedCause = new DetectorUnownedCause[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (owner[i] != 0) continue;
+            unownedCause[i] = zoneMask != null && !zoneMask[i]
+                ? DetectorUnownedCause.OutsideScope
+                : !footprint[i] ? DetectorUnownedCause.OutsideFootprint
+                : obst[i] ? DetectorUnownedCause.Obstruction
+                : DetectorUnownedCause.NonHabitable;
+        }
+        result.Ownership = new DetectorOwnership(
+            W, H, hf.MinX, hf.MinY, opt.CellFt,
+            owner, claimed, unownedCause, ownerMetadata);
         return result;
     }
 

@@ -250,6 +250,56 @@ public sealed class ResidueResult
     public List<List<double[]>> Holes = new();
 }
 
+internal enum DetectorOwnerDisposition { Room, Residue, Excluded }
+
+internal enum DetectorUnownedCause { None, OutsideScope, OutsideFootprint, Obstruction, NonHabitable }
+
+internal sealed record DetectorOwnerMetadata(
+    int Label,
+    string? OutputId,
+    DetectorOwnerDisposition Disposition,
+    ResidueReason? ResidueReason);
+
+// Exact detector authority retained in-process. Geometry remains derived output; this is deliberately
+// absent from TSV until the whole partition can be serialized and round-tripped together.
+internal sealed class DetectorOwnership
+{
+    private readonly int[] ownerByCell;
+    private readonly bool[] claimedByCell;
+    private readonly DetectorUnownedCause[] unownedCauseByCell;
+    private readonly Dictionary<int, DetectorOwnerMetadata> metadata;
+
+    internal DetectorOwnership(
+        int width, int height, double minX, double minY, double cellFt,
+        int[] ownerByCell, bool[] claimedByCell, DetectorUnownedCause[] unownedCauseByCell,
+        IReadOnlyDictionary<int, DetectorOwnerMetadata> metadata)
+    {
+        if (ownerByCell.Length != width * height
+            || claimedByCell.Length != ownerByCell.Length
+            || unownedCauseByCell.Length != ownerByCell.Length)
+            throw new ArgumentException("ownership arrays disagree with the detector grid");
+        this.Width = width;
+        this.Height = height;
+        this.MinX = minX;
+        this.MinY = minY;
+        this.CellFt = cellFt;
+        this.ownerByCell = (int[])ownerByCell.Clone();
+        this.claimedByCell = (bool[])claimedByCell.Clone();
+        this.unownedCauseByCell = (DetectorUnownedCause[])unownedCauseByCell.Clone();
+        this.metadata = new Dictionary<int, DetectorOwnerMetadata>(metadata);
+    }
+
+    internal int Width { get; }
+    internal int Height { get; }
+    internal double MinX { get; }
+    internal double MinY { get; }
+    internal double CellFt { get; }
+    internal IReadOnlyCollection<DetectorOwnerMetadata> Owners => this.metadata.Values;
+    internal int OwnerAt(int cell) => this.ownerByCell[cell];
+    internal bool ClaimedAt(int cell) => this.claimedByCell[cell];
+    internal DetectorUnownedCause UnownedCauseAt(int cell) => this.unownedCauseByCell[cell];
+}
+
 public sealed class TakeoffResult
 {
     public string LevelName = "";
@@ -267,6 +317,7 @@ public sealed class TakeoffResult
     public List<string> LevelFlags = new();
     public string? SeedViewA, SeedViewB;    // names of the stripped seed views (until cleanup)
     public string? EvidenceView;            // rainbow view name (after Annotate)
+    internal DetectorOwnership? Ownership;  // exact detector cells; never serialized
     // True once TakeoffPromotion has closed this result: every surviving ROOM is accepted (held
     // rooms were moved to Rejected residues) and ToTsv persists that disposition as an explicit
     // ROOM column instead of leaving it as a convention readers must know. Raw detector output

@@ -295,6 +295,89 @@ public sealed class TakeoffReplayTests
         finally { File.Delete(path); }
     }
 
+    [Test]
+    public void Partition_retains_exact_cell_ownership_without_changing_output()
+    {
+        const int width = 20, height = 12;
+        const double cellFt = 1;
+        int count = width * height;
+        var footprint = new bool[count];
+        var domain = new bool[count];
+        void AddFloor(int x0, int x1, int y0, int y1, bool habitable = true)
+        {
+            for (int y = y0; y < y1; y++)
+                for (int x = x0; x < x1; x++)
+                {
+                    footprint[y * width + x] = true;
+                    domain[y * width + x] = habitable;
+                }
+        }
+        AddFloor(6, 14, 4, 8);  // two emitted rooms
+        AddFloor(9, 11, 4, 8, habitable: false); // claimed wall band between them
+        AddFloor(0, 4, 4, 8);   // visible border residue
+        AddFloor(18, 20, 0, 2); // suppressed border residue
+        var obstruction = new bool[count];
+        for (int y = 4; y < 8; y++)
+            for (int x = 9; x < 11; x++) obstruction[y * width + x] = true;
+        var field = new Heightfield {
+            W = width, H = height, MinX = 10, MinY = 20, CellFt = cellFt,
+            FloorZ = footprint.Select(value => value ? 0f : float.NaN).ToArray(),
+            CeilZ = domain.Select(value => value ? 9f : float.NaN).ToArray(),
+        };
+        var options = new TakeoffOptions {
+            CellFt = cellFt,
+            MinSqft = 1,
+            MinFeatureWidthFt = 0,
+            MinResidueSqft = 10,
+            WallClaimFt = 2,
+        };
+        var run = PartitionFormulation.Run(
+            field, obstruction, "Ownership", 0, options, _ => { },
+            Enumerable.Repeat(true, count).ToArray(), footprint, new float[count]);
+        var ownership = run.Ownership!;
+
+        Assert.Multiple(() => {
+            Assert.That(ownership.Width, Is.EqualTo(width));
+            Assert.That(ownership.Height, Is.EqualTo(height));
+            Assert.That(ownership.MinX, Is.EqualTo(10));
+            Assert.That(ownership.MinY, Is.EqualTo(20));
+            Assert.That(ownership.CellFt, Is.EqualTo(cellFt));
+            Assert.That(Enumerable.Range(0, count).Where(i => footprint[i])
+                .All(i => ownership.OwnerAt(i) != 0), Is.True,
+                "every detector-domain or claimed-wall cell must retain an owner");
+            Assert.That(Enumerable.Range(0, count).Where(i => !footprint[i])
+                .All(i => ownership.OwnerAt(i) == 0
+                    && ownership.UnownedCauseAt(i) == DetectorUnownedCause.OutsideFootprint),
+                Is.True, "every source-starved in-zone cell must retain an explicit cause");
+            Assert.That(ownership.Owners.Select(owner => owner.Label),
+                Is.EquivalentTo(Enumerable.Range(0, count)
+                    .Select(ownership.OwnerAt).Where(label => label != 0).Distinct()));
+            Assert.That(ownership.Owners.Where(owner => owner.Disposition == DetectorOwnerDisposition.Room)
+                .All(owner => run.Rooms.Single(room => room.Id == owner.OutputId).RawSqft
+                    == OwnerArea(owner.Label)), Is.True);
+            Assert.That(ownership.Owners.Where(owner => owner.Disposition == DetectorOwnerDisposition.Residue)
+                .All(owner => run.Residues.Single(residue => residue.Id == owner.OutputId) is { } residue
+                    && residue.RawSqft == OwnerArea(owner.Label)
+                    && residue.Reason == owner.ResidueReason), Is.True);
+            Assert.That(Area(DetectorOwnerDisposition.Room),
+                Is.EqualTo(run.Rooms.Sum(room => room.RawSqft)));
+            Assert.That(Area(DetectorOwnerDisposition.Residue),
+                Is.EqualTo(run.Residues.Sum(residue => residue.RawSqft)));
+            Assert.That(Area(DetectorOwnerDisposition.Excluded),
+                Is.EqualTo(run.ExcludedResidueSqft));
+            Assert.That(Enumerable.Range(0, count).Count(ownership.ClaimedAt) * cellFt * cellFt,
+                Is.EqualTo(run.ClaimedWallSqft));
+            Assert.That(RoomTakeoff.LoadResult(run.ToTsv(), run.LevelName, run.LevelElevation).Ownership,
+                Is.Null, "detector ownership must remain an in-process sidecar");
+        });
+
+        double OwnerArea(int label) => Enumerable.Range(0, count)
+            .Count(i => ownership.OwnerAt(i) == label) * cellFt * cellFt;
+        double Area(DetectorOwnerDisposition disposition) => ownership.Owners
+            .Where(owner => owner.Disposition == disposition)
+            .Sum(owner => OwnerArea(owner.Label));
+    }
+
     // Open-plan scene: one long 6-ft-tall space whose midpoint has only half-foot wall stubs —
     // enough to break the seed plateau's 3-ft clearance (hybrid splits there), while the shared
     // boundary stays ~83% unbacked by evidence, so the merge criterion re-merges the halves and

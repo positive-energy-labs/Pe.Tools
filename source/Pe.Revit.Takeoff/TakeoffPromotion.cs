@@ -2235,6 +2235,7 @@ public static class TakeoffPromotion
         SeedViewA = source.SeedViewA,
         SeedViewB = source.SeedViewB,
         EvidenceView = source.EvidenceView,
+        Ownership = source.Ownership,
     };
 
     private static List<double[]> Coordinates(LineString ring, bool counterClockwise)
