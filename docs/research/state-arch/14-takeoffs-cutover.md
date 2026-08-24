@@ -20,10 +20,11 @@ Verdict: **Steps 1–5 reached. Deterministic, compile, and fixture-browser lane
 4. **Panels and verbs — reached.** Commit `ac4a70f` moved adopt/sync panels, room writes,
    capture/partition/refresh/launch/sync/adopt, receipts, failures, and serial busy state behind the
    store verb bracket.
-5. **Delete replaced route state — reached.** Commit `0f0601d` removed the takeoffs route's
-   `useVerb`, TanStack snapshot authority, hand cache surgery, legacy `SessionOverlay`, and
-   hard-coded feed states. Shared `lib/use-verb.ts` remains because unrelated routes still import
-   it.
+5. **Delete replaced route state — reached, with narrower credit.** Commit `0f0601d` removed the
+   takeoffs route's `useVerb`, `replaceRegionBlob` React-state surgery, and hard-coded feed states.
+   There was no TanStack snapshot authority or `patchSnapshot` at `335906d~1`, so the cutover did
+   not remove them. `SessionOverlay` remains in `world.ts` and moved behind the store. Shared
+   `lib/use-verb.ts` remains because unrelated routes still import it.
 
 Commit `e1c0fa3` completed the fixture adoption proof, made the targeting manifest single-source,
 and fixed an audit-found regression so a live `.r10` open is joined back into the authority world
@@ -46,12 +47,14 @@ and fixed an audit-found regression so a live `.r10` open is joined back into th
 
 ## Hook diff
 
-“Before” is the recovered frontier working-tree UI used as the cutover baseline.
+"Before" is the reproducible `git show 335906d~1:<path>` baseline. Counts include hook calls only,
+not imports or comments.
 
-| File | `useState` | `useEffect` | `useMemo` | ESLint suppressions |
-| --- | ---: | ---: | ---: | ---: |
-| `routes/takeoffs.tsx` | 4 → 0 | 0 → 2 | 2 → 1 | 1 → 0 |
-| `takeoff/atlas.tsx` | 9 → 2 | 2 → 1 | 10 → 10 | 2 → 2 |
+| File | `useState` | `useEffect` | `useMemo` | `useRef` | `useCallback` | ESLint suppressions | Lines |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `routes/takeoffs.tsx` | 8 → 0 | 1 → 2 | 0 → 1 | 1 → 2 | 2 → 0 | 0 → 0 | 925 → 630 |
+| `takeoff/atlas.tsx` | 9 → 2 | 2 → 1 | 10 → 11 | 0 → 1 | 0 → 0 | 2 → 2 | 2,015 → 2,045 |
+| `targeting/kit.tsx` | absent → 3 | absent → 2 | absent → 2 | absent → 1 | absent → 8 | absent → 1 | absent → 624 |
 
 The route's two effects are lifecycle plumbing only: cancelable disposal and validated router
 search → store input (`source/pe-tools/apps/web/src/routes/takeoffs.tsx:121`). Atlas's two state
