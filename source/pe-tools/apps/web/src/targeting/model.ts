@@ -66,6 +66,8 @@ export interface Feed {
   state: FeedState;
   /** Unix ms of the read the options came from (on-demand feeds). */
   at?: number;
+  /** Exact input tuple that produced this read. */
+  basis?: readonly string[];
   note?: string;
 }
 

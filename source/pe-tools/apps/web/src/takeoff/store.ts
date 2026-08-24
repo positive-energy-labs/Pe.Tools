@@ -299,6 +299,8 @@ export function createTakeoffStore(deps: {
   let busyTimer: ReturnType<typeof setInterval> | undefined;
   let inFlight = false;
   let currentHover = "";
+  let focusedZone = "";
+  let selectedRoom = "";
   const stagedIds = new Set<string>();
 
   const searchAtom = Atom.make<TakeoffSearch>(EMPTY_TAKEOFF_SEARCH).pipe(
@@ -375,6 +377,9 @@ export function createTakeoffStore(deps: {
   );
   const selectedAtom = Atom.family((id: string) =>
     Atom.make(false).pipe(Atom.withLabel(`takeoffs/entity/${id}/selected`)),
+  );
+  const boundAtom = Atom.family((id: string) =>
+    Atom.make(false).pipe(Atom.withLabel(`takeoffs/entity/${id}/url-bound`)),
   );
   const decidedAtom = Atom.family((id: string) =>
     Atom.make<Readonly<Record<string, "accept" | "dismiss">>>({}).pipe(
@@ -645,6 +650,7 @@ export function createTakeoffStore(deps: {
       return {
         hovered: get(hoveredAtom(id)),
         selected: get(selectedAtom(id)),
+        bound: get(boundAtom(id)),
         decided: get(decidedAtom(id)),
         staged,
         dirty: staged !== null,
@@ -764,7 +770,7 @@ export function createTakeoffStore(deps: {
     Atom.batch(() => {
       registry.set(searchAtom, next);
       for (const id of new Set([...before, ...after]))
-        if (before.has(id) !== after.has(id)) registry.set(selectedAtom(id), after.has(id));
+        if (before.has(id) !== after.has(id)) registry.set(boundAtom(id), after.has(id));
     });
     if (previous.target !== next.target || previous.view !== next.view) clearStaging();
   };
@@ -855,6 +861,20 @@ export function createTakeoffStore(deps: {
         if (currentHover) registry.set(hoveredAtom(currentHover), false);
         currentHover = id;
         if (id) registry.set(hoveredAtom(id), true);
+      });
+    },
+    focusZone(id: string) {
+      Atom.batch(() => {
+        if (focusedZone) registry.set(selectedAtom(focusedZone), false);
+        focusedZone = id;
+        if (id) registry.set(selectedAtom(id), true);
+      });
+    },
+    selectRoom(id: string) {
+      Atom.batch(() => {
+        if (selectedRoom) registry.set(selectedAtom(selectedRoom), false);
+        selectedRoom = id;
+        if (id) registry.set(selectedAtom(id), true);
       });
     },
     setAtlasPage(patch: Partial<AtlasPageState>) {

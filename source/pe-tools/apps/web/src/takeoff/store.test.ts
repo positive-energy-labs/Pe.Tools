@@ -182,8 +182,12 @@ describe("takeoff route store", () => {
     const room = store.atoms.registry
       .get(store.atoms.world)
       .zones.flatMap((zone) => zone.rooms)[0]!;
+    const zone = store.atoms.registry.get(store.atoms.world).zones[0]!;
 
     store.actions.setAtlasPage({ level: "Main", cursor: room.guid });
+    store.actions.focusZone(zone.zone.guid);
+    store.actions.selectRoom(room.guid);
+    store.actions.hover(room.guid);
     store.actions.patchRoom(room.guid, { name: "Staged room" });
     store.actions.decide(room.guid, "thin residue", "accept");
 
@@ -192,9 +196,12 @@ describe("takeoff route store", () => {
       cursor: room.guid,
     });
     expect(store.atoms.registry.get(store.atoms.entity(room.guid))).toMatchObject({
+      hovered: true,
+      selected: true,
       dirty: true,
       staged: { base: { name: room.name }, next: { name: "Staged room" } },
     });
+    expect(store.atoms.registry.get(store.atoms.entity(zone.zone.guid)).selected).toBe(true);
     expect(store.atoms.registry.get(store.atoms.entity(room.guid)).decided).toEqual({
       "thin residue": "accept",
     });

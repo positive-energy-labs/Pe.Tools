@@ -332,6 +332,47 @@ interface Row {
   open: string[];
 }
 
+function RoomNameCell({
+  store,
+  row,
+  onCommit,
+}: {
+  store: TakeoffStore;
+  row: Row;
+  onCommit: (value: string) => void;
+}) {
+  const entity = useAtomValue(store.atoms.entity(row.room.guid));
+  const state = [
+    entity.hovered ? "hovered" : null,
+    entity.selected ? "table selection" : null,
+    entity.dirty ? "staged" : null,
+    entity.conflict ? "authority changed" : null,
+  ].filter(Boolean);
+  return (
+    <div
+      data-dirty={entity.dirty || undefined}
+      data-conflict={entity.conflict || undefined}
+      title={state.join(" · ") || undefined}
+      className={cn(
+        "flex min-w-0 items-center",
+        entity.hovered && "[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
+        entity.selected && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <TextCell value={row.room.name} onCommit={onCommit} className="text-left" />
+      </div>
+      {entity.dirty && (
+        <span
+          className={cn("face-mono t-caption pr-1", entity.conflict && "text-[var(--r-caution)]")}
+        >
+          {entity.conflict ? "conflict" : "staged"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /**
  * The .r10 column's cell-state derivation — one function, so the column's marks and its facet
  * word are read from the same facts. AUDIT #3 → RULED R2 (2026-08-16): `fresh: "never"` is the
@@ -379,8 +420,14 @@ export function Atlas({ store }: AtlasProps) {
   const setStageFilter = (value: Stage | null) =>
     store.actions.setAtlasPage({ stageFilter: value });
   const setLevel = (value: string) => store.actions.setAtlasPage({ level: value });
-  const setZoneKey = (value: string | null) => store.actions.setAtlasPage({ zoneKey: value });
-  const setCursor = (value: string | null) => store.actions.setAtlasPage({ cursor: value });
+  const setZoneKey = (value: string | null) => {
+    store.actions.setAtlasPage({ zoneKey: value });
+    store.actions.focusZone(world.zones.find((zone) => zone.zone.key === value)?.zone.guid ?? "");
+  };
+  const setCursor = (value: string | null) => {
+    store.actions.setAtlasPage({ cursor: value });
+    store.actions.selectRoom(value ?? "");
+  };
   /** Where the per-room Manual J fields live: inline table columns (dense, whole-scope entry)
    *  or the room panel (narrow table, one room in focus). One home at a time, never both. */
   /** The row order the user is actually looking at — MasterTable owns filter/sort/search, and
@@ -537,10 +584,10 @@ export function Atlas({ store }: AtlasProps) {
         sort: (row) => row.room.name,
         search: (row) => row.room.name,
         cell: (row) => (
-          <TextCell
-            value={row.room.name}
-            onCommit={(v) => actions.patch(row.room.guid, { name: v })}
-            className="text-left"
+          <RoomNameCell
+            store={store}
+            row={row}
+            onCommit={(value) => actions.patch(row.room.guid, { name: value })}
           />
         ),
       },
@@ -937,6 +984,7 @@ export function Atlas({ store }: AtlasProps) {
                 cursor={cursor}
                 stateOf={stateOf}
                 onSelectZone={selectZone}
+                onHover={(id) => store.actions.hover(id)}
                 onCursor={(z, guid) => {
                   setZoneKey(z.zone.key);
                   setLevel(z.zone.lane.label);
@@ -958,6 +1006,7 @@ export function Atlas({ store }: AtlasProps) {
               {/* Zone info lives ON the plan, where the zone is — not in a far-away rail. */}
               {selected && (
                 <ZoneCard
+                  store={store}
                   zone={selected}
                   cursorRoom={cursorRow?.room ?? null}
                   geoReady={geoReady}
@@ -1067,6 +1116,7 @@ export function Atlas({ store }: AtlasProps) {
                       setCursor(row.room.guid);
                       if (!selected) setLevel(row.zone.zone.lane.label);
                     }}
+                    onRowHover={(row) => store.actions.hover(row?.room.guid ?? "")}
                     onVisibleChange={(keys) =>
                       (visibleKeys.length !== keys.length ||
                         visibleKeys.some((key, index) => key !== keys[index])) &&
@@ -1105,6 +1155,7 @@ function LevelPlan({
   cursor,
   stateOf,
   onSelectZone,
+  onHover,
   onCursor,
   onClear,
 }: {
@@ -1114,6 +1165,7 @@ function LevelPlan({
   cursor: string | null;
   stateOf: (room: WorldRoom) => RoomState;
   onSelectZone: (z: WorldZone) => void;
+  onHover: (id: string) => void;
   onCursor: (z: WorldZone, guid: string) => void;
   onClear: () => void;
 }) {
@@ -1187,7 +1239,12 @@ function LevelPlan({
             (z.zone.bounds.minY + z.zone.bounds.maxY) / 2,
           ]);
           return (
-            <g key={z.zone.key} opacity={dimmed ? 0.15 : 1}>
+            <g
+              key={z.zone.key}
+              opacity={dimmed ? 0.15 : 1}
+              onMouseEnter={() => onHover(z.zone.guid)}
+              onMouseLeave={() => onHover("")}
+            >
               <path
                 d={pathD(z.zone.loops, frame)}
                 fillRule="evenodd"
@@ -1465,6 +1522,7 @@ function Line({ label, value, muted }: { label: string; value: string; muted?: b
  * click-out) removes it, so collapsing the plan hides only plan-local information.
  */
 function ZoneCard({
+  store,
   zone,
   cursorRoom,
   geoReady,
@@ -1475,6 +1533,7 @@ function ZoneCard({
   systems,
   onClose,
 }: {
+  store: TakeoffStore;
   zone: WorldZone;
   cursorRoom: WorldRoom | null;
   geoReady: boolean;
@@ -1485,6 +1544,7 @@ function ZoneCard({
   systems: WorldSystem[];
   onClose: () => void;
 }) {
+  const entity = useAtomValue(store.atoms.entity(zone.zone.guid));
   const states = zone.rooms.map(stateOf);
   const run = zone.runs[zone.runs.length - 1] ?? null;
   const closure = run
@@ -1495,7 +1555,18 @@ function ZoneCard({
   return (
     // Capped to the plan body and scrolling internally — at the default plan height the verbs
     // at the bottom must stay reachable without enlarging the plan first.
-    <div className="absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur">
+    <div
+      data-hovered={entity.hovered || undefined}
+      data-selected={entity.selected || undefined}
+      data-dirty={entity.dirty || undefined}
+      data-conflict={entity.conflict || undefined}
+      className={cn(
+        "absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur",
+        entity.hovered && "ring-1 ring-[var(--r-line-2)]",
+        entity.selected && "border-[var(--r-line-2)]",
+        entity.conflict && "border-[var(--r-caution)]",
+      )}
+    >
       <div className="flex items-center gap-1.5 px-2 py-1.5">
         <ZoneThumb zone={zone.zone} className="size-5" />
         <span className="face-mono t-value">{zone.zone.key}</span>
@@ -1515,6 +1586,24 @@ function ZoneCard({
       <ZonePeek zone={zone} cursorRoom={cursorRoom} geoReady={geoReady} stateOf={stateOf} />
 
       <div className="space-y-1 px-2 py-1.5">
+        <div className="flex flex-wrap gap-1">
+          {entity.bound && (
+            <FactChip title="This zone is bound in the URL scope.">URL bound</FactChip>
+          )}
+          {entity.selected && <FactChip title="This zone has plan focus.">plan focus</FactChip>}
+          {entity.dirty && (
+            <FactChip
+              tone={entity.conflict ? "alarm" : undefined}
+              title={
+                entity.conflict
+                  ? "Authority changed since this edit was staged."
+                  : "This entity has staged edits."
+              }
+            >
+              {entity.conflict ? "edit conflict" : "staged edit"}
+            </FactChip>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           <ZoneStateBar zone={zone} states={states} className="w-16" />
           <span className="face-mono t-value text-muted-foreground" title={STAGE_BLURB[zone.stage]}>

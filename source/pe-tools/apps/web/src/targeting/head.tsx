@@ -38,6 +38,7 @@ function Caption({ b, link }: { b: Bindings; link: Link }) {
       {link.dir}
       {link.liveness ? ` Â· ${link.liveness}` : ""}
       {fresh ? ` Â· ${fresh}` : ""}
+      {f?.basis?.length ? ` | basis ${f.basis.join(" / ")}` : ""}
     </span>
   );
 }
