@@ -2,6 +2,7 @@ import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanst
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 
+import AtomDevtools from "../integrations/atoms/devtools";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import { useHostLiveInvalidation } from "../host/live";
 
@@ -63,6 +64,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
               name: "Tanstack Router",
               render: <TanStackRouterDevtoolsPanel />,
             },
+            AtomDevtools,
             TanStackQueryDevtools,
           ]}
         />

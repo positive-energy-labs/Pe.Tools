@@ -221,7 +221,13 @@ than guessing flags. Below is only the earned delta.
 - Never probe CLI surface through app-booting wrappers (`pnpm run pea -- --help` boots the app);
   never foreground a smoke suite to read three tail lines — background once, tee, poll.
 - The permission sandbox can block localhost HTTP, indistinguishable from a dead host. Probe
-  127.0.0.1 unsandboxed, or via the SDK surface.
+  127.0.0.1 unsandboxed, or via the SDK surface. **`vp dev` binds `[::1]` only** — a
+  127.0.0.1 probe of a healthy web dev server refuses the connection and reads exactly like a
+  dead host. Use `localhost` (or `[::1]`); confirm with `netstat -ano | Select-String ":<port>\s"`
+  before believing a web server is down.
+- `pane send-text` mangles a compound `$env:X="..."; cmd` line — the assignment can vanish and
+  the process starts without it, silently. Set env inside the command the pane runs, or verify
+  the value from the server's own output before trusting it.
 
 ## What to trust (exit codes lie here)
 
