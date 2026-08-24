@@ -307,7 +307,14 @@ export function createTakeoffStore(deps: {
     )
     .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/snapshot"));
   const foldersSource = runtime
-    .atom((get) => Effect.succeed(unbound(get(recentDirsAtom), ["browser"])))
+    .atom((get) =>
+      Effect.succeed({
+        value: get(recentDirsAtom),
+        at: Date.now(),
+        basis: ["browser"],
+        bound: true,
+      } satisfies TimedRead<readonly string[]>),
+    )
     .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/folders"));
   const foldersResult = runtimeFactory
     .withReactivity(["folders"])(foldersSource)

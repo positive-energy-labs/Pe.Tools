@@ -5,7 +5,8 @@
  * in for the `takeoffs.*` operations that do not exist yet. Keep this file thin: it owns the
  * transport, the structured script result, and the session scope; nothing about the pipeline's meaning.
  */
-import { callHostDynamic } from "#/host/client";
+import { callHostDynamic, callHostRpc } from "#/host/client";
+import { fromBridgeSessions } from "#/host/target";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import {
   adoptZonesScript,
@@ -36,6 +37,8 @@ import type {
   Resolution,
   ViewFacts,
 } from "#/takeoff/model";
+import type { SessionEvent, SessionSource, TakeoffHost } from "#/takeoff/store";
+import { buildLiveWorld, emptyOverlay } from "#/takeoff/world";
 
 export interface LiveSnapshot {
   status: ModelStatus;
@@ -43,6 +46,66 @@ export interface LiveSnapshot {
   zoneFrs: CandidateRegion[];
   regionsByZone: Record<string, LiveRegion[]>;
 }
+
+export const createHostSessionSource = (): SessionSource => ({
+  async list() {
+    const response = await callHostRpc("bridge.sessions.list", undefined);
+    return fromBridgeSessions(response.sessions);
+  },
+  async activeDocument(session) {
+    if (!session.activeDocumentTitle)
+      throw new Error(`session ${session.sessionId} has no active document`);
+    return { session, title: session.activeDocumentTitle };
+  },
+  subscribe(listener) {
+    const source = new EventSource("/events");
+    source.onmessage = (message) => {
+      try {
+        const event = JSON.parse(message.data) as {
+          readonly sessionId?: string;
+          readonly kind?: "connected" | "disconnected" | "state-sync" | "event";
+        };
+        if (!event.sessionId) return;
+        const kind: SessionEvent["kind"] =
+          event.kind === "disconnected" ? "sessionGone" : "docChanged";
+        listener({ kind, sessionId: event.sessionId });
+      } catch {
+        // The next well-formed host event remains usable; malformed SSE cannot name a safe key.
+      }
+    };
+    return () => source.close();
+  },
+});
+
+export const createLiveTakeoffHost = (): TakeoffHost => ({
+  fixture: false,
+  async readSnapshot(session) {
+    const raw = await readSnapshot({ bridgeSessionId: session.sessionId });
+    return {
+      ...raw,
+      world: buildLiveWorld({
+        ...raw,
+        overlay: emptyOverlay(),
+        r10Path: null,
+        r10: null,
+      }),
+    };
+  },
+  async listRhvac(dir) {
+    const response = (await callHostDynamic("rhvac.list", { dir })) as {
+      readonly exists?: boolean;
+      readonly files?: readonly { readonly path: string; readonly name: string }[];
+    };
+    return response.exists ? [...(response.files ?? [])] : [];
+  },
+  openRhvac: (path) => callHostRpc("rhvac.open", { path }),
+  async adopt(session, input) {
+    const adopted = await adoptZones({ bridgeSessionId: session.sessionId }, input.view, [
+      ...input.items,
+    ]);
+    return { text: `adopted ${adopted.length} zoning regions` };
+  },
+});
 
 interface ScriptResponse {
   status: string;
