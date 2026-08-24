@@ -234,7 +234,7 @@ export function freshnessWord(b: Bindings, link: Link): string | null {
     case "live":
       return "live";
     case "fresh":
-      return f.at ? `read ${ago(f.at)}` : "read";
+      return f.at ? `read at ${new Date(f.at).toLocaleTimeString()}` : "read";
     case "stale":
       return "stale";
     case "loading":
@@ -244,13 +244,6 @@ export function freshnessWord(b: Bindings, link: Link): string | null {
     case "fixture":
       return "fixture";
   }
-}
-
-function ago(at: number): string {
-  const s = Math.max(0, Math.round((Date.now() - at) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  return `${Math.round(s / 3600)}h ago`;
 }
 
 /* ------------------------------------------------------------------ picker */
