@@ -1708,6 +1708,85 @@ public static class TakeoffPromotion
             result.Residues.Remove(hole);
             filled++;
         }
+        if (wallClaimFt > 0 && result.Ownership is { } detectorOwnership)
+            filled += RejoinOwnedResidueBranches(
+                result, held, detectorOwnership, wallClaimFt);
+        return filled;
+    }
+
+    private static int RejoinOwnedResidueBranches(
+        TakeoffResult result, IReadOnlyList<ResidueResult> held,
+        DetectorOwnership ownership, double wallClaimFt)
+    {
+        var buffer = new BufferParameters { JoinStyle = JoinStyle.Mitre };
+        int filled = 0;
+        foreach (var residue in result.Residues
+                     .Where(item => item.Reason == ResidueReason.Excluded).ToList())
+        {
+            if (ToGeometry(residue) is not Polygon polygon
+                || DetectorRoomOwnership(polygon, ownership) is not { } component
+                || component.RoomIds.Count < 2)
+                continue;
+            Geometry core = polygon.Buffer(-ownership.CellFt, buffer);
+            if (core.IsEmpty) continue;
+            Geometry opened = PolygonIntersection(
+                core.Buffer(ownership.CellFt, buffer), polygon);
+            var branches = PolygonParts(PolygonDifference(polygon, opened)).ToList();
+            var updates = new Dictionary<ResidueResult, Polygon>();
+            var absorbed = new List<Polygon>();
+            foreach (var branch in branches)
+            {
+                var detector = DetectorRoomOwnership(branch, ownership);
+                if (detector is not { } branchOwnership
+                    || branchOwnership.RoomIds.Count != 1
+                    || branchOwnership.MaxOtherAxisFt > 2 * wallClaimFt + Epsilon)
+                    continue;
+                string root = branchOwnership.RoomIds.Single();
+                var owner = held.Select(item => (item, geometry: updates.TryGetValue(item, out var prior)
+                            ? prior : (Polygon)ToGeometry(item)))
+                    .Select(item => (item.item, item.geometry,
+                        shared: Intersection(branch.Boundary, item.geometry.Boundary).Length))
+                    .Where(item => item.shared > Epsilon
+                        && item.item.Id.Split('~')[0] == root)
+                    .OrderBy(item => item.item.Reason == ResidueReason.Rejected ? 0 : 1)
+                    .ThenByDescending(item => item.shared)
+                    .ThenBy(item => item.item.Id, StringComparer.Ordinal)
+                    .FirstOrDefault();
+                if (owner.item == null) continue;
+                Geometry joined = OverlayNGRobust.Overlay(
+                    owner.geometry, branch, SpatialFunction.Union);
+                if (joined is not Polygon completed || !completed.IsValid
+                    || Math.Abs(completed.Area - owner.geometry.Area - branch.Area) > Epsilon)
+                    continue;
+                updates[owner.item] = completed;
+                absorbed.Add(branch);
+            }
+            if (absorbed.Count == 0) continue;
+            Geometry absorbedGeometry = Polygonal(OverlayNGRobust.Union(absorbed));
+            Geometry remainder = PolygonDifference(polygon, absorbedGeometry);
+            if (remainder is not Polygon remaining || !remaining.IsValid
+                || Math.Abs(remaining.Area + absorbedGeometry.Area - polygon.Area) > Epsilon)
+                continue;
+
+            foreach (var (owner, completed) in updates)
+            {
+                owner.RawSqft = completed.Area;
+                owner.Polygon = Coordinates(completed.ExteriorRing, true);
+                owner.Holes = Enumerable.Range(0, completed.NumInteriorRings)
+                    .Select(index => Coordinates(completed.GetInteriorRingN(index), false)).ToList();
+            }
+            residue.RawSqft = remaining.Area;
+            residue.Polygon = Coordinates(remaining.ExteriorRing, true);
+            residue.Holes = Enumerable.Range(0, remaining.NumInteriorRings)
+                .Select(index => Coordinates(remaining.GetInteriorRingN(index), false)).ToList();
+            if (!remaining.Covers(GeometryFactory.CreatePoint(
+                    new Coordinate(residue.LabelX, residue.LabelY))))
+            {
+                residue.LabelX = remaining.InteriorPoint.X;
+                residue.LabelY = remaining.InteriorPoint.Y;
+            }
+            filled += absorbed.Count;
+        }
         return filled;
     }
 

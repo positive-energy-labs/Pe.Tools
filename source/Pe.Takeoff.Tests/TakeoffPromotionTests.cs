@@ -415,6 +415,45 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Multi_room_residue_rejoins_only_its_single_owner_branches()
+    {
+        var left = Residue("left", ResidueReason.Rejected,
+            (0, 0), (3, 0), (3, 5), (0, 5));
+        var right = Residue("right", ResidueReason.Rejected,
+            (10, 0), (13, 0), (13, 5), (10, 5));
+        var cells = new int[13 * 5];
+        cells[3] = cells[4] = 1;
+        cells[3 * 13 + 8] = cells[3 * 13 + 9] = 2;
+        var result = new TakeoffResult {
+            Residues = {
+                left,
+                right,
+                Residue("compound", ResidueReason.Excluded,
+                    (3, 0), (8, 0), (8, 3), (10, 3), (10, 4),
+                    (8, 4), (8, 5), (5, 5), (5, 1), (3, 1)),
+            },
+            Ownership = new DetectorOwnership(
+                13, 5, 0, 0, 1, cells, new bool[cells.Length],
+                new DetectorUnownedCause[cells.Length],
+                new Dictionary<int, DetectorOwnerMetadata> {
+                    [1] = new(1, "left", DetectorOwnerDisposition.Room, null),
+                    [2] = new(2, "right", DetectorOwnerDisposition.Room, null),
+                }),
+        };
+        var zone = Zone("zone", (0, 0), (13, 0), (13, 5), (0, 5)).ExactGeometry();
+
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone, wallClaimFt: 1.5);
+
+        Assert.Multiple(() => {
+            Assert.That(filled, Is.EqualTo(2));
+            Assert.That(left.RawSqft, Is.EqualTo(17).Within(1e-9));
+            Assert.That(right.RawSqft, Is.EqualTo(17).Within(1e-9));
+            Assert.That(result.Residues.Single(item => item.Id == "compound").RawSqft,
+                Is.EqualTo(15).Within(1e-9));
+        });
+    }
+
+    [Test]
     public void Zone_snap_keeps_collinear_runs_collinear()
     {
         var factory = new GeometryFactory();
