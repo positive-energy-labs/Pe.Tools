@@ -344,6 +344,77 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Multi_room_zone_edge_junction_stays_excluded()
+    {
+        var left = Residue("left", ResidueReason.Rejected,
+            (0, 0), (5, 0), (5, 10), (0, 10));
+        var right = Residue("right", ResidueReason.Rejected,
+            (8, 0), (13, 0), (13, 10), (8, 10));
+        var cells = new int[13 * 10];
+        for (int y = 0; y < 4; y++)
+        {
+            cells[y * 13 + 5] = 1;
+            cells[y * 13 + 7] = 2;
+        }
+        var result = new TakeoffResult {
+            Residues = {
+                left,
+                right,
+                Residue("junction", ResidueReason.Excluded,
+                    (5, 0), (8, 0), (8, 4), (5, 4)),
+            },
+            Ownership = new DetectorOwnership(
+                13, 10, 0, 0, 1, cells, new bool[cells.Length],
+                new DetectorUnownedCause[cells.Length],
+                new Dictionary<int, DetectorOwnerMetadata> {
+                    [1] = new(1, "left", DetectorOwnerDisposition.Room, null),
+                    [2] = new(2, "right", DetectorOwnerDisposition.Room, null),
+                }),
+        };
+        var zone = Zone("zone", (0, 0), (13, 0), (13, 10), (0, 10)).ExactGeometry();
+
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone, wallClaimFt: 1.5);
+
+        Assert.Multiple(() => {
+            Assert.That(filled, Is.Zero);
+            Assert.That(left.RawSqft, Is.EqualTo(50).Within(1e-9));
+            Assert.That(result.Residues, Has.Count.EqualTo(3));
+        });
+    }
+
+    [Test]
+    public void Bounded_single_room_zone_edge_gap_rejoins_that_room()
+    {
+        var room = Residue("room", ResidueReason.Rejected,
+            (0, 0), (5, 0), (5, 10), (0, 10));
+        var cells = new int[7 * 10];
+        for (int y = 0; y < 4; y++)
+            cells[y * 7 + 5] = 1;
+        var result = new TakeoffResult {
+            Residues = {
+                room,
+                Residue("gap", ResidueReason.Excluded,
+                    (5, 0), (7, 0), (7, 4), (5, 4)),
+            },
+            Ownership = new DetectorOwnership(
+                7, 10, 0, 0, 1, cells, new bool[cells.Length],
+                new DetectorUnownedCause[cells.Length],
+                new Dictionary<int, DetectorOwnerMetadata> {
+                    [1] = new(1, "room", DetectorOwnerDisposition.Room, null),
+                }),
+        };
+        var zone = Zone("zone", (0, 0), (7, 0), (7, 10), (0, 10)).ExactGeometry();
+
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone, wallClaimFt: 1.5);
+
+        Assert.Multiple(() => {
+            Assert.That(filled, Is.EqualTo(1));
+            Assert.That(room.RawSqft, Is.EqualTo(58).Within(1e-9));
+            Assert.That(result.Residues, Has.Count.EqualTo(1));
+        });
+    }
+
+    [Test]
     public void Zone_snap_keeps_collinear_runs_collinear()
     {
         var factory = new GeometryFactory();

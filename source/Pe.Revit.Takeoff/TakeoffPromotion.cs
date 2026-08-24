@@ -1650,17 +1650,18 @@ public static class TakeoffPromotion
         if (heldComponents > 0)
             state.Rejections["zone-component:held"] = heldComponents;
         RebuildResiduesInsideZone(state.Result, state.ZoneGeometry);
-        int filled = FillInteriorResidueGaps(state.Result, state.ZoneGeometry);
+        int filled = FillInteriorResidueGaps(
+            state.Result, state.ZoneGeometry, state.Options.WallClaimFt);
         if (filled > 0) state.Rejections["disposition:interior-gap-filled"] = filled;
     }
 
     /// <summary>
     /// Rejoins an internal Excluded component to an existing non-Excluded owner. Held wins when
     /// several owners qualify. The zone-edge refusal
-    /// leaves the exterior narrow band untouched; choosing the longest shared boundary resolves
-    /// multi-room junction nuclei without changing any Accepted geometry or inventing a room.
+    /// leaves the exterior narrow band and ambiguous multi-room junctions untouched.
     /// </summary>
-    internal static int FillInteriorResidueGaps(TakeoffResult result, Geometry zone)
+    internal static int FillInteriorResidueGaps(
+        TakeoffResult result, Geometry zone, double wallClaimFt = 0)
     {
         var held = result.Residues
             .Where(residue => residue.Reason != ResidueReason.Excluded).ToList();
@@ -1671,20 +1672,28 @@ public static class TakeoffPromotion
         {
             Geometry geometry = ToGeometry(hole);
             double zoneContact = Intersection(geometry.Boundary, zone.Boundary).Length;
-            string? detectorOwner = zoneContact > Epsilon && result.Ownership is { } ownership
-                ? SoleDetectorRoomOwner(geometry, ownership)
-                : null;
-            if (geometry is not Polygon polygon
-                || (zoneContact > Epsilon && detectorOwner == null))
+            if (geometry is not Polygon polygon)
                 continue;
             var owners = held.Select(residue => (residue, geometry: (Polygon)ToGeometry(residue)))
                 .Select(item => (item.residue, item.geometry,
                     shared: Intersection(polygon.Boundary, item.geometry.Boundary).Length))
-                .Where(item => item.shared > Epsilon
-                    && (detectorOwner == null || item.residue.Id == detectorOwner))
+                .Where(item => item.shared > Epsilon)
                 .OrderBy(item => item.residue.Reason == ResidueReason.Rejected ? 0 : 1)
                 .ThenByDescending(item => item.shared)
                 .ThenBy(item => item.residue.Id, StringComparer.Ordinal).ToList();
+            var detector = zoneContact > Epsilon && result.Ownership is { } ownership
+                ? DetectorRoomOwnership(geometry, ownership)
+                : null;
+            string? detectorRoot = detector is { } junction
+                && junction.RoomIds.Count == 1
+                && (junction.AllRoom || wallClaimFt > 0
+                    && junction.MaxOtherAxisFt <= 2 * wallClaimFt + Epsilon)
+                ? junction.RoomIds.Single()
+                : null;
+            if (zoneContact > Epsilon && detectorRoot == null)
+                continue;
+            if (detectorRoot != null)
+                owners.RemoveAll(owner => owner.residue.Id.Split('~')[0] != detectorRoot);
             Geometry? joined = owners.Count == 0 ? null : OverlayNGRobust.Overlay(
                 owners[0].geometry, polygon, SpatialFunction.Union);
             if (joined is not Polygon completed || !completed.IsValid
@@ -1702,12 +1711,15 @@ public static class TakeoffPromotion
         return filled;
     }
 
-    private static string? SoleDetectorRoomOwner(
+    private static (HashSet<string> RoomIds, bool AllRoom, double MaxOtherAxisFt)?
+        DetectorRoomOwnership(
         Geometry geometry, DetectorOwnership ownership)
     {
         var roomIds = ownership.Owners.ToDictionary(owner => owner.Label, owner =>
             owner.Disposition == DetectorOwnerDisposition.Room ? owner.OutputId : null);
-        string? sole = null;
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        var roomCells = new List<(int X, int Y)>();
+        var otherCells = new List<(int X, int Y)>();
         for (int y = Math.Max(0, (int)Math.Floor((geometry.EnvelopeInternal.MinY - ownership.MinY)
                                                / ownership.CellFt));
              y < Math.Min(ownership.Height, (int)Math.Ceiling(
@@ -1722,12 +1734,18 @@ public static class TakeoffPromotion
                 ownership.MinY + (y + 0.5) * ownership.CellFt));
             if (!geometry.Covers(center)) continue;
             int label = ownership.OwnerAt(y * ownership.Width + x);
-            if (!roomIds.TryGetValue(label, out string? roomId) || roomId == null
-                || (sole != null && sole != roomId))
-                return null;
-            sole = roomId;
+            if (roomIds.TryGetValue(label, out string? roomId) && roomId != null)
+            {
+                found.Add(roomId);
+                roomCells.Add((x, y));
+            }
+            else otherCells.Add((x, y));
         }
-        return sole;
+        if (roomCells.Count == 0) return null;
+        double maxOtherAxisFt = otherCells.Count == 0 ? 0 : otherCells.Max(cell =>
+            roomCells.Min(room => Math.Max(
+                Math.Abs(cell.X - room.X), Math.Abs(cell.Y - room.Y))) * ownership.CellFt);
+        return (found, otherCells.Count == 0, maxOtherAxisFt);
     }
 
     private static int HoldUnclaimedZoneComponents(PromotionState state)
