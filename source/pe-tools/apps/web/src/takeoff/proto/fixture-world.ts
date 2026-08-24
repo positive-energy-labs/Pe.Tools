@@ -7,11 +7,13 @@
  */
 import { useMemo } from "react";
 
+import type { SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { World, WorldRoom, WorldZone } from "#/takeoff/world";
 
 import { useMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
+import { mockWorld, type MockRoom, type MockWorld, type MockZone } from "./mock";
 
-const room = (r: GeoRoom): WorldRoom => ({
+const room = (r: GeoRoom | MockRoom): WorldRoom => ({
   guid: r.guid,
   elementId: null,
   name: r.name,
@@ -24,11 +26,11 @@ const room = (r: GeoRoom): WorldRoom => ({
   provenance: { ...r.provenance, sourceRoomId: r.guid },
   r10: r.r10 ? { fileIdentity: "fixture", ...r.r10 } : null,
   data: r.data,
-  outer: r.outer,
-  holes: r.holes,
+  outer: "outer" in r ? r.outer : null,
+  holes: "holes" in r ? r.holes : [],
 });
 
-const zone = (z: GeoZone): WorldZone => ({
+const zone = (z: GeoZone | MockZone): WorldZone => ({
   zone: {
     guid: z.zone.guid,
     elementId: null,
@@ -44,7 +46,7 @@ const zone = (z: GeoZone): WorldZone => ({
   tags: z.tags,
   name: z.name,
   rooms: z.rooms.map(room),
-  residues: z.residues.map((r) => ({
+  residues: ("residues" in z ? z.residues : []).map((r) => ({
     id: r.id,
     reason: r.reason,
     rawSqft: r.rawSqft,
@@ -68,25 +70,68 @@ const zone = (z: GeoZone): WorldZone => ({
   driftSqft: z.driftSqft,
 });
 
+export const projectFixtureWorld = (fixture: MockWorld): World => ({
+  docName: fixture.docName,
+  r10Path: fixture.r10Path,
+  lanes: [...new Map(fixture.zones.map((z) => [z.zone.lane.view, z.zone.lane])).values()].map(
+    (lane) => ({ view: lane.view, label: lane.label, replayPath: null }),
+  ),
+  zones: fixture.zones.map(zone),
+  systems: fixture.systems.map((system) => ({
+    guid: system.guid,
+    tag: system.tag,
+    zoneKeys: system.zoneKeys,
+    sensibleBtuh: system.sensibleBtuh,
+    overCap: system.overCap,
+  })),
+});
+
+export const createFixtureTakeoffHost = (): TakeoffHost => ({
+  fixture: true,
+  async readSnapshot() {
+    const world = projectFixtureWorld(mockWorld());
+    return {
+      world,
+      views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
+      zoneFrs: [],
+      regionsByZone: {},
+    };
+  },
+  async listRhvac(dir) {
+    return [{ path: `${dir}\\projectA.r10`, name: "projectA.r10" }];
+  },
+  async openRhvac(path) {
+    return { path };
+  },
+  async adopt() {
+    throw new Error("fixture takeoff host is read-only");
+  },
+});
+
+export const createFixtureSessionSource = (): SessionSource => {
+  const session = {
+    sessionId: "fixture",
+    processId: 0,
+    lane: null,
+    custody: "observed" as const,
+    activeDocumentTitle: "project-a Residence.rvt",
+    openDocumentCount: 1,
+  };
+  return {
+    async list() {
+      return [session];
+    },
+    async activeDocument() {
+      return { session, title: session.activeDocumentTitle };
+    },
+    subscribe() {
+      return () => undefined;
+    },
+  };
+};
+
 export function useFixtureWorld(): { world: World; geoReady: boolean } {
   const { world: geo, geoReady } = useMockWorldGeo();
-  const world = useMemo<World>(
-    () => ({
-      docName: geo.docName,
-      r10Path: geo.r10Path,
-      lanes: [...new Map(geo.zones.map((z) => [z.zone.lane.view, z.zone.lane])).values()].map(
-        (lane) => ({ view: lane.view, label: lane.label, replayPath: null }),
-      ),
-      zones: geo.zones.map(zone),
-      systems: geo.systems.map((s) => ({
-        guid: s.guid,
-        tag: s.tag,
-        zoneKeys: s.zoneKeys,
-        sensibleBtuh: s.sensibleBtuh,
-        overCap: s.overCap,
-      })),
-    }),
-    [geo],
-  );
+  const world = useMemo<World>(() => projectFixtureWorld(geo), [geo]);
   return { world, geoReady };
 }
