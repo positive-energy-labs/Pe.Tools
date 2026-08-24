@@ -39,6 +39,7 @@ function harness() {
   const events = new Set<(event: SessionEvent) => void>();
   const calls = { sessions: 0, doc: 0, snapshot: 0, list: 0, open: 0, adopt: 0 };
   let failSnapshot = false;
+  let liveProjection = false;
   let holdSnapshot = false;
   let releaseSnapshot: (() => void) | undefined;
   const snapshot: TakeoffSnapshot = {
@@ -83,7 +84,9 @@ function harness() {
       calls.snapshot += 1;
       if (failSnapshot) throw new Error("snapshot rejected");
       if (holdSnapshot) await new Promise<void>((resolve) => (releaseSnapshot = resolve));
-      return snapshot;
+      return liveProjection
+        ? { ...snapshot, status: { doc: "Harness.rvt", systems: [], regions: [] } }
+        : snapshot;
     },
     async listRhvac(dir) {
       calls.list += 1;
@@ -91,7 +94,12 @@ function harness() {
     },
     async openRhvac(path) {
       calls.open += 1;
-      return { path };
+      return {
+        sourceFile: path,
+        fileIdentity: { fileName: "projectA.r10", stamp: "test" },
+        rooms: [],
+        systems: [],
+      };
     },
     async readCandidates() {
       return [];
@@ -121,6 +129,7 @@ function harness() {
     sessions,
     emit: (event: SessionEvent) => events.forEach((listener) => listener(event)),
     fail: () => (failSnapshot = true),
+    live: () => (liveProjection = true),
     hold: () => (holdSnapshot = true),
     release: () => releaseSnapshot?.(),
   };
@@ -288,6 +297,51 @@ describe("takeoff route store", () => {
     expect(h.calls.snapshot).toBe(before.snapshot + 1);
     expect(h.calls.list).toBe(before.list);
     expect(h.calls.open).toBe(before.open);
+    store.dispose();
+  });
+
+  it("joins the opened .r10 into a live authority world", async () => {
+    const h = harness();
+    h.live();
+    const store = createTakeoffStore({
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    store.actions.setSearch(bound);
+    await Promise.all([
+      store.actions.settle(store.atoms.snapshot),
+      store.actions.settle(store.atoms.r10),
+    ]);
+
+    expect(store.atoms.registry.get(store.atoms.world).r10Path).toBe(bound.r10);
+    expect(h.calls.open).toBe(1);
+    store.dispose();
+  });
+
+  it("adopts the selected view through the fixture host", async () => {
+    const store = createTakeoffStore({
+      host: createFixtureTakeoffHost(),
+      sessions: createFixtureSessionSource(),
+      search: searchPort().port,
+    });
+    store.actions.setSearch({
+      ...EMPTY_TAKEOFF_SEARCH,
+      source: "fixture",
+      view: "Mechanical Zoning Plan - Lower Level",
+    });
+    await store.actions.settle(store.atoms.candidates);
+    await tick();
+
+    expect(store.atoms.registry.get(store.atoms.adoptRows)).toHaveLength(11);
+    store.actions.openPanel("adopt");
+    await store.actions.adoptSelected();
+
+    expect(store.atoms.registry.get(store.atoms.panel)).toBeNull();
+    expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
+      verb: "adopt",
+      text: "fixture adopted 11 zoning regions",
+    });
     store.dispose();
   });
 });

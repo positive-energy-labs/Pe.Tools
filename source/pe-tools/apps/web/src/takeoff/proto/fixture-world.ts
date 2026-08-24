@@ -101,11 +101,28 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
   async openRhvac(path) {
     return { path };
   },
-  async readCandidates() {
-    return [];
+  async readCandidates(_session, view) {
+    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
+    return world.zones
+      .filter((zone) => zone.zone.lane.view === view)
+      .map((zone, index) => ({
+        elementId: index + 1,
+        typeName: zone.name,
+        view: zone.zone.lane.view,
+        color: zone.zone.color,
+        sqft: zone.zone.declaredSqft,
+        role: "zoning-region",
+        guid: zone.zone.guid,
+        blob: JSON.stringify({
+          view: zone.zone.lane.view,
+          name: zone.name,
+          systemTag: zone.tags[0] ?? "",
+        }),
+        loops: zone.zone.loops.map((loop) => loop.map(([x, y]) => [x, y] as [number, number])),
+      }));
   },
-  async adopt() {
-    throw new Error("fixture takeoff host is read-only");
+  async adopt(_session, input) {
+    return { text: `fixture adopted ${input.items.length} zoning regions` };
   },
   async capture() {
     throw new Error("fixture takeoff host is read-only");

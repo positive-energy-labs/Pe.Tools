@@ -10,6 +10,7 @@ import {
   upsertResolution,
   type CandidateRegion,
   type LiveRegion,
+  type ModelStatus,
   type PartitionRun,
   type Resolution,
   type ViewFacts,
@@ -17,6 +18,8 @@ import {
 import type { PartitionArgs } from "#/takeoff/scripts";
 import {
   applyEdit,
+  buildLiveWorld,
+  emptyOverlay,
   readZoneMeta,
   type RoomEdit,
   type World,
@@ -76,6 +79,7 @@ export interface SessionSource {
 
 export interface TakeoffSnapshot {
   readonly world: World;
+  readonly status?: ModelStatus;
   readonly views: ViewFacts[];
   readonly zoneFrs: CandidateRegion[];
   readonly regionsByZone: Record<string, LiveRegion[]>;
@@ -167,15 +171,27 @@ export interface SyncPlan {
   readonly tags: readonly string[];
 }
 
-const LINKS: Link[] = [
-  { key: "world", joiner: "in", placeholder: "pick a world", needs: "a world" },
-  { key: "rvt", parent: "world", joiner: "", placeholder: "no document", needs: "a document" },
+export const TAKEOFF_LINKS: Link[] = [
+  {
+    key: "world",
+    joiner: "in",
+    placeholder: "pick a world",
+    needs: "a live world — start Revit with the Pe add-in, or start one from /instances",
+    liveness: "attached",
+  },
+  {
+    key: "rvt",
+    parent: "world",
+    joiner: "",
+    placeholder: "no document",
+    needs: "the document arrives with the bound world",
+  },
   {
     key: "view",
     parent: "rvt",
     joiner: "from",
     placeholder: "pick a zoning plan",
-    needs: "views",
+    needs: "plan views with filled regions come from the bound model",
     dir: "read",
   },
   {
@@ -183,25 +199,31 @@ const LINKS: Link[] = [
     parent: "rvt",
     joiner: "into",
     placeholder: "pick zones",
-    needs: "zones",
+    needs: "zones come from adoption — stamp designer regions first",
     dir: "write",
     multi: true,
   },
-  { key: "folder", joiner: "beside", placeholder: "pick a folder", needs: "a folder" },
+  {
+    key: "folder",
+    joiner: "beside",
+    placeholder: "pick a folder",
+    needs: "a host-visible folder holding .r10 files — add one below",
+  },
   {
     key: "r10",
     parent: "folder",
     joiner: "syncing",
     placeholder: "pick a .r10",
-    needs: ".r10 files",
+    needs: ".r10 files come from the bound folder",
     dir: "sync",
+    liveness: "detached",
   },
 ];
 
 const BINDINGS: Product = {
   key: "takeoffs",
   name: "takeoffs",
-  links: LINKS,
+  links: TAKEOFF_LINKS,
   stages: [],
   panes: [],
 };
@@ -473,7 +495,9 @@ export function createTakeoffStore(deps: {
     })
     .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/r10-open"));
   const r10Result = runtimeFactory
-    .withReactivity(["rhvac-open"])(r10Source)
+    .withReactivity(["rhvac-open"])(
+      Atom.swr(r10Source, { staleTime: "30 seconds", revalidateOnMount: false }),
+    )
     .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/r10-open"));
 
   const sessionsFeed = Atom.make((get) =>
@@ -528,10 +552,28 @@ export function createTakeoffStore(deps: {
   ).pipe(Atom.withLabel("takeoffs/feed/r10"));
   const authorityWorldAtom = Atom.make((get): World => {
     const result = get(snapshotResult);
-    if (AsyncResult.isSuccess(result)) return result.value.value?.world ?? EMPTY_WORLD;
-    if (AsyncResult.isFailure(result))
-      return Option.getOrUndefined(result.previousSuccess)?.value.value?.world ?? EMPTY_WORLD;
-    return EMPTY_WORLD;
+    const snapshot = AsyncResult.isSuccess(result)
+      ? result.value.value
+      : AsyncResult.isFailure(result)
+        ? Option.getOrUndefined(result.previousSuccess)?.value.value
+        : null;
+    if (!snapshot) return EMPTY_WORLD;
+    if (!snapshot.status) return snapshot.world;
+    const opened = get(r10Result);
+    const r10 = AsyncResult.isSuccess(opened)
+      ? opened.value.bound
+        ? opened.value.value
+        : null
+      : AsyncResult.isFailure(opened)
+        ? Option.getOrUndefined(opened.previousSuccess)?.value.value
+        : null;
+    return buildLiveWorld({
+      ...snapshot,
+      status: snapshot.status,
+      overlay: emptyOverlay(),
+      r10Path: get(r10PathAtom) || null,
+      r10: r10 as Parameters<typeof buildLiveWorld>[0]["r10"],
+    });
   }).pipe(Atom.withLabel("takeoffs/world/authority"));
   const worldAtom = Atom.make((get): World => {
     const authority = get(authorityWorldAtom);
@@ -738,7 +780,7 @@ export function createTakeoffStore(deps: {
       r10: current.r10 || null,
     };
     const multi: Multi = { zones: new Set(current.zones) };
-    const link = LINKS.find((candidate) => candidate.key === key);
+    const link = TAKEOFF_LINKS.find((candidate) => candidate.key === key);
     if (!link) throw Error(`unknown takeoff binding ${key}`);
     const next = pickInto(BINDINGS, bound, multi, link, id);
     deps.search.patch({

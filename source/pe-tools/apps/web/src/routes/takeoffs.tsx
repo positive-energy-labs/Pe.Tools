@@ -36,62 +36,13 @@ import {
   createFixtureSessionSource,
   createFixtureTakeoffHost,
 } from "#/takeoff/proto/fixture-world";
-import { createTakeoffStore, type TakeoffStore } from "#/takeoff/store";
+import { createTakeoffStore, TAKEOFF_LINKS, type TakeoffStore } from "#/takeoff/store";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 
 // ── The manifest ─────────────────────────────────────────────────────────────
-
-const LINKS: Link[] = [
-  {
-    key: "world",
-    joiner: "in",
-    placeholder: "pick a world",
-    needs: "a live world — start Revit with the Pe add-in, or start one from /instances",
-    liveness: "attached",
-  },
-  {
-    key: "rvt",
-    parent: "world",
-    joiner: "",
-    placeholder: "no document",
-    needs: "the document arrives with the bound world",
-  },
-  {
-    key: "view",
-    parent: "rvt",
-    joiner: "from",
-    placeholder: "pick a zoning plan",
-    needs: "plan views with filled regions come from the bound model",
-    dir: "read",
-  },
-  {
-    key: "zones",
-    parent: "rvt",
-    joiner: "into",
-    placeholder: "pick zones",
-    multi: true,
-    needs: "zones come from adoption — stamp designer regions first",
-    dir: "write",
-  },
-  {
-    key: "folder",
-    joiner: "beside",
-    placeholder: "pick a folder",
-    needs: "a host-visible folder holding .r10 files — add one below",
-  },
-  {
-    key: "r10",
-    parent: "folder",
-    joiner: "syncing",
-    placeholder: "pick a .r10",
-    needs: ".r10 files come from the bound folder",
-    dir: "sync",
-    liveness: "detached",
-  },
-];
 
 const PANES: Product["panes"] = [
   { key: "plan", label: "plan image", draws: ["view"] },
@@ -244,7 +195,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const product: Product = {
     key: "takeoffs",
     name: "takeoffs",
-    links: LINKS,
+    links: TAKEOFF_LINKS,
     panes: PANES,
     stages: [
       {
@@ -255,8 +206,8 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "adopt",
             label: "adopt zones",
             demands: ["view"],
-            run: live ? async () => store.actions.openPanel("adopt") : null,
-            needs: "a live document — the fixture cannot be stamped",
+            run: async () => store.actions.openPanel("adopt"),
+            needs: "a zoning view with filled regions",
           },
         ],
       },
@@ -515,13 +466,13 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
           </div>
         ))}
         {listed === null && (
-          <p className="px-2 py-3">
+          <div className="px-2 py-3">
             {AsyncResult.isFailure(candidates) ? (
               <OutcomeLine kind="error" label="reading regions failed" />
             ) : (
               <OutcomeLine kind="busy" label="reading regions" says={view} />
             )}
-          </p>
+          </div>
         )}
         {listed !== null && listed.length === 0 && (
           <div className="px-2 py-3">
