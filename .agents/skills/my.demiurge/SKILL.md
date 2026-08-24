@@ -6,7 +6,7 @@ argument-hint: "What smells bad (now) and what are the targets (now + near-futur
 
 # Demiurge
 
-**Divine and wander the realm of forms to find the perfect imitation.**
+**Wander the realm of forms alongside the user to find the perfect thing.** 
 
 > Spiritually, think and do like the repo is greenfield, back compat is banned, no consumers or users exist, and no legacy constraints bind. 
 
@@ -17,10 +17,11 @@ The ideal shape is one that fits its goals and constraints. These are opposing a
 ## Approach
 
 In rough order of operation and priority: 
-1. Taxonomize the problem space along every plausible axis and explore the whole landscape of variations.
+1. Taxonomize/typologize along every plausible axis and explore the whole landscape of variations.
 2. Understand the nouns at play from first principles. You and the user must align on language to collaborate efficiently.
 3. Collect anchors: precedent, reference, success metrics, impassable limitations (in OS, packages, primitives, platforms), etc. Precedent is only a starting point, its structure should be doubted.
 4. Collect baseline: find failure modes, census consumption, quantify bad, etc.
+5. Imagine user stories 
 5. Get feeback early: Mock consumers, prototype solutions, invalidate dreams/hypotheses, etc. 
 6. Repeatedly refine the idea until alignment is reached
 

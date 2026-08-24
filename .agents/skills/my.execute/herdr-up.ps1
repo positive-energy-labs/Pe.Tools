@@ -22,6 +22,15 @@ function HdJson {
   ($out -join "`n") | ConvertFrom-Json
 }
 
+function HdStart {
+  # `agent start`, KEEPING stderr. A pending startup dialog and a hard refusal both exit
+  # nonzero, so the error JSON is the only thing that tells them apart. Swallowing it made an
+  # invalid agent name (uppercase is refused) surface only as "never settled after start".
+  $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  try { $out = & $H --session $Session @Args 2>&1 } finally { $ErrorActionPreference = $eap }
+  ($out | ForEach-Object { $_.ToString() }) -join "`n"
+}
+
 # server: probe; if unreachable, start headless server and wait
 if ($null -eq (HdJson workspace list)) {
   Start-Process -FilePath $H -ArgumentList @('--session', $Session, 'server') -WindowStyle Hidden
@@ -54,6 +63,9 @@ function Settle([string]$Name) {
     Start-Sleep -Seconds 2
   }
   Write-Warning "$Name never settled after start (status: $st)"
+  if ($st -eq 'missing' -and $script:lastStart) {
+    Write-Warning "start refused it: $script:lastStart"
+  }
   & $H --session $Session agent read $Name --lines 10
   exit 1
 }
@@ -89,10 +101,10 @@ foreach ($spec in $Specs) {
     $cargs = @('agent', 'start', $name, '--kind', 'claude', '--pane', $pane, '--')
     if ($model) { $cargs += @('--model', $model) }
     $cargs += '--dangerously-skip-permissions'
-    HdJson @cargs | Out-Null
+    $script:lastStart = HdStart @cargs
   }
   else {
-    HdJson agent start $name --kind $kind --pane $pane | Out-Null
+    $script:lastStart = HdStart agent start $name --kind $kind --pane $pane
   }
   Settle $name | Out-Null
   "{0}`t{1}" -f $name, $pane

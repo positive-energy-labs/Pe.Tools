@@ -25,17 +25,19 @@ Optimize work by delegating to cheaper subagents. First, compress the problem sp
 
 > **Cost:** Price per task.
 >
-> **Taste:** Good "intuition", opinions, pretty code, UI/UX, architecture, and decisions.
+> **Taste:** Good opinions, pretty code, UI/UX, architecture, and decisions. Gives a credible, intuitive, and insighful impression.
 >
-> **Intelligence:** How likely is full marks on a big and complicated, but bounded and/or specified task? On long-hauls, can they resist derailments and stay on task?
+> **Intelligence:** How likely is full marks on a big and complicated, but bounded and/or specified task? Can they resist derailment and stay on task?
 > - **Bounded:** The job has a supplied edge or stop condition.
 > - **Specified:** The job’s important choices are supplied.
 
 | Model | Cost | Taste | Intelligence | Use For | Usage Notes |
 |--|--|--|--|--|--|
 | Fable 5 | 10 | 9 | 7 | Design, aesthetics, and decision making. Delegate to sparingly, only for unbounded AND unspecified work. Or requests for important design opinion. | Low or medium thinking only. Never in parallel. |
-| Opus 5 | 6 | 6 | 4 | Most initial implementations. The task must be bounded and extra work or review forbidden. | Medium or high thinking. Opus readily overdoes and derails, especially at high thinking and above. |
-| Codex (GPT-5.6) | 2 | 4 | 8 | Migration foot soldier, brute force, long slogs, compile smashing, etc. Use when the goal is quantifiable AND important choices can be specified. | Codex TOML handles model + thinking (5.6 high). 5.6 takes you at face value with no interpretation. A blessing and a curse. It’s short on "intuition," *but* the job will always get done. **Amazing for swarms** |
+| Opus 5 | 6 | 6 | 3 | Most initial implementations *but* the task **must be bounded**. Opus talks and writes code like its intelligent \*, but it is not. Given a big task, it will derail on the first tagent its not forbidden from. | Medium or high thinking. Keep the task small and forbid going beyond that. |
+| Codex (GPT-5.6) | 2 | 4 | 9 | Migration foot soldier, brute force, long slogs, compile smashing, etc. Use when the goal is quantifiable AND important choices can be specified. | Codex TOML handles model + thinking (5.6 high). 5.6 takes you at face value with no interpretation. A blessing and a curse. It’s short on "intuition," *but* the job will always get done. **Amazing for swarms and goal loops** |
+
+\* *Imitating* intelligence is half the battle. Seemingly insighful opinions can give you new ideas. Pretty code or nice architecture is a good base that only needs filling in. Nice things must feel nice and be nice. 
 
 ## Tips
 - Reuse *recently* finished agents to avoid repeated work and the lossiness of playing Telephone. In Herdr this is just another prompt to the same settled agent.
