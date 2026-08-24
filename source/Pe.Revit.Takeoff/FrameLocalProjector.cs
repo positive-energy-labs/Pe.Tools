@@ -319,7 +319,8 @@ internal static class FrameLocalProjector
                     string violations = string.Join(", ", item.roomAudit.Violations
                         .Select(violation => violation.Kind).Distinct());
                     Reject(item.room.Index, FrameLocalRejectionReason.CanonicalEditability,
-                        $"canonical editability rejected projected room ({violations})");
+                        $"canonical editability rejected projected room ({violations})",
+                        item.room.Geometry);
                 }
                 break;
             }
@@ -335,8 +336,13 @@ internal static class FrameLocalProjector
         return new FrameLocalProjectionResult(
             accepted, rejectedRooms, Conserved(source, accepted, rejectedRooms));
 
-        void Reject(int index, FrameLocalRejectionReason reason, string detail) =>
-            rejected.TryAdd(index, new FrameLocalRejectedRoom(CloneRoom(source.Rooms[index]), reason, detail));
+        void Reject(int index, FrameLocalRejectionReason reason, string detail,
+            Polygon? attemptedProjection = null) =>
+            rejected.TryAdd(index, new FrameLocalRejectedRoom(
+                CloneRoom(source.Rooms[index]), reason, detail,
+                AttemptedProjection: attemptedProjection == null
+                    ? null
+                    : CloneRoom(source.Rooms[index], attemptedProjection)));
     }
 
     private static void SolveComponent(
@@ -448,14 +454,14 @@ internal static class FrameLocalProjector
             if (!candidate.Covers(label))
             {
                 Reject(room, FrameLocalRejectionReason.LabelOutside, "source label is outside projected room",
-                    areaDrift, boundaryDrift);
+                    areaDrift, boundaryDrift, polygon);
                 continue;
             }
 
             if (areaDrift > knobs.MaxAreaDrift)
             {
                 Reject(room, FrameLocalRejectionReason.AreaDrift, $"area drift {areaDrift:P1} {probe}",
-                    areaDrift, boundaryDrift);
+                    areaDrift, boundaryDrift, polygon);
                 continue;
             }
 
@@ -477,8 +483,14 @@ internal static class FrameLocalProjector
 
             if (HasMicroStepRun(polygon))
             {
+                Polygon? reviewCandidate = null;
+                if (DeJog(Rotate(polygon, -frame), JogStepMaxFt) is { } dejogged
+                    && Rotate(dejogged, frame) is Polygon repaired
+                    && PassesRoomGates(room.Source, repaired, knobs))
+                    reviewCandidate = repaired;
                 Reject(room, FrameLocalRejectionReason.MicroStepRun,
-                    "three or more consecutive handle-scale edges remain", areaDrift, boundaryDrift);
+                    "three or more consecutive handle-scale edges remain", areaDrift, boundaryDrift,
+                    reviewCandidate);
                 continue;
             }
 

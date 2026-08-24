@@ -200,6 +200,10 @@ public sealed class FrameLocalProjectorTests
                 Is.EqualTo(FrameLocalRejectionReason.LabelOutside));
             Assert.That(result.Rejected.Single(x => x.Room.Id == "drift").Reason,
                 Is.EqualTo(FrameLocalRejectionReason.AreaDrift));
+            Assert.That(result.Rejected.Single(x => x.Room.Id == "drift").AttemptedProjection,
+                Is.Not.Null);
+            Assert.That(IsOrthogonal(result.Rejected.Single(x => x.Room.Id == "drift")
+                .AttemptedProjection!), Is.True);
             Assert.That(result.Rejected.Single(x => x.Room.Id == "drift").Room.Polygon,
                 Has.Count.EqualTo(drift.Polygon.Count));
         });
@@ -247,6 +251,31 @@ public sealed class FrameLocalProjectorTests
             Assert.That(audit.IsStrictlyEditable, Is.True);
             Assert.That(result.Accepted.Rooms.Single().Polygon, Has.Count.GreaterThan(4));
             Assert.That(audit.Rooms.Single().CornerCount, Is.EqualTo(4));
+        });
+    }
+
+    [Test]
+    public void Micro_step_rejection_retains_a_repaired_orthogonal_review_candidate()
+    {
+        var room = Room("room", new[]
+        {
+            (0d, 0d), (0.75d, 0d), (0.75d, 0.75d), (1.5d, 0.75d),
+            (1.5d, 1.5d), (20d, 1.5d), (20d, 20d), (0d, 20d)
+        }, 10, 10);
+        var knobs = FrameLocalKnobs.Default with { DeStaircaseFt = 0 };
+
+        var result = FrameLocalProjector.Project(Takeoff(room), knobs);
+
+        var rejected = result.Rejected.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Accepted.Rooms, Is.Empty);
+            Assert.That(rejected.Reason, Is.EqualTo(FrameLocalRejectionReason.MicroStepRun));
+            Assert.That(rejected.AttemptedProjection, Is.Not.Null);
+            Assert.That(IsOrthogonal(rejected.AttemptedProjection!), Is.True);
+            Assert.That(Editability(rejected.AttemptedProjection!).IsStrictlyEditable, Is.True);
+            Assert.That(result.Conservation.SourceDeltaSqft, Is.EqualTo(0).Within(1e-7));
         });
     }
 
