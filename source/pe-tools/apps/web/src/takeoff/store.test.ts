@@ -209,6 +209,28 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("does not invent a conflict from nested Manual J base fields", async () => {
+    const store = createTakeoffStore({
+      host: createFixtureTakeoffHost(),
+      sessions: createFixtureSessionSource(),
+      search: searchPort().port,
+    });
+    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    await store.actions.settle(store.atoms.snapshot);
+    const room = store.atoms.registry
+      .get(store.atoms.world)
+      .zones.flatMap((zone) => zone.rooms)
+      .find((candidate) => candidate.data !== null)!;
+
+    store.actions.patchRoom(room.guid, { name: "Staged room" });
+
+    expect(store.atoms.registry.get(store.atoms.entity(room.guid))).toMatchObject({
+      dirty: true,
+      conflict: false,
+    });
+    store.dispose();
+  });
+
   it("keeps the prior snapshot stale after adopt, then re-reads it", async () => {
     const h = harness();
     const store = createTakeoffStore({

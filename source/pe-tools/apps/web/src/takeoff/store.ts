@@ -651,9 +651,7 @@ export function createTakeoffStore(deps: {
         conflict:
           staged !== null &&
           authority !== undefined &&
-          Object.entries(staged.base).some(
-            ([key, value]) => authority[key as keyof WorldRoom] !== value,
-          ),
+          JSON.stringify(staged.base) !== JSON.stringify(roomEdit(authority)),
       };
     }).pipe(Atom.withLabel(`takeoffs/entity/${id}`)),
   );
