@@ -11,7 +11,7 @@
 // The atlas renders a `World` and calls back through `AtlasActions` — it owns selection and
 // optimistic decision state, nothing else. The route owns the world, the overlay, and every
 // host call.
-import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
@@ -69,6 +69,14 @@ export interface AtlasActions {
 export interface AtlasProps {
   store: TakeoffStore;
 }
+
+const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
+  patch: (id, patch) => store.actions.patchRoom(id, patch),
+  decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
+  capture: (lane) => void store.actions.capture(lane).catch(() => undefined),
+  partition: (zone) => void store.actions.partition(zone).catch(() => undefined),
+  refresh: () => void store.actions.refresh().catch(() => undefined),
+});
 
 // ── Room state — the one progress vocabulary ────────────────────────────────
 //
@@ -406,13 +414,7 @@ export function Atlas({ store }: AtlasProps) {
   const busyState = useAtomValue(store.atoms.busy);
   const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
   const geoReady = AsyncResult.isSuccess(useAtomValue(store.atoms.snapshot));
-  const actions: AtlasActions = {
-    patch: (id, patch) => store.actions.patchRoom(id, patch),
-    decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
-    capture: (lane) => void store.actions.capture(lane).catch(() => undefined),
-    partition: (zone) => void store.actions.partition(zone).catch(() => undefined),
-    refresh: () => void store.actions.refresh().catch(() => undefined),
-  };
+  const actions = useMemo(() => createAtlasActions(store), [store]);
   const page = useAtomValue(store.atoms.atlasPage);
   const decided = useAtomValue(store.atoms.decisions);
   const { stageFilter, zoneKey, cursor, fieldsMode, visibleKeys } = page;
@@ -489,32 +491,34 @@ export function Atlas({ store }: AtlasProps) {
   }, [world]);
 
   // ── Keyboard: j/k cursor, a/d verbs, Esc clears scope (←/→ belong to the switcher) ──
+  const keydown = useRef<(event: KeyboardEvent) => void>(() => undefined);
+  keydown.current = (e) => {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.isContentEditable)) return;
+    if (e.key === "Escape") {
+      setZoneKey(null);
+      setCursor(null);
+      return;
+    }
+    if (e.key === "j" || e.key === "k") {
+      e.preventDefault();
+      if (visibleRows.length === 0) return;
+      const i = visibleRows.findIndex((r) => r.room.guid === cursor);
+      const next = e.key === "j" ? Math.min(visibleRows.length - 1, i + 1) : Math.max(0, i - 1);
+      setCursor(visibleRows[i === -1 ? 0 : next]!.room.guid);
+      return;
+    }
+    if ((e.key === "a" || e.key === "d") && cursorRow) {
+      if (cursorRow.open.length === 0) return;
+      e.preventDefault();
+      decide(cursorRow.room, cursorRow.open[0]!, e.key === "a" ? "accept" : "dismiss");
+    }
+  };
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.isContentEditable)) return;
-      if (e.key === "Escape") {
-        setZoneKey(null);
-        setCursor(null);
-        return;
-      }
-      if (e.key === "j" || e.key === "k") {
-        e.preventDefault();
-        if (visibleRows.length === 0) return;
-        const i = visibleRows.findIndex((r) => r.room.guid === cursor);
-        const next = e.key === "j" ? Math.min(visibleRows.length - 1, i + 1) : Math.max(0, i - 1);
-        setCursor(visibleRows[i === -1 ? 0 : next]!.room.guid);
-        return;
-      }
-      if ((e.key === "a" || e.key === "d") && cursorRow) {
-        if (cursorRow.open.length === 0) return;
-        e.preventDefault();
-        decide(cursorRow.room, cursorRow.open[0]!, e.key === "a" ? "accept" : "dismiss");
-      }
-    };
+    const onKey = (event: KeyboardEvent) => keydown.current(event);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   // Optimistic: mark locally, then write through. The route re-reads on demand; a failed
   // write surfaces through the route's error lane, never as a silently-kept decision.
