@@ -1412,6 +1412,16 @@ public sealed class TakeoffPromotionTests
         });
     }
 
+    [Test]
+    public void Half_tolerance_requires_relative_and_material_regularity_win()
+    {
+        Assert.Multiple(() => {
+            Assert.That(SpaceBoundaryNetwork.PreferFiner(0, 0, 2), Is.False);
+            Assert.That(SpaceBoundaryNetwork.PreferFiner(17.6, 36.3, 2), Is.False);
+            Assert.That(SpaceBoundaryNetwork.PreferFiner(39.9, 103.4, 2), Is.True);
+        });
+    }
+
     private static RoomResult Room(string id, params (double X, double Y)[] points) => new()
     {
         Id = id,
