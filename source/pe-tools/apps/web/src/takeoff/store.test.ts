@@ -42,7 +42,13 @@ function harness() {
   let holdSnapshot = false;
   let releaseSnapshot: (() => void) | undefined;
   const snapshot: TakeoffSnapshot = {
-    world: { docName: "Harness.rvt", r10Path: null, lanes: [], zones: [], systems: [] },
+    world: {
+      docName: "Harness.rvt",
+      r10Path: null,
+      lanes: [{ view: bound.view, label: "Main", replayPath: null }],
+      zones: [],
+      systems: [],
+    },
     views: [{ name: bound.view, level: "Main", regions: 1 }],
     zoneFrs: [],
     regionsByZone: {},
@@ -87,9 +93,26 @@ function harness() {
       calls.open += 1;
       return { path };
     },
+    async readCandidates() {
+      return [];
+    },
     async adopt() {
       calls.adopt += 1;
       return { text: "adopted" };
+    },
+    async capture() {
+      return { replayPath: "C:\\Takeoffs\\replay_Main.bin", rooms: 1, totalSqft: 100 };
+    },
+    async partition() {
+      throw new Error("partition is outside this harness");
+    },
+    async writeDecisions() {
+      return { blob: "{}" };
+    },
+    async writeRoomType() {},
+    async launchRhvac() {},
+    async syncRhvac() {
+      return { text: "synced" };
     },
   };
   return {
@@ -151,15 +174,26 @@ describe("takeoff route store", () => {
       .zones.flatMap((zone) => zone.rooms)[0]!;
 
     store.actions.setAtlasPage({ level: "Main", cursor: room.guid });
+    store.actions.patchRoom(room.guid, { name: "Staged room" });
     store.actions.decide(room.guid, "thin residue", "accept");
 
     expect(store.atoms.registry.get(store.atoms.atlasPage)).toMatchObject({
       level: "Main",
       cursor: room.guid,
     });
+    expect(store.atoms.registry.get(store.atoms.entity(room.guid))).toMatchObject({
+      dirty: true,
+      staged: { base: { name: room.name }, next: { name: "Staged room" } },
+    });
     expect(store.atoms.registry.get(store.atoms.entity(room.guid)).decided).toEqual({
       "thin residue": "accept",
     });
+    expect(
+      store.atoms.registry
+        .get(store.atoms.world)
+        .zones.flatMap((zone) => zone.rooms)
+        .find((candidate) => candidate.guid === room.guid)?.name,
+    ).toBe("Staged room");
     expect(store.atoms.registry.get(store.atoms.decisions)).toEqual({
       [`${room.guid}::thin residue`]: "accept",
     });
@@ -186,6 +220,29 @@ describe("takeoff route store", () => {
     expect(h.calls.adopt).toBe(1);
     expect(h.calls.snapshot).toBe(2);
     expect(store.atoms.registry.get(store.feeds.zones).state).toBe("fresh");
+    store.dispose();
+  });
+
+  it("brackets capture and publishes its replay through the store world", async () => {
+    const h = harness();
+    const store = createTakeoffStore({
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    store.actions.setSearch(bound);
+    await store.actions.settle(store.atoms.snapshot);
+
+    await store.actions.capture({ view: bound.view, label: "Main" });
+
+    expect(store.atoms.registry.get(store.atoms.busy)).toBeNull();
+    expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
+      verb: "capture",
+      text: "captured Main: 1 rooms",
+    });
+    expect(store.atoms.registry.get(store.atoms.world).lanes[0]?.replayPath).toBe(
+      "C:\\Takeoffs\\replay_Main.bin",
+    );
     store.dispose();
   });
 

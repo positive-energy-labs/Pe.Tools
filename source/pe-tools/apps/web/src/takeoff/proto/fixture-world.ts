@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import type { SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { World, WorldRoom, WorldZone } from "#/takeoff/world";
 
-import { useMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
+import { loadMockWorldGeo, useMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
 import { mockWorld, type MockRoom, type MockWorld, type MockZone } from "./mock";
 
 const room = (r: GeoRoom | MockRoom): WorldRoom => ({
@@ -89,7 +89,7 @@ export const projectFixtureWorld = (fixture: MockWorld): World => ({
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
   async readSnapshot() {
-    const world = projectFixtureWorld(mockWorld());
+    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
     return {
       world,
       views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
@@ -103,7 +103,28 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
   async openRhvac(path) {
     return { path };
   },
+  async readCandidates() {
+    return [];
+  },
   async adopt() {
+    throw new Error("fixture takeoff host is read-only");
+  },
+  async capture() {
+    throw new Error("fixture takeoff host is read-only");
+  },
+  async partition() {
+    throw new Error("fixture takeoff host is read-only");
+  },
+  async writeDecisions() {
+    throw new Error("fixture takeoff host is read-only");
+  },
+  async writeRoomType() {
+    throw new Error("fixture takeoff host is read-only");
+  },
+  async launchRhvac() {
+    throw new Error("fixture takeoff host is read-only");
+  },
+  async syncRhvac() {
     throw new Error("fixture takeoff host is read-only");
   },
 });

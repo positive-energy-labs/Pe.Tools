@@ -186,3 +186,6 @@ export function useMockWorldGeo(): { world: GeoWorld; geoReady: boolean } {
   );
   return { world, geoReady: takeoff !== null };
 }
+
+export const loadMockWorldGeo = async (): Promise<GeoWorld> =>
+  joinGeometry(mockWorld(), await loadFixtureTakeoff());

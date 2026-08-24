@@ -6,8 +6,24 @@ import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 
 import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
 import type { AdoptItem } from "#/takeoff/scripts";
-import type { CandidateRegion, LiveRegion, ViewFacts } from "#/takeoff/model";
-import type { RoomEdit, World, WorldRoom } from "#/takeoff/world";
+import {
+  upsertResolution,
+  type CandidateRegion,
+  type LiveRegion,
+  type PartitionRun,
+  type Resolution,
+  type ViewFacts,
+} from "#/takeoff/model";
+import type { PartitionArgs } from "#/takeoff/scripts";
+import {
+  applyEdit,
+  readZoneMeta,
+  type RoomEdit,
+  type World,
+  type WorldLane,
+  type WorldRoom,
+  type WorldZone,
+} from "#/takeoff/world";
 import {
   pickInto,
   type Bound,
@@ -45,7 +61,7 @@ export interface SearchPort {
 
 export type SessionEvent =
   | { readonly kind: "docChanged"; readonly sessionId: string }
-  | { readonly kind: "sessionGone"; readonly sessionId: string };
+  | { readonly kind: "sessionsChanged"; readonly sessionId: string };
 
 export interface ActiveDocument {
   readonly session: SessionFacts;
@@ -75,9 +91,27 @@ export interface TakeoffHost {
   readSnapshot(session: SessionFacts, document: ActiveDocument): Promise<TakeoffSnapshot>;
   listRhvac(dir: string): Promise<RhvacFile[]>;
   openRhvac(path: string): Promise<unknown>;
+  readCandidates(session: SessionFacts, view: string): Promise<CandidateRegion[]>;
   adopt(
     session: SessionFacts,
     input: { readonly view: string; readonly items: readonly AdoptItem[] },
+  ): Promise<{ readonly text: string }>;
+  capture(
+    session: SessionFacts,
+    lane: Pick<WorldLane, "view" | "label">,
+  ): Promise<{ readonly replayPath: string; readonly rooms: number; readonly totalSqft: number }>;
+  partition(session: SessionFacts, input: PartitionArgs): Promise<PartitionRun>;
+  writeDecisions(
+    session: SessionFacts,
+    elementId: number,
+    resolutions: readonly Resolution[],
+  ): Promise<{ readonly blob: string }>;
+  writeRoomType(session: SessionFacts, elementId: number, roomType: string): Promise<void>;
+  launchRhvac(session: SessionFacts | null, path: string): Promise<void>;
+  syncRhvac(
+    session: SessionFacts,
+    path: string,
+    inserts: readonly { readonly zone: WorldZone; readonly room: WorldRoom }[],
   ): Promise<{ readonly text: string }>;
 }
 
@@ -116,6 +150,21 @@ export interface AtlasPageState {
   readonly cursor: string | null;
   readonly fieldsMode: "columns" | "panel";
   readonly visibleKeys: readonly string[];
+}
+
+export interface AdoptDraft {
+  readonly region: CandidateRegion;
+  readonly checked: boolean;
+  readonly name: string;
+  readonly systemTag: string;
+}
+
+export interface SyncPlan {
+  readonly inScope: readonly WorldZone[];
+  readonly blockedZones: readonly WorldZone[];
+  readonly inserts: readonly { readonly zone: WorldZone; readonly room: WorldRoom }[];
+  readonly untagged: number;
+  readonly tags: readonly string[];
 }
 
 const LINKS: Link[] = [
@@ -169,6 +218,27 @@ const unbound = <A>(value: A, basis: readonly string[] = []): TimedRead<A> => ({
   at: Date.now(),
   basis,
   bound: false,
+});
+
+const roomEdit = (room: WorldRoom): RoomEdit => ({
+  name: room.name,
+  type: room.type,
+  ceilingFt: room.ceilingFt,
+  people: room.data?.people,
+  lightingW: room.data?.lightingW,
+  equipSensible: room.data?.equipSensible,
+  equipLatent: room.data?.equipLatent,
+  ventilationCfm: room.data?.ventilationCfm,
+});
+
+const partitionInput = (zone: WorldZone, replayPath: string): PartitionArgs => ({
+  replayPath,
+  view: zone.zone.lane.view,
+  levelFragment: zone.zone.lane.label,
+  zoneName: zone.name,
+  zoneGuid: zone.zone.guid,
+  runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
+  loops: zone.zone.loops,
 });
 
 export function resultFeed<A>(
@@ -269,6 +339,15 @@ export function createTakeoffStore(deps: {
     fieldsMode: "columns",
     visibleKeys: [],
   }).pipe(Atom.withLabel("takeoffs/page/atlas"));
+  const replaysAtom = Atom.make<Readonly<Record<string, string>>>({}).pipe(
+    Atom.withLabel("takeoffs/page/replays"),
+  );
+  const panelAtom = Atom.make<"adopt" | "sync" | null>(null).pipe(
+    Atom.withLabel("takeoffs/page/panel"),
+  );
+  const adoptPatchesAtom = Atom.make<Readonly<Record<number, Partial<AdoptDraft>>>>({}).pipe(
+    Atom.withLabel("takeoffs/page/adopt-patches"),
+  );
   const hoveredAtom = Atom.family((id: string) =>
     Atom.make(false).pipe(Atom.withLabel(`takeoffs/entity/${id}/hovered`)),
   );
@@ -323,6 +402,38 @@ export function createTakeoffStore(deps: {
       Atom.swr(snapshotSource, { staleTime: "30 seconds", revalidateOnMount: false }),
     )
     .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/snapshot"));
+  const candidatesSource = runtime
+    .atom((get) =>
+      Effect.gen(function* () {
+        const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
+        const view = get(viewAtom);
+        if (!document.value || !view) return unbound<CandidateRegion[]>([], document.basis);
+        return yield* timed([document.value.session.sessionId, view], () =>
+          deps.host.readCandidates(document.value!.session, view),
+        );
+      }),
+    )
+    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/candidates"));
+  const candidatesResult = runtimeFactory
+    .withReactivity(["candidates"])(
+      Atom.swr(candidatesSource, { staleTime: "30 seconds", revalidateOnMount: false }),
+    )
+    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/candidates"));
+  const adoptRowsAtom = Atom.make((get): readonly AdoptDraft[] | null => {
+    const result = get(candidatesResult);
+    if (!AsyncResult.isSuccess(result) || !result.value.bound) return null;
+    const patches = get(adoptPatchesAtom);
+    return result.value.value.map((region) => {
+      const meta = readZoneMeta(region.blob);
+      return {
+        region,
+        checked: region.role === "zoning-region",
+        name: meta.name || region.typeName,
+        systemTag: meta.systemTag,
+        ...patches[region.elementId],
+      };
+    });
+  }).pipe(Atom.withLabel("takeoffs/page/adopt-rows"));
   const foldersSource = runtime
     .atom((get) =>
       Effect.succeed({
@@ -415,17 +526,38 @@ export function createTakeoffStore(deps: {
       deps.host.fixture,
     ),
   ).pipe(Atom.withLabel("takeoffs/feed/r10"));
-  const worldAtom = Atom.make((get): World => {
+  const authorityWorldAtom = Atom.make((get): World => {
     const result = get(snapshotResult);
     if (AsyncResult.isSuccess(result)) return result.value.value?.world ?? EMPTY_WORLD;
     if (AsyncResult.isFailure(result))
       return Option.getOrUndefined(result.previousSuccess)?.value.value?.world ?? EMPTY_WORLD;
     return EMPTY_WORLD;
+  }).pipe(Atom.withLabel("takeoffs/world/authority"));
+  const worldAtom = Atom.make((get): World => {
+    const authority = get(authorityWorldAtom);
+    return {
+      ...authority,
+      lanes: authority.lanes.map((lane) => ({
+        ...lane,
+        replayPath: get(replaysAtom)[lane.label] ?? lane.replayPath,
+      })),
+      zones: authority.zones.map((zone) => ({
+        ...zone,
+        zone: {
+          ...zone.zone,
+          lane: {
+            ...zone.zone.lane,
+            replayPath: get(replaysAtom)[zone.zone.lane.label] ?? zone.zone.lane.replayPath,
+          },
+        },
+        rooms: zone.rooms.map((room) => applyEdit(room, get(stagedAtom(room.guid))?.next)),
+      })),
+    };
   }).pipe(Atom.withLabel("takeoffs/world"));
   const roomsByIdAtom = Atom.make(
     (get) =>
       new Map(
-        get(worldAtom)
+        get(authorityWorldAtom)
           .zones.flatMap((zone) => zone.rooms)
           .map((room) => [room.guid, room] as const),
       ),
@@ -437,6 +569,33 @@ export function createTakeoffStore(deps: {
       ),
     ),
   ).pipe(Atom.withLabel("takeoffs/page/decisions"));
+  const syncPlanAtom = Atom.make((get): SyncPlan => {
+    const selected = new Set(get(zonesAtom));
+    const inScope = get(worldAtom).zones.filter(
+      (zone) => selected.size === 0 || selected.has(zone.zone.guid),
+    );
+    const blockedZones = inScope.filter(
+      (zone) =>
+        zone.driftSqft > 0 ||
+        zone.rooms.some((room) => room.flags.length > 0) ||
+        zone.runs.some((run) => run.orphaned > 0 || run.failures > 0),
+    );
+    const blocked = new Set(blockedZones.map((zone) => zone.zone.guid));
+    const inserts = inScope.flatMap((zone) =>
+      blocked.has(zone.zone.guid)
+        ? []
+        : zone.rooms
+            .filter((room) => room.elementId !== null && room.r10 === null && room.data !== null)
+            .map((room) => ({ zone, room })),
+    );
+    return {
+      inScope,
+      blockedZones,
+      inserts,
+      untagged: inserts.filter(({ zone }) => zone.tags.length === 0).length,
+      tags: [...new Set(inserts.flatMap(({ zone }) => zone.tags))],
+    };
+  }).pipe(Atom.withLabel("takeoffs/page/sync-plan"));
   const entityAtom = Atom.family((id: string) =>
     Atom.make((get) => {
       const authority = get(roomsByIdAtom).get(id);
@@ -501,7 +660,16 @@ export function createTakeoffStore(deps: {
     );
     try {
       const value = await work();
-      registry.set(receiptAtom, { verb: id, text: id, at: Date.now() });
+      const text =
+        typeof value === "string"
+          ? value
+          : typeof value === "object" &&
+              value !== null &&
+              "text" in value &&
+              typeof value.text === "string"
+            ? value.text
+            : id;
+      registry.set(receiptAtom, { verb: id, text, at: Date.now() });
       log(`${id} succeeded`);
       return value;
     } catch (cause) {
@@ -523,6 +691,31 @@ export function createTakeoffStore(deps: {
   const clearStaging = () => {
     for (const id of stagedIds) registry.set(stagedAtom(id), null);
     stagedIds.clear();
+  };
+  const stageRoom = (id: string, patch: RoomEdit) => {
+    const authority = registry.get(roomsByIdAtom).get(id);
+    if (!authority) throw Error(`unknown room ${id}`);
+    const staged = registry.get(stagedAtom(id));
+    const base = staged?.base ?? roomEdit(authority);
+    const next = { ...(staged?.next ?? base), ...patch };
+    registry.set(stagedAtom(id), { base, next });
+    stagedIds.add(id);
+    return authority;
+  };
+  const commitRoomField = (id: string, patch: RoomEdit) => {
+    const staged = registry.get(stagedAtom(id));
+    if (!staged) return;
+    const base = { ...staged.base, ...patch };
+    const next = { ...staged.next, ...patch };
+    if (JSON.stringify(base) === JSON.stringify(next)) {
+      registry.set(stagedAtom(id), null);
+      stagedIds.delete(id);
+    } else registry.set(stagedAtom(id), { base, next });
+  };
+  const activeSession = async () => {
+    const document = await settle(activeDocumentResult);
+    if (!document.value) throw Error("no document bound");
+    return document.value.session;
   };
   const setSearch = (next: TakeoffSearch) => {
     const previous = registry.get(searchAtom);
@@ -558,13 +751,18 @@ export function createTakeoffStore(deps: {
   };
 
   const unsubscribe = deps.sessions.subscribe((event) => {
+    if (event.kind === "sessionsChanged") {
+      log(`push ${event.kind} ${event.sessionId}`);
+      registry.set(invalidateAtom, ["sessions"]);
+      return;
+    }
     const document = registry.get(activeDocumentResult);
     const current = AsyncResult.isSuccess(document)
       ? document.value.value?.session.sessionId
       : null;
     if (current !== event.sessionId) return;
     log(`push ${event.kind} ${event.sessionId}`);
-    registry.set(invalidateAtom, event.kind === "docChanged" ? ["active-document"] : ["sessions"]);
+    registry.set(invalidateAtom, ["active-document"]);
   });
 
   const feeds = {
@@ -577,6 +775,30 @@ export function createTakeoffStore(deps: {
   };
   const actions = {
     setSearch,
+    patchSearch(patch: Partial<TakeoffSearch>) {
+      deps.search.patch(patch);
+    },
+    setBindings(patch: {
+      readonly stage?: string;
+      readonly bound?: Bound;
+      readonly multi?: Multi;
+    }) {
+      const current = registry.get(searchAtom);
+      deps.search.patch({
+        ...(patch.stage ? { stage: patch.stage as TakeoffStage } : {}),
+        ...(patch.bound
+          ? {
+              ...(current.source === "live" && patch.bound.world !== current.target
+                ? { target: patch.bound.world ?? "" }
+                : {}),
+              view: patch.bound.view ?? "",
+              dir: patch.bound.folder ?? "",
+              r10: patch.bound.r10 ?? "",
+            }
+          : {}),
+        ...(patch.multi ? { zones: [...(patch.multi.zones ?? [])] } : {}),
+      });
+    },
     pick,
     settle,
     invalidate: (keys: readonly string[]) => registry.set(invalidateAtom, keys),
@@ -598,6 +820,18 @@ export function createTakeoffStore(deps: {
     setAtlasPage(patch: Partial<AtlasPageState>) {
       registry.update(atlasPageAtom, (page) => ({ ...page, ...patch }));
     },
+    openPanel(panel: "adopt" | "sync" | null) {
+      registry.set(panelAtom, panel);
+    },
+    clearFailure() {
+      registry.set(failureAtom, null);
+    },
+    patchAdopt(elementId: number, patch: Partial<AdoptDraft>) {
+      registry.update(adoptPatchesAtom, (patches) => ({
+        ...patches,
+        [elementId]: { ...patches[elementId], ...patch },
+      }));
+    },
     decide(id: string, flag: string, verdict: "accept" | "dismiss") {
       registry.update(decidedAtom(id), (decisions) => ({ ...decisions, [flag]: verdict }));
     },
@@ -607,11 +841,109 @@ export function createTakeoffStore(deps: {
       if (staged) stagedIds.add(id);
       else stagedIds.delete(id);
     },
+    patchRoom(id: string, patch: RoomEdit) {
+      const room = stageRoom(id, patch);
+      if (deps.host.fixture || patch.type === undefined || room.elementId === null) return;
+      void runVerb("room-type", async () => {
+        const session = await activeSession();
+        await deps.host.writeRoomType(session, room.elementId!, patch.type!);
+        commitRoomField(id, { type: patch.type });
+        registry.set(invalidateAtom, ["snapshot"]);
+      }).catch(() => undefined);
+    },
+    decideRoom(room: WorldRoom, flag: string, verdict: "accept" | "dismiss") {
+      registry.update(decidedAtom(room.guid), (decisions) => ({ ...decisions, [flag]: verdict }));
+      if (deps.host.fixture) return;
+      void runVerb("decision", async () => {
+        if (room.elementId === null) throw Error(`room ${room.name} has no Room Region home`);
+        const session = await activeSession();
+        const next: Resolution = {
+          subject: room.provenance.sourceRoomId,
+          flag,
+          verb: verdict,
+          at: new Date().toISOString(),
+          runId: room.provenance.runId,
+        };
+        await deps.host.writeDecisions(
+          session,
+          room.elementId,
+          upsertResolution(room.decisions, next),
+        );
+        registry.set(invalidateAtom, ["snapshot"]);
+      }).catch(() => undefined);
+    },
+    capture(lane: Pick<WorldLane, "view" | "label">) {
+      return runVerb("capture", async () => {
+        const session = await activeSession();
+        const result = await deps.host.capture(session, lane);
+        registry.update(replaysAtom, (replays) => ({
+          ...replays,
+          [lane.label]: result.replayPath,
+        }));
+        return { ...result, text: `captured ${lane.label}: ${result.rooms} rooms` };
+      });
+    },
+    partition(zone: WorldZone) {
+      return runVerb("partition", async () => {
+        const replayPath = registry.get(replaysAtom)[zone.zone.lane.label];
+        if (!replayPath) throw Error(`capture ${zone.zone.lane.label} first`);
+        const session = await activeSession();
+        const result = await deps.host.partition(session, partitionInput(zone, replayPath));
+        registry.set(invalidateAtom, ["snapshot"]);
+        return { ...result, text: `partitioned ${zone.zone.key}` };
+      });
+    },
+    refresh() {
+      registry.set(invalidateAtom, ["snapshot"]);
+      return settle(snapshotResult);
+    },
+    launchRhvac() {
+      return runVerb("launch", async () => {
+        const path = registry.get(r10PathAtom);
+        if (!path) throw Error("no .r10 bound");
+        const document = await settle(activeDocumentResult);
+        await deps.host.launchRhvac(document.value?.session ?? null, path);
+        return `opened ${path} in RHVAC`;
+      });
+    },
+    syncRhvac() {
+      return runVerb("sync", async () => {
+        const path = registry.get(r10PathAtom);
+        if (!path) throw Error("no .r10 bound");
+        const plan = registry.get(syncPlanAtom);
+        if (plan.inserts.length === 0) throw Error("no rooms are eligible to sync");
+        if (plan.untagged > 0) throw Error(`${plan.untagged} eligible rooms have no system tag`);
+        const session = await activeSession();
+        const result = await deps.host.syncRhvac(session, path, plan.inserts);
+        clearStaging();
+        registry.set(panelAtom, null);
+        registry.set(invalidateAtom, ["snapshot", "rhvac-open"]);
+        return result;
+      });
+    },
     adopt(input: { readonly view: string; readonly items: readonly AdoptItem[] }) {
       return runVerb("adopt", async () => {
         registry.set(adoptMutation, input);
         return settle(adoptMutation);
       });
+    },
+    adoptSelected() {
+      const view = registry.get(viewAtom);
+      const rows = registry.get(adoptRowsAtom)?.filter((row) => row.checked) ?? [];
+      return actions
+        .adopt({
+          view,
+          items: rows.map((row) => ({
+            elementId: row.region.elementId,
+            name: row.name,
+            systemTag: row.systemTag,
+          })),
+        })
+        .then((result) => {
+          registry.set(adoptPatchesAtom, {});
+          registry.set(panelAtom, null);
+          return result;
+        });
     },
   };
 
@@ -629,9 +961,13 @@ export function createTakeoffStore(deps: {
       world: worldAtom,
       atlasPage: atlasPageAtom,
       decisions: decisionsAtom,
+      panel: panelAtom,
+      syncPlan: syncPlanAtom,
       sessions: sessionsResult,
       activeDocument: activeDocumentResult,
       snapshot: snapshotResult,
+      candidates: candidatesResult,
+      adoptRows: adoptRowsAtom,
       listing: listingResult,
       r10: r10Result,
       entity: entityAtom,

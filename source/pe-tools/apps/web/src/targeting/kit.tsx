@@ -146,8 +146,8 @@ export interface Runner {
 }
 
 /**
- * Wraps the route's serialized verb bracket (`useVerb().run`) so the head knows WHICH verb is in
- * flight and which links it touches. `exec` is the route's `run(label, work)`.
+ * Projects the store's serialized verb bracket so the head knows which verb is in flight and which
+ * links it touches. `exec` invokes the verb; the store owns busy, failure, receipt, and timing.
  */
 export function useRunner(
   product: Product,
@@ -155,14 +155,10 @@ export function useRunner(
   exec: (label: string, work: () => Promise<string | void>) => Promise<void>,
   busyLabel: string | null,
 ): Runner {
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [active, setActive] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (busyLabel === null) {
-      setBusyKey(null);
-      setActive(new Set());
-    }
-  }, [busyLabel]);
+  const busyVerb = product.stages
+    .flatMap((stage) => stage.verbs)
+    .find((verb) => verb.key === busyLabel);
+  const active = useMemo(() => new Set(busyVerb?.demands ?? []), [busyVerb]);
 
   const canRun = useCallback(
     (verb: Verb) => {
@@ -177,14 +173,12 @@ export function useRunner(
   const run = useCallback(
     (verb: Verb) => {
       if (!verb.run || !canRun(verb).ok) return;
-      setBusyKey(verb.key);
-      setActive(new Set(verb.demands));
       void exec(verb.label, verb.run);
     },
     [canRun, exec],
   );
 
-  return { busy: busyKey, active, run, canRun };
+  return { busy: busyVerb?.key ?? null, active, run, canRun };
 }
 
 /* ------------------------------------------------------------------ panes */

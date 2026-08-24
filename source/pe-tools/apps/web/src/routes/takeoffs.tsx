@@ -17,64 +17,30 @@
  * `?source=fixture` mounts the project-a fixture adapter — an explicit dev choice, never a
  * fallback: a live read that fails shows its error, it does not quietly become a fixture.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
-import { callHostRpc } from "#/host/client";
-import { HOST_QUERY_KEY, useHostOp } from "#/host/queries";
 import { mintSelector, resolveTarget } from "#/host/target";
-import { useVerb } from "#/lib/use-verb";
 import { fmtNum } from "#/components/master-table/model";
-import { Atlas, type AtlasActions } from "#/takeoff/atlas";
-import {
-  adoptZones,
-  detectCapture,
-  linkRhvacBatch,
-  partitionZone,
-  prepareCapture,
-  readCandidates,
-  readSnapshot,
-  writeDecisions,
-  writeRoomType,
-  createHostSessionSource,
-  createLiveTakeoffHost,
-  type LiveSnapshot,
-} from "#/takeoff/host";
-import {
-  DEFAULT_ARTIFACT_DIR,
-  upsertResolution,
-  type CandidateRegion,
-  type Resolution,
-} from "#/takeoff/model";
+import { Atlas } from "#/takeoff/atlas";
+import { createHostSessionSource, createLiveTakeoffHost } from "#/takeoff/host";
+import { DEFAULT_ARTIFACT_DIR, type CandidateRegion } from "#/takeoff/model";
 import {
   createFixtureSessionSource,
   createFixtureTakeoffHost,
-  useFixtureWorld,
 } from "#/takeoff/proto/fixture-world";
 import { createTakeoffStore, type TakeoffStore } from "#/takeoff/store";
-import {
-  applyEdit,
-  buildLiveWorld,
-  emptyOverlay,
-  readZoneMeta,
-  type SessionOverlay,
-  type World,
-  type WorldRoom,
-  type WorldZone,
-} from "#/takeoff/world";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
 
 // ── The manifest ─────────────────────────────────────────────────────────────
 
@@ -173,8 +139,6 @@ const readDirs = (): string[] => {
   }
 };
 
-const EMPTY_WORLD: World = { docName: "", r10Path: null, lanes: [], zones: [], systems: [] };
-
 function TakeoffsRoute() {
   const { source } = Route.useSearch();
   return <TakeoffsStoreOwner key={source} source={source} />;
@@ -220,13 +184,6 @@ function TakeoffsStoreOwner({ source }: { source: Search["source"] }) {
 function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const search = Route.useSearch();
   const { target, source, view, zones, dir, r10, stage } = search;
-  const navigate = useNavigate({ from: "/takeoffs" });
-  const setSearch = useCallback(
-    (patch: Partial<Search>) => void navigate({ search: (prev) => ({ ...prev, ...patch }) }),
-    [navigate],
-  );
-  const qc = useQueryClient();
-
   // ── sources ──
   const sessionsResult = useAtomValue(store.atoms.sessions);
   const sessions = AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.value : [];
@@ -235,42 +192,23 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const scope: HostSessionScope | null = session ? { bridgeSessionId: session.sessionId } : null;
   const docTitle = session?.activeDocumentTitle ?? null;
 
-  const fixture = useFixtureWorld();
   const live = source === "live";
+  const world = useAtomValue(store.atoms.world);
+  const busyState = useAtomValue(store.atoms.busy);
+  const failure = useAtomValue(store.atoms.failure);
+  const receipt = useAtomValue(store.atoms.receipt);
+  const panel = useAtomValue(store.atoms.panel);
+  const busy = busyState?.id ?? null;
+  const busySeconds = busyState?.seconds ?? 0;
 
-  const snapshotKey = ["takeoff-snapshot", scope?.bridgeSessionId ?? "", docTitle ?? ""] as const;
-  const snapshot = useQuery({
-    queryKey: snapshotKey,
-    queryFn: () => readSnapshot(scope!),
-    enabled: live && scope !== null,
-    staleTime: Number.POSITIVE_INFINITY,
-    refetchOnWindowFocus: false,
-  });
-  const raw = snapshot.data ?? null;
-
-  const [dirs, setDirs] = useState(readDirs);
   const addDir = (d: string) => {
+    const dirs = readDirs();
     const next = [d, ...dirs.filter((x) => x !== d)].slice(0, 8);
     localStorage.setItem(DIRS_KEY, JSON.stringify(next));
-    setDirs(next);
     store.actions.rememberDir(d);
-    setSearch({ dir: d, r10: "" });
+    store.actions.patchSearch({ dir: d, r10: "" });
   };
-  const r10Query = useHostOp(
-    "rhvac.open",
-    { path: r10 },
-    { enabled: live && r10 !== "", staleTime: Number.POSITIVE_INFINITY },
-  );
-
-  const [overlay, setOverlay] = useState<SessionOverlay>(emptyOverlay);
-  const { busy, seconds: busySeconds, error, setError, receipt, run } = useVerb();
-  const [panel, setPanel] = useState<"adopt" | "sync" | null>(null);
-
-  const world: World = live
-    ? raw
-      ? buildLiveWorld({ ...raw, overlay, r10Path: r10 || null, r10: r10Query.data ?? null })
-      : { ...EMPTY_WORLD, docName: scope ? "reading…" : "no target" }
-    : withEdits(fixture.world, overlay);
+  const r10Result = useAtomValue(store.atoms.r10);
 
   // ── feeds: one per link, each a projection of a query's state ──
   const projectedFeeds: Feeds = {
@@ -298,27 +236,9 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     }),
     [live, session, sessions, docTitle, view, dir, r10, zones, stage],
   );
-  const setState = useCallback(
-    (patch: Partial<BindingState>) => {
-      const next: Partial<Search> = {};
-      if (patch.stage) next.stage = patch.stage as Search["stage"];
-      if (patch.bound) {
-        const b = patch.bound;
-        if (live && b.world !== state.bound.world) next.target = b.world ?? "";
-        next.view = b.view ?? "";
-        next.dir = b.folder ?? "";
-        next.r10 = b.r10 ?? "";
-      }
-      if (patch.multi) next.zones = [...(patch.multi.zones ?? [])];
-      setSearch(next);
-    },
-    [live, state.bound.world, setSearch],
-  );
+  const setState = (patch: Partial<BindingState>) => store.actions.setBindings(patch);
 
   // ── verbs ──
-  const invalidateSnapshot = () => qc.invalidateQueries({ queryKey: snapshotKey });
-  const patchSnapshot = (fn: (prev: LiveSnapshot) => LiveSnapshot) =>
-    qc.setQueryData<LiveSnapshot>(snapshotKey, (prev) => (prev ? fn(prev) : prev));
   const boundZones = world.zones.filter((z) => zones.includes(z.zone.guid));
 
   const product: Product = {
@@ -335,7 +255,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "adopt",
             label: "adopt zones",
             demands: ["view"],
-            run: live ? async () => setPanel("adopt") : null,
+            run: live ? async () => store.actions.openPanel("adopt") : null,
             needs: "a live document — the fixture cannot be stamped",
           },
         ],
@@ -350,13 +270,9 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             demands: ["view"],
             run: live
               ? async () => {
-                  const prepared = await prepareCapture(scope!, view);
-                  const detected = await detectCapture(scope!, prepared.level);
-                  setOverlay((prev) => ({
-                    ...prev,
-                    replays: { ...prev.replays, [prepared.level]: detected.replayPath },
-                  }));
-                  return `captured ${prepared.level}: ${detected.rooms} rooms · ${fmtNum(detected.totalSqft, 0)} sf`;
+                  const lane = world.lanes.find((candidate) => candidate.view === view);
+                  if (!lane) throw new Error(`unknown zoning view ${view}`);
+                  await store.actions.capture(lane);
                 }
               : null,
             needs: "a live document — the fixture is already captured",
@@ -366,33 +282,14 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             label: `partition ${zones.length || ""} zone${zones.length === 1 ? "" : "s"}`,
             demands: ["zones"],
             refuse: () => {
-              const uncaptured = boundZones.find((z) => !overlay.replays[z.zone.lane.label]);
+              const uncaptured = boundZones.find((zone) => !zone.zone.lane.replayPath);
               return uncaptured
                 ? `capture ${uncaptured.zone.lane.label} first — the partition replays its snapshot`
                 : null;
             },
             run: live
               ? async () => {
-                  for (const zone of boundZones) {
-                    const result = await partitionZone(scope!, {
-                      replayPath: overlay.replays[zone.zone.lane.label]!,
-                      view: zone.zone.lane.view,
-                      levelFragment: zone.zone.lane.label,
-                      zoneName: zone.name,
-                      zoneGuid: zone.zone.guid,
-                      runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
-                      loops: zone.zone.loops,
-                    });
-                    patchSnapshot((prev) => ({
-                      ...prev,
-                      regionsByZone: { ...prev.regionsByZone, [zone.zone.guid]: result.regions },
-                    }));
-                    setOverlay((prev) => ({
-                      ...prev,
-                      runs: { ...prev.runs, [zone.zone.guid]: result },
-                    }));
-                  }
-                  return `partitioned ${boundZones.map((z) => z.zone.key).join(", ")}`;
+                  for (const zone of boundZones) await store.actions.partition(zone);
                 }
               : null,
             needs: "a live document — the fixture is already partitioned",
@@ -401,7 +298,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "refresh",
             label: "refresh",
             demands: ["rvt"],
-            run: live ? async () => void (await snapshot.refetch()) : null,
+            run: live ? async () => void (await store.actions.refresh()) : null,
             needs: "a live document — the replay is already the whole world",
           },
         ],
@@ -414,9 +311,8 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "sync",
             label: "sync .r10",
             demands: ["r10"],
-            refuse: () =>
-              r10Query.isError ? `the .r10 did not open — ${r10Query.error?.message}` : null,
-            run: live ? async () => setPanel("sync") : null,
+            refuse: () => (AsyncResult.isFailure(r10Result) ? "the .r10 did not open" : null),
+            run: live ? async () => store.actions.openPanel("sync") : null,
             needs: "a live document — the fixture has no .r10 to sync into",
           },
           {
@@ -424,9 +320,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             label: "open in RHVAC",
             nav: true,
             demands: ["r10"],
-            run: async () => {
-              await callHostRpc("rhvac.launch", { path: r10 }, scope ?? undefined);
-            },
+            run: async () => void (await store.actions.launchRhvac()),
           },
         ],
       },
@@ -434,86 +328,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   };
 
   const b = useBindings(product, feeds, state, setState);
-  const runner = useRunner(product, b, run, busy);
-
-  const actions: AtlasActions = {
-    patch: (guid, patch) => {
-      const persistOverlay = () =>
-        setOverlay((prev) => ({
-          ...prev,
-          edits: { ...prev.edits, [guid]: { ...prev.edits[guid], ...patch } },
-        }));
-      if (live && scope && patch.type) {
-        const room = world.zones.flatMap((z) => z.rooms).find((c) => c.guid === guid);
-        if (room?.elementId != null) {
-          void run("writing room type", async () => {
-            await writeRoomType(scope, room.elementId!, patch.type!);
-            persistOverlay();
-          });
-          return;
-        }
-      }
-      persistOverlay();
-    },
-    decide: (room, flag, verb) => {
-      if (!live || !scope) return; // fixture: local only, and says so
-      if (room.elementId === null) {
-        setError(`room ${room.name}: no Room Region home to write the decision to`);
-        return;
-      }
-      const next: Resolution = {
-        subject: room.provenance.sourceRoomId,
-        flag,
-        verb,
-        at: new Date().toISOString(),
-        runId: room.provenance.runId,
-      };
-      void run(`writing ${verb}`, async () => {
-        const result = await writeDecisions(
-          scope,
-          room.elementId!,
-          upsertResolution(room.decisions, next),
-        );
-        patchSnapshot((prev) => replaceRegionBlob(prev, room.elementId!, result.blob));
-      });
-    },
-    capture: (lane) => {
-      if (!scope) return;
-      void run(`capturing ${lane.label}`, async () => {
-        const prepared = await prepareCapture(scope, lane.view);
-        const detected = await detectCapture(scope, prepared.level);
-        setOverlay((prev) => ({
-          ...prev,
-          replays: { ...prev.replays, [lane.label]: detected.replayPath },
-        }));
-      });
-    },
-    partition: (zone) => {
-      if (!scope) return;
-      const replayPath = overlay.replays[zone.zone.lane.label];
-      if (!replayPath) {
-        setError(`capture ${zone.zone.lane.label} first — the partition replays its snapshot`);
-        return;
-      }
-      void run(`partitioning ${zone.zone.key}`, async () => {
-        const result = await partitionZone(scope, {
-          replayPath,
-          view: zone.zone.lane.view,
-          levelFragment: zone.zone.lane.label,
-          zoneName: zone.name,
-          zoneGuid: zone.zone.guid,
-          runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
-          loops: zone.zone.loops,
-        });
-        patchSnapshot((prev) => ({
-          ...prev,
-          regionsByZone: { ...prev.regionsByZone, [zone.zone.guid]: result.regions },
-        }));
-        setOverlay((prev) => ({ ...prev, runs: { ...prev.runs, [zone.zone.guid]: result } }));
-      });
-    },
-    refresh: () => void snapshot.refetch(),
-  };
+  const runner = useRunner(product, b, async (_label, work) => void (await work()), busy);
 
   const addFolder = (link: Link) =>
     link.key === "folder" ? (
@@ -583,29 +398,22 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             </EmptyState>
             <Verb
               label="open the project-a fixture instead"
-              onClick={() => setSearch({ source: "fixture" })}
+              onClick={() => store.actions.patchSearch({ source: "fixture" })}
               reason="Mounts the project-a fixture adapter — an explicit dev choice, never a fallback. Nothing in it can be written."
             />
           </div>
         ) : (
-          <Atlas
-            store={store}
-            world={world}
-            geoReady={live ? raw !== null : fixture.geoReady}
-            live={live}
-            busy={busy ? `${busy} · ${busySeconds}s queued/running` : null}
-            actions={actions}
-          />
+          <Atlas store={store} />
         )}
       </div>
 
       {/* A failed host call is an ERROR, not a seam — caution, deliberately not the alarm. */}
-      {error && (
+      {failure && (
         <div className="absolute bottom-2 left-1/2 z-40 max-w-2xl -translate-x-1/2 bg-background px-2 py-1 shadow-md">
-          <OutcomeLine kind="error" label={error} />
+          <OutcomeLine kind="error" label={failure.message} />
           <Verb
             label="dismiss"
-            onClick={() => setError(null)}
+            onClick={() => store.actions.clearFailure()}
             reason="Clears this error line. It does not retry — re-run the verb that failed."
           />
         </div>
@@ -615,128 +423,16 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
         <div className="absolute right-2 bottom-2 z-40">
           <Verb
             label="leave fixture → live"
-            onClick={() => setSearch({ source: "live" })}
+            onClick={() => store.actions.patchSearch({ source: "live" })}
             reason="Switches this route back to the live lane, where reads and writes address the targeted Revit document"
           />
         </div>
       )}
 
-      {panel === "adopt" && scope && (
-        <AdoptPanel
-          scope={scope}
-          view={view}
-          zones={world.zones}
-          run={run}
-          busy={busy}
-          onClose={() => setPanel(null)}
-          onDone={() => {
-            setPanel(null);
-            void invalidateSnapshot();
-          }}
-        />
-      )}
-      {panel === "sync" && scope && raw && (
-        <SyncPanel
-          scope={scope}
-          world={world}
-          zoneGuids={zones}
-          r10Path={r10}
-          run={run}
-          busy={busy}
-          onClose={() => setPanel(null)}
-          onDone={() => {
-            setPanel(null);
-            void invalidateSnapshot();
-            void qc.invalidateQueries({
-              predicate: (q) =>
-                q.queryKey[0] === HOST_QUERY_KEY[0] && q.queryKey[2] === "rhvac.open",
-            });
-          }}
-        />
-      )}
+      {panel === "adopt" && scope && <AdoptPanel store={store} />}
+      {panel === "sync" && scope && <SyncPanel store={store} />}
     </div>
   );
-}
-
-function replaceRegionBlob(raw: LiveSnapshot, elementId: number, blob: string): LiveSnapshot {
-  return {
-    ...raw,
-    regionsByZone: Object.fromEntries(
-      Object.entries(raw.regionsByZone).map(([zoneGuid, regions]) => [
-        zoneGuid,
-        regions.map((region) => (region.elementId === elementId ? { ...region, blob } : region)),
-      ]),
-    ),
-  };
-}
-
-const WALL_ASSEMBLY =
-  "R-3 insulated sheathing, R-13 closed cell sprayfoam in a 2x6 wood stud cavity, R-15 Fiberglass batt";
-const ROOF_ASSEMBLY = "R49 closed cell sprayfoam in 2x14 joist cavity";
-const FLOOR_ASSEMBLY =
-  "R-19 open cell 1/2 lb. spray foam insulation, 5 inches in 2 x 10 joist cavity, any cover";
-
-/** Minimal honest Attic payload: polygon edges become walls; room area becomes floor and roof. */
-function buildRhvacInsert(
-  room: WorldRoom,
-  number: number,
-  systemNumber: number,
-): RhvacInsertRoomData {
-  const height = room.ceilingFt || 8;
-  const outer = room.outer ?? [];
-  const walls = outer.map(([x1, y1], i) => {
-    const [x2, y2] = outer[(i + 1) % outer.length]!;
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    const octant = ((Math.round((angle + Math.PI / 2) / (Math.PI / 4)) % 8) + 8) % 8;
-    return {
-      index1: i + 1,
-      assembly: WALL_ASSEMBLY,
-      uValue: 0.036,
-      lengthFeet: Math.hypot(x2 - x1, y2 - y1),
-      heightFeet: height,
-      direction: octant + 1,
-    };
-  });
-  return {
-    number,
-    name: room.name,
-    systemNumber,
-    zoneNumber: 1,
-    areaSquareFeet: room.sqft,
-    ceilingHeightFeet: height,
-    people: room.data!.people,
-    lightingWatts: room.data!.lightingW,
-    equipmentSensibleBtuh: room.data!.equipSensible,
-    equipmentLatentBtuh: room.data!.equipLatent,
-    ventilationCfm: room.data!.ventilationCfm,
-    floors: [
-      {
-        assembly: FLOOR_ASSEMBLY,
-        uValue: 0.051,
-        areaSquareFeet: room.sqft,
-        exposedPerimeterFeet: walls.reduce((sum, wall) => sum + wall.lengthFeet, 0),
-      },
-    ],
-    roofs: [
-      { assembly: ROOF_ASSEMBLY, uValue: 0.024, areaSquareFeet: room.sqft, areaMultiplier: 1.2 },
-    ],
-    walls,
-    glass: [],
-    doors: [],
-  };
-}
-
-/** Apply the session overlay's pending edits to a fixture world (the live builder does this
- *  itself), so cell edits behave identically on both sources. */
-function withEdits(world: World, overlay: SessionOverlay): World {
-  if (Object.keys(overlay.edits).length === 0) return world;
-  return {
-    ...world,
-    zones: world.zones.map((z) => ({
-      ...z,
-      rooms: z.rooms.map((r) => applyEdit(r, overlay.edits[r.guid])),
-    })),
-  };
 }
 
 // ── Adopt panel — stamp designer FRs in place as Zoning Regions ─────────────
@@ -748,60 +444,25 @@ interface AdoptRow {
   systemTag: string;
 }
 
-function AdoptPanel({
-  scope,
-  view,
-  zones,
-  run,
-  busy,
-  onClose,
-  onDone,
-}: {
-  scope: HostSessionScope;
-  /** The bound zoning view — the sentence picked it; the panel only lists its regions. */
-  view: string;
-  zones: WorldZone[];
-  run: (label: string, work: () => Promise<string | void>) => Promise<void>;
-  busy: string | null;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [rows, setRows] = useState<AdoptRow[] | null>(null);
-  const candidates = useQuery({
-    queryKey: ["takeoff-candidates", scope.bridgeSessionId, view],
-    queryFn: () => readCandidates(scope, view),
-    staleTime: 0,
-  });
-  const listed = rows ?? candidates.data?.map(toRow) ?? null;
+function AdoptPanel({ store }: { store: TakeoffStore }) {
+  const view = useAtomValue(store.atoms.view);
+  const zones = useAtomValue(store.atoms.world).zones;
+  const listed = useAtomValue(store.atoms.adoptRows);
+  const candidates = useAtomValue(store.atoms.candidates);
+  const busy = useAtomValue(store.atoms.busy)?.id ?? null;
 
   const patchRow = (elementId: number, patch: Partial<AdoptRow>) =>
-    setRows((prev) =>
-      (prev ?? listed ?? []).map((r) =>
-        r.region.elementId === elementId ? { ...r, ...patch } : r,
-      ),
-    );
+    store.actions.patchAdopt(elementId, patch);
 
   const picked = listed?.filter((r) => r.checked) ?? [];
 
   const adopt = () => {
     if (picked.length === 0) return;
-    void run(`stamping ${picked.length} zones`, async () => {
-      await adoptZones(
-        scope,
-        view,
-        picked.map((r) => ({
-          elementId: r.region.elementId,
-          name: r.name,
-          systemTag: r.systemTag,
-        })),
-      );
-      onDone();
-      return `stamped ${picked.length} zoning region${picked.length === 1 ? "" : "s"} in ${view}`;
-    });
+    void store.actions.adoptSelected().catch(() => undefined);
   };
 
   return (
-    <Panel title={`adopt zoning regions — ${view}`} onClose={onClose}>
+    <Panel title={`adopt zoning regions — ${view}`} onClose={() => store.actions.openPanel(null)}>
       <p className="face-mono t-value text-muted-foreground">
         tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
         name, system tag) — re-adopt to edit. legends are ignored.
@@ -855,11 +516,8 @@ function AdoptPanel({
         ))}
         {listed === null && (
           <p className="px-2 py-3">
-            {candidates.isError ? (
-              <OutcomeLine
-                kind="error"
-                label={`reading regions failed — ${candidates.error.message}`}
-              />
+            {AsyncResult.isFailure(candidates) ? (
+              <OutcomeLine kind="error" label="reading regions failed" />
             ) : (
               <OutcomeLine kind="busy" label="reading regions" says={view} />
             )}
@@ -895,136 +553,16 @@ function AdoptPanel({
   );
 }
 
-function toRow(region: CandidateRegion): AdoptRow {
-  const meta = readZoneMeta(region.blob);
-  return {
-    region,
-    checked: region.role === "zoning-region",
-    name: meta.name || region.typeName,
-    systemTag: meta.systemTag,
-  };
-}
-
 // ── Sync panel — insert reviewed rooms into a template .r10 copy ────────────
 
-function SyncPanel({
-  scope,
-  world,
-  zoneGuids,
-  r10Path,
-  run,
-  busy,
-  onClose,
-  onDone,
-}: {
-  scope: HostSessionScope;
-  world: World;
-  /** Bound zones narrow the insert set; none bound = every eligible zone. */
-  zoneGuids: string[];
-  r10Path: string;
-  run: (label: string, work: () => Promise<string | void>) => Promise<void>;
-  busy: string | null;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  interface InsertRow {
-    zone: WorldZone;
-    room: WorldRoom;
-  }
-  const inScope = world.zones.filter(
-    (z) => zoneGuids.length === 0 || zoneGuids.includes(z.zone.guid),
-  );
-  const blockedZones = inScope.filter(
-    (zone) =>
-      zone.driftSqft > 0 ||
-      zone.rooms.some((room) => room.flags.length > 0) ||
-      zone.runs.some((item) => item.orphaned > 0 || item.failures > 0),
-  );
-  const blockedZoneIds = new Set(blockedZones.map((zone) => zone.zone.guid));
-  const inserts: InsertRow[] = inScope.flatMap((zone) =>
-    blockedZoneIds.has(zone.zone.guid)
-      ? []
-      : zone.rooms
-          .filter((room) => room.elementId !== null && room.r10 === null && room.data !== null)
-          .map((room) => ({ zone, room })),
-  );
-  const untagged = inserts.filter(({ zone }) => zone.tags.length === 0);
-  const tags = [...new Set(inserts.flatMap(({ zone }) => zone.tags))];
-
-  const sync = () => {
-    if (inserts.length === 0 || untagged.length > 0) return;
-    void run(`syncing ${inserts.length} rooms`, async () => {
-      const before = await callHostRpc("rhvac.open", { path: r10Path }, scope);
-      const firstRoomNumber = Math.max(0, ...before.rooms.map((room) => room.number)) + 1;
-      const bySystemName = new Map(
-        before.systems
-          .filter((system) => system.name.trim().length > 0)
-          .map((system) => [system.name.trim().toLocaleLowerCase(), system.number]),
-      );
-      const firstRun =
-        before.rooms.length === 1 &&
-        before.rooms[0]!.number === 1 &&
-        before.rooms[0]!.name.trim().length === 0 &&
-        before.rooms[0]!.areaSquareFeet === 0;
-      let nextSystemNumber = Math.max(0, ...before.systems.map((system) => system.number)) + 1;
-      const systemNumbers = new Map<string, number>();
-      for (const tag of tags) {
-        const existing = bySystemName.get(tag.trim().toLocaleLowerCase());
-        if (existing !== undefined) systemNumbers.set(tag, existing);
-        else if (firstRun) systemNumbers.set(tag, nextSystemNumber++);
-        else
-          throw new Error(
-            `system '${tag}' does not exist in this non-first-run .r10; create/tag it in RHVAC first`,
-          );
-      }
-      const result = await callHostRpc(
-        "rhvac.sync",
-        {
-          targetPath: r10Path,
-          updates: [],
-          inserts: inserts.map(({ zone, room }, i) =>
-            buildRhvacInsert(room, firstRoomNumber + i, systemNumbers.get(zone.tags[0]!)!),
-          ),
-          systems: tags.map((tag) => ({ number: systemNumbers.get(tag)!, name: tag })),
-          deleteUntouchedSeedRoom: true,
-        },
-        scope,
-      );
-
-      // Write the {file identity, room Identifier} linkage home onto each Room Region blob.
-      // fileIdentity is deliberately weak (.r10 has no GUID) — fileName + title-hash stamp.
-      const fileIdentity = `${result.fileIdentity.fileName}#${result.fileIdentity.stamp}`;
-      const byNumber = new Map(result.insertedRooms.map((r) => [r.number, r.identifier]));
-      const now = new Date().toISOString();
-      const links = inserts.map(({ room }, i) => {
-        const number = firstRoomNumber + i;
-        const identifier = byNumber.get(number);
-        if (identifier === undefined)
-          throw new Error(`.r10 sync omitted the receipt for inserted room number ${number}`);
-        return {
-          elementId: room.elementId!,
-          link: { identifier, fileIdentity, syncedAt: now, lastSyncedSqft: room.sqft },
-        };
-      });
-      if (byNumber.size !== links.length)
-        throw new Error(
-          `.r10 sync returned ${byNumber.size} insert receipts for ${links.length} rooms`,
-        );
-      await linkRhvacBatch(scope, links);
-      onDone();
-      return (
-        `synced ${result.insertedRooms.length}/${inserts.length} rooms into ${r10Path}` +
-        ` (${result.roomsBefore}→${result.roomsAfter} rooms, seed room ${result.seedRoom.action})` +
-        (result.backupPath ? ` · backup: ${result.backupPath}` : "") +
-        (result.assemblyFallbacks.length > 0
-          ? ` · ${result.assemblyFallbacks.length} assembly fallbacks`
-          : "")
-      );
-    });
-  };
+function SyncPanel({ store }: { store: TakeoffStore }) {
+  const { zones: zoneGuids, r10: r10Path } = useAtomValue(store.atoms.search);
+  const { inScope, blockedZones, inserts, untagged, tags } = useAtomValue(store.atoms.syncPlan);
+  const busy = useAtomValue(store.atoms.busy)?.id ?? null;
+  const sync = () => void store.actions.syncRhvac().catch(() => undefined);
 
   return (
-    <Panel title={`sync to ${r10Path}`} onClose={onClose}>
+    <Panel title={`sync to ${r10Path}`} onClose={() => store.actions.openPanel(null)}>
       <p className="face-mono t-value text-muted-foreground">
         inserts reviewed rooms (with Manual J data) into the bound .r10 — always work on a COPY of
         the project template, never the original. systems are seeded by number + name only;
@@ -1067,11 +605,11 @@ function SyncPanel({
         )}
       </div>
 
-      {untagged.length > 0 && (
+      {untagged > 0 && (
         <OutcomeLine
           className="mt-1"
           kind="advisory"
-          label={`${untagged.length} room(s) in untagged zones`}
+          label={`${untagged} room(s) in untagged zones`}
           says="re-adopt those zones with a system tag first — a room cannot land in a .r10 system that has no name"
         />
       )}
@@ -1088,14 +626,14 @@ function SyncPanel({
         <Verb
           tone="commit"
           label={`sync ${inserts.length} rooms`}
-          disabled={busy !== null || inserts.length === 0 || untagged.length > 0}
+          disabled={busy !== null || inserts.length === 0 || untagged > 0}
           reason={
             busy !== null
               ? `${busy} is in flight`
               : inserts.length === 0
                 ? "no room is eligible — a room needs a Room Region home, Manual J data, and no existing .r10 link"
-                : untagged.length > 0
-                  ? `${untagged.length} eligible room(s) sit in zones with no system tag — tag those zones first`
+                : untagged > 0
+                  ? `${untagged} eligible room(s) sit in zones with no system tag — tag those zones first`
                   : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`
           }
           onClick={sync}
