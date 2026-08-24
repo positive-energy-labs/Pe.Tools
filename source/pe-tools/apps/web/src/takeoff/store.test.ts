@@ -37,7 +37,7 @@ const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function harness() {
   const events = new Set<(event: SessionEvent) => void>();
-  const calls = { sessions: 0, doc: 0, snapshot: 0, list: 0, open: 0, adopt: 0 };
+  const calls = { sessions: 0, doc: 0, snapshot: 0, candidates: 0, list: 0, open: 0, adopt: 0 };
   let failSnapshot = false;
   let liveProjection = false;
   let holdSnapshot = false;
@@ -102,6 +102,7 @@ function harness() {
       };
     },
     async readCandidates() {
+      calls.candidates += 1;
       return [];
     },
     async adopt() {
@@ -239,7 +240,10 @@ describe("takeoff route store", () => {
       search: searchPort().port,
     });
     store.actions.setSearch(bound);
-    await store.actions.settle(store.atoms.snapshot);
+    await Promise.all([
+      store.actions.settle(store.atoms.snapshot),
+      store.actions.settle(store.atoms.candidates),
+    ]);
     h.hold();
 
     await store.actions.adopt({ view: bound.view, items: [] });
@@ -250,6 +254,7 @@ describe("takeoff route store", () => {
     await store.actions.settle(store.atoms.snapshot);
     expect(h.calls.adopt).toBe(1);
     expect(h.calls.snapshot).toBe(2);
+    expect(h.calls.candidates).toBe(2);
     expect(store.atoms.registry.get(store.feeds.zones).state).toBe("fresh");
     store.dispose();
   });

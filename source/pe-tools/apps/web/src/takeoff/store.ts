@@ -668,7 +668,7 @@ export function createTakeoffStore(deps: {
           try: () => deps.host.adopt(document.value!.session, input),
           catch: (cause) => (cause instanceof Error ? cause : Error(String(cause))),
         });
-        yield* Reactivity.invalidate(["snapshot"]);
+        yield* Reactivity.invalidate(["snapshot", "candidates"]);
         return receipt;
       }),
     )
