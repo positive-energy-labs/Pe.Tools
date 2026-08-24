@@ -5,12 +5,10 @@
  * exercisable with dense mid-project state and no Revit attached. Everything here is synthetic
  * or replayed project-a data; elementIds are null, so every write path is inert by construction.
  */
-import { useMemo } from "react";
-
 import type { SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { World, WorldRoom, WorldZone } from "#/takeoff/world";
 
-import { loadMockWorldGeo, useMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
+import { loadMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
 import { mockWorld, type MockRoom, type MockWorld, type MockZone } from "./mock";
 
 const room = (r: GeoRoom | MockRoom): WorldRoom => ({
@@ -150,9 +148,3 @@ export const createFixtureSessionSource = (): SessionSource => {
     },
   };
 };
-
-export function useFixtureWorld(): { world: World; geoReady: boolean } {
-  const { world: geo, geoReady } = useMockWorldGeo();
-  const world = useMemo<World>(() => projectFixtureWorld(geo), [geo]);
-  return { world, geoReady };
-}

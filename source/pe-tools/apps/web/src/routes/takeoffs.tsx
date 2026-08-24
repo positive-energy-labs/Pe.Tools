@@ -12,7 +12,7 @@
  *            a write verb invalidates (adopt, partition, decide, sync-link)
  *   folder · a per-browser recents list (the legal-options source for a disk root)
  *   r10    · `rhvac.list` keyed [dir]; the join is `rhvac.open` keyed [path], invalidated by sync
- *   overlay· this tab's ephemeral state (replays, partition runs, pending Manual J edits)
+ *   staged · registry-owned `{base,next}` room edits, replays, panel state, and verb receipts
  *
  * `?source=fixture` mounts the project-a fixture adapter — an explicit dev choice, never a
  * fallback: a live read that fails shows its error, it does not quietly become a fixture.
