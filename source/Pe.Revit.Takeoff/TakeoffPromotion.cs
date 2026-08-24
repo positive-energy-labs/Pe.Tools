@@ -1709,8 +1709,13 @@ public static class TakeoffPromotion
             filled++;
         }
         if (wallClaimFt > 0 && result.Ownership is { } detectorOwnership)
-            filled += RejoinOwnedResidueBranches(
+        {
+            int branches = RejoinOwnedResidueBranches(
                 result, held, detectorOwnership, wallClaimFt);
+            filled += branches;
+            if (branches > 0)
+                filled += FillInteriorResidueGaps(result, zone);
+        }
         return filled;
     }
 

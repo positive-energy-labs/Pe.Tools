@@ -492,6 +492,52 @@ public sealed class TakeoffPromotionTests
     }
 
     [Test]
+    public void Split_residue_reconsiders_each_new_whole_component()
+    {
+        var left = Residue("left", ResidueReason.Rejected,
+            (-2, 2), (0, 2), (0, 6), (-2, 6));
+        var right = Residue("right", ResidueReason.Rejected,
+            (10, 2), (12, 2), (12, 6), (10, 6));
+        var bridge = Residue("bridge", ResidueReason.Rejected,
+            (4, 0), (6, 0), (6, 3), (4, 3));
+        var cells = new int[14 * 6];
+        for (int y = 2; y < 6; y++)
+        {
+            for (int x = 2; x < 6; x++) cells[y * 14 + x] = 1;
+            for (int x = 8; x < 12; x++) cells[y * 14 + x] = 2;
+        }
+        var causes = new DetectorUnownedCause[cells.Length];
+        causes[3 * 14 + 6] = causes[3 * 14 + 7] = DetectorUnownedCause.Obstruction;
+        var result = new TakeoffResult {
+            Residues = {
+                left,
+                right,
+                bridge,
+                Residue("compound", ResidueReason.Excluded,
+                    (0, 2), (4, 2), (4, 3), (6, 3), (6, 2), (10, 2),
+                    (10, 6), (6, 6), (6, 4), (4, 4), (4, 6), (0, 6)),
+            },
+            Ownership = new DetectorOwnership(
+                14, 6, -2, 0, 1, cells, new bool[cells.Length], causes,
+                new Dictionary<int, DetectorOwnerMetadata> {
+                    [1] = new(1, "left", DetectorOwnerDisposition.Room, null),
+                    [2] = new(2, "right", DetectorOwnerDisposition.Room, null),
+                }),
+        };
+        var zone = Zone("zone", (-2, 0), (12, 0), (12, 6), (-2, 6)).ExactGeometry();
+
+        int filled = TakeoffPromotion.FillInteriorResidueGaps(result, zone, wallClaimFt: 1.5);
+
+        Assert.Multiple(() => {
+            Assert.That(filled, Is.EqualTo(3));
+            Assert.That(left.RawSqft, Is.EqualTo(24).Within(1e-9));
+            Assert.That(right.RawSqft, Is.EqualTo(24).Within(1e-9));
+            Assert.That(bridge.RawSqft, Is.EqualTo(8).Within(1e-9));
+            Assert.That(result.Residues, Has.Count.EqualTo(3));
+        });
+    }
+
+    [Test]
     public void Zone_snap_keeps_collinear_runs_collinear()
     {
         var factory = new GeometryFactory();
