@@ -138,6 +138,34 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("keeps Atlas page state and per-room decisions on the registry", async () => {
+    const store = createTakeoffStore({
+      host: createFixtureTakeoffHost(),
+      sessions: createFixtureSessionSource(),
+      search: searchPort().port,
+    });
+    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    await store.actions.settle(store.atoms.snapshot);
+    const room = store.atoms.registry
+      .get(store.atoms.world)
+      .zones.flatMap((zone) => zone.rooms)[0]!;
+
+    store.actions.setAtlasPage({ level: "Main", cursor: room.guid });
+    store.actions.decide(room.guid, "thin residue", "accept");
+
+    expect(store.atoms.registry.get(store.atoms.atlasPage)).toMatchObject({
+      level: "Main",
+      cursor: room.guid,
+    });
+    expect(store.atoms.registry.get(store.atoms.entity(room.guid)).decided).toEqual({
+      "thin residue": "accept",
+    });
+    expect(store.atoms.registry.get(store.atoms.decisions)).toEqual({
+      [`${room.guid}::thin residue`]: "accept",
+    });
+    store.dispose();
+  });
+
   it("keeps the prior snapshot stale after adopt, then re-reads it", async () => {
     const h = harness();
     const store = createTakeoffStore({

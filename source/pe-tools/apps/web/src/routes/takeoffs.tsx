@@ -589,6 +589,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
           </div>
         ) : (
           <Atlas
+            store={store}
             world={world}
             geoReady={live ? raw !== null : fixture.geoReady}
             live={live}

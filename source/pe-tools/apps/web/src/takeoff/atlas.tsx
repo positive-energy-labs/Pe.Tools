@@ -12,6 +12,7 @@
 // optimistic decision state, nothing else. The route owns the world, the overlay, and every
 // host call.
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
 
 import {
   CellSelect,
@@ -37,6 +38,7 @@ import { Pane, PaneSplit, PaneWorkspace } from "#/components/ui/pane";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { FLAG_MEANING, loopBounds, pathD } from "#/takeoff/model";
+import type { TakeoffStore } from "#/takeoff/store";
 import {
   SENSIBLE_CAP_BTUH,
   STAGE_ORDER,
@@ -65,6 +67,7 @@ export interface AtlasActions {
 }
 
 export interface AtlasProps {
+  store: TakeoffStore;
   world: World;
   /** Real room boundaries loaded (fixture fetch / live regions read finished). */
   geoReady: boolean;
@@ -364,23 +367,20 @@ const PLAN_MAX_PX = 720;
 const PLAN_DEFAULT_PX = 340;
 const PLAN_CHROME_PX = 34;
 
-export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
-  const [stageFilter, setStageFilter] = useState<Stage | null>(null);
-  const [level, setLevel] = useState<string>("");
-  const [zoneKey, setZoneKey] = useState<string | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [decided, setDecided] = useState<Record<string, Verdict>>({});
+export function Atlas({ store, world, geoReady, live, busy, actions }: AtlasProps) {
+  const page = useAtomValue(store.atoms.atlasPage);
+  const decided = useAtomValue(store.atoms.decisions);
+  const { stageFilter, zoneKey, cursor, fieldsMode, visibleKeys } = page;
+  const level = page.level || world.lanes[0]?.label || "";
+  const setStageFilter = (value: Stage | null) =>
+    store.actions.setAtlasPage({ stageFilter: value });
+  const setLevel = (value: string) => store.actions.setAtlasPage({ level: value });
+  const setZoneKey = (value: string | null) => store.actions.setAtlasPage({ zoneKey: value });
+  const setCursor = (value: string | null) => store.actions.setAtlasPage({ cursor: value });
   /** Where the per-room Manual J fields live: inline table columns (dense, whole-scope entry)
    *  or the room panel (narrow table, one room in focus). One home at a time, never both. */
-  const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
   /** The row order the user is actually looking at — MasterTable owns filter/sort/search, and
    *  reports the result here so j/k walks the SAME order rather than the pre-filter scope. */
-  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
-
-  // First lane to arrive names the initial level tab (lanes are live data, not a constant).
-  useEffect(() => {
-    if (!level && world.lanes.length > 0) setLevel(world.lanes[0]!.label);
-  }, [level, world.lanes]);
 
   // Plan geometry: controlled collapse; PaneWorkspace owns and persists its resized height.
   const [planOpen, setPlanOpen] = useState(true);
@@ -468,7 +468,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
   // Optimistic: mark locally, then write through. The route re-reads on demand; a failed
   // write surfaces through the route's error lane, never as a silently-kept decision.
   const decide = (room: WorldRoom, flag: string, verb: Verdict) => {
-    setDecided((prev) => ({ ...prev, [flagKey(room.guid, flag)]: verb }));
+    store.actions.decide(room.guid, flag, verb);
     actions.decide(room, flag, verb);
   };
 
@@ -1018,7 +1018,9 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                       <button
                         type="button"
                         onClick={() =>
-                          setFieldsMode((mode) => (mode === "panel" ? "columns" : "panel"))
+                          store.actions.setAtlasPage({
+                            fieldsMode: fieldsMode === "panel" ? "columns" : "panel",
+                          })
                         }
                         title={
                           fieldsMode === "panel"
@@ -1058,19 +1060,17 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                     if (!selected) setLevel(row.zone.zone.lane.label);
                   }}
                   onVisibleChange={(keys) =>
-                    setVisibleKeys((prev) =>
-                      prev.length === keys.length && prev.every((k, i) => k === keys[i])
-                        ? prev
-                        : keys,
-                    )
+                    (visibleKeys.length !== keys.length ||
+                      visibleKeys.some((key, index) => key !== keys[index])) &&
+                    store.actions.setAtlasPage({ visibleKeys: keys })
                   }
                 />
               }
               end={
                 cursorRow && (
-                  <RoomPanel
+                  <RoomPanelFromStore
+                    store={store}
                     row={cursorRow}
-                    decided={decided}
                     live={live}
                     fieldsMode={fieldsMode}
                     onDecide={decide}
@@ -1575,6 +1575,17 @@ function ZoneCard({
 /** Per-room data, living beside the rooms it narrates. Exists exactly while a row is under the
  *  cursor. In "panel" fields mode the Manual J fields render here and leave the table narrow;
  *  in "columns" mode they stay inline and this panel carries calls + provenance only. */
+function RoomPanelFromStore({
+  store,
+  row,
+  ...props
+}: Omit<Parameters<typeof RoomPanel>[0], "decided"> & {
+  store: TakeoffStore;
+}) {
+  const entity = useAtomValue(store.atoms.entity(row.room.guid));
+  return <RoomPanel {...props} row={row} decided={entity.decided} />;
+}
+
 function RoomPanel({
   row,
   decided,
@@ -1585,7 +1596,7 @@ function RoomPanel({
   url,
 }: {
   row: Row;
-  decided: Record<string, Verdict>;
+  decided: Readonly<Record<string, Verdict>>;
   live: boolean;
   fieldsMode: "columns" | "panel";
   onDecide: (room: WorldRoom, flag: string, verb: Verdict) => void;
@@ -1594,7 +1605,7 @@ function RoomPanel({
 }) {
   const { room, zone, state, open } = row;
   const localDecisions = room.flags
-    .map((f) => ({ flag: f, verb: decided[flagKey(room.guid, f)] }))
+    .map((f) => ({ flag: f, verb: decided[f] }))
     .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
 
   return (

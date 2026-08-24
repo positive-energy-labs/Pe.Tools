@@ -109,6 +109,15 @@ export interface StagedRoomEdit {
   readonly next: RoomEdit;
 }
 
+export interface AtlasPageState {
+  readonly stageFilter: World["zones"][number]["stage"] | null;
+  readonly level: string;
+  readonly zoneKey: string | null;
+  readonly cursor: string | null;
+  readonly fieldsMode: "columns" | "panel";
+  readonly visibleKeys: readonly string[];
+}
+
 const LINKS: Link[] = [
   { key: "world", joiner: "in", placeholder: "pick a world", needs: "a world" },
   { key: "rvt", parent: "world", joiner: "", placeholder: "no document", needs: "a document" },
@@ -252,6 +261,14 @@ export function createTakeoffStore(deps: {
     Atom.keepAlive,
     Atom.withLabel("takeoffs/verb/receipt"),
   );
+  const atlasPageAtom = Atom.make<AtlasPageState>({
+    stageFilter: null,
+    level: "",
+    zoneKey: null,
+    cursor: null,
+    fieldsMode: "columns",
+    visibleKeys: [],
+  }).pipe(Atom.withLabel("takeoffs/page/atlas"));
   const hoveredAtom = Atom.family((id: string) =>
     Atom.make(false).pipe(Atom.withLabel(`takeoffs/entity/${id}/hovered`)),
   );
@@ -259,7 +276,7 @@ export function createTakeoffStore(deps: {
     Atom.make(false).pipe(Atom.withLabel(`takeoffs/entity/${id}/selected`)),
   );
   const decidedAtom = Atom.family((id: string) =>
-    Atom.make<"accept" | "dismiss" | null>(null).pipe(
+    Atom.make<Readonly<Record<string, "accept" | "dismiss">>>({}).pipe(
       Atom.withLabel(`takeoffs/entity/${id}/decided`),
     ),
   );
@@ -413,6 +430,13 @@ export function createTakeoffStore(deps: {
           .map((room) => [room.guid, room] as const),
       ),
   ).pipe(Atom.withLabel("takeoffs/rooms-by-id"));
+  const decisionsAtom = Atom.make((get) =>
+    Object.fromEntries(
+      [...get(roomsByIdAtom).keys()].flatMap((id) =>
+        Object.entries(get(decidedAtom(id))).map(([flag, verdict]) => [`${id}::${flag}`, verdict]),
+      ),
+    ),
+  ).pipe(Atom.withLabel("takeoffs/page/decisions"));
   const entityAtom = Atom.family((id: string) =>
     Atom.make((get) => {
       const authority = get(roomsByIdAtom).get(id);
@@ -571,8 +595,11 @@ export function createTakeoffStore(deps: {
         if (id) registry.set(hoveredAtom(id), true);
       });
     },
-    decide(id: string, verdict: "accept" | "dismiss") {
-      registry.set(decidedAtom(id), verdict);
+    setAtlasPage(patch: Partial<AtlasPageState>) {
+      registry.update(atlasPageAtom, (page) => ({ ...page, ...patch }));
+    },
+    decide(id: string, flag: string, verdict: "accept" | "dismiss") {
+      registry.update(decidedAtom(id), (decisions) => ({ ...decisions, [flag]: verdict }));
     },
     stage(id: string, base: RoomEdit, next: RoomEdit) {
       const staged = JSON.stringify(base) === JSON.stringify(next) ? null : { base, next };
@@ -600,6 +627,8 @@ export function createTakeoffStore(deps: {
       r10Path: r10PathAtom,
       stage: stageAtom,
       world: worldAtom,
+      atlasPage: atlasPageAtom,
+      decisions: decisionsAtom,
       sessions: sessionsResult,
       activeDocument: activeDocumentResult,
       snapshot: snapshotResult,
