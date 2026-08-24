@@ -37,6 +37,7 @@ import {
   createFixtureTakeoffHost,
 } from "#/takeoff/proto/fixture-world";
 import { createTakeoffStore, TAKEOFF_LINKS, type TakeoffStore } from "#/takeoff/store";
+import { registerInspectableAtomStore } from "#/state/atom-inspect";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
@@ -119,9 +120,11 @@ function TakeoffsStoreOwner({ source }: { source: Search["source"] }) {
   }
   const store = storeRef.current;
   useEffect(() => {
+    const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
     if (disposeTimer.current) clearTimeout(disposeTimer.current);
     return () => {
       disposeTimer.current = setTimeout(() => store.dispose(), 0);
+      unregister?.();
     };
   }, [store]);
   useEffect(() => store.actions.setSearch(search), [search, store]);

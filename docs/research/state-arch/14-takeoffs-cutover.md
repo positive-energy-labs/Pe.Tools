@@ -112,3 +112,56 @@ frontier UI baseline, splitting a 2,000-line Atlas without creating two authorit
 browser-only dialog/Strict Mode behavior. The final audit also found the missing `.r10` world join;
 that extra pass was necessary, but it exposed how easy it is for compile-green substrate cutovers to
 drop a downstream join unless the joined world has its own deterministic assertion.
+
+## Pass 2
+
+Pass 2 completed G1, G2, G3, G4, G5, G6, G9, and the devtools cutover. G7, G8, and G10 were
+deliberately not attempted because the user reserved those decisions and the live lane.
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| G1 | **done** | Conflict now compares the staged base with `roomEdit(authority)` and uses no `keyof WorldRoom` cast (`source/pe-tools/apps/web/src/takeoff/store.ts:666`). Judge probe P1 covers a room with nested Manual J data (`source/pe-tools/apps/web/src/takeoff/store.test.ts:220`). Commit `a61e519`. |
+| G2 | **done** | Adopt invalidates both snapshot and candidates (`source/pe-tools/apps/web/src/takeoff/store.ts:682`); the SWR test asserts a second candidate read (`source/pe-tools/apps/web/src/takeoff/store.test.ts:264`). Commit `1c2bea0`. |
+| G3 | **done** | A failed `.r10` feed renders a retry verb that invalidates `rhvac-open` and `rhvac-list` (`source/pe-tools/apps/web/src/routes/takeoffs.tsx:282`). Commit `d08f613`. |
+| G4 | **done** | Feed badges render their basis (`source/pe-tools/apps/web/src/targeting/head.tsx:41`). Zone cards and both room surfaces subscribe to the entity family (`source/pe-tools/apps/web/src/takeoff/atlas.tsx:352`, `:1551`, `:1687`). URL-bound and plan-focus remain two named currencies (`source/pe-tools/apps/web/src/takeoff/store.ts:659`). This supersedes the Pass 1 S6 limitation. Commit `d7d0bfa`. |
+| G5 | **done** | Atlas actions are hoisted and memoized once per store (`source/pe-tools/apps/web/src/takeoff/atlas.tsx:73`, `:417`); the keydown handler is ref-backed and the listener mounts once (`:494`, `:519`). Commit `02374ec`. |
+| G6 | **done** | The hook table below is recomputed from `git show 335906d~1`; the Step 5 deletion claim above was narrowed to the three removals the diff proves. Commit `1a5430c`. |
+| G9 | **done** | Fresh reads state a fixed wall-clock time instead of calculating a relative `ago()` during render (`source/pe-tools/apps/web/src/targeting/kit.tsx:237`). Commit `9ac0abb`. |
+| Devtools | **done, with Effect internals noted** | The store structurally implements `InspectableAtomStore`, exposes its registry and inspector, and brackets every store-owned `set`/`update` with `note({verb,key})` (`source/pe-tools/apps/web/src/takeoff/store.ts:299`, `:1117`). Route registration is reactive, so an already-mounted panel switches to the route store (`source/pe-tools/apps/web/src/state/atom-inspect.ts:64`; `source/pe-tools/apps/web/src/integrations/atoms/devtools.tsx:27`). The no-React Adopt test asserts a recorded cause (`source/pe-tools/apps/web/src/takeoff/store.test.ts:382`). |
+
+### Pass 2 hook table
+
+Counts are hook calls only, excluding imports and comments. The baseline is `335906d~1`.
+
+| File | `useState` | `useEffect` | `useMemo` | `useRef` | `useCallback` | ESLint suppressions | Lines |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `routes/takeoffs.tsx` | 8 â†’ 0 | 1 â†’ 2 | 0 â†’ 1 | 1 â†’ 2 | 2 â†’ 0 | 0 â†’ 0 | 925 â†’ 633 |
+| `takeoff/atlas.tsx` | 9 â†’ 2 | 2 â†’ 1 | 10 â†’ 11 | 0 â†’ 1 | 0 â†’ 0 | 2 â†’ 2 | 2,015 â†’ 2,045 |
+| `targeting/kit.tsx` | absent â†’ 3 | absent â†’ 2 | absent â†’ 2 | absent â†’ 1 | absent â†’ 8 | absent â†’ 1 | absent â†’ 617 |
+
+The judge's `targeting/kit.tsx` hook totals included its hook import and a comment despite saying
+those were excluded. The table above counts executable hook calls. Pass 2 also found two devtools
+facts the judge could not have seen before the merge: the branch documentation declared
+`InspectableAtomStore`, but the interface was absent from `atom-inspect.ts`; and Effect v4 creates
+six to seven unlabeled runtime/SWR implementation nodes even when every store-authored node uses
+`Atom.withLabel`. Those nodes remain visibly `unlabelled`; relabeling library internals through a
+cast would violate the public-API inspection rule. At fixture scale the 100 ms inspector scan also
+made browser automation noticeably slow (1,127 nodes after Atlas families materialized).
+
+### Pass 2 proof
+
+- **Deterministic:** `vp test src/takeoff src/targeting` â€” 3 files, 34 tests passed.
+- **Compile/static:** `vp check` on the touched store, route, Atlas, targeting, inspector, and
+  devtools paths â€” correctly formatted; zero warnings, lint errors, or type errors.
+- **Browser fixture:** `/takeoffs?source=fixture` rendered the sentence, Atlas, room table, and
+  Adopt panel. Binding Lower Level and committing 11 candidates closed the panel. The Atoms panel
+  reported 1,127 nodes, 1,531 edges, and 208 subscribed; its last-20 list showed
+  `adopt page/panel` on candidate and entity recomputations. Browser warnings/errors: zero.
+- **Live lane:** not run by instruction. No Revit session was started and no live Host was
+  contacted.
+
+Pass 2 took about 55 minutes. The time that felt wrong was not the judge fixes; it was proving the
+devtools on the full fixture graph. The initial global handoff let an already-mounted panel retain
+the wrong inspector, and the route-sized 100 ms scan made semantic browser clicks slow. Replacing
+that handoff with the small active-store subscription fixed correctness; scan cost remains a known
+devtools limitation.

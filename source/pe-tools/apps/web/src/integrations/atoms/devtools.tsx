@@ -1,7 +1,12 @@
 import { RegistryContext } from "@effect/atom-react";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
-import { inspectAtomRegistry, type InspectSnapshot } from "#/state/atom-inspect";
+import {
+  getInspectableAtomStore,
+  inspectAtomRegistry,
+  subscribeInspectableAtomStore,
+  type InspectSnapshot,
+} from "#/state/atom-inspect";
 
 import type { TanStackDevtoolsReactPlugin } from "@tanstack/react-devtools";
 
@@ -19,7 +24,13 @@ const styles = `
 
 function AtomsPanel() {
   const registry = useContext(RegistryContext);
-  const inspector = useMemo(() => inspectAtomRegistry(registry), [registry]);
+  const store = useSyncExternalStore(
+    subscribeInspectableAtomStore,
+    getInspectableAtomStore,
+    getInspectableAtomStore,
+  );
+  const fallback = useMemo(() => inspectAtomRegistry(registry), [registry]);
+  const inspector = store?.inspector ?? fallback;
   const [snapshot, setSnapshot] = useState<InspectSnapshot>(() => inspector.snapshot());
   const [prefix, setPrefix] = useState("");
   const [sort, setSort] = useState<"recomputes" | "lastChangeAt">("recomputes");
@@ -27,15 +38,16 @@ function AtomsPanel() {
   const [nextValue, setNextValue] = useState("");
 
   useEffect(() => {
+    setSnapshot(inspector.snapshot());
     const unsubscribe = inspector.subscribe(() => setSnapshot(inspector.snapshot()));
     if (import.meta.env.DEV) Object.assign(globalThis, { __PE_ATOMS__: inspector });
     return () => {
       unsubscribe();
-      inspector.dispose();
+      if (!store) inspector.dispose();
       if ((globalThis as { __PE_ATOMS__?: unknown }).__PE_ATOMS__ === inspector)
         Reflect.deleteProperty(globalThis, "__PE_ATOMS__");
     };
-  }, [inspector]);
+  }, [inspector, store]);
 
   const rows = snapshot.nodes
     .filter(({ label }) => label.startsWith(prefix))

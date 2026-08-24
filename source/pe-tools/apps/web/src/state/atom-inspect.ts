@@ -42,6 +42,35 @@ export interface AtomInspector {
   dispose(): void;
 }
 
+export interface InspectableAtomStore {
+  readonly registry: AtomRegistry.AtomRegistry;
+  readonly inspector: AtomInspector;
+  inspect(): InspectSnapshot;
+  subscribe(cb: () => void): () => void;
+  note(cause: InspectCause): void;
+  refresh(id: string): boolean;
+  set(id: string, value: string): boolean;
+  dispose(): void;
+}
+
+let activeStore: InspectableAtomStore | undefined;
+const storeListeners = new Set<() => void>();
+
+export const getInspectableAtomStore = () => activeStore;
+export const subscribeInspectableAtomStore = (listener: () => void) => {
+  storeListeners.add(listener);
+  return () => storeListeners.delete(listener);
+};
+export const registerInspectableAtomStore = (store: InspectableAtomStore) => {
+  activeStore = store;
+  storeListeners.forEach((listener) => listener());
+  return () => {
+    if (activeStore !== store) return;
+    activeStore = undefined;
+    storeListeners.forEach((listener) => listener());
+  };
+};
+
 type Node = AtomRegistry.Node<unknown>;
 type Record = {
   id: string;

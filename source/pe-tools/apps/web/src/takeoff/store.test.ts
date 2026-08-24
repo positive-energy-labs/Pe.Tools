@@ -368,6 +368,7 @@ describe("takeoff route store", () => {
     await tick();
 
     expect(store.atoms.registry.get(store.atoms.adoptRows)).toHaveLength(11);
+    store.inspect();
     store.actions.openPanel("adopt");
     await store.actions.adoptSelected();
 
@@ -376,6 +377,9 @@ describe("takeoff route store", () => {
       verb: "adopt",
       text: "fixture adopted 11 zoning regions",
     });
+    const inspection = store.inspect();
+    expect(inspection.nodes.some((node) => node.label === "takeoffs/verb/adopt")).toBe(true);
+    expect(inspection.changes.some((change) => change.cause?.verb === "adopt")).toBe(true);
     store.dispose();
   });
 });

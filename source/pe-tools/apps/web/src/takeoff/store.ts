@@ -5,6 +5,7 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 
 import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
+import { inspectAtomRegistry, type InspectableAtomStore } from "#/state/atom-inspect";
 import type { AdoptItem } from "#/takeoff/scripts";
 import {
   upsertResolution,
@@ -294,8 +295,13 @@ export function createTakeoffStore(deps: {
   search: SearchPort;
 }) {
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+  const inspector = inspectAtomRegistry(registry);
+  const write = <A>(verb: string, key: string, run: () => A): A => {
+    inspector.note({ verb, key });
+    return run();
+  };
   const runtimeFactory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() });
-  const runtime = runtimeFactory(Layer.empty);
+  const runtime = runtimeFactory(Layer.empty).pipe(Atom.withLabel("takeoffs/runtime"));
   let busyTimer: ReturnType<typeof setInterval> | undefined;
   let inFlight = false;
   let currentHover = "";
@@ -680,8 +686,10 @@ export function createTakeoffStore(deps: {
     )
     .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/verb/adopt"));
 
-  const log = (text: string) =>
-    registry.update(actionsLogAtom, (items) => [...items, text].slice(-20));
+  const log = (verb: string, text: string) =>
+    write(verb, "actions", () =>
+      registry.update(actionsLogAtom, (items) => [...items, text].slice(-20)),
+    );
   const settle = <A>(atom: Atom.Atom<AsyncResult.AsyncResult<A, Error>>) => {
     registry.get(atom);
     return Effect.runPromise(AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true }));
@@ -693,15 +701,18 @@ export function createTakeoffStore(deps: {
         verb: id,
         message: `${id} refused; another verb is running`,
       } as const;
-      registry.set(failureAtom, failure);
+      write(id, "failure", () => registry.set(failureAtom, failure));
       throw Error(failure.message);
     }
     inFlight = true;
-    registry.set(failureAtom, null);
-    registry.set(busyAtom, { id, seconds: 0 });
+    write(id, "failure", () => registry.set(failureAtom, null));
+    write(id, "busy", () => registry.set(busyAtom, { id, seconds: 0 }));
     const started = Date.now();
     busyTimer = setInterval(
-      () => registry.set(busyAtom, { id, seconds: Math.floor((Date.now() - started) / 1000) }),
+      () =>
+        write(id, "busy", () =>
+          registry.set(busyAtom, { id, seconds: Math.floor((Date.now() - started) / 1000) }),
+        ),
       250,
     );
     try {
@@ -715,8 +726,8 @@ export function createTakeoffStore(deps: {
               typeof value.text === "string"
             ? value.text
             : id;
-      registry.set(receiptAtom, { verb: id, text, at: Date.now() });
-      log(`${id} succeeded`);
+      write(id, "receipt", () => registry.set(receiptAtom, { verb: id, text, at: Date.now() }));
+      log(id, `${id} succeeded`);
       return value;
     } catch (cause) {
       const failure = {
@@ -724,18 +735,19 @@ export function createTakeoffStore(deps: {
         verb: id,
         message: cause instanceof Error ? cause.message : String(cause),
       } as const;
-      registry.set(failureAtom, failure);
-      log(`${id} failed`);
+      write(id, "failure", () => registry.set(failureAtom, failure));
+      log(id, `${id} failed`);
       throw cause;
     } finally {
       if (busyTimer) clearInterval(busyTimer);
       busyTimer = undefined;
       inFlight = false;
-      registry.set(busyAtom, null);
+      write(id, "busy", () => registry.set(busyAtom, null));
     }
   };
   const clearStaging = () => {
-    for (const id of stagedIds) registry.set(stagedAtom(id), null);
+    for (const id of stagedIds)
+      write("clear-staging", `entity/${id}/staged`, () => registry.set(stagedAtom(id), null));
     stagedIds.clear();
   };
   const stageRoom = (id: string, patch: RoomEdit) => {
@@ -744,7 +756,7 @@ export function createTakeoffStore(deps: {
     const staged = registry.get(stagedAtom(id));
     const base = staged?.base ?? roomEdit(authority);
     const next = { ...(staged?.next ?? base), ...patch };
-    registry.set(stagedAtom(id), { base, next });
+    write("stage-room", `entity/${id}/staged`, () => registry.set(stagedAtom(id), { base, next }));
     stagedIds.add(id);
     return authority;
   };
@@ -754,9 +766,12 @@ export function createTakeoffStore(deps: {
     const base = { ...staged.base, ...patch };
     const next = { ...staged.next, ...patch };
     if (JSON.stringify(base) === JSON.stringify(next)) {
-      registry.set(stagedAtom(id), null);
+      write("commit-room", `entity/${id}/staged`, () => registry.set(stagedAtom(id), null));
       stagedIds.delete(id);
-    } else registry.set(stagedAtom(id), { base, next });
+    } else
+      write("commit-room", `entity/${id}/staged`, () =>
+        registry.set(stagedAtom(id), { base, next }),
+      );
   };
   const activeSession = async () => {
     const document = await settle(activeDocumentResult);
@@ -768,9 +783,12 @@ export function createTakeoffStore(deps: {
     const before = new Set(previous.zones);
     const after = new Set(next.zones);
     Atom.batch(() => {
-      registry.set(searchAtom, next);
+      write("set-search", "search", () => registry.set(searchAtom, next));
       for (const id of new Set([...before, ...after]))
-        if (before.has(id) !== after.has(id)) registry.set(boundAtom(id), after.has(id));
+        if (before.has(id) !== after.has(id))
+          write("set-search", `entity/${id}/url-bound`, () =>
+            registry.set(boundAtom(id), after.has(id)),
+          );
     });
     if (previous.target !== next.target || previous.view !== next.view) clearStaging();
   };
@@ -798,8 +816,8 @@ export function createTakeoffStore(deps: {
 
   const unsubscribe = deps.sessions.subscribe((event) => {
     if (event.kind === "sessionsChanged") {
-      log(`push ${event.kind} ${event.sessionId}`);
-      registry.set(invalidateAtom, ["sessions"]);
+      log("host-event", `push ${event.kind} ${event.sessionId}`);
+      write("host-event", "invalidate/sessions", () => registry.set(invalidateAtom, ["sessions"]));
       return;
     }
     const document = registry.get(activeDocumentResult);
@@ -807,8 +825,10 @@ export function createTakeoffStore(deps: {
       ? document.value.value?.session.sessionId
       : null;
     if (current !== event.sessionId) return;
-    log(`push ${event.kind} ${event.sessionId}`);
-    registry.set(invalidateAtom, ["active-document"]);
+    log("host-event", `push ${event.kind} ${event.sessionId}`);
+    write("host-event", "invalidate/active-document", () =>
+      registry.set(invalidateAtom, ["active-document"]),
+    );
   });
 
   const feeds = {
@@ -847,57 +867,77 @@ export function createTakeoffStore(deps: {
     },
     pick,
     settle,
-    invalidate: (keys: readonly string[]) => registry.set(invalidateAtom, keys),
+    invalidate: (keys: readonly string[]) =>
+      write("invalidate", keys.join(","), () => registry.set(invalidateAtom, keys)),
     rememberDir(dir: string) {
       const value = dir.trim();
       if (!value) return;
-      registry.update(recentDirsAtom, (dirs) =>
-        [value, ...dirs.filter((item) => item !== value)].slice(0, 8),
+      write("remember-dir", "persisted/recent-dirs", () =>
+        registry.update(recentDirsAtom, (dirs) =>
+          [value, ...dirs.filter((item) => item !== value)].slice(0, 8),
+        ),
       );
     },
     hover(id: string) {
       if (id === currentHover) return;
       Atom.batch(() => {
-        if (currentHover) registry.set(hoveredAtom(currentHover), false);
+        if (currentHover)
+          write("hover", `entity/${currentHover}/hovered`, () =>
+            registry.set(hoveredAtom(currentHover), false),
+          );
         currentHover = id;
-        if (id) registry.set(hoveredAtom(id), true);
+        if (id) write("hover", `entity/${id}/hovered`, () => registry.set(hoveredAtom(id), true));
       });
     },
     focusZone(id: string) {
       Atom.batch(() => {
-        if (focusedZone) registry.set(selectedAtom(focusedZone), false);
+        if (focusedZone)
+          write("focus-zone", `entity/${focusedZone}/selected`, () =>
+            registry.set(selectedAtom(focusedZone), false),
+          );
         focusedZone = id;
-        if (id) registry.set(selectedAtom(id), true);
+        if (id)
+          write("focus-zone", `entity/${id}/selected`, () => registry.set(selectedAtom(id), true));
       });
     },
     selectRoom(id: string) {
       Atom.batch(() => {
-        if (selectedRoom) registry.set(selectedAtom(selectedRoom), false);
+        if (selectedRoom)
+          write("select-room", `entity/${selectedRoom}/selected`, () =>
+            registry.set(selectedAtom(selectedRoom), false),
+          );
         selectedRoom = id;
-        if (id) registry.set(selectedAtom(id), true);
+        if (id)
+          write("select-room", `entity/${id}/selected`, () => registry.set(selectedAtom(id), true));
       });
     },
     setAtlasPage(patch: Partial<AtlasPageState>) {
-      registry.update(atlasPageAtom, (page) => ({ ...page, ...patch }));
+      write("set-atlas-page", "page/atlas", () =>
+        registry.update(atlasPageAtom, (page) => ({ ...page, ...patch })),
+      );
     },
     openPanel(panel: "adopt" | "sync" | null) {
-      registry.set(panelAtom, panel);
+      write("open-panel", "page/panel", () => registry.set(panelAtom, panel));
     },
     clearFailure() {
-      registry.set(failureAtom, null);
+      write("clear-failure", "failure", () => registry.set(failureAtom, null));
     },
     patchAdopt(elementId: number, patch: Partial<AdoptDraft>) {
-      registry.update(adoptPatchesAtom, (patches) => ({
-        ...patches,
-        [elementId]: { ...patches[elementId], ...patch },
-      }));
+      write("patch-adopt", "page/adopt-patches", () =>
+        registry.update(adoptPatchesAtom, (patches) => ({
+          ...patches,
+          [elementId]: { ...patches[elementId], ...patch },
+        })),
+      );
     },
     decide(id: string, flag: string, verdict: "accept" | "dismiss") {
-      registry.update(decidedAtom(id), (decisions) => ({ ...decisions, [flag]: verdict }));
+      write("decide", `entity/${id}/decided`, () =>
+        registry.update(decidedAtom(id), (decisions) => ({ ...decisions, [flag]: verdict })),
+      );
     },
     stage(id: string, base: RoomEdit, next: RoomEdit) {
       const staged = JSON.stringify(base) === JSON.stringify(next) ? null : { base, next };
-      registry.set(stagedAtom(id), staged);
+      write("stage", `entity/${id}/staged`, () => registry.set(stagedAtom(id), staged));
       if (staged) stagedIds.add(id);
       else stagedIds.delete(id);
     },
@@ -908,11 +948,13 @@ export function createTakeoffStore(deps: {
         const session = await activeSession();
         await deps.host.writeRoomType(session, room.elementId!, patch.type!);
         commitRoomField(id, { type: patch.type });
-        registry.set(invalidateAtom, ["snapshot"]);
+        write("room-type", "invalidate/snapshot", () => registry.set(invalidateAtom, ["snapshot"]));
       }).catch(() => undefined);
     },
     decideRoom(room: WorldRoom, flag: string, verdict: "accept" | "dismiss") {
-      registry.update(decidedAtom(room.guid), (decisions) => ({ ...decisions, [flag]: verdict }));
+      write("decision", `entity/${room.guid}/decided`, () =>
+        registry.update(decidedAtom(room.guid), (decisions) => ({ ...decisions, [flag]: verdict })),
+      );
       if (deps.host.fixture) return;
       void runVerb("decision", async () => {
         if (room.elementId === null) throw Error(`room ${room.name} has no Room Region home`);
@@ -929,17 +971,19 @@ export function createTakeoffStore(deps: {
           room.elementId,
           upsertResolution(room.decisions, next),
         );
-        registry.set(invalidateAtom, ["snapshot"]);
+        write("decision", "invalidate/snapshot", () => registry.set(invalidateAtom, ["snapshot"]));
       }).catch(() => undefined);
     },
     capture(lane: Pick<WorldLane, "view" | "label">) {
       return runVerb("capture", async () => {
         const session = await activeSession();
         const result = await deps.host.capture(session, lane);
-        registry.update(replaysAtom, (replays) => ({
-          ...replays,
-          [lane.label]: result.replayPath,
-        }));
+        write("capture", "page/replays", () =>
+          registry.update(replaysAtom, (replays) => ({
+            ...replays,
+            [lane.label]: result.replayPath,
+          })),
+        );
         return { ...result, text: `captured ${lane.label}: ${result.rooms} rooms` };
       });
     },
@@ -949,12 +993,12 @@ export function createTakeoffStore(deps: {
         if (!replayPath) throw Error(`capture ${zone.zone.lane.label} first`);
         const session = await activeSession();
         const result = await deps.host.partition(session, partitionInput(zone, replayPath));
-        registry.set(invalidateAtom, ["snapshot"]);
+        write("partition", "invalidate/snapshot", () => registry.set(invalidateAtom, ["snapshot"]));
         return { ...result, text: `partitioned ${zone.zone.key}` };
       });
     },
     refresh() {
-      registry.set(invalidateAtom, ["snapshot"]);
+      write("refresh", "invalidate/snapshot", () => registry.set(invalidateAtom, ["snapshot"]));
       return settle(snapshotResult);
     },
     launchRhvac() {
@@ -976,14 +1020,16 @@ export function createTakeoffStore(deps: {
         const session = await activeSession();
         const result = await deps.host.syncRhvac(session, path, plan.inserts);
         clearStaging();
-        registry.set(panelAtom, null);
-        registry.set(invalidateAtom, ["snapshot", "rhvac-open"]);
+        write("sync", "page/panel", () => registry.set(panelAtom, null));
+        write("sync", "invalidate/snapshot,rhvac-open", () =>
+          registry.set(invalidateAtom, ["snapshot", "rhvac-open"]),
+        );
         return result;
       });
     },
     adopt(input: { readonly view: string; readonly items: readonly AdoptItem[] }) {
       return runVerb("adopt", async () => {
-        registry.set(adoptMutation, input);
+        write("adopt", "verb/adopt", () => registry.set(adoptMutation, input));
         return settle(adoptMutation);
       });
     },
@@ -1000,14 +1046,16 @@ export function createTakeoffStore(deps: {
           })),
         })
         .then((result) => {
-          registry.set(adoptPatchesAtom, {});
-          registry.set(panelAtom, null);
+          write("adopt", "page/adopt-patches", () => registry.set(adoptPatchesAtom, {}));
+          write("adopt", "page/panel", () => registry.set(panelAtom, null));
           return result;
         });
     },
   };
 
-  return {
+  const store = {
+    registry,
+    inspector,
     atoms: {
       registry,
       search: searchAtom,
@@ -1039,6 +1087,7 @@ export function createTakeoffStore(deps: {
     feeds,
     inspect() {
       return {
+        ...inspector.snapshot(),
         url: registry.get(searchAtom),
         persisted: { recentDirs: registry.get(recentDirsAtom) },
         page: {
@@ -1054,12 +1103,18 @@ export function createTakeoffStore(deps: {
         actions: registry.get(actionsLogAtom),
       };
     },
+    subscribe: (cb: () => void) => inspector.subscribe(cb),
+    note: (cause: { verb: string; key: string }) => inspector.note(cause),
+    refresh: (id: string) => inspector.refresh(id),
+    set: (id: string, value: string) => inspector.set(id, value),
     dispose() {
       unsubscribe();
       if (busyTimer) clearInterval(busyTimer);
+      inspector.dispose();
       registry.dispose();
     },
   };
+  return store satisfies InspectableAtomStore;
 }
 
 export type TakeoffStore = ReturnType<typeof createTakeoffStore>;
