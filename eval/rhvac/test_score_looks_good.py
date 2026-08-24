@@ -57,8 +57,17 @@ def test_ortho_stats_flags_off_frame_edge():
     poly = Polygon([(0, 0), (10, 0), (10, 5), (8, 5.35), (0, 5.35)])  # ~10 deg segment
     stats = slg.ortho_stats(poly, frame_deg=0.0)
     assert stats["offFrameEdges"] == 1
+    assert stats["nonOrthogonalEdges"] == 1
     assert stats["onFrameLenFraction"] < 1.0
     assert stats["editCost"] == stats["normVerts"] + 2
+
+
+def test_ortho_stats_allows_45_degree_exception():
+    stats = slg.ortho_stats(
+        Polygon([(0, 0), (10, 0), (10, 6), (0, 6)]), frame_deg=45.0)
+    assert stats["offFrameEdges"] == 4
+    assert stats["nonOrthogonalEdges"] == 0
+    assert stats["nonOrthogonalFt"] == 0.0
 
 
 def test_frame_angle_from_rotated_zone():
@@ -227,7 +236,7 @@ def test_measure_axes_bins_every_measure_and_separates_dispositions():
         leakSf=0.0, swallowSf=5.0, interiorWallRunFt=4.0,
         sampled=40, backedSamples=30, edgeOnInk=0.75, worstUnbackedRunFt=5.0,
         doubleLineFt=10.0, stairstepEdges=1, maxStairstepSpanFt=2.0,
-        microJogCount=1)
+        microJogCount=1, nonOrthogonalFt=4.0)
     zone = dict(
         zone="Main Level#00", level="Main Level", zoneSqft=100.0,
         StrictlyEditable=True, Contained=True, ClosureErrorSqft=0.0,
@@ -240,6 +249,7 @@ def test_measure_axes_bins_every_measure_and_separates_dispositions():
                           "D_regularity", "E_coverage", "F_honesty"]
     assert axes["B_extent"]["swallow"]["accepted"]["pct"] == 5.0
     assert axes["C_boundary"]["edgeOnInk"]["accepted"]["value"] == 30.0
+    assert axes["D_regularity"]["nonOrthogonalLength"]["accepted"]["pct"] == 10.0
     assert axes["E_coverage"]["areaShare"]["held"]["pct"] == 0.0
 
     leaves = []

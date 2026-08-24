@@ -321,7 +321,9 @@ def ortho_stats(geometry, frame_deg):
     verts = 0
     norm_verts = 0
     off_edges = 0
+    non_orthogonal_edges = 0
     on_len = 0.0
+    regular_grid_len = 0.0
     total_len = 0.0
     for part in _polygon_parts(geometry):
         for ring in [part.exterior.coords] + [r.coords for r in part.interiors]:
@@ -336,6 +338,7 @@ def ortho_stats(geometry, frame_deg):
                 length = math.hypot(x1 - x0, y1 - y0)
                 angle = (math.degrees(math.atan2(y1 - y0, x1 - x0)) - frame_deg) % 90
                 off_axis = min(angle, 90 - angle)  # deviation from nearest frame axis
+                grid_deviation = min(off_axis, abs(45 - off_axis))
                 mod180 = (math.degrees(math.atan2(y1 - y0, x1 - x0)) - frame_deg) % 180
                 if off_axis <= OFF_FRAME_DEG:
                     cls = "H" if min(mod180, 180 - mod180) <= 45 else "V"
@@ -343,6 +346,10 @@ def ortho_stats(geometry, frame_deg):
                 else:
                     cls = "O"
                     off_edges += 1
+                if grid_deviation <= OFF_FRAME_DEG:
+                    regular_grid_len += length
+                else:
+                    non_orthogonal_edges += 1
                 classes.append(cls)
                 lengths.append(length)
                 total_len += length
@@ -353,7 +360,9 @@ def ortho_stats(geometry, frame_deg):
     on_frame_fraction = (on_len / total_len) if total_len > EPS else 0.0
     edit_cost = norm_verts + 2 * off_edges
     return dict(verts=verts, normVerts=norm_verts, offFrameEdges=off_edges,
-                onFrameLenFraction=round(on_frame_fraction, 4), editCost=edit_cost)
+                onFrameLenFraction=round(on_frame_fraction, 4), editCost=edit_cost,
+                nonOrthogonalEdges=non_orthogonal_edges,
+                nonOrthogonalFt=round(total_len - regular_grid_len, 1))
 
 
 def boundary_samples(coords, step=SAMPLE_STEP_FT):
@@ -1381,6 +1390,8 @@ def _measure_axes(zones):
             "worstUnbackedRun": _worst_run_measures(zones),
             "doubleLine": _ratio_by_disposition(zones, "doubleLineFt", "boundaryFt")},
         "D_regularity": {
+            "nonOrthogonalLength": _ratio_by_disposition(
+                zones, "nonOrthogonalFt", "boundaryFt"),
             "stairstepEdges": _shape_measures(zones, "stairstepEdges", "boundaryEdges"),
             "maxStairstepSpan": _max_shape_span_measures(zones),
             "microJogs": _shape_measures(zones, "microJogCount", "boundaryEdges")},
@@ -1390,7 +1401,7 @@ def _measure_axes(zones):
 
 def measure_vector(scores, scores_raw_oracle):
     return {
-        "metricSchemaVersion": 3,
+        "metricSchemaVersion": 4,
         "identity": scores["identity"],
         "thresholds": {
             "inkBackedDistanceFt": {"value": HIT_FT,
