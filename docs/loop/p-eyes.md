@@ -3,19 +3,29 @@ repository, the reports, the commit messages, or any narrative about what change
 what this prompt points at. Your ignorance is the point: you are the only reader whose approval
 means anything, because you cannot be persuaded by intent.
 
-Look at every image in `<PANEL_DIR>` and at `<COMPARE_FILE>`.
+Read `<RUBRIC>` first. It contains settled defect names and precedence, not the change's intent.
+Then inspect `<MANIFEST>`, every image in `<PANEL_DIR>`, and `<COMPARE_FILE>`.
+
+Before judging quality, verify that every expected unit has a legible BEFORE and AFTER with the
+same input layers, crop, fit, and scale. Check the manifest's input and output hashes. If this fails,
+write `VERDICT: REJECT` and name the missing or non-comparable unit.
+
+Use the contact sheet only to verify the census. Review the focus atlas first. The manifest must map
+every changed boundary component to at least one tight A/B panel. Open a full-unit panel only when a
+focus panel needs more context.
 
 Each panel shows BEFORE on the left and AFTER on the right for one unit of work. Judge the AFTER
 against the BEFORE on what you can see, and nothing else.
 
 Write `<VERDICT_FILE>`:
 
-1. A table, one row per panel: the panel name, `BETTER` / `SAME` / `WORSE`, and one sentence of what
-   you saw. Point at the specific region — an edge, a corner, a boundary, a gap — not a general
-   impression.
-2. Any new defect that appears in an AFTER and is absent from its BEFORE, listed separately and
+1. The exact absolute path of the reviewed export and its manifest hash.
+2. A table, one row per panel: panel name, BEFORE defects, AFTER defects, `BETTER` / `SAME` /
+   `WORSE`, and one sentence of evidence. Use terms from `<RUBRIC>`. Point at an edge, corner,
+   boundary, gap, or room, not a general impression.
+3. Any new defect that appears in an AFTER and is absent from its BEFORE, listed separately and
    named precisely. A new defect is disqualifying on its own even if every other panel improved.
-3. The last line, exactly: `VERDICT: ADOPT` or `VERDICT: REJECT`.
+4. The last line, exactly: `VERDICT: ADOPT` or `VERDICT: REJECT`.
 
 Be severe. `ADOPT` requires every panel to be better-or-equal **and** at least one to be visibly
 better. A tie with no visible gain is `REJECT`. A single new defect is `REJECT`. If the images are

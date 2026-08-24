@@ -11,6 +11,17 @@ YOUR HYPOTHESIS, and only this one:
 
     <HYPOTHESIS>
 
+SEAM you touch: `<SEAM>`. This is the one place in the system where your mechanism acts. Another
+builder this round owns a different seam. Stay in yours.
+
+FALSIFIER, and you must honour it:
+
+    <FALSIFIER>
+
+If that becomes true, your hypothesis is dead. **Stop building, write the report, say the falsifier
+fired.** A proof of absence delivered at minute 20 is a better result than an honest inert diff
+delivered at minute 60. Nobody will thank you for grinding past it.
+
 RULES OF THE FAN-OUT
 
 - **One hypothesis, one diff.** If you see a second good idea, write it down in your report; do not
@@ -28,6 +39,14 @@ RULES OF THE FAN-OUT
   `C:\Users\kaitp\source\repos\Pe.Tools` (the main checkout — kaitpw's uncommitted work lives there).
 - Never `git add -A`, never `commit -a`. Commit by pathspec inside your own worktree.
 
+MEASURE FIRST, BEFORE YOU BUILD
+
+    <MEASURE FIRST>
+
+Write the answer to `<RUNDIR>/measure-first.md` inside the first `<MEASURE FIRST BUDGET>` minutes.
+If it says the mechanism has no room to act, stop there and report it. This is the highest-yield
+instruction in this prompt: most dead hypotheses are visible before any code is written.
+
 MEASURE
 
 1. `<GATES>` — must be green.
@@ -36,6 +55,27 @@ MEASURE
 4. Generate the visual panels into `<RUNDIR>/ab` if the harness produces them. Do **not** review
    them yourself and do not argue about what they show — a separate reviewer sees them later, and
    only at checkpoints.
+
+For `DECIDER = visual-first`, the bundle is mandatory for every candidate that clears GATES. Run
+`<VISUAL>`, verify its manifest, and report the expected and actual panel counts. Include every
+expected unit, even unchanged units. A missing, stale, unreadable, or non-comparable panel is a red
+visual lane, not an empty success.
+
+For `DECIDER = checkpoint-visual`, persist enough geometry and hashes to build the cumulative A/B
+bundle later. Do not summon or imitate the visual reviewer unless this lane is the named checkpoint
+or focused investigation.
+
+**Silence is not success.** Assume every tool in this list lies to you until you have proven it did
+not. Check the ones named here before you trust a single number:
+
+    <KNOWN SILENT FAILURES>
+
+The recurring shapes: a test wrapper that returns before the runner prints its summary; a
+comparison tool that emits zero panels when nothing changed, which looks identical to "no
+regressions"; a diff tool that reports drift from noise nobody cares about; a headline score that
+credits held or deferred work, so it rises while the accepted output is byte-identical to baseline.
+Read the headline number next to its breakdown, never alone. If a step produces no output, prove
+that the step ran.
 
 TIMEBOX — at `<TIMEBOX>` minutes, stop building. Write the report with whatever you have; a gate
 you did not get to is the line `Gates: NOT RUN`. A half-built mechanism honestly reported beats a
@@ -46,8 +86,10 @@ REPORT — write `<RUNDIR>/REPORT.md`, then stop. Colloquial, not a wall of numb
 - **Claim** — one paragraph. What you changed, and what it did.
 - **Numbers** — a small table: baseline vs candidate, plus the per-unit breakdown the brief names.
 - **Gates** — each one, green or red, with the failing output if red.
-- **Falsifier** — what would have to be true for this result to be an artifact rather than a real
-  improvement. Say it even when the numbers look good.
+- **Visual bundle** — exact absolute path, manifest verification, expected/actual panel counts.
+- **Falsifier** — did the falsifier above fire, yes or no? If no, what would still have to be true
+  for this result to be an artifact rather than a real improvement. Say it even when the numbers
+  look good.
 - **Salvage** — the one idea from this attempt that belongs in somebody else's next round, whether
   or not your own diff worked.
 - **Friction** — anything in the tooling that behaved wrongly, cost you far more time than it
@@ -56,6 +98,8 @@ REPORT — write `<RUNDIR>/REPORT.md`, then stop. Colloquial, not a wall of numb
 
 If the tooling misbehaves, do **not** fix it and do **not** block on it: note it in Friction with
 the exact repro commands and their tee'd output paths, work around it, and finish your round.
+
+Write every file as UTF-8, not UTF-16; the orchestrator reads them with plain tools.
 
 Commit your diff and your report by pathspec so a crash costs nothing. Leave the tree committed and
 clean. Then go idle. Work autonomously; do not ask questions.

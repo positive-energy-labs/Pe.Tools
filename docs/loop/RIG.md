@@ -1,14 +1,19 @@
 # The delegated convergence loop
 
-A rig for running an unattended, multi-agent push at a measurable frontier. You are the
-orchestrator. **You never write code.** Everything that touches the tree is delegated.
+A rig for an unattended, multi-agent push at a **measurable frontier**. You are the orchestrator.
+**You never write code.** Everything that touches the tree is delegated.
 
-The spirit is `demiurge` + `find-the-product` + `prototype`: **fan out on everything plausible at
-once, let the metric and the eye kill most of it, keep the survivors, repeat.** A round that
-retires nothing and narrows nothing produced no information — that is the failure mode this rig
-exists to avoid, and it is why builders go wide and simultaneous rather than deep and sequential.
+The seed idea: **fan out on everything plausible at once, let the metric and the eye kill most of
+it, keep the survivors, repeat.** A round that retires nothing and narrows nothing produced no
+information. That is the failure mode this rig exists to avoid, and it is why builders go wide and
+simultaneous instead of deep and sequential.
 
-Fill in the mission block, then start at Round 0. Nobody will answer questions while this runs.
+A builder is cheap and disposable. Reaching for the keyboard yourself is the expensive mistake: it
+burns your context on implementation history, which is the contamination that makes you a worse
+judge of the work.
+
+This document is not an authority on your mission. It seeds the loop and names the traps. Read
+`BRIEF`, `TASTE`, and `LEDGER` for what is true.
 
 ---
 
@@ -16,19 +21,11 @@ Fill in the mission block, then start at Round 0. Nobody will answer questions w
 
 | Role | Who | Edits code | Lives |
 |---|---|---|---|
-| **orchestrator** | you (Fable) | never | the session kaitpw opened |
-| **builders** `b1..bN` | Codex, reasoning **high** | yes, only in their own worktree | one Herdr session per worktree |
-| **idea** | Claude Opus 5, medium | never | the standing session, spawned when needed |
-| **eyes** | Claude Opus 5, medium — **fresh instance every time, never reused** | never | spawned per checkpoint, stopped after |
-| **sdkfix** | Codex | yes, in the SDK worktree only | the standing session |
-
-Your job is the frontier, the fan-out, the cherry-pick, and the ledger. You read reports, numbers,
-and diffs; you merge; you decide. You do not implement, do not run the solver, do not hand-fix a
-builder's diff. If a winner needs a change, that is a builder's next round.
-
-A builder is cheap and disposable. Reaching for the keyboard yourself is the expensive mistake:
-it burns your context on implementation history, which is exactly the contamination that makes you
-a worse judge of the work.
+| **orchestrator** | you | never | the session kaitpw opened |
+| **builders** `b1..bN` | Codex, reasoning **high** | own worktree only | one Herdr session per worktree |
+| **idea** | Claude Opus 5, medium | never | standing session, spawned when dry |
+| **eyes** | Claude Opus 5 — **fresh every time, never reused** | never | spawned per checkpoint, stopped after |
+| **sdkfix** | Codex | SDK worktree only | standing session |
 
 ---
 
@@ -40,225 +37,275 @@ BASE         <abs path to the base worktree>            BRANCH  <branch>
 BRIEF        <the standing brief doc>                   TASTE   <the doc whose verdicts outrank the metric>
 LEDGER       <docs/features/<name>/LEDGER.md — Decided / Tried & rejected / Owed>
 CURRENCY     <exact command that prints the number, and which number it is>
+SECONDARY    <the numbers that must be read on the same line as CURRENCY — see Gotchas>
 GATES        <exact command(s) that must be green; the honesty bar no candidate may lower>
+DECIDER      metric-first | checkpoint-visual | visual-first
+VISUAL       <exact export command, expected panel set, and review cadence>
+PLATEAU      <the numeric and visual dry rule that ends the mission>
 BACKLOG      <where hypotheses come from today>
 BIG_MOVE     <the metric delta that earns an image checkpoint>
-FLAT_RULE    metric-only | eyes-can-carry   (eyes-can-carry: a flat-CURRENCY candidate may adopt on a
-             visual ADOPT if a NAMED secondary number moved; name the number here)
+FLAT_RULE    metric-only | eyes-can-carry   (eyes-can-carry: flat CURRENCY may adopt on a visual
+             ADOPT if a NAMED secondary number moved; name it here)
 WIDTH        <builders per round>                       TIMEBOX <minutes per builder per round>
 AMBITION     knobs-first | code-first   (code-first: builders may restructure stages and models;
-             gates and honesty bars are still untouchable)
+             gates and honesty bars stay untouchable)
 RUNS         <abs dir where every round's artifacts land>
 ```
 
-Anything not in that block is loop, and the loop below does not change per mission.
+Anything not in that block is loop, and the loop does not change per mission.
 
-<details><summary>The filled block for the 2026-08-21 run (loop2)</summary>
+`metric-first` means the metric adopts and the eye can veto at configured checkpoints.
+`checkpoint-visual` means intermediate grafts are provisional until a delegated visual checkpoint
+adopts the block. `visual-first` means every candidate needs a visual verdict before graft. Do not
+compress visible quality into one scalar just to fill `CURRENCY`.
+
+<details><summary>The filled block for the 2026-08-21 run (loop2) — an example, not a template</summary>
 
 ```
 MISSION      Raise accepted coverage on project-a by making more geometry honestly pass the existing
-             gates - never by loosening gates. Reframed off THINK-3: the dead backlog is dead.
+             gates - never by loosening gates.
 BASE         C:\Users\kaitp\source\repos\Pe.Tools-takeoff-frontier   BRANCH  takeoff-frontier
 BRIEF        docs/features/takeoffs/TUNING.md                        TASTE   TASTE.md (repo root of BASE)
 LEDGER       docs/features/takeoffs/LEDGER.md
 CURRENCY     python eval/rhvac/score-looks-good.py score <run>/report.json -> board v1.1 savedWork
-             secondary (named, for FLAT_RULE): accepted double-line residue ft (r7: 980.7),
-             per-room edgeOnInk, accepted rooms / sf
-GATES        dotnet test source/Pe.Takeoff.Tests -c Debug (143 green at r7), and no already-accepted
-             room's edgeOnInk falls by more than 0.005 (per room; zone/board means are diagnostic)
-BACKLOG      THINK-3 + ADDENDUM reframe (.artifacts/runs/overnight/), the three 2026-08-21 taste
-             rulings in TASTE.md, LEDGER Owed. Not the TUNING H1..H5 lines - THINK-3 closed them.
+SECONDARY    accepted rooms / accepted sf / residue ft, from the BOARD line. savedWork credits HELD
+             area, so it moves without any product win. Never read it alone.
+GATES        dotnet test source/Pe.Takeoff.Tests -c Debug (143 green), and no already-accepted room's
+             edgeOnInk falls by more than 0.005
+DECIDER      metric-first
+VISUAL       compare-zone-runs.py; report-card zones at BIG_MOVE checkpoints
+PLATEAU      dry reframe round after two dry rounds
 BIG_MOVE     savedWork +0.010 cumulative since the last checkpoint
 FLAT_RULE    eyes-can-carry; secondary = accepted double-line residue ft
 WIDTH        3                                          TIMEBOX 60
-AMBITION     code-first. No Revit: raster lane only, Revit stays at zero.
-RUNS         C:\Users\kaitp\source\repos\Pe.Tools-takeoff-frontier\.artifacts\runs\loop2\
-             baseline = ..\overnight-r7\report.json (savedWork 0.3736, immutable r0 anchor 0.3660)
+AMBITION     code-first. No Revit: raster lane only.
+RUNS         ...\.artifacts\runs\loop2\   baseline = ..\overnight-r7\report.json (savedWork 0.3736)
 ```
+
+Result: 9 builder lanes, 3 rounds, 0 adopted, closed dry. Three mechanisms falsified. That is a
+legal outcome of this rig, and the reason the `FALSIFIED` verdict below exists.
 </details>
-
----
-
-## Herdr, the minimum you need
-
-One session per worktree; panes inside it are named agents. The scripts live in the main checkout at
-`C:\Users\kaitp\source\repos\Pe.Tools\.claude\skills\execute\`:
-
-```
-herdr-up.ps1   <session> <cwd> <name>:<kind>[:<model>] ...   # idempotent; creates server, workspace, panes
-herdr-send.ps1 <session> <name> <abs path to prompt file>    # one hop, verified delivered
-herdr-wait.ps1 <session> <name> <timeout ms>                 # background it; its verdict is the truth
-```
-
-`<kind>` is `codex` or `claude`; `<model>` maps to `--model`, so builders are `b1:codex`, the thinker
-is `idea:claude:opus`, a reviewer is `rev3:claude:opus`.
-
-Non-negotiable mechanics, all of which have burned somebody: pass `--session <S>` on **every**
-`herdr` command and never rely on the default session or `--current`. Health comes from
-`agent list` — `idle`/`done` means complete, `blocked` means it needs input, `unknown` proves
-nothing. One prompt owner per agent: if you send while a builder is mid-task you have corrupted its
-round. Never drive slash commands through `send-text` from Git Bash; `agent prompt` owns `/`. To
-redirect an agent urgently, `send-keys <name> esc`, verify it settled, then re-prompt. Read the
-version-matched manual with `herdr --skill` before improvising.
-
-Stand up a standing session on `BASE` for `idea`, `eyes`, and `sdkfix`; stand up one throwaway
-session per builder worktree per round and tear it down when the round ends.
-
-The full mechanics are in the main checkout's `execute` skill — read the "Herdr", "Sessions and hot
-reload", and "Documents and op receipts" sections there, not a worktree's copy, which will be stale.
 
 ---
 
 ## Round 0 — establish the floor
 
-Delegate it to one builder. It ends with: the base worktree green on GATES, one baseline run
-snapshotted under `RUNS/r0/`, the CURRENCY number recorded, and a committed tree. Read `BRIEF`,
-`TASTE`, and `LEDGER` yourself while that runs — you need the tombstones. **Never re-try a
-tombstone without new evidence.**
+Delegate it to one builder. It ends with: `BASE` green on GATES, one baseline run under `RUNS/r0/`,
+the CURRENCY number recorded, and a committed tree. Read `BRIEF`, `TASTE`, and `LEDGER` yourself
+while it runs — you need the tombstones. **Never re-try a tombstone without new evidence.**
 
-If the baseline number disagrees with what the docs claim it is, that is Round 0's real finding.
-Stop and say so in `RUNS/SUMMARY.md`; a wrong baseline poisons every comparison after it.
+If the baseline number disagrees with the docs, that is Round 0's real finding. Stop and say so; a
+wrong baseline poisons every comparison after it.
 
-Round 0 also owes three things the first run learned the hard way:
+Round 0 also owes:
 
-- **Identity check.** Run the baseline twice, no-op. Room ids, dispositions, and polygons must be
-  byte-identical, or the per-room honesty bar is undefined and every A/B on that fixture is noise.
-  If it fails, the first fan-out's top hypothesis is "make identity stable / additive-only
-  candidate path", not coverage.
-- **Merge audit.** If `BASE` is a branch behind `main`, the merge that brought it current is
-  audited (conflict files named, resolution read) before any fan-out builds on it.
-- **Taste closure.** Every open "FOR kaitpw" call from the last `SUMMARY.md` gets a TASTE line -
-  kaitpw's answer, or a recorded default with the date. No fan-out runs over an unanswered taste
-  question; builders would otherwise build on a coin flip.
+- **Identity check.** Run the baseline twice, no-op. Ids, dispositions, and geometry must be
+  byte-identical, or the per-unit honesty bar is undefined and every A/B is noise. If it fails, the
+  first fan-out's top hypothesis is "make identity stable", not coverage.
+- **Merge audit.** If `BASE` is behind `main`, the merge that brought it current is audited before
+  any fan-out builds on it.
+- **Taste closure.** Every open "FOR kaitpw" call from the last `SUMMARY.md` gets a TASTE line —
+  kaitpw's answer, or a recorded default with the date. No fan-out runs over a coin flip.
+- **Visual identity.** Generate the complete baseline bundle twice. The manifest, expected panel
+  count, inputs, fit, and pixels must match. Missing or unreadable panels make the visual lane red.
+- **Rubric calibration.** Name visible defects from concrete baseline examples. Do not invent a
+  score yet. The reviewer needs defect names and precedence, not weights.
 
-Round 0 and Round 1 may overlap when the baseline snapshot already exists on disk and Round 1's
-slate does not depend on the identity check; the cost of being wrong is one round.
+## Proof contract
+
+- **GATES** prove legality and honesty. They never claim that an output looks good.
+- **CURRENCY and SECONDARY** measure coverage, defect counts, and cost. They rank work and expose
+  regressions. Keep the vector; do not hide disagreement in a weighted mean.
+- **VISUAL** is the exact output under review. It includes every expected unit, not only changed or
+  favorable units.
+- Under `DECIDER = visual-first`, green gates plus a visual ADOPT are required. A metric gain alone
+  cannot graft. Under `checkpoint-visual`, metrics may graft provisionally but no phase or baseline
+  becomes final before a visual ADOPT. Under `metric-first`, the configured checkpoint can veto.
 
 ---
 
-## Round N — fan out, harvest, cherry-pick, graft
+## Round N — fan out, harvest, verdict, graft
 
-**1. Fan out.** Pick **3–5 hypotheses that are mutually exclusive in mechanism**, not variations of
-one idea. Overreach deliberately on at least one; a slate pruned for feasibility teaches nothing.
-Rank them from `BACKLOG`, the last `idea` report, and the losers' salvaged ideas from last round.
+**1. Fan out.** Pick 3–5 hypotheses. Overreach deliberately on at least one; a slate pruned for
+feasibility teaches nothing.
 
-Each builder gets its own worktree and its own Herdr session, because they will collide on the same
-artifact paths otherwise:
+> **Each lane must name the SEAM it touches** — the one place in the system where its mechanism
+> acts. **Reject a slate where two lanes name the same seam.** "Mutually exclusive in mechanism" is
+> not self-enforcing: loop2 ran four lanes that all died at the same seam, and nobody saw it until
+> the idea lane tabulated them after the fact.
+
+Each builder gets its own worktree and its own Herdr session, or they collide on artifact paths:
 
 ```
 git -C BASE worktree add ../<repo>-r<N>b<k> -b <branch>-r<N>b<k>
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\kaitp\source\repos\Pe.Tools\.claude\skills\execute\herdr-up.ps1 <mission>-r<N>b<k> <that worktree> b<k>:codex
+powershell -NoProfile -ExecutionPolicy Bypass -File <execute skill>\herdr-up.ps1 <mission>-r<N>b<k> <that worktree> b<k>:codex
 powershell ... herdr-send.ps1 <mission>-r<N>b<k> b<k> <abs path to the filled p-builder.md>
 ```
 
-Send all of them before waiting on any of them. Then background one waiter per builder
-(`herdr-wait.ps1 <session> b<k> 3600000`) and wait on the set.
+Keep the `<repo>-r<N>b<k>` naming prefix — it is what makes bulk teardown safe next to worktrees you
+did not create. Send all builders before waiting on any. Then background one waiter each.
 
-**2. Harvest.** A builder that hits `TIMEBOX` writes its report with what it has (`Gates: NOT RUN`
-is a legal line) and stops; a timeboxed builder is a data point about the mechanism's cost, not a
-failure to hide. Each builder wrote `RUNS/r<N>b<k>/REPORT.md`: one paragraph of claim, the score
-table against the current baseline, the gate results, and a falsifier. Read the reports and the
-diffs. **A pasted proof is a claim until you re-run it** — for the candidate you intend to adopt,
-re-run CURRENCY and GATES yourself in its worktree before merging.
+**2. Harvest.** Each builder wrote `RUNS/r<N>b<k>/REPORT.md`. A builder that hits `TIMEBOX` writes
+what it has (`Gates: NOT RUN` is a legal line); a timeboxed builder is a data point about cost.
 
-**3. Cherry-pick.** Adopt at most one mechanism per round. Adopt only if CURRENCY improves, GATES
-are green, and the honesty bar held. A tie with no gain is a reject. Then read the losers for parts:
-a rejected mechanism often contains one idea that belongs in a winner. Name those explicitly — they
-are next round's fan-out, and salvaging them is most of the value of running wide.
+> **Verify wins. Trust declared losses.** A pasted proof is a claim until you re-run it — re-run
+> CURRENCY and GATES yourself for the candidate you intend to adopt. But a report whose own
+> falsifier fired needs no re-verification. Re-scoring a self-declared loss costs a round and buys
+> nothing.
 
-**4. Graft.** Merge the winner into `BRANCH`, in dependency order if more than one landed. One dated
-line in `LEDGER` per outcome: Decided for the adopted mechanism, Tried & rejected for each loser with
-its numbers and the reason. The winner becomes the new baseline. Remove the round's worktrees
-(`herdr session stop` first — the pane holds the directory) and let their branches die.
+**3. Verdict.** One per lane, at most one ADOPT per round:
 
-**5. Rewrite `RUNS/SUMMARY.md` every round, overwriting.** The morning read must always be current.
-Colloquial, not a wall of numbers: where the frontier is, what moved it, what is now believed dead,
-and the open calls for kaitpw with your recommended default for each.
+| Verdict | When | Ticks the dry counter |
+|---|---|---|
+| **ADOPT** | the mission's DECIDER approved it, GATES green, honesty bar held | no |
+| **FALSIFIED** | the lane's stated falsifier fired — the mechanism is now proven not to be the lever | **no** |
+| **REJECT** | it regressed, or it produced no information | yes |
+
+`FALSIFIED` is the verdict this rig was missing. A proof of absence is expensive, real, and reusable
+— it retires a direction permanently. Counting it as dryness stops the frame exactly when it has
+finally started to learn. Write the falsification into `LEDGER` as a tombstone with its evidence.
+
+A tie with no gain is a REJECT. Then read the losers for parts: a rejected mechanism often carries
+one idea that belongs in a winner. Name those — they are next round's fan-out.
+
+**4. Graft.** Merge the winner into `BRANCH`. One dated `LEDGER` line per outcome. The winner is the
+new baseline. Then tear down: **`herdr session stop <name>` FIRST** — the pane holds the directory
+and `rm -rf` fails with a permission error that never mentions the session — then remove the
+worktree, `git worktree prune`, delete the branch.
+
+**5. Rewrite `RUNS/SUMMARY.md` every round, overwriting.** The morning read must always be current:
+where the frontier is, what moved it, what is now dead, and open calls for kaitpw with your
+recommended default for each.
+
+Append one short line to `RUNS/TIMELINE.md` after every meaningful event:
+
+```
+<utc> | <phase/round> | <event> | <evidence path or commit>
+```
+
+Never rewrite it. Keep each field to one phrase so it survives a long session without becoming a
+second report.
 
 ---
 
-## The image checkpoint
+## Visual review
 
-Deterministic gates run every round. **The eye runs rarely** — only when the metric moved enough
-that a human would want to look:
+Under `DECIDER = visual-first`, every candidate that clears GATES gets a complete visual bundle and
+a verdict before graft. Metrics decide review order, not adoption. The reviewer sees the frozen
+rubric, manifest, and images, but never the hypothesis or builder narrative.
 
-> Fire a checkpoint when the cumulative adopted CURRENCY delta since the last checkpoint reaches
-> `BIG_MOVE`, when any single adopted round exceeds the largest adopted delta so far, or **before
-> graft** on any single round whose delta is at least `BIG_MOVE / 2` (the metric rewarded new bad
-> walls twice in the first run; a big single jump is exactly when the metric is least trusted).
+Under `DECIDER = checkpoint-visual`, do not summon eyes every wave. Generate a complete bundle and
+use a fresh delegated reviewer at baseline calibration, a large cumulative metric move, a named
+focused investigation, each phase boundary, and plateau. Intermediate grafts stay provisional; a
+checkpoint REJECT unwinds the whole block to the last visually adopted baseline.
 
-Under `FLAT_RULE = eyes-can-carry` a candidate with flat CURRENCY, green GATES, honesty held, and
-the named secondary number moved the right way is **eligible**, not adopted: it earns an immediate
-checkpoint of its own, and adopts only on that ADOPT. Flat plus nothing named is still a reject.
+Under `DECIDER = metric-first`, deterministic gates run every round and the eye runs at checkpoints:
 
-At a checkpoint the whole fan-out **stops** until the verdict lands. Spawn a fresh `eyes` (a name
-never used before), send it `p-eyes.md` filled in, and let it see **only the panels and the
-comparison — never your narrative, never the reports**. A stranger who knows nothing about why the
-change was made is the only reviewer whose praise means anything.
+> Fire a checkpoint when cumulative adopted CURRENCY delta since the last checkpoint reaches
+> `BIG_MOVE`, when a single adopted round exceeds the largest adopted delta so far, or **before
+> graft** on any round whose delta is at least `BIG_MOVE / 2`. A big single jump is exactly when the
+> metric is least trusted.
 
-The price of looking rarely is that a REJECT unwinds the **whole block since the last checkpoint**,
-not just the last round. Take the whole block back to the last checkpointed commit, record every
-rolled-back mechanism as Tried & rejected with the reviewer's words verbatim, and treat the
-reviewer's specific complaint as the highest-ranked hypothesis of the next fan-out. That cost is the
-reason `BIG_MOVE` is a real number and not "whenever it feels big".
+Under `FLAT_RULE = eyes-can-carry` a flat-CURRENCY candidate with green GATES, honesty held, and the
+named secondary moved is **eligible**, not adopted: it earns a checkpoint of its own and adopts only
+on that ADOPT. Flat plus nothing named is still a reject.
 
-Stop the `eyes` pane when its verdict is read. Never reuse one.
+The whole fan-out **stops** until the verdict lands. Spawn a fresh `eyes` (a name never used
+before), send it `p-eyes.md`, and let it see **only the panels and the comparison — never your
+narrative, never the reports**. A stranger who knows nothing about why the change was made is the
+only reviewer whose praise means anything. Stop the pane when the verdict is read.
+
+The price of looking rarely: a REJECT unwinds the **whole block since the last checkpoint**. Record
+every rolled-back mechanism with the reviewer's words verbatim, and treat the reviewer's complaint
+as the top hypothesis of the next fan-out.
+
+The visual bundle is red before judgment if any expected panel is absent, unreadable, stale, or
+rendered with different inputs, crop, fit, or layers across A and B. The manifest records hashes for
+all inputs and outputs. Preserve the exact reviewed export path in the verdict.
+
+Use three views without confusing their jobs:
+
+1. The contact sheet proves that every expected unit exists.
+2. The focus atlas is the primary review surface. It contains a tight A/B crop for every changed
+   boundary component and every flagged defect.
+3. Full-unit panels provide context on demand. They do not replace focused review.
+
+The manifest maps every changed component to at least one focus panel. A change with no focus panel
+makes the bundle incomplete.
 
 ---
 
 ## When the fan-out goes dry
 
-Two consecutive rounds where nothing adopts, or a round whose whole slate came back "no effect", is
-not a signal to try harder in the same direction. It is a signal that the frame is wrong.
+Two consecutive rounds where nothing adopts **and nothing was falsified** means the frame is wrong,
+not that the builders were lazy.
 
 Spawn `idea` with `p-idea.md`. It thinks; it never edits, never runs the solver, never commits. It
-returns a ranked reframe: what the evidence now says the real lever is, which backlog lines it
-declares dead, and what it would need to see to change its mind. Rebuild the next fan-out from that
-report. If it says a line of work is dead, stop that line.
+returns a ranked reframe: what the evidence says the real lever is, which lines it declares dead,
+and what would change its mind. Rebuild the next fan-out from that report.
 
-If `idea` says the backlog is dry **and** the last two rounds adopted nothing, write the final
-`SUMMARY.md` and go idle with a clean tree. Stopping on a dry frontier is a result. Grinding out
-four more rejected rounds is not.
+**If the reframed round also adopts nothing, test `PLATEAU`.** Stop only when its numeric and visual
+conditions both hold. Stopping on a dry frontier is a result. Grinding out four more rejected
+rounds is not.
+
+---
+
+## Gotchas
+
+The ones that cost real time. Add to this list; it is the most valuable part of the file.
+
+**The currency lies.** A score that credits work-in-progress, held, or deferred units moves without
+any product win. Read CURRENCY next to `SECONDARY` on the same line, every time. In loop2 this
+nearly adopted a change whose accepted geometry was byte-identical to baseline.
+
+**Silence reads as success.** A comparison tool that emits zero panels when nothing changed, a test
+wrapper that returns before the runner prints its summary, a diff tool that reports drift from noise
+you do not care about — each has already fooled a builder into reporting a win. Name every one you
+find in `p-builder.md` **before** the round, not after.
+
+**Environment**
+
+| Trap | Rule |
+|---|---|
+| Codex writes UTF-16 | `iconv -f UTF-16 -t UTF-8 <file> \|\| cat <file>`; tell builders to write UTF-8 |
+| Worktree `rm -rf` → Permission denied | stop the Herdr session first |
+| Terminal wrapper default is 10 s | one command per call; never chain scoring commands |
+| Bash background cap is 600 s | a 60-min builder is this rig's supervisable maximum |
+| `rg` + wildcard in an abs Windows path | os error 123 — use `rg -g "pat*" <dir>` |
+| Unquoted heredoc | `<<'PYEOF'` always |
+| `herdr` default session | pass `--session <S>` on **every** command; `agent list` is the only truthful health signal |
 
 ---
 
 ## Tooling defects — delegate, never fix, never block
 
-When the SDK, the host, or the harness misbehaves: do not fix it, do not work around it silently,
-and do not let it stall the round.
+**A defect named in any report must exist as a queue file first.** A defect described in prose and
+never filed is a defect nobody is working on.
 
-**The rule that was broken last time: a defect named in any report must exist as a queue file
-first.** A defect described in prose and never filed is a defect nobody is working on, and it will
-still be open in the morning while the report implies it was handled.
-
-Write `<queue dir>/<NN>-<slug>.md` containing only: the problem in two sentences, the exact repro
-commands with their tee'd output paths, and the expected behavior. Send it to `sdkfix`. Continue the
-round with a workaround or a different hypothesis. `sdkfix` owns the whole reproduce → fix → gate →
-release → re-pin cycle and drops `<NN>-<slug>.done.md` beside your file.
+Write `<queue dir>/<NN>-<slug>.md`: the problem in two sentences, the exact repro with tee'd output
+paths, the expected behavior. Send it to `sdkfix`. Continue the round with a workaround. `sdkfix`
+owns reproduce → fix → gate → release → re-pin and drops `<NN>-<slug>.done.md` beside your file.
 
 ---
 
 ## Rules that do not bend
 
-- Never touch `C:\Users\kaitp\source\repos\Pe.Tools` (the main checkout — kaitpw's uncommitted work
-  lives there) except to **read** skills and **run** the `herdr-*.ps1` scripts.
+- Never touch the main checkout (kaitpw's uncommitted work lives there) except to **read** skills
+  and **run** the `herdr-*.ps1` scripts.
 - Never `git add -A`, never `commit -a`. Commit by pathspec.
-- Never loosen a gate constant, a threshold, or an honesty bar to make a candidate pass. The mission
-  is to make more things honestly pass the gates that exist.
+- Never loosen a gate constant, threshold, or honesty bar to make a candidate pass.
 - Never leave an unadopted diff in a tree. Reject means revert, now.
 - Never reuse an `eyes`. Never let a builder decide adoption. Never implement anything yourself.
 - Every round boundary leaves a committed tree and a written report, so a crash costs one round.
-- Verdicts that matter to kaitpw go in `LEDGER` and nowhere else — not in commit messages, not only
-  in `SUMMARY.md`.
-- Time on task that felt wrong is signal. Builders are told to report it; you surface it in
-  `SUMMARY.md`. A subagent grinding for an hour on something that should have taken ten minutes is
-  telling you the architecture is bad, and its judgment is worth more than yours there because its
-  context is not contaminated by why the thing is shaped that way.
+- Verdicts that matter to kaitpw go in `LEDGER` — not in commit messages, not only in `SUMMARY.md`.
+- Time on task that felt wrong is signal. A subagent grinding for an hour on a ten-minute job is
+  telling you the architecture is bad, and its judgment beats yours there because its context is not
+  contaminated by why the thing is shaped that way.
 
 ## Prompts
 
 [p-builder.md](p-builder.md) · [p-idea.md](p-idea.md) · [p-eyes.md](p-eyes.md) ·
 [p-sdkfix.md](p-sdkfix.md)
 
-Copy the prompt, fill its `<...>` slots, write it into the round's run dir, and send that filled
-copy. Never send the template.
+Fill the `<...>` slots, write the filled copy into the round's run dir, send that. Never send the
+template. Assert no `<SLOT>` token survives — an unfilled slot has already shipped once.

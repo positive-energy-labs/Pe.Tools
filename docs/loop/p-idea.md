@@ -15,6 +15,14 @@ record of what somebody once thought was promising; it is not the territory.
 
 Write `<THINKFILE>` with exactly these sections:
 
+**LANES** — one row per builder lane that has run, oldest first. Fill it before you think; the
+pattern is usually in the last column and invisible without the table.
+
+| lane | mechanism | seam it touched | verdict | where it died |
+|---|---|---|---|---|
+
+Two lanes that died at the same seam are one lane. Say so.
+
 **TAUGHT** — what the rejected rounds actually established. Not "H3 didn't work" but what the world
 must be like for H3 to have failed the way it did. Name the pattern across failures if there is one.
 
@@ -22,8 +30,11 @@ must be like for H3 to have failed the way it did. Name the pattern across failu
 kills it. Be willing to kill a lot. An unpruned backlog is why the loop is spinning.
 
 **NEXT** — three hypotheses, ranked, that are **mutually exclusive in mechanism** so they can be
-built simultaneously by different builders. For each: the mechanism in one sentence, the cheapest
-thing that would express it, the number it should move, and how much.
+built simultaneously by different builders. For each: the mechanism in one sentence, **the seam it
+touches** (no two may share one), the cheapest thing that would express it, the number it should
+move and by how much, the cheap measurement that would show the mechanism has room to act before
+any code is written, and **the falsifier** — the observation that proves the mechanism is not the
+lever, so the builder can stop early.
 
 **BLIND SPOT** — what the metric cannot see. If the honest answer is that the current currency has
 stopped tracking the thing kaitpw actually cares about, say that plainly and say what would.
