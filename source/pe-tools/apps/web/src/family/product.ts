@@ -1,11 +1,6 @@
-import type { Product } from "#/targeting/model";
+import type { Product, Verb } from "#/targeting/model";
 
-export const FAMILY_PRODUCT = (actions: {
-  open: () => Promise<string | void>;
-  save: () => Promise<string | void>;
-  capture: () => Promise<string | void>;
-  build: () => Promise<string | void>;
-}): Product => ({
+export const FAMILY_PRODUCT = (verbs: Record<"open" | "save" | "capture" | "build", Pick<Verb, "run" | "refuse">>): Product => ({
   key: "family",
   name: "family",
   links: [
@@ -31,13 +26,13 @@ export const FAMILY_PRODUCT = (actions: {
       key: "author",
       label: "author",
       verbs: [
-        { key: "open", label: "open", demands: ["profile"], run: actions.open },
+        { key: "open", label: "open", demands: ["profile"], ...verbs.open },
         {
           key: "save",
           label: "save profile",
           demands: ["profile"],
           commit: true,
-          run: actions.save,
+          ...verbs.save,
         },
       ],
     },
@@ -45,13 +40,13 @@ export const FAMILY_PRODUCT = (actions: {
       key: "evidence",
       label: "evidence",
       verbs: [
-        { key: "capture", label: "capture evidence", demands: ["session"], run: actions.capture },
+        { key: "capture", label: "capture evidence", demands: ["session"], ...verbs.capture },
         {
           key: "build",
           label: "build .rfa",
           demands: ["session", "profile"],
           commit: true,
-          run: actions.build,
+          ...verbs.build,
         },
       ],
     },

@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vite-plus/test";
 
 import { FAMILY_PRODUCT } from "#/family/product";
 
-const actions = () => ({ open: vi.fn(), save: vi.fn(), capture: vi.fn(), build: vi.fn() });
+const verbs = () => ({ open: { run: vi.fn() }, save: { run: vi.fn() }, capture: { run: vi.fn() }, build: { run: vi.fn() } });
 
 describe("FAMILY_PRODUCT", () => {
   it("declares the ruled terminals, stages, and panes", async () => {
-    const run = actions();
-    const product = FAMILY_PRODUCT(run);
+    const joined = verbs();
+    const product = FAMILY_PRODUCT(joined);
 
     expect(product.links.map(({ key, joiner, dir }) => ({ key, joiner, dir }))).toEqual([
       { key: "session", joiner: "editing", dir: "duplex" },
@@ -21,7 +21,7 @@ describe("FAMILY_PRODUCT", () => {
       "inspector",
     ]);
     await product.stages[0]!.verbs[0]!.run?.();
-    expect(run.open).toHaveBeenCalledOnce();
+    expect(joined.open.run).toHaveBeenCalledOnce();
   });
 
 });

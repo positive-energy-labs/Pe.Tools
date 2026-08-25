@@ -49,7 +49,7 @@ const make = (testFixture = fixture()) => {
     registry,
     settingsSlice,
     calls: testFixture.calls,
-    store: createFamilyStore({ registry, scope: { threadId: "thread-1" }, host: testFixture.host, search: { target: "", patch() {} }, slices: { settings: settingsSlice, family: familySlice } }),
+    store: createFamilyStore({ registry, scope: { threadId: "thread-1" }, host: testFixture.host, search: { target: "session:test", patch() {} }, slices: { settings: settingsSlice, family: familySlice } }),
   };
 };
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -85,7 +85,7 @@ describe("family route store", () => {
     const { store } = make({ ...testFixture, host });
     const capture = store.actions.capture();
     await tick();
-    await expect(store.actions.build("test.family.json")).rejects.toThrow("another verb is running");
+    await expect(store.actions.build()).rejects.toThrow("another verb is running");
     release({ ok: true, result: {} });
     await capture;
   });
@@ -106,6 +106,13 @@ describe("family route store", () => {
     const { registry, store } = make();
     await store.actions.capture();
     expect(registry.get(store.atoms.receipt)).toMatchObject({ verb: "capture", text: "capture" });
+  });
+
+  it("latches an unknown build outcome in the store receipt", async () => {
+    const { registry, store } = make();
+    store.actions.armBuild(); await store.actions.build();
+    expect(registry.get(store.atoms.receipt)).toMatchObject({ verb: "build", text: expect.stringContaining("OUTCOME UNKNOWN") });
+    expect(registry.get(store.atoms.armedBuild)).not.toBeNull();
   });
 
   it("projects feed initial, success, and failure states", async () => {

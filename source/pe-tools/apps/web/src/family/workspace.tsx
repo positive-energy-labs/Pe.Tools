@@ -137,13 +137,9 @@ import { Pane, PaneWorkspace } from "#/components/ui/pane";
 import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
 import {
-  BUILD_OUTCOME_UNKNOWN,
   BUILD_VERB,
   BuildStrip,
   buildOutputPath,
-  buildRefusals,
-  readBuildReceipt,
-  type BuildFacts,
 } from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
 import { NavStateCell, ProposedCell } from "#/family/marks";
@@ -535,72 +531,11 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
   const capturing = busy?.id === "capture";
   /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
   const armedBuild = useAtomValue(store.atoms.armedBuild);
-  const setArmedBuild = store.actions.setArmedBuild;
   const building = busy?.id === "build";
   const failure = useAtomValue(store.atoms.failure);
   /** A latched unknown outcome. Host failures stay on the core's failure channel. */
-  const buildSaid = useAtomValue(store.atoms.buildSaid);
-  const buildOutcome =
-    failure?.kind === "host" && failure.verb === "build"
-      ? { code: "host" as const, says: failure.message }
-      : buildSaid;
-  const setBuildSaid = store.actions.setBuildSaid;
-  const fields = useAtomValue(store.atoms.fields);
-
-  /** Fields staged onto `route:settings` but not yet written — unsaved by another route. */
-  const stagedCount = useMemo(
-    () => Object.values(fields).filter((field) => field.staged != null).length,
-    [fields],
-  );
-
-  /** Everything the ceremony reads, in one flat record. The predicates live in `#/family/build`. */
-  const buildFacts = useMemo<BuildFacts>(
-    () => ({
-      relativePath: lane.document?.relativePath ?? null,
-      versionToken: lane.document?.versionToken ?? null,
-      validation,
-      unsavedCount,
-      stagedCount,
-      boundTarget: target,
-      armedToken: armedBuild?.token ?? null,
-    }),
-    [lane.document, validation, unsavedCount, stagedCount, target, armedBuild],
-  );
-
-  /**
-   * A FRESH READ IS NOT A NEW DOCUMENT. Evidence arriving — from either crossing — has to reach the
-   * LIVE half of the draft, and must not touch the authored half: `lane.seedKey` deliberately does
-   * not move for a capture, because re-seeding would throw away edits in progress. A live value is
-   * a READING of Revit, not part of what you are editing, so it is folded in on its own.
-   */
-  /**
-   * THE COMMIT. Fires only from the armed strip, and only once its own predicates are silent — but
-   * it re-checks them here anyway, because the strip's arming is page state and this is the write.
-   */
-  const runBuild = async () => {
-    const relativePath = lane.document?.relativePath;
-    if (relativePath == null || armedBuild == null) return;
-    if (buildRefusals({ ...buildFacts, armedToken: armedBuild.token }).length > 0) return;
-    setBuildSaid(null);
-    const built = await store.actions.build(relativePath);
-    const receipt = readBuildReceipt(built.result);
-    if (receipt == null) {
-      // OUTCOME UNKNOWN, latched. `build_evidence` mutates outside the page — it writes a file —
-      // so an answer with no receipt is neither a success nor a refusal, and claiming either
-      // would be the surface inventing a fact about the disk.
-      setBuildSaid({ code: "unknown", says: BUILD_OUTCOME_UNKNOWN });
-      return;
-    }
-    // Disarm on the way out: the plan was spent, and a strip still armed against a token the
-    // build has already consumed would invite a second, differently-named .rfa.
-    setArmedBuild(null);
-  };
-
-  /** Re-arm against the file as it now stands. Writes nothing — the one exit every refusal shares. */
-  const replanBuild = () => {
-    setBuildSaid(null);
-    setArmedBuild({ token: lane.document?.versionToken ?? null, reason: "" });
-  };
+  const buildFacts = useAtomValue(store.atoms.buildFacts);
+  const buildOutcome = useAtomValue(store.atoms.buildOutcome);
 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
 
@@ -1742,9 +1677,7 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
               tone="commit"
               busy={building}
               disabled={lane.document == null || building}
-              onClick={() =>
-                setArmedBuild({ token: lane.document?.versionToken ?? null, reason: "" })
-              }
+              onClick={store.actions.armBuild}
               reason={
                 lane.document == null
                   ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
@@ -1767,15 +1700,10 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
         facts={buildFacts}
         familyName={world.familyName}
         count={world.paramRows.length}
-        onReasonChange={(reason) =>
-          setArmedBuild((previous) => (previous == null ? previous : { ...previous, reason }))
-        }
-        onCommit={() => void runBuild().catch(() => undefined)}
-        onCancel={() => {
-          setArmedBuild(null);
-          setBuildSaid(null);
-        }}
-        onReplan={replanBuild}
+        onReasonChange={store.actions.setBuildReason}
+        onCommit={() => void store.actions.build().catch(() => undefined)}
+        onCancel={store.actions.cancelBuild}
+        onReplan={store.actions.armBuild}
       />
       {drillIn ?? crossType}
     </Pane>
@@ -2176,12 +2104,9 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
     session: useAtomValue(store.feeds.session),
     profile: useAtomValue(store.feeds.profile),
   };
-  const settle = (run: () => Promise<unknown>) => run().then(() => undefined, () => undefined);
   const product = FAMILY_PRODUCT({
-    open: () => settle(() => store.actions.open(profile)),
-    save: () => settle(store.actions.save),
-    capture: () => settle(store.actions.capture),
-    build: () => settle(runBuild),
+    open: store.commandVerb("open", () => ({ documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: profile } })),
+    ...store.verbs,
   });
   const bindingState: BindingState = {
     bound: { session: target || null, profile: profile || null },

@@ -5,13 +5,14 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { familyRouteState, settingsRouteState, type FamilyDocument, type SettingsRouteDocument } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
-import type { BuildRefusal } from "#/family/build";
+import { BUILD_OUTCOME_UNKNOWN, buildRefusals, readBuildReceipt, type BuildFacts, type BuildRefusal } from "#/family/build";
 import { FAMILY_MODULE, type EvidenceSlice, type FamilyHost, type FamilySnapshot, type FieldState } from "#/family/host";
 import { familyLane } from "#/family/lane";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
 import { draftToPatches } from "#/family/project";
 import { mintSelector, sessionLabel } from "#/host/target";
 import { createRouteStoreCore, docAtom, feed, hostRead, type Scope, type Slice } from "#/state/route-store";
+import type { Verb } from "#/targeting/model";
 
 export interface SearchPort { readonly target: string; patch(partial: { target?: string }): void }
 type Setter<A> = A | ((previous: A) => A);
@@ -68,8 +69,7 @@ export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; s
   const picker = Atom.make<{ open: string | null; level: string | null; query: string }>({ open: null, level: null, query: "" }).pipe(owned("page/picker"));
   const seededRef = Atom.make(registry.get(lane).seedKey).pipe(Atom.autoDispose);
   const evidenceRef = Atom.make(registry.get(evidence)?.from.capturedAt ?? null).pipe(Atom.autoDispose);
-  const armedBuild = Atom.make<ArmedBuild>(null).pipe(owned("page/armed-build"));
-  const buildSaid = Atom.make<BuildRefusal | null>(null).pipe(owned("page/build-said"));
+  const armedBuild = Atom.make<ArmedBuild>(null).pipe(owned("page/armed"));
 
   const sessionsSource = runtime.atom(() => hostRead(["sessions"], deps.host.sessions));
   const sessionsResult = runtimeFactory.withReactivity(["sessions"])(Atom.swr(sessionsSource, { staleTime: "5 seconds", revalidateOnMount: false })).pipe(Atom.autoDispose);
@@ -99,6 +99,50 @@ export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; s
     if (!result.ok) throw Error(result.hint ?? result.error ?? fallback);
     return result;
   };
+  const buildFacts = Atom.make((get): BuildFacts => {
+    const current = get(lane);
+    return {
+      relativePath: current.document?.relativePath ?? null, versionToken: current.document?.versionToken ?? null,
+      validation: current.document ? (get(snapshot)?.validation ?? null) : null,
+      unsavedCount: current.document ? draftToPatches(current.document.model, get(draft), initialDraft(current.world)).length : 0,
+      stagedCount: Object.values(get(fields)).filter((field) => field.staged != null).length,
+      boundTarget: deps.search.target, armedToken: get(armedBuild)?.token ?? null,
+    };
+  }).pipe(owned("view/build-facts"));
+  const buildRefusal = () => {
+    const refusals = buildRefusals(registry.get(buildFacts));
+    return refusals.length ? refusals.map((refusal) => refusal.says).join(" · ") : registry.get(armedBuild) == null ? "arm build .rfa in the sheet pane first" : null;
+  };
+  type CommandName = "open" | "save" | "capture" | "build";
+  const keys: Record<CommandName, readonly string[]> = { open: ["settings"], save: ["settings"], capture: ["family"], build: ["family"] };
+  const writer = { async command(name: CommandName, input: unknown) {
+    if (name === "open") { expect(await deps.host.settingsCommand("open", input as Record<string, unknown>), "open failed"); return "opened"; }
+    if (name === "capture") { expect(await deps.host.familyCommand("capture_evidence", input as Record<string, unknown> | undefined), "capture failed"); return "capture"; }
+    if (name === "save") {
+      const current = registry.get(lane);
+      if (!current.document) { write("save", "page/draft", () => registry.update(draft, (value) => ({ ...value, dirty: false }))); return `saved ${current.world.path}`; }
+      const patches = draftToPatches(current.document.model, registry.get(draft), initialDraft(current.world));
+      if (!patches.length) return `Nothing to write - every value already matches ${current.document.relativePath}.`;
+      expect(await deps.host.settingsApply(patches), "the document rejected it"); expect(await deps.host.settingsCommand("save"), "save failed");
+      return `saved ${current.document.relativePath} - ${patches.length} field${patches.length === 1 ? "" : "s"} written`;
+    }
+    const refusal = buildRefusal(); if (refusal) throw Error(refusal);
+    const current = registry.get(lane).document!;
+    const result = expect(await deps.host.familyCommand("build_evidence", { documentId: { ...FAMILY_MODULE, relativePath: current.relativePath } }), "build failed");
+    const receipt = readBuildReceipt(result.result);
+    if (receipt == null) return BUILD_OUTCOME_UNKNOWN;
+    write("build", "page/armed", () => registry.set(armedBuild, null)); return `built ${receipt.rfaPath}`;
+  } };
+  const commandVerb = (name: CommandName, input: () => unknown = () => undefined): Pick<Verb, "run" | "refuse"> => ({
+    run: () => core.runVerb(name, () => writer.command(name, input()), keys[name]),
+    ...(name === "build" ? { refuse: buildRefusal } : {}),
+  });
+  const verbs = { save: commandVerb("save"), capture: commandVerb("capture"), build: commandVerb("build") };
+  const buildOutcome = Atom.make((get): BuildRefusal | null => {
+    const failure = get(core.failure); if (failure?.kind === "host" && failure.verb === "build") return { code: "host", says: failure.message };
+    const receipt = get(core.receipt); return receipt?.verb === "build" && receipt.text === BUILD_OUTCOME_UNKNOWN ? { code: "unknown", says: BUILD_OUTCOME_UNKNOWN } : null;
+  }).pipe(owned("view/build-outcome"));
+  const setArmed = (next: ArmedBuild) => write("arm-build", "page/armed", () => Atom.batch(() => { registry.set(armedBuild, next); if (registry.get(core.receipt)?.verb === "build") registry.set(core.receipt, null); }));
   const actions = {
     setDraft: (value: Setter<Draft>) => set("set-draft", draft, value), setOverlay: (value: Setter<Overlay>) => set("set-overlay", overlay, value),
     setTable: (value: Setter<MasterTableState>) => set("set-table", tableState, value), setDrill: (value: Setter<MasterTableState>) => set("set-drill", drillState, value),
@@ -107,31 +151,23 @@ export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; s
     setFocus: (value: Setter<Focus>) => set("set-focus", focus, value), setFocusedProposal: (value: Setter<string | null>) => set("set-focused-proposal", focusedProposal, value),
     setPinnedParam: (value: Setter<string | null>) => set("set-pinned-param", pinnedParam, value), setAnatomyCollapsed: (value: Setter<boolean>) => set("set-anatomy-collapsed", anatomyCollapsed, value),
     setInspect: (value: Setter<Inspect>) => set("set-inspect", inspect, value), setBinding: (value: Setter<Binding>) => set("set-binding", binding, value),
-    setArmedBuild: (value: Setter<ArmedBuild>) => set("set-armed-build", armedBuild, value), setBuildSaid: (value: Setter<BuildRefusal | null>) => set("set-build-said", buildSaid, value),
+    armBuild: () => setArmed({ token: registry.get(lane).document?.versionToken ?? null, reason: "" }),
+    cancelBuild: () => setArmed(null),
+    setBuildReason: (reason: string) => set("build-reason", armedBuild, (previous) => previous == null ? previous : { ...previous, reason }),
     setPicker(value: Setter<{ open: string | null; level: string | null; query: string }>) { set("set-picker", picker, value); },
     say(text: string) { write("say", "verb/receipt", () => registry.set(core.receipt, { verb: "page", text, at: Date.now() })); },
-    async save() {
-      return runVerb("save", async () => {
-        const current = registry.get(lane);
-        if (!current.document) { write("save", "page/draft", () => registry.update(draft, (value) => ({ ...value, dirty: false }))); return `saved ${current.world.path}`; }
-        const patches = draftToPatches(current.document.model, registry.get(draft), initialDraft(current.world));
-        if (!patches.length) return `Nothing to write - every value already matches ${current.document.relativePath}.`;
-        expect(await deps.host.settingsApply(patches), "the document rejected it");
-        expect(await deps.host.settingsCommand("save"), "save failed");
-        return `saved ${current.document.relativePath} - ${patches.length} field${patches.length === 1 ? "" : "s"} written`;
-      }, ["settings"]);
-    },
-    open(relativePath: string) { return runVerb("open", async () => expect(await deps.host.settingsCommand("open", { documentId: { ...FAMILY_MODULE, relativePath } }), "open failed"), ["settings"]); },
-    capture() { return runVerb("capture", async () => expect(await deps.host.familyCommand("capture_evidence"), "capture failed"), ["family"]); },
-    build(relativePath: string) { return runVerb("build", async () => expect(await deps.host.familyCommand("build_evidence", { documentId: { ...FAMILY_MODULE, relativePath } }), "build failed"), ["family"]); },
+    save: verbs.save.run!,
+    open(relativePath: string) { return commandVerb("open", () => ({ documentId: { ...FAMILY_MODULE, relativePath } })).run!(); },
+    capture: verbs.capture.run!, build: verbs.build.run!,
     bind(nextTarget: string) { return runVerb("bind", async () => { expect(await deps.host.familyApply([{ path: ["binding", "target"], value: nextTarget }]), "bind failed"); write("bind", "url/target", () => deps.search.patch({ target: nextTarget })); return `bound ${nextTarget}`; }, ["family", "profile"]); },
   };
   return {
     registry,
     search: deps.search,
     slices: { settings: settingsSlice, family: familySlice },
-    atoms: { lane, snapshot, fields, saved, draft, overlay, table: tableState, drill: drillState, docMode, docZoom, drillType, stageType, focus, focusedProposal, pinnedParam, anatomyCollapsed, inspect, binding, picker, armedBuild, buildSaid, busy: core.busy, failure: core.failure, receipt: core.receipt },
+    atoms: { lane, snapshot, fields, saved, draft, overlay, table: tableState, drill: drillState, docMode, docZoom, drillType, stageType, focus, focusedProposal, pinnedParam, anatomyCollapsed, inspect, binding, picker, armedBuild, buildFacts, buildOutcome, busy: core.busy, failure: core.failure, receipt: core.receipt },
     feeds: { session: sessionFeed, profile: profileFeed },
+    verbs, commandVerb,
     actions,
     dispose() { unsubscribeLane(); core.dispose(); },
   };
