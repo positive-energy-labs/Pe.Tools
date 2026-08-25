@@ -2,27 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { takeoffsRouteState } from "./takeoffs.ts";
 
-const ProjectASnapshot = {
-  world: {
-    docName: "project-a Residence.rvt",
-    r10Path: null,
-    lanes: [],
-    zones: [],
-    systems: [],
-  },
-  views: [],
-  zoneFrs: [],
-  regionsByZone: {},
-};
-
 describe("takeoffsRouteState", () => {
-  it("round-trips the project-a fixture snapshot", () => {
-    const document = {
+  it("defaults a new route document to no world", () => {
+    expect(takeoffsRouteState.schema.parse({ binding: { target: null } })).toEqual({
       binding: { target: null },
-      snapshot: ProjectASnapshot,
+      snapshot: null,
       staged: [],
-    };
-    expect(takeoffsRouteState.schema.parse(document)).toEqual(document);
+    });
   });
 
   it("allows staged proposals but rejects snapshot writes", () => {

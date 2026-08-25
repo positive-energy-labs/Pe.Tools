@@ -1,4 +1,4 @@
-import { Effect, Layer, Option } from "effect";
+import { Cause, Effect, Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -21,22 +21,23 @@ import {
   feed,
   hostRead,
   unbound,
+  type Feed,
   type Scope,
   type Slice,
   type TimedRead,
 } from "#/state/route-store";
-import type { AdoptItem } from "#/takeoff/scripts";
+import type {
+  AdoptItem,
+  PartitionArgs,
+} from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import {
   upsertResolution,
   type CandidateRegion,
   type PartitionRun,
   type Resolution,
 } from "#/takeoff/model";
-import type { PartitionArgs } from "#/takeoff/scripts";
 import {
   applyEdit,
-  buildLiveWorld,
-  emptyOverlay,
   readZoneMeta,
   STAGE_ORDER,
   type RoomEdit,
@@ -52,7 +53,6 @@ export type { TakeoffSnapshot } from "@pe/agent-contracts";
 export type TakeoffStage = "adopt" | "audit" | "sync";
 
 export interface TakeoffSearch {
-  readonly target: string;
   readonly source: "live" | "fixture";
   readonly view: string;
   readonly zones: readonly string[];
@@ -62,7 +62,6 @@ export interface TakeoffSearch {
 }
 
 export const EMPTY_TAKEOFF_SEARCH: TakeoffSearch = {
-  target: "",
   source: "live",
   view: "",
   zones: [],
@@ -97,7 +96,11 @@ export interface RhvacFile {
 
 export interface TakeoffHost {
   readonly fixture: boolean;
-  readSnapshot(session: SessionFacts, document: ActiveDocument): Promise<TakeoffSnapshot>;
+  readSnapshot(
+    session: SessionFacts,
+    document: ActiveDocument,
+    write: (snapshot: TakeoffSnapshot) => Promise<unknown>,
+  ): Promise<TakeoffSnapshot>;
   listRhvac(dir: string): Promise<RhvacFile[]>;
   openRhvac(path: string): Promise<unknown>;
   readCandidates(session: SessionFacts, view: string): Promise<CandidateRegion[]>;
@@ -326,12 +329,37 @@ const compare = (a: string | number | undefined, b: string | number | undefined)
   return String(a) < String(b) ? -1 : 1;
 };
 
+const snapshotFeed = (
+  result: AsyncResult.AsyncResult<TakeoffSnapshot | null, Error>,
+  options: (snapshot: TakeoffSnapshot) => Feed["options"],
+  needs: string,
+): Feed => {
+  if (AsyncResult.isInitial(result))
+    return { options: null, state: "loading", lane: "read", stale: false, seam: { needs } };
+  if (AsyncResult.isFailure(result))
+    return {
+      options: null,
+      state: "error",
+      lane: "read",
+      stale: false,
+      note: String(Cause.squash(result.cause)),
+      seam: { needs },
+    };
+  return {
+    options: result.value ? options(result.value) : null,
+    state: "ready",
+    lane: "read",
+    stale: result.waiting,
+    seam: { needs },
+  };
+};
+
 export function createTakeoffStore(deps: {
   host: TakeoffHost;
   sessions: SessionSource;
   search: SearchPort;
   registry: AtomRegistry.AtomRegistry;
-  scope?: Scope;
+  scope: Scope;
   slice?: Atom.Atom<AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>>;
   writer?: {
     apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
@@ -344,15 +372,13 @@ export function createTakeoffStore(deps: {
   const runtime = runtimeFactory(Layer.empty).pipe(Atom.autoDispose);
   // FOOTGUN: reads and core invalidation must share Atom.runtime's Reactivity memo map.
   Reflect.set(runtime.layer, "keepAlive", false);
-  const takeoffsSlice = deps.scope
-    ? core.owned("slice/takeoffs", deps.slice ?? docAtom(takeoffsRouteState, deps.scope))
-    : null;
-  const takeoffsWriter = deps.scope
-    ? (deps.writer ?? docWriter(takeoffsRouteState, deps.scope))
-    : null;
+  const takeoffsSlice = core.owned(
+    "slice/takeoffs",
+    deps.slice ?? docAtom(takeoffsRouteState, deps.scope),
+  );
+  const takeoffsWriter = deps.writer ?? docWriter(takeoffsRouteState, deps.scope);
   const searchAtom = Atom.make<TakeoffSearch>(EMPTY_TAKEOFF_SEARCH).pipe(owned("search"));
   const targetAtom = Atom.make((get) => {
-    if (!takeoffsSlice) return get(searchAtom).target;
     const result = get(takeoffsSlice);
     return AsyncResult.isSuccess(result) ? (result.value.doc?.binding.target ?? "") : "";
   }).pipe(owned("binding/target"));
@@ -417,18 +443,13 @@ export function createTakeoffStore(deps: {
   const decisionsAtom = Atom.make<Readonly<Record<string, "accept" | "dismiss">>>({}).pipe(
     owned("page/decisions"),
   );
-  const localStagedEditsAtom = Atom.make<Readonly<Record<string, StagedRoomEdit>>>({}).pipe(
-    Atom.autoDispose,
-  );
-  const stagedEditsAtom = takeoffsSlice
-    ? Atom.make((get): Readonly<Record<string, StagedRoomEdit>> => {
-        const result = get(takeoffsSlice);
-        if (!AsyncResult.isSuccess(result) || !result.value.doc) return {};
-        return Object.fromEntries(
-          result.value.doc.staged.map(({ roomId, ...edit }) => [roomId, { roomId, ...edit }]),
-        );
-      }).pipe(Atom.autoDispose)
-    : localStagedEditsAtom;
+  const stagedEditsAtom = Atom.make((get): Readonly<Record<string, StagedRoomEdit>> => {
+    const result = get(takeoffsSlice);
+    if (!AsyncResult.isSuccess(result) || !result.value.doc) return {};
+    return Object.fromEntries(
+      result.value.doc.staged.map(({ roomId, ...edit }) => [roomId, { roomId, ...edit }]),
+    );
+  }).pipe(Atom.autoDispose);
   const hoveredAtom = Atom.family((_id: string) =>
     Atom.make(false).pipe(Atom.autoDispose),
   );
@@ -471,38 +492,34 @@ export function createTakeoffStore(deps: {
   const activeDocumentResult = runtimeFactory
     .withReactivity(["active-document"])(activeDocumentSource)
     .pipe(Atom.autoDispose);
-  const snapshotSource = runtime
+  const snapshotProducerSource = runtime
     .atom((get) =>
       Effect.gen(function* () {
         const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
         if (!document.value) return unbound<TakeoffSnapshot | null>(null, document.basis);
         return yield* hostRead([document.value.session.sessionId, document.value.title], () =>
-          deps.host.readSnapshot(document.value!.session, document.value!),
+          deps.host.readSnapshot(document.value!.session, document.value!, async (snapshot) => {
+            const result = await takeoffsWriter.apply([{ path: ["snapshot"], value: snapshot }]);
+            if (!result.ok) throw Error(result.error ?? "snapshot write failed");
+          }),
         );
       }),
     )
     .pipe(Atom.autoDispose);
-  const sliceSnapshotResult = takeoffsSlice
-    ? Atom.make((get) =>
-        AsyncResult.map(
-          get(takeoffsSlice),
-          (slice) =>
-            ({
-              value: slice.doc?.snapshot ?? null,
-              at: Date.now(),
-              basis: ["slice/takeoffs"],
-              bound: slice.doc !== null,
-            }) satisfies TimedRead<TakeoffSnapshot | null>,
-        ),
-      ).pipe(Atom.autoDispose)
-    : null;
-  const snapshotResult = sliceSnapshotResult
-    ? sliceSnapshotResult
-    : runtimeFactory
-        .withReactivity(["snapshot"])(
-          Atom.swr(snapshotSource, { staleTime: "30 seconds", revalidateOnMount: false }),
-        )
-        .pipe(Atom.autoDispose);
+  const snapshotProducerResult = runtimeFactory
+    .withReactivity(["snapshot"])(
+      Atom.swr(snapshotProducerSource, { staleTime: "30 seconds", revalidateOnMount: false }),
+    )
+    .pipe(Atom.autoDispose);
+  const snapshotResult = Atom.make((get) => {
+    const slice = get(takeoffsSlice);
+    if (AsyncResult.isSuccess(slice) && slice.value.doc?.snapshot)
+      return AsyncResult.map(slice, (value) => value.doc!.snapshot);
+    const producer = get(snapshotProducerResult);
+    return AsyncResult.isSuccess(producer)
+      ? AsyncResult.map(slice, (value) => value.doc?.snapshot ?? null)
+      : AsyncResult.map(producer, () => null);
+  }).pipe(Atom.autoDispose);
   const candidatesSource = runtime
     .atom((get) =>
       Effect.gen(function* () {
@@ -600,21 +617,19 @@ export function createTakeoffStore(deps: {
     ),
   ).pipe(owned("feed/rvt"));
   const viewFeed = Atom.make((get) =>
-    feed(
+    snapshotFeed(
       get(snapshotResult),
       (snapshot) =>
-        snapshot?.views.map((view) => ({ id: view.name, label: view.name, sub: view.level })) ?? [],
-      "read",
-      { needs: TAKEOFF_LINKS[2]!.needs },
+        snapshot.views.map((view) => ({ id: view.name, label: view.name, sub: view.level })),
+      TAKEOFF_LINKS[2]!.needs,
     ),
   ).pipe(owned("feed/view"));
   const zonesFeed = Atom.make((get) =>
-    feed(
+    snapshotFeed(
       get(snapshotResult),
       (snapshot) =>
-        snapshot?.world.zones.map((zone) => ({ id: zone.zone.guid, label: zone.name })) ?? [],
-      "read",
-      { needs: TAKEOFF_LINKS[3]!.needs },
+        snapshot.world.zones.map((zone) => ({ id: zone.zone.guid, label: zone.name })),
+      TAKEOFF_LINKS[3]!.needs,
     ),
   ).pipe(owned("feed/zones"));
   const folderFeed = Atom.make((get) =>
@@ -635,28 +650,7 @@ export function createTakeoffStore(deps: {
   ).pipe(owned("feed/r10"));
   const authorityWorldAtom = Atom.make((get): World => {
     const result = get(snapshotResult);
-    const snapshot = AsyncResult.isSuccess(result)
-      ? result.value.value
-      : AsyncResult.isFailure(result)
-        ? Option.getOrUndefined(result.previousSuccess)?.value.value
-        : null;
-    if (!snapshot) return EMPTY_WORLD;
-    if (!snapshot.status) return snapshot.world;
-    const opened = get(r10Result);
-    const r10 = AsyncResult.isSuccess(opened)
-      ? opened.value.bound
-        ? opened.value.value
-        : null
-      : AsyncResult.isFailure(opened)
-        ? Option.getOrUndefined(opened.previousSuccess)?.value.value
-        : null;
-    return buildLiveWorld({
-      ...snapshot,
-      status: snapshot.status,
-      overlay: emptyOverlay(),
-      r10Path: get(r10PathAtom) || null,
-      r10: r10 as Parameters<typeof buildLiveWorld>[0]["r10"],
-    });
+    return AsyncResult.isSuccess(result) && result.value ? result.value.world : EMPTY_WORLD;
   }).pipe(Atom.autoDispose);
   const worldAtom = Atom.make((get): World => {
     const authority = get(authorityWorldAtom);
@@ -816,16 +810,14 @@ export function createTakeoffStore(deps: {
     ) => Readonly<Record<string, StagedRoomEdit>>,
   ) => {
     const next = update(registry.get(stagedEditsAtom));
-    return takeoffsWriter
-      ? write(verb, "slice/takeoffs/staged", () =>
-          takeoffsWriter.apply([
-            {
-              path: ["staged"],
-              value: Object.entries(next).map(([roomId, edit]) => ({ ...edit, roomId })),
-            },
-          ]),
-        )
-      : write(verb, "page/staged-edits", () => registry.set(localStagedEditsAtom, next));
+    return write(verb, "slice/takeoffs/staged", () =>
+      takeoffsWriter.apply([
+        {
+          path: ["staged"],
+          value: Object.entries(next).map(([roomId, edit]) => ({ ...edit, roomId })),
+        },
+      ]),
+    );
   };
   const clearStaging = () => {
     return replaceStaging("clear-staging", () => ({}));
@@ -875,8 +867,6 @@ export function createTakeoffStore(deps: {
             registry.set(boundAtom(id), after.has(id)),
           );
     });
-    if (!takeoffsSlice && (previous.target !== next.target || previous.view !== next.view))
-      clearStaging();
   };
   const unsubscribe = deps.sessions.subscribe((event) => {
     if (event.kind === "sessionsChanged") {
@@ -913,22 +903,12 @@ export function createTakeoffStore(deps: {
     }) {
       const current = registry.get(searchAtom);
       const nextTarget = patch.bound?.world ?? "";
-      if (
-        takeoffsWriter &&
-        current.source === "live" &&
-        patch.bound &&
-        nextTarget !== registry.get(targetAtom)
-      )
+      if (current.source === "live" && patch.bound && nextTarget !== registry.get(targetAtom))
         void takeoffsWriter.command?.("bind", { target: nextTarget || null });
       deps.search.patch({
         ...(patch.stage ? { stage: patch.stage as TakeoffStage } : {}),
         ...(patch.bound
           ? {
-              ...(!takeoffsWriter &&
-              current.source === "live" &&
-              patch.bound.world !== current.target
-                ? { target: patch.bound.world ?? "" }
-                : {}),
               view: patch.bound.view ?? "",
               dir: patch.bound.folder ?? "",
               r10: patch.bound.r10 ?? "",

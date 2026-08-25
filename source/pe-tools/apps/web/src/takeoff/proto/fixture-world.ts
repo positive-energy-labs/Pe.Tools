@@ -7,6 +7,7 @@
  */
 import type { SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { World, WorldRoom, WorldZone } from "#/takeoff/world";
+import { produceTakeoffSnapshot } from "../../../../../packages/mcps/src/shared/takeoff-ops.ts";
 
 import { loadMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
 import { mockWorld, type MockRoom, type MockWorld, type MockZone } from "./mock";
@@ -86,14 +87,16 @@ export const projectFixtureWorld = (fixture: MockWorld): World => ({
 
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
-  async readSnapshot() {
-    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
-    return {
-      world,
-      views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
-      zoneFrs: [],
-      regionsByZone: {},
-    };
+  readSnapshot(_session, _document, write) {
+    return produceTakeoffSnapshot(async () => {
+      const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
+      return {
+        world,
+        views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
+        zoneFrs: [],
+        regionsByZone: {},
+      };
+    }, write);
   },
   async listRhvac(dir) {
     return [{ path: `${dir}\\projectA.r10`, name: "projectA.r10" }];

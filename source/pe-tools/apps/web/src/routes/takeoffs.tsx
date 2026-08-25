@@ -68,7 +68,6 @@ const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 export const Route = createFileRoute("/takeoffs")({
   validateSearch: (search: Record<string, unknown>) => ({
-    target: str(search.target),
     source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
     view: str(search.view),
     zones: csv(search.zones),

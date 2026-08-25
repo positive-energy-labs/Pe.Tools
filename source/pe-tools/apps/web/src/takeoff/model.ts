@@ -8,6 +8,25 @@
  */
 import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
 import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
+import type {
+  DetectedRoom,
+  LiveRegion,
+  PartitionRun,
+  Resolution,
+} from "@pe/agent-contracts";
+
+export type {
+  CandidateRegion,
+  DetectedResidue,
+  DetectedRoom,
+  LiveRegion,
+  ModelStatus,
+  PartitionRun,
+  RegistryState,
+  RegistrySystem,
+  Resolution,
+  ViewFacts,
+} from "@pe/agent-contracts";
 
 // ── Levels ──────────────────────────────────────────────────────────────────
 //
@@ -158,101 +177,6 @@ export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
   return zones;
 }
 
-// ── Live results (wire shapes of the scripting calls) ───────────────────────
-
-export interface DetectedRoom {
-  id: string;
-  rawSqft: number;
-  perimeterFt: number;
-  meanCeilingFt: number;
-  label: [number, number];
-  flags: string[];
-  outer: [number, number][];
-}
-
-export interface DetectedResidue {
-  id: string;
-  reason: string;
-  rawSqft: number;
-  label: [number, number];
-  outer: [number, number][];
-}
-
-/** A non-template ViewPlan, for the adoption flow's view pick. */
-export interface ViewFacts {
-  name: string;
-  /** GenLevel name; "" for plan views with no level. */
-  level: string;
-  /** FilledRegion count on the view — sorts zoning-plan candidates up without name-matching. */
-  regions: number;
-}
-
-/** A FilledRegion as the adoption/zone reads see it: identity stamps + tessellated loops. */
-export interface CandidateRegion {
-  elementId: number;
-  typeName: string;
-  /** Owner view name. */
-  view: string;
-  /** "r,g,b" foreground pattern color of the FR type. */
-  color: string;
-  sqft: number;
-  /** Pe role stamp — null = unstamped designer FR (an adoption candidate). */
-  role: string | null;
-  guid: string | null;
-  /** Raw provenance blob ("" when absent). */
-  blob: string;
-  loops: [number, number][][];
-}
-
-/** A Room Region / held-residue FR that exists in the model right now. */
-export interface LiveRegion {
-  elementId: number;
-  role: string;
-  guid: string;
-  sqft: number;
-  roomType?: string;
-  /** Raw provenance blob text — the datum's home for decisions. */
-  blob: string;
-  outer: [number, number][];
-}
-
-export interface PartitionRun {
-  levelName: string;
-  elevation: number;
-  created: number;
-  held: number;
-  rebound: number;
-  orphaned: number;
-  domainSqft: number;
-  claimedWallSqft: number;
-  excludedResidueSqft: number;
-  totalSqft: number;
-  profile: string;
-  failures: string[];
-  rooms: DetectedRoom[];
-  residues: DetectedResidue[];
-  regions: LiveRegion[];
-}
-
-export interface RegistrySystem {
-  guid: string;
-  tag: string;
-}
-
-export interface RegistryState {
-  systems: RegistrySystem[];
-  appeared: string[];
-  vanished: RegistrySystem[];
-  renameCandidates: { fromGuid: string; fromTag: string; toTag: string }[];
-  needsHuman: boolean;
-}
-
-export interface ModelStatus {
-  doc: string;
-  systems: RegistrySystem[];
-  regions: { zoneGuid: string; rooms: number; held: number }[];
-}
-
 // ── Zone status (step the zone is at) ───────────────────────────────────────
 
 export type ZoneStage = "unregistered" | "registered" | "partitioned";
@@ -267,14 +191,6 @@ export const zoneStage = (tags: string[], materializedRooms: number): ZoneStage 
  * keeps the designer's state. Written straight into the Room Region's provenance blob at
  * decision time — there is no batch commit and no sidecar.
  */
-export interface Resolution {
-  subject: string;
-  flag: string;
-  verb: "accept" | "dismiss";
-  at: string;
-  runId: string;
-}
-
 /** Reads the `resolutions` array spliced onto a v1 RegionProvenance blob. Fail-soft: a blob we
  *  cannot parse reads as "no decisions", never as "decided". */
 export function readResolutions(blob: string): Resolution[] {

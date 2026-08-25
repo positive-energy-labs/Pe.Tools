@@ -1,0 +1,76 @@
+import { expect, test } from "vite-plus/test";
+import type { TakeoffsRouteDocument } from "@pe/agent-contracts";
+import { createTakeoffsCommandHandlers } from "../src/pea/takeoffs-commands.ts";
+
+const rawSnapshot = {
+  status: { doc: "Harness.rvt", systems: [], regions: [] },
+  views: [{ name: "Zoning", level: "Main", regions: 1 }],
+  zoneFrs: [
+    {
+      elementId: 42,
+      typeName: "Zoning",
+      view: "Zoning",
+      color: "0,0,0",
+      sqft: 100,
+      role: "zoning-region",
+      guid: "zone-1",
+      blob: JSON.stringify({ view: "Zoning", name: "Zone 1", systemTag: "FC-1" }),
+      loops: [
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+        ],
+      ],
+    },
+  ],
+  regionsByZone: {},
+};
+
+test("takeoffs audit produces and sets the document snapshot", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as {
+      request: { sourceName: string };
+    };
+    const data =
+      body.request.sourceName === "takeoff-snapshot.cs"
+        ? rawSnapshot
+        : body.request.sourceName === "takeoff-prepare.cs"
+          ? { level: "Main" }
+          : body.request.sourceName === "takeoff-detect.cs"
+            ? { level: "Main", replayPath: "replay.bin", rooms: 1, totalSqft: 100 }
+            : {};
+    return new Response(JSON.stringify({ status: "Succeeded", data: JSON.stringify(data) }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const document: TakeoffsRouteDocument = {
+      binding: { target: null },
+      snapshot: null,
+      staged: [],
+    };
+    let writes = 0;
+    await createTakeoffsCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).audit(
+      { view: "Zoning", zones: ["zone-1"] },
+      {
+        getDoc: () => document,
+        setDoc: async (next) => {
+          Object.assign(document, next);
+          writes += 1;
+        },
+      },
+    );
+
+    expect(writes).toBe(1);
+    expect(document.snapshot?.world).toMatchObject({
+      docName: "Harness.rvt",
+      zones: [{ name: "Zone 1" }],
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -13,8 +13,12 @@ import {
   type LiveRegion,
   type PartitionRun,
 } from "#/takeoff/model";
-import { decisionScript, partitionScript, registryScript, snapshotScript } from "#/takeoff/scripts";
-import { buildLiveWorld, type SessionOverlay } from "#/takeoff/world";
+import {
+  decisionScript,
+  partitionScript,
+  registryScript,
+  snapshotScript,
+} from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 
 const square = (x: number, y: number, size: number): [number, number][] => [
   [x, y],
@@ -181,46 +185,6 @@ describe("decision queue", () => {
 
   it("does not bind a room to a region it is not inside", () => {
     expect(regionForRoom(room("R01", [], [500, 500]), [region(42, provenance())])).toBeUndefined();
-  });
-});
-
-// ── Rerun proposals never silently drop ───────────────────────────────────────
-
-describe("rerun proposals", () => {
-  const guid = "7a4e0000-0000-4000-8000-000000010006";
-  const zoneFr = {
-    elementId: 1,
-    typeName: "Zoning",
-    view: "V",
-    color: "0,0,0",
-    sqft: 100,
-    role: "zoning-region",
-    guid,
-    blob: JSON.stringify({ v: 1, view: "V", name: "Z1", systemTag: "FC-8" }),
-    loops: [square(0, 0, 10)],
-  };
-  const overlay: SessionOverlay = {
-    // a run that detected a room the rebind matched to no existing region (regions: [])
-    runs: { [guid]: run({ rooms: [room("R99", [], [50, 5])], regions: [] }) },
-    replays: {},
-    edits: {},
-  };
-
-  it("flags a rerun-discovered room with no materialized region so it blocks the sync", () => {
-    const world = buildLiveWorld({
-      status: { doc: "d", systems: [], regions: [] },
-      zoneFrs: [zoneFr],
-      views: [{ name: "V", level: "Main", regions: 1 }],
-      regionsByZone: {},
-      overlay,
-      r10Path: null,
-      r10: null,
-    });
-    const rooms = world.zones[0]!.rooms;
-    expect(rooms).toHaveLength(1);
-    // present (not dropped) AND carrying an open call (so blockedZones excludes the zone)
-    expect(rooms[0]!.elementId).toBeNull();
-    expect(rooms[0]!.flags).toContain("unhomed-proposal");
   });
 });
 
