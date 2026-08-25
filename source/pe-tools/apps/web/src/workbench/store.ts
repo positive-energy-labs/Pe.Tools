@@ -113,6 +113,7 @@ export function createChatStore(deps: {
     Atom.make<{ text: string; attachments: WorkbenchAttachment[] }>({ text: deps.search.prompt ?? "", attachments: [] }),
   );
   let promptTimer: ReturnType<typeof setTimeout> | undefined;
+  let turnTimer: ReturnType<typeof setTimeout> | undefined;
 
   const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) =>
     core.write(verb, atom.label?.[0] ?? "page", () =>
@@ -137,6 +138,10 @@ export function createChatStore(deps: {
     }
     promptTimer = setTimeout(() => deps.search.patch({ prompt }, true), 300);
   };
+  const setTurn = (turn?: number) => {
+    if (turnTimer) clearTimeout(turnTimer);
+    turnTimer = setTimeout(() => deps.search.patch({ turn }, true), 1000);
+  };
 
   const actions = {
     setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
@@ -148,7 +153,7 @@ export function createChatStore(deps: {
     setWorldCache: (value: Setter<WorldCacheState>) => set("set-world-cache", worldCache, value),
     setDraft,
     setMode: (mode: string) => deps.search.patch({ mode }),
-    setTurn: (turn?: number) => deps.search.patch({ turn }, true),
+    setTurn,
     setPlugin: (plugin?: ChatSearch["plugin"]) => deps.search.patch({ plugin }),
     switchThread: (thread: string) => deps.search.patch({ thread }),
     async send(text: string, attachments?: WorkbenchAttachment[]) {
@@ -223,6 +228,7 @@ export function createChatStore(deps: {
     actions,
     dispose() {
       if (promptTimer) clearTimeout(promptTimer);
+      if (turnTimer) clearTimeout(turnTimer);
       channel.dispose();
       core.dispose();
     },

@@ -28,23 +28,14 @@ import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 export function ChatShell({
   initialTurn,
   plugin,
-  onTurnChange,
-  onPluginClose,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
-  onTurnChange?: (turn: number | undefined) => void;
-  onPluginClose?: () => void;
 }) {
   return (
     <HotkeysProvider>
       <WorkbenchRuntimeProvider>
-        <Surface
-          initialTurn={initialTurn}
-          plugin={plugin}
-          onTurnChange={onTurnChange}
-          onPluginClose={onPluginClose}
-        />
+        <Surface initialTurn={initialTurn} plugin={plugin} />
       </WorkbenchRuntimeProvider>
     </HotkeysProvider>
   );
@@ -53,13 +44,9 @@ export function ChatShell({
 function Surface({
   initialTurn,
   plugin,
-  onTurnChange,
-  onPluginClose,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
-  onTurnChange?: (turn: number | undefined) => void;
-  onPluginClose?: () => void;
 }) {
   const {
     store,
@@ -197,7 +184,7 @@ function Surface({
               mode={mode}
               initialTurn={initialTurn}
               scrollKey={currentThreadId}
-              onTurnChange={onTurnChange}
+              onTurnChange={store.actions.setTurn}
               sideOpen={sideOpen}
               onSideOpenChange={openSide}
               sideHead={<ModeDial mode={mode} setMode={setMode} />}
@@ -245,7 +232,7 @@ function Surface({
                     size="icon-sm"
                     variant="ghost"
                     title="Close workspace"
-                    onClick={onPluginClose}
+                    onClick={() => store.actions.setPlugin(undefined)}
                   >
                     <X />
                   </Button>

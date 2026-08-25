@@ -29,7 +29,6 @@ export interface FamiliesSearchPort {
 type Setter<A> = A | ((previous: A) => A);
 type PickerState = { open: string | null; level: string | null; query: string; stage: string };
 type FamiliesSlice = Atom.Atom<AsyncResult.AsyncResult<Slice<FamiliesRouteDocument>, Error>>;
-const emptyTable = (): MasterTableState => ({ filters: {}, sorts: [], query: "" });
 
 export function createFamiliesStore(deps: {
   registry: AtomRegistry.AtomRegistry;
@@ -70,7 +69,9 @@ export function createFamiliesStore(deps: {
   const seenFamilies = Atom.make<ReadonlySet<string>>(new Set<string>()).pipe(
     owned("page/seen-families"),
   );
-  const table = Atom.make(emptyTable()).pipe(owned("page/table"));
+  const table = Atom.make<MasterTableState>({ filters: {}, sorts: [], query: "" }).pipe(
+    owned("page/table"),
+  );
   const picker = Atom.make<PickerState>({
     open: null,
     level: null,

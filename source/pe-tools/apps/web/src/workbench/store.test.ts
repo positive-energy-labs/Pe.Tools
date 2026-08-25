@@ -84,7 +84,7 @@ describe("chat store", () => {
     h.store.dispose();
   });
 
-  it("keeps only short attachment-free drafts in search and patches a new thread", async () => {
+  it("debounces search mirrors and patches a new thread", async () => {
     vi.useFakeTimers();
     const h = harness();
     h.store.actions.setDraft({ text: "short", attachments: [] });
@@ -93,6 +93,11 @@ describe("chat store", () => {
 
     h.store.actions.setDraft({ text: "short", attachments: [{ name: "plan.md", text: "x" }] });
     expect(h.patches.at(-1)).toEqual({ prompt: undefined });
+    h.store.actions.setTurn(4);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(h.patches).not.toContainEqual({ turn: 4 });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.patches.at(-1)).toEqual({ turn: 4 });
     await h.store.actions.newThread();
     expect(h.patches.at(-1)).toEqual({ thread: "thread-2" });
     h.store.dispose();

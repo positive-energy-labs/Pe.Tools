@@ -120,7 +120,9 @@ export function createTakeoffOperations(execute: ScriptExecutor) {
         const lanes: World["lanes"] = [];
         const ordinals = new Map<string, number>();
         const zones: WorldZone[] = raw.zoneFrs.map((region) => {
-          const meta = zoneMeta(region.blob);
+          const meta = JSON.parse(region.blob) as { view?: string; name?: string; systemTag?: string };
+          if (!meta.view || !meta.name)
+            throw Error("Zoning Region provenance is missing view or name");
           const view = region.view || meta.view;
           const label = levelByView.get(view) || view;
           let lane = lanes.find((item) => item.view === view);
@@ -160,7 +162,18 @@ export function createTakeoffOperations(execute: ScriptExecutor) {
               lane,
               color: region.color,
               loops: region.loops,
-              declaredSqft: region.loops.reduce((sum, loop) => sum + area(loop), 0),
+              declaredSqft: region.loops.reduce(
+                (sum, loop) =>
+                  sum +
+                  Math.abs(
+                    loop.reduce((area, point, index) => {
+                      const next = loop[(index + 1) % loop.length]!;
+                      return area + point[0] * next[1] - next[0] * point[1];
+                    }, 0),
+                  ) /
+                    2,
+                0,
+              ),
               bounds: bounds(region.loops),
             },
             stage,
@@ -268,13 +281,6 @@ const centroid = (loop: readonly (readonly [number, number])[]): [number, number
   const sum = loop.reduce(([x, y], [px, py]) => [x + px, y + py], [0, 0]);
   return [sum[0] / Math.max(loop.length, 1), sum[1] / Math.max(loop.length, 1)];
 };
-const area = (loop: readonly (readonly [number, number])[]) =>
-  Math.abs(
-    loop.reduce((sum, point, index) => {
-      const next = loop[(index + 1) % loop.length]!;
-      return sum + point[0] * next[1] - next[0] * point[1];
-    }, 0),
-  ) / 2;
 const bounds = (loops: readonly (readonly (readonly [number, number])[])[]) => {
   const points = loops.flat();
   return {
@@ -284,12 +290,6 @@ const bounds = (loops: readonly (readonly (readonly [number, number])[])[]) => {
     maxY: Math.max(...points.map(([, y]) => y)),
   };
 };
-
-function zoneMeta(blob: string): { view: string; name: string; systemTag: string } {
-  const value = JSON.parse(blob) as { view?: string; name?: string; systemTag?: string };
-  if (!value.view || !value.name) throw Error("Zoning Region provenance is missing view or name");
-  return { view: value.view, name: value.name, systemTag: value.systemTag ?? "" };
-}
 
 function room(region: LiveRegion): WorldRoom {
   const value = JSON.parse(region.blob) as {
