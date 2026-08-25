@@ -51,7 +51,13 @@ const fixture = () => {
   };
   return { host, calls };
 };
-const make = (testFixture = fixture()) => {
+const make = (
+  testFixture = fixture(),
+  search: { target: string; patch(partial: { target?: string }): void } = {
+    target: "",
+    patch() {},
+  },
+) => {
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
   registries.push(registry);
   const docSlice = Atom.make(AsyncResult.success(slice(document())));
@@ -62,7 +68,7 @@ const make = (testFixture = fixture()) => {
       registry,
       scope: { threadId: "thread-1" },
       host: testFixture.host,
-      search: { target: "", patch() {} },
+      search,
       slice: docSlice,
     }),
   };
@@ -124,5 +130,27 @@ describe("families route store", () => {
     expect(calls).toEqual([
       { op: "apply", input: [{ path: ["excludedIds"], value: [1] }] },
     ]);
+  });
+
+  it("rebinds a back/direct URL target on mount and before plan", async () => {
+    const patches: Array<{ target?: string }> = [];
+    const { calls, store } = make(fixture(), {
+      target: "session:new",
+      patch: (patch) => patches.push(patch),
+    });
+    await store.actions.bind(store.search.target);
+    store.actions.setDraft({
+      placement: "AllLoaded",
+      categories: ["Furniture"],
+      families: ["Desk"],
+    });
+    await store.actions.applyScope();
+    await store.actions.plan();
+    expect(calls.filter(({ op }) => op === "bind" || op === "plan")).toEqual([
+      { op: "bind", input: { target: "session:new" } },
+      { op: "bind", input: { target: "session:new" } },
+      { op: "plan", input: expect.any(Object) },
+    ]);
+    expect(patches).toEqual([{ target: "session:new" }]);
   });
 });

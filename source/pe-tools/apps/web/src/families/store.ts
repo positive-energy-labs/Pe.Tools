@@ -77,16 +77,14 @@ export function createFamiliesStore(deps: {
     query: "",
     stage: "scope",
   }).pipe(owned("page/picker"));
-  const target = Atom.make(deps.search.target).pipe(owned("url/target"));
-
   const sessionsSource = runtime.atom(() => hostRead(["sessions"], deps.host.sessions));
   const sessionsResult = runtimeFactory
     .withReactivity(["sessions"])(
       Atom.swr(sessionsSource, { staleTime: "5 seconds", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
-  const categorySource = runtime.atom((get) =>
-    hostRead([get(target)], () => deps.host.categories(get(target))),
+  const categorySource = runtime.atom(() =>
+    hostRead([deps.search.target], () => deps.host.categories(deps.search.target)),
   );
   const categoryResult = runtimeFactory
     .withReactivity(["category"])(
@@ -95,8 +93,8 @@ export function createFamiliesStore(deps: {
     .pipe(Atom.autoDispose);
   const familySource = runtime.atom((get) => {
     const next = get(draft);
-    return hostRead([get(target), ...next.categories, next.placement], () =>
-      next.categories.length ? deps.host.families(get(target), next) : Promise.resolve([]),
+    return hostRead([deps.search.target, ...next.categories, next.placement], () =>
+      next.categories.length ? deps.host.families(deps.search.target, next) : Promise.resolve([]),
     );
   });
   const familyResult = runtimeFactory
@@ -104,8 +102,8 @@ export function createFamiliesStore(deps: {
       Atom.swr(familySource, { staleTime: "5 minutes", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
-  const profileSource = runtime.atom((get) =>
-    hostRead([get(target)], () => deps.host.profiles(get(target))),
+  const profileSource = runtime.atom(() =>
+    hostRead([deps.search.target], () => deps.host.profiles(deps.search.target)),
   );
   const profileResult = runtimeFactory
     .withReactivity(["profile"])(
@@ -144,6 +142,10 @@ export function createFamiliesStore(deps: {
     if (!result.ok) throw Error(result.hint ?? result.error ?? fallback);
     return result;
   };
+  const bindDocument = (nextTarget: string) =>
+    deps.host
+      .command("bind", { target: nextTarget || null })
+      .then((result) => expectOk(result, "bind failed"));
 
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,
@@ -228,6 +230,7 @@ export function createFamiliesStore(deps: {
           const path = registry.get(profilePath);
           const scope = registry.get(applied);
           if (!path || !scope) throw Error("plan needs a profile and applied scope");
+          await bindDocument(deps.search.target);
           return expectOk(
             await deps.host.command("plan", { profilePath: path, scope }),
             "plan failed",
@@ -242,6 +245,7 @@ export function createFamiliesStore(deps: {
         async () => {
           const current = registry.get(plan);
           if (!current) throw Error("apply needs a plan");
+          await bindDocument(deps.search.target);
           return expectOk(
             await deps.host.command("apply", { expectedPlanHash: current.planHash }),
             "apply failed",
@@ -254,11 +258,7 @@ export function createFamiliesStore(deps: {
       return runVerb(
         "bind",
         async () => {
-          const result = expectOk(
-            await deps.host.command("bind", { target: nextTarget || null }),
-            "bind failed",
-          );
-          registry.set(target, nextTarget);
+          const result = await bindDocument(nextTarget);
           deps.search.patch({ target: nextTarget });
           return result;
         },
@@ -269,18 +269,22 @@ export function createFamiliesStore(deps: {
       return runVerb("project", async () => {
         const ids = [...registry.get(pickedIds)];
         if (!ids.length) throw Error("project needs picked families");
-        const result = await deps.host.project(registry.get(target), ids);
+        const result = await deps.host.project(deps.search.target, ids);
         registry.set(projection, result);
         return `projected ${result.projections.length} families`;
       });
     },
     openPath(path: string) {
-      return deps.host.openPath(registry.get(target), path);
+      return runVerb("open-path", async () => {
+        await deps.host.openPath(deps.search.target, path);
+        return `opened ${path}`;
+      });
     },
   };
 
   return {
     registry,
+    search: deps.search,
     slices: { families: slice },
     atoms: {
       profilePath,
@@ -295,7 +299,6 @@ export function createFamiliesStore(deps: {
       seenFamilies,
       table,
       picker,
-      target,
       busy: core.busy,
       failure: core.failure,
       receipt: core.receipt,

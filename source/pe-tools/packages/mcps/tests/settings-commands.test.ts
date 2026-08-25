@@ -1,5 +1,6 @@
 import { expect, test } from "vite-plus/test";
-import type { SettingsRouteDocument } from "@pe/agent-contracts";
+import type { FamiliesRouteDocument, SettingsRouteDocument } from "@pe/agent-contracts";
+import { createFamiliesCommandHandlers } from "../src/pea/families-commands.ts";
 import { createSettingsCommandHandlers } from "../src/pea/settings-commands.ts";
 
 /**
@@ -378,4 +379,68 @@ test("save blocks when a staged field still needs attention", async () => {
   await expect(
     handlers().save({}, { getDoc: () => document, setDoc: async () => undefined }),
   ).rejects.toThrow(/Save blocked/);
+});
+
+test("families handlers filter the plan, refuse drift, exclude IDs, and write receipts", async () => {
+  const document: FamiliesRouteDocument = {
+    binding: { target: "session:family" },
+    profilePath: null,
+    plan: null,
+    excludedIds: [],
+    apply: null,
+  };
+  const requests: Array<{ key: string; request: unknown }> = [];
+  const handler = createFamiliesCommandHandlers({ hostBaseUrl: "http://127.0.0.1:5180" });
+  const ctx = {
+    getDoc: () => document,
+    setDoc: async (next: FamiliesRouteDocument) => void Object.assign(document, next),
+  };
+  await withHost(
+    (key, request) => {
+      requests.push({ key, request });
+      if (key === "settings.document.open") return { rawContent: "{}" };
+      if (key === "familyfoundry.plan")
+        return {
+          planHash: "hash-2",
+          diagnostics: [],
+          families: ["Desk", "Chair", "Outside"].map((familyName, index) => ({
+            familyId: index + 1,
+            familyName,
+            plan: {
+              parameters: [],
+              requiredApsParameterNames: [],
+              familyParameterNames: [],
+              loweredActions: [{ operation: "set", target: "Width", sources: [], reason: "profile" }],
+            },
+          })),
+        };
+      if (key === "familyfoundry.apply")
+        return {
+          planHash: "hash-2",
+          refused: false,
+          diagnostics: [],
+          receipts: [{
+            familyId: 1,
+            familyName: "Desk",
+            success: true,
+            error: null,
+            operationsRun: ["set"],
+            parametersChanged: 1,
+            diffSummary: { added: 1, removed: 0, modified: 0 },
+            artifactDirectoryPath: "artifacts/desk",
+          }],
+        };
+      throw new Error(`unexpected op ${key}`);
+    },
+    async () => {
+      await handler.plan({ profilePath: "desk.json", scope: { familyNames: ["Desk", "Chair"] } }, ctx);
+      expect(document.plan?.entries.map(({ familyName }) => familyName)).toEqual(["Desk", "Chair"]);
+      document.excludedIds = [2];
+      await expect(handler.apply({ expectedPlanHash: "stale" }, ctx)).rejects.toThrow(/plan drift/);
+      await handler.apply({ expectedPlanHash: "hash-2" }, ctx);
+    },
+  );
+  expect(requests.find(({ key }) => key === "familyfoundry.apply")?.request).toMatchObject({ familyIds: [1] });
+  expect(document.apply?.receipts).toHaveLength(1);
+  expect(document.apply?.artifacts).toEqual(["artifacts/desk"]);
 });

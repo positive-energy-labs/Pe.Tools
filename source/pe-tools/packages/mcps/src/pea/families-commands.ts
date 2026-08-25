@@ -9,8 +9,6 @@ import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
 const PROFILE_MODULE = { moduleKey: "CmdFFDesiredMigrator", rootKey: "profiles" } as const;
 
-export { familiesRouteState } from "@pe/agent-contracts";
-
 export function createFamiliesCommandHandlers(
   options: { hostBaseUrl?: string } = {},
 ): RouteStateCommandHandlers<FamiliesRouteDocument> {

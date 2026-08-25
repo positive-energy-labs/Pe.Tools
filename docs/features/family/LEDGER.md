@@ -64,8 +64,6 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 - 2026-08-19 — of the settings branch, three things matter: the schema-to-field-renderer revival + `schema-core` infra (it never should have been deleted), `/settings` back on the render WITH schema-to-field rendering wired into `settings.tsx` (may land as a post-merge step), and the raw json editor. The four settings-route prototypes (variants a–d) are DISCARDED — built on false pretenses; the code-is-the-spec residue persists in the family and settings routes themselves. The promotion sweep deletes all RELEVANT stale worktrees/branches, settings included.
 
 - 2026-08-25 — `/families` runs on `families/store.ts`; `familiesRouteState` (`packages/agent-contracts/src/families.ts`) holds the plan-hash chain (`profilePath`, `plan`, `excludedIds`, `apply`); draft scope and applied scope are two page atoms joined by the `apply-scope` verb. 29 state sites → 0. PROVEN[deterministic, worktree, e36f91c]: 81/81, tsc 0.
-- 2026-08-25 — `FAMILIES_PRODUCT` replaces `AddressingBar`+`Sentence` on `/families`; `TargetingHead` now has two route consumers (`/family`, `/families`).
-
 ## Tried & rejected
 
 - 2026-07-04 — file-mirror and deferred-ExternalEvent substrates: both work but weaker than parking (unmirrored families unreachable; second poll protocol). FF's own apply path is unusable from scripts for project families (EditFamily under host txn).

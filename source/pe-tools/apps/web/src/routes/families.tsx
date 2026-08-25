@@ -53,6 +53,7 @@ function FamiliesStoreOwner({ thread, target }: { thread: string; target: string
   }
   const store = owner.store;
   useEffect(() => {
+    void store.actions.bind(target).catch(() => undefined);
     const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
     if (owner.disposeTimer) clearTimeout(owner.disposeTimer);
     return () => {
@@ -62,6 +63,6 @@ function FamiliesStoreOwner({ thread, target }: { thread: string; target: string
       }, 0);
       unregister?.();
     };
-  }, [key, owner, store]);
+  }, [key, owner, store, target]);
   return <FamiliesWorkspace store={store} />;
 }

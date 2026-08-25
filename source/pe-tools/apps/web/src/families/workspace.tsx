@@ -1,26 +1,8 @@
-/**
- * /families workspace — FFMigrator's fleet lane.
- *
- * THE LAW: the table always answers "everything currently in scope"; the plan is a LENS over it,
- * never a replacement. A compiled plan tints rows and opens a decision queue above the table — it
- * never hides a family, never becomes the only thing on screen, and never silently narrows scope.
- *
- * The three lanes, in order of commitment:
- *   scope  — categories → families → placement, draft until Apply (the matrix op is the expensive
- *            one, so its budget is sized to the picked family list and never fired on keystroke).
- *   plan   — profile in, per-family reconciliation + planHash out. Read-only; a lens.
- *   apply  — explicit familyIds + expectedPlanHash, gated behind a human-readable reason, receipts
- *            out. Drift is refused by the op, echoed here as an error with re-plan guidance.
- * The projection lane runs sideways: families picked in the table, dense profile JSON back.
- *
- * All Family Foundry calls go through `#/host/familyfoundry`, fully typed against the checked-in
- * generated clients. The remaining unproven surface is LIVE behavior: step-3 live proof.
- */
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueries } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
-import type { FamiliesRouteDocument, FfPlanEntry, FfReceipt } from "@pe/agent-contracts";
+import type { FfPlanEntry, FfReceipt } from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -49,11 +31,7 @@ import {
   SelectValue,
 } from "#/components/ui/select";
 import { callHostRpc } from "#/host/client";
-import {
-  FF_PROFILE_MODULE,
-  diagnosticLine,
-  type FfDiagnostic,
-} from "#/host/familyfoundry";
+import { FF_PROFILE_MODULE, diagnosticLine } from "#/host/familyfoundry";
 import { FamiliesHead } from "#/families/head";
 import type { FamiliesStore } from "#/families/store";
 import { HostIssuePanel, toHostIssue } from "#/host/issues";
@@ -74,16 +52,6 @@ import { cn } from "#/lib/utils";
 
 type FfFamilyPlan = FfPlanEntry;
 type FfReconciliationPlan = FfPlanEntry["plan"];
-type FfPlanData = NonNullable<FamiliesRouteDocument["plan"]> & {
-  families: FfPlanEntry[];
-  diagnostics: FfDiagnostic[];
-};
-type FfApplyData = NonNullable<FamiliesRouteDocument["apply"]> & {
-  refused: boolean;
-  diagnostics: FfDiagnostic[];
-  receipts: FfReceipt[];
-};
-
 /** Profile library reads are one document-open each; cap the fan-out and say so when it bites. */
 const PROFILE_READ_LIMIT = 40;
 /** A parameter is "common" when it appears on this share of the families in scope. */
@@ -366,7 +334,7 @@ function NamePicker({
 
 export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   const navigate = useNavigate();
-  const target = useAtomValue(store.atoms.target);
+  const target = store.search.target;
   const scope = useMemo(() => (target ? { bridgeSessionId: target } : undefined), [target]);
   const draft = useAtomValue(store.atoms.draft);
   const { placement, categories: draftCategories, families: pickedFamilies } = draft;
@@ -378,25 +346,11 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
     store.actions.setDraft((previous) => ({ ...previous, families: next }));
   const applied = useAtomValue(store.atoms.applied);
   const profilePath = useAtomValue(store.atoms.profilePath);
-  const planDocument = useAtomValue(store.atoms.plan);
-  const plan = useMemo<FfPlanData | null>(
-    () =>
-      planDocument
-        ? { ...planDocument, families: planDocument.entries, diagnostics: [] }
-        : null,
-    [planDocument],
-  );
+  const plan = useAtomValue(store.atoms.plan);
   const excludedIds = new Set(useAtomValue(store.atoms.excludedIds));
   const pickedIds = useAtomValue(store.atoms.pickedIds);
   const setPickedIds = store.actions.setPickedIds;
-  const applyDocument = useAtomValue(store.atoms.applyData);
-  const applyData = useMemo<FfApplyData | null>(
-    () =>
-      applyDocument
-        ? { ...applyDocument, refused: false, diagnostics: [] }
-        : null,
-    [applyDocument],
-  );
+  const applyData = useAtomValue(store.atoms.applyData);
   const projection = useAtomValue(store.atoms.projection);
   const showUncommon = useAtomValue(store.atoms.showUncommon);
   const setShowUncommon = store.actions.setShowUncommon;
@@ -404,7 +358,6 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   const busyState = useAtomValue(store.atoms.busy);
   const busy = busyState?.id ?? null;
   const failure = useAtomValue(store.atoms.failure);
-  const error = failure?.message ?? null;
   const categoryFeed = useAtomValue(store.feeds.category);
   const familyFeed = useAtomValue(store.feeds.family);
   const profileFeed = useAtomValue(store.feeds.profile);
@@ -485,11 +438,11 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
 
   const planByFamilyId = useMemo(() => {
     const map = new Map<number, FfFamilyPlan>();
-    for (const entry of plan?.families ?? []) map.set(entry.familyId, entry);
+    for (const entry of plan?.entries ?? []) map.set(entry.familyId, entry);
     return map;
   }, [plan]);
   const receiptByFamilyId = useMemo(() => {
-    const map = new Map<number, FfApplyData["receipts"][number]>();
+    const map = new Map<number, FfReceipt>();
     for (const entry of applyData?.receipts ?? []) map.set(entry.familyId, entry);
     return map;
   }, [applyData]);
@@ -735,7 +688,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   // ── verbs ────────────────────────────────────────────────────────────────────────────────────
   const includedPlanned = useMemo(
     () =>
-      (plan?.families ?? []).filter(
+      (plan?.entries ?? []).filter(
         (entry) => !excludedIds.has(entry.familyId) && familyFlag(entry) === null,
       ),
     [plan, excludedIds],
@@ -860,13 +813,12 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         )}
       </div>
 
-      {error && (
+      {failure && (
         <div className="border-b border-[var(--r-line)] px-4 py-1.5">
-          {/* A host refusal is the model disagreeing; other failures stay caution. */}
           <OutcomeLine
-            kind={applyData?.refused === true ? "refused" : "error"}
-            label={applyData?.refused === true ? "apply refused" : "command failed"}
-            says={error}
+            kind="error"
+            label={`${failure.verb} failed`}
+            says={failure.message}
           />
         </div>
       )}
@@ -875,29 +827,6 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
           <HostIssuePanel issue={matrixIssue} compact />
         </div>
       )}
-      {plan && plan.diagnostics.length > 0 && (
-        <div className="border-b border-[var(--r-line)] px-4 py-1.5">
-          <SectionLabel>
-            <span title="Diagnostics are reported at PROFILE level, not per family, and a single one blocks the whole apply lane. Fix the profile document, then re-plan.">
-              plan diagnostics
-            </span>
-          </SectionLabel>
-          <ul className="mt-1 space-y-0.5">
-            {plan.diagnostics.map((diagnostic) => (
-              <li key={`${diagnostic.code}:${diagnostic.path}`}>
-                {/* A profile that will not compile blocks the whole apply lane — but it is a
-                    document defect, not the model disagreeing, so it stays off the one alarm. */}
-                <OutcomeLine
-                  kind="error"
-                  label={diagnosticLine(diagnostic)}
-                  says={diagnostic.suggestion ?? undefined}
-                />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* ── decision queue: the plan as a lens over the scope ────────────────────────────── */}
       {plan && (
         <div className="max-h-56 shrink-0 overflow-auto border-b border-[var(--r-line)] px-4 py-2">
@@ -908,7 +837,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
               </span>
             </SectionLabel>
             <FactChip title="Included = ticked here AND carrying at least one lowered action. Unclaimed families are shown for honesty — the profile said nothing about them, so apply will not touch them.">
-              {includedPlanned.length} of {plan.families.length} planned families included
+              {includedPlanned.length} of {plan.entries.length} planned families included
               {outsideProfile.length > 0
                 ? ` · ${outsideProfile.length} in scope but unclaimed`
                 : ""}
@@ -916,7 +845,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
           </div>
           <table className="mt-1 w-full border-collapse">
             <tbody>
-              {plan.families.map((entry) => {
+              {plan.entries.map((entry) => {
                 const flag = familyFlag(entry);
                 const excluded = excludedIds.has(entry.familyId);
                 return (
@@ -978,7 +907,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                   </td>
                 </tr>
               ))}
-              {plan.families.length === 0 && outsideProfile.length === 0 && (
+              {plan.entries.length === 0 && outsideProfile.length === 0 && (
                 <tr>
                   <td colSpan={5}>
                     <EmptyState
@@ -1073,16 +1002,10 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                   <td colSpan={5}>
                     <EmptyState
                       story="scope"
-                      exit={
-                        applyData.refused
-                          ? "the refusal itself is the line above this table — re-plan and retry"
-                          : "re-plan and read the decision queue before retrying"
-                      }
+                      exit="re-plan and read the decision queue before retrying"
                       className="py-1"
                     >
-                      {applyData.refused
-                        ? "no receipts — apply was refused before it touched anything"
-                        : "no receipts — apply ran and reported nothing"}
+                      no receipts — apply ran and reported nothing
                     </EmptyState>
                   </td>
                 </tr>

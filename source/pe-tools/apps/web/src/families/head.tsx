@@ -12,7 +12,7 @@ const same = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 export function FamiliesHead({ store }: { store: FamiliesStore }) {
-  const target = useAtomValue(store.atoms.target);
+  const target = store.search.target;
   const profilePath = useAtomValue(store.atoms.profilePath);
   const draft = useAtomValue(store.atoms.draft);
   const applied = useAtomValue(store.atoms.applied);

@@ -1,22 +1,7 @@
 import { z } from "zod";
 
+import { parameterIdentitySchema } from "./family-types.ts";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
-
-const diagnosticSchema = z.object({
-  code: z.string(),
-  path: z.string(),
-  message: z.string(),
-  suggestion: z.string().nullish(),
-});
-
-const parameterIdentitySchema = z.object({
-  key: z.string(),
-  kind: z.enum(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]),
-  name: z.string(),
-  builtInParameterId: z.number().nullish(),
-  sharedGuid: z.string().nullish(),
-  parameterElementId: z.number().nullish(),
-});
 
 const resolvedParameterSchema = z.object({
   definition: z.object({
@@ -135,5 +120,3 @@ export const familiesRouteState = defineRouteState({
     },
   },
 });
-
-export { diagnosticSchema as ffDiagnosticSchema };
