@@ -133,7 +133,8 @@ function TakeoffsStoreOwner({
 
 function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const search = Route.useSearch();
-  const { target, source, view, zones, dir, r10, stage } = search;
+  const { source, view, zones, dir, r10, stage } = search;
+  const target = useAtomValue(store.atoms.target);
   // ── sources ──
   const sessionsResult = useAtomValue(store.atoms.sessions);
   const sessions = AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.value : [];

@@ -333,7 +333,10 @@ export function createTakeoffStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope?: Scope;
   slice?: Atom.Atom<AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>>;
-  writer?: { apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult> };
+  writer?: {
+    apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
+    command?(name: string, input?: unknown): Promise<RouteStateWriteResult>;
+  };
 }) {
   const core = createRouteStoreCore("takeoffs", deps.registry);
   const { registry, owned, write, runVerb } = core;
@@ -348,9 +351,11 @@ export function createTakeoffStore(deps: {
     ? (deps.writer ?? docWriter(takeoffsRouteState, deps.scope))
     : null;
   const searchAtom = Atom.make<TakeoffSearch>(EMPTY_TAKEOFF_SEARCH).pipe(owned("search"));
-  const targetAtom = Atom.make((get) => get(searchAtom).target).pipe(
-    owned("search/target"),
-  );
+  const targetAtom = Atom.make((get) => {
+    if (!takeoffsSlice) return get(searchAtom).target;
+    const result = get(takeoffsSlice);
+    return AsyncResult.isSuccess(result) ? (result.value.doc?.binding.target ?? "") : "";
+  }).pipe(owned("binding/target"));
   const sourceAtom = Atom.make((get) => get(searchAtom).source).pipe(
     owned("search/source"),
   );
@@ -907,11 +912,21 @@ export function createTakeoffStore(deps: {
       readonly multi?: Multi;
     }) {
       const current = registry.get(searchAtom);
+      const nextTarget = patch.bound?.world ?? "";
+      if (
+        takeoffsWriter &&
+        current.source === "live" &&
+        patch.bound &&
+        nextTarget !== registry.get(targetAtom)
+      )
+        void takeoffsWriter.command?.("bind", { target: nextTarget || null });
       deps.search.patch({
         ...(patch.stage ? { stage: patch.stage as TakeoffStage } : {}),
         ...(patch.bound
           ? {
-              ...(current.source === "live" && patch.bound.world !== current.target
+              ...(!takeoffsWriter &&
+              current.source === "live" &&
+              patch.bound.world !== current.target
                 ? { target: patch.bound.world ?? "" }
                 : {}),
               view: patch.bound.view ?? "",

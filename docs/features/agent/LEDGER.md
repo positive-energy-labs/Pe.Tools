@@ -9,6 +9,8 @@ restated here.
 
 ## Decided
 
+- 2026-08-25 — Route-state HTTP and SSE require `threadId`; `scope=workspace` is a 400. The runtime test `workspace scope is isolated by resource identity` is deleted; `thread documents are isolated, authorized, and survive module recreation` carries isolation proof. PROVEN[deterministic, worktree, 650ed3a]: runtime 15/15, mcps 52/52 with 1 skipped, agent-contracts 27/27, web 30/30, tsc 0.
+
 ### Context ladder and capability map
 
 - 2026-07 — Revit agent context is a progressive ladder, not one context dump: `Context` (orient) → `Catalog` (inventory) → `Resolve` (fuzzy phrase → stable handle) → `Matrix` (joins/coverage) → `Detail` (known handle) → `Apply` (after proof). Missing layers get added as small bounded projections. All 39 `revit.*` public ops in `host-ops.generated.ts` follow it.

@@ -165,7 +165,7 @@ describe("takeoff route store", () => {
     const host = createFixtureTakeoffHost();
     const snapshot = await host.readSnapshot(null as never, null as never);
     const document: TakeoffsRouteDocument = {
-      binding: { target: null },
+      binding: { target: "session:fixture" },
       snapshot,
       staged: [],
     };
@@ -187,6 +187,7 @@ describe("takeoff route store", () => {
     });
     await store.actions.settle(store.atoms.snapshot);
     expect(store.atoms.registry.get(store.atoms.world).docName).toBe("project-a Residence.rvt");
+    expect(store.atoms.registry.get(store.atoms.target)).toBe("session:fixture");
 
     store.atoms.registry.set(
       store.slices.takeoffs! as typeof slice,
