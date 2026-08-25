@@ -116,8 +116,9 @@
  * and the proposals with their accept/deny (they need `route:settings` field
  * proposals, which the projection deliberately does not invent), and the doc pane's parse.
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -140,14 +141,13 @@ import {
   BUILD_VERB,
   BuildStrip,
   buildOutputPath,
-  buildReceiptLine,
   buildRefusals,
   readBuildReceipt,
   type BuildFacts,
 } from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
-import { FamilyHead } from "#/family/head";
 import { NavStateCell, ProposedCell } from "#/family/marks";
+import { FAMILY_PRODUCT } from "#/family/product";
 import type { FamilyStore } from "#/family/store";
 import {
   AGREEMENT_TONE,
@@ -183,8 +183,12 @@ import {
   type ProtoProposal,
 } from "#/family/world";
 import { cn } from "#/lib/utils";
+import { TargetingHead } from "#/targeting/head";
+import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 
 export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore; requestedFamily?: string }) {
+  const { profile = "", stage = "author" } = useSearch({ from: "/family" });
+  const navigate = useNavigate({ from: "/family" });
   /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
   const lane = useAtomValue(store.atoms.lane);
   const world = lane.world;
@@ -485,13 +489,6 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
 
   const busy = useAtomValue(store.atoms.busy);
 
-  /**
-   * OPEN — the lane switch, and the only verb on this page that changes which file the page IS.
-   * It runs the settings lifecycle's `open`, which preserves the field trichotomy: proposals pea
-   * already made against a document survive you looking at another one and coming back.
-   */
-  const openDocument = (relativePath: string) => store.actions.open(relativePath);
-
   /** The host's own schema verdict on the SAVED file. Only meaningful on the live lane: the fixture
    * has no schema behind it, and a green chip there would be claiming a check nobody ran. */
   const snapshot = useAtomValue(store.atoms.snapshot);
@@ -518,14 +515,6 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
    * the store's version-token guard rebuilds the draft from what actually landed. That is the difference
    * between a surface that shows you the write and one that shows you its own optimism.
    */
-  const save = async () => {
-    try {
-      await store.actions.save();
-    } catch (error) {
-      say(`Refused — ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
   // ── THE HOST CROSSINGS (phase D) ──────────────────────────────────────────────────────────────
   //
   // Two verbs, and they are the only two on this page that talk to Revit. Everything else above is
@@ -584,18 +573,6 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
    * not move for a capture, because re-seeding would throw away edits in progress. A live value is
    * a READING of Revit, not part of what you are editing, so it is folded in on its own.
    */
-  const captureLive = async () => {
-    try {
-      const read = await store.actions.capture();
-      const payload = (read.result ?? {}) as { familyName?: string; parameterCount?: number };
-      say(
-        `read ${payload.familyName ?? "the live family"} out of Revit — ${payload.parameterCount ?? 0} parameters; the ⇄ live overlay is now stamped with this read`,
-      );
-    } catch (error) {
-      say(`Could not read the live family — ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
   /**
    * THE COMMIT. Fires only from the armed strip, and only once its own predicates are silent — but
    * it re-checks them here anyway, because the strip's arming is page state and this is the write.
@@ -612,13 +589,11 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
       // so an answer with no receipt is neither a success nor a refusal, and claiming either
       // would be the surface inventing a fact about the disk.
       setBuildSaid({ code: "unknown", says: BUILD_OUTCOME_UNKNOWN });
-      say(BUILD_OUTCOME_UNKNOWN);
       return;
     }
     // Disarm on the way out: the plan was spent, and a strip still armed against a token the
     // build has already consumed would invite a second, differently-named .rfa.
     setArmedBuild(null);
-    say(buildReceiptLine(receipt, new Date().toLocaleTimeString()));
   };
 
   /** Re-arm against the file as it now stands. Writes nothing — the one exit every refusal shares. */
@@ -1755,7 +1730,7 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
               label="capture live"
               busy={capturing}
               disabled={lane.document == null || capturing}
-              onClick={() => void captureLive()}
+              onClick={() => void store.actions.capture().catch(() => undefined)}
               reason={
                 lane.document == null
                   ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
@@ -2195,17 +2170,62 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
     </Pane>
   );
 
+  const picker = useAtomValue(store.atoms.picker);
+  const receipt = useAtomValue(store.atoms.receipt);
+  const feeds = {
+    session: useAtomValue(store.feeds.session),
+    profile: useAtomValue(store.feeds.profile),
+  };
+  const settle = (run: () => Promise<unknown>) => run().then(() => undefined, () => undefined);
+  const product = FAMILY_PRODUCT({
+    open: () => settle(() => store.actions.open(profile)),
+    save: () => settle(store.actions.save),
+    capture: () => settle(store.actions.capture),
+    build: () => settle(runBuild),
+  });
+  const bindingState: BindingState = {
+    bound: { session: target || null, profile: profile || null },
+    multi: {},
+    stage,
+  };
+  const setBindingState = useCallback(
+    (patch: Partial<BindingState>) => {
+      const nextSession = patch.bound?.session ?? null;
+      const nextProfile = patch.bound?.profile ?? null;
+      if (nextSession !== null && nextSession !== target)
+        void store.actions.bind(nextSession).catch(() => undefined);
+      if (nextProfile !== null && nextProfile !== profile)
+        void navigate({ search: (previous) => ({ ...previous, profile: nextProfile }) });
+      const nextStage = patch.stage === "evidence" ? "evidence" : "author";
+      if (patch.stage && nextStage !== stage)
+        void navigate({ search: (previous) => ({ ...previous, stage: nextStage }) });
+    },
+    [navigate, profile, stage, store, target],
+  );
+  const bindings = useBindings(
+    product,
+    feeds,
+    bindingState,
+    setBindingState,
+    picker.open,
+    (open) => store.actions.setPicker((previous) => ({ ...previous, open })),
+    picker.level,
+    (level) => store.actions.setPicker((previous) => ({ ...previous, level })),
+    picker.query,
+    (query) => store.actions.setPicker((previous) => ({ ...previous, query })),
+  );
+  const runner = useRunner(product, bindings, busy?.id ?? null);
+
   return (
     <main className="flex h-screen min-h-0 flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
-      <FamilyHead
-        store={store}
-        onOpen={openDocument}
-        onPickSession={(nextTarget) => void store.actions.bind(nextTarget).catch(() => undefined)}
-        onSave={save}
-        onCapture={captureLive}
-        onBuild={runBuild}
-        outcome={
-          lane.parseError != null ? (
+      <TargetingHead
+        product={product}
+        b={bindings}
+        runner={runner}
+        receipt={
+          failure != null ? (
+            <OutcomeLine kind="error" label={`${failure.verb} failed`} says={failure.message} />
+          ) : lane.parseError != null ? (
             <OutcomeLine
               kind="error"
               label="the open document will not parse"
@@ -2217,6 +2237,8 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
               label={`?family=${requestedFamily} ignored`}
               says="this surface opens an authored family.json, not a placed element — pick the profile"
             />
+          ) : receipt != null ? (
+            <OutcomeLine kind="receipt" label={receipt.text} />
           ) : undefined
         }
         aside={

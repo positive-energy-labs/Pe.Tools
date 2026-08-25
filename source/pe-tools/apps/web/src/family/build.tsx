@@ -207,15 +207,6 @@ export function readBuildReceipt(result: unknown): BuildReceipt | null {
   };
 }
 
-/** The receipt in the page's own voice — family, path, and when, on the one receipt channel. */
-export function buildReceiptLine(receipt: BuildReceipt, capturedAt: string): string {
-  return (
-    `built ${receipt.familyName} → ${receipt.rfaPath}` +
-    `${receipt.parameterCount == null ? "" : ` · ${receipt.parameterCount} params`}` +
-    ` · captured ${capturedAt}`
-  );
-}
-
 /** What the surface says when it cannot vouch for its own write (finding 3 above). */
 export const BUILD_OUTCOME_UNKNOWN =
   "OUTCOME UNKNOWN — the build command returned without a receipt, so this surface cannot say whether " +

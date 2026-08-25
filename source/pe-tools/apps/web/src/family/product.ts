@@ -1,13 +1,11 @@
 import type { Product } from "#/targeting/model";
 
-export type FamilyProductActions = {
+export const FAMILY_PRODUCT = (actions: {
   open: () => Promise<string | void>;
   save: () => Promise<string | void>;
   capture: () => Promise<string | void>;
   build: () => Promise<string | void>;
-};
-
-export const FAMILY_PRODUCT = (actions: FamilyProductActions): Product => ({
+}): Product => ({
   key: "family",
   name: "family",
   links: [

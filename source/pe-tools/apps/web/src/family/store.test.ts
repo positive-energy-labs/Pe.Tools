@@ -90,6 +90,24 @@ describe("family route store", () => {
     await capture;
   });
 
+  it("records a failed open only on the core failure channel", async () => {
+    const testFixture = fixture();
+    const host: FamilyHost = {
+      ...testFixture.host,
+      settingsCommand: async () => { throw Error("open refused"); },
+    };
+    const { registry, store } = make({ ...testFixture, host });
+    await expect(store.actions.open("picked.family.json")).rejects.toThrow("open refused");
+    expect(registry.get(store.atoms.failure)).toMatchObject({ verb: "open", message: "open refused" });
+    expect(registry.get(store.atoms.receipt)).toBeNull();
+  });
+
+  it("keeps capture on the core receipt channel", async () => {
+    const { registry, store } = make();
+    await store.actions.capture();
+    expect(registry.get(store.atoms.receipt)).toMatchObject({ verb: "capture", text: "capture" });
+  });
+
   it("projects feed initial, success, and failure states", async () => {
     let releaseSessions!: (value: []) => void;
     const testFixture = fixture();

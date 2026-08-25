@@ -14,7 +14,6 @@ import {
   type BuildFacts,
   buildOutputPath,
   buildPlanHash,
-  buildReceiptLine,
   buildRefusals,
   buildTarget,
   issueText,
@@ -237,18 +236,5 @@ describe("readBuildReceipt — a build with no receipt is not a success", () => 
       documentVersionToken: null,
       parameterCount: null,
     });
-  });
-
-  it("the receipt line carries family, path and when — the three facts a build is judged on", () => {
-    const line = buildReceiptLine(
-      {
-        familyName: "Fan Coil Unit",
-        rfaPath: "out.rfa",
-        documentVersionToken: "7",
-        parameterCount: 12,
-      },
-      "14:15:00",
-    );
-    expect(line).toBe("built Fan Coil Unit → out.rfa · 12 params · captured 14:15:00");
   });
 });

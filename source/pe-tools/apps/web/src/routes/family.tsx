@@ -99,15 +99,43 @@ function FamilyStoreOwner({
   const store = storeRef.current;
   const snapshot = useAtomValue(store.atoms.snapshot);
   const openProfile = snapshot?.documentId.relativePath ?? "";
+  const successfulOpen = useRef<{ requested: string; before: string } | null>(null);
   useEffect(() => {
-    if (!profile || store.registry.get(store.atoms.snapshot)?.documentId.relativePath === profile)
+    const before = store.registry.get(store.atoms.snapshot)?.documentId.relativePath ?? "";
+    if (!profile || before === profile) {
+      successfulOpen.current = null;
       return;
-    void store.actions.open(profile).catch(() => undefined);
-  }, [profile, store]);
+    }
+    successfulOpen.current = null;
+    let current = true;
+    void store.actions
+      .open(profile)
+      .then(() => {
+        if (!current) return;
+        successfulOpen.current = { requested: profile, before };
+        const opened = store.registry.get(store.atoms.snapshot)?.documentId.relativePath;
+        if (opened && opened !== before && opened !== profile) {
+          successfulOpen.current = null;
+          void navigate({ search: (previous) => ({ ...previous, profile: opened }) });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [navigate, profile, store]);
   useEffect(() => {
-    if (!openProfile) return;
+    const opened = successfulOpen.current;
+    if (
+      !openProfile ||
+      opened?.requested !== profile ||
+      openProfile === opened.before ||
+      openProfile === profile
+    )
+      return;
+    successfulOpen.current = null;
     void navigate({ search: (previous) => ({ ...previous, profile: openProfile }) });
-  }, [navigate, openProfile]);
+  }, [navigate, openProfile, profile]);
   useEffect(() => {
     const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
     if (disposeTimer.current) clearTimeout(disposeTimer.current);
