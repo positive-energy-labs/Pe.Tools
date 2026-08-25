@@ -2,7 +2,6 @@ import { Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import { familyRouteState, settingsRouteState, type FamilyDocument, type SettingsRouteDocument } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
@@ -12,7 +11,7 @@ import { familyLane } from "#/family/lane";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
 import { draftToPatches } from "#/family/project";
 import { mintSelector, sessionLabel } from "#/host/target";
-import { createRouteStoreCore, docAtom, feed, hostRead, type Scope } from "#/state/route-store";
+import { createRouteStoreCore, docAtom, feed, hostRead, type Scope, type Slice } from "#/state/route-store";
 
 export interface SearchPort { readonly target: string; patch(partial: { target?: string }): void }
 type Setter<A> = A | ((previous: A) => A);
@@ -21,27 +20,28 @@ type Binding = { slug: string; property: string } | null;
 type ArmedBuild = { token: string | null; reason: string } | null;
 const table = (): MasterTableState => ({ filters: {}, sorts: [], query: "" });
 
-export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; scope: Scope; host: FamilyHost; search: SearchPort }) {
+type FamilySlices = {
+  settings: Atom.Atom<AsyncResult.AsyncResult<Slice<SettingsRouteDocument>, Error>>;
+  family: Atom.Atom<AsyncResult.AsyncResult<Slice<FamilyDocument>, Error>>;
+};
+
+export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; scope: Scope; host: FamilyHost; search: SearchPort; slices?: FamilySlices }) {
   const core = createRouteStoreCore("family", deps.registry);
   const { registry, owned, write, runVerb } = core;
   const runtimeFactory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() });
   const runtime = runtimeFactory(Layer.empty).pipe(Atom.autoDispose);
   Reflect.set(runtime.layer, "keepAlive", false);
-  const invalidate = runtime.fn((keys: readonly string[]) => Reactivity.invalidate(keys)).pipe(Atom.autoDispose);
 
-  const settingsSlice = docAtom(settingsRouteState, deps.scope);
-  const familySlice = docAtom(familyRouteState, deps.scope);
-  const fixtureRevision = Atom.make(0).pipe(Atom.autoDispose);
+  const settingsSlice = core.owned("slice/settings", deps.slices?.settings ?? docAtom(settingsRouteState, deps.scope));
+  const familySlice = core.owned("slice/family", deps.slices?.family ?? docAtom(familyRouteState, deps.scope));
   const settingsDoc = Atom.make((get): SettingsRouteDocument | null => {
-    get(fixtureRevision);
     const result = get(settingsSlice);
-    return AsyncResult.isSuccess(result) ? result.value.doc : (deps.host.fixtureDocs?.settings as SettingsRouteDocument | undefined) ?? null;
-  }).pipe(owned("doc/settings"));
+    return AsyncResult.isSuccess(result) ? result.value.doc : null;
+  }).pipe(Atom.autoDispose);
   const familyDoc = Atom.make((get): FamilyDocument | null => {
-    get(fixtureRevision);
     const result = get(familySlice);
-    return AsyncResult.isSuccess(result) ? result.value.doc : (deps.host.fixtureDocs?.family as FamilyDocument | undefined) ?? null;
-  }).pipe(owned("doc/family"));
+    return AsyncResult.isSuccess(result) ? result.value.doc : null;
+  }).pipe(Atom.autoDispose);
   const snapshot = Atom.make((get) => {
     const value = get(settingsDoc)?.snapshot;
     return value?.documentId.moduleKey === FAMILY_MODULE.moduleKey && value.documentId.rootKey === FAMILY_MODULE.rootKey ? value as FamilySnapshot : null;
@@ -63,37 +63,36 @@ export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; s
   const focusedProposal = Atom.make<string | null>(null).pipe(owned("page/focused-proposal"));
   const pinnedParam = Atom.make<string | null>(null).pipe(owned("page/pinned-param"));
   const anatomyCollapsed = Atom.make(false).pipe(owned("page/anatomy-collapsed"));
-  const target = Atom.make(deps.search.target).pipe(owned("url/target"));
   const inspect = Atom.make<Inspect>(null).pipe(owned("page/inspect"));
   const binding = Atom.make<Binding>(null).pipe(owned("page/binding"));
   const picker = Atom.make<{ open: string | null; level: string | null; query: string }>({ open: null, level: null, query: "" }).pipe(owned("page/picker"));
-  const seededRef = Atom.make(registry.get(lane).seedKey).pipe(owned("page/seeded-ref"));
-  const evidenceRef = Atom.make(registry.get(evidence)?.from.capturedAt ?? null).pipe(owned("page/evidence-ref"));
+  const seededRef = Atom.make(registry.get(lane).seedKey).pipe(Atom.autoDispose);
+  const evidenceRef = Atom.make(registry.get(evidence)?.from.capturedAt ?? null).pipe(Atom.autoDispose);
   const armedBuild = Atom.make<ArmedBuild>(null).pipe(owned("page/armed-build"));
   const buildSaid = Atom.make<BuildRefusal | null>(null).pipe(owned("page/build-said"));
 
   const sessionsSource = runtime.atom(() => hostRead(["sessions"], deps.host.sessions));
   const sessionsResult = runtimeFactory.withReactivity(["sessions"])(Atom.swr(sessionsSource, { staleTime: "5 seconds", revalidateOnMount: false })).pipe(Atom.autoDispose);
-  const profileSource = runtime.atom((get) => hostRead([get(target)], () => deps.host.profile(get(target))));
+  const profileSource = runtime.atom(() => hostRead([deps.search.target], () => deps.host.profile(deps.search.target)));
   const profileResult = runtimeFactory.withReactivity(["profile"])(Atom.swr(profileSource, { staleTime: "60 seconds", revalidateOnMount: false })).pipe(Atom.autoDispose);
   const sessionFeed = Atom.make((get) => feed(get(sessionsResult), (items) => items.map((session) => ({ id: mintSelector(session, items), label: sessionLabel(session) })), "live")).pipe(owned("feed/session"));
   const profileFeed = Atom.make((get) => feed(get(profileResult), (paths) => paths.map((path) => ({ id: path, label: path })), "read")).pipe(owned("feed/profile"));
 
   const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) => write(verb, atom.label?.[0] ?? "page", () => registry.update(atom, (previous) => typeof next === "function" ? (next as (value: A) => A)(previous) : next));
-  const resetFor = (nextLane: ReturnType<typeof familyLane>) => Atom.batch(() => {
+  const resetFor = (nextLane: ReturnType<typeof familyLane>) => write("system", "slice-reset", () => Atom.batch(() => {
     registry.set(seededRef, nextLane.seedKey);
     registry.set(draft, initialDraft(nextLane.world));
     registry.set(stageType, nextLane.world.typeNames[1] ?? nextLane.world.typeNames[0] ?? "");
     registry.set(drillType, null); registry.set(inspect, null); registry.set(binding, null);
     registry.set(focus, null); registry.set(focusedProposal, null); registry.set(pinnedParam, null); registry.set(overlay, "draft");
-  });
+  }));
   const unsubscribeLane = registry.subscribe(lane, (next) => {
     if (registry.get(seededRef) !== next.seedKey) resetFor(next);
     const stamp = registry.get(evidence)?.from.capturedAt ?? null;
-    if (registry.get(evidenceRef) !== stamp) Atom.batch(() => {
+    if (registry.get(evidenceRef) !== stamp) write("system", "evidence-refresh", () => Atom.batch(() => {
       registry.set(evidenceRef, stamp);
       registry.update(draft, (previous) => ({ ...previous, live: structuredClone(next.world.live?.values ?? {}) }));
-    });
+    }));
   }, { immediate: true });
 
   const expect = <T extends { ok: boolean; error?: string; hint?: string }>(result: T, fallback: string): T => {
@@ -101,27 +100,20 @@ export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; s
     return result;
   };
   const actions = {
-    acceptFixtureDocs(settings: unknown, family: unknown) {
-      if (!deps.host.fixtureDocs) throw Error("fixture documents are unavailable");
-      deps.host.fixtureDocs.settings = settings;
-      deps.host.fixtureDocs.family = family;
-      registry.update(fixtureRevision, (value) => value + 1);
-    },
     setDraft: (value: Setter<Draft>) => set("set-draft", draft, value), setOverlay: (value: Setter<Overlay>) => set("set-overlay", overlay, value),
     setTable: (value: Setter<MasterTableState>) => set("set-table", tableState, value), setDrill: (value: Setter<MasterTableState>) => set("set-drill", drillState, value),
     setDocMode: (value: Setter<"text" | "sheet">) => set("set-doc-mode", docMode, value), setDocZoom: (value: Setter<number>) => set("set-doc-zoom", docZoom, value),
     setDrillType: (value: Setter<string | null>) => set("set-drill-type", drillType, value), setStageType: (value: Setter<string>) => set("set-stage-type", stageType, value),
     setFocus: (value: Setter<Focus>) => set("set-focus", focus, value), setFocusedProposal: (value: Setter<string | null>) => set("set-focused-proposal", focusedProposal, value),
     setPinnedParam: (value: Setter<string | null>) => set("set-pinned-param", pinnedParam, value), setAnatomyCollapsed: (value: Setter<boolean>) => set("set-anatomy-collapsed", anatomyCollapsed, value),
-    setTarget(nextTarget: string) { void actions.bind(nextTarget).catch(() => undefined); }, setInspect: (value: Setter<Inspect>) => set("set-inspect", inspect, value), setBinding: (value: Setter<Binding>) => set("set-binding", binding, value),
+    setInspect: (value: Setter<Inspect>) => set("set-inspect", inspect, value), setBinding: (value: Setter<Binding>) => set("set-binding", binding, value),
     setArmedBuild: (value: Setter<ArmedBuild>) => set("set-armed-build", armedBuild, value), setBuildSaid: (value: Setter<BuildRefusal | null>) => set("set-build-said", buildSaid, value),
     setPicker(value: Setter<{ open: string | null; level: string | null; query: string }>) { set("set-picker", picker, value); },
     say(text: string) { write("say", "verb/receipt", () => registry.set(core.receipt, { verb: "page", text, at: Date.now() })); },
-    refreshProfile() { write("refresh-profile", "invalidate/profile", () => registry.set(invalidate, ["profile"])); },
     async save() {
       return runVerb("save", async () => {
         const current = registry.get(lane);
-        if (!current.document) { registry.update(draft, (value) => ({ ...value, dirty: false })); return `saved ${current.world.path}`; }
+        if (!current.document) { write("save", "page/draft", () => registry.update(draft, (value) => ({ ...value, dirty: false }))); return `saved ${current.world.path}`; }
         const patches = draftToPatches(current.document.model, registry.get(draft), initialDraft(current.world));
         if (!patches.length) return `Nothing to write - every value already matches ${current.document.relativePath}.`;
         expect(await deps.host.settingsApply(patches), "the document rejected it");
@@ -132,16 +124,13 @@ export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; s
     open(relativePath: string) { return runVerb("open", async () => expect(await deps.host.settingsCommand("open", { documentId: { ...FAMILY_MODULE, relativePath } }), "open failed"), ["settings"]); },
     capture() { return runVerb("capture", async () => expect(await deps.host.familyCommand("capture_evidence"), "capture failed"), ["family"]); },
     build(relativePath: string) { return runVerb("build", async () => expect(await deps.host.familyCommand("build_evidence", { documentId: { ...FAMILY_MODULE, relativePath } }), "build failed"), ["family"]); },
-    bind(nextTarget: string) { return runVerb("bind", async () => { expect(await deps.host.familyApply([{ path: ["binding", "target"], value: nextTarget }]), "bind failed"); registry.set(target, nextTarget); deps.search.patch({ target: nextTarget }); return `bound ${nextTarget}`; }, ["family", "profile"]); },
-    pick(nextTarget: string) { return actions.bind(nextTarget); },
+    bind(nextTarget: string) { return runVerb("bind", async () => { expect(await deps.host.familyApply([{ path: ["binding", "target"], value: nextTarget }]), "bind failed"); write("bind", "url/target", () => deps.search.patch({ target: nextTarget })); return `bound ${nextTarget}`; }, ["family", "profile"]); },
   };
   return {
     registry,
-    get documents() { return registry.get(profileFeed).options?.map((option) => option.id) ?? []; },
-    get snapshot() { return registry.get(snapshot); },
-    refreshDocuments: actions.refreshProfile,
+    search: deps.search,
     slices: { settings: settingsSlice, family: familySlice },
-    atoms: { lane, snapshot, fields, evidence, saved, draft, overlay, table: tableState, drill: drillState, docMode, docZoom, drillType, stageType, focus, focusedProposal, pinnedParam, anatomyCollapsed, target, inspect, binding, picker, seededRef, evidenceRef, armedBuild, buildSaid, busy: core.busy, failure: core.failure, receipt: core.receipt },
+    atoms: { lane, snapshot, fields, saved, draft, overlay, table: tableState, drill: drillState, docMode, docZoom, drillType, stageType, focus, focusedProposal, pinnedParam, anatomyCollapsed, inspect, binding, picker, armedBuild, buildSaid, busy: core.busy, failure: core.failure, receipt: core.receipt },
     feeds: { session: sessionFeed, profile: profileFeed },
     actions,
     dispose() { unsubscribeLane(); core.dispose(); },

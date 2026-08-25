@@ -23,7 +23,7 @@
  */
 import { settingsFieldPointer } from "@pe/agent-contracts";
 
-import type { RouteStatePatch } from "#/workbench/route-state";
+import type { RouteStatePatch } from "@pe/agent-contracts";
 import { timeAgo } from "#/lib/utils";
 import type { ConnectorSpec, FamilyModel, ParamSpec, SolidSpec } from "#/family/family-model";
 import { paramRef, paramSpec } from "#/family/family-model";

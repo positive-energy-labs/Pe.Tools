@@ -51,7 +51,6 @@ export type BuildRefusalCode =
   | "unsaved"
   | "invalid"
   | "superseded"
-  /** The host said no, in its own words. Never paraphrased — its wording is the teaching channel. */
   | "host"
   /** The command answered without proving anything. Not a no; unprovable. */
   | "unknown";
@@ -228,7 +227,7 @@ export interface BuildStripProps {
   armed: { token: string | null; reason: string } | null;
   /** The command is out. Nothing about the .rfa is known yet. */
   building: boolean;
-  /** A host refusal, verbatim, or the latched unknown outcome. Outranks the local predicates. */
+  /** A host failure or latched unknown outcome. Outranks the local predicates. */
   said: BuildRefusal | null;
   facts: BuildFacts;
   familyName: string;

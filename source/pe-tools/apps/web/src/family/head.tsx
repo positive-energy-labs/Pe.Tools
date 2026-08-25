@@ -4,6 +4,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { FAMILY_PRODUCT } from "#/family/product";
 import type { FamilyStore } from "#/family/store";
+import { OutcomeLine } from "#/components/lang/outcome";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 
@@ -16,7 +17,7 @@ export function FamilyHead({
   onSave,
   onCapture,
   onBuild,
-  receipt,
+  outcome,
   aside,
 }: {
   store: FamilyStore;
@@ -25,13 +26,14 @@ export function FamilyHead({
   onSave: Action;
   onCapture: Action;
   onBuild: Action;
-  receipt?: React.ReactNode;
+  outcome?: React.ReactNode;
   aside?: React.ReactNode;
 }) {
   const { target = "", profile = "", stage = "author" } = useSearch({ from: "/family" });
   const navigate = useNavigate({ from: "/family" });
   const picker = useAtomValue(store.atoms.picker);
   const busy = useAtomValue(store.atoms.busy);
+  const receipt = useAtomValue(store.atoms.receipt);
   const feeds = {
     session: useAtomValue(store.feeds.session),
     profile: useAtomValue(store.feeds.profile),
@@ -73,5 +75,13 @@ export function FamilyHead({
     (query) => store.actions.setPicker((previous) => ({ ...previous, query })),
   );
   const runner = useRunner(product, b, busy?.id ?? null);
-  return <TargetingHead product={product} b={b} runner={runner} receipt={receipt} aside={aside} />;
+  return (
+    <TargetingHead
+      product={product}
+      b={b}
+      runner={runner}
+      receipt={outcome ?? (receipt ? <OutcomeLine kind="receipt" label={receipt.text} /> : undefined)}
+      aside={aside}
+    />
+  );
 }

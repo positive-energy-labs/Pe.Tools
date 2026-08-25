@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import type { RouteStateWriteResult } from "@pe/agent-contracts";
 
-import { createFixtureFamilyHost } from "#/family/host";
+import type { FamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
 
 const MODEL = {
@@ -20,27 +23,50 @@ const settings = (versionToken = "v1") => ({
 const family = { binding: { target: "" }, doc: null, evidence: null };
 const registries: AtomRegistry.AtomRegistry[] = [];
 afterEach(() => registries.splice(0).forEach((registry) => registry.dispose()));
-const make = (host = createFixtureFamilyHost({ settings: settings(), family })) => {
+const slice = <D>(doc: D) => ({ doc, hydrated: true, connected: null, error: null, peaActive: false });
+const fixture = () => {
+  const calls: Array<{ op: string; input: unknown }> = [];
+  const record = async (op: string, input: unknown): Promise<RouteStateWriteResult> => {
+    calls.push({ op, input });
+    return { ok: true, result: {} };
+  };
+  const host: FamilyHost = {
+    sessions: async () => [],
+    profile: async () => [],
+    settingsApply: (patches) => record("settings.apply", patches),
+    settingsCommand: (name, input) => record(`settings.${name}`, input ?? {}),
+    familyApply: (patches) => record("family.apply", patches),
+    familyCommand: (name, input) => record(`family.${name}`, input ?? {}),
+  };
+  return { host, calls };
+};
+const make = (testFixture = fixture()) => {
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+  const settingsSlice = Atom.make(AsyncResult.success(slice(settings())));
+  const familySlice = Atom.make(AsyncResult.success(slice(family)));
   registries.push(registry);
-  return { registry, host, store: createFamilyStore({ registry, scope: { threadId: "thread-1" }, host, search: { target: "", patch() {} } }) };
+  return {
+    registry,
+    settingsSlice,
+    calls: testFixture.calls,
+    store: createFamilyStore({ registry, scope: { threadId: "thread-1" }, host: testFixture.host, search: { target: "", patch() {} }, slices: { settings: settingsSlice, family: familySlice } }),
+  };
 };
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("family route store", () => {
   it("does not reseed draft for a second slice snapshot with the same version token", () => {
-    const { registry, store } = make();
+    const { registry, settingsSlice, store } = make();
     store.actions.setDraft((draft) => ({ ...draft, authored: { ...draft.authored, Width: "30in" }, dirty: true }));
-    store.actions.acceptFixtureDocs({ ...settings(), savedAt: "later" }, family);
+    registry.set(settingsSlice, AsyncResult.success(slice({ ...settings(), savedAt: "later" })));
     expect(registry.get(store.atoms.draft).authored.Width).toBe("30in");
-    expect(registry.get(store.atoms.seededRef)).toBe("test.family.json@v1");
   });
 
   it("save stages the reverse-projection patches before the save command", async () => {
-    const { store, host } = make();
+    const { store, calls } = make();
     store.actions.setDraft((draft) => ({ ...draft, authored: { ...draft.authored, Width: "30in" }, dirty: true }));
     await store.actions.save();
-    expect(host.calls).toEqual([
+    expect(calls).toEqual([
       { op: "settings.apply", input: [{ path: ["fields", "/familyParameters/Width/value", "staged"], value: { value: "30in" } }] },
       { op: "settings.save", input: {} },
     ]);
@@ -48,15 +74,15 @@ describe("family route store", () => {
 
   it("refuses build while capture is running", async () => {
     let release!: (value: { ok: true; result: {} }) => void;
-    const fixture = createFixtureFamilyHost({ settings: settings(), family });
-    const host = {
-      ...fixture,
+    const testFixture = fixture();
+    const host: FamilyHost = {
+      ...testFixture.host,
       familyCommand: (name: "capture_evidence" | "build_evidence", input?: Record<string, unknown>) =>
         name === "capture_evidence"
           ? new Promise<{ ok: true; result: {} }>((resolve) => { release = resolve; })
-          : fixture.familyCommand(name, input),
+          : testFixture.host.familyCommand(name, input),
     };
-    const { store } = make(host);
+    const { store } = make({ ...testFixture, host });
     const capture = store.actions.capture();
     await tick();
     await expect(store.actions.build("test.family.json")).rejects.toThrow("another verb is running");
@@ -66,13 +92,13 @@ describe("family route store", () => {
 
   it("projects feed initial, success, and failure states", async () => {
     let releaseSessions!: (value: []) => void;
-    const fixture = createFixtureFamilyHost({ settings: settings(), family });
-    const host = {
-      ...fixture,
+    const testFixture = fixture();
+    const host: FamilyHost = {
+      ...testFixture.host,
       sessions: () => new Promise<[]>((resolve) => { releaseSessions = resolve; }),
       profile: async () => { throw Error("tree refused"); },
     };
-    const { registry, store } = make(host);
+    const { registry, store } = make({ ...testFixture, host });
     expect(registry.get(store.feeds.session).state).toBe("loading");
     releaseSessions([]);
     await tick();

@@ -187,7 +187,6 @@ import { cn } from "#/lib/utils";
 export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore; requestedFamily?: string }) {
   /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
   const lane = useAtomValue(store.atoms.lane);
-  useAtomValue(store.feeds.profile);
   const world = lane.world;
   /**
    * The last-read document, as a draft. It is the page's record of the DISK and the baseline the
@@ -228,10 +227,7 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
   const setPinnedParam = store.actions.setPinnedParam;
   const anatomyCollapsed = useAtomValue(store.atoms.anatomyCollapsed);
   const setAnatomyCollapsed = store.actions.setAnatomyCollapsed;
-  const coreReceipt = useAtomValue(store.atoms.receipt);
-  const receipt = coreReceipt && { text: coreReceipt.text, atMs: coreReceipt.at };
-  const target = useAtomValue(store.atoms.target);
-  const setTarget = store.actions.setTarget;
+  const target = store.search.target;
   /**
    * What the doc pane's LOWER HALF is showing. One slot, two subjects: a constituent's
    * non-bindable metadata, or a parameter's family-level value. They share the slot because they
@@ -494,14 +490,7 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
    * It runs the settings lifecycle's `open`, which preserves the field trichotomy: proposals pea
    * already made against a document survive you looking at another one and coming back.
    */
-  const openDocument = (relativePath: string) =>
-    void (async () => {
-      const opened = await store.actions.open(relativePath);
-      if (!opened.ok)
-        say(
-          `Could not open ${relativePath} — ${opened.hint ?? opened.error ?? "the host refused, without saying why"}`,
-        );
-    })();
+  const openDocument = (relativePath: string) => store.actions.open(relativePath);
 
   /** The host's own schema verdict on the SAVED file. Only meaningful on the live lane: the fixture
    * has no schema behind it, and a green chip there would be claiming a check nobody ran. */
@@ -559,8 +548,13 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
   const armedBuild = useAtomValue(store.atoms.armedBuild);
   const setArmedBuild = store.actions.setArmedBuild;
   const building = busy?.id === "build";
-  /** The host's own last word on a build, or a latched unknown outcome. Outranks the predicates. */
+  const failure = useAtomValue(store.atoms.failure);
+  /** A latched unknown outcome. Host failures stay on the core's failure channel. */
   const buildSaid = useAtomValue(store.atoms.buildSaid);
+  const buildOutcome =
+    failure?.kind === "host" && failure.verb === "build"
+      ? { code: "host" as const, says: failure.message }
+      : buildSaid;
   const setBuildSaid = store.actions.setBuildSaid;
   const fields = useAtomValue(store.atoms.fields);
 
@@ -593,14 +587,6 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
   const captureLive = async () => {
     try {
       const read = await store.actions.capture();
-      if (!read.ok) {
-        // The host's words verbatim — "is a family document active in the bound session?" IS the
-        // exit, and paraphrasing it into "capture failed" would throw away the only help there is.
-        say(
-          `Could not read the live family — ${read.hint ?? read.error ?? "the host refused, without saying why"}`,
-        );
-        return;
-      }
       const payload = (read.result ?? {}) as { familyName?: string; parameterCount?: number };
       say(
         `read ${payload.familyName ?? "the live family"} out of Revit — ${payload.parameterCount ?? 0} parameters; the ⇄ live overlay is now stamped with this read`,
@@ -619,32 +605,20 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
     if (relativePath == null || armedBuild == null) return;
     if (buildRefusals({ ...buildFacts, armedToken: armedBuild.token }).length > 0) return;
     setBuildSaid(null);
-    try {
-      const built = await store.actions.build(relativePath);
-      if (!built.ok) {
-        const says = built.hint ?? built.error ?? "the host refused, without saying why";
-        setBuildSaid({ code: "host", says });
-        say(`Build refused — ${says}`);
-        return;
-      }
-      const receipt = readBuildReceipt(built.result);
-      if (receipt == null) {
-        // OUTCOME UNKNOWN, latched. `build_evidence` mutates outside the page — it writes a file —
-        // so an answer with no receipt is neither a success nor a refusal, and claiming either
-        // would be the surface inventing a fact about the disk.
-        setBuildSaid({ code: "unknown", says: BUILD_OUTCOME_UNKNOWN });
-        say(BUILD_OUTCOME_UNKNOWN);
-        return;
-      }
-      // Disarm on the way out: the plan was spent, and a strip still armed against a token the
-      // build has already consumed would invite a second, differently-named .rfa.
-      setArmedBuild(null);
-      say(buildReceiptLine(receipt, new Date().toLocaleTimeString()));
-    } catch (error) {
-      const says = error instanceof Error ? error.message : String(error);
-      setBuildSaid({ code: "host", says });
-      say(`Build refused — ${says}`);
+    const built = await store.actions.build(relativePath);
+    const receipt = readBuildReceipt(built.result);
+    if (receipt == null) {
+      // OUTCOME UNKNOWN, latched. `build_evidence` mutates outside the page — it writes a file —
+      // so an answer with no receipt is neither a success nor a refusal, and claiming either
+      // would be the surface inventing a fact about the disk.
+      setBuildSaid({ code: "unknown", says: BUILD_OUTCOME_UNKNOWN });
+      say(BUILD_OUTCOME_UNKNOWN);
+      return;
     }
+    // Disarm on the way out: the plan was spent, and a strip still armed against a token the
+    // build has already consumed would invite a second, differently-named .rfa.
+    setArmedBuild(null);
+    say(buildReceiptLine(receipt, new Date().toLocaleTimeString()));
   };
 
   /** Re-arm against the file as it now stands. Writes nothing — the one exit every refusal shares. */
@@ -1814,14 +1788,14 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
         className="mx-2 mt-2 shrink-0"
         armed={armedBuild}
         building={building}
-        said={buildSaid}
+        said={buildOutcome}
         facts={buildFacts}
         familyName={world.familyName}
         count={world.paramRows.length}
         onReasonChange={(reason) =>
           setArmedBuild((previous) => (previous == null ? previous : { ...previous, reason }))
         }
-        onCommit={() => void runBuild()}
+        onCommit={() => void runBuild().catch(() => undefined)}
         onCancel={() => {
           setArmedBuild(null);
           setBuildSaid(null);
@@ -2226,18 +2200,16 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
       <FamilyHead
         store={store}
         onOpen={openDocument}
-        onPickSession={setTarget}
+        onPickSession={(nextTarget) => void store.actions.bind(nextTarget).catch(() => undefined)}
         onSave={save}
         onCapture={captureLive}
         onBuild={runBuild}
-        receipt={
-          receipt ? (
-            <OutcomeLine kind="receipt" label={receipt.text} />
-          ) : lane.parseError != null ? (
+        outcome={
+          lane.parseError != null ? (
             <OutcomeLine
               kind="error"
               label="the open document will not parse"
-              says={`${store.snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
+              says={`${snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
             />
           ) : requestedFamily != null ? (
             <OutcomeLine

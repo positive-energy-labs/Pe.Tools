@@ -10,9 +10,8 @@
  *
  * WHAT THE ROUTE STILL OWNS, and why each survived the promotion:
  *   `thread` — the chat side pane iframes this route with a thread id, and `#/workbench/route-state`
- *     reads it straight off the URL to scope route state to that conversation. Declared here
- *     because an undeclared param is dropped on the first navigation, and the pane would then
- *     silently fall back to workspace scope. Nothing on the page reads it; the router does.
+ *     passes it to the family store to address both route-state slices to that conversation.
+ *     Declared here because an undeclared param is dropped on the first navigation.
  *   `family` — `/families` row navigation passes an ELEMENT id. Phase B gave the surface a real
  *     document lane, but a placed element is still not a document: nothing maps an element id to a
  *     `family.json` path. So it is handed to the workspace and SAID rather than swallowed — the
