@@ -14,6 +14,7 @@ import {
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
+import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import {
   createRouteStoreCore,
   docAtom,
@@ -76,14 +77,18 @@ export type SessionEvent =
   | { readonly kind: "docChanged"; readonly sessionId: string }
   | { readonly kind: "sessionsChanged"; readonly sessionId: string };
 
+export interface TakeoffSessionFacts extends SessionFacts {
+  readonly year?: string;
+}
+
 export interface ActiveDocument {
-  readonly session: SessionFacts;
+  readonly session: TakeoffSessionFacts;
   readonly title: string;
 }
 
 export interface SessionSource {
-  list(): Promise<SessionFacts[]>;
-  activeDocument(session: SessionFacts): Promise<ActiveDocument>;
+  list(): Promise<TakeoffSessionFacts[]>;
+  activeDocument(session: TakeoffSessionFacts): Promise<ActiveDocument>;
   subscribe(listener: (event: SessionEvent) => void): () => void;
 }
 
@@ -94,6 +99,12 @@ export interface RhvacFile {
 
 export interface TakeoffHost {
   readonly fixture: boolean;
+  listRecentDocuments?(year?: string): Promise<readonly RecentDocument[]>;
+  openDocument?(input: {
+    readonly path: string;
+    readonly id: string;
+    readonly conflictPolicy?: "keep";
+  }): Promise<void>;
   readSnapshot(
     session: SessionFacts,
     document: ActiveDocument,
@@ -490,6 +501,29 @@ export function createTakeoffStore(deps: {
   const activeDocumentResult = runtimeFactory
     .withReactivity(["active-document"])(activeDocumentSource)
     .pipe(Atom.autoDispose);
+  const recentDocumentsSource = runtime
+    .atom((get) =>
+      Effect.gen(function* () {
+        const target = get(targetAtom);
+        const read = yield* get.result(sessionsResult, { suspendOnWaiting: true });
+        const resolution = resolveTarget(read.value, target);
+        if (resolution.kind !== "resolved" || !deps.host.listRecentDocuments)
+          return unbound<readonly RecentDocument[]>([], [target]);
+        const session = read.value.find(
+          (candidate) => candidate.sessionId === resolution.session.sessionId,
+        )!;
+        return yield* hostRead(
+          [session.sessionId, session.year ?? "all"],
+          () => deps.host.listRecentDocuments!(session.year),
+        );
+      }),
+    )
+    .pipe(Atom.autoDispose);
+  const recentDocumentsResult = runtimeFactory
+    .withReactivity(["recent-documents"])(
+      Atom.swr(recentDocumentsSource, { staleTime: "30 seconds", revalidateOnMount: false }),
+    )
+    .pipe(Atom.autoDispose);
   const snapshotProducerSource = runtime
     .atom((get) =>
       Effect.gen(function* () {
@@ -614,14 +648,34 @@ export function createTakeoffStore(deps: {
       { needs: TAKEOFF_LINKS[0]!.needs },
     ),
   ).pipe(owned("feed/world"));
-  const documentFeed = Atom.make((get) =>
-    feed(
-      get(activeDocumentResult),
-      (document) => (document ? [{ id: document.title, label: document.title }] : []),
-      deps.host.fixture ? "fixture" : "live",
+  const documentFeed = Atom.make((get) => {
+    const document = get(activeDocumentResult);
+    if (deps.host.fixture || !deps.host.listRecentDocuments)
+      return feed(
+        document,
+        (active) => (active ? [{ id: active.title, label: active.title }] : []),
+        deps.host.fixture ? "fixture" : "live",
+        { needs: TAKEOFF_LINKS[1]!.needs },
+      );
+    return feed(
+      get(recentDocumentsResult),
+      (recents) => {
+        const active = AsyncResult.isSuccess(document) ? document.value.value : null;
+        return [
+          ...(active ? [{ id: active.title, label: active.title }] : []),
+          ...recents
+            .filter((recent) => recent.title !== active?.title)
+            .map((recent) => ({
+              id: recent.title,
+              label: recent.title,
+              sub: recent.isCloud ? "cloud" : recent.path,
+            })),
+        ];
+      },
+      "live",
       { needs: TAKEOFF_LINKS[1]!.needs },
-    ),
-  ).pipe(owned("feed/rvt"));
+    );
+  }).pipe(owned("feed/rvt"));
   const viewFeed = Atom.make((get) =>
     snapshotFeed(
       get(snapshotResult),
@@ -874,6 +928,29 @@ export function createTakeoffStore(deps: {
           );
     });
   };
+  const openSelectedDocument = (title: string) =>
+    runVerb(
+      "open-document",
+      async () => {
+        const sessions = await settle(sessionsResult);
+        const resolution = resolveTarget(sessions.value, registry.get(targetAtom));
+        if (resolution.kind !== "resolved") throw Error("no world bound");
+        const { session } = resolution;
+        if (!session.sdkSessionId)
+          throw Error("open the document in Revit; this session is observed");
+        const recents = await settle(recentDocumentsResult);
+        const recent = recents.value.find((candidate) => candidate.title === title);
+        if (!recent) throw Error(`unknown recent document ${title}`);
+        if (!deps.host.openDocument) throw Error("document opening is unavailable");
+        await deps.host.openDocument({
+          path: recent.path,
+          id: session.sdkSessionId,
+          ...(recent.isCloud ? { conflictPolicy: "keep" as const } : {}),
+        });
+        return { text: `opened ${recent.title}` };
+      },
+      ["snapshot", "candidates"],
+    ).catch(() => undefined);
   const unsubscribe = deps.sessions.subscribe((event) => {
     if (event.kind === "sessionsChanged") {
       write("host-event", "invalidate/sessions", () => registry.set(invalidateAtom, ["sessions"]));
@@ -922,6 +999,15 @@ export function createTakeoffStore(deps: {
           : {}),
         ...(patch.multi ? { zones: [...(patch.multi.zones ?? [])] } : {}),
       });
+      const nextDocument = patch.bound?.rvt;
+      const sessions = registry.get(sessionsResult);
+      const resolution = AsyncResult.isSuccess(sessions)
+        ? resolveTarget(sessions.value.value, registry.get(targetAtom))
+        : null;
+      const activeTitle =
+        resolution?.kind === "resolved" ? resolution.session.activeDocumentTitle : undefined;
+      if (current.source === "live" && nextDocument && nextDocument !== activeTitle)
+        return openSelectedDocument(nextDocument);
     },
     settle,
     invalidate: (keys: readonly string[]) =>
@@ -1194,6 +1280,7 @@ export function createTakeoffStore(deps: {
       syncPlan: syncPlanAtom,
       sessions: sessionsResult,
       activeDocument: activeDocumentResult,
+      recentDocuments: recentDocumentsResult,
       snapshot: snapshotResult,
       candidates: candidatesResult,
       adoptRows: adoptRowsAtom,

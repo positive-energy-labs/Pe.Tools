@@ -123,6 +123,7 @@ const createStore = (
 function harness() {
   const events = new Set<(event: SessionEvent) => void>();
   const calls = { sessions: 0, doc: 0, snapshot: 0, candidates: 0, list: 0, open: 0, adopt: 0 };
+  const documentOpens: Array<{ path: string; id: string; conflictPolicy?: "keep" }> = [];
   let failSnapshot = false;
   let failR10 = false;
   let liveProjection = false;
@@ -150,6 +151,7 @@ function harness() {
           processId: 42,
           lane: "dev",
           custody: "controlled",
+          year: "2026",
           activeDocumentTitle: "Harness.rvt",
           openDocumentCount: 1,
         },
@@ -166,6 +168,33 @@ function harness() {
   };
   const host: TakeoffHost = {
     fixture: false,
+    async listRecentDocuments() {
+      return [
+        {
+          year: 2026,
+          rank: 0,
+          title: "Harness.rvt",
+          path: "C:\\Models\\Harness.rvt",
+          isCloud: false,
+          region: null,
+          projectGuid: null,
+          modelGuid: null,
+        },
+        {
+          year: 2026,
+          rank: 1,
+          title: "Cloud.rvt",
+          path: "recent:Cloud.rvt",
+          isCloud: true,
+          region: "US",
+          projectGuid: "project",
+          modelGuid: "model",
+        },
+      ];
+    },
+    async openDocument(input) {
+      documentOpens.push(input);
+    },
     async readSnapshot(_session, _document, write) {
       calls.snapshot += 1;
       if (failSnapshot) throw new Error("snapshot rejected");
@@ -215,6 +244,7 @@ function harness() {
   };
   return {
     calls,
+    documentOpens,
     host,
     sessions,
     emit: (event: SessionEvent) => events.forEach((listener) => listener(event)),
@@ -228,6 +258,25 @@ function harness() {
 }
 
 describe("takeoff route store", () => {
+  it("opens a picked recent document but not the active document", async () => {
+    const h = harness();
+    const store = createStore({
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    store.actions.setSearch(bound);
+    await store.actions.settle(store.atoms.recentDocuments);
+
+    await store.actions.setBindings({ bound: { rvt: "Cloud.rvt" } });
+    await store.actions.setBindings({ bound: { rvt: "Harness.rvt" } });
+
+    expect(h.documentOpens).toEqual([
+      { path: "recent:Cloud.rvt", id: "dev-26", conflictPolicy: "keep" },
+    ]);
+    store.dispose();
+  });
+
   it("produces a fixture snapshot accepted by the route document schema", async () => {
     const sessions = createFixtureSessionSource();
     const session = (await sessions.list())[0]!;

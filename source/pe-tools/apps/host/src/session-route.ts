@@ -3,6 +3,8 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
 import {
+  docOpenArgv,
+  docRecentsArgv,
   sessionConvergeArgv,
   sessionRestartArgv,
   sessionStartArgv,
@@ -152,10 +154,51 @@ export type SessionCliRunner<R = never> = (
 
 export type SessionCliOutcome = { readonly status: number; readonly bodyJson: string };
 
+export type DocOpenRequest = {
+  readonly path: string;
+  readonly id: string;
+  readonly year?: string;
+  readonly conflictPolicy?: string;
+  readonly detach?: boolean;
+};
+
+export function docRecentsArgs(year?: string | null): string[] {
+  return docRecentsArgv({ year: readOptionalString(year) });
+}
+
+export function parseDocOpenRequest(
+  body: unknown,
+):
+  | { readonly ok: true; readonly request: DocOpenRequest }
+  | { readonly ok: false; readonly error: string } {
+  const record =
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+  const path = readOptionalString(record.path);
+  const id = readOptionalString(record.id);
+  if (!path || !id) return { ok: false, error: "document open requires path and id" };
+  return {
+    ok: true,
+    request: {
+      path,
+      id,
+      year: typeof record.year === "number" ? String(record.year) : readOptionalString(record.year),
+      conflictPolicy: readOptionalString(record.conflictPolicy),
+      detach: record.detach === true,
+    },
+  };
+}
+
+export function docOpenArgs(request: DocOpenRequest): string[] {
+  return docOpenArgv(request);
+}
+
 // start/restart/converge block on Revit readiness (cold boot is 180-300s; the CLI's own wait
 // default is 420s; a dev-lane start also builds first) — the route budget must outlast the CLI's.
 const DEFAULT_ACTION_TIMEOUT_MS = 600_000;
 const STATUS_TIMEOUT_MS = 60_000;
+const DOC_OPEN_TIMEOUT_MS = 600_000;
 
 export function sessionActionTimeoutMs(request: SessionActionRequest): number {
   return request.timeoutSeconds != null
@@ -265,3 +308,33 @@ const sessionsActionRoute = HttpRouter.add("POST", "/sessions", (req) =>
 );
 
 export const sessionsRoute = Layer.mergeAll(sessionsStatusRoute, sessionsActionRoute);
+
+const docsRecentsRoute = HttpRouter.add("GET", "/docs/recents", (req) =>
+  Effect.gen(function* () {
+    const year = new URL(req.url, "http://localhost").searchParams.get("year");
+    const outcome = yield* executeSessionCli(
+      docRecentsArgs(year),
+      runPeRevitCli,
+      STATUS_TIMEOUT_MS,
+      { action: "doc recents" },
+    );
+    return jsonResponse(outcome);
+  }),
+);
+
+const docsOpenRoute = HttpRouter.add("POST", "/docs/open", (req) =>
+  Effect.gen(function* () {
+    const body = yield* Effect.result(req.json);
+    const parsed = parseDocOpenRequest(body._tag === "Success" ? body.success : null);
+    if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
+    const outcome = yield* executeSessionCli(
+      docOpenArgs(parsed.request),
+      runPeRevitCli,
+      DOC_OPEN_TIMEOUT_MS,
+      { action: "doc open", id: parsed.request.id },
+    );
+    return jsonResponse(outcome);
+  }),
+);
+
+export const docsRoute = Layer.mergeAll(docsRecentsRoute, docsOpenRoute);

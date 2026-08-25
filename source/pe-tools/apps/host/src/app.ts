@@ -16,7 +16,7 @@ import {
 import { callRoute } from "./call-route.ts";
 import { productRoot } from "./host-ownership.ts";
 import { installRoot, peRevitLauncher } from "./pe-revit-launch.ts";
-import { sessionsRoute } from "./session-route.ts";
+import { docsRoute, sessionsRoute } from "./session-route.ts";
 import {
   adminShutdownRoute,
   announceServedSession,
@@ -381,6 +381,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
     hostInstallRoute,
     adminShutdownRoute,
     sessionsRoute,
+    docsRoute,
     callRoute,
     MastraMountLive,
     ServedSessionLive,

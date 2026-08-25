@@ -2,7 +2,10 @@ import { Effect } from "effect";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import {
+  docOpenArgs,
+  docRecentsArgs,
   executeSessionCli,
+  parseDocOpenRequest,
   parseSessionActionRequest,
   resolveStartProject,
   sessionActionTimeoutMs,
@@ -98,6 +101,37 @@ test("stop/restart/converge map to --id verbs; stop honors force", () => {
 test("status args pass an optional id filter", () => {
   expect(sessionStatusArgs()).toEqual(["session", "status", "--json"]);
   expect(sessionStatusArgs("scratch")).toEqual(["session", "status", "--id", "scratch", "--json"]);
+});
+
+test("document recents args carry an optional year", () => {
+  expect(docRecentsArgs()).toEqual(["doc", "recents", "--json"]);
+  expect(docRecentsArgs("2026")).toEqual(["doc", "recents", "--year", "2026", "--json"]);
+});
+
+test("document open requires path and id and maps optional arguments", () => {
+  expect(parseDocOpenRequest({ path: "recent:Cloud.rvt" })).toMatchObject({ ok: false });
+  expect(parseDocOpenRequest({ id: "dev-26" })).toMatchObject({ ok: false });
+  const parsed = parseDocOpenRequest({
+    path: "recent:Cloud.rvt",
+    id: "dev-26",
+    year: 2026,
+    conflictPolicy: "keep",
+    detach: true,
+  });
+  if (!parsed.ok) throw Error(parsed.error);
+  expect(docOpenArgs(parsed.request)).toEqual([
+    "doc",
+    "open",
+    "recent:Cloud.rvt",
+    "--id",
+    "dev-26",
+    "--year",
+    "2026",
+    "--detach",
+    "--conflict-policy",
+    "keep",
+    "--json",
+  ]);
 });
 
 test("action body validation mirrors the CLI invocation contract", () => {
