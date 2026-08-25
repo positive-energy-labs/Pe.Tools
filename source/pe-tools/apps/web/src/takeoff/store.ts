@@ -157,6 +157,7 @@ export interface AtlasPageState {
   readonly cursor: string | null;
   readonly fieldsMode: "columns" | "panel";
   readonly planOpen: boolean;
+  readonly statsOpen: boolean;
 }
 
 export type AtlasRoomState = "call" | "unreviewed" | "data" | "synced";
@@ -460,6 +461,7 @@ export function createTakeoffStore(deps: {
     owned("takeoffs/page/atlas/fields-mode"),
   );
   const planOpenAtom = Atom.make(true).pipe(owned("takeoffs/page/atlas/plan-open"));
+  const statsOpenAtom = Atom.make(false).pipe(owned("takeoffs/page/atlas/stats-open"));
   const cursorAtom = Atom.make<AtlasPageState["cursor"]>(null).pipe(
     owned("takeoffs/page/atlas/cursor"),
   );
@@ -471,6 +473,7 @@ export function createTakeoffStore(deps: {
       cursor: get(cursorAtom),
       fieldsMode: get(fieldsModeAtom),
       planOpen: get(planOpenAtom),
+      statsOpen: get(statsOpenAtom),
     }),
   ).pipe(owned("takeoffs/page/atlas"));
   const atlasTableStateAtom = Atom.make<MasterTableState>({
@@ -1094,6 +1097,7 @@ export function createTakeoffStore(deps: {
           if (patch.cursor !== undefined) registry.set(cursorAtom, patch.cursor);
           if (patch.fieldsMode !== undefined) registry.set(fieldsModeAtom, patch.fieldsMode);
           if (patch.planOpen !== undefined) registry.set(planOpenAtom, patch.planOpen);
+          if (patch.statsOpen !== undefined) registry.set(statsOpenAtom, patch.statsOpen);
         }),
       );
     },
@@ -1274,6 +1278,7 @@ export function createTakeoffStore(deps: {
       level: levelAtom,
       fieldsMode: fieldsModeAtom,
       planOpen: planOpenAtom,
+      statsOpen: statsOpenAtom,
       cursor: cursorAtom,
       atlasTableState: atlasTableStateAtom,
       atlasRows: atlasRowsAtom,

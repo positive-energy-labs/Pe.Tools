@@ -11,7 +11,7 @@
 // The atlas renders a `World` and calls back through `AtlasActions` — it owns selection and
 // optimistic decision state, nothing else. The route owns the world, the overlay, and every
 // host call.
-import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
@@ -420,6 +420,7 @@ export function Atlas({ store }: AtlasProps) {
   const cursor = useAtomValue(store.atoms.cursor);
   const fieldsMode = useAtomValue(store.atoms.fieldsMode);
   const planOpen = useAtomValue(store.atoms.planOpen);
+  const statsOpen = useAtomValue(store.atoms.statsOpen);
   const tableState = useAtomValue(store.atoms.atlasTableState);
   const rows = useAtomValue(store.atoms.atlasRows);
   const visibleKeys = useAtomValue(store.atoms.visibleRows);
@@ -448,8 +449,8 @@ export function Atlas({ store }: AtlasProps) {
    *  reports the result here so j/k walks the SAME order rather than the pre-filter scope. */
 
   // Plan geometry: controlled collapse; PaneWorkspace owns and persists its resized height.
-  const [statsOpen, setStatsOpen] = useState(false);
   const setPlanOpen = (open: boolean) => store.actions.setAtlasPage({ planOpen: open });
+  const setStatsOpen = (open: boolean) => store.actions.setAtlasPage({ statsOpen: open });
 
   // Edits live in the route's session overlay (they must survive into the sync payload); the
   // world arrives with them already applied. The atlas only forwards patches.
@@ -961,7 +962,7 @@ export function Atlas({ store }: AtlasProps) {
 
                   <button
                     type="button"
-                    onClick={() => setStatsOpen((v) => !v)}
+                    onClick={() => setStatsOpen(!statsOpen)}
                     title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
                     className={cn(
                       "face-mono t-value ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5",

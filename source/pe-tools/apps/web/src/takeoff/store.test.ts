@@ -205,7 +205,12 @@ describe("takeoff route store", () => {
       .zones.flatMap((zone) => zone.rooms)[0]!;
     const zone = store.atoms.registry.get(store.atoms.world).zones[0]!;
 
-    store.actions.setAtlasPage({ level: "Main", cursor: room.guid, planOpen: false });
+    store.actions.setAtlasPage({
+      level: "Main",
+      cursor: room.guid,
+      planOpen: false,
+      statsOpen: true,
+    });
     store.actions.focusZone(zone.zone.guid);
     store.actions.selectRoom(room.guid);
     store.actions.hover(room.guid);
@@ -216,6 +221,7 @@ describe("takeoff route store", () => {
       level: "Main",
       cursor: room.guid,
       planOpen: false,
+      statsOpen: true,
     });
     expect(store.atoms.registry.get(store.atoms.entity(room.guid))).toMatchObject({
       hovered: true,
