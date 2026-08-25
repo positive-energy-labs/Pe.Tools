@@ -43,6 +43,7 @@ import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import { withThread } from "./-with-thread";
 
 // ── The manifest ─────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ export const Route = createFileRoute("/takeoffs")({
     stage: STAGES.find((s) => s === search.stage) ?? "adopt",
     thread: str(search.thread) || undefined,
   }),
+  beforeLoad: withThread,
   component: TakeoffsRoute,
 });
 
@@ -95,7 +97,8 @@ const readDirs = (): string[] => {
 
 function TakeoffsRoute() {
   const { source, thread } = Route.useSearch();
-  return <TakeoffsStoreOwner key={`${source}:${thread ?? ""}`} source={source} thread={thread} />;
+  if (!thread) return null;
+  return <TakeoffsStoreOwner key={`${source}:${thread}`} source={source} thread={thread} />;
 }
 
 function TakeoffsStoreOwner({
@@ -103,7 +106,7 @@ function TakeoffsStoreOwner({
   thread,
 }: {
   source: Search["source"];
-  thread?: string;
+  thread: string;
 }) {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: "/takeoffs" });
@@ -122,7 +125,7 @@ function TakeoffsStoreOwner({
           }),
       },
       registry: appAtomRegistry,
-      ...(thread ? { scope: { threadId: thread } } : {}),
+      scope: { threadId: thread },
     });
     for (const dir of readDirs().reverse()) created.actions.rememberDir(dir);
     return created;
