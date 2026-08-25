@@ -35,37 +35,18 @@ export interface InspectSnapshot {
 
 export interface AtomInspector {
   note(cause: InspectCause): void;
-  snapshot(): InspectSnapshot;
+  inspect(): InspectSnapshot;
   subscribe(cb: () => void): () => void;
   refresh(id: string): boolean;
   set(id: string, value: string): boolean;
   dispose(): void;
 }
 
-interface InspectableAtomStore {
-  readonly inspector: AtomInspector;
-}
-
-let activeStore: InspectableAtomStore | undefined;
-const storeListeners = new Set<() => void>();
-
-export const getInspectableAtomStore = () => activeStore;
-export const subscribeInspectableAtomStore = (listener: () => void) => {
-  storeListeners.add(listener);
-  return () => storeListeners.delete(listener);
-};
 export const registerInspectableAtomStore = (store: {
   readonly registry: AtomRegistry.AtomRegistry;
 }) => {
-  const registered = { inspector: inspectAtomRegistry(store.registry) };
-  activeStore = registered;
-  storeListeners.forEach((listener) => listener());
-  return () => {
-    if (activeStore !== registered) return;
-    registered.inspector.dispose();
-    activeStore = undefined;
-    storeListeners.forEach((listener) => listener());
-  };
+  const inspector = inspectAtomRegistry(store.registry);
+  return () => inspector.dispose();
 };
 
 type Node = AtomRegistry.Node<unknown>;
@@ -81,6 +62,7 @@ const size = (value: unknown): number =>
   Array.isArray(value) ? value.length : (value as ReadonlySet<unknown>).size;
 
 const labelOf = (node: Node) => node.atom.label?.[0] ?? "unlabelled";
+const inspectors = new WeakMap<AtomRegistry.AtomRegistry, AtomInspector>();
 
 const show = (value: unknown): string => {
   const seen = new WeakSet<object>();
@@ -101,6 +83,8 @@ const show = (value: unknown): string => {
 };
 
 export function inspectAtomRegistry(registry: AtomRegistry.AtomRegistry): AtomInspector {
+  const existing = inspectors.get(registry);
+  if (existing) return existing;
   const records = new WeakMap<Atom.Atom<unknown>, Record>();
   const nodesById = new Map<string, Node>();
   const listeners = new Set<() => void>();
@@ -131,6 +115,7 @@ export function inspectAtomRegistry(registry: AtomRegistry.AtomRegistry): AtomIn
 
   const scan = (notify = true) => {
     const liveNodes = [...registry.getNodes().values()] as Node[];
+    let causeRead = false;
     nodesById.clear();
     for (const node of liveNodes) {
       const record = recordFor(node);
@@ -142,11 +127,13 @@ export function inspectAtomRegistry(registry: AtomRegistry.AtomRegistry): AtomIn
         record.recomputes++;
         record.lastChangeAt = at;
         changes.push({ id: record.id, label: labelOf(node), at, cause: pendingCause });
+        causeRead = true;
         if (changes.length > 100) changes.splice(0, changes.length - 100);
       }
       record.value = value;
       record.hasValue = true;
     }
+    if (causeRead) pendingCause = null;
     const nodes = liveNodes
       .map((node): InspectNode => {
         const record = recordFor(node);
@@ -185,11 +172,11 @@ export function inspectAtomRegistry(registry: AtomRegistry.AtomRegistry): AtomIn
 
   scan(false);
 
-  return {
+  const inspector: AtomInspector = {
     note(cause) {
       pendingCause = { ...cause };
     },
-    snapshot: () => scan(false),
+    inspect: () => scan(false),
     subscribe(cb) {
       listeners.add(cb);
       timer ??= setInterval(scan, 100);
@@ -232,4 +219,6 @@ export function inspectAtomRegistry(registry: AtomRegistry.AtomRegistry): AtomIn
       listeners.clear();
     },
   };
+  inspectors.set(registry, inspector);
+  return inspector;
 }

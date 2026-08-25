@@ -4,7 +4,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createLiveFamiliesHost } from "#/families/host";
 import { createFamiliesStore, type FamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
-import { registerInspectableAtomStore } from "#/state/atom-inspect";
 import { appAtomRegistry } from "#/state/registry";
 import { withThread } from "./-with-thread";
 
@@ -54,14 +53,12 @@ function FamiliesStoreOwner({ thread, target }: { thread: string; target: string
   const store = owner.store;
   useEffect(() => {
     void store.actions.bind(target).catch(() => undefined);
-    const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
     if (owner.disposeTimer) clearTimeout(owner.disposeTimer);
     return () => {
       owner.disposeTimer = setTimeout(() => {
         store.dispose();
         owners.delete(key);
       }, 0);
-      unregister?.();
     };
   }, [key, owner, store, target]);
   return <FamiliesWorkspace store={store} />;

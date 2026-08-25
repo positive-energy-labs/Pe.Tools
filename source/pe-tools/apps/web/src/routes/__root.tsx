@@ -3,14 +3,16 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { RegistryContext } from "@effect/atom-react";
 
-import AtomDevtools from "../integrations/atoms/devtools";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import { useHostLiveInvalidation } from "../host/live";
+import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry } from "../state/registry";
 
 import appCss from "../styles.css?url";
 
 import type { QueryClient } from "@tanstack/react-query";
+
+if (import.meta.env.DEV) Object.assign(globalThis, { __PE_INSPECT__: inspectAtomRegistry(appAtomRegistry) });
 
 interface MyRouterContext {
   queryClient: QueryClient;
@@ -67,7 +69,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 name: "Tanstack Router",
                 render: <TanStackRouterDevtoolsPanel />,
               },
-              AtomDevtools,
               TanStackQueryDevtools,
             ]}
           />
