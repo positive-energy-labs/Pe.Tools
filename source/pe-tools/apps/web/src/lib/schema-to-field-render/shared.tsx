@@ -19,53 +19,11 @@ import {
 } from "@pe/schema-core";
 import type { FieldChangeSummary } from "./field-state";
 
-export interface SettingsFieldApi {
-  state: { value: unknown; meta: { errors: unknown[] } };
-  handleBlur: () => void;
-  handleChange: (value: never) => void;
-  pushValue: (value: never) => void;
-  removeValue: (index: number) => void;
-}
-export interface SettingsFieldMetaBase {
-  isTouched: boolean;
-  isBlurred: boolean;
-  isDirty: boolean;
-  isValidating: boolean;
-  errorMap: Record<string, unknown>;
-  errorSourceMap: Record<string, unknown>;
-}
-
-function createEmptyFieldMeta(): SettingsFieldMetaBase {
-  return {
-    isTouched: false,
-    isBlurred: false,
-    isDirty: false,
-    isValidating: false,
-    errorMap: {},
-    errorSourceMap: {},
-  };
-}
-
-export interface SettingsForm {
-  Field: (props: {
-    name: never;
-    children: (field: SettingsFieldApi) => ReactNode;
-  }) => ReactNode | Promise<ReactNode>;
-  Subscribe: (props: {
-    selector: (state: { values: SettingsValues }) => SettingsValues;
-    children: (values: SettingsValues) => ReactNode;
-  }) => ReactNode | Promise<ReactNode>;
-  setFieldMeta: (
-    name: never,
-    updater: (meta: SettingsFieldMetaBase | undefined) => SettingsFieldMetaBase,
-  ) => void;
-}
 export type SettingsValues = Record<string, unknown>;
 
 export interface SchemaToFieldRenderProps {
-  form?: SettingsForm;
-  values?: SettingsValues;
-  onChange?: (path: string, value: unknown) => void;
+  values: SettingsValues;
+  onChange: (path: string, value: unknown) => void;
   schema: RenderSchemaNode;
   moduleKey: string;
   rootKey?: string;
@@ -107,10 +65,11 @@ export interface ResolvedFieldRendererProps extends FieldRendererProps {
 }
 
 interface SchemaRenderContextValue {
-  form: SettingsForm;
+  values: SettingsValues;
+  onChange: (path: string, value: unknown) => void;
+  errors: ReadonlyMap<string, string[]>;
   moduleKey: string;
   rootKey?: string;
-  values: SettingsValues;
   schemaDocument: SchemaDocument;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
 }
@@ -118,32 +77,35 @@ interface SchemaRenderContextValue {
 const SchemaRenderContext = createContext<SchemaRenderContextValue | null>(null);
 
 export function SchemaRenderProvider({
-  form,
+  values,
+  onChange,
+  errors,
   schemaDocument,
   moduleKey,
   rootKey,
-  allValues,
   fieldChanges,
   children,
 }: {
-  form: SettingsForm;
+  values: SettingsValues;
+  onChange: (path: string, value: unknown) => void;
+  errors: ReadonlyMap<string, string[]>;
   schemaDocument: SchemaDocument;
   moduleKey: string;
   rootKey?: string;
-  allValues: SettingsValues;
   fieldChanges: ReadonlyMap<string, FieldChangeSummary>;
   children: ReactNode;
 }) {
   const contextValue = useMemo(
     () => ({
-      form,
+      values,
+      onChange,
+      errors,
       moduleKey,
       rootKey,
-      values: allValues,
       schemaDocument,
       fieldChanges,
     }),
-    [allValues, fieldChanges, form, moduleKey, schemaDocument, rootKey],
+    [errors, fieldChanges, moduleKey, onChange, rootKey, schemaDocument, values],
   );
 
   return (
@@ -160,8 +122,17 @@ function useSchemaRenderContext() {
   return context;
 }
 
-export function useSettingsForm() {
-  return useSchemaRenderContext().form;
+export function useSettingsField(path: string) {
+  const { values, onChange, errors } = useSchemaRenderContext();
+  const value = readPathValue(values, path);
+  return {
+    value,
+    errors: errors.get(path) ?? [],
+    change: (next: unknown) => onChange(path, next),
+    push: (next: unknown) => onChange(path, [...(Array.isArray(value) ? value : []), next]),
+    remove: (index: number) =>
+      onChange(path, (Array.isArray(value) ? value : []).filter((_, at) => at !== index)),
+  };
 }
 
 export function useSchemaRoot() {
@@ -174,44 +145,6 @@ export function useSchemaDocument() {
 
 export function useFieldChangeSummary(path: string) {
   return useSchemaRenderContext().fieldChanges.get(path);
-}
-
-export function updateFieldServerErrors(form: SettingsForm, path: string, messages: string[]) {
-  form.setFieldMeta(path as never, (meta) => {
-    const currentMeta = meta ?? createEmptyFieldMeta();
-    const nextErrorMap = { ...currentMeta.errorMap };
-    const nextErrorSourceMap = { ...currentMeta.errorSourceMap };
-
-    if (messages.length > 0) {
-      nextErrorMap.onServer = messages;
-      nextErrorSourceMap.onServer = "form";
-    } else {
-      delete nextErrorMap.onServer;
-      delete nextErrorSourceMap.onServer;
-    }
-
-    return {
-      ...currentMeta,
-      errorMap: nextErrorMap,
-      errorSourceMap: nextErrorSourceMap,
-    };
-  });
-}
-
-export function clearFieldServerErrors(form: SettingsForm, path: string) {
-  updateFieldServerErrors(form, path, []);
-}
-
-export function formatFormError(error: unknown): string {
-  if (typeof error === "string") {
-    return error;
-  }
-
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message?: string }).message ?? "Unknown form error");
-  }
-
-  return "Unknown form error";
 }
 
 export function coercePrimitive(input: string, nodeType: string | undefined): unknown {

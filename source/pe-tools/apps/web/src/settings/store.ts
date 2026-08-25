@@ -3,6 +3,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
+  settingsRouteState,
   settingsFieldSegments,
   type RouteStatePatch,
   type SettingsFieldState,
@@ -13,6 +14,8 @@ import { SettingsFileKind, type SettingsFileEntry } from "@pe/host-contracts/ope
 import { mintSelector, sessionLabel } from "#/host/target";
 import {
   createRouteStoreCore,
+  docAtom,
+  docWriter,
   feed,
   hostRead,
   unbound,
@@ -21,12 +24,11 @@ import {
 } from "#/state/route-store";
 import type { SettingsHost } from "#/settings/host";
 
-export interface SettingsSearchPort {
+interface SettingsSearchPort {
   readonly source?: "fixture";
-  patch(partial: { source?: "fixture" }): void;
 }
 
-export interface SettingsPicker {
+interface SettingsPicker {
   workspaceKey: string | undefined;
   moduleKey: string | undefined;
   rootKey: string | undefined;
@@ -35,11 +37,12 @@ export interface SettingsPicker {
 
 type HeadPicker = { open: string | null; level: string | null; query: string };
 type Setter<A> = A | ((previous: A) => A);
-type PendingStage = {
+interface PendingStage {
   timer: ReturnType<typeof setTimeout>;
   resolve: () => void;
   reject: (cause: unknown) => void;
-};
+  value: unknown;
+}
 
 function authoringFile(entry: SettingsFileEntry) {
   return (
@@ -51,11 +54,10 @@ function authoringFile(entry: SettingsFileEntry) {
   );
 }
 
-function stagedValues(snapshot: SettingsRouteDocument["snapshot"], fields: Record<string, SettingsFieldState>) {
-  if (!snapshot) return {};
+export function projectStagedValues(rawContent: string, fields: Record<string, SettingsFieldState>) {
   let values: Record<string, unknown>;
   try {
-    const parsed: unknown = JSON.parse(snapshot.rawContent);
+    const parsed: unknown = JSON.parse(rawContent);
     values = parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? structuredClone(parsed as Record<string, unknown>)
       : {};
@@ -92,7 +94,10 @@ export function createSettingsStore(deps: {
   Reflect.set(runtime.layer, "keepAlive", false);
   const lane: Lane = deps.search.source === "fixture" ? "fixture" : "read";
 
-  const settingsSlice = owned("slice/settings", deps.host.document(deps.scope));
+  const liveWriter = docWriter(settingsRouteState, deps.scope);
+  const apply = deps.host.apply ?? liveWriter.apply;
+  const command = deps.host.command ?? liveWriter.command;
+  const settingsSlice = owned("slice/settings", deps.host.document ?? docAtom(settingsRouteState, deps.scope));
   const document = Atom.make((get): SettingsRouteDocument | null => {
     const result = get(settingsSlice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
@@ -105,7 +110,7 @@ export function createSettingsStore(deps: {
     Object.entries(get(fields)).filter(([, field]) => field.proposal != null),
   ).pipe(owned("view/proposals"));
   const formDirty = Atom.make((get) => Object.values(get(fields)).some((field) => field.staged != null)).pipe(owned("view/form-dirty"));
-  const formValues = Atom.make((get) => stagedValues(get(snapshot), get(fields))).pipe(owned("view/form-values"));
+  const formValues = Atom.make((get) => projectStagedValues(get(snapshot)?.rawContent ?? "{}", get(fields))).pipe(owned("view/form-values"));
   const connected = Atom.make((get) => {
     const result = get(settingsSlice);
     return AsyncResult.isSuccess(result) ? result.value.connected : null;
@@ -134,30 +139,6 @@ export function createSettingsStore(deps: {
   const workspacesSource = runtime.atom(() => hostRead(["settings.workspaces"], deps.host.workspaces));
   const workspacesResult = runtimeFactory.withReactivity(["settings.workspaces"])(
     Atom.swr(workspacesSource, { staleTime: "5 minutes", revalidateOnMount: false }),
-  ).pipe(Atom.autoDispose);
-  const modulesSource = runtime.atom((get) => {
-    const workspaceKey = get(picker).workspaceKey;
-    return workspaceKey
-      ? hostRead(["settings.workspaces", workspaceKey], async () =>
-          (await deps.host.workspaces()).find((item) => item.workspaceKey === workspaceKey)?.modules ?? [],
-        )
-      : Effect.succeed(unbound([], ["workspace"]));
-  });
-  const modulesResult = runtimeFactory.withReactivity(["settings.workspaces"])(
-    Atom.swr(modulesSource, { staleTime: "5 minutes", revalidateOnMount: false }),
-  ).pipe(Atom.autoDispose);
-  const rootsSource = runtime.atom((get) => {
-    const selected = get(picker);
-    return selected.workspaceKey && selected.moduleKey
-      ? hostRead(["settings.workspaces", selected.workspaceKey, selected.moduleKey], async () =>
-          (await deps.host.workspaces())
-            .find((item) => item.workspaceKey === selected.workspaceKey)
-            ?.modules.find((item) => item.moduleKey === selected.moduleKey)?.roots ?? [],
-        )
-      : Effect.succeed(unbound([], ["workspace", "module"]));
-  });
-  const rootsResult = runtimeFactory.withReactivity(["settings.workspaces"])(
-    Atom.swr(rootsSource, { staleTime: "5 minutes", revalidateOnMount: false }),
   ).pipe(Atom.autoDispose);
   const treeSource = runtime.atom((get) => {
     const { moduleKey, rootKey } = get(picker);
@@ -189,10 +170,17 @@ export function createSettingsStore(deps: {
     feed(get(workspacesResult), (items) => items.map((item) => ({ id: item.workspaceKey, label: item.displayName || item.workspaceKey })), lane),
   ).pipe(owned("feed/workspace"));
   const moduleFeed = Atom.make((get) =>
-    feed(get(modulesResult), (items) => items.map((item) => ({ id: item.moduleKey, label: item.moduleKey })), lane, { needs: "a workspace" }),
+    feed(get(workspacesResult), (items) =>
+      items.find((item) => item.workspaceKey === get(picker).workspaceKey)?.modules
+        .map((item) => ({ id: item.moduleKey, label: item.moduleKey })) ?? [], lane, { needs: "a workspace" }),
   ).pipe(owned("feed/module"));
   const rootFeed = Atom.make((get) =>
-    feed(get(rootsResult), (items) => items.map((item) => ({ id: item.rootKey, label: item.displayName || item.rootKey })), lane, { needs: "a module" }),
+    feed(get(workspacesResult), (items) => {
+      const selected = get(picker);
+      return items.find((item) => item.workspaceKey === selected.workspaceKey)?.modules
+        .find((item) => item.moduleKey === selected.moduleKey)?.roots
+        .map((item) => ({ id: item.rootKey, label: item.displayName || item.rootKey })) ?? [];
+    }, lane, { needs: "a module" }),
   ).pipe(owned("feed/root"));
   const fileFeed = Atom.make((get) =>
     feed(get(treeResult), (items) => items.filter(authoringFile).map((item) => ({ id: item.relativePath, label: item.relativePath })), lane, { needs: "a module and root" }),
@@ -216,6 +204,30 @@ export function createSettingsStore(deps: {
     return result;
   };
   const pending = new Map<string, PendingStage>();
+  let lastApply = Promise.resolve();
+  const flush = (name: string) => {
+    const item = pending.get(name);
+    if (!item) return lastApply;
+    clearTimeout(item.timer);
+    pending.delete(name);
+    const patch: RouteStatePatch = { path: ["fields", name, "staged"], value: { value: item.value } };
+    const applied = lastApply.catch(() => undefined).then(async () => {
+      try {
+        expect(await apply([patch]), `staging ${name} failed`);
+        item.resolve();
+      } catch (cause) {
+        write("stage", "failure", () => registry.set(core.failure, {
+          kind: "host",
+          verb: "stage",
+          message: cause instanceof Error ? cause.message : String(cause),
+        }));
+        item.reject(cause);
+        throw cause;
+      }
+    });
+    lastApply = applied;
+    return applied;
+  };
   const stage = (name: string, value: unknown) => {
     const prior = pending.get(name);
     if (prior) {
@@ -223,18 +235,13 @@ export function createSettingsStore(deps: {
       prior.resolve();
     }
     return new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(async () => {
-        pending.delete(name);
-        try {
-          const patch: RouteStatePatch = { path: ["fields", name, "staged"], value: { value } };
-          expect(await deps.host.apply([patch]), `staging ${name} failed`);
-          resolve();
-        } catch (cause) {
-          reject(cause);
-        }
-      }, 150);
-      pending.set(name, { timer, resolve, reject });
+      const timer = setTimeout(() => void flush(name).catch(() => undefined), 150);
+      pending.set(name, { timer, resolve, reject, value });
     });
+  };
+  const flushPending = async () => {
+    await Promise.all([...pending.keys()].map(flush));
+    await lastApply;
   };
 
   const actions = {
@@ -242,28 +249,29 @@ export function createSettingsStore(deps: {
     setTargeting: (value: Setter<HeadPicker>) => set("targeting", targeting, value),
     stage: (name: string, value: unknown) => write("stage", name, () => stage(name, value)),
     apply: (patches: RouteStatePatch[]) => write("apply", "slice/fields", async () =>
-      expect(await deps.host.apply(patches), "field update failed"),
+      expect(await apply(patches), "field update failed"),
     ),
     open: () => runVerb("open", async () => {
       const { moduleKey, rootKey, filePath } = registry.get(picker);
       if (!moduleKey || !rootKey || !filePath) throw Error("open needs a module, root, and file");
-      expect(await deps.host.command("open", { documentId: { moduleKey, rootKey, relativePath: filePath } }), "open failed");
+      expect(await command("open", { documentId: { moduleKey, rootKey, relativePath: filePath } }), "open failed");
       return `opened ${filePath}`;
     }, ["settings", "settings.schema"]),
     refresh: () => runVerb("refresh", async () => {
-      expect(await deps.host.command("refresh"), "re-read failed");
+      expect(await command("refresh"), "re-read failed");
       return "re-read settings";
     }, ["settings", "settings.schema"]),
     validate: () => runVerb("validate", async () => {
-      expect(await deps.host.command("validate", { includeProposals: false }), "validate failed");
+      expect(await command("validate", { includeProposals: false }), "validate failed");
       return "validated settings";
     }, ["settings"]),
     save: () => runVerb("save", async () => {
-      expect(await deps.host.command("save"), "save failed");
+      await flushPending();
+      expect(await command("save"), "save failed");
       return "saved settings";
     }, ["settings"]),
     bind: (target: string | null) => runVerb("bind", async () => {
-      expect(await deps.host.command("bind", { target }), "bind failed");
+      expect(await command("bind", { target }), "bind failed");
       return target ? `bound ${target}` : "unbound session";
     }, ["settings"]),
   };

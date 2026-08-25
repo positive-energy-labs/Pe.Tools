@@ -1,13 +1,11 @@
 import type { Product } from "#/targeting/model";
 
-export type SettingsProductActions = {
-  open: () => Promise<string | void>;
-  refresh: () => Promise<string | void>;
-  validate: () => Promise<string | void>;
-  save: () => Promise<string | void>;
-};
-
-export const SETTINGS_PRODUCT = (actions: SettingsProductActions): Product => ({
+export const SETTINGS_PRODUCT = (actions: {
+  open(): Promise<string | void>;
+  refresh(): Promise<string | void>;
+  validate(): Promise<string | void>;
+  save(): Promise<string | void>;
+}): Product => ({
   key: "settings",
   name: "settings",
   links: [

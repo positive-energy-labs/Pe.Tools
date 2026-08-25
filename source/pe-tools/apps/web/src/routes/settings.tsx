@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
@@ -21,11 +21,13 @@ import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { timeAgo } from "#/lib/utils";
 import { createFixtureSettingsHost } from "#/settings-panes/fixture-route";
 import { schemaFormModel } from "#/settings-panes/schema-form";
-import { SettingsHead } from "#/settings/head";
+import { SETTINGS_PRODUCT } from "#/settings/product";
 import { createLiveSettingsHost } from "#/settings/host";
 import { createSettingsStore, type SettingsStore } from "#/settings/store";
-import { registerInspectableAtomStore } from "#/state/atom-inspect";
 import { appAtomRegistry } from "#/state/registry";
+import { useRouteStore } from "#/state/use-route-store";
+import { TargetingHead } from "#/targeting/head";
+import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 
 export const Route = createFileRoute("/settings")({
   validateSearch: (
@@ -64,30 +66,18 @@ function SettingsStoreOwner({
   thread: string;
   source?: "fixture";
 }) {
-  const navigate = useNavigate({ from: "/settings" });
-  const store = useMemo(() => {
+  const store = useRouteStore(() => {
     const scope = { threadId: thread };
     const host = source === "fixture"
       ? createFixtureSettingsHost(appAtomRegistry)
-      : createLiveSettingsHost(scope);
+      : createLiveSettingsHost();
     return createSettingsStore({
       registry: appAtomRegistry,
       scope,
       host,
-      search: {
-        source,
-        patch: (patch) =>
-          void navigate({ search: (previous) => ({ ...previous, ...patch }) }),
-      },
+      search: { source },
     });
-  }, [navigate, source, thread]);
-  useEffect(() => {
-    const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
-    return () => {
-      unregister?.();
-      store.dispose();
-    };
-  }, [store]);
+  });
   return <SettingsWorkspace store={store} />;
 }
 
@@ -110,8 +100,8 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
     [fields, snapshot],
   );
   const formModel = useMemo(
-    () => schemaFormModel(JSON.stringify(values), schemaJson),
-    [schemaJson, values],
+    () => schemaFormModel(snapshot?.rawContent ?? "", schemaJson),
+    [schemaJson, snapshot?.rawContent],
   );
   const stagedCount = Object.values(fields).filter((field) => field.staged != null).length;
   const attentionCount = Object.values(fields).filter(
@@ -147,10 +137,68 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
       />
     </>
   );
+  const picker = useAtomValue(store.atoms.picker);
+  const targeting = useAtomValue(store.atoms.targeting);
+  const binding = useAtomValue(store.atoms.binding);
+  const receipt = useAtomValue(store.atoms.receipt);
+  const feeds = {
+    workspace: useAtomValue(store.feeds.workspace),
+    module: useAtomValue(store.feeds.module),
+    root: useAtomValue(store.feeds.root),
+    file: useAtomValue(store.feeds.file),
+    session: useAtomValue(store.feeds.session),
+  };
+  const product = SETTINGS_PRODUCT({
+    open: store.actions.open,
+    refresh: store.actions.refresh,
+    validate: store.actions.validate,
+    save: store.actions.save,
+  });
+  const state: BindingState = {
+    bound: {
+      workspace: picker.workspaceKey ?? null,
+      module: picker.moduleKey ?? null,
+      root: picker.rootKey ?? null,
+      file: picker.filePath ?? null,
+      session: binding.target ?? null,
+    },
+    multi: {},
+    stage: "document",
+  };
+  const setState = useCallback((patch: Partial<BindingState>) => {
+    if (!patch.bound) return;
+    store.actions.setPicker({
+      workspaceKey: patch.bound.workspace ?? undefined,
+      moduleKey: patch.bound.module ?? undefined,
+      rootKey: patch.bound.root ?? undefined,
+      filePath: patch.bound.file ?? undefined,
+    });
+    const session = patch.bound.session ?? null;
+    if (session !== (binding.target ?? null)) void store.actions.bind(session).catch(() => undefined);
+  }, [binding.target, store]);
+  const bindings = useBindings(
+    product,
+    feeds,
+    state,
+    setState,
+    targeting.open,
+    (open) => store.actions.setTargeting((previous) => ({ ...previous, open })),
+    targeting.level,
+    (level) => store.actions.setTargeting((previous) => ({ ...previous, level })),
+    targeting.query,
+    (query) => store.actions.setTargeting((previous) => ({ ...previous, query })),
+  );
+  const runner = useRunner(product, bindings, busy?.id ?? null);
 
   return (
     <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--r-page)]">
-      <SettingsHead store={store} aside={aside} />
+      <TargetingHead
+        product={product}
+        b={bindings}
+        runner={runner}
+        receipt={receipt ? <OutcomeLine kind="receipt" label={receipt.text} /> : undefined}
+        aside={aside}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
         <div className="mx-auto max-w-3xl space-y-3">
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
@@ -173,9 +221,9 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                     moduleKey={snapshot.documentId.moduleKey}
                     rootKey={snapshot.documentId.rootKey}
                     baselineValues={formModel.baseline}
-                    values={formModel.baseline}
+                    values={values}
                     onChange={(path, value) =>
-                      void store.actions.stage(settingsFieldPointer(path.split(".")), value)
+                      void store.actions.stage(settingsFieldPointer(path.split(".")), value).catch(() => undefined)
                     }
                     validationResult={toValidationResult(validation)}
                   />
@@ -263,7 +311,9 @@ function FieldRow({
           stagedBy="you"
           cap={busy ? "readonly" : "editable"}
           capReason={busy ? "A settings verb is running." : undefined}
-          onCommit={(value) => void store.actions.stage(row.path, parseLike(shown, value))}
+          onCommit={(value) =>
+            void store.actions.stage(row.path, parseLike(shown, value)).catch(() => undefined)
+          }
           note={row.field?.review === "attention" ? "needs attention" : proposal?.note ?? undefined}
         />
       </div>

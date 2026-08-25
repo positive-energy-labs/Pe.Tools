@@ -17,7 +17,7 @@
  * `?source=fixture` mounts the project-a fixture adapter — an explicit dev choice, never a
  * fallback: a live read that fails shows its error, it does not quietly become a fixture.
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -38,7 +38,7 @@ import {
   createFixtureTakeoffHost,
 } from "#/takeoff/proto/fixture-world";
 import { createTakeoffStore, TAKEOFF_LINKS, type TakeoffStore } from "#/takeoff/store";
-import { registerInspectableAtomStore } from "#/state/atom-inspect";
+import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
@@ -74,6 +74,7 @@ export const Route = createFileRoute("/takeoffs")({
     dir: str(search.dir),
     r10: str(search.r10),
     stage: STAGES.find((s) => s === search.stage) ?? "adopt",
+    thread: str(search.thread) || undefined,
   }),
   component: TakeoffsRoute,
 });
@@ -93,17 +94,21 @@ const readDirs = (): string[] => {
 };
 
 function TakeoffsRoute() {
-  const { source } = Route.useSearch();
-  return <TakeoffsStoreOwner key={source} source={source} />;
+  const { source, thread } = Route.useSearch();
+  return <TakeoffsStoreOwner key={`${source}:${thread ?? ""}`} source={source} thread={thread} />;
 }
 
-function TakeoffsStoreOwner({ source }: { source: Search["source"] }) {
+function TakeoffsStoreOwner({
+  source,
+  thread,
+}: {
+  source: Search["source"];
+  thread?: string;
+}) {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: "/takeoffs" });
-  const storeRef = useRef<TakeoffStore | null>(null);
-  const disposeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  if (!storeRef.current) {
-    storeRef.current = createTakeoffStore({
+  const store = useRouteStore(() => {
+    const created = createTakeoffStore({
       host: source === "fixture" ? createFixtureTakeoffHost() : createLiveTakeoffHost(),
       sessions: source === "fixture" ? createFixtureSessionSource() : createHostSessionSource(),
       search: {
@@ -117,18 +122,11 @@ function TakeoffsStoreOwner({ source }: { source: Search["source"] }) {
           }),
       },
       registry: appAtomRegistry,
+      ...(thread ? { scope: { threadId: thread } } : {}),
     });
-    for (const dir of readDirs().reverse()) storeRef.current.actions.rememberDir(dir);
-  }
-  const store = storeRef.current;
-  useEffect(() => {
-    const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
-    if (disposeTimer.current) clearTimeout(disposeTimer.current);
-    return () => {
-      disposeTimer.current = setTimeout(() => store.dispose(), 0);
-      unregister?.();
-    };
-  }, [store]);
+    for (const dir of readDirs().reverse()) created.actions.rememberDir(dir);
+    return created;
+  });
   useEffect(() => store.actions.setSearch(search), [search, store]);
   return <TakeoffsPage store={store} />;
 }

@@ -15,13 +15,10 @@ import { FieldRenderer } from "./field-renderer";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
   buildDefaultArrayItem,
-  clearFieldServerErrors,
   coercePrimitive,
-  formatFormError,
   type ResolvedFieldRendererProps,
-  type SettingsFieldApi,
   useFieldOptions,
-  useSettingsForm,
+  useSettingsField,
 } from "./shared";
 
 export function ArrayField({
@@ -31,7 +28,7 @@ export function ArrayField({
   isRequired,
   placeholder,
 }: ResolvedFieldRendererProps) {
-  const form = useSettingsForm();
+  const field = useSettingsField(path);
   const rawItemNodeRef = effectiveNodeRef.item();
   const itemNodeRef = rawItemNodeRef?.effective() ?? rawItemNodeRef;
   const itemNode = itemNodeRef?.raw();
@@ -57,8 +54,6 @@ export function ArrayField({
   const comboboxItems = items.map((item) => item.value);
 
   return (
-    <form.Field name={path as never}>
-      {(field: SettingsFieldApi) => (
         <div className="flex flex-col gap-2">
           <FieldLabelRow
             label={label}
@@ -72,18 +67,17 @@ export function ArrayField({
               items={comboboxItems}
               multiple
               value={
-                Array.isArray(field.state.value)
-                  ? field.state.value.map((entry: unknown) => String(entry).trim()).filter(Boolean)
+                Array.isArray(field.value)
+                  ? field.value.map((entry: unknown) => String(entry).trim()).filter(Boolean)
                   : []
               }
               onValueChange={(next) => {
-                clearFieldServerErrors(form, path);
-                field.handleChange(next.map((value) => coercePrimitive(value, itemType)) as never);
+                field.change(next.map((value) => coercePrimitive(value, itemType)));
               }}
             >
               <ComboboxChips>
                 <ComboboxValue>
-                  {(Array.isArray(field.state.value) ? field.state.value : []).map(
+                  {(Array.isArray(field.value) ? field.value : []).map(
                     (item: unknown) => (
                       <ComboboxChip key={String(item)}>{String(item)}</ComboboxChip>
                     ),
@@ -104,7 +98,7 @@ export function ArrayField({
             </Combobox>
           ) : isObjectArray && itemNode?.properties ? (
             <div className="space-y-4">
-              {(Array.isArray(field.state.value) ? (field.state.value as unknown[]) : []).map(
+              {(Array.isArray(field.value) ? (field.value as unknown[]) : []).map(
                 (_, index) => {
                   const childPathPrefix = `${path}.${index}`;
                   return (
@@ -120,8 +114,7 @@ export function ArrayField({
                           label="remove"
                           reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
                           onClick={() => {
-                            clearFieldServerErrors(form, path);
-                            field.removeValue(index);
+                            field.remove(index);
                           }}
                         />
                       </div>
@@ -140,20 +133,17 @@ export function ArrayField({
                 label="add item"
                 reason="Append an item built from the schema's own defaults for this list. The change lives in the form until save writes it."
                 onClick={() => {
-                  clearFieldServerErrors(form, path);
-                  field.pushValue(buildDefaultArrayItem(itemNodeRef) as never);
+                  field.push(buildDefaultArrayItem(itemNodeRef));
                 }}
               />
             </div>
           ) : (
             <Textarea
-              value={JSON.stringify(field.state.value ?? [], null, 2)}
-              onBlur={field.handleBlur}
+              value={JSON.stringify(field.value ?? [], null, 2)}
               onChange={(event) => {
                 try {
-                  clearFieldServerErrors(form, path);
                   const next = JSON.parse(event.currentTarget.value);
-                  field.handleChange(next as never);
+                  field.change(next);
                 } catch {
                   // Keep user input editable while JSON is invalid.
                 }
@@ -169,9 +159,7 @@ export function ArrayField({
                 : "Array is currently edited as JSON for the MVP."}
           </span>
           <FieldOptionsMetadata options={optionsState} />
-          <FieldMessages messages={field.state.meta.errors.map(formatFormError)} />
+          <FieldMessages messages={field.errors} />
         </div>
-      )}
-    </form.Field>
   );
 }

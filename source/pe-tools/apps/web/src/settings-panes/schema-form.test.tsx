@@ -46,7 +46,7 @@ describe("the fixture lane's schema→form derivation", () => {
   });
 });
 
-function Harness() {
+function Harness({ changed = false }: { changed?: boolean }) {
   const model = schemaFormModel(RAW, FIXTURE_SCHEMA_JSON);
   if (!model) return <p>no form model</p>;
   return (
@@ -55,7 +55,7 @@ function Harness() {
       moduleKey="CmdScheduleManager"
       rootKey="schedules"
       baselineValues={model.baseline}
-      values={model.baseline}
+      values={changed ? { ...model.baseline, Name: "changed" } : model.baseline}
       onChange={() => undefined}
     />
   );
@@ -88,6 +88,20 @@ describe("SchemaToFieldRender over the fixture model", () => {
     const parsed = JSON.parse(RAW) as { Name: string; CategoryName: string };
     expect(await screen.findByDisplayValue(parsed.Name)).toBeTruthy();
     expect(await screen.findByDisplayValue(parsed.CategoryName)).toBeTruthy();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows changed values against the raw document baseline", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no host in fixture mode")));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Harness changed />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByDisplayValue("changed")).toBeTruthy();
+    expect(await screen.findByText("Changed")).toBeTruthy();
     vi.unstubAllGlobals();
   });
 });

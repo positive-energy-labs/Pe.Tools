@@ -2,7 +2,6 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
-  settingsFieldSegments,
   type RouteStatePatch,
   type RouteStateWriteResult,
   type SettingsFieldState,
@@ -10,6 +9,7 @@ import {
 } from "@pe/agent-contracts";
 
 import type { SettingsHost } from "#/settings/host";
+import { projectStagedValues } from "#/settings/store";
 import {
   FIXTURE_SCHEMA_JSON,
   fixtureDocument,
@@ -17,25 +17,6 @@ import {
   fixtureRawFor,
   fixtureWorkspaces,
 } from "./fixture";
-
-function spliceStagedIntoRaw(rawContent: string, fields: SettingsRouteDocument["fields"]): string {
-  const parsed = JSON.parse(rawContent) as Record<string, unknown>;
-  for (const [pointer, field] of Object.entries(fields)) {
-    if (field.staged == null) continue;
-    const segments = settingsFieldSegments(pointer);
-    let cursor = parsed;
-    for (const segment of segments.slice(0, -1)) {
-      const next = cursor[segment];
-      if (next == null || typeof next !== "object" || Array.isArray(next)) cursor[segment] = {};
-      cursor = cursor[segment] as Record<string, unknown>;
-    }
-    const leaf = segments.at(-1);
-    if (leaf === undefined) continue;
-    if (field.staged.delete === true) delete cursor[leaf];
-    else cursor[leaf] = field.staged.value;
-  }
-  return JSON.stringify(parsed, null, 2);
-}
 
 export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): SettingsHost {
   let document = structuredClone(fixtureDocument);
@@ -53,7 +34,7 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
   const version = () => `fixture-${++revision}`;
 
   return {
-    document: () => slice,
+    document: slice,
     workspaces: async () => fixtureWorkspaces,
     tree: async (moduleKey, rootKey) =>
       moduleKey === "CmdScheduleManager" && rootKey === "schedules" ? fixtureFiles : [],
@@ -126,7 +107,11 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
           )
         )
           return { ok: false, error: "A staged field needs attention." };
-        const rawContent = spliceStagedIntoRaw(document.snapshot.rawContent, document.fields);
+        const rawContent = JSON.stringify(
+          projectStagedValues(document.snapshot.rawContent, document.fields),
+          null,
+          2,
+        );
         const fields = Object.fromEntries(
           Object.entries(document.fields)
             .map(([pointer, field]): [string, SettingsFieldState] => [

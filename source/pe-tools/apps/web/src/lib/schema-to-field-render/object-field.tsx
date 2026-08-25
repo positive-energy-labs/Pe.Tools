@@ -1,10 +1,8 @@
 import { FieldLegendRow, FieldMessages } from "./field-metadata";
 import { FieldRenderer } from "./field-renderer";
 import {
-  formatFormError,
   type ResolvedFieldRendererProps,
-  type SettingsFieldApi,
-  useSettingsForm,
+  useSettingsField,
 } from "./shared";
 
 export function ObjectField({
@@ -13,15 +11,13 @@ export function ObjectField({
   label,
   isRequired,
 }: ResolvedFieldRendererProps) {
-  const form = useSettingsForm();
+  const field = useSettingsField(path);
   const propertyEntries = effectiveNodeRef.sortedProperties();
   if (propertyEntries.length === 0) {
     return null;
   }
 
   return (
-    <form.Field name={path as never}>
-      {(field: SettingsFieldApi) => (
         <fieldset className="space-y-4 rounded-lg border border-border p-4">
           <legend>
             <FieldLegendRow
@@ -36,13 +32,11 @@ export function ObjectField({
               path={path}
             />
           </legend>
-          <FieldMessages messages={field.state.meta.errors.map(formatFormError)} />
+          <FieldMessages messages={field.errors} />
           {propertyEntries.map(([childKey, childNodeRef]) => {
             const childPath = `${path}.${childKey}`;
             return <FieldRenderer key={childPath} path={childPath} node={childNodeRef.raw()} />;
           })}
         </fieldset>
-      )}
-    </form.Field>
   );
 }

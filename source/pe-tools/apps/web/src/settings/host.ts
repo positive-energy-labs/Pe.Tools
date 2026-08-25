@@ -1,7 +1,6 @@
 import type * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import {
-  settingsRouteState,
   type RouteStatePatch,
   type RouteStateWriteResult,
   type SettingsRouteDocument,
@@ -13,22 +12,20 @@ import type {
 
 import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions, type SessionFacts } from "#/host/target";
-import { docAtom, docWriter, type Scope, type Slice } from "#/state/route-store";
+import type { Slice } from "#/state/route-store";
 
 export interface SettingsHost {
-  document(scope: Scope): Atom.Atom<AsyncResult.AsyncResult<Slice<SettingsRouteDocument>, Error>>;
+  readonly document?: Atom.Atom<AsyncResult.AsyncResult<Slice<SettingsRouteDocument>, Error>>;
   workspaces(): Promise<readonly SettingsWorkspaceDescriptor[]>;
   tree(moduleKey: string, rootKey: string): Promise<readonly SettingsFileEntry[]>;
   schema(moduleKey: string, rootKey: string): Promise<string>;
   sessions(): Promise<SessionFacts[]>;
-  apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  command(name: "bind" | "open" | "refresh" | "validate" | "save", input?: unknown): Promise<RouteStateWriteResult>;
+  apply?(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
+  command?(name: "bind" | "open" | "refresh" | "validate" | "save", input?: unknown): Promise<RouteStateWriteResult>;
 }
 
-export function createLiveSettingsHost(scope: Scope): SettingsHost {
-  const writer = docWriter(settingsRouteState, scope);
+export function createLiveSettingsHost(): SettingsHost {
   return {
-    document: (nextScope) => docAtom(settingsRouteState, nextScope),
     async workspaces() {
       return (await callHostRpc("settings.workspaces", undefined)).workspaces;
     },
@@ -48,7 +45,5 @@ export function createLiveSettingsHost(scope: Scope): SettingsHost {
     async sessions() {
       return fromBridgeSessions((await callHostRpc("bridge.sessions.list", undefined)).sessions);
     },
-    apply: writer.apply,
-    command: writer.command,
   };
 }

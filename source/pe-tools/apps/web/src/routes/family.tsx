@@ -27,10 +27,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { EmptyState } from "#/components/lang/empty";
 import { createLiveFamilyHost } from "#/family/host";
-import { createFamilyStore, type FamilyStore } from "#/family/store";
+import { createFamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
-import { registerInspectableAtomStore } from "#/state/atom-inspect";
 import { appAtomRegistry } from "#/state/registry";
+import { useRouteStore } from "#/state/use-route-store";
 
 export const Route = createFileRoute("/family")({
   /** Every param is optional, so every `<Link to="/family">` stays search-free. */
@@ -82,11 +82,9 @@ function FamilyStoreOwner({
   family?: string;
 }) {
   const navigate = useNavigate({ from: "/family" });
-  const storeRef = useRef<FamilyStore | null>(null);
-  const disposeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  if (!storeRef.current) {
+  const store = useRouteStore(() => {
     const scope = { threadId: thread };
-    storeRef.current = createFamilyStore({
+    return createFamilyStore({
       registry: appAtomRegistry,
       scope,
       host: createLiveFamilyHost(scope),
@@ -95,8 +93,7 @@ function FamilyStoreOwner({
         patch: (patch) => void navigate({ search: (previous) => ({ ...previous, ...patch }) }),
       },
     });
-  }
-  const store = storeRef.current;
+  });
   const snapshot = useAtomValue(store.atoms.snapshot);
   const openProfile = snapshot?.documentId.relativePath ?? "";
   const successfulOpen = useRef<{ requested: string; before: string } | null>(null);
@@ -136,13 +133,5 @@ function FamilyStoreOwner({
     successfulOpen.current = null;
     void navigate({ search: (previous) => ({ ...previous, profile: openProfile }) });
   }, [navigate, openProfile, profile]);
-  useEffect(() => {
-    const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
-    if (disposeTimer.current) clearTimeout(disposeTimer.current);
-    return () => {
-      disposeTimer.current = setTimeout(() => store.dispose(), 0);
-      unregister?.();
-    };
-  }, [store]);
   return <FamilyWorkspace store={store} requestedFamily={family} />;
 }

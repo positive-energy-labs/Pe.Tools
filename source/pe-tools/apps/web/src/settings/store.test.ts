@@ -21,7 +21,7 @@ function make(transform?: (host: SettingsHost) => SettingsHost) {
     registry,
     scope: { threadId: `settings-${registries.length}` },
     host,
-    search: { source: "fixture", patch() {} },
+    search: { source: "fixture" },
   });
   stores.push(store);
   registries.push(registry);
@@ -37,7 +37,7 @@ describe("settings route store", () => {
       ...fixture,
       async apply(patches) {
         calls.push(patches);
-        return fixture.apply(patches);
+        return fixture.apply!(patches);
       },
     }));
 
@@ -53,6 +53,36 @@ describe("settings route store", () => {
     ]));
   });
 
+  it("flushes the latest staged value before save", async () => {
+    const calls: string[] = [];
+    const { store } = make((fixture) => ({
+      ...fixture,
+      async apply(patches) {
+        calls.push(`apply:${String(patches[0]?.value && (patches[0].value as { value?: unknown }).value)}`);
+        return fixture.apply!(patches);
+      },
+      async command(name, input) {
+        calls.push(name);
+        return name === "save" ? { ok: true } : fixture.command!(name, input);
+      },
+    }));
+    void store.actions.stage("/Name", "saved immediately");
+
+    await store.actions.save();
+
+    expect(calls).toEqual(["apply:saved immediately", "save"]);
+  });
+
+  it("reports staging rejection through the route failure atom", async () => {
+    const { registry, store } = make((fixture) => ({
+      ...fixture,
+      apply: async () => ({ ok: false, error: "stage rejected" }),
+    }));
+
+    await expect(store.actions.stage("/Name", "rejected")).rejects.toThrow("stage rejected");
+    expect(registry.get(store.atoms.failure)?.message).toBe("stage rejected");
+  });
+
   it("refuses save while open is running", async () => {
     let release!: (value: RouteStateWriteResult) => void;
     const { store } = make((fixture) => ({
@@ -60,7 +90,7 @@ describe("settings route store", () => {
       command: (name, input) =>
         name === "open"
           ? new Promise<RouteStateWriteResult>((resolve) => { release = resolve; })
-          : fixture.command(name, input),
+          : fixture.command!(name, input),
     }));
     store.actions.setPicker({
       workspaceKey: "default",
