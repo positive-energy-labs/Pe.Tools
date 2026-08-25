@@ -236,8 +236,6 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * sidebar, or the cards would go dark exactly as you reached for them. */
   const [pinnedParam, setPinnedParam] = useState<string | null>(null);
   const [anatomyCollapsed, setAnatomyCollapsed] = useState(false);
-  /** Which ghost row is first in VISIBLE order — the one that carries the section hairline. */
-  const [firstGhostKey, setFirstGhostKey] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{ text: string; atMs: number } | null>(null);
   const [target, setTarget] = useState("");
   /**
@@ -1474,6 +1472,39 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world, draft, saved, overlay, stageType, binding, consumers, tableState]);
 
+  // ponytail: family still derives order in the component; G7 cutover owed
+  const firstGhostKey = useMemo(() => {
+    const byKey = new Map(columns.map((column) => [column.key, column]));
+    const query = tableState.query.trim().toLowerCase();
+    return (
+      [...rows]
+        .filter(
+          (row) =>
+            (!query ||
+              columns.some((column) => column.search?.(row).toLowerCase().includes(query))) &&
+            Object.entries(tableState.filters).every(([key, value]) => {
+              const column = byKey.get(key);
+              return column?.match?.(row, value) ?? column?.facet?.(row) === value;
+            }),
+        )
+        .sort((left, right) => {
+          for (const sort of tableState.sorts) {
+            const read = byKey.get(sort.key)?.sort;
+            if (!read) continue;
+            const before = read(left);
+            const after = read(right);
+            const order =
+              typeof before === "number" && typeof after === "number"
+                ? before - after
+                : String(before).localeCompare(String(after));
+            if (order !== 0) return sort.dir === "desc" ? -order : order;
+          }
+          return 0;
+        })
+        .find((row) => row.kind === "ghost")?.key ?? null
+    );
+  }, [columns, rows, tableState]);
+
   /**
    * THE DRILL-IN, on the same primitive. Same MasterTable, same identity cell, same editable type
    * cell — narrowed to one type and opened up with the spine. The crossing verbs live ONLY in the
@@ -1648,12 +1679,6 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       rowClassName={rowTint}
       tableState={tableState}
       onTableStateChange={setTableState}
-      // Idempotent on purpose: the same key back in is not a state change, so this can be fed on
-      // every render of the table without the two components pushing each other round in a loop.
-      onVisibleChange={(keys) => {
-        const first = keys.find((key) => key.startsWith("geom:")) ?? null;
-        setFirstGhostKey((previous) => (previous === first ? previous : first));
-      }}
       summary={
         <span title="Read left to right: how much of this profile the spec backs, what pea still wants, how many geometry dimensions nothing can reach, how many cells save would write, and where Revit disagrees. The one alarm is spent on drift and nothing else; unbound and unsaved wear caution, because a gap and a pending write are warnings rather than conflicts.">
           {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}

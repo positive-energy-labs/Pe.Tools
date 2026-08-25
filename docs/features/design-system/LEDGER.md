@@ -184,6 +184,9 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ### Component repairs
 
+- Family workspace still derives visible row order locally to place the first-ghost hairline.
+  Promote that order into route/store state in the owed G7 cutover when family state leaves the
+  component; do not restore `MasterTable.onVisibleChange` write-back.
 - Delete `components/ui/button`: still ~13 importers (down from 22). Each route pass migrates a consumer onto `lang/Verb` and lowers the `uiButtonImports` ratchet; the file dies at zero.
 - `Verb` has no icon-only or render-prop form; three `ui/button` imports survive on it — composer send/stop/attach, plugin-pane close ×, control-chips Combobox trigger. Rule it as an icon-verb variant (with the required `reason` riding the title) or bless gutter-scale destructive affordances staying route-rolled.
 - Verb busy+disabled composition: a busy-and-refused verb is currently unrenderable.

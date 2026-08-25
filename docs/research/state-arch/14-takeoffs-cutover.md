@@ -269,3 +269,51 @@ Commit `40768fe` completed G15 through G19.
 
 Nothing remains from G15-G19. Live Host/Revit behavior remains outside this cutover's deterministic
 and fixture-browser proof lanes.
+
+## Pass 6
+
+The merge gate removed the stale family `onVisibleChange` prop. Family was not using visible order
+for keyboard or select-visible behavior: it only stored the first visible ghost key to draw a
+section hairline. A 33-line component-local derivation now reads the family-owned `tableState`,
+rows, and columns directly. The requested Ponytail marker and owed G7 entry are in
+`docs/features/design-system/LEDGER.md`; no `MasterTable` write-back was restored.
+
+### Full check result
+
+Unscoped `vp check` from `source/pe-tools` remains red on exactly six pre-existing formatting
+files:
+
+```text
+apps/web/src/routes/api/runs-export.ts
+apps/web/src/runs/feedback/export.ts
+apps/web/src/runs/feedback/staging.ts
+apps/web/src/runs/feedback/tray.tsx
+apps/web/src/runs/feedback/verbs.tsx
+apps/web/src/runs/visual-law.json
+Found formatting issues in 6 files (4363ms, 24 threads). Run `vp check --fix` to fix them.
+vp check exit code: 1
+```
+
+None of those six paths differs from `takeoff-frontier`. Checking every branch-changed web source
+path separately passed all 20 files with zero formatting, warning, lint, or type errors. The
+requested focused `vp check apps/web/src/family/workspace.tsx` also passed.
+
+### Non-cutover branch inventory
+
+This is the complete `git diff --stat takeoff-frontier..HEAD` inventory outside
+takeoffs/targeting/MasterTable/state/devtools. It is recorded only; nothing was split or reverted.
+
+| Area | Diff | Inventory |
+| --- | ---: | --- |
+| `.agents/skills/**`, `.claude/skills/**` | 17 paths, +121/-616 | Namespace migration to `my.*`, cross-tree execute moves, new `my.concisify` and `my.delegate`, and deletion of superseded delegate/execute/Demiurge files. Git reports nine renames, six deletions, and two additions. |
+| `docs/loop/*` | 5 new files, +515/-0 | `RIG.md`, `p-builder.md`, `p-eyes.md`, `p-idea.md`, and `p-sdkfix.md`. |
+| `docs/features/host/LEDGER.md` | binary, 26,793 -> 28,233 bytes | Modified binary rewrite; Git cannot provide a text line diff. |
+
+### Pass 6 proof
+
+- **Deterministic:** `vp test src/takeoff src/targeting src/state src/components/master-table src/family`
+  passed 13 files and 156 tests.
+- **Static:** all 20 branch-changed web source paths passed `vp check`; the unscoped result is the
+  six-file pre-existing formatting baseline listed above.
+- **Left undone:** the family route's full G7 store cutover remains explicitly owed. The six
+  unrelated formatting files remain for their owning Runs work.
