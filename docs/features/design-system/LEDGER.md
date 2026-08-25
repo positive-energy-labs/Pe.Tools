@@ -68,6 +68,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 - 2026-08-25 — A1 applied to `/family` (second route); `Sentence` picker state and `MasterTable` state are store-owned on both consumers; `SidePane` width is app-shell memory, declared outside every route store.
 - 2026-08-25 — `/family` Q1–Q7 applied as recommendation A (judge file `.artifacts/spikes/targeting-family-judge.md`); `Dir` gains `duplex`. Q8 (≥2-route bar) stays Owed pending one browser observation: in one session, bind a terminal and switch a stage on both `/takeoffs` and `/family`, then reload and go back; both `TargetingHead` instances must retain their URL bindings, print their store feed lane/state, and run a wired verb without the old head appearing.
 - 2026-08-25 — Refusing a second verb is LAW: `Atom.fn` supersedes (installed `Atom.ts:1336–1392`); the host transaction cannot be interrupted, so `runVerb` refuses and records `busy`. `useVerb` records the same refusal.
+- 2026-08-25 — ≥2-route bar: `TargetingHead` renders and is consumed on `/family` and `/families` (deterministic lane); the browser observation from W2-C is still owed for the ruling.
 
 ### Enforcement
 
