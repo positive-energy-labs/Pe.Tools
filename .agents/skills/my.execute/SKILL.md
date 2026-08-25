@@ -169,6 +169,10 @@ is unproven and prove the route/data path instead. Readiness is a ladder, not a 
 snapshot/console → navigate → screenshot. A hidden pane cannot produce a screenshot. **One identical failure is the ceiling** — after it,
 switch proof (read_page text, console, network, or a deterministic test) instead of re-shooting.
 
+Headless fallback that beat the preview tool on 2026-08-25 (the tool wedged on a worktree host: `snapshot`, `evaluate`, even `1+1` timed out while the app was healthy): `playwright-core` is already installed (`node_modules/.pnpm/playwright-core@*`) and drives the machine's Chrome by `executablePath`; import it by absolute `file:///` URL, no install. Recipes live at `.artifacts/runs/cutover-dev-20260825-b/probe*.mjs`: `probe.mjs URL` (alive check, iframe count, `__PE_INSPECT__` node count, body text, console errors), `probe-verb.mjs URL "text=<verb>"…` (click, then dump text + inspector changes), `probe-chat.mjs` (inputs + wire census). Text and `__PE_INSPECT__.inspect()` are the testimony; there is no screenshot in this lane. Cross-check the host pane log and the thread transcript (`/chat?thread=`): a pane receipt can say `opened` while the host refused the write.
+
+`herdr.ps1 up` splits from `panes[0]`; when that pane runs the dev server it fails `agent_pane_busy` and never starts the agent. Until fixed: `pane split <a shell pane> --direction down --cwd <wt> --no-focus`, then `agent start <name> --kind codex --pane <id>`, then `herdr.ps1 send`.
+
 ## Herdr, subagents and observable background work
 
 Herdr is tmux with agent-aware panes: it knows each agent's status, delivers prompts, emits notifications, and binds a workspace to a directory. Model: **session → workspace → tab → pane**; an agent is a process in a pane with `idle | working | blocked | done | unknown`. Always name the session; parse JSON and IDs; never infer focus.
