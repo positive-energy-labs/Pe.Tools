@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { EmptyState } from "#/components/lang/empty";
 import { createLiveFamiliesHost } from "#/families/host";
 import { createFamiliesStore, type FamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
 import { registerInspectableAtomStore } from "#/state/atom-inspect";
 import { appAtomRegistry } from "#/state/registry";
+import { withThread } from "./-with-thread";
 
 export const Route = createFileRoute("/families")({
   validateSearch: (
@@ -16,6 +16,7 @@ export const Route = createFileRoute("/families")({
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   }),
+  beforeLoad: withThread,
   component: FamiliesRoute,
 });
 
@@ -26,12 +27,7 @@ const owners = new Map<
 
 function FamiliesRoute() {
   const { target = "", thread } = Route.useSearch();
-  if (!thread)
-    return (
-      <EmptyState story="scope" exit="open this page from a chat thread">
-        no families workspace is open
-      </EmptyState>
-    );
+  if (!thread) return null;
   return <FamiliesStoreOwner key={`${thread}:${target}`} thread={thread} target={target} />;
 }
 

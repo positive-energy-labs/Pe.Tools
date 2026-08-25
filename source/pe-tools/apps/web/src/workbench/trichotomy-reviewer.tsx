@@ -67,7 +67,7 @@ export function CellTrichotomyReviewer({
   renderLabel,
   renderValue = defaultRenderValue,
 }: CellTrichotomyReviewerProps) {
-  const { config } = useWorkbench();
+  const { config, currentThreadId } = useWorkbench();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,7 +82,9 @@ export function CellTrichotomyReviewer({
   const write = async (key: string, suffix: "apply" | "command", body: Record<string, unknown>) => {
     setBusy(key);
     try {
-      const result = await writeRouteState(config, route, suffix, body);
+      const result = await writeRouteState(config, route, suffix, body, {
+        threadId: currentThreadId,
+      });
       setError(commandFailureNote(result));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Route update failed.");

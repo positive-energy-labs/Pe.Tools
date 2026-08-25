@@ -95,7 +95,6 @@ export const familyRouteState = defineRouteState({
   title: "Family",
   description:
     "Anatomy, types, and spec grounding for one authored family.json. Authored edits and proposals live in route:settings; this slice carries the spec doc and Revit evidence.",
-  key: "route:family",
   schema: familyDocumentSchema,
   // Pea never patches this slice directly — doc and evidence arrive via commands.
   agentWriteMask: [],

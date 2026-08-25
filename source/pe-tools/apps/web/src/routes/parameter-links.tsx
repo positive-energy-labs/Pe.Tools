@@ -17,6 +17,7 @@ import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { canApply, errorIssueCount, isDraftDirty, sameProfile } from "#/parameter-links/model";
 import { useRouteState } from "#/workbench/route-state";
+import { withThread } from "./-with-thread";
 
 /**
  * /parameter-links — the route-native workspace for cross-element parameter links.
@@ -26,7 +27,14 @@ import { useRouteState } from "#/workbench/route-state";
  * Preview evaluates it without writing; Apply (human-only, freshness-gated) stores it and
  * reconciles the changed target parameters. Mirrors the /family-types route architecture.
  */
-export const Route = createFileRoute("/parameter-links")({ component: ParameterLinksRoute });
+export const Route = createFileRoute("/parameter-links")({
+  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
+    thread:
+      typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
+  }),
+  beforeLoad: withThread,
+  component: ParameterLinksRoute,
+});
 
 type CommandName = "refresh" | "preview" | "apply";
 
@@ -43,7 +51,13 @@ function profileHash(profile: ParameterLinkProfile | null): string {
 }
 
 function ParameterLinksRoute() {
-  const route = useRouteState(parameterLinksRouteState);
+  const { thread } = Route.useSearch();
+  if (!thread) return null;
+  return <ParameterLinksWorkspace thread={thread} />;
+}
+
+function ParameterLinksWorkspace({ thread }: { thread: string }) {
+  const route = useRouteState(parameterLinksRouteState, { threadId: thread });
   const document = route.slice;
   const stored = document?.profile ?? null;
   const remoteDraft = document?.draftProfile ?? null;

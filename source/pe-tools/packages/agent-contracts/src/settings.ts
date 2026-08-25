@@ -114,7 +114,6 @@ export const settingsRouteState = defineRouteState({
   route: "settings",
   title: "Settings",
   description: "Review, validate, and save proposed changes to a typed settings document.",
-  key: "route:settings",
   schema: settingsRouteDocumentSchema,
   agentWriteMask: trichotomyAgentMask("fields"),
   commands: {

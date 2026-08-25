@@ -108,7 +108,6 @@ export const scheduleGridRouteState = defineRouteState({
   route: "schedule-grid",
   title: "Schedule Grid",
   description: "Review and apply proposed edits to bound Revit schedule cells.",
-  key: "route:schedule-grid",
   schema: scheduleGridDocumentSchema,
   agentWriteMask: trichotomyAgentMask(),
   commands: {

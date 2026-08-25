@@ -1,8 +1,13 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { defineRouteState, routeBindingSchema } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
+import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
+import { createPeaRuntime } from "../src/pea-runtime.ts";
 import type {
   RouteWorkspaceEvent,
   RouteWorkspaceRegistration,
@@ -26,7 +31,6 @@ function registration(
     route: "test-route",
     title: "Test Route",
     description: "A test collaborative route.",
-    key: "route:test-route",
     schema: documentSchema,
     agentWriteMask: [["values"]],
     commands: {
@@ -86,7 +90,6 @@ function memoryStore() {
 function workspace(
   store: RuntimeThreadStateStore,
   options: {
-    resourceId?: string;
     registration?: RouteWorkspaceRegistration;
     authorized?: Set<string>;
     appendThreadEvent?: (event: RouteWorkspaceThreadEvent) => void | Promise<void>;
@@ -95,15 +98,13 @@ function workspace(
   return new RouteWorkspace({
     registrations: [options.registration ?? registration()],
     store,
-    resourceId: options.resourceId ?? "resource-a",
     authorizeThread: (threadId) => options.authorized?.has(threadId) ?? true,
     appendThreadEvent: options.appendThreadEvent,
   });
 }
 
-const threadA = { kind: "thread", threadId: "thread-a" } as const;
-const threadB = { kind: "thread", threadId: "thread-b" } as const;
-const workspaceScope = { kind: "workspace" } as const;
+const threadA = { threadId: "thread-a" } as const;
+const threadB = { threadId: "thread-b" } as const;
 
 test("thread documents are isolated, authorized, and survive module recreation", async () => {
   const { store } = memoryStore();
@@ -124,19 +125,6 @@ test("thread documents are isolated, authorized, and survive module recreation",
       description: "A test collaborative route.",
     },
   ]);
-});
-
-test("workspace scope is isolated by resource identity", async () => {
-  const { store } = memoryStore();
-  const resourceA = workspace(store, { resourceId: "resource-a" });
-  const resourceB = workspace(store, { resourceId: "resource-b" });
-  await resourceA.apply(workspaceScope, "test-route", "human", [
-    { path: ["values", "owner"], value: "A" },
-  ]);
-  expect((await resourceA.read(workspaceScope, "test-route"))?.doc).toMatchObject({
-    values: { owner: "A" },
-  });
-  expect((await resourceB.read(workspaceScope, "test-route"))?.doc).toMatchObject({ values: {} });
 });
 
 test("apply and command serialize without losing either update", async () => {
@@ -222,7 +210,7 @@ test("mask, schema, human command gate, and substrate bind are enforced", async 
   });
 });
 
-test("publishes all action outcomes but appends only human thread chronology", async () => {
+test("publishes all action outcomes but appends only human chronology", async () => {
   const { store } = memoryStore();
   const appended: RouteWorkspaceThreadEvent[] = [];
   const published: RouteWorkspaceEvent[] = [];
@@ -236,7 +224,7 @@ test("publishes all action outcomes but appends only human thread chronology", a
   await module.apply(threadA, "test-route", "agent", [
     { path: ["values", "agent"], value: "proposal" },
   ]);
-  await module.apply(workspaceScope, "test-route", "human", [{ path: ["count"], value: 1 }]);
+  await module.apply(threadB, "test-route", "human", [{ path: ["count"], value: 1 }]);
   await module.apply(threadA, "test-route", "human", [{ path: ["count"], value: 2 }]);
   expect(await module.command(threadA, "test-route", "human", "fail", {})).toMatchObject({
     ok: false,
@@ -244,6 +232,7 @@ test("publishes all action outcomes but appends only human thread chronology", a
 
   expect(published).toHaveLength(4);
   expect(appended).toEqual([
+    expect.objectContaining({ action: "apply", threadId: "thread-b", ok: true, patchCount: 1 }),
     expect.objectContaining({ action: "apply", threadId: "thread-a", ok: true, patchCount: 1 }),
     expect.objectContaining({
       action: "command",
@@ -254,6 +243,24 @@ test("publishes all action outcomes but appends only human thread chronology", a
     }),
   ]);
 });
+
+test("a request without threadId is refused", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-route-state-"));
+  const runtime = await createPeaRuntime({ workspaceRoot });
+  try {
+    const app = await buildAgentControllerApp({
+      runtime,
+      label: "pea",
+      routeRegistrations: [registration()],
+    });
+    const response = await app.fetch(new Request("http://local/pe/route-state/test-route"));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ hint: "threadId required" });
+  } finally {
+    await runtime.close?.();
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+}, 30_000);
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;

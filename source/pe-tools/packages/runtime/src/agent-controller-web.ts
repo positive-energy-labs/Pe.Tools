@@ -158,7 +158,6 @@ export async function buildAgentControllerApp(
   const routeWorkspace = new RouteWorkspace({
     registrations,
     store: threadState!,
-    resourceId: info.resourceId,
     authorizeThread: async (threadId) => {
       const thread = await runtime.session!.thread.getById({ threadId });
       return thread?.resourceId === info.resourceId;
@@ -172,7 +171,8 @@ export async function buildAgentControllerApp(
   app.get("/pe/route-state", (c) => c.json(routeWorkspace.list()));
   app.get("/pe/route-state/:route", async (c) => {
     const scope = parseRouteWorkspaceScope(c);
-    if (typeof scope === "string") return c.json({ error: scope }, 400);
+    if (typeof scope === "string")
+      return c.json({ error: "route scope is required", hint: scope }, 400);
     try {
       const view = await routeWorkspace.read(scope, c.req.param("route"));
       return view
@@ -184,7 +184,8 @@ export async function buildAgentControllerApp(
   });
   app.get("/pe/route-state/:route/events", async (c) => {
     const scope = parseRouteWorkspaceScope(c);
-    if (typeof scope === "string") return c.json({ error: scope }, 400);
+    if (typeof scope === "string")
+      return c.json({ error: "route scope is required", hint: scope }, 400);
     const route = c.req.param("route");
     try {
       if (!(await routeWorkspace.read(scope, route)))
@@ -197,7 +198,8 @@ export async function buildAgentControllerApp(
   const mountRouteStateWrites = (prefix: string, actor: "agent" | "human") => {
     app.post(`${prefix}/:route/apply`, async (c) => {
       const scope = parseRouteWorkspaceScope(c);
-      if (typeof scope === "string") return c.json({ ok: false, error: scope }, 400);
+      if (typeof scope === "string")
+        return c.json({ ok: false, error: "route scope is required", hint: scope }, 400);
       const parsed = routeStateApplyBodySchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return c.json({ ok: false, error: "invalid body", hint: "expected { patches }" }, 400);
@@ -212,7 +214,8 @@ export async function buildAgentControllerApp(
     });
     app.post(`${prefix}/:route/command`, async (c) => {
       const scope = parseRouteWorkspaceScope(c);
-      if (typeof scope === "string") return c.json({ ok: false, error: scope }, 400);
+      if (typeof scope === "string")
+        return c.json({ ok: false, error: "route scope is required", hint: scope }, 400);
       const parsed = routeStateCommandBodySchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return c.json(
@@ -245,14 +248,7 @@ export async function buildAgentControllerApp(
 
 function parseRouteWorkspaceScope(c: Context): RouteWorkspaceScope | string {
   const threadId = c.req.query("threadId")?.trim();
-  const rawScope = c.req.query("scope");
-  if (rawScope != null && rawScope !== "workspace")
-    return "scope must be 'workspace' when supplied";
-  if (threadId && rawScope === "workspace")
-    return "choose exactly one route scope: threadId or scope=workspace";
-  if (threadId) return { kind: "thread", threadId };
-  if (rawScope === "workspace") return { kind: "workspace" };
-  return "route scope is required: threadId=<id> or scope=workspace";
+  return threadId && c.req.query("scope") == null ? { threadId } : "threadId required";
 }
 
 async function appendRouteWorkspaceThreadEvent(
@@ -331,10 +327,7 @@ function streamRouteWorkspace(
 }
 
 function sameRouteWorkspaceScope(left: RouteWorkspaceScope, right: RouteWorkspaceScope): boolean {
-  return (
-    left.kind === right.kind &&
-    (left.kind === "workspace" || (right.kind === "thread" && left.threadId === right.threadId))
-  );
+  return left.threadId === right.threadId;
 }
 
 function errorMessage(error: unknown): string {

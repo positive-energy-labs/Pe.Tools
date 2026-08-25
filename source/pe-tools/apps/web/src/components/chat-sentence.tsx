@@ -125,7 +125,18 @@ function Plain() {
 }
 
 function WithRouteDoc({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
-  const route = useRouteState(spec);
+  const { currentThreadId } = useWorkbench();
+  return currentThreadId ? <AddressedRouteDoc spec={spec} threadId={currentThreadId} /> : <Plain />;
+}
+
+function AddressedRouteDoc({
+  spec,
+  threadId,
+}: {
+  spec: RouteStateSpec<z.ZodType>;
+  threadId: string;
+}) {
+  const route = useRouteState(spec, { threadId });
   const staged = useMemo(
     () => (route.slice == null ? null : documentTrichotomySummary(route.slice)),
     [route.slice],

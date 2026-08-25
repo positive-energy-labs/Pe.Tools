@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import { familyRouteState, readRouteState, settingsRouteState } from "@pe/agent-contracts";
+import { familyRouteState, parseRouteDoc, settingsRouteState } from "@pe/agent-contracts";
 
 import {
   InlineRoutePlugin,
@@ -13,8 +13,8 @@ import {
  * Authored-field review renders through the settings plugin; this card carries the
  * sibling context — spec doc size and evidence provenance/freshness. */
 export function FamilyChatPlugin({ toolName, args, sessionState, running }: RouteChatPluginProps) {
-  const document = readRouteState(sessionState, familyRouteState);
-  const settings = readRouteState(sessionState, settingsRouteState);
+  const document = parseRouteDoc(sessionState, familyRouteState);
+  const settings = parseRouteDoc(sessionState, settingsRouteState);
   const evidence = document?.evidence ?? null;
   const evidenceFresh =
     evidence != null &&

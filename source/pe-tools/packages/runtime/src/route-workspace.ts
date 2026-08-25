@@ -7,7 +7,7 @@ import type {
 } from "@pe/agent-contracts";
 import type { RuntimeThreadStateStore } from "./storage/thread-state.ts";
 
-export type RouteWorkspaceScope = { kind: "thread"; threadId: string } | { kind: "workspace" };
+export type RouteWorkspaceScope = { threadId: string };
 export type RouteWorkspaceActor = "agent" | "human";
 export type RouteWorkspacePatch = { path: (string | number)[]; value?: unknown };
 
@@ -37,7 +37,6 @@ export interface RouteWorkspaceEvent extends Omit<RouteWorkspaceThreadEvent, "th
 export interface RouteWorkspaceOptions {
   registrations: readonly RouteWorkspaceRegistration[];
   store: RuntimeThreadStateStore;
-  resourceId: string;
   authorizeThread(threadId: string): boolean | Promise<boolean>;
   appendThreadEvent?(event: RouteWorkspaceThreadEvent): void | Promise<void>;
 }
@@ -83,7 +82,6 @@ export class RouteWorkspace {
   readonly #listeners = new Set<(event: RouteWorkspaceEvent) => void>();
 
   constructor(private readonly options: RouteWorkspaceOptions) {
-    if (!options.resourceId) throw new Error("route workspace requires a resourceId");
     for (const registration of options.registrations) {
       const route = registration.spec.route;
       if (this.#registry.has(route)) throw new Error(`duplicate route '${route}'`);
@@ -109,7 +107,6 @@ export class RouteWorkspace {
       route,
       title: spec.title,
       description: spec.description,
-      key: spec.key,
       doc: structuredClone(envelope.doc),
       revision: envelope.revision,
       status: envelope.outcomeUnknown ? "outcomeUnknown" : "ready",
@@ -326,12 +323,12 @@ export class RouteWorkspace {
   }
 
   async #authorize(scope: RouteWorkspaceScope): Promise<void> {
-    if (scope.kind === "thread" && !(await this.options.authorizeThread(scope.threadId)))
+    if (!(await this.options.authorizeThread(scope.threadId)))
       throw new Error(`thread '${scope.threadId}' is not authorized`);
   }
 
   async #load(scope: RouteWorkspaceScope, spec: RouteStateSpec<z.ZodType>) {
-    const threadId = this.#storageThreadId(scope);
+    const threadId = scope.threadId;
     const type = stateType(spec.route);
     const raw = await this.options.store.getState({ threadId, type });
     if (raw == null) {
@@ -360,21 +357,14 @@ export class RouteWorkspace {
     envelope: PersistedRouteEnvelope,
   ): Promise<void> {
     await this.options.store.setState({
-      threadId: this.#storageThreadId(scope),
+      threadId: scope.threadId,
       type: stateType(route),
       value: envelope,
     });
   }
 
-  #storageThreadId(scope: RouteWorkspaceScope): string {
-    // Native thread state requires a threadId; workspace state gets one stable resource-owned key.
-    return scope.kind === "thread"
-      ? scope.threadId
-      : `${STATE_TYPE_PREFIX}workspace:${this.options.resourceId}`;
-  }
-
   async #publish(event: RouteWorkspaceEvent): Promise<void> {
-    if (event.actor === "human" && event.scope.kind === "thread") {
+    if (event.actor === "human") {
       await this.options.appendThreadEvent?.({
         type: event.type,
         threadId: event.scope.threadId,
@@ -392,7 +382,7 @@ export class RouteWorkspace {
 
   #serialized<T>(scope: RouteWorkspaceScope, route: string, work: () => Promise<T>): Promise<T> {
     // Keep the whole read/validate/effect/persist/publication sequence ordered per document.
-    const key = `${this.#storageThreadId(scope)}\0${route}`;
+    const key = `${scope.threadId}\0${route}`;
     const previous = this.#tails.get(key) ?? Promise.resolve();
     const run = previous.catch(() => undefined).then(work);
     const tail = run.then(

@@ -142,7 +142,6 @@ export const familyTypesRouteState = defineRouteState({
   route: "family-types",
   title: "Family Types",
   description: "Review and apply proposed family parameter values against a grounded spec.",
-  key: "route:family-types",
   schema: familyTypesDocumentSchema,
   agentWriteMask: trichotomyAgentMask(),
   commands: {

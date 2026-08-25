@@ -125,7 +125,6 @@ export const parameterLinksRouteState = defineRouteState({
   route: "parameter-links",
   title: "Parameter Links",
   description: "Review, preview, and reconcile a model-owned parameter linkage profile.",
-  key: "route:parameter-links",
   schema: parameterLinksDocumentSchema,
   agentWriteMask: [["draftProfile"]],
   commands: {

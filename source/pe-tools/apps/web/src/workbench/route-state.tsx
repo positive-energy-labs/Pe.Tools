@@ -1,4 +1,4 @@
-/** Thread- or workspace-scoped route documents over the host RouteWorkspace API. */
+/** Thread-scoped route documents over the host RouteWorkspace API. */
 import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { Cause, Option } from "effect";
@@ -16,15 +16,6 @@ export type { RouteStatePatch, RouteStateWriteResult } from "@pe/agent-contracts
 import { docAtom, docWriter, type Scope } from "#/state/route-store";
 import { type WorkbenchEndpointConfig, peUrl } from "./config";
 
-export type RouteWorkspaceScope = { kind: "thread"; threadId: string } | { kind: "workspace" };
-
-/** Chat panes carry `thread`; route pages without it are explicitly standalone workspaces. */
-export function resolveRouteWorkspaceScope(search?: string): RouteWorkspaceScope {
-  const source = search ?? (typeof window === "undefined" ? "" : window.location.search);
-  const threadId = new URLSearchParams(source).get("thread")?.trim();
-  return threadId ? { kind: "thread", threadId } : { kind: "workspace" };
-}
-
 export interface RouteStateHandle<T> {
   slice: T | null;
   hydrated: boolean;
@@ -35,20 +26,14 @@ export interface RouteStateHandle<T> {
   error: string | null;
 }
 
-const address = (scope: RouteWorkspaceScope): Scope => {
-  if (scope.kind === "workspace") throw Error("workspace scope is not addressable; open with ?thread");
-  return { threadId: scope.threadId };
-};
-
 export function useRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
-  scope = resolveRouteWorkspaceScope(),
+  scope: Scope,
 ): RouteStateHandle<z.infer<TSchema>> {
-  const addressed = address(scope);
-  const wireResult = useAtomValue(docAtom(spec, addressed));
+  const wireResult = useAtomValue(docAtom(spec, scope));
   const wire = AsyncResult.isSuccess(wireResult) ? wireResult.value : null;
   const failure = AsyncResult.isFailure(wireResult) ? wireResult.cause : null;
-  const writer = useMemo(() => docWriter(spec, addressed), [spec, addressed.threadId]);
+  const writer = useMemo(() => docWriter(spec, scope), [spec, scope.threadId]);
 
   return {
     slice: wire?.doc ?? null,
@@ -71,7 +56,7 @@ export async function writeRouteState(
   route: string,
   suffix: "apply" | "command",
   body: Record<string, unknown>,
-  scope = resolveRouteWorkspaceScope(),
+  scope: Scope,
 ): Promise<RouteStateWriteResult> {
   try {
     const response = await fetch(routeWorkspaceUrl(config, route, suffix, scope), {
@@ -90,11 +75,10 @@ function routeWorkspaceUrl(
   config: WorkbenchEndpointConfig,
   route: string,
   operation: "read" | "events" | "apply" | "command",
-  scope: RouteWorkspaceScope,
+  scope: Scope,
 ): string {
   const suffix = operation === "read" ? "" : `/${operation}`;
   const url = new URL(peUrl(config, `/route-state/${route}${suffix}`));
-  if (scope.kind === "thread") url.searchParams.set("threadId", scope.threadId);
-  else url.searchParams.set("scope", "workspace");
+  url.searchParams.set("threadId", scope.threadId);
   return url.toString();
 }

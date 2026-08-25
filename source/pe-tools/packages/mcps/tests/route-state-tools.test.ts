@@ -17,7 +17,11 @@ test("route-state tools keep discovery shallow and scope detail and writes to th
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
     calls.push({ method: init?.method ?? "GET", url: new URL(url) });
-    return Response.json({ ok: true });
+    return Response.json(
+      new URL(url).pathname === "/pe/route-state"
+        ? [{ route: "family-types", title: "Family Types", description: "Review values." }]
+        : { ok: true },
+    );
   }) as typeof globalThis.fetch;
 
   const requestContext = {
@@ -30,7 +34,7 @@ test("route-state tools keep discovery shallow and scope detail and writes to th
   const context = { requestContext };
 
   try {
-    await execute(routeStateRead, {}, {});
+    const discovery = await execute(routeStateRead, {}, {});
     await execute(routeStateRead, { route: "family-types" }, context);
     await execute(
       routeStateApply,
@@ -64,6 +68,7 @@ test("route-state tools keep discovery shallow and scope detail and writes to th
       content: expect.stringContaining("active Pea thread"),
     });
     expect(calls).toHaveLength(5);
+    expect(JSON.stringify(discovery)).not.toContain('"key"');
   } finally {
     globalThis.fetch = originalFetch;
     if (originalBaseUrl === undefined) delete process.env.PE_TOOLS_HOST_BASE_URL;

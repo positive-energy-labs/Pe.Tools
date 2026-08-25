@@ -23,6 +23,7 @@ import { ValueDiff } from "#/components/ui/value-diff";
 import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
+import { withThread } from "./-with-thread";
 
 /**
  * /schedule-grid — a web surface for editing any Revit schedule collaboratively. The rail
@@ -39,6 +40,11 @@ import { useRouteState } from "#/workbench/route-state";
  * table; the pending strip is the reviewer.
  */
 export const Route = createFileRoute("/schedule-grid")({
+  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
+    thread:
+      typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
+  }),
+  beforeLoad: withThread,
   component: ScheduleGridRoute,
 });
 
@@ -47,8 +53,14 @@ type Snapshot = NonNullable<ScheduleGridDocument["snapshot"]>;
 type ScheduleRow = Snapshot["rows"][number];
 
 function ScheduleGridRoute() {
+  const { thread } = Route.useSearch();
+  if (!thread) return null;
+  return <ScheduleGridWorkspace thread={thread} />;
+}
+
+function ScheduleGridWorkspace({ thread }: { thread: string }) {
   const { slice, hydrated, apply, command, peaActive, connected } =
-    useRouteState(scheduleGridRouteState);
+    useRouteState(scheduleGridRouteState, { threadId: thread });
   const document = slice;
   const snapshot = document?.snapshot ?? null;
   const catalog = document?.catalog ?? null;

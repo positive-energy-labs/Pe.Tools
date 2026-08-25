@@ -6,7 +6,7 @@
  * pea may propose to — everything else is human-only), and a set of named commands
  * (the side-effectful work the mask forbids doing by hand). No per-route server code
  * beyond the schema + mask + command handlers: RouteWorkspace (packages/runtime)
- * owns thread/workspace persistence, ordering, recovery, validation, and commands; the
+ * owns thread persistence, ordering, recovery, validation, and commands; the
  * three universal pea tools (route_state_read/route_state_apply/route_command) are thin
  * HTTP clients to its endpoints; the browser writes the same scoped document as `actor:"human"`
  * (unmasked) and receives document snapshots through its route-specific event stream.
@@ -30,8 +30,6 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   /** Human-facing discovery metadata; adapters should not duplicate this. */
   title: string;
   description: string;
-  /** Top-level session-state key, namespaced `route:<name>` to coexist with harness keys. */
-  key: string;
   schema: TSchema;
   /**
    * Segment-array patterns authorizing agent writes. `"*"` matches exactly one segment;
@@ -102,12 +100,11 @@ export function resolveTarget(input: unknown, doc: unknown): string | undefined 
   return bound ?? undefined;
 }
 
-/** Parse a route's slice out of a raw session-state map; null when absent or invalid. */
-export function readRouteState<TSchema extends z.ZodType>(
-  sessionState: Record<string, unknown> | undefined,
+/** Parse a raw route document; null when absent or invalid. */
+export function parseRouteDoc<TSchema extends z.ZodType>(
+  raw: unknown,
   spec: RouteStateSpec<TSchema>,
 ): z.infer<TSchema> | null {
-  const raw = sessionState?.[spec.key];
   if (raw == null) return null;
   const result = spec.schema.safeParse(raw);
   return result.success ? result.data : null;

@@ -1,6 +1,6 @@
 import {
   cellSummary,
-  readRouteState,
+  parseRouteDoc,
   scheduleGridRouteState,
   splitScheduleCellKey,
 } from "@pe/agent-contracts";
@@ -31,7 +31,7 @@ export function ScheduleGridChatPlugin({
   running,
   active,
 }: RouteChatPluginProps) {
-  const document = readRouteState(sessionState, scheduleGridRouteState);
+  const document = parseRouteDoc(sessionState, scheduleGridRouteState);
   const snapshot = document?.snapshot ?? null;
   const cells = document?.cells ?? {};
   const summary = cellSummary(cells);

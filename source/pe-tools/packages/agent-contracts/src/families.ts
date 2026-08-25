@@ -112,7 +112,6 @@ export const familiesRouteState = defineRouteState({
   route: "families",
   title: "Families",
   description: "Family Foundry: plan a profile against loaded families, exclude, apply.",
-  key: "route:families",
   schema: familiesDocumentSchema,
   agentWriteMask: [["excludedIds"], ["profilePath"]],
   commands: {

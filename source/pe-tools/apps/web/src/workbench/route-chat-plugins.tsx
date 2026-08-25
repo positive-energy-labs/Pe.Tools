@@ -1,14 +1,13 @@
 import { useState, type ComponentType, type ReactNode } from "react";
 import type { z } from "zod";
 import {
-  type FamilyTypesDocument,
   type ParameterLinksDocument,
   actionLabel,
   cellSummary,
   familyRouteState,
   familyTypesRouteState,
   parameterLinksRouteState,
-  readRouteState,
+  parseRouteDoc,
   scheduleGridRouteState,
   settingsRouteState,
   splitCellKey,
@@ -20,7 +19,7 @@ import { Link } from "@tanstack/react-router";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
-import { type RouteStateWriteResult, useRouteState, writeRouteState } from "./route-state";
+import { useRouteState, writeRouteState } from "./route-state";
 import { CellTrichotomyReviewer } from "./trichotomy-reviewer";
 import { FamilyChatPlugin } from "./plugins/family-chat-plugin";
 import { ScheduleGridChatPlugin } from "./plugins/schedule-grid-chat-plugin";
@@ -32,7 +31,7 @@ export interface RouteChatPluginProps {
   toolCallId: string;
   toolName: string;
   args: unknown;
-  sessionState: Record<string, unknown>;
+  sessionState: unknown;
   running: boolean;
   active: boolean;
 }
@@ -158,10 +157,29 @@ function ConnectedRouteChatPlugin({
   registration,
   ...props
 }: RouteChatPluginProps & { registration: RouteChatPluginRegistration }) {
-  const route = useRouteState(registration.spec);
+  const { currentThreadId } = useWorkbench();
+  if (!currentThreadId) return null;
+  return (
+    <AddressedRouteChatPlugin
+      registration={registration}
+      {...props}
+      currentThreadId={currentThreadId}
+    />
+  );
+}
+
+function AddressedRouteChatPlugin({
+  registration,
+  currentThreadId,
+  ...props
+}: RouteChatPluginProps & {
+  registration: RouteChatPluginRegistration;
+  currentThreadId: string;
+}) {
+  const route = useRouteState(registration.spec, { threadId: currentThreadId });
   if (!route.hydrated || route.slice == null) return null;
   const Renderer = registration.Renderer;
-  return <Renderer {...props} sessionState={{ [registration.spec.key]: route.slice }} />;
+  return <Renderer {...props} sessionState={route.slice} />;
 }
 
 function ParameterLinksChatPlugin({
@@ -171,10 +189,10 @@ function ParameterLinksChatPlugin({
   running,
   active,
 }: RouteChatPluginProps) {
-  const document = readRouteState(sessionState, parameterLinksRouteState);
+  const document = parseRouteDoc(sessionState, parameterLinksRouteState);
   const profile = document?.draftProfile ?? document?.profile;
   const evaluation = document?.evaluation;
-  const { config } = useWorkbench();
+  const { config, currentThreadId } = useWorkbench();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewedProfile, setPreviewedProfile] = useState<NonNullable<typeof profile> | null>(
@@ -189,10 +207,16 @@ function ParameterLinksChatPlugin({
     setBusy(name);
     setError(null);
     try {
-      const result = await writeRouteState(config, "parameter-links", "command", {
-        command: name,
-        input: name === "refresh" ? {} : { profile: commandProfile },
-      });
+      const result = await writeRouteState(
+        config,
+        "parameter-links",
+        "command",
+        {
+          command: name,
+          input: name === "refresh" ? {} : { profile: commandProfile },
+        },
+        { threadId: currentThreadId },
+      );
       if (!result.ok) {
         setError(result.error ?? result.hint ?? `${name} failed.`);
       } else if (name === "preview" && profile) {
@@ -359,7 +383,7 @@ function FamilyTypesChatPlugin({
   running,
   active,
 }: RouteChatPluginProps) {
-  const document = readRouteState(sessionState, familyTypesRouteState);
+  const document = parseRouteDoc(sessionState, familyTypesRouteState);
   const cells = document?.cells ?? {};
   const summary = cellSummary(cells);
   const openProposals = Object.values(cells).filter(
@@ -404,31 +428,6 @@ function FamilyTypesChatPlugin({
       ) : null}
     </InlineRoutePlugin>
   );
-}
-
-/** Kept for the route-chat-plugins test; the inline card derives counts via `cellSummary`. */
-export function summarizeFamilyTypes(document: FamilyTypesDocument | null) {
-  const entries = Object.entries(document?.cells ?? {});
-  const items = entries.filter(([, cell]) => cell.proposal != null || cell.staged != null);
-  const staged = entries.filter(([, cell]) => cell.staged != null);
-  return {
-    items,
-    proposalCount: entries.filter(([, cell]) => cell.proposal != null && cell.staged == null)
-      .length,
-    stagedCount: staged.length,
-    attentionCount: items.filter(([, cell]) => cell.review === "attention").length,
-    canPush: staged.length > 0 && staged.every(([, cell]) => cell.review !== "attention"),
-  };
-}
-
-export function familyTypesWriteError(result: RouteStateWriteResult): string | null {
-  if (!result.ok) return result.error ?? result.hint ?? "Route update failed.";
-  if (!isRecord(result.result) || !Array.isArray(result.result.failures)) return null;
-  const failures = result.result.failures.filter(isRecord);
-  if (failures.length === 0) return null;
-  const first = failures[0];
-  const detail = [first?.key, first?.error].filter((part) => typeof part === "string").join(": ");
-  return `${failures.length} value${failures.length === 1 ? "" : "s"} failed${detail ? `: ${detail}` : "."}`;
 }
 
 /** Pea's inline route card — a machine-operated object carrying state, so it IS an artifact:

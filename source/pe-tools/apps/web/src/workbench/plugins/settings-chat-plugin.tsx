@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import { cellSummary, readRouteState, settingsRouteState } from "@pe/agent-contracts";
+import { cellSummary, parseRouteDoc, settingsRouteState } from "@pe/agent-contracts";
 
 import {
   InlineRoutePlugin,
@@ -18,7 +18,7 @@ export function SettingsChatPlugin({
   running,
   active,
 }: RouteChatPluginProps) {
-  const document = readRouteState(sessionState, settingsRouteState);
+  const document = parseRouteDoc(sessionState, settingsRouteState);
   const isFamilyModel =
     document?.snapshot?.documentId.moduleKey === "FamilyFoundry" &&
     document.snapshot.documentId.rootKey === "models";

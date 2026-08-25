@@ -25,11 +25,11 @@ import { useEffect, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { EmptyState } from "#/components/lang/empty";
 import { createLiveFamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
 import { appAtomRegistry } from "#/state/registry";
+import { withThread } from "./-with-thread";
 import { useRouteStore } from "#/state/use-route-store";
 
 export const Route = createFileRoute("/family")({
@@ -51,14 +51,14 @@ export const Route = createFileRoute("/family")({
     profile: typeof search.profile === "string" ? search.profile.trim() : "",
     stage: search.stage === "evidence" ? "evidence" : "author",
   }),
+  beforeLoad: withThread,
   component: FamilyRoute,
 });
 
 function FamilyRoute() {
   const search = Route.useSearch();
   const { family, thread, target = "", profile = "" } = search;
-  if (!thread)
-    return <EmptyState story="scope" exit="open this page from a chat thread">no family workspace is open</EmptyState>;
+  if (!thread) return null;
   return (
     <FamilyStoreOwner
       key={`${thread}:${target}`}
