@@ -940,8 +940,10 @@ export function createTakeoffStore(deps: {
         const recent = recents.value.find((candidate) => candidate.title === title);
         if (!recent) throw Error(`unknown recent document ${title}`);
         if (!deps.host.openDocument) throw Error("document opening is unavailable");
+        // SHIM: the CLI resolves cloud models only through `recent:<title>`; a literal `cld://`
+        // path is read as a local file (Pe.Revit.Sdk NEXT.md gap). Dies when `doc open <cld://…>` resolves.
         await deps.host.openDocument({
-          path: recent.path,
+          path: recent.isCloud ? `recent:${recent.title}` : recent.path,
           id: session.sdkSessionId,
           ...(recent.isCloud ? { conflictPolicy: "keep" as const } : {}),
         });
