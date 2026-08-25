@@ -11,7 +11,6 @@ import {
 } from "@pe/agent-contracts";
 import { SettingsFileKind, type SettingsFileEntry } from "@pe/host-contracts/operation-types";
 
-import { mintSelector, resolveTarget, sessionLabel } from "#/host/target";
 import {
   createRouteStoreCore,
   docAtom,
@@ -96,12 +95,6 @@ export function createSettingsStore(deps: {
     "slice/settings",
     deps.host.document ?? docAtom(settingsRouteState, deps.scope),
   );
-  const sessionsSource = runtime.atom(() => hostRead(["bridge.sessions.list"], deps.host.sessions));
-  const sessionsResult = runtimeFactory
-    .withReactivity(["sessions"])(
-      Atom.swr(sessionsSource, { staleTime: "5 seconds", revalidateOnMount: false }),
-    )
-    .pipe(Atom.autoDispose);
   const document = Atom.make((get): SettingsRouteDocument | null => {
     const result = get(settingsSlice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
@@ -110,19 +103,8 @@ export function createSettingsStore(deps: {
     const doc = get(document);
     const value = doc?.snapshot;
     if (!value) return null;
-    const sessions = get(sessionsResult);
-    const resolution = AsyncResult.isSuccess(sessions)
-      ? resolveTarget(sessions.value.value, doc.binding.target ?? "")
-      : null;
-    const target =
-      resolution?.kind === "resolved"
-        ? (resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`)
-        : deps.search.source === "fixture"
-          ? doc.binding.target
-          : null;
-    return target && readingIsCurrent(value.from, { target, documentId: value.from.documentId })
-      ? value
-      : null;
+    const target = doc.binding.target;
+    return target && readingIsCurrent(value.from, { target, documentId: target }) ? value : null;
   }).pipe(owned("view/snapshot"));
   const fields = Atom.make((get) => get(document)?.fields ?? {}).pipe(owned("view/fields"));
   const validation = Atom.make((get) => get(snapshot)?.validation ?? null).pipe(
@@ -254,19 +236,11 @@ export function createSettingsStore(deps: {
               !entry.isSchema &&
               entry.relativePath.toLowerCase().endsWith(".json"),
           )
-          .map((item) => ({ id: item.relativePath, label: item.relativePath })),
+          .map((item) => ({ id: item.path, label: item.relativePath })),
       lane,
       { needs: "a module and root" },
     ),
   ).pipe(owned("feed/file"));
-  const sessionFeed = Atom.make((get) =>
-    feed(
-      get(sessionsResult),
-      (items) =>
-        items.map((item) => ({ id: mintSelector(item, items), label: sessionLabel(item) })),
-      lane,
-    ),
-  ).pipe(owned("feed/session"));
   const schemaJson = Atom.make((get) => {
     const result = get(schemaResult);
     return AsyncResult.isSuccess(result) && result.value.bound ? result.value.value : undefined;
@@ -332,6 +306,22 @@ export function createSettingsStore(deps: {
     await Promise.all([...pending.keys()].map(flush));
     await lastApply;
   };
+  const bindDocument = async (target: string | null) => {
+    const doc = registry.get(document);
+    const patches: RouteStatePatch[] = [
+      {
+        path: ["binding"],
+        value: { target, boundAt: target ? new Date().toISOString() : null },
+      },
+    ];
+    if (
+      doc?.snapshot &&
+      (!target || !readingIsCurrent(doc.snapshot.from, { target, documentId: target }))
+    )
+      patches.push({ path: ["snapshot"], value: null });
+    expect(await apply(patches), "bind failed");
+    return target ? `bound ${target}` : "unbound settings file";
+  };
 
   const actions = {
     setPicker: (value: Setter<SettingsPicker>) => set("pick", picker, value),
@@ -348,11 +338,22 @@ export function createSettingsStore(deps: {
           const { moduleKey, rootKey, filePath } = registry.get(picker);
           if (!moduleKey || !rootKey || !filePath)
             throw Error("open needs a module, root, and file");
+          const result = registry.get(treeResult);
+          const files = AsyncResult.isSuccess(result)
+            ? result.value.value
+            : await deps.host.tree(moduleKey, rootKey);
+          const file =
+            files.find((item) => item.path === filePath) ??
+            (await deps.host.tree(moduleKey, rootKey)).find((item) => item.path === filePath);
+          if (!file) throw Error("open needs a file from the current settings tree");
+          if (registry.get(document)?.binding.target !== file.path) await bindDocument(file.path);
           expect(
-            await command("open", { documentId: { moduleKey, rootKey, relativePath: filePath } }),
+            await command("open", {
+              documentId: { moduleKey, rootKey, relativePath: file.relativePath },
+            }),
             "open failed",
           );
-          return `opened ${filePath}`;
+          return `opened ${file.relativePath}`;
         },
         ["settings", "settings.schema"],
       ),
@@ -384,42 +385,7 @@ export function createSettingsStore(deps: {
         },
         ["settings"],
       ),
-    bind: (target: string | null) =>
-      runVerb(
-        "bind",
-        async () => {
-          const doc = registry.get(document);
-          const sessions = registry.get(sessionsResult);
-          const sessionItems = AsyncResult.isSuccess(sessions)
-            ? sessions.value.value
-            : await deps.host.sessions();
-          const resolution = resolveTarget(sessionItems, target ?? "");
-          const canonicalTarget =
-            resolution?.kind === "resolved"
-              ? (resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`)
-              : deps.search.source === "fixture"
-                ? target
-                : null;
-          const patches: RouteStatePatch[] = [
-            {
-              path: ["binding"],
-              value: { target, boundAt: target ? new Date().toISOString() : null },
-            },
-          ];
-          if (
-            doc?.snapshot &&
-            (!canonicalTarget ||
-              !readingIsCurrent(doc.snapshot.from, {
-                target: canonicalTarget,
-                documentId: doc.snapshot.from.documentId,
-              }))
-          )
-            patches.push({ path: ["snapshot"], value: null });
-          expect(await apply(patches), "bind failed");
-          return target ? `bound ${target}` : "unbound session";
-        },
-        ["settings"],
-      ),
+    bind: (target: string | null) => runVerb("bind", () => bindDocument(target), ["settings"]),
   };
 
   return {
@@ -449,7 +415,6 @@ export function createSettingsStore(deps: {
       module: moduleFeed,
       root: rootFeed,
       file: fileFeed,
-      session: sessionFeed,
     },
     actions,
     dispose() {

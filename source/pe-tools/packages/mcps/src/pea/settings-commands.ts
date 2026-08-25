@@ -5,7 +5,7 @@
  * These are the side-effectful work the agent write mask forbids doing by hand: open a
  * schema-backed settings document, re-read it, validate a candidate splice, and save
  * (human-only). They run where the pea runtime is composed (in-process with the host),
- * reaching the TS host through `HostRpcCaller`; reads resolve the bound world for `from`.
+ * reaching the TS host through `HostRpcCaller` — no Revit session required.
  */
 import {
   type SettingsDocumentId,
@@ -23,7 +23,6 @@ import type {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
-import { currentReadingIdentity } from "./reading-source.ts";
 
 export { settingsRouteState } from "@pe/agent-contracts";
 
@@ -207,7 +206,8 @@ async function openSnapshot(
   const versionToken = raw.metadata.versionToken?.value;
   return {
     from: {
-      ...(await currentReadingIdentity(caller, absolutePath)),
+      target: absolutePath,
+      documentId: absolutePath,
       settingsDocumentId: documentId,
       ...(versionToken ? { documentVersionToken: versionToken } : {}),
       observedAt: new Date().toISOString(),

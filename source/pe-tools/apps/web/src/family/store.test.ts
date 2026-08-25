@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import type { RouteStateWriteResult } from "@pe/agent-contracts";
+import type {
+  FamilyDocument,
+  RouteStateWriteResult,
+  SettingsRouteDocument,
+} from "@pe/agent-contracts";
 
 import { FAMILY_MODULE, type FamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
@@ -21,12 +25,13 @@ const MODEL = {
   solids: {},
   connectors: {},
 };
-const settings = (versionToken = "v1") => ({
-  binding: { target: "session:test" },
+const SETTINGS_PATH = "C:\\Settings\\test.family.json";
+const settings = (versionToken = "v1", documentId = SETTINGS_PATH): SettingsRouteDocument => ({
+  binding: { target: SETTINGS_PATH },
   snapshot: {
     from: {
-      target: "test",
-      documentId: "C:\\Settings\\test.family.json",
+      target: SETTINGS_PATH,
+      documentId,
       documentVersionToken: versionToken,
       observedAt: "2026-08-25T00:00:00Z",
       settingsDocumentId: {
@@ -40,7 +45,11 @@ const settings = (versionToken = "v1") => ({
   },
   fields: {},
 });
-const family = { binding: { target: "" }, doc: null, evidence: null };
+const family = (evidence: FamilyDocument["evidence"] = null): FamilyDocument => ({
+  binding: { target: "" },
+  doc: null,
+  evidence,
+});
 const registries: AtomRegistry.AtomRegistry[] = [];
 afterEach(() => registries.splice(0).forEach((registry) => registry.dispose()));
 const slice = <D>(doc: D) => ({
@@ -57,18 +66,17 @@ const fixture = () => {
     return { ok: true, result: {} };
   };
   const host: FamilyHost = {
-    sessions: async () => [
-      {
-        sessionId: "bridge-test",
-        sdkSessionId: "test",
-        processId: 42,
-        lane: "dev",
-        custody: "controlled",
-        activeDocumentId: "C:\\Models\\Test.rfa",
-        activeDocumentTitle: "Test.rfa",
+    sessions: async () =>
+      ["test", "new"].map((id, index) => ({
+        sessionId: `bridge-${id}`,
+        sdkSessionId: id,
+        processId: 42 + index,
+        lane: "dev" as const,
+        custody: "controlled" as const,
+        activeDocumentId: `C:\\Models\\${id === "test" ? "Test" : "New"}.rfa`,
+        activeDocumentTitle: `${id === "test" ? "Test" : "New"}.rfa`,
         openDocumentCount: 1,
-      },
-    ],
+      })),
     profile: async () => [],
     settingsApply: (patches) => record("settings.apply", patches),
     settingsCommand: (name, input) => record(`settings.${name}`, input ?? {}),
@@ -77,14 +85,20 @@ const fixture = () => {
   };
   return { host, calls };
 };
-const make = (testFixture = fixture(), profile = "") => {
+const make = (
+  testFixture = fixture(),
+  profile = "",
+  settingsDocument = settings(),
+  familyDocument = family(),
+) => {
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
-  const settingsSlice = Atom.make(AsyncResult.success(slice(settings())));
-  const familySlice = Atom.make(AsyncResult.success(slice(family)));
+  const settingsSlice = Atom.make(AsyncResult.success(slice(settingsDocument)));
+  const familySlice = Atom.make(AsyncResult.success(slice(familyDocument)));
   registries.push(registry);
   return {
     registry,
     settingsSlice,
+    familySlice,
     calls: testFixture.calls,
     store: createFamilyStore({
       registry,
@@ -98,6 +112,50 @@ const make = (testFixture = fixture(), profile = "") => {
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("family route store", () => {
+  it("unbinds a persisted settings snapshot from another file", () => {
+    const { registry, store } = make(fixture(), "", settings("v1", "C:\\Settings\\other.json"));
+
+    expect(registry.get(store.atoms.snapshot)).toBeNull();
+  });
+
+  it("keeps a persisted settings snapshot from the bound file", () => {
+    const { registry, store } = make();
+
+    expect(registry.get(store.atoms.snapshot)?.from).toMatchObject({
+      target: SETTINGS_PATH,
+      documentId: SETTINGS_PATH,
+    });
+  });
+
+  it("clears build evidence in the same write when binding another target", async () => {
+    const testFixture = fixture();
+    const evidence: NonNullable<FamilyDocument["evidence"]> = {
+      typeNames: [],
+      parameters: [],
+      diagnostics: [],
+      from: {
+        origin: "build",
+        target: "test",
+        documentId: SETTINGS_PATH,
+        observedAt: "2026-08-25T00:00:00Z",
+        familyName: "Test",
+      },
+    };
+    const { calls, store } = make(testFixture, "", settings(), family(evidence));
+
+    await store.actions.bind("session:new");
+
+    expect(calls).toEqual([
+      {
+        op: "family.apply",
+        input: [
+          { path: ["binding"], value: expect.objectContaining({ target: "session:new" }) },
+          { path: ["evidence"], value: null },
+        ],
+      },
+    ]);
+  });
+
   it("opens a direct URL profile once on mount without a verb failure", async () => {
     const { registry, store, calls } = make(fixture(), "pe-vav-test.json");
     await tick();

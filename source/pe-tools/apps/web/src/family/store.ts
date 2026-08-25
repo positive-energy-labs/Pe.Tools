@@ -92,7 +92,8 @@ export function createFamilyStore(deps: {
     )
     .pipe(Atom.autoDispose);
   const snapshot = Atom.make((get) => {
-    const value = get(settingsDoc)?.snapshot;
+    const doc = get(settingsDoc);
+    const value = doc?.snapshot;
     if (
       !value ||
       value.from.settingsDocumentId.moduleKey !== FAMILY_MODULE.moduleKey ||
@@ -100,15 +101,8 @@ export function createFamilyStore(deps: {
       (deps.search.profile && value.from.settingsDocumentId.relativePath !== deps.search.profile)
     )
       return null;
-    const sessions = get(sessionsResult);
-    const resolution = AsyncResult.isSuccess(sessions)
-      ? resolveTarget(sessions.value.value, deps.search.target)
-      : null;
-    const target =
-      resolution?.kind === "resolved"
-        ? (resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`)
-        : null;
-    return target && readingIsCurrent(value.from, { target, documentId: value.from.documentId })
+    const target = doc.binding.target;
+    return target && readingIsCurrent(value.from, { target, documentId: target })
       ? (value as FamilySnapshot)
       : null;
   }).pipe(owned("view/snapshot"));
@@ -118,17 +112,21 @@ export function createFamilyStore(deps: {
   const evidence = Atom.make((get) => {
     const value = get(familyDoc)?.evidence;
     if (!value) return null;
-    if (value.from.origin === "build") {
-      const source = get(snapshot)?.from;
-      return source && readingIsCurrent(value.from, source) ? (value as EvidenceSlice) : null;
-    }
     const sessions = get(sessionsResult);
     const resolution = AsyncResult.isSuccess(sessions)
       ? resolveTarget(sessions.value.value, deps.search.target)
       : null;
-    if (resolution?.kind !== "resolved" || !resolution.session.activeDocumentId) return null;
+    if (resolution?.kind !== "resolved") return null;
+    const target = resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`;
+    if (value.from.origin === "build") {
+      const documentId = get(snapshot)?.from.documentId;
+      return documentId && readingIsCurrent(value.from, { target, documentId })
+        ? (value as EvidenceSlice)
+        : null;
+    }
+    if (!resolution.session.activeDocumentId) return null;
     return readingIsCurrent(value.from, {
-      target: resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`,
+      target,
       documentId: resolution.session.activeDocumentId,
     })
       ? (value as EvidenceSlice)
@@ -405,12 +403,13 @@ export function createFamilyStore(deps: {
             ? sessions.value.value
             : await deps.host.sessions();
           const resolution = resolveTarget(sessionItems, nextTarget);
+          const target =
+            resolution?.kind === "resolved"
+              ? (resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`)
+              : null;
           const current =
-            resolution?.kind === "resolved" && resolution.session.activeDocumentId
-              ? {
-                  target: resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`,
-                  documentId: resolution.session.activeDocumentId,
-                }
+            target && resolution?.kind === "resolved" && resolution.session.activeDocumentId
+              ? { target, documentId: resolution.session.activeDocumentId }
               : null;
           const patches: RouteStatePatch[] = [
             {
@@ -421,9 +420,12 @@ export function createFamilyStore(deps: {
               },
             },
           ];
+          const settingsDocumentId = registry.get(snapshot)?.from.documentId;
           const evidenceSource =
             doc?.evidence?.from.origin === "build"
-              ? (registry.get(snapshot)?.from ?? null)
+              ? target && settingsDocumentId
+                ? { target, documentId: settingsDocumentId }
+                : null
               : current;
           if (
             doc?.evidence &&

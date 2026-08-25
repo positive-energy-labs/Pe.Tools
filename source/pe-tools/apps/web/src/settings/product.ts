@@ -13,7 +13,6 @@ export const SETTINGS_PRODUCT = (actions: {
     { key: "module", parent: "workspace", joiner: "", placeholder: "a module", needs: "a settings module" },
     { key: "root", parent: "module", joiner: "", placeholder: "a root", needs: "a settings root" },
     { key: "file", parent: "root", joiner: "editing", placeholder: "a settings file", needs: "an authoring file", dir: "duplex", liveness: "detached" },
-    { key: "session", joiner: "on", placeholder: "a Revit session", needs: "a Revit session", dir: "duplex", liveness: "attached" },
   ],
   stages: [{
     key: "document",

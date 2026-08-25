@@ -39,7 +39,6 @@ export function createFamiliesCommandHandlers(
       document.plan = {
         from: { ...(await currentReadingIdentity(rpc)), observedAt },
         planHash: result.planHash,
-        takenAt: observedAt,
         entries: result.families.filter((entry) => allowed.has(entry.familyName)),
       };
       document.excludedIds = [];

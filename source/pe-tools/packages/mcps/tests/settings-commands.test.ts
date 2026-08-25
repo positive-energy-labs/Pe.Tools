@@ -73,7 +73,7 @@ function openResponse(rawContent: string, versionValue = "v1") {
 function routeSnapshot(rawContent: string, versionToken = "v1") {
   return {
     from: {
-      target: "test",
+      target: DOCUMENT_PATH,
       documentId: DOCUMENT_PATH,
       documentVersionToken: versionToken,
       observedAt: "2026-08-25T00:00:00Z",
@@ -105,6 +105,7 @@ test("open maps the host snapshot into the route document, flattening the versio
   );
 
   expect(document.snapshot?.from.settingsDocumentId).toEqual(DOCUMENT_ID);
+  expect(document.snapshot?.from.target).toBe(DOCUMENT_PATH);
   expect(document.snapshot?.from.documentId).toBe(DOCUMENT_PATH);
   expect(document.snapshot?.rawContent).toBe('{"revit":{"units":"mm"}}');
   expect(document.snapshot?.composedContent).toBe('composed:{"revit":{"units":"mm"}}');

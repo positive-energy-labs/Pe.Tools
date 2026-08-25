@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import type { RouteStatePatch, RouteStateWriteResult } from "@pe/agent-contracts";
 
 import { createFixtureSettingsHost } from "#/settings-panes/fixture-route";
+import { fixtureDocument, fixtureFiles } from "#/settings-panes/fixture";
 import type { SettingsHost } from "#/settings/host";
 import { createSettingsStore } from "#/settings/store";
 
@@ -31,6 +34,57 @@ function make(transform?: (host: SettingsHost) => SettingsHost) {
 const waitForStage = () => new Promise<void>((resolve) => setTimeout(resolve, 180));
 
 describe("settings route store", () => {
+  it("unbinds a persisted snapshot from another settings file", () => {
+    const document = structuredClone(fixtureDocument);
+    document.snapshot!.from.documentId = fixtureFiles[1]!.path;
+    const { registry, store } = make((fixture) => ({
+      ...fixture,
+      document: Atom.make(
+        AsyncResult.success({
+          doc: document,
+          hydrated: true,
+          connected: true,
+          error: null,
+          peaActive: false,
+        }),
+      ),
+    }));
+
+    expect(registry.get(store.atoms.snapshot)).toBeNull();
+  });
+
+  it("keeps a persisted snapshot from the bound settings file", () => {
+    const { registry, store } = make();
+
+    expect(registry.get(store.atoms.snapshot)?.from).toMatchObject({
+      target: fixtureFiles[0]!.path,
+      documentId: fixtureFiles[0]!.path,
+    });
+  });
+
+  it("clears the snapshot in the same write when binding another settings file", async () => {
+    const calls: RouteStatePatch[][] = [];
+    const { store } = make((fixture) => ({
+      ...fixture,
+      async apply(patches) {
+        calls.push(patches);
+        return fixture.apply!(patches);
+      },
+    }));
+
+    await store.actions.bind(fixtureFiles[1]!.path);
+
+    expect(calls).toEqual([
+      [
+        {
+          path: ["binding"],
+          value: expect.objectContaining({ target: fixtureFiles[1]!.path }),
+        },
+        { path: ["snapshot"], value: null },
+      ],
+    ]);
+  });
+
   it("debounces each field to one latest staged patch", async () => {
     const calls: RouteStatePatch[][] = [];
     const { store } = make((fixture) => ({
@@ -102,7 +156,7 @@ describe("settings route store", () => {
       workspaceKey: "default",
       moduleKey: "CmdScheduleManager",
       rootKey: "schedules",
-      filePath: "MechEquip/TEST.json",
+      filePath: fixtureFiles[0]!.path,
     });
 
     const open = store.actions.open();
@@ -118,7 +172,7 @@ describe("settings route store", () => {
       workspaceKey: "default",
       moduleKey: "CmdScheduleManager",
       rootKey: "schedules",
-      filePath: "MechEquip/TEST.json",
+      filePath: fixtureFiles[0]!.path,
     };
     store.actions.setPicker(picker);
     const before = registry.get(store.atoms.snapshot)?.from.documentVersionToken;
@@ -138,7 +192,7 @@ describe("settings route store", () => {
       workspaceKey: "default",
       moduleKey: "FamilyFoundry",
       rootKey: "models",
-      filePath: "other.json",
+      filePath: "C:\\Settings\\other.json",
     });
 
     expect(registry.get(store.atoms.snapshot)?.from.settingsDocumentId).toEqual(before);

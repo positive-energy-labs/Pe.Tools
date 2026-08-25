@@ -11,7 +11,6 @@ import type {
 } from "@pe/host-contracts/operation-types";
 
 import { callHostRpc } from "#/host/client";
-import { fromBridgeSessions, type SessionFacts } from "#/host/target";
 import type { Slice } from "#/state/route-store";
 
 export interface SettingsHost {
@@ -19,7 +18,6 @@ export interface SettingsHost {
   workspaces(): Promise<readonly SettingsWorkspaceDescriptor[]>;
   tree(moduleKey: string, rootKey: string): Promise<readonly SettingsFileEntry[]>;
   schema(moduleKey: string, rootKey: string): Promise<string>;
-  sessions(): Promise<SessionFacts[]>;
   apply?(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
   command?(name: "bind" | "open" | "refresh" | "validate" | "save", input?: unknown): Promise<RouteStateWriteResult>;
 }
@@ -41,9 +39,6 @@ export function createLiveSettingsHost(): SettingsHost {
     },
     async schema(moduleKey, rootKey) {
       return (await callHostRpc("settings.schema", { moduleKey, rootKey })).schemaJson;
-    },
-    async sessions() {
-      return fromBridgeSessions((await callHostRpc("bridge.sessions.list", undefined)).sessions);
     },
   };
 }

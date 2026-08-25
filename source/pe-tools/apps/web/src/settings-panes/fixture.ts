@@ -115,10 +115,10 @@ const fixtureFields: Record<string, SettingsFieldState> = {
 };
 
 export const fixtureDocument: SettingsRouteDocument = {
-  binding: { target: "thread:fixture" },
+  binding: { target: fixtureFiles[0]!.path },
   snapshot: {
     from: {
-      target: "thread:fixture",
+      target: fixtureFiles[0]!.path,
       documentId: fixtureFiles[0]!.path,
       settingsDocumentId: {
         moduleKey: "CmdScheduleManager",

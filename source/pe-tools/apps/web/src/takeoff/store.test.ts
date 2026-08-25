@@ -515,6 +515,25 @@ describe("takeoff route store", () => {
     const h = harness();
     h.hold();
     const patches: RouteStatePatch[][] = [];
+    const sessions: SessionSource = {
+      ...h.sessions,
+      async list() {
+        return [
+          ...(await h.sessions.list()),
+          {
+            sessionId: "bridge-other",
+            sdkSessionId: "other",
+            processId: 43,
+            lane: "dev",
+            custody: "controlled",
+            year: "2026",
+            activeDocumentTitle: "Other.rvt",
+            activeDocumentId: "C:\\Models\\Other.rvt",
+            openDocumentCount: 1,
+          },
+        ];
+      },
+    };
     const slice = Atom.make(
       AsyncResult.success({
         doc: {
@@ -532,7 +551,7 @@ describe("takeoff route store", () => {
       {
         slice,
         host: h.host,
-        sessions: h.sessions,
+        sessions,
         search: searchPort().port,
       },
       (next) => patches.push(next),
@@ -540,11 +559,14 @@ describe("takeoff route store", () => {
     await store.actions.settle(store.atoms.sessions);
 
     await store.actions.setBindings({
-      bound: { world: "session:dev-26", rvt: "model" },
+      bound: { world: "session:other", rvt: "C:\\Models\\Other.rvt" },
     });
     await tick();
 
-    expect(patches).toContainEqual([{ path: ["snapshot"], value: null }]);
+    expect(patches).toContainEqual([
+      { path: ["binding"], value: expect.objectContaining({ target: "session:other" }) },
+      { path: ["snapshot"], value: null },
+    ]);
     const landed = store.atoms.registry.get(store.slices.takeoffs);
     expect(AsyncResult.getOrThrow(landed).doc?.snapshot).toBeNull();
     h.release();

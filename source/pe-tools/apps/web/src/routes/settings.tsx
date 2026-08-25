@@ -156,7 +156,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
     module: useAtomValue(store.feeds.module),
     root: useAtomValue(store.feeds.root),
     file: useAtomValue(store.feeds.file),
-    session: useAtomValue(store.feeds.session),
   };
   const product = SETTINGS_PRODUCT({
     open: store.actions.open,
@@ -170,7 +169,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
       module: picker.moduleKey ?? null,
       root: picker.rootKey ?? null,
       file: picker.filePath ?? null,
-      session: binding.target ?? null,
     },
     multi: {},
     stage: "document",
@@ -184,9 +182,8 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
         rootKey: patch.bound.root ?? undefined,
         filePath: patch.bound.file ?? undefined,
       });
-      const session = patch.bound.session ?? null;
-      if (session !== (binding.target ?? null))
-        void store.actions.bind(session).catch(() => undefined);
+      const file = patch.bound.file ?? null;
+      if (file !== (binding.target ?? null)) void store.actions.bind(file).catch(() => undefined);
     },
     [binding.target, store],
   );

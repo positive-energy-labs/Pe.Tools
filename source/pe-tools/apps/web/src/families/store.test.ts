@@ -17,17 +17,16 @@ const emptyEntry = {
     loweredActions: [{ operation: "set", target: "Width", sources: [], reason: "profile" }],
   },
 };
-const document = (): FamiliesRouteDocument => ({
+const document = (documentId = "C:\\Models\\Test.rvt"): FamiliesRouteDocument => ({
   binding: { target: "session:test" },
   profilePath: "desk.json",
   plan: {
     from: {
       target: "test",
-      documentId: "C:\\Models\\Test.rvt",
+      documentId,
       observedAt: "2026-08-25T00:00:00Z",
     },
     planHash: "hash-1",
-    takenAt: "2026-08-25T00:00:00Z",
     entries: [emptyEntry],
   },
   excludedIds: [],
@@ -76,13 +75,15 @@ const make = (
     target: "session:test",
     patch() {},
   },
+  routeDocument = document(),
 ) => {
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
   registries.push(registry);
-  const docSlice = Atom.make(AsyncResult.success(slice(document())));
+  const docSlice = Atom.make(AsyncResult.success(slice(routeDocument)));
   return {
     registry,
     calls: testFixture.calls,
+    docSlice,
     store: createFamiliesStore({
       registry,
       scope: { threadId: "thread-1" },
@@ -95,6 +96,22 @@ const make = (
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("families route store", () => {
+  it("unbinds a persisted plan from another document", () => {
+    const { registry, store } = make(fixture(), undefined, document("C:\\Models\\Other.rvt"));
+
+    expect(registry.get(store.atoms.plan)).toBeNull();
+  });
+
+  it("keeps a persisted plan from the bound document", async () => {
+    const { registry, store } = make();
+    await tick();
+
+    expect(registry.get(store.atoms.plan)?.from).toMatchObject({
+      target: "test",
+      documentId: "C:\\Models\\Test.rvt",
+    });
+  });
+
   it("keeps draft edits separate from applied scope", () => {
     const { registry, store } = make();
     store.actions.setDraft({
@@ -149,7 +166,7 @@ describe("families route store", () => {
     expect(calls).toEqual([{ op: "apply", input: [{ path: ["excludedIds"], value: [1] }] }]);
   });
 
-  it("binds a direct URL target once on mount without a verb failure", async () => {
+  it("clears the plan in the same write when binding another target", async () => {
     const { calls, registry, store } = make(fixture(), {
       target: "session:new",
       patch() {},

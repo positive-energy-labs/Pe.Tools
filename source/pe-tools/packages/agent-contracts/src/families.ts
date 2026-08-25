@@ -77,7 +77,6 @@ export const familiesDocumentSchema = z.object({
     .object({
       from: readingFromSchema,
       planHash: z.string(),
-      takenAt: z.string(),
       entries: z.array(ffPlanEntrySchema),
     })
     .nullable()

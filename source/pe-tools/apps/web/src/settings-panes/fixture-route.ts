@@ -45,7 +45,6 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
     tree: async (moduleKey, rootKey) =>
       moduleKey === "CmdScheduleManager" && rootKey === "schedules" ? fixtureFiles : [],
     schema: async (moduleKey) => (moduleKey === "CmdScheduleManager" ? FIXTURE_SCHEMA_JSON : "{}"),
-    sessions: async () => [],
     async apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult> {
       const fields = { ...document.fields };
       let binding = document.binding;
@@ -87,14 +86,15 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
             | undefined
         )?.documentId;
         if (!documentId) return { ok: false, error: "open needs a documentId." };
+        const documentPath =
+          fixtureFiles.find((file) => file.relativePath === documentId.relativePath)?.path ??
+          `C:\\Fixtures\\${documentId.relativePath}`;
         publish({
           ...document,
           snapshot: {
             from: {
-              target: document.binding.target ?? "thread:fixture",
-              documentId:
-                fixtureFiles.find((file) => file.relativePath === documentId.relativePath)?.path ??
-                `C:\\Fixtures\\${documentId.relativePath}`,
+              target: documentPath,
+              documentId: documentPath,
               settingsDocumentId: documentId,
               documentVersionToken: version(),
               observedAt: new Date().toISOString(),
