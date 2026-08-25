@@ -57,12 +57,12 @@ const STAGES = ["adopt", "audit", "sync"] as const;
 
 // ── Search: the bindings' home ──────────────────────────────────────────────
 
-// the router round-trips arrays as JSON; a hand-typed URL may still carry a comma list
-const csv = (v: unknown): string[] =>
+// The router round-trips arrays as JSON; a scalar stays one legal name, including commas.
+export const csv = (v: unknown): string[] =>
   Array.isArray(v)
     ? v.filter((x): x is string => typeof x === "string")
     : typeof v === "string" && v
-      ? v.split(",").filter(Boolean)
+      ? [v]
       : [];
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 

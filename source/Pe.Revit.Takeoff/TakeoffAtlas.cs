@@ -192,6 +192,7 @@ public static class TakeoffAtlas
         var view = FindView(doc, viewName);
         return new FilteredElementCollector(doc, view.Id)
             .OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
+            .OrderBy(fr => fr.Id.Value())
             .Select(fr => ToRegionFacts(doc, fr))
             .ToList();
     }

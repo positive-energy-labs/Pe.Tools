@@ -959,8 +959,8 @@ export function createTakeoffStore(deps: {
       ? document.value.value?.session.sessionId
       : null;
     if (current !== event.sessionId) return;
-    write("host-event", "invalidate/active-document", () =>
-      registry.set(invalidateAtom, ["active-document"]),
+    write("host-event", "invalidate/sessions,active-document", () =>
+      registry.set(invalidateAtom, ["sessions", "active-document"]),
     );
   });
 

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -14,6 +14,7 @@ import {
   createFixtureTakeoffHost,
   createFixtureSessionSource,
 } from "#/takeoff/proto/fixture-world";
+import { createLiveTakeoffHost } from "#/takeoff/host";
 import {
   createTakeoffStore,
   EMPTY_TAKEOFF_SEARCH,
@@ -46,6 +47,7 @@ const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 const registries: AtomRegistry.AtomRegistry[] = [];
 afterEach(() => {
   for (const registry of registries.splice(0)) registry.dispose();
+  vi.restoreAllMocks();
 });
 
 type StoreDeps = Parameters<typeof createTakeoffStore>[0];
@@ -128,6 +130,7 @@ function harness() {
   let failR10 = false;
   let liveProjection = false;
   let holdSnapshot = false;
+  let documentTitle = "Harness.rvt";
   let releaseSnapshot: (() => void) | undefined;
   const snapshot: TakeoffSnapshot = {
     world: {
@@ -152,14 +155,14 @@ function harness() {
           lane: "dev",
           custody: "controlled",
           year: "2026",
-          activeDocumentTitle: "Harness.rvt",
+          activeDocumentTitle: documentTitle,
           openDocumentCount: 1,
         },
       ];
     },
     async activeDocument(session) {
       calls.doc += 1;
-      return { session, title: "Harness.rvt" };
+      return { session, title: session.activeDocumentTitle! };
     },
     subscribe(listener) {
       events.add(listener);
@@ -254,6 +257,7 @@ function harness() {
     live: () => (liveProjection = true),
     hold: () => (holdSnapshot = true),
     release: () => releaseSnapshot?.(),
+    setDocumentTitle: (title: string) => (documentTitle = title),
   };
 }
 
@@ -274,6 +278,75 @@ describe("takeoff route store", () => {
     expect(h.documentOpens).toEqual([
       { path: "recent:Cloud.rvt", id: "dev-26", conflictPolicy: "keep" },
     ]);
+    store.dispose();
+  });
+
+  it("surfaces a document-open SDK diagnostic without a success receipt", async () => {
+    const h = harness();
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          result: {},
+          diagnostics: [
+            {
+              code: "doc.no-match",
+              detail: "no file at recent:Cloud.rvt",
+              fix: "pe-revit doc recents",
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    const store = createStore({
+      host: { ...h.host, openDocument: createLiveTakeoffHost().openDocument },
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    store.actions.setSearch(bound);
+    await store.actions.settle(store.atoms.recentDocuments);
+
+    await store.actions.setBindings({ bound: { rvt: "Cloud.rvt" } });
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith(
+      "/docs/open",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(store.atoms.registry.get(store.atoms.failure)).toMatchObject({
+      verb: "open-document",
+      message: "no file at recent:Cloud.rvt",
+    });
+    expect(store.atoms.registry.get(store.atoms.receipt)).toBeNull();
+    store.dispose();
+  });
+
+  it("refuses document open from observed custody before HTTP", async () => {
+    const h = harness();
+    const fetch = vi.spyOn(globalThis, "fetch");
+    const observed: SessionSource = {
+      ...h.sessions,
+      async list() {
+        const [{ sdkSessionId: _, ...session }] = await h.sessions.list();
+        return [{ ...session!, custody: "observed" }];
+      },
+    };
+    const store = createStore({
+      host: { ...h.host, openDocument: createLiveTakeoffHost().openDocument },
+      sessions: observed,
+      search: searchPort().port,
+    });
+    store.actions.setSearch(bound);
+    await store.actions.settle(store.atoms.sessions);
+
+    await store.actions.setBindings({ bound: { rvt: "Cloud.rvt" } });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(store.atoms.registry.get(store.atoms.failure)).toMatchObject({
+      verb: "open-document",
+      message: "open the document in Revit; this session is observed",
+    });
+    expect(store.atoms.registry.get(store.atoms.receipt)).toBeNull();
     store.dispose();
   });
 
@@ -599,7 +672,7 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("cascades one pushed document invalidation through doc and snapshot only", async () => {
+  it("refreshes the active title and rvt feed after a pushed document change", async () => {
     const h = harness();
     const store = createStore({
       host: h.host,
@@ -613,14 +686,24 @@ describe("takeoff route store", () => {
     ]);
     const before = { ...h.calls };
 
+    h.setDocumentTitle("Second.rvt");
     h.emit({ kind: "docChanged", sessionId: "bridge-dev-26" });
     await tick();
     await store.actions.settle(store.atoms.snapshot);
 
-    expect(h.calls.doc).toBe(before.doc + 1);
-    expect(h.calls.snapshot).toBe(before.snapshot + 1);
+    expect(h.calls.sessions).toBe(before.sessions + 1);
+    expect(h.calls.doc).toBeGreaterThan(before.doc);
+    expect(h.calls.snapshot).toBeGreaterThan(before.snapshot);
     expect(h.calls.list).toBe(before.list);
     expect(h.calls.open).toBe(before.open);
+    expect(store.atoms.registry.get(store.feeds.rvt).options?.[0]).toMatchObject({
+      id: "Second.rvt",
+      label: "Second.rvt",
+    });
+    expect(
+      AsyncResult.getOrThrow(store.atoms.registry.get(store.atoms.sessions)).value[0]
+        ?.activeDocumentTitle,
+    ).toBe("Second.rvt");
     store.dispose();
   });
 
