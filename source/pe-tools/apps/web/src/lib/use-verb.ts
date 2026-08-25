@@ -39,12 +39,15 @@ export function useVerb() {
     return () => window.clearInterval(timer);
   }, [busy]);
 
-  /** Serialized: a verb fired while another runs is dropped, not queued. A string returned by
+  /** Serialized: a verb fired while another runs is refused, not queued. A string returned by
    * `work` becomes the receipt; errors surface as "<label> failed — <message>". `setError`
    * stays exposed for verbs whose SUCCESS path still has something to say (refusals, empty
    * results). */
   const run = useCallback(async (label: string, work: () => Promise<string | void>) => {
-    if (inFlight.current) return;
+    if (inFlight.current) {
+      setOutcome({ kind: "error", text: `${label} refused; another verb is running` });
+      return;
+    }
     inFlight.current = true;
     setBusy(label);
     setSeconds(0);

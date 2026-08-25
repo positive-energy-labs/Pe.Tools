@@ -28,8 +28,13 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     return kept;
   };
   /** Labels and mounts an atom. `AtomRegistry.mount` reads eagerly (`AtomRegistry.ts:537`). */
-  const owned = <A extends Atom.Atom<any>>(label: string, atom: A): A =>
-    keep(atom.pipe(Atom.withLabel(`${route}/${label}`)));
+  function owned<A extends Atom.Atom<any>>(label: string, atom: A): A;
+  function owned(label: string): <A extends Atom.Atom<any>>(atom: A) => A;
+  function owned<A extends Atom.Atom<any>>(label: string, atom?: A) {
+    const own = <T extends Atom.Atom<any>>(value: T): T =>
+      keep(value.pipe(Atom.withLabel(`${route}/${label}`)));
+    return atom ? own(atom) : own;
+  }
   const write = <A>(verb: string, key: string, mutate: () => A): A => {
     inspector.note({ verb, key });
     return mutate();

@@ -15,15 +15,17 @@
  * all project. Everything live comes in beside it as a `Feed` per link: the legal options, and
  * how fresh they are. Bindings are the CALLER's state (URL search on a route).
  *
- * Seams are DERIVED, never flagged:
- *   feed.options === null   → legal-options seam (no real source yet; `link.needs` says what)
- *   feed.state === "fixture"→ page-level seam chip
+ * Seams are declared facts:
+ *   feed.seam               → legal-options seam
+ *   feed.lane === "fixture" → page-level seam chip
  *   verb.run === null       → verb seam (declared, not wired)
  *   pane.draws ⊄ bound∩demanded → pane disabled with reason (demands gate panes)
  *
  * Authoring questions the shape forces: what are the terminals (fewest nouns)? which trunks do
  * they share (`parent`)? which stage demands which terminal?
  */
+
+import type { Feed } from "#/state/route-store";
 
 export type Dir = "read" | "write" | "sync";
 export type Liveness = "attached" | "detached";
@@ -33,6 +35,8 @@ export interface Option {
   label: string;
   sub?: string;
 }
+
+export type { Feed, FeedState, Lane } from "#/state/route-store";
 
 export interface Link {
   key: string;
@@ -47,28 +51,6 @@ export interface Link {
   /** Terminal-only. Links without one are trunks. */
   dir?: Dir;
   liveness?: Liveness;
-}
-
-/**
- * Where a feed's options stand right now.
- *   live    — pushed (SSE); always current
- *   fresh   — read on demand; matches its basis
- *   stale   — read on demand; the basis moved (doc changed, a write landed) and no re-read yet
- *   loading — first read in flight
- *   error   — the read failed; `note` carries the message (an ERROR, not a seam)
- *   fixture — seeded by a declared mock lane
- */
-export type FeedState = "live" | "fresh" | "stale" | "loading" | "error" | "fixture";
-
-export interface Feed {
-  /** null = legal-options SEAM: no real source of options exists yet. */
-  options: Option[] | null;
-  state: FeedState;
-  /** Unix ms of the read the options came from (on-demand feeds). */
-  at?: number;
-  /** Exact input tuple that produced this read. */
-  basis?: readonly string[];
-  note?: string;
 }
 
 export type Feeds = Record<string, Feed>;
@@ -192,8 +174,9 @@ export function seams(p: Product, feeds: Feeds): Seam[] {
   const out: Seam[] = [];
   for (const l of p.links) {
     const f = feeds[l.key];
-    if (!f || f.options === null) out.push({ kind: "options", subject: l.key, needs: l.needs });
-    else if (f.state === "fixture") out.push({ kind: "fixture", subject: l.key, needs: l.needs });
+    if (f?.seam) out.push({ kind: "options", subject: l.key, needs: f.seam.needs });
+    if (f?.lane === "fixture")
+      out.push({ kind: "fixture", subject: l.key, needs: l.needs });
   }
   for (const s of p.stages)
     for (const v of s.verbs)
@@ -219,7 +202,7 @@ export function refusal(
     const first = product.links.find((l) => l.key === missing[0]);
     return `needs ${missing.join(", ")} bound${first ? ` — ${first.needs}` : ""}`;
   }
-  const stale = v.demands.find((k) => feeds[k]?.state === "stale");
+  const stale = v.demands.find((k) => feeds[k]?.stale);
   if (stale) return `${stale} is stale — refresh before ${v.label}`;
   return v.refuse?.() ?? null;
 }

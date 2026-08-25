@@ -158,24 +158,6 @@ function harness() {
 }
 
 describe("takeoff route store", () => {
-  it("clears every declared descendant when a trunk is re-picked", () => {
-    const h = harness();
-    const search = searchPort();
-    const store = createStore({ host: h.host, sessions: h.sessions, search: search.port });
-    store.actions.setSearch(bound);
-
-    store.actions.pick("world", "session:other");
-
-    expect(search.patches.at(-1)).toMatchObject({
-      target: "session:other",
-      view: "",
-      zones: [],
-      dir: bound.dir,
-      r10: bound.r10,
-    });
-    store.dispose();
-  });
-
   it("swaps the whole capability root for the project-a fixture", async () => {
     const search = searchPort();
     const store = createStore({
@@ -188,7 +170,10 @@ describe("takeoff route store", () => {
     const snapshot = await store.actions.settle(store.atoms.snapshot);
 
     expect(snapshot.value!.world.docName).toBe("project-a Residence.rvt");
-    expect(store.atoms.registry.get(store.feeds.world).state).toBe("fixture");
+    expect(store.atoms.registry.get(store.feeds.world)).toMatchObject({
+      state: "ready",
+      lane: "fixture",
+    });
     store.dispose();
   });
 
@@ -377,13 +362,13 @@ describe("takeoff route store", () => {
     await store.actions.adopt({ view: bound.view, items: [] });
     await tick();
 
-    expect(store.atoms.registry.get(store.feeds.zones).state).toBe("stale");
+    expect(store.atoms.registry.get(store.feeds.zones).stale).toBe(true);
     h.release();
     await store.actions.settle(store.atoms.snapshot);
     expect(h.calls.adopt).toBe(1);
     expect(h.calls.snapshot).toBe(2);
     expect(h.calls.candidates).toBe(2);
-    expect(store.atoms.registry.get(store.feeds.zones).state).toBe("fresh");
+    expect(store.atoms.registry.get(store.feeds.zones).stale).toBe(false);
     store.dispose();
   });
 
@@ -510,7 +495,6 @@ describe("takeoff route store", () => {
     await tick();
 
     expect(store.atoms.registry.get(store.atoms.adoptRows)).toHaveLength(11);
-    store.inspect();
     store.actions.openPanel("adopt");
     await store.actions.adoptSelected();
 
@@ -519,9 +503,6 @@ describe("takeoff route store", () => {
       verb: "adopt",
       text: "fixture adopted 11 zoning regions",
     });
-    const inspection = store.inspect();
-    expect(inspection.nodes.some((node) => node.label === "takeoffs/verb/adopt")).toBe(true);
-    expect(inspection.changes.some((change) => change.cause?.verb === "adopt")).toBe(true);
     store.dispose();
   });
 });

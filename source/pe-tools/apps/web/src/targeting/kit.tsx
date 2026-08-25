@@ -243,20 +243,16 @@ export function SeamChip({ product, feeds }: { product: Product; feeds: Feeds })
 export function freshnessWord(b: Bindings, link: Link): string | null {
   const f = b.feeds[link.key];
   if (!f) return null;
-  switch (f.state) {
-    case "live":
-      return "live";
-    case "fresh":
-      return f.at ? `read at ${new Date(f.at).toLocaleTimeString()}` : "read";
-    case "stale":
-      return "stale";
-    case "loading":
-      return "reading…";
-    case "error":
-      return "read failed";
-    case "fixture":
-      return "fixture";
-  }
+  const state = f.stale
+    ? "stale"
+    : f.state === "loading"
+      ? "reading…"
+      : f.state === "error"
+        ? "read failed"
+        : f.at
+          ? `read at ${new Date(f.at).toLocaleTimeString()}`
+          : null;
+  return [f.lane, state].filter(Boolean).join(" · ");
 }
 
 /* ------------------------------------------------------------------ picker */
@@ -313,7 +309,7 @@ export function Picker({
 
   const lit = runner?.active.has(link.key) ?? false;
   const feed = b.feeds[link.key];
-  const broken = feed?.state === "stale" || feed?.state === "error";
+  const broken = feed?.stale || feed?.state === "error";
   const leafLabel = b.labelOf(link);
   const caution = !p.complete || broken;
   // incomplete: only the next placeholder prints; the caution colour says "not through yet"
@@ -325,7 +321,7 @@ export function Picker({
     freshnessWord(b, link),
     feed?.note ?? null,
     p.complete ? null : `needs ${p.next!.needs}`,
-    feed?.options === null ? "seam — no legal option source yet" : null,
+    feed?.seam ? `seam — needs ${feed.seam.needs}` : null,
     lit ? "in flight" : null,
   ]
     .filter(Boolean)
@@ -601,18 +597,24 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
       {product.panes.map((p) => {
         const st = paneState(product, p, b);
         return (
-          <span
+          <button
+            type="button"
             key={p.key}
             title={st.reason}
+            disabled={!st.ok}
+            aria-disabled={!st.ok}
             className="face-mono t-caption"
             style={{
               color: st.ok ? "var(--r-ink)" : "var(--r-ink-mute)",
               fontStyle: st.ok ? undefined : "italic",
               borderBottom: st.ok ? "1px solid var(--r-line-2)" : "1px solid transparent",
+              background: "transparent",
+              padding: 0,
+              pointerEvents: st.ok ? undefined : "none",
             }}
           >
             {p.label}
-          </span>
+          </button>
         );
       })}
     </span>

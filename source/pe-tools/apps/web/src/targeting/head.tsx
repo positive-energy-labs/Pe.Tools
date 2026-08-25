@@ -29,7 +29,7 @@ const RUN_CSS =
 function Caption({ b, link }: { b: Bindings; link: Link }) {
   const fresh = freshnessWord(b, link);
   const f = b.feeds[link.key];
-  const warn = f?.state === "stale" || f?.state === "error";
+  const warn = f?.stale || f?.state === "error";
   return (
     <span
       className="face-mono t-caption"
@@ -47,11 +47,11 @@ function Demand({ product, k, b }: { product: Product; k: string; b: Bindings })
   const link = product.links.find((l) => l.key === k);
   if (!link) return null;
   const bound = b.isBound(link);
-  const seam = b.feeds[k]?.options === null;
+  const seam = b.feeds[k]?.seam;
   return (
     <span
       className="face-mono t-caption"
-      title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${link.needs}` : ""}`}
+      title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${seam.needs}` : ""}`}
       style={{
         color: bound ? "var(--r-ink)" : "var(--r-caution)",
         borderBottom: seam ? "1px dashed var(--r-caution)" : "1px solid transparent",

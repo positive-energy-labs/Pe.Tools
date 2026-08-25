@@ -58,12 +58,18 @@ const P: Product = {
 };
 
 const feeds: Feeds = {
-  world: { options: [{ id: "w1", label: "w1" }], state: "live" },
-  rvt: { options: [{ id: "d1", label: "d1" }], state: "live" },
-  view: { options: [{ id: "v1", label: "v1" }], state: "fresh" },
-  zones: { options: [{ id: "z1", label: "z1" }], state: "stale" },
-  folder: { options: [], state: "fresh" },
-  r10: { options: null, state: "fresh" },
+  world: { options: [{ id: "w1", label: "w1" }], state: "ready", lane: "live", stale: false },
+  rvt: { options: [{ id: "d1", label: "d1" }], state: "ready", lane: "live", stale: false },
+  view: { options: [{ id: "v1", label: "v1" }], state: "ready", lane: "read", stale: false },
+  zones: { options: [{ id: "z1", label: "z1" }], state: "ready", lane: "read", stale: true },
+  folder: { options: [], state: "ready", lane: "read", stale: false },
+  r10: {
+    options: null,
+    state: "ready",
+    lane: "read",
+    stale: false,
+    seam: { needs: "r10s" },
+  },
 };
 
 describe("targeting manifest", () => {
@@ -105,7 +111,7 @@ describe("targeting manifest", () => {
     expect(refusal(P, P.stages[0]!.verbs[1]!, bound, {}, feeds)).toMatch(/not wired/);
     expect(refusal(P, go, bound, { zones: new Set() }, feeds)).toMatch(/needs zones bound/);
     expect(refusal(P, go, bound, { zones: new Set(["z1"]) }, feeds)).toMatch(/zones is stale/);
-    const freshFeeds = { ...feeds, zones: { ...feeds.zones!, state: "fresh" as const } };
+    const freshFeeds = { ...feeds, zones: { ...feeds.zones!, stale: false } };
     expect(refusal(P, go, bound, { zones: new Set(["z1"]) }, freshFeeds)).toBeNull();
     expect(
       refusal(

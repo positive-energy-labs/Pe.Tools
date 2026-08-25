@@ -257,6 +257,7 @@ return (
 <div class="rule"><b>Recommendation:</b> keep the per-route <em>store object</em> (namespace, actions, <code>inspect()</code>, fixture seam) but make it a handle over the <b>one app registry</b>, passed in like the host: <code>createTakeoffStore({ host, sessions, search, registry })</code>. Atoms stay per-store-instance; families that must dedupe across mounts (route docs, host reads) key on <code>(route, scope)</code> exactly like <code>route-state.tsx</code> already does. Write it as an ADR; the cost is one constructor arg and deleting line 297.</div>
 
 <h2>8. Chat plugins — what I missed, and what it changes</h2>
+<p><b>Retraction (2026-08-25):</b> A shared browser registry cannot unify iframe, dock, and server realms; the route document is the source and each store subscribes, as ruled in <code>w1-demiurge.md</code> §3a.</p>
 <p>Not considered in the bake-off. Reading it now (<code>workbench/route-chat-plugins.tsx</code>, ADR 0001):</p>
 <ul>
 <li>A plugin is <code>{ spec: RouteStateSpec, Renderer }</code>; the same <code>spec</code> drives the pea MCP tool, the runtime workspace, and the web card. Route identity is the URL segment. Good — that is the S1 "Product" noun already living server-side.</li>
