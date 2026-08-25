@@ -1,38 +1,32 @@
 ---
 name: demiurge
-description: Find and fashion a perfect shape by collaboratively exploring every option. Trigger when asked "Whats the best long-term solution", "Rethink the API", "Cleanroom X", "No back-compat, refactor Y", "Dream on Z", etc. Use also when it seems like the user is fighting an existing design choice.
-argument-hint: "What smells bad (now) and what are the targets (now + near-future)?"
+description: Find and fashion the ideal shape by exploring every option before converging. Trigger on "demiurge X", "best long-term solution", "rethink the API", "cleanroom", "no back-compat, refactor", "dream on", "rethink from first principles", "deepen the module", "where should the seam go", "what are ALL the approaches", or when the user is fighting an existing design. Not for product surfaces a user touches; that is `triangulate`.
+argument-hint: "What shape is in question, and what constrains it?"
 ---
-
 # Demiurge
 
-**Wander the realm of forms alongside the user to find the perfect thing.** 
+**Be the Demiurge.** Gaze at the forms, then shape matter toward them as well as matter allows. Wander the realm of forms alongside the user; converge only when every form has been seen.
 
-> Spiritually, think and do like the repo is greenfield, back compat is banned, no consumers or users exist, and no legacy constraints bind. 
+> Spiritually, the repo is greenfield: back compat is banned, no consumers exist, no legacy constraints bind.
 
-The ideal shape is one that fits its goals and constraints. These are opposing axes. The right balance covers its bases over near-term needs or foundational reframes and aggressively excludes what won't be used in practice. Ideal shape is often a question of desired capabilities and behavior in disguise.
+The ideal shape is the balance point between goals and constraints, which oppose. Nothing that doesn't connect, nothing longer than it must be. Shape is often a question of desired capabilities in disguise. "Code is the spec" still holds, but we are writing the new spec; it exists nowhere yet.
 
-"Code is the spec" still applies as a principle, but we're making the new "spec", it doesn't yet exist in code or in concept.
+Speak in deep-module words and no others: a **module** is anything with an interface and an implementation, at any scale; its **interface** is everything a caller must know (types, invariants, ordering, errors, config, perf), not the signature; an **adapter** is the thin thing at a **seam**. A deep module hides much behind little. Deepen where `git log` is hot, never by scanning cold.
 
-## Approach
+## Loop
 
-In rough order of operation and priority: 
-1. Taxonomize/typologize along every plausible axis and explore the whole landscape of variations.
-2. Understand the nouns at play from first principles. You and the user must align on language to collaborate efficiently.
-3. Collect anchors: precedent, reference, success metrics, impassable limitations (in OS, packages, primitives, platforms), etc. Precedent is only a starting point, its structure should be doubted.
-4. Collect baseline: find failure modes, census consumption, quantify bad, etc.
-5. Imagine user stories 
-5. Get feeback early: Mock consumers, prototype solutions, invalidate dreams/hypotheses, etc. 
-6. Repeatedly refine the idea until alignment is reached
+Rough order; later steps invalidate earlier ones, loop back freely.
 
-Assume the user doesn't know what they want, the user's prompt is signal but never the whole picture. Use the `grilling` skill to tease out their implicit contraints and goals throughout steps. 
+1. Nouns from first principles, as if the codebase didn't exist. A noun that exists only because of legacy structure is flagged; it may not survive. Align on language before anything compounds.
+2. Typologize along every axis. Shapes from too simple to too radical; the width is the user's.
+3. Anchors: precedent, metrics, limits, speculative consumers. Label each LAW (physics, platform, primitives) or LORE (convention, habit). LORE may be defied; say when.
+4. Baseline: failure modes, consumption census, quantify the bad.
+5. Prune legibly: write each shape's epitaph before advancing.
+6. Feedback early: mock consumers, spike, invalidate dreams.
+7. Refine until aligned.
 
-If theres a clear sense of product direction then `find-the-product` instead. "Products" are what a end-user sees/uses, a different lane from dev-side technical questions about architecture or API shape.
+If you catch yourself defending one shape before all are on the table, stop; you converged early. The prompt is signal, never the whole picture; `grill` throughout.
 
-When the shape is found defer to the `index` skills routing. Not every ideal requires immediate implementation, this is an exercise for the user as much as anything.
+Once found, `index` routes. Not every ideal demands implementation; this is an exercise for the user as much as anything. Verdicts persist per `docs`.
 
-## Reporting
-
-Respond in ASD-STE100 and produce more artifacts than prose. Heavily use tables, mermaid diagrams, and code snippets illustrating multiple angles for easy comparison. 
-
-No flowery language, this is noise in an already noisy time. Don't try to explain the whole picture, the user will drown. Don't respond with a wall of prose.
+Report per `write`, artifact register: shapes side by side, never a wall of prose.

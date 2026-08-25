@@ -1,6 +1,6 @@
 ---
 name: execute
-description: How to execute code across every proof lane - deterministic, compile, artifact, the pe-revit test ladder (deterministic/fresh/attached rungs), controlled Revit sessions (dev/installed), documents, op receipts, host/web (vp), browser, worktrees. And, how to run subagents and background processes (Herdr multiplexer). As a Pe.Tools coding agent, use before testing, probing, delegating, proving, when choosing a lane, or to diagnose a pe-revit/pea/vp/browser fail or hang.
+description: "How anything runs or is proven in this repo. Trigger on \"run\", \"test\", \"build\", \"prove it\", \"which lane\", \"worktree\", \"herdr\", \"spin up\", \"dev server\", \"background this\", \"why does pe-revit hang\", or before any subagent launch, Revit session, browser check, or proof claim. Runbook, not a stance. Lanes: deterministic, compile, artifact, pe-revit ladder (deterministic/fresh/attached), Revit sessions (dev/installed), documents, op receipts, host/web (vp), browser, worktrees, Herdr."
 ---
 
 # Execution
@@ -50,7 +50,7 @@ lane choice, the proven loop shapes, and the lies to defend against. Defensive l
 
 ## Proof lanes, in preference order
 
-1. **deterministic**, no Revit. `pe-revit test --project <P>` picks this rung by itself for a
+1. **deterministic**, no Revit. Tests are temporary feedback, not a suite: one red loop while building, one deterministic run over the whole chain when it closes, the rest deleted. `pe-revit test --project <P>` picks this rung by itself for a
    year-neutral project. Put judgment here; spend Revit time only on proof.
 2. **fresh**, the default Revit-backed proof: `pe-revit test --project <RevitTests csproj>` picks
    it for a Revit-backed project, launches its own ephemeral **controlled** Revit (row
@@ -171,45 +171,28 @@ switch proof (read_page text, console, network, or a deterministic test) instead
 
 ## Herdr, subagents and observable background work
 
-Subagents (claude/codex/…) and any process the user might watch (dev servers, long tests) run in
-Herdr panes, never harness Agent/background tools: harness runs can't be observed or interjected,
-and a user interrupt kills them (Herdr agents survive). `herdr --skill` is the version-matched CLI
-manual — read it before any Herdr work the scripts below don't cover; probe command groups rather
-than guessing flags. Below is only the earned delta.
+Herdr is tmux with agent-aware panes: it knows each agent's status, delivers prompts, emits notifications, and binds a workspace to a directory. Model: **session → workspace → tab → pane**; an agent is a process in a pane with `idle | working | blocked | done | unknown`. Always name the session; parse JSON and IDs; never infer focus.
 
-- **Launch and prompt through the scripts in this skill's directory** (PowerShell, PS 5.1-safe,
-  ASCII-only, warnings not throws so callers read exit codes):
-  - `herdr-up.ps1 S CWD name:kind[:model] ...` — headless server + one workspace + one pane per
-    agent; idempotent (reuses existing agents, recovers one stuck on a startup dialog). claude
-    launches with `--dangerously-skip-permissions`; `:model` maps to `--model` (`opus`, `fable`).
-    Prints name→pane; tell the user S and `herdr session attach S`.
-  - `herdr-send.ps1 S NAME PROMPT_FILE` — one-hop delivery, verified to `working` (codex needs the
-    nudge-enter; claude's first-launch notice eats prompt #1; blank lines are collapsed).
-  - `herdr-wait.ps1 S NAME [TIMEOUT_MS]` — background it as the wake signal; its verdict is the
-    agent's final status, not `agent wait`'s exit code. One watcher per agent; they are disposable
-    (they die with your session), agents and report files are durable.
-- **Agents inherit the workspace cwd**: one Herdr session per worktree (`sdk-w2` ↔
-  `Pe.Revit.Sdk-w2`). Sibling worktrees are created from the CLI as repo siblings, each on its own
-  branch; the orchestrator merges in dependency order and runs the deterministic harness after
-  every merge. Stop the Herdr session before removing its worktree (the pane holds the directory).
-  In the main checkout `.claude/skills/**` and `.agents/skills/**` are hardlinked (one edit shows in
-  both); `git worktree add` checks out two independent files, so in a worktree edit both and `diff`
-  them before committing.
-- `--session S` on **every** command, never the default session or `--current`. Never drive slash
-  commands through `send-text` from Git Bash (MSYS rewrites `/quit`); `agent prompt` owns `/`.
-  IDs come from parsed JSON. One prompt owner per agent.
-- Health: `agent list`. `idle|done` = complete; `blocked` = needs input; `unknown` proves nothing.
-  A `blocked` agent on a harness safety prompt (e.g. the "possibly-empty variable" `rm` guard):
-  read the pane; if the guard is a heuristic false positive on a path you can see, `send-keys
-  <name> enter` accepts the highlighted default — never guess numeric options.
-- Missions name a report file and end with "work autonomously; do not ask". Read the report AND
-  spot-check the diff yourself before merging; a pasted proof is a claim until re-run. Time on task
-  that felt wrong is signal — agents are told to say so, and you surface it.
-- Urgent redirect: `send-keys <name> esc` → verify settled → re-prompt. Reads are terminal
-  snapshots; if more `--lines` reveals nothing, have the agent write Markdown to disk.
-- Dev servers / long tests: `pane run` → `pane wait-output --match <ready-line>` → `pane read`.
-- Retain panes for the user; close only what this run created (`herdr session stop S`, then
-  `session delete S`). Prompts execute with the pane agent's permissions — they are privileged.
+Why here and never the harness Agent tool: **observability**, the user attaches to the same session, watches any pane, interjects; harness subagents are invisible and their waiters died on interrupt while Herdr panes survived. **Collaboration**, one prompt owner per agent, the user and orchestrator share the same durable panes, reports go to named files (pane history collapses on alternate-screen agents; a Markdown report is the record). **Background work**, dev servers, long tests, and overnight loops outlive the orchestrator's session; waiters are disposable wake signals, panes and report files are durable. Never close a working agent ("catch you killing a claude that was still running"); redirect with `esc`, wait, re-prompt.
+
+One script, six verbs, `herdr.ps1` beside this file (PowerShell 5.1, ASCII, warnings not throws, exit codes below). It carries the defenses the 2026-08 friction census demanded (69 instances, 26 session targeting, 15 liveness, 18 from the old `herdr-up.ps1`): resolved-cwd proof after launch, refusal of non-startup dialogs, parsed status, status-aware reads, idempotent stop.
+
+```
+herdr.ps1 up     S CWD name:kind[:model] ...   0 ready | 1 runtime | 2 usage | 3 blocked
+herdr.ps1 send   S AGENT PROMPT_FILE           0 turn observed | 1 failed | 2 usage | 3 busy
+herdr.ps1 status S [AGENT]                     parsed JSON
+herdr.ps1 wait   S AGENT [TIMEOUT_MS]          0 settled (idle/done/blocked) | 1 timeout | 2 missing
+herdr.ps1 read   S AGENT [LINES]               visible while working, recent-unwrapped when settled
+herdr.ps1 stop   S                             stop then delete; absent is success
+```
+
+- `up` is idempotent: an existing agent is reported, never restarted; a startup `launch_pending` dialog gets Enter, any other `blocked` is refused (exit 3). Claude launches `--dangerously-skip-permissions`; `:model` maps to `--model`. Agent names: lowercase, digits, `-`, `_`.
+- `send` refuses an unsettled agent (one prompt owner), verifies the turn by `state_change_seq`, nudges Enter once for Codex's pasted-content case. Slash commands go through `agent prompt`, never `send-text` from Git Bash (MSYS rewrites `/`). Keys are logical: `ctrl+c`, `esc`, `enter`.
+- `wait` is the wake signal: background it; its verdict is the parsed final status, not `agent wait`'s exit code. One waiter per agent.
+- Agents inherit the workspace cwd: one session per worktree (`sdk-w2` ↔ `Pe.Revit.Sdk-w2`); stop the session before removing its worktree. In the main checkout `.claude/skills/**` and `.agents/skills/**` are mirrored; in a worktree edit both.
+- Missions name a report file and end with "work autonomously; do not ask". Read the report AND spot-check the diff; a pasted proof is a claim until re-run. Time on task that felt wrong is signal.
+- Dev servers / long tests: `pane run` → `pane wait-output --match <ready-line>` → `pane read`. Retain panes for the user; `stop` only what this run created. Prompts run with the pane agent's permissions; they are privileged.
+- `herdr --skill` is the version-matched manual for anything the verbs don't cover; probe command groups, don't guess flags. Group help exits 2 on stderr by design.
 
 ## Timeouts, backgrounding, cleanup
 

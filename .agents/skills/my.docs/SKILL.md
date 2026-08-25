@@ -1,11 +1,11 @@
 ---
 name: docs
-description: Pe.Tools docs conventions, where every kind of durable knowledge lives. Read before writing any markdown, recording a decision, persisting research, creating a handoff, or when another skill needs a persistence home. The single source of truth all other skills defer to.
+description: Where every kind of durable knowledge lives in this repo. Trigger on "record this", "ledger", "ADR", "owed", "save this durably", "write it up", "where should this go", before writing any markdown, or when another skill needs a persistence home. Runbook, not a stance; the single source all other skills defer to. Formats for ADRs and glossaries live beside it.
 ---
 
 # Docs
 
-Code is the spec. Markdown exists only for what code cannot say: why, what was tried and failed, and what is still owed. Before writing a doc, ask whether the knowledge belongs in code, a test, or a commit message instead, those are preferred. Exception: product/design **verdicts always go to the feature ledger**, never commit messages (the `find-the-product` rule wins).
+Code is the spec. Markdown exists only for what code cannot say: why, what was tried and failed, and what is still owed. Before writing a doc, ask whether the knowledge belongs in code, a test, or a commit message instead, those are preferred. Exception: product/design **verdicts always go to the feature ledger**, never commit messages (the `triangulate` rule wins).
 
 Use ASD-STE100 Simplified Technical English and grow glossaries. Predictability and shared language allow everyone to say less and understand more. 
 
@@ -16,9 +16,9 @@ There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket 
 | Home| Knowledge |
 |---|---|
 | `docs/features/<name>/LEDGER.md` |  Feature-scoped decisions, rejected paths, open work |
-| `docs/features/<name>/MAP.md`, deleted when the effort ends |  Live-effort frontier (wayfinder tickets, find-the-product rounds) |
+| `docs/features/<name>/MAP.md`, deleted when the effort ends |  Live-effort frontier (triangulate rounds, demiurge shapes) |
 | `docs/adr/NNNN-slug.md` |  Decisions that constrain other features |
-| Nearest package `AGENTS.md` Shared Language table; feature terms in `docs/features/<name>/GLOSSARY.md` (lazy, `domain-modeling` owns) |  Domain vocabulary |
+| Nearest package `AGENTS.md` Shared Language table; feature terms in `docs/features/<name>/GLOSSARY.md` (lazy, `grill` grows them; formats: `GLOSSARY-FORMAT.md`, `ADR-FORMAT.md` beside this skill) |  Domain vocabulary |
 | Hard-won wide-breadth rationale | Authority docs (registry below) |
 | `.artifacts/handoffs/<date>-<topic>.md` |  Session-to-session bridges |
 | relevant `docs/features/<feat>`, else `docs/research/` |  Research findings |
