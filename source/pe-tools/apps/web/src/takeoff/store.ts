@@ -156,6 +156,7 @@ export interface AtlasPageState {
   readonly zoneKey: string | null;
   readonly cursor: string | null;
   readonly fieldsMode: "columns" | "panel";
+  readonly planOpen: boolean;
 }
 
 export type AtlasRoomState = "call" | "unreviewed" | "data" | "synced";
@@ -458,6 +459,7 @@ export function createTakeoffStore(deps: {
   const fieldsModeAtom = Atom.make<AtlasPageState["fieldsMode"]>("columns").pipe(
     owned("takeoffs/page/atlas/fields-mode"),
   );
+  const planOpenAtom = Atom.make(true).pipe(owned("takeoffs/page/atlas/plan-open"));
   const cursorAtom = Atom.make<AtlasPageState["cursor"]>(null).pipe(
     owned("takeoffs/page/atlas/cursor"),
   );
@@ -468,6 +470,7 @@ export function createTakeoffStore(deps: {
       zoneKey: get(zoneKeyAtom),
       cursor: get(cursorAtom),
       fieldsMode: get(fieldsModeAtom),
+      planOpen: get(planOpenAtom),
     }),
   ).pipe(owned("takeoffs/page/atlas"));
   const atlasTableStateAtom = Atom.make<MasterTableState>({
@@ -1090,6 +1093,7 @@ export function createTakeoffStore(deps: {
           if (patch.zoneKey !== undefined) registry.set(zoneKeyAtom, patch.zoneKey);
           if (patch.cursor !== undefined) registry.set(cursorAtom, patch.cursor);
           if (patch.fieldsMode !== undefined) registry.set(fieldsModeAtom, patch.fieldsMode);
+          if (patch.planOpen !== undefined) registry.set(planOpenAtom, patch.planOpen);
         }),
       );
     },
@@ -1269,6 +1273,7 @@ export function createTakeoffStore(deps: {
       stageFilter: stageFilterAtom,
       level: levelAtom,
       fieldsMode: fieldsModeAtom,
+      planOpen: planOpenAtom,
       cursor: cursorAtom,
       atlasTableState: atlasTableStateAtom,
       atlasRows: atlasRowsAtom,

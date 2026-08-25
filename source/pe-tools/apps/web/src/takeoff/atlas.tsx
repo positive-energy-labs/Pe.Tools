@@ -419,6 +419,7 @@ export function Atlas({ store }: AtlasProps) {
   const pageLevel = useAtomValue(store.atoms.level);
   const cursor = useAtomValue(store.atoms.cursor);
   const fieldsMode = useAtomValue(store.atoms.fieldsMode);
+  const planOpen = useAtomValue(store.atoms.planOpen);
   const tableState = useAtomValue(store.atoms.atlasTableState);
   const rows = useAtomValue(store.atoms.atlasRows);
   const visibleKeys = useAtomValue(store.atoms.visibleRows);
@@ -447,8 +448,8 @@ export function Atlas({ store }: AtlasProps) {
    *  reports the result here so j/k walks the SAME order rather than the pre-filter scope. */
 
   // Plan geometry: controlled collapse; PaneWorkspace owns and persists its resized height.
-  const [planOpen, setPlanOpen] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
+  const setPlanOpen = (open: boolean) => store.actions.setAtlasPage({ planOpen: open });
 
   // Edits live in the route's session overlay (they must survive into the sync payload); the
   // world arrives with them already applied. The atlas only forwards patches.
@@ -971,7 +972,7 @@ export function Atlas({ store }: AtlasProps) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPlanOpen((v) => !v)}
+                    onClick={() => setPlanOpen(!planOpen)}
                     title={
                       planOpen
                         ? "collapse the plan — give the table the full height"
