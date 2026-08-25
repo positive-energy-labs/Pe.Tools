@@ -80,6 +80,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     }
     inFlight = true;
     write(id, "failure", () => registry.set(failure, null));
+    write(id, "receipt", () => registry.set(receipt, null));
     write(id, "busy", () => registry.set(busy, { id, seconds: 0 }));
     const started = Date.now();
     busyTimer = setInterval(
@@ -91,6 +92,15 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     );
     try {
       const value = await work();
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        "ok" in value &&
+        value.ok === false
+      ) {
+        const result = value as RouteStateWriteResult;
+        throw Error([result.error, result.hint].filter(Boolean).join(": ") || `${id} failed`);
+      }
       const text =
         typeof value === "string"
           ? value

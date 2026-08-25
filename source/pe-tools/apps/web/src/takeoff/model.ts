@@ -76,7 +76,8 @@ export const DEFAULT_ARTIFACT_DIR = "%USERPROFILE%\\OneDrive\\Documents\\Pe.Tool
 
 // ── Zones ───────────────────────────────────────────────────────────────────
 
-export interface Zone extends DeclaredZone {
+export interface Zone extends Omit<DeclaredZone, "color"> {
+  color: string;
   lane: LevelLane;
   /** "Main#06" — stable within the fixture, and what the deterministic GUID is derived from. */
   key: string;
@@ -165,6 +166,7 @@ export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
         const ordinal = i + 1;
         zones.push({
           ...z,
+          color: z.color ?? "0,0,0",
           lane,
           ordinal,
           key: `${lane.label}#${String(ordinal).padStart(2, "0")}`,

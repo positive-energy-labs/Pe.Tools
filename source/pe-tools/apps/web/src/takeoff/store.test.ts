@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import type { RouteStatePatch, TakeoffSnapshot, TakeoffsRouteDocument } from "@pe/agent-contracts";
+import {
+  takeoffsRouteState,
+  type RouteStatePatch,
+  type TakeoffSnapshot,
+  type TakeoffsRouteDocument,
+} from "@pe/agent-contracts";
 import type { Slice } from "#/state/route-store";
 
 import {
@@ -223,6 +228,25 @@ function harness() {
 }
 
 describe("takeoff route store", () => {
+  it("produces a fixture snapshot accepted by the route document schema", async () => {
+    const sessions = createFixtureSessionSource();
+    const session = (await sessions.list())[0]!;
+    const document = (await sessions.activeDocument(session))!;
+    let snapshot: TakeoffSnapshot | undefined;
+
+    await createFixtureTakeoffHost().readSnapshot(session, document, async (value) => {
+      snapshot = value;
+    });
+
+    const parsed = takeoffsRouteState.schema.safeParse({
+      binding: { target: null },
+      snapshot,
+      staged: [],
+    });
+    if (!parsed.success) throw parsed.error;
+    expect(parsed.success).toBe(true);
+  });
+
   it("writes the fixture host read into the document and renders only that slice", async () => {
     const patches: RouteStatePatch[][] = [];
     const store = createStore({

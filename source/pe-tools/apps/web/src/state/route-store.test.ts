@@ -71,6 +71,21 @@ describe("route store kit", () => {
     const hostError = Error("host broke");
     await expect(core.runVerb("bad", async () => Promise.reject(hostError))).rejects.toBe(hostError);
     expect(registry.get(core.failure)).toMatchObject({ kind: "host", message: "host broke" });
+    await expect(
+      core.runVerb("write", async () => ({
+        ok: false,
+        error: "the patched document is invalid",
+        hint: "snapshot.world.zones.43.zone.color: expected string",
+      })),
+    ).rejects.toThrow(
+      "the patched document is invalid: snapshot.world.zones.43.zone.color: expected string",
+    );
+    expect(registry.get(core.failure)).toMatchObject({
+      kind: "host",
+      verb: "write",
+      message: "the patched document is invalid: snapshot.world.zones.43.zone.color: expected string",
+    });
+    expect(registry.get(core.receipt)).toBeNull();
     core.dispose();
   });
 
