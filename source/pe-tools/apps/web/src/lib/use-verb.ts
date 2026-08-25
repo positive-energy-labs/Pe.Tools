@@ -45,7 +45,7 @@ export function useVerb() {
    * results). */
   const run = useCallback(async (label: string, work: () => Promise<string | void>) => {
     if (inFlight.current) {
-      setOutcome({ kind: "error", text: `${label} refused; another verb is running` });
+      setOutcome({ kind: "refused", text: `${label} refused; another verb is running` });
       return;
     }
     inFlight.current = true;

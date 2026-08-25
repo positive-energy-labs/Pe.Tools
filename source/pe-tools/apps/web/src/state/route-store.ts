@@ -6,14 +6,28 @@ import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import { MastraClient } from "@mastra/client-js";
 import { z } from "zod";
 
-import { readRouteState, type RouteDocOf, type RouteStateSpec } from "@pe/agent-contracts";
+import {
+  readRouteState,
+  type RouteDocOf,
+  type RouteStatePatch,
+  type RouteStateSpec,
+  type RouteStateWriteResult,
+} from "@pe/agent-contracts";
 
 import { inspectAtomRegistry } from "#/state/atom-inspect";
+import type { Option } from "#/targeting/model";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 import { parseWireEvent } from "#/workbench/wire";
 
 export type VerbFailure = { kind: "busy" | "host"; verb: string; message: string };
 export type VerbReceipt = { verb: string; text: string; at: number };
+export class VerbRefused extends Error {
+  readonly name = "VerbRefused";
+
+  constructor(readonly verb: string) {
+    super(`${verb} refused; another verb is running`);
+  }
+}
 
 export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomRegistry) {
   const inspector = inspectAtomRegistry(registry);
@@ -40,7 +54,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     return mutate();
   };
 
-  const runtimeFactory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() });
+  const runtimeFactory = Atom.runtime;
   const runtime = keep(runtimeFactory(Layer.empty));
   Reflect.set(runtime.layer, "keepAlive", false);
   const invalidate = keep(runtime.fn((keys: readonly string[]) => Reactivity.invalidate(keys)));
@@ -55,13 +69,14 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     keys?: readonly string[],
   ): Promise<A> => {
     if (inFlight) {
+      const error = new VerbRefused(id);
       const refused = {
         kind: "busy",
         verb: id,
-        message: `${id} refused; another verb is running`,
+        message: error.message,
       } as const;
       write(id, "failure", () => registry.set(failure, refused));
-      throw Error(refused.message);
+      throw error;
     }
     inFlight = true;
     write(id, "failure", () => registry.set(failure, null));
@@ -142,16 +157,10 @@ export const unbound = <A>(value: A, basis: readonly string[] = []): TimedRead<A
   bound: false,
 });
 
-interface FeedOption {
-  id: string;
-  label: string;
-  sub?: string;
-}
-
 export type FeedState = "ready" | "loading" | "error";
 export type Lane = "live" | "read" | "fixture";
 export interface Feed {
-  options: FeedOption[] | null;
+  options: Option[] | null;
   state: FeedState;
   lane: Lane;
   stale: boolean;
@@ -163,7 +172,7 @@ export interface Feed {
 
 export function feed<A>(
   result: AsyncResult.AsyncResult<TimedRead<A>, Error>,
-  options: (value: A) => FeedOption[],
+  options: (value: A) => Option[],
   lane: Lane,
   seam?: { needs: string },
 ): Feed {
@@ -204,26 +213,16 @@ export interface Scope {
 export interface Slice<D> {
   doc: D | null;
   hydrated: boolean;
-  connected: boolean;
+  connected: boolean | null;
   error: string | null;
   peaActive: boolean;
 }
 
-interface RouteStatePatch {
-  path: (string | number)[];
-  value?: unknown;
-}
-
-interface RouteStateWriteResult {
-  ok: boolean;
-  error?: string;
-  hint?: string;
-  doc?: unknown;
-  result?: unknown;
-}
-
 const peInfoSchema = z.object({ controllerId: z.string(), resourceId: z.string() });
-type WireMessage = { kind: "doc"; doc: unknown } | { kind: "pea"; active: boolean };
+type WireMessage =
+  | { kind: "doc"; doc: unknown }
+  | { kind: "pea"; active: boolean }
+  | { kind: "connected"; value: boolean };
 const routeAtoms = new Map<string, Atom.Atom<AsyncResult.AsyncResult<Slice<any>, Error>>>();
 
 function routeUrl(route: string, operation: "read" | "events" | "apply" | "command", scope: Scope) {
@@ -238,7 +237,7 @@ function wireStream<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
   const initial: Slice<RouteDocOf<S>> = {
     doc: null,
     hydrated: false,
-    connected: true,
+    connected: null,
     error: null,
     peaActive: false,
   };
@@ -266,6 +265,8 @@ function wireStream<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
             onError: () => undefined,
           });
           const events = new EventSource(routeUrl(spec.route, "events", scope));
+          events.onopen = () => Queue.offerUnsafe(queue, { kind: "connected", value: true });
+          events.onerror = () => Queue.offerUnsafe(queue, { kind: "connected", value: false });
           events.onmessage = (raw) => {
             try {
               const payload = JSON.parse(raw.data) as { doc?: unknown };
@@ -288,6 +289,8 @@ function wireStream<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
     Stream.scan(initial, (state, message): Slice<RouteDocOf<S>> =>
       message.kind === "pea"
         ? { ...state, peaActive: message.active }
+        : message.kind === "connected"
+          ? { ...state, connected: message.value }
         : {
             ...state,
             doc: readRouteState({ [spec.key]: message.doc }, spec),

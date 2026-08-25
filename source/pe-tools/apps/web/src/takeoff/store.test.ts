@@ -192,12 +192,11 @@ describe("takeoff route store", () => {
 
     store.actions.setAtlasPage({
       level: "Main",
+      zoneKey: zone.zone.key,
       cursor: room.guid,
       planOpen: false,
       statsOpen: true,
     });
-    store.actions.focusZone(zone.zone.guid);
-    store.actions.selectRoom(room.guid);
     store.actions.hover(room.guid);
     store.actions.patchRoom(room.guid, { name: "Staged room" });
     store.actions.decide(room.guid, "thin residue", "accept");
@@ -472,11 +471,12 @@ describe("takeoff route store", () => {
     const before = { ...h.calls };
 
     h.recoverR10();
-    store.actions.retryRhvac();
+    await store.actions.retryRhvac();
     await store.actions.settle(store.atoms.r10);
 
     expect(h.calls.list).toBe(before.list + 1);
     expect(h.calls.open).toBeGreaterThan(before.open);
+    expect(store.atoms.registry.get(store.atoms.receipt)?.verb).toBe("retry-r10");
     store.dispose();
   });
 
@@ -495,7 +495,7 @@ describe("takeoff route store", () => {
     await tick();
 
     expect(store.atoms.registry.get(store.atoms.adoptRows)).toHaveLength(11);
-    store.actions.openPanel("adopt");
+    await store.actions.openAdopt();
     await store.actions.adoptSelected();
 
     expect(store.atoms.registry.get(store.atoms.panel)).toBeNull();

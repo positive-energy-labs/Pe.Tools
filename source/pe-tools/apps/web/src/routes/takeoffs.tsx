@@ -210,7 +210,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "adopt",
             label: "adopt zones",
             demands: ["view"],
-            run: async () => store.actions.openPanel("adopt"),
+            run: () => store.actions.openAdopt(),
             needs: "a zoning view with filled regions",
           },
         ],
@@ -253,7 +253,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "refresh",
             label: "refresh",
             demands: ["rvt"],
-            run: live ? async () => void (await store.actions.refresh()) : null,
+            run: live ? () => store.actions.refresh() : null,
             needs: "a live document — the replay is already the whole world",
           },
         ],
@@ -267,7 +267,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             label: "sync .r10",
             demands: ["r10"],
             refuse: () => (AsyncResult.isFailure(r10Result) ? "the .r10 did not open" : null),
-            run: live ? async () => store.actions.openPanel("sync") : null,
+            run: live ? () => store.actions.openSync() : null,
             needs: "a live document — the fixture has no .r10 to sync into",
           },
           {
@@ -283,7 +283,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
                   key: "retry-r10",
                   label: "retry .r10",
                   demands: ["r10"],
-                  run: async () => store.actions.retryRhvac(),
+                  run: () => store.actions.retryRhvac(),
                 },
               ]
             : []),
@@ -304,7 +304,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     targetingQuery,
     store.actions.setTargetingQuery,
   );
-  const runner = useRunner(product, b, async (_label, work) => void (await work()), busy);
+  const runner = useRunner(product, b, busy);
 
   const addFolder = (link: Link) =>
     link.key === "folder" ? (

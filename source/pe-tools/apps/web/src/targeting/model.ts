@@ -36,8 +36,6 @@ export interface Option {
   sub?: string;
 }
 
-export type { Feed, FeedState, Lane } from "#/state/route-store";
-
 export interface Link {
   key: string;
   /** Parent link key; undefined = root of a trunk. */

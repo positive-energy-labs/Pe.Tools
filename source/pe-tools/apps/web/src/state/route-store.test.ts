@@ -13,6 +13,7 @@ import {
   feed,
   hostRead,
   unbound,
+  VerbRefused,
 } from "./route-store";
 
 describe("route store kit", () => {
@@ -56,14 +57,15 @@ describe("route store kit", () => {
     );
     await Promise.resolve();
 
-    await expect(core.runVerb("second", async () => "no")).rejects.toThrow(
-      "second refused; another verb is running",
-    );
+    await expect(core.runVerb("second", async () => "no")).rejects.toBeInstanceOf(VerbRefused);
     expect(registry.get(core.failure)).toMatchObject({ kind: "busy", verb: "second" });
     finish();
     await expect(first).resolves.toBe("done");
     expect(registry.get(core.receipt)).toMatchObject({ verb: "first", text: "done" });
     expect(writes).toContainEqual(["snapshot"]);
+    expect(writes.findIndex((value) => value === registry.get(core.receipt))).toBeLessThan(
+      writes.findIndex((value) => Array.isArray(value) && value[0] === "snapshot"),
+    );
 
     const hostError = Error("host broke");
     await expect(core.runVerb("bad", async () => Promise.reject(hostError))).rejects.toBe(hostError);

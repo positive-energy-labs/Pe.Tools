@@ -54,6 +54,20 @@ export function defineRouteState<TSchema extends z.ZodType>(
 export type RouteDocOf<TSpec> =
   TSpec extends RouteStateSpec<infer TSchema> ? z.infer<TSchema> : never;
 
+/** A single segment-array patch. Omit `value` to delete the key. */
+export interface RouteStatePatch {
+  path: (string | number)[];
+  value?: unknown;
+}
+
+export interface RouteStateWriteResult {
+  ok: boolean;
+  error?: string;
+  hint?: string;
+  doc?: unknown;
+  result?: unknown;
+}
+
 /* ── Session binding (substrate-owned doc segment) ─────────────────────────── */
 
 /**

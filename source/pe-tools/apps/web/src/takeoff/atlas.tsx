@@ -432,15 +432,9 @@ export function Atlas({ store }: AtlasProps) {
     (value: string) => store.actions.setAtlasPage({ level: value }),
     [store],
   );
-  const setZoneKey = (value: string | null) => {
-    store.actions.setAtlasPage({ zoneKey: value });
-    store.actions.focusZone(world.zones.find((zone) => zone.zone.key === value)?.zone.guid ?? "");
-  };
+  const setZoneKey = (value: string | null) => store.actions.setAtlasPage({ zoneKey: value });
   const setCursor = useCallback(
-    (value: string | null) => {
-      store.actions.setAtlasPage({ cursor: value });
-      store.actions.selectRoom(value ?? "");
-    },
+    (value: string | null) => store.actions.setAtlasPage({ cursor: value }),
     [store],
   );
   /** Where the per-room Manual J fields live: inline table columns (dense, whole-scope entry)

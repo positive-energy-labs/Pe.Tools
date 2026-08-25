@@ -5,7 +5,13 @@ import { Cause, Option } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { z } from "zod";
 
-import { type RouteStateSpec } from "@pe/agent-contracts";
+import {
+  type RouteStatePatch,
+  type RouteStateSpec,
+  type RouteStateWriteResult,
+} from "@pe/agent-contracts";
+
+export type { RouteStatePatch, RouteStateWriteResult } from "@pe/agent-contracts";
 
 import { docAtom, docWriter, type Scope } from "#/state/route-store";
 import { type WorkbenchEndpointConfig, peUrl } from "./config";
@@ -19,27 +25,13 @@ export function resolveRouteWorkspaceScope(search?: string): RouteWorkspaceScope
   return threadId ? { kind: "thread", threadId } : { kind: "workspace" };
 }
 
-/** A single segment-array patch. Omit `value` to delete the key. */
-export interface RouteStatePatch {
-  path: (string | number)[];
-  value?: unknown;
-}
-
-export interface RouteStateWriteResult {
-  ok: boolean;
-  error?: string;
-  hint?: string;
-  doc?: unknown;
-  result?: unknown;
-}
-
 export interface RouteStateHandle<T> {
   slice: T | null;
   hydrated: boolean;
   apply: (patches: RouteStatePatch[]) => Promise<RouteStateWriteResult>;
   command: (command: string, input?: unknown) => Promise<RouteStateWriteResult>;
   peaActive: boolean;
-  connected: boolean;
+  connected: boolean | null;
   error: string | null;
 }
 
@@ -64,7 +56,7 @@ export function useRouteState<TSchema extends z.ZodType>(
     apply: writer.apply,
     command: (command, input) => writer.command(command as keyof TSchema & string, input),
     peaActive: wire?.peaActive ?? false,
-    connected: failure == null && (wire?.connected ?? true),
+    connected: failure ? false : (wire?.connected ?? null),
     error: failure
       ? Option.getOrElse(
           Option.map(Cause.findErrorOption(failure), (caught) => caught.message),

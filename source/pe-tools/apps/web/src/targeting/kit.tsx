@@ -160,13 +160,12 @@ export interface Runner {
 
 /**
  * Projects the store's serialized verb bracket so the head knows which verb is in flight and which
- * links it touches. `exec` invokes the verb; the store owns busy, failure, receipt, and timing.
+ * links it touches. Every `Verb.run` calls a store action that owns the bracket.
  */
 export function useRunner(
   product: Product,
   b: Bindings,
-  exec: (label: string, work: () => Promise<string | void>) => Promise<void>,
-  busyLabel: string | null,
+  busyLabel: string | null = null,
 ): Runner {
   const busyVerb = product.stages
     .flatMap((stage) => stage.verbs)
@@ -186,9 +185,9 @@ export function useRunner(
   const run = useCallback(
     (verb: Verb) => {
       if (!verb.run || !canRun(verb).ok) return;
-      void exec(verb.label, verb.run);
+      void verb.run();
     },
-    [canRun, exec],
+    [canRun],
   );
 
   return { busy: busyVerb?.key ?? null, active, run, canRun };
