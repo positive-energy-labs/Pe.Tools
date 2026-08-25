@@ -28,8 +28,10 @@ import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
+import { withThread } from "./-with-thread";
 
 export const Route = createFileRoute("/settings")({
+  beforeLoad: withThread,
   validateSearch: (
     search: Record<string, unknown>,
   ): { thread?: string; source?: "fixture" } => ({
@@ -44,12 +46,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsRoute() {
   const search = Route.useSearch();
-  if (!search.thread)
-    return (
-      <EmptyState story="scope" exit="open this page from a chat thread">
-        no settings workspace is open
-      </EmptyState>
-    );
+  if (!search.thread) return null;
   return (
     <SettingsStoreOwner
       key={`${search.thread}:${search.source ?? "read"}`}
