@@ -164,6 +164,8 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Owed
 
+- 2026-08-25 — Pre-existing guard census, identical on main and `goal/route-cutover`: dead shim tokens 14; bare hairlines 29; deleted tele classes 83; hex colour literals 8; sub-10px type 1; docs authority registry 1 missing path (`.agents/skills/docs/SKILL.md`); repo-root markdown 1 stray (`TASTE.md`).
+
 ### Cross-route language gaps (the single owners)
 
 - The `review: "attention"` axis: a staged value can be flagged/contested with nothing in the grammar saying so. Not `agree: "drift"` (the model holds no other value; the schema objects to this one), not freshness, not capability. Rule it as a row-fact gutter marker or an `invalid` qualifier on `stage: "staged"`. Consumers: `/settings` (first), `/schedule-grid` (second — clears the ≥2-route bar).
