@@ -1,18 +1,14 @@
 /** Thread- or workspace-scoped route documents over the host RouteWorkspace API. */
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { Cause, Effect, Option, Queue, Stream } from "effect";
+import { Cause, Option } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import { MastraClient } from "@mastra/client-js";
 import { z } from "zod";
 
-import { type RouteStateSpec, readRouteState } from "@pe/agent-contracts";
+import { type RouteStateSpec } from "@pe/agent-contracts";
 
-import { type WorkbenchEndpointConfig, peUrl, resolveWorkbenchConfig } from "./config";
-import { parseWireEvent } from "./wire";
-
-const peInfoSchema = z.object({ controllerId: z.string(), resourceId: z.string() });
+import { docAtom, docWriter, type Scope } from "#/state/route-store";
+import { type WorkbenchEndpointConfig, peUrl } from "./config";
 
 export type RouteWorkspaceScope = { kind: "thread"; threadId: string } | { kind: "workspace" };
 
@@ -47,138 +43,34 @@ export interface RouteStateHandle<T> {
   error: string | null;
 }
 
-interface WireState {
-  doc: unknown;
-  hydrated: boolean;
-  peaActive: boolean;
-}
-
-interface WireDescriptor {
-  route: string;
-  stateKey: string;
-  scope: RouteWorkspaceScope;
-}
-
-type WireMessage = { kind: "doc"; doc: unknown } | { kind: "pea"; active: boolean };
-
-const INITIAL_WIRE: WireState = { doc: null, hydrated: false, peaActive: false };
-
-function wireStream(
-  config: WorkbenchEndpointConfig,
-  descriptor: WireDescriptor,
-): Stream.Stream<WireState, Error> {
-  return Stream.callback<WireMessage, Error>((queue) =>
-    Effect.acquireRelease(
-      Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(peUrl(config, "/info"));
-          if (!response.ok) throw new Error(`workbench /info ${response.status}`);
-          const info = peInfoSchema.parse(await response.json());
-          const session = new MastraClient({ baseUrl: config.origin })
-            .getAgentController(info.controllerId)
-            .session(info.resourceId);
-
-          // Hydrate before opening either long-lived stream. Chat + iframe roots otherwise
-          // exhaust the browser's per-origin connection pool and strand this request. The
-          // route SSE sends its current snapshot on connect, so it closes the hydration race.
-          const initial = await fetch(
-            routeWorkspaceUrl(config, descriptor.route, "read", descriptor.scope),
-          );
-          if (!initial.ok) throw new Error(`route workspace read ${initial.status}`);
-          const payload = (await initial.json()) as { doc?: unknown };
-          if ("doc" in payload) Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
-
-          const unsubscribeSession = await session.subscribe({
-            onEvent: (raw: unknown) => {
-              const event = parseWireEvent(raw);
-              if (event?.type === "agent_start")
-                Queue.offerUnsafe(queue, { kind: "pea", active: true });
-              else if (event?.type === "agent_end")
-                Queue.offerUnsafe(queue, { kind: "pea", active: false });
-            },
-            onError: () => undefined,
-          });
-
-          const events = new EventSource(
-            routeWorkspaceUrl(config, descriptor.route, "events", descriptor.scope),
-          );
-          events.onmessage = (raw) => {
-            try {
-              const payload = JSON.parse(raw.data) as { doc?: unknown };
-              if (!("doc" in payload)) return;
-              Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
-            } catch {
-              // Ignore malformed frames; the next valid snapshot is authoritative.
-            }
-          };
-
-          return () => {
-            events.close();
-            unsubscribeSession.unsubscribe();
-          };
-        },
-        catch: (caught) => (caught instanceof Error ? caught : new Error(String(caught))),
-      }),
-      (close) => Effect.sync(close),
-    ),
-  ).pipe(
-    Stream.scan(INITIAL_WIRE, (state, message) =>
-      message.kind === "doc"
-        ? { ...state, doc: message.doc, hydrated: true }
-        : { ...state, peaActive: message.active },
-    ),
-  );
-}
-
-/** A string key shares one wire across every inline card and dock for the same coordinate. */
-const routeWireAtom = Atom.family((key: string) => {
-  const descriptor = JSON.parse(key) as WireDescriptor;
-  return Atom.make(wireStream(resolveWorkbenchConfig(), descriptor));
-});
+const address = (scope: RouteWorkspaceScope): Scope => {
+  if (scope.kind === "workspace") throw Error("workspace scope is not addressable; open with ?thread");
+  return { threadId: scope.threadId };
+};
 
 export function useRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
   scope = resolveRouteWorkspaceScope(),
 ): RouteStateHandle<z.infer<TSchema>> {
-  const config = useMemo(() => resolveWorkbenchConfig(), []);
-  const key = JSON.stringify({
-    route: spec.route,
-    stateKey: spec.key,
-    scope,
-  } satisfies WireDescriptor);
-  const wireResult = useAtomValue(routeWireAtom(key));
-  const wire = AsyncResult.isSuccess(wireResult) ? wireResult.value : INITIAL_WIRE;
+  const addressed = address(scope);
+  const wireResult = useAtomValue(docAtom(spec, addressed));
+  const wire = AsyncResult.isSuccess(wireResult) ? wireResult.value : null;
   const failure = AsyncResult.isFailure(wireResult) ? wireResult.cause : null;
-
-  const apply = useCallback(
-    (patches: RouteStatePatch[]) =>
-      writeRouteState(config, spec.route, "apply", { patches }, scope),
-    [config, spec.route, scope.kind, scope.kind === "thread" ? scope.threadId : ""],
-  );
-  const command = useCallback(
-    (command: string, input?: unknown) =>
-      writeRouteState(config, spec.route, "command", { command, input: input ?? {} }, scope),
-    [config, spec.route, scope.kind, scope.kind === "thread" ? scope.threadId : ""],
-  );
-
-  const slice = useMemo(
-    () => (wire.hydrated ? readRouteState({ [spec.key]: wire.doc }, spec) : null),
-    [wire.hydrated, wire.doc, spec],
-  );
+  const writer = useMemo(() => docWriter(spec, addressed), [spec, addressed.threadId]);
 
   return {
-    slice,
-    hydrated: wire.hydrated,
-    apply,
-    command,
-    peaActive: wire.peaActive,
-    connected: failure == null,
+    slice: wire?.doc ?? null,
+    hydrated: wire?.hydrated ?? false,
+    apply: writer.apply,
+    command: (command, input) => writer.command(command as keyof TSchema & string, input),
+    peaActive: wire?.peaActive ?? false,
+    connected: failure == null && (wire?.connected ?? true),
     error: failure
       ? Option.getOrElse(
           Option.map(Cause.findErrorOption(failure), (caught) => caught.message),
           () => "wire failed",
         )
-      : null,
+      : (wire?.error ?? null),
   };
 }
 
