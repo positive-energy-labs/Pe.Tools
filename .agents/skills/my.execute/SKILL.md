@@ -240,6 +240,7 @@ in `AGENTS.md`.
 - Never infer freshness from an isolated build, an old log line, or a matching filename; the row's
   `buildStamp` and the emitter's `apply` event are the witnesses.
 - Never use harness worktree tools; `git worktree add` as repo siblings, never nested.
+- A fresh worktree has no `node_modules` and `pnpm install` there is banned. Build it as per-entry junctions to a healthy checkout (`Pe.Tools-tooling-boot`, or main when its install is whole): for `source/pe-tools`, every `apps/*` and every `packages/*`, create a real `node_modules` dir and junction each child (and each `@scope/*` child) to the source checkout, EXCEPT workspace links (`@pe/*`), which must point at THIS worktree's `packages/*`/`apps/*`. A single junction of the whole `node_modules` makes tsc and vitest read the other checkout's `packages/*` and proves the wrong tree (2026-08-25). Proof of the link: tsc exit 0 from `apps/web` after editing a `packages/*` type.
 
 ## Reporting
 
