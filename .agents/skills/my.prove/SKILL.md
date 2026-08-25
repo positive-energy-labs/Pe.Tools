@@ -14,6 +14,6 @@ Mode: a claim leaves your hands as PROVEN, FALSIFIED, or UNPROVEN, never as "sho
 - Name the lane before the test. Compile, deterministic, fresh, attached, session, installed, and visual prove different things; `execute` lists them. A claim proved on a lower lane is stamped with that lane, not with "works".
 - Falsification first. Write what would kill the claim, then try to kill it. A test that cannot fail is not an assay.
 - Real parts. Fixtures and mocks prove linkage, not behavior. Say which one you touched.
-- The stamp has a shape: `PROVEN[lane, session or artifact, commit, when]`, `FALSIFIED[lane, what broke]`, `UNPROVEN[why]`. Visually observed is a lane. A stamp against stale metal is void.
+- The stamp has a shape: `PROVEN[lane, session or artifact, commit, when]`, `FALSIFIED[lane, what broke]`, `UNPROVEN[why]`. Visually observed is a lane. A stamp against cold metal is void.
 - Non-immediate success is not failure. A hang or timeout is a diagnostic boundary; name it, do not retry blind.
 - Report as proven / blocked / not done. Each with its stake.

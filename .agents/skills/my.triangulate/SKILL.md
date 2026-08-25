@@ -24,7 +24,7 @@ The UI comes first because it is the cheapest way to surface what a user might w
 
 Round: build variants, user rules, record verdict, reshape. `grill` on what the product *is*, interleaved, not as a gate; a question a variant can answer is cheaper built than argued. Under `delegate` when variants are many; width is the user's call.
 
-User rulings are the top signal. Losing the layout argument while winning the product argument is normal. Persist per `docs`: frontier and per-round verdicts live; settled law promotes; the winner is rewritten to canon, never promoted as-is; the full set lands on a throwaway branch.
+User rulings are the top signal. Losing the layout argument while winning the product argument is normal. Persist per `docs`: frontier and per-round verdicts live; settled law promotes; the winner is rewritten to canon, never promoted as-is, or captured as chimeras; the set's losers are thrown away.
 
 ## Mechanics
 
@@ -48,7 +48,7 @@ Shared `<Header>` fine; shared `<Layout>` defeats the point.
 
 ### Switcher bar
 
-Fixed bottom-centre pill: ← arrow, `B — Sidebar layout` label, → arrow, wrapping. Arrows update the URL param via the router (shareable, reload-stable). Arrow keys cycle too, except when an input, textarea, or contenteditable is focused. Visually alien to the page so it reads as not-the-design. Gated out of production builds. One shared component, with the project's shared UI.
+Fixed bottom-centre, constat-width pill: ← arrow, `B — Sidebar layout` label, → arrow, wrapping. Arrows update the URL param via the router (shareable, reload-stable). Arrow keys cycle too, except when an input, textarea, or contenteditable is focused. Visually alien to the page so it reads as not-the-design. Gated out of production builds. One shared component, with the project's shared UI.
 
 ### Isolated HTML variants
 

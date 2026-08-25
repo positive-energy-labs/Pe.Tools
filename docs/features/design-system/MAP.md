@@ -293,6 +293,9 @@ EYE       a purge critic (Codex) reads every wave's diff before the verdict; one
           the end. Eye outranks number when honesty is in question.
 GATES     `vp test` on touched dirs + tsc exit 0 from apps/web; codegen unchanged; no `pnpm install`, no `vp check --fix`;
           ledgers per `docs` (three sections, one-line entries, cross-route gaps in design-system).
+          Revit contact is allowed and encouraged all night (kaitpw 2026-08-25; no other sessions run in parallel).
+          A pe-revit tooling defect becomes an Owed line in the owning ledger plus a delegated background fix; work
+          around it when full verification is still possible.
 WIDTH     2–3 builders per wave, 60–90 min box; critics 20 min; alarm at 2×.
 DRY       two waves that retire nothing end it; polish is a stop.
 ABSENT    assumed rulings, each re-openable by kaitpw:
