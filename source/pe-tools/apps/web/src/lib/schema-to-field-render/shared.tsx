@@ -1,4 +1,3 @@
-import type { AnyFieldApi } from "@tanstack/react-form";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { SettingsFieldOptions, SettingsParameterCatalog } from "@pe/host-contracts/generated";
 
@@ -20,7 +19,13 @@ import {
 } from "@pe/schema-core";
 import type { FieldChangeSummary } from "./field-state";
 
-export type SettingsFieldApi = AnyFieldApi;
+export interface SettingsFieldApi {
+  state: { value: unknown; meta: { errors: unknown[] } };
+  handleBlur: () => void;
+  handleChange: (value: never) => void;
+  pushValue: (value: never) => void;
+  removeValue: (index: number) => void;
+}
 export interface SettingsFieldMetaBase {
   isTouched: boolean;
   isBlurred: boolean;
@@ -58,7 +63,9 @@ export interface SettingsForm {
 export type SettingsValues = Record<string, unknown>;
 
 export interface SchemaToFieldRenderProps {
-  form: SettingsForm;
+  form?: SettingsForm;
+  values?: SettingsValues;
+  onChange?: (path: string, value: unknown) => void;
   schema: RenderSchemaNode;
   moduleKey: string;
   rootKey?: string;

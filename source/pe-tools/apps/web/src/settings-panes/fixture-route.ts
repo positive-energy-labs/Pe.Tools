@@ -1,43 +1,32 @@
-/**
- * PROTOTYPE FIXTURE — a local stand-in for `useRouteState(settingsRouteState)` so the
- * shipped /settings works with NO host at all (`?source=fixture`, the takeoffs pattern:
- * an explicit URL choice, never a fallback). Commands and patches run against in-memory
- * state; "save" splices staged fields into the local raw content exactly like the real
- * save op, so the full open → form-edit → stage → save loop is drivable — and nothing
- * ever leaves the page.
- */
-import { useCallback, useRef, useState } from "react";
-
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
   settingsFieldSegments,
+  type RouteStatePatch,
+  type RouteStateWriteResult,
   type SettingsFieldState,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
 
-import { fixtureDocument, fixtureRawFor } from "./fixture";
-
-type WriteResult = { ok: boolean; error?: string | null; hint?: string | null };
-
-export interface FixtureSettingsRoute {
-  slice: SettingsRouteDocument;
-  connected: boolean;
-  peaActive: boolean;
-  error: null;
-  command: (name: string, input?: unknown) => Promise<WriteResult>;
-  apply: (patches: { path: (string | number)[]; value?: unknown }[]) => Promise<WriteResult>;
-}
+import type { SettingsHost } from "#/settings/host";
+import {
+  FIXTURE_SCHEMA_JSON,
+  fixtureDocument,
+  fixtureFiles,
+  fixtureRawFor,
+  fixtureWorkspaces,
+} from "./fixture";
 
 function spliceStagedIntoRaw(rawContent: string, fields: SettingsRouteDocument["fields"]): string {
   const parsed = JSON.parse(rawContent) as Record<string, unknown>;
   for (const [pointer, field] of Object.entries(fields)) {
     if (field.staged == null) continue;
     const segments = settingsFieldSegments(pointer);
-    let cursor: Record<string, unknown> = parsed;
+    let cursor = parsed;
     for (const segment of segments.slice(0, -1)) {
       const next = cursor[segment];
-      if (next == null || typeof next !== "object") {
-        cursor[segment] = {};
-      }
+      if (next == null || typeof next !== "object" || Array.isArray(next)) cursor[segment] = {};
       cursor = cursor[segment] as Record<string, unknown>;
     }
     const leaf = segments.at(-1);
@@ -48,115 +37,118 @@ function spliceStagedIntoRaw(rawContent: string, fields: SettingsRouteDocument["
   return JSON.stringify(parsed, null, 2);
 }
 
-export function useFixtureSettingsRoute(): FixtureSettingsRoute {
-  const [document, setDocument] = useState<SettingsRouteDocument>(fixtureDocument);
-  const saveCounter = useRef(0);
+export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): SettingsHost {
+  let document = structuredClone(fixtureDocument);
+  let revision = 0;
+  const state = () => ({ doc: document, hydrated: true, connected: true, error: null, peaActive: false });
+  const changed = Atom.make(0);
+  const slice = Atom.make((get) => {
+    get(changed);
+    return AsyncResult.success(state());
+  });
+  const publish = (next: SettingsRouteDocument) => {
+    document = next;
+    registry.update(changed, (value) => value + 1);
+  };
+  const version = () => `fixture-${++revision}`;
 
-  const command = useCallback(async (name: string, input?: unknown): Promise<WriteResult> => {
-    switch (name) {
-      case "open": {
-        const documentId = (input as { documentId?: SettingsRouteDocument["snapshot"] } | undefined)
-          ?.documentId as { moduleKey: string; rootKey: string; relativePath: string } | undefined;
+  return {
+    document: () => slice,
+    workspaces: async () => fixtureWorkspaces,
+    tree: async (moduleKey, rootKey) =>
+      moduleKey === "CmdScheduleManager" && rootKey === "schedules" ? fixtureFiles : [],
+    schema: async (moduleKey) => moduleKey === "CmdScheduleManager" ? FIXTURE_SCHEMA_JSON : "{}",
+    sessions: async () => [],
+    async apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult> {
+      const fields = { ...document.fields };
+      for (const patch of patches) {
+        const [head, pointer, member] = patch.path;
+        if (head !== "fields" || typeof pointer !== "string" || typeof member !== "string") continue;
+        const field: SettingsFieldState = fields[pointer] ?? {
+          proposal: null,
+          staged: null,
+          review: "none",
+        };
+        fields[pointer] = { ...field, [member]: patch.value ?? null } as SettingsFieldState;
+      }
+      publish({ ...document, fields });
+      return { ok: true, doc: document };
+    },
+    async command(name, input): Promise<RouteStateWriteResult> {
+      if (name === "bind") {
+        const target = (input as { target?: string | null } | undefined)?.target ?? null;
+        publish({ ...document, binding: { target, boundAt: new Date().toISOString() } });
+        return { ok: true, doc: document };
+      }
+      if (name === "open") {
+        const documentId = (input as {
+          documentId?: { moduleKey: string; rootKey: string; relativePath: string };
+        } | undefined)?.documentId;
         if (!documentId) return { ok: false, error: "open needs a documentId." };
-        setDocument((prev) => ({
-          ...prev,
+        publish({
+          ...document,
           snapshot: {
             documentId,
             rawContent: fixtureRawFor(documentId.relativePath),
             composedContent: null,
-            versionToken: null,
+            versionToken: version(),
             modifiedUtc: new Date().toISOString(),
-            // Only the seeded TEST.json carries the seeded validation scenario.
             validation:
               documentId.relativePath === "MechEquip/TEST.json"
                 ? fixtureDocument.snapshot?.validation
                 : { isValid: true, issues: [] },
             takenAt: new Date().toISOString(),
           },
-          // Real open preserves open proposals; the fixture mirrors that.
-          fields: documentId.relativePath === "MechEquip/TEST.json" ? fixtureDocument.fields : {},
-        }));
-        return { ok: true };
-      }
-      case "refresh": {
-        setDocument((prev) =>
-          prev.snapshot
-            ? { ...prev, snapshot: { ...prev.snapshot, takenAt: new Date().toISOString() } }
-            : prev,
-        );
-        return { ok: true };
-      }
-      case "validate":
-        // ponytail: advisory no-op — the fixture has no schema runner; the seeded
-        // validation stands. Re-add ajv (recovered settings-validation) for real dry-runs.
-        return { ok: true };
-      case "save": {
-        let failed: string | undefined;
-        setDocument((prev) => {
-          if (!prev.snapshot) {
-            failed = "No document open.";
-            return prev;
-          }
-          const attention = Object.values(prev.fields).some(
-            (field) => field.review === "attention" && field.staged != null,
-          );
-          if (attention) {
-            failed =
-              "A staged field needs attention — the fixture save refuses, like the real one.";
-            return prev;
-          }
-          saveCounter.current += 1;
-          const rawContent = spliceStagedIntoRaw(prev.snapshot.rawContent, prev.fields);
-          const fields: Record<string, SettingsFieldState> = Object.fromEntries(
-            Object.entries(prev.fields)
-              .map(([pointer, field]): [string, SettingsFieldState] => [
-                pointer,
-                { ...field, staged: null, review: "none" },
-              ])
-              .filter(([, field]) => field.proposal != null),
-          );
-          return {
-            ...prev,
-            snapshot: {
-              ...prev.snapshot,
-              rawContent,
-              versionToken: `fixture-${saveCounter.current}`,
-              validation: { isValid: true, issues: [] },
-            },
-            fields,
-            savedAt: new Date().toISOString(),
-          };
+          fields:
+            documentId.relativePath === "MechEquip/TEST.json"
+              ? structuredClone(fixtureDocument.fields)
+              : {},
         });
-        return failed ? { ok: false, error: failed } : { ok: true };
+        return { ok: true, doc: document };
       }
-      default:
-        return { ok: false, error: `The fixture lane has no "${name}" command.` };
-    }
-  }, []);
-
-  /** Only `["fields", pointer, member]` patches exist on this route; a missing `value`
-   * clears the member — the same shape route.apply sends to the real dispatcher. */
-  const apply = useCallback(
-    async (patches: { path: (string | number)[]; value?: unknown }[]): Promise<WriteResult> => {
-      setDocument((prev) => {
-        const fields = { ...prev.fields };
-        for (const patch of patches) {
-          const [head, pointer, member] = patch.path;
-          if (head !== "fields" || typeof pointer !== "string" || typeof member !== "string")
-            continue;
-          const field: SettingsFieldState = fields[pointer] ?? {
-            proposal: null,
-            staged: null,
-            review: "none",
-          };
-          fields[pointer] = { ...field, [member]: patch.value ?? null } as SettingsFieldState;
-        }
-        return { ...prev, fields };
-      });
-      return { ok: true };
+      if (name === "refresh" || name === "validate") {
+        if (!document.snapshot) return { ok: false, error: "No document open." };
+        publish({
+          ...document,
+          snapshot: {
+            ...document.snapshot,
+            versionToken: version(),
+            takenAt: new Date().toISOString(),
+          },
+        });
+        return { ok: true, doc: document };
+      }
+      if (name === "save") {
+        if (!document.snapshot) return { ok: false, error: "No document open." };
+        if (
+          Object.values(document.fields).some(
+            (field) => field.review === "attention" && field.staged != null,
+          )
+        )
+          return { ok: false, error: "A staged field needs attention." };
+        const rawContent = spliceStagedIntoRaw(document.snapshot.rawContent, document.fields);
+        const fields = Object.fromEntries(
+          Object.entries(document.fields)
+            .map(([pointer, field]): [string, SettingsFieldState] => [
+              pointer,
+              { ...field, staged: null, review: "none" },
+            ])
+            .filter(([, field]) => field.proposal != null),
+        );
+        publish({
+          ...document,
+          snapshot: {
+            ...document.snapshot,
+            rawContent,
+            versionToken: version(),
+            validation: { isValid: true, issues: [] },
+          },
+          fields,
+          savedAt: new Date().toISOString(),
+        });
+        return { ok: true, doc: document };
+      }
+      return { ok: false, error: `The fixture lane has no "${name}" command.` };
     },
-    [],
-  );
-
-  return { slice: document, connected: true, peaActive: false, error: null, command, apply };
+  };
 }

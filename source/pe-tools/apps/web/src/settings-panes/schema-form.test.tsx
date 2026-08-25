@@ -18,7 +18,6 @@
  * exactly what "hostless" has to mean.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useForm } from "@tanstack/react-form";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
@@ -49,15 +48,15 @@ describe("the fixture lane's schema→form derivation", () => {
 
 function Harness() {
   const model = schemaFormModel(RAW, FIXTURE_SCHEMA_JSON);
-  const form = useForm({ defaultValues: model?.baseline ?? {} });
   if (!model) return <p>no form model</p>;
   return (
     <SchemaToFieldRender
-      form={form as unknown as Parameters<typeof SchemaToFieldRender>[0]["form"]}
       schema={model.schema}
       moduleKey="CmdScheduleManager"
       rootKey="schedules"
       baselineValues={model.baseline}
+      values={model.baseline}
+      onChange={() => undefined}
     />
   );
 }
