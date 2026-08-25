@@ -239,3 +239,33 @@ Commit `ee8c1b4` completed G9 through G12 and resolved G14 with executable proof
 - The browser real-geometry fixture and deterministic fallback have different room counts, 180 and
   179. A single fixture data lane would remove that proof ambiguity, but changing the fixture's
   real-geometry behavior was outside G9-G14.
+
+## Pass 5
+
+Commit `40768fe` completed G15 through G19.
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| G15 | **done** | Decisions and staged edits are single record atoms; per-room decided/staged atoms are projections rather than writable family authorities. Hovered, selected, bound, decided, staged, and entity family members enter the store's `owned` release list when materialized. The four-cycle G10 test now calls both `decide()` and `patchRoom()` before disposal; it failed first with 375 surviving nodes and now returns to the zero-node baseline after every TTL (`source/pe-tools/apps/web/src/takeoff/store.test.ts:302`). |
+| G16 | **done** | `MasterRow` is memoized, row callbacks and `cellsFor` are stable, and Atlas supplies stable row key, gutter, table-state, click, and hover callbacks. The jsdom regression counts cell renders across an `activeKey` change and requires at most two rows (`source/pe-tools/apps/web/src/components/master-table/master-table.test.tsx:144`). |
+| G17 | **done** | Atlas subscribes directly to stage filter, zone key, level, cursor, and fields mode. It never reads `store.atoms.atlasPage`; the aggregate remains only the sentence/inspection view (`source/pe-tools/apps/web/src/takeoff/atlas.tsx:417`). |
+| G18 | **done** | `match` is optional column semantics, and the flags column's one predicate is consumed by both Atlas and `visibleRowsAtom` (`source/pe-tools/apps/web/src/takeoff/store.ts:323`). |
+| G19 | **done** | Both fixture lanes now contain 180 rooms. The real-geometry browser fixture is unchanged; the deterministic synthetic fallback receives one stable parity room. This retains an offline fixture fallback while removing the review-ambiguous 179/180 split (`source/pe-tools/apps/web/src/takeoff/proto/mock.ts:219`). |
+
+### Pass 5 proof
+
+- **Deterministic:** `vp test src/takeoff src/targeting src/state src/components/master-table`
+  from `apps/web` passed 5 files and 52 tests.
+- **Compile/static:** `vp check` on the six touched TypeScript/TSX paths passed formatting, lint,
+  and type checks.
+- **Browser fixture:** `/takeoffs?source=fixture` rendered 45 zones and 180 rows. Around ten
+  sequential `j` cursor switches, CDP Performance metrics reported 41.612 ms script, 306.729 ms
+  task, and 44.759 ms layout; wall time was 748 ms including browser-input transport. Ten
+  alternating row hovers reported 47.988 ms script, 323.981 ms task, and 0 ms layout. The cursor
+  script cost is 98.7% below Pass 4's 3,095.683 ms measurement.
+- **Live lane:** not run. No Revit session or live Host was needed.
+
+### Pass 5 left undone
+
+Nothing remains from G15-G19. Live Host/Revit behavior remains outside this cutover's deterministic
+and fixture-browser proof lanes.
