@@ -128,6 +128,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Tried & rejected
 
+- 2026-08-25 — `Verb.command` as the shared rail/Pea declaration is rejected: `/family`'s `build` rail verb must keep its route closure for arming, refusal, receipt validation, unknown-outcome handling, and disarming, while the route-state command remains the side-effect boundary. Executing the command from the generic runner would widen the forbidden targeting seam; carrying both `run` and `command` fails the spike's epitaph.
 - 2026-08-16 — **Base 1 (byte-identical specimen isolating token scope)** retired: it isolated the variable so well the round stopped judging a product. Verdicts on 12 abstract rows and caption prose did not transfer; every verdict that stuck came from a concrete product moment, never from the five-axis taxonomy. Raw findings survive in git history (`docs/design/DESIGN-LANG-HANDOFF.md`, deleted 2026-08-17).
 - 2026-08-16 — **a · control-plus** (round 1): beaten as its own control. Donated verb grouping + outcome colour coordination and the green proposal card as originally intended.
 - 2026-08-16 — **b · ink** (colour nearly abolished): looks good but noisier than c's axis discipline. Donated the outcome text-decoration direction (squiggly-under / italic; bold stays reserved) and the dark-mode green card.
