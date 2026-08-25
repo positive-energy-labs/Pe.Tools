@@ -276,3 +276,43 @@ Open for the sitting: does the caution `A › placeholder` closed text read as "
 glance? Should search span every remaining level (whole-path results) or stay per level?
 Flow view: promote as a projection over `terminals()` + trunks once the side rule is restated
 for trunk-vs-terminal (the old subject clause no longer exists).
+
+## Route-state cutover goal (2026-08-25, kaitpw → orchestrator, Herdr session `cutover`)
+
+Goal form. Worktree `~/source/repos/Pe.Tools-cutover-all`, branch `goal/route-cutover` from main `5a3a6a7`+docs. Evidence under `.artifacts/goal/route-cutover/`.
+
+```
+MISSION   /family, /families, /settings, /workbench (chat) run on a route store like /takeoffs (ADR 0009; A1: all
+          page state in the store), each route's agent-shared slice declared once, and every targeting-primitive
+          demand those routes raised is addressed. Never: a second writable truth beside the store, a compat shim
+          left standing, a proof claimed without its lane. parameter-links, param-tables, schedule-grid keep
+          triangulating and only inherit shared primitives.
+NUMBER    routes cut over, of 5 (/takeoffs counts once its plugin slice is declared). Beside it: component-local
+          state sites on those routes (census wave 0 → 0), shim count, LOC delta.
+EYE       a purge critic (Codex) reads every wave's diff before the verdict; one browser observation per route at
+          the end. Eye outranks number when honesty is in question.
+GATES     `vp test` on touched dirs + tsc exit 0 from apps/web; codegen unchanged; no `pnpm install`, no `vp check --fix`;
+          ledgers per `docs` (three sections, one-line entries, cross-route gaps in design-system).
+WIDTH     2–3 builders per wave, 60–90 min box; critics 20 min; alarm at 2×.
+DRY       two waves that retire nothing end it; polish is a stop.
+ABSENT    assumed rulings, each re-openable by kaitpw:
+          - /family Q1–Q8: all recommendation A (closures over route store; Dir gains duplex; family/store.ts first;
+            profile = URL truth with host→URL projection; pick writes binding; feed honesty is a precondition;
+            replace old head keeping validation chip in aside; rewrite → observe → rule ≥2-route bar).
+          - FeedState becomes ready|loading|error + declared Feed.seam; live/fixture become lane facts, not states.
+          - Immediate refusal of a second verb is LAW: runVerb stays and is extracted to state/route-store.ts with
+            hostRead and the feed projector; /family pays for the extraction.
+          - Labels: public graph nodes and actions only.
+          - Apply-arming (previewedProfile) moves to the route doc.
+          - Workspace scope, the iframe, defineCommitCommand: decided from wave-0 census, not by fiat.
+          - Out of scope: host sessionId, the diagram, takeoff geometry tuning, small nits.
+LEDGER    design-system (cross-route rulings + owed), family / takeoffs (application), host `/settings` section,
+          agent (chat). Wave verdicts land as Decided/Tried & rejected lines, never here.
+```
+
+Waves (rough; reshaped after each verdict):
+0. Census ×3 (routes' state homes · store-generic extraction · plugin door) — instrument first.
+1. Demiurge shapes for `state/route-store.ts` + store↔`RouteStateSpec` relation (one Fable apostle); ruling.
+2. Build: route-store extraction + FeedState honesty + `family/store.ts` + /family on manifest; purge critic.
+3. Build: /families, /settings stores; purge critic.
+4. Build: /workbench chat on stores + plugin door; purge critic; browser observation; ≥2-route bar ruling.

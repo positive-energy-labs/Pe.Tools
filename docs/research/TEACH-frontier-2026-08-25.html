@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>The frontier — five threads, one spine</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark-dimmed.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+body{max-width:62rem;margin:3rem auto;padding:0 1.5rem;font:16px/1.55 system-ui,sans-serif;color:#1b1f23;background:#fbfbfa}
+h1{font-size:1.7rem;margin-bottom:.2rem}h2{margin-top:3rem;border-bottom:1px solid #ddd;padding-bottom:.2rem}h3{margin-top:1.8rem}
+pre{border-radius:6px;font-size:13px;line-height:1.45;overflow:auto}code{font-family:ui-monospace,Consolas,monospace}
+p code,li code,td code{background:#eee;padding:0 .3em;border-radius:3px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.93em}td,th{border:1px solid #ddd;padding:.35em .6em;text-align:left;vertical-align:top}th{background:#f0f0ee}
+.src{font-size:.8em;color:#666;margin:-.4rem 0 .3rem}.rule{background:#fff7d6;border-left:4px solid #e0b000;padding:.6rem 1rem;margin:1rem 0}
+.doubt{background:#fde8e8;border-left:4px solid #c62828;padding:.6rem 1rem;margin:1rem 0}
+.open{background:#e8f0fd;border-left:4px solid #1e5bc6;padding:.6rem 1rem;margin:1rem 0}
+blockquote{border-left:3px solid #ccc;margin:.8rem 0;padding:.2rem 1rem}
+.dim{color:#666}
+</style></head><body>
+
+<h1>The frontier — five threads, one spine</h1>
+<p class="dim">For kaitpw, 2026-08-25. Use: rule the open decisions across chat plugin, targeting, host ops, Effect v4 style, and devtools/diagrams without re-reading three ledgers. All code is verbatim from <code>main</code> at <code>5a3a6a7</code>; paths under each block are relative to <code>source/pe-tools/apps/web/src/</code> unless said otherwise. <code>ledger:line</code> cites <code>docs/features/&lt;name&gt;/LEDGER.md</code>.</p>
+
+<h2>0. The one sentence</h2>
+<div class="rule">One canonical state per route (the route store). Chat plugin, sentence head, host wire, devtools panel and diagram are each a <b>projection</b> of declarations — never a second writable truth, never a claim the declaration did not carry.</div>
+<p>Every thread below is one projection. Every doubt-0824 finding, read closely, is the same finding five times: <em>a projection said something the declaration underneath it never said.</em> Once you see that, the frontier stops being 40 owed lines and becomes one question per thread: <b>where is the projection lying, and which declaration fixes it?</b></p>
+
+<h2>1. The map — what projects what</h2>
+<pre><code class="language-text">C# op metadata + live host catalog        ← public-contract AUTHORITY (CLAUDE.md)
+        │  pe-dev ops-catalog / host-typegen
+        ▼
+host wire (/call, /operations, route-state SSE)
+        │  hostRead / feed projector
+        ▼
+route store  (takeoff/store.ts is the only one; /family, /settings, /schedule-grid have specs but no store)   ← the one canonical state per route
+   │           │             │              │
+   ▼           ▼             ▼              ▼
+Product     panes        inspect()      RouteStateSpec doc
+manifest    (React)      (devtools,     (chat plugin: inline card, dock, sentence,
+(head)                    diagram)       Pea MCP tools)</code></pre>
+<p>Arrows only point down. Anything that writes upward through a projection — a panel that fires a Revit read, a plugin card holding its own <code>useState</code> safety gate, a head that invents <code>fresh</code> — is the bug family this whole frontier is about.</p>
+
+<h2>2. Chat plugin — the doctrine that wasn't true</h2>
+<p>What you were taught on 08-24:</p>
+<blockquote class="dim">"…route store = <code>RouteStateSpec</code> + atoms in the shared registry, keyed by <code>(route, scope)</code>; the route page, the inline card, the dock and the sentence are four panes of one store. That collapses 'make every route a plugin' into 'every route is a store; a plugin is a pane'."</blockquote>
+<p class="src">docs/research/state-arch/TEACH.html:266</p>
+<p>What is on main. The plugin wire is its own atom family keyed by a JSON string, fed by SSE, and what it reads is <em>the host's route-state document</em> — not the route's store:</p>
+<pre><code class="language-ts">const routeWireAtom = Atom.family((key: string) =&gt; {
+  const descriptor = JSON.parse(key) as WireDescriptor;
+  return Atom.make(wireStream(resolveWorkbenchConfig(), descriptor));
+});
+
+export function useRouteState&lt;TSchema extends z.ZodType&gt;(
+  spec: RouteStateSpec&lt;TSchema&gt;,
+  scope = resolveRouteWorkspaceScope(),
+): RouteStateHandle&lt;z.infer&lt;TSchema&gt;&gt; {
+  const key = JSON.stringify({ route: spec.route, stateKey: spec.key, scope } satisfies WireDescriptor);
+  const wireResult = useAtomValue(routeWireAtom(key));
+  ...
+  const apply = useCallback(
+    (patches: RouteStatePatch[]) =&gt; writeRouteState(config, spec.route, "apply", { patches }, scope), ...);</code></pre>
+<p class="src">workbench/route-state.tsx:134–156</p>
+<p>The takeoffs cutover never touched this file. <code>takeoff/store.ts</code> has no <code>RouteStateSpec</code>; nothing on <code>/takeoffs</code> or <code>/families</code> is plugin-readable. Five specs are registered (<code>packages/agent-contracts/src/{family,family-types,parameter-links,schedule-grid,settings}.ts</code>) and three chat plugins render (<code>workbench/plugins/{family,schedule-grid,settings}-chat-plugin.tsx</code>) — every one reads the host doc through this wire, none reads a route store. The three-homes ruling (2026-08-19: URL · doc · page memory) is what replaced "every route is a store", and the research docs still preach the old one.</p>
+<div class="doubt"><b>Doubt, plugins #1–2:</b> the teaching was a plausible projection of a cutover that had not happened. Owed: retract TEACH.html §8 and 08-synthesis §2 (design-system:262).</div>
+
+<h3>2a. Scope — one word, one writer, three readers</h3>
+<pre><code class="language-ts">export type RouteWorkspaceScope = { kind: "thread"; threadId: string } | { kind: "workspace" };
+
+/** Chat panes carry `thread`; route pages without it are explicitly standalone workspaces. */
+export function resolveRouteWorkspaceScope(search?: string): RouteWorkspaceScope {
+  const source = search ?? (typeof window === "undefined" ? "" : window.location.search);
+  const threadId = new URLSearchParams(source).get("thread")?.trim();
+  return threadId ? { kind: "thread", threadId } : { kind: "workspace" };
+}</code></pre>
+<p class="src">workbench/route-state.tsx:17–24</p>
+<pre><code class="language-ts">function scopedPath(path: string, threadId: string): string {
+  return `${path}?threadId=${encodeURIComponent(threadId)}`;
+}</code></pre>
+<p class="src">packages/mcps/src/pea/route-state.ts:167 — Pea can only ever write thread scope</p>
+<p>So: Pea writes thread docs only; a standalone <code>/settings</code> page writes a <em>workspace</em> doc no agent will ever read; and which one the browser reads is re-derived from <code>window.location</code> on each call. The same route, open as an inline card and as the iframe, can be reading two different documents.</p>
+<div class="open"><b>Open (design-system:265, plus "may the chat page stay an iframe", :282):</b> does workspace scope die? If every doc is thread-scoped, <code>resolveRouteWorkspaceScope</code>, the <code>scope=workspace</code> URL form and the third home collapse. If it stays, the standalone page needs a reason to exist that an agent can see.</div>
+
+<h3>2b. Apply-arming lives in the wrong home</h3>
+<pre><code class="language-ts">const [previewedProfile, setPreviewedProfile] = useState&lt;NonNullable&lt;typeof profile&gt; | null&gt;(null);
+...
+const command = async (name: "refresh" | "preview" | "apply") =&gt; {
+  const commandProfile = name === "apply" ? previewedProfile : profile;
+  if (name !== "refresh" &amp;&amp; !commandProfile) return;</code></pre>
+<p class="src">workbench/route-chat-plugins.tsx:180–189</p>
+<p>"You may only apply what you previewed" is a <b>safety gate</b>, held in component-local <code>useState</code> inside a dock that unmounts every turn. It is A1's finding one layer over: page state that must survive lives in the store/doc, not in React. Candidate home: the route doc (design-system:277).</p>
+
+<h3>2c. What is not built at all</h3>
+<p>The agent ledger's three-door surface — <code>defineRouteToolset</code> → <code>toAgentClientTools</code> / <code>MCPServer</code> / WebMCP, proposals via <code>fill_state_updated</code>, elicitation approval, SSE fan-out to a second tab — has <b>nothing in source</b> (agent ledger §Owed, "Build the three-door surface"). What exists is one door: route-state SSE + Pea's MCP tools. "Registered" is not "collaborative".</p>
+
+<h2>3. Targeting — the manifest is honest only where the store feeds it honestly</h2>
+<p>The manifest declares the feed vocabulary:</p>
+<pre><code class="language-ts">/**
+ * Where a feed's options stand right now.
+ *   live    — pushed (SSE); always current
+ *   fresh   — read on demand; matches its basis
+ *   stale   — read on demand; the basis moved (doc changed, a write landed) and no re-read yet
+ *   loading — first read in flight
+ *   error   — the read failed; `note` carries the message (an ERROR, not a seam)
+ *   fixture — seeded by a declared mock lane
+ */
+export type FeedState = "live" | "fresh" | "stale" | "loading" | "error" | "fixture";</code></pre>
+<p class="src">targeting/model.ts:52–61</p>
+<p>and two projections of it disagree with that comment:</p>
+<pre><code class="language-ts">export function seams(p: Product, feeds: Feeds): Seam[] {
+  const out: Seam[] = [];
+  for (const l of p.links) {
+    const f = feeds[l.key];
+    if (!f || f.options === null) out.push({ kind: "options", subject: l.key, needs: l.needs });
+    //  ^ loading and error also have options===null → reported as "no source of options exists"
+    else if (f.state === "fixture") out.push({ kind: "fixture", subject: l.key, needs: l.needs });
+  }
+  ...
+}
+
+export function refusal(...): string | null {
+  ...
+  const stale = v.demands.find((k) =&gt; feeds[k]?.state === "stale");
+  if (stale) return `${stale} is stale — refresh before ${v.label}`;
+  //  ^ the comment says stale = "basis moved"; the store uses it for "re-read in flight"
+  return v.refuse?.() ?? null;
+}</code></pre>
+<p class="src">targeting/model.ts:191–226</p>
+<p>Six words for one axis, and the store produces four of them in the right sense; <code>live</code> is hardcoded while <code>fixture</code> is a route lane. The pane strip is the same disease, purely visual — it computes a gate and renders it as italic grey text with a <code>title</code>; nothing is disabled:</p>
+<pre><code class="language-tsx">export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
+  return (
+    &lt;span className="flex flex-wrap items-baseline gap-x-3 gap-y-1"&gt;
+      ...
+      {product.panes.map((p) =&gt; {
+        const st = paneState(product, p, b);
+        return (
+          &lt;span key={p.key} title={st.reason} className="face-mono t-caption"
+            style={{ color: st.ok ? "var(--r-ink)" : "var(--r-ink-mute)",
+                     fontStyle: st.ok ? undefined : "italic", ... }}&gt;
+            {p.label}
+          &lt;/span&gt;</code></pre>
+<p class="src">targeting/kit.tsx:595–617 — the header's "a pane whose draws are unbound is disabled, and says why" (kit.tsx:9) is a false claim</p>
+<div class="doubt"><b>Doubt, targeting #1–4, #6:</b> the head can say <code>fresh</code>, <code>stale</code>, or "gated" on a store that never asserted it. Both B4 spikes shipped a lying feed. The fix is one declaration, not four patches: <code>FeedState = ready | loading | error</code> plus a declared <code>Feed.seam</code> (design-system:265).</div>
+<div class="open"><b>Open — the eight <code>/family</code> rulings (design-system:264), in order:</b> 1 verb wiring: in-render closures over a route store (takeoffs canon) vs a static handler map · 2 <code>Dir</code> gains <code>duplex</code> (8/12 endpoints are; the word is a label, drives nothing) · 3 build <code>family/store.ts</code> first — <code>/family</code> has no store, so A1 has nowhere to land · 4 <code>profile</code> home = URL, host→URL projection on open · 5 pick writes the binding, store derives open · 6 feed honesty is a precondition, not owed · 7 replace the old head, keep the validation chip in <code>aside</code> · 8 rewrite on the rulings, browser-observe once, rule the ≥2-route bar. Until 8, "the product is not found" stands.</div>
+
+<h2>4. Host / host-op — the same lie, one layer down</h2>
+<p>The host is the best-behaved thread and the model this page asks the web app to copy: C# op metadata is authority, 56 ops, codegen in sync, everything else a projection. Its frontier is small and concrete:</p>
+<ul>
+<li><b>Two readers of "current session" disagree.</b> <code>host.json</code>'s <code>sessionId</code> is written once on attach and never invalidated; a host that outlives its session keeps advertising a reaped id while <code>/call</code> routes to the live bridge (host:72). A service file is a projection of the bridge that claimed to be truth. Fix: clear on reap, or stamp with a generation so a stale read is <em>detectable</em>.</li>
+<li><b>Proof-lane cost.</b> <code>vp run @pe/host#test</code> is 459 s, 453 s of it one Jet smoke (host:75). A metadata change pays a 7-minute toll; that is why host work feels slow.</li>
+<li><b><code>/instances</code></b> cannot pre-empt an id clash (the stem is minted host-side) and has no text-level proof path (SSR ships zero session strings) — host:76–77.</li>
+<li><b>Specced, unbuilt:</b> queue provenance (<code>x-pe-origin</code>, <code>QueueLedger</code>), <code>GET /options/&lt;domain&gt;</code> for editor completions, <code>?session=</code> on settings schemas (host:78–79).</li>
+</ul>
+<div class="rule">Nothing here blocks the web frontier. It is listed because "which session is current" is the root of every <code>Liveness</code>/<code>basis</code> claim the targeting head makes; if the host can lie about it, the head inherits the lie.</div>
+
+<h2>5. Effect v4 — style is settled; open are two laws and ADR rot</h2>
+<p>The substrate verdict held through the cutover: one <code>AtomRegistry</code> per app (ADR 0009), a route store owns and releases its own nodes, v3 reflexes are catalogued as wrong in <code>docs/features/host/EFFECT-V4-PATTERNS.md</code>. The doubt grade was "fine, over-labelled". Two rulings decide how the next store is written:</p>
+<pre><code class="language-ts">const runVerb = async &lt;A&gt;(id: string, work: () =&gt; Promise&lt;A&gt;): Promise&lt;A&gt; =&gt; {
+  if (inFlight) {
+    const failure = { kind: "busy", verb: id, message: `${id} refused; another verb is running` } as const;
+    write(id, "failure", () =&gt; registry.set(failureAtom, failure));
+    throw Error(failure.message);
+  }
+  inFlight = true;
+  write(id, "failure", () =&gt; registry.set(failureAtom, null));
+  write(id, "busy", () =&gt; registry.set(busyAtom, { id, seconds: 0 }));
+  ...</code></pre>
+<p class="src">takeoff/store.ts:864–876 — a hand-rolled pending/failure/busy bracket; 7 callers</p>
+<div class="open"><b>Open (design-system:268):</b> is "a second verb is refused immediately" LAW? If yes, <code>runVerb</code> stays and is extracted to <code>state/route-store.ts</code> with <code>hostRead</code> and the feed projector (~200 LOC); the sub-question is whether <code>/family</code> pays now or <code>/runs</code> pays later (design-system:263). If no, <code>Atom.fn</code> owns pending and failure and the bracket dies.</div>
+<div class="open"><b>Open (design-system:271):</b> label only public graph nodes and actions, not every intermediate (55 today). Labels are the vocabulary of devtools and diagram — this ruling sizes §6.</div>
+<div class="doubt"><b>Doubt, plugins #4–5:</b> ADR 0001 has 4/6 decisions naming deleted files or n=2 laws; ADR 0009's Suspense rationale is fixed upstream (effect-atom #6672). An ADR citing a file that no longer exists is testimony (design-system:272).</div>
+
+<h2>6. Devtools / inspection / diagrams — an observation surface that touches what it observes</h2>
+<pre><code class="language-ts">inspect() {
+  return {
+    ...inspector.snapshot(),
+    url: registry.get(searchAtom),
+    persisted: { recentDirs: registry.get(recentDirsAtom) },
+    page: { atlas: registry.get(atlasPageAtom), table: registry.get(atlasTableStateAtom),
+            visibleRows: registry.get(visibleRowsAtom), hover: currentHover, staged: [...stagedIds], ... },
+    feeds: Object.fromEntries(Object.entries(feeds).map(([key, atom]) =&gt; [key, registry.get(atom)])),</code></pre>
+<p class="src">takeoff/store.ts:1328–1345</p>
+<p>Three things in eleven lines. <code>registry.get(feedAtom)</code> on an unread feed <em>materializes</em> it — inspecting can fire a Revit read. <code>hover: currentHover</code> is a closure variable, not an atom, so the census mirrors a value the graph doesn't own. And this snapshot is already the honest shape that the 187-line panel re-derives by scanning the registry:</p>
+<pre><code class="language-tsx">if (!visible) return;
+setSnapshot(inspector.snapshot());
+const unsubscribe = inspector.subscribe(() =&gt; setSnapshot(inspector.snapshot()));
+if (import.meta.env.DEV) Object.assign(globalThis, { __PE_ATOMS__: inspector });
+return () =&gt; { unsubscribe(); if (!store) inspector.dispose();
+  if ((globalThis as { __PE_ATOMS__?: unknown }).__PE_ATOMS__ === inspector)
+    Reflect.deleteProperty(globalThis, "__PE_ATOMS__"); };</code></pre>
+<p class="src">integrations/atoms/devtools.tsx:56–65 — <code>__PE_ATOMS__</code> exists only while the panel is open; an agent cannot rely on it</p>
+<div class="doubt"><b>Doubt, devtools #4–8, #11–12:</b> the "600 ms per hover row" that justified the visibility gate was never measured (synthetic scan: 0.8 ms; the likelier cause was the hidden table's re-render, so the gate fixes it for the wrong stated reason). The "deterministic snapshots" test compares an unchanged map to itself. An observation surface that lies is worse than none.</div>
+<div class="open"><b>Open (design-system:269–270):</b> (a) one <code>inspect()</code> (~50 LOC; never <code>registry.get</code> on a feed; <code>currentHover</code> as an atom) replaces panel + collector (−395 claimed). (b) The diagram's fate: <code>13-diagram-gen.md</code> proved a byte-identical <em>architecture</em> graph (70 nodes) from <code>Product</code> + host declarations + <code>registry.getNodes()</code>, but not a UI diagram — visual↔state (color, dot, badge, cell value) still lives in JSX ternaries. Promote it as a drift-review tool (44-node manifest render, drop the 26 runtime registry nodes), or park it as user docs, which is blocked on declaring <b>Marks</b> (<code>15-ui-diagram-idea.md</code> §2) and a canonical <code>stateNode</code> key.</div>
+
+<h2>7. Why every doubt is the same doubt</h2>
+<table>
+<tr><th>Thread</th><th>The projection</th><th>What it claimed</th><th>What the declaration actually held</th></tr>
+<tr><td>Chat plugin</td><td>TEACH.html §8; the iframe card</td><td>every route is a store; a plugin is a pane</td><td>five specs, three plugins, zero route stores behind them; the wire reads a host doc; scope from <code>window.location</code></td></tr>
+<tr><td>Targeting</td><td><code>TargetingHead</code>, <code>PaneStrip</code>, the spikes' feeds</td><td><code>fresh</code>, <code>stale</code>, "pane disabled"</td><td><code>options===null</code>; a <code>title</code> attribute; a static fixture</td></tr>
+<tr><td>Host</td><td><code>host.json</code></td><td>"the current session is X"</td><td>X was reaped; the bridge knows, the file doesn't</td></tr>
+<tr><td>Effect</td><td>ADR 0001 / 0009</td><td>"we decided this, for this reason"</td><td>files deleted; upstream fixed the reason</td></tr>
+<tr><td>Devtools</td><td>panel, <code>inspect()</code>, snapshot test</td><td>"observes without touching; deterministic; 600 ms"</td><td>fires reads; compares a map to itself; unmeasured</td></tr>
+</table>
+<p>The cure is never "fix the projection". It is: make the declaration carry the fact — a <code>FeedState</code> that means what it says, a session generation, a labelled atom, a Mark — then let every projection be dumb.</p>
+
+<h2>8. Dependency order — why the eight rulings go first</h2>
+<pre><code class="language-text">FeedState honest (§3) ──► /family on manifest (§3 Q1–Q8) ──► ≥2-route bar ──► manifest registered with plugin (§2)
+        │                                                                                ▲
+        └──► inspect() side-effect-free (§6a) ──► diagram as drift tool (§6b)            │
+host session truth (§4) ─────────────────────────────────────────────────────────────────┘
+effect: runVerb LAW? · route-store extraction · label policy · ADR hygiene (§5)  — cross-cutting; gates nothing yet</code></pre>
+<p>Read it as: the plugin reads only what a store declares; a store declares only what the host tells it honestly; a devtool shows only what the store declares, without touching it. The eight <code>/family</code> rulings are the cheapest gate on the longest chain. "Litigate only as needed" means a doubt line is spent by one of three things — a persisted ruling, a stamped proof, or a deletion — and two dry rounds on a thread end it.</p>
+
+<h2>9. Apply it (transfer check)</h2>
+<p><code>/instances</code> wants a timestamped, attributed ledger rail. It is blocked on "outcomes are orphans": <code>OutcomeLine</code> carries no verb, actor, time, target (design-system:162). Using §7's table: which thread is that, is it a <em>declaration</em> gap or a <em>projection</em> gap, and what is the one declaration that would let <code>/instances</code>, <code>/workbench</code>'s owed-approval count and <code>/schedule-grid</code>'s failure attribution all become dumb projections? Answer that; then rule Q1–Q8.</p>
+
+<h2>Links</h2>
+<ul>
+<li><code>docs/features/design-system/LEDGER.md</code> §"Chat-plugin readiness" (~254–281) — the doubt-0824 owed lines this page walks</li>
+<li><code>docs/features/host/LEDGER.md</code> §Owed; <code>docs/features/agent/LEDGER.md</code> §"Collaborative UI" and §Owed</li>
+<li><code>.artifacts/spikes/targeting-family-judge.md</code> — the eight rulings with both spikes' evidence</li>
+<li><code>docs/research/state-arch/TEACH.html</code> (§8 to be retracted), <code>12-devtools.md</code>, <code>13-diagram-gen.md</code>, <code>15-ui-diagram-idea.md</code></li>
+<li><code>docs/features/host/EFFECT-V4-PATTERNS.md</code>; ADR 0001, 0009</li>
+</ul>
+<script>hljs.highlightAll()</script>
+</body></html>
