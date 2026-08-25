@@ -21,8 +21,6 @@
  * that chose the lane would be able to contradict the page's own state; `?variant`, because there
  * is nothing to switch to.
  */
-import { useEffect, useRef } from "react";
-import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { createLiveFamilyHost } from "#/family/host";
@@ -90,48 +88,10 @@ function FamilyStoreOwner({
       host: createLiveFamilyHost(scope),
       search: {
         target,
+        profile,
         patch: (patch) => void navigate({ search: (previous) => ({ ...previous, ...patch }) }),
       },
     });
   });
-  const snapshot = useAtomValue(store.atoms.snapshot);
-  const openProfile = snapshot?.documentId.relativePath ?? "";
-  const successfulOpen = useRef<{ requested: string; before: string } | null>(null);
-  useEffect(() => {
-    const before = store.registry.get(store.atoms.snapshot)?.documentId.relativePath ?? "";
-    if (!profile || before === profile) {
-      successfulOpen.current = null;
-      return;
-    }
-    successfulOpen.current = null;
-    let current = true;
-    void store.actions
-      .open(profile)
-      .then(() => {
-        if (!current) return;
-        successfulOpen.current = { requested: profile, before };
-        const opened = store.registry.get(store.atoms.snapshot)?.documentId.relativePath;
-        if (opened && opened !== before && opened !== profile) {
-          successfulOpen.current = null;
-          void navigate({ search: (previous) => ({ ...previous, profile: opened }) });
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, [navigate, profile, store]);
-  useEffect(() => {
-    const opened = successfulOpen.current;
-    if (
-      !openProfile ||
-      opened?.requested !== profile ||
-      openProfile === opened.before ||
-      openProfile === profile
-    )
-      return;
-    successfulOpen.current = null;
-    void navigate({ search: (previous) => ({ ...previous, profile: openProfile }) });
-  }, [navigate, openProfile, profile]);
   return <FamilyWorkspace store={store} requestedFamily={family} />;
 }

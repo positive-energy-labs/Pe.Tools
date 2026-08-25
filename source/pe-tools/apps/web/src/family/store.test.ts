@@ -4,7 +4,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import type { RouteStateWriteResult } from "@pe/agent-contracts";
 
-import type { FamilyHost } from "#/family/host";
+import { FAMILY_MODULE, type FamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
 
 const MODEL = {
@@ -40,7 +40,7 @@ const fixture = () => {
   };
   return { host, calls };
 };
-const make = (testFixture = fixture()) => {
+const make = (testFixture = fixture(), profile = "") => {
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
   const settingsSlice = Atom.make(AsyncResult.success(slice(settings())));
   const familySlice = Atom.make(AsyncResult.success(slice(family)));
@@ -49,12 +49,21 @@ const make = (testFixture = fixture()) => {
     registry,
     settingsSlice,
     calls: testFixture.calls,
-    store: createFamilyStore({ registry, scope: { threadId: "thread-1" }, host: testFixture.host, search: { target: "session:test", patch() {} }, slices: { settings: settingsSlice, family: familySlice } }),
+    store: createFamilyStore({ registry, scope: { threadId: "thread-1" }, host: testFixture.host, search: { target: "session:test", profile, patch() {} }, slices: { settings: settingsSlice, family: familySlice } }),
   };
 };
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("family route store", () => {
+  it("opens a direct URL profile once on mount without a verb failure", async () => {
+    const { registry, store, calls } = make(fixture(), "pe-vav-test.json");
+    await tick();
+    expect(registry.get(store.atoms.failure)).toBeNull();
+    expect(calls.filter(({ op }) => op === "settings.open")).toEqual([
+      { op: "settings.open", input: { documentId: { ...FAMILY_MODULE, relativePath: "pe-vav-test.json" } } },
+    ]);
+  });
+
   it("does not reseed draft for a second slice snapshot with the same version token", () => {
     const { registry, settingsSlice, store } = make();
     store.actions.setDraft((draft) => ({ ...draft, authored: { ...draft.authored, Width: "30in" }, dirty: true }));

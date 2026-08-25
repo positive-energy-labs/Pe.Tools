@@ -14,7 +14,7 @@ import { mintSelector, sessionLabel } from "#/host/target";
 import { createRouteStoreCore, docAtom, feed, hostRead, type Scope, type Slice } from "#/state/route-store";
 import type { Verb } from "#/targeting/model";
 
-export interface SearchPort { readonly target: string; patch(partial: { target?: string }): void }
+export interface SearchPort { readonly target: string; readonly profile: string; patch(partial: { target?: string }): void }
 type Setter<A> = A | ((previous: A) => A);
 type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
 type Binding = { slug: string; property: string } | null;
@@ -133,6 +133,8 @@ export function createFamilyStore(deps: { registry: AtomRegistry.AtomRegistry; s
     if (receipt == null) return BUILD_OUTCOME_UNKNOWN;
     write("build", "page/armed", () => registry.set(armedBuild, null)); return `built ${receipt.rfaPath}`;
   } };
+  if (deps.search.profile && registry.get(snapshot)?.documentId.relativePath !== deps.search.profile)
+    void write("system", "open", () => writer.command("open", { documentId: { ...FAMILY_MODULE, relativePath: deps.search.profile } })).catch(() => undefined);
   const commandVerb = (name: CommandName, input: () => unknown = () => undefined): Pick<Verb, "run" | "refuse"> => ({
     run: () => core.runVerb(name, () => writer.command(name, input()), keys[name]),
     ...(name === "build" ? { refuse: buildRefusal } : {}),
