@@ -281,7 +281,7 @@ for trunk-vs-terminal (the old subject clause no longer exists).
 
 Goal form. Worktree `~/source/repos/Pe.Tools-cutover-all`, branch `goal/route-cutover` from main `5a3a6a7`+docs. Evidence under `.artifacts/goal/route-cutover/`.
 
-Status 2026-08-25 ~13:00 (resumed after the 03:55 session loss): NUMBER 5/5 routes on route stores (`/takeoffs` slice declared, `/family`, `/families`, `/settings`, `/chat` in-realm panes); shim count 0 (no-scope fallback, iframe, `writeRouteState`, `readRouteState`, workspace scope all deleted); big ideas I1–I7 ruled in `.artifacts/goal/route-cutover/IDEAS.md`, friction in `FRICTION.md`. Waves 5–9 each had a fresh-eyes purge critic; two builder verdicts were overturned by critics (S-A producer, S-B closure claim). Remaining: W9-B/W9-C fixes, whole-branch critic, PR.
+Status 2026-08-25 ~13:00 (resumed after the 03:55 session loss): NUMBER 5/5 routes on route stores (`/takeoffs` slice declared, `/family`, `/families`, `/settings`, `/chat` in-realm panes); route-file `useState|useRef|useReducer` residue 0; shim count 0 (no-scope fallback, iframe, `writeRouteState`, `readRouteState`, workspace scope all deleted); big ideas I1–I7 ruled in `.artifacts/goal/route-cutover/IDEAS.md`, friction in `FRICTION.md`. Waves 5–9 each had a fresh-eyes purge critic; two builder verdicts were overturned by critics (S-A producer, S-B closure claim). Remaining: final re-critique and PR.
 
 ```
 MISSION   /family, /families, /settings, /workbench (chat) run on a route store like /takeoffs (ADR 0009; A1: all

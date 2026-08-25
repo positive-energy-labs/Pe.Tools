@@ -82,7 +82,8 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 
 ## Owed
 
-- `armedBuild` and `buildSaid` are page atoms; ruled home is the doc (C1). Move them into `familyRouteState` (schema + `build_evidence` handler) so the unknown-outcome latch survives navigation.
+- 2026-08-25 — `armedBuild` is a page atom; ruled home is the doc (C1). Move it into `familyRouteState` (schema + `build_evidence` handler) so the unknown-outcome latch survives navigation.
+- 2026-08-25 — `page/binding` remains component-written (`family/workspace.tsx:240-254`); move the write behind a store action when the binding flow is next changed.
 
 - A home for the review VERDICT tuple (family, type, run) — a human fact nothing in the repo can hold; parked 2026-08-19 until runs are cheap to produce from the UI.
 
