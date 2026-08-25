@@ -2,6 +2,9 @@
 
 ## Decided
 
+- 2026-08-25 — `rvt` is a real trunk picker: `feed/rvt` lists the active document then `GET /docs/recents` (year-filtered); a pick of another title runs `POST /docs/open` with `id: sdkSessionId` and `conflictPolicy: "keep"` for cloud rows; observed custody refuses before the call; the URL never stores the document. PROVEN[browser, worktree host 5180, `pe.app-25`, afa762c]: pick `…R25_staging` → `doc current` = that title; pick `w4a-x` (file gone) → honest `doc.no-match` failure, no receipt.
+- 2026-08-25 — `view` → `views` (`multi`, csv URL): candidates read once per bound view and tagged `view`, adopt runs one host call per view (`n regions across m views`), `capture level` walks every bound lane, the plan pane draws the first bound view. PROVEN[browser, ProjectA_Clone_Aug_11 cloud on `pe.app-25`, a15fb36+25e918b]: two `Mechanical Zoning Plan` views bound, adopt panel lists their regions grouped by view.
+- 2026-08-25 — Cloud `doc open` needs a bridge deployed by CLI ≥ beta.128 (`Pe.Revit.Bridge` ships inside `Pe.Revit.Cli`, copied on `session start`/`restart`; not in `Pe.Revit.Loader` nor the product payload). A Revit launched before the CLI bump keeps the old bridge and answers `doc.bad-body`; `session restart` is the remedy, never a companion bump.
 - 2026-08-25 — `takeoffsRouteState` owns `binding`, `snapshot`, and `staged`; `/takeoffs` reads `slice/takeoffs` by `thread`, writes staged proposals with `docWriter.apply`, and keeps hover, sort, cursor, panes, pickers, `AdoptDraft`, and `SyncPlan` in page memory.
 
 - 2026-08-25 — `takeoff/store.ts` runs on the kit; `BINDINGS`, `actions.pick`, `store.inspect()` deleted (test-only); `currentHover` is `page/hover`. PROVEN[deterministic, worktree, 83cc2c1]: 53/53, tsc 0.
@@ -201,6 +204,9 @@
 
 ## Owed
 
+- `feed/views` lists every plan view (Power, Plumbing, Roof…) although the link promises "plan views with filled regions"; filter in `TakeoffAtlas.Views` by filled-region presence, or sort zoning plans first.
+- `doc recents` lists files that no longer exist (`w4a-x.rvt`); the picker shows them and the open fails honestly. Either the SDK prunes on read or the feed marks `sub: "missing"` from a host stat.
+- `doc open <cld://…>` literal paths are treated as local (SDK gap, filed in Pe.Revit.Sdk `docs/context/NEXT.md`); the picker sends `path` only because `recent:` resolution is CLI-side.
 - Wall-rail unification is hypothesis H1 for the tuning loop: the room boundary does not land on the wall rail, so the leftover band becomes thin Excluded residue where it stops short and a protrusion where it reaches in. Tier-1 `doubleLine` is 27.83% of accepted boundary at P2 and rose from 11.14% (P0) through 25.42% (P1) — the one measure that regressed across the tuning wave, and the defect kaitpw flagged on 6 of 10 annotation cards.
 - Delete the `bridgeFill` compile bridge in `source/pe-tools/apps/web/src/runs/palette.ts`. Law v1.3 sets `fill: null` for `void` and `excluded`; the viewer still paints a solid. Consumers to migrate: `browser.tsx` (ZonePanel, plan dock, legend) and `feedback/composite.ts`.
 - Lower Level reaches only 18.25 px/ft against Revit's 15000-pixel long-edge cap, below the 24 px/ft target the other three levels meet. Split the level export or accept the gap; a 4 in wall spans 6.08 px there against 8 px elsewhere.
