@@ -65,8 +65,8 @@ export interface MasterTableProps<Row extends RowData> {
   onRowHover?: (row: Row | null) => void;
   /** Highlighted row, if the route tracks a cursor. Kept scrolled into view. */
   activeKey?: string | null;
-  /** Visible row order after filter, sort, and search. */
-  onVisibleChange?: (keys: string[]) => void;
+  /** Route-owned visible row order after filter, sort, and search. */
+  visibleKeys?: readonly string[];
   /** Supply this with onTableStateChange when a route or agent owns table state. */
   tableState?: MasterTableState;
   onTableStateChange?: (state: MasterTableState) => void;
@@ -151,7 +151,7 @@ export function MasterTable<Row extends RowData>({
   rowClassName,
   onRowHover,
   activeKey,
-  onVisibleChange,
+  visibleKeys,
   tableState,
   onTableStateChange,
   gutter,
@@ -234,19 +234,18 @@ export function MasterTable<Row extends RowData>({
     }),
   );
 
-  const visibleRows = table.getRowModel().rows;
+  const tableRows =
+    visibleKeys === undefined ? table.getRowModel().rows : table.getCoreRowModel().rows;
+  const visibleRows = useMemo(() => {
+    if (visibleKeys === undefined) return tableRows;
+    const byId = new Map(tableRows.map((row) => [row.id, row]));
+    return visibleKeys.map((key) => byId.get(key)).filter((row) => row !== undefined);
+  }, [tableRows, visibleKeys]);
   const cellsFor = (row: (typeof visibleRows)[number]) => [
     ...row.getStartVisibleCells(),
     ...row.getCenterVisibleCells(),
     ...row.getEndVisibleCells(),
   ];
-  const visibleKeys = useMemo(() => visibleRows.map((row) => row.id), [visibleRows]);
-  const onVisibleChangeRef = useRef(onVisibleChange);
-  onVisibleChangeRef.current = onVisibleChange;
-  useEffect(() => {
-    onVisibleChangeRef.current?.(visibleKeys);
-  }, [visibleKeys]);
-
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
   useEffect(() => {
     activeRowRef.current?.scrollIntoView({ block: "nearest" });

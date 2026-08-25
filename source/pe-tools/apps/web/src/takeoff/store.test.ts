@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 import {
   createFixtureTakeoffHost,
@@ -34,6 +35,20 @@ const searchPort = () => {
 };
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+const registries: AtomRegistry.AtomRegistry[] = [];
+afterEach(() => {
+  for (const registry of registries.splice(0)) registry.dispose();
+});
+
+const createStore = (deps: Omit<Parameters<typeof createTakeoffStore>[0], "registry">) => {
+  const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+  registries.push(registry);
+  return createTakeoffStore({
+    ...deps,
+    registry,
+  });
+};
 
 function harness() {
   const events = new Set<(event: SessionEvent) => void>();
@@ -140,7 +155,7 @@ describe("takeoff route store", () => {
   it("clears every declared descendant when a trunk is re-picked", () => {
     const h = harness();
     const search = searchPort();
-    const store = createTakeoffStore({ host: h.host, sessions: h.sessions, search: search.port });
+    const store = createStore({ host: h.host, sessions: h.sessions, search: search.port });
     store.actions.setSearch(bound);
 
     store.actions.pick("world", "session:other");
@@ -157,7 +172,7 @@ describe("takeoff route store", () => {
 
   it("swaps the whole capability root for the project-a fixture", async () => {
     const search = searchPort();
-    const store = createTakeoffStore({
+    const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
       search: search.port,
@@ -172,7 +187,7 @@ describe("takeoff route store", () => {
   });
 
   it("keeps Atlas page state and per-room decisions on the registry", async () => {
-    const store = createTakeoffStore({
+    const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
       search: searchPort().port,
@@ -217,8 +232,50 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("derives visible room order from table sort and filter state", async () => {
+    const store = createStore({
+      host: createFixtureTakeoffHost(),
+      sessions: createFixtureSessionSource(),
+      search: searchPort().port,
+    });
+    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    await store.actions.settle(store.atoms.snapshot);
+
+    store.actions.setSort([{ key: "name", dir: "desc" }]);
+    const sorted = store.atoms.registry.get(store.atoms.visibleRows);
+    store.actions.setTableState({
+      filters: { type: "bedroom" },
+      sorts: [{ key: "name", dir: "asc" }],
+      query: "",
+    });
+    const filtered = store.atoms.registry.get(store.atoms.visibleRows);
+
+    expect(sorted.slice(0, 3)).toEqual([
+      "7a4e-room-2cb7863f-0005",
+      "7a4e-room-2eb78965-0000",
+      "7a4e-room-2eb78965-0002",
+    ]);
+    expect(filtered).toEqual([
+      "7a4e-room-2bb784ac-0000",
+      "7a4e-room-179f7d80-0000",
+      "7a4e-room-189d407c-0000",
+      "7a4e-room-2bb784ac-0001",
+      "7a4e-room-179f7d80-0001",
+      "7a4e-room-189d407c-0001",
+      "7a4e-room-2bb784ac-0002",
+      "7a4e-room-179f7d80-0002",
+      "7a4e-room-189d407c-0002",
+      "7a4e-room-2bb784ac-0003",
+      "7a4e-room-179f7d80-0003",
+      "7a4e-room-179f7d80-0004",
+      "7a4e-room-179f7d80-0005",
+    ]);
+    store.dispose();
+    expect(store.atoms.registry.get(store.atoms.visibleRows)).toEqual(filtered);
+  });
+
   it("does not invent a conflict from nested Manual J base fields", async () => {
-    const store = createTakeoffStore({
+    const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
       search: searchPort().port,
@@ -241,7 +298,7 @@ describe("takeoff route store", () => {
 
   it("keeps the prior snapshot stale after adopt, then re-reads it", async () => {
     const h = harness();
-    const store = createTakeoffStore({
+    const store = createStore({
       host: h.host,
       sessions: h.sessions,
       search: searchPort().port,
@@ -268,7 +325,7 @@ describe("takeoff route store", () => {
 
   it("brackets capture and publishes its replay through the store world", async () => {
     const h = harness();
-    const store = createTakeoffStore({
+    const store = createStore({
       host: h.host,
       sessions: h.sessions,
       search: searchPort().port,
@@ -292,7 +349,7 @@ describe("takeoff route store", () => {
   it("projects a snapshot failure into every snapshot-backed feed", async () => {
     const h = harness();
     h.fail();
-    const store = createTakeoffStore({
+    const store = createStore({
       host: h.host,
       sessions: h.sessions,
       search: searchPort().port,
@@ -311,7 +368,7 @@ describe("takeoff route store", () => {
 
   it("cascades one pushed document invalidation through doc and snapshot only", async () => {
     const h = harness();
-    const store = createTakeoffStore({
+    const store = createStore({
       host: h.host,
       sessions: h.sessions,
       search: searchPort().port,
@@ -337,7 +394,7 @@ describe("takeoff route store", () => {
   it("joins the opened .r10 into a live authority world", async () => {
     const h = harness();
     h.live();
-    const store = createTakeoffStore({
+    const store = createStore({
       host: h.host,
       sessions: h.sessions,
       search: searchPort().port,
@@ -354,7 +411,7 @@ describe("takeoff route store", () => {
   });
 
   it("adopts the selected view through the fixture host", async () => {
-    const store = createTakeoffStore({
+    const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
       search: searchPort().port,

@@ -4,6 +4,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 
+import type { MasterTableState } from "#/components/master-table/model";
 import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
 import { inspectAtomRegistry, type InspectableAtomStore } from "#/state/atom-inspect";
 import type { AdoptItem } from "#/takeoff/scripts";
@@ -22,6 +23,7 @@ import {
   buildLiveWorld,
   emptyOverlay,
   readZoneMeta,
+  STAGE_ORDER,
   type RoomEdit,
   type World,
   type WorldLane,
@@ -154,7 +156,29 @@ export interface AtlasPageState {
   readonly zoneKey: string | null;
   readonly cursor: string | null;
   readonly fieldsMode: "columns" | "panel";
-  readonly visibleKeys: readonly string[];
+}
+
+export type AtlasRoomState = "call" | "unreviewed" | "data" | "synced";
+
+export const ATLAS_ROOM_STATES: readonly AtlasRoomState[] = [
+  "call",
+  "unreviewed",
+  "data",
+  "synced",
+];
+
+export const ATLAS_ROOM_STATE_LABEL: Record<AtlasRoomState, string> = {
+  call: "needs a call",
+  unreviewed: "no Manual J",
+  data: "data entered",
+  synced: "in .r10",
+};
+
+export interface AtlasRow {
+  readonly zone: WorldZone;
+  readonly room: WorldRoom;
+  readonly state: AtlasRoomState;
+  readonly open: readonly string[];
 }
 
 export interface AdoptDraft {
@@ -289,12 +313,64 @@ export function resultFeed<A>(
   };
 }
 
+export function atlasRoomState(room: WorldRoom, open: number): AtlasRoomState {
+  if (open > 0 || (room.r10 && room.r10.lastSyncedSqft !== room.sqft)) return "call";
+  if (room.r10) return "synced";
+  if (room.data) return "data";
+  return "unreviewed";
+}
+
+const atlasFacet = (row: AtlasRow, key: string): string | undefined => {
+  if (key === "stage") return row.zone.stage;
+  if (key === "state") return ATLAS_ROOM_STATE_LABEL[row.state];
+  if (key === "type") return row.room.type;
+  if (key === "r10")
+    return !row.room.r10
+      ? "not exported"
+      : row.room.r10.lastSyncedSqft === row.room.sqft
+        ? "clean"
+        : "drift";
+  return undefined;
+};
+
+const atlasSortValue = (
+  row: AtlasRow,
+  key: string,
+  fieldsMode: AtlasPageState["fieldsMode"],
+): string | number | undefined => {
+  if (key === "stage") return STAGE_ORDER.indexOf(row.zone.stage);
+  if (key === "state") return ATLAS_ROOM_STATES.indexOf(row.state);
+  if (key === "zone") return row.zone.zone.key;
+  if (key === "name") return row.room.name;
+  if (key === "type") return row.room.type;
+  if (key === "sqft") return row.room.sqft;
+  if (key === "flags") return row.open.length;
+  if (key === "r10") return atlasFacet(row, key) === "drift" ? 0 : row.room.r10 ? 6 : 5;
+  if (fieldsMode === "panel") return undefined;
+  if (key === "ceil") return row.room.ceilingFt;
+  if (key === "people") return row.room.data?.people ?? 0;
+  if (key === "lightingW") return row.room.data?.lightingW ?? 0;
+  if (key === "equipSensible") return row.room.data?.equipSensible ?? 0;
+  if (key === "equipLatent") return row.room.data?.equipLatent ?? 0;
+  if (key === "ventilationCfm") return row.room.data?.ventilationCfm ?? 0;
+  return undefined;
+};
+
+const compare = (a: string | number | undefined, b: string | number | undefined): number => {
+  if (a === b) return 0;
+  if (a === undefined) return -1;
+  if (b === undefined) return 1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a) < String(b) ? -1 : 1;
+};
+
 export function createTakeoffStore(deps: {
   host: TakeoffHost;
   sessions: SessionSource;
   search: SearchPort;
+  registry: AtomRegistry.AtomRegistry;
 }) {
-  const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+  const registry = deps.registry;
   const inspector = inspectAtomRegistry(registry);
   const write = <A>(verb: string, key: string, run: () => A): A => {
     inspector.note({ verb, key });
@@ -367,8 +443,12 @@ export function createTakeoffStore(deps: {
     zoneKey: null,
     cursor: null,
     fieldsMode: "columns",
-    visibleKeys: [],
   }).pipe(Atom.withLabel("takeoffs/page/atlas"));
+  const atlasTableStateAtom = Atom.make<MasterTableState>({
+    filters: {},
+    sorts: [],
+    query: "",
+  }).pipe(Atom.withLabel("takeoffs/page/atlas-table"));
   const replaysAtom = Atom.make<Readonly<Record<string, string>>>({}).pipe(
     Atom.withLabel("takeoffs/page/replays"),
   );
@@ -622,6 +702,56 @@ export function createTakeoffStore(deps: {
       ),
     ),
   ).pipe(Atom.withLabel("takeoffs/page/decisions"));
+  const atlasRowsAtom = Atom.make((get): readonly AtlasRow[] => {
+    const page = get(atlasPageAtom);
+    const decisions = get(decisionsAtom);
+    const world = get(worldAtom);
+    const selected = page.zoneKey
+      ? world.zones.find((zone) => zone.zone.key === page.zoneKey)
+      : undefined;
+    const zones = selected
+      ? [selected]
+      : world.zones.filter((zone) => page.stageFilter === null || zone.stage === page.stageFilter);
+    return zones.flatMap((zone) =>
+      zone.rooms.map((room) => {
+        const open = room.flags.filter((flag) => decisions[`${room.guid}::${flag}`] === undefined);
+        return { zone, room, open, state: atlasRoomState(room, open.length) };
+      }),
+    );
+  }).pipe(Atom.withLabel("takeoffs/page/atlas-rows"));
+  const visibleRowsAtom = Atom.make((get): readonly string[] => {
+    const page = get(atlasPageAtom);
+    const state = get(atlasTableStateAtom);
+    const query = state.query.trim().toLowerCase();
+    return get(atlasRowsAtom)
+      .filter(
+        (row) =>
+          (!query ||
+            [row.zone.zone.key, row.room.name, row.room.type].some((value) =>
+              value.toLowerCase().includes(query),
+            )) &&
+          Object.entries(state.filters).every(([key, value]) =>
+            key === "flags"
+              ? value === "any"
+                ? row.open.length > 0
+                : value === "none"
+                  ? row.open.length === 0
+                  : row.open.includes(value)
+              : atlasFacet(row, key) === value,
+          ),
+      )
+      .sort((left, right) => {
+        for (const sort of state.sorts) {
+          const order = compare(
+            atlasSortValue(left, sort.key, page.fieldsMode),
+            atlasSortValue(right, sort.key, page.fieldsMode),
+          );
+          if (order !== 0) return sort.dir === "desc" ? -order : order;
+        }
+        return 0;
+      })
+      .map((row) => row.room.guid);
+  }).pipe(Atom.withLabel("takeoffs/page/atlas-visible-rows"));
   const syncPlanAtom = Atom.make((get): SyncPlan => {
     const selected = new Set(get(zonesAtom));
     const inScope = get(worldAtom).zones.filter(
@@ -916,6 +1046,14 @@ export function createTakeoffStore(deps: {
         registry.update(atlasPageAtom, (page) => ({ ...page, ...patch })),
       );
     },
+    setSort(sorts: MasterTableState["sorts"]) {
+      write("set-sort", "page/atlas-table/sorts", () =>
+        registry.update(atlasTableStateAtom, (state) => ({ ...state, sorts })),
+      );
+    },
+    setTableState(state: MasterTableState) {
+      write("set-table-state", "page/atlas-table", () => registry.set(atlasTableStateAtom, state));
+    },
     openPanel(panel: "adopt" | "sync" | null) {
       write("open-panel", "page/panel", () => registry.set(panelAtom, panel));
     },
@@ -1068,6 +1206,9 @@ export function createTakeoffStore(deps: {
       stage: stageAtom,
       world: worldAtom,
       atlasPage: atlasPageAtom,
+      atlasTableState: atlasTableStateAtom,
+      atlasRows: atlasRowsAtom,
+      visibleRows: visibleRowsAtom,
       decisions: decisionsAtom,
       panel: panelAtom,
       syncPlan: syncPlanAtom,
@@ -1091,6 +1232,9 @@ export function createTakeoffStore(deps: {
         url: registry.get(searchAtom),
         persisted: { recentDirs: registry.get(recentDirsAtom) },
         page: {
+          atlas: registry.get(atlasPageAtom),
+          table: registry.get(atlasTableStateAtom),
+          visibleRows: registry.get(visibleRowsAtom),
           hover: currentHover,
           staged: [...stagedIds],
           busy: registry.get(busyAtom),
@@ -1111,7 +1255,6 @@ export function createTakeoffStore(deps: {
       unsubscribe();
       if (busyTimer) clearInterval(busyTimer);
       inspector.dispose();
-      registry.dispose();
     },
   };
   return store satisfies InspectableAtomStore;

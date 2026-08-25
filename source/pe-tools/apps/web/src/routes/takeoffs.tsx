@@ -18,7 +18,7 @@
  * fallback: a live read that fails shows its error, it does not quietly become a fixture.
  */
 import { useEffect, useMemo, useRef } from "react";
-import { RegistryContext, useAtomValue } from "@effect/atom-react";
+import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
@@ -28,6 +28,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
 import { mintSelector, resolveTarget } from "#/host/target";
+import { appAtomRegistry } from "#/state/registry";
 import { fmtNum } from "#/components/master-table/model";
 import { Atlas } from "#/takeoff/atlas";
 import { createHostSessionSource, createLiveTakeoffHost } from "#/takeoff/host";
@@ -115,6 +116,7 @@ function TakeoffsStoreOwner({ source }: { source: Search["source"] }) {
             }),
           }),
       },
+      registry: appAtomRegistry,
     });
     for (const dir of readDirs().reverse()) storeRef.current.actions.rememberDir(dir);
   }
@@ -128,11 +130,7 @@ function TakeoffsStoreOwner({ source }: { source: Search["source"] }) {
     };
   }, [store]);
   useEffect(() => store.actions.setSearch(search), [search, store]);
-  return (
-    <RegistryContext.Provider value={store.atoms.registry}>
-      <TakeoffsPage store={store} />
-    </RegistryContext.Provider>
-  );
+  return <TakeoffsPage store={store} />;
 }
 
 function TakeoffsPage({ store }: { store: TakeoffStore }) {

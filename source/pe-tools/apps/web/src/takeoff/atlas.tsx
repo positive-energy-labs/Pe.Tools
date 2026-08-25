@@ -39,7 +39,14 @@ import { Pane, PaneSplit, PaneWorkspace } from "#/components/ui/pane";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { FLAG_MEANING, loopBounds, pathD } from "#/takeoff/model";
-import type { TakeoffStore } from "#/takeoff/store";
+import {
+  ATLAS_ROOM_STATES as ROOM_STATES,
+  ATLAS_ROOM_STATE_LABEL,
+  atlasRoomState,
+  type AtlasRoomState as RoomState,
+  type AtlasRow as Row,
+  type TakeoffStore,
+} from "#/takeoff/store";
 import {
   SENSIBLE_CAP_BTUH,
   STAGE_ORDER,
@@ -95,29 +102,25 @@ const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
 // row-level PIPELINE VERDICT, not the cell grammar's state axes — the column rides the table's
 // `verdict:` clause, whose tone union is the meaning band by construction.
 
-type RoomState = "call" | "unreviewed" | "data" | "synced";
-
-const ROOM_STATES: RoomState[] = ["call", "unreviewed", "data", "synced"];
-
 const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; note: string }> = {
   call: {
     tone: "alarm",
-    label: "needs a call",
+    label: ATLAS_ROOM_STATE_LABEL.call,
     note: "a human must decide: an open detector flag, or the .r10 no longer matches the model",
   },
   unreviewed: {
     tone: "mute",
-    label: "no Manual J",
+    label: ATLAS_ROOM_STATE_LABEL.unreviewed,
     note: "nothing open, but no Manual J data entered yet — export would refuse this room",
   },
   data: {
     tone: "caution",
-    label: "data entered",
+    label: ATLAS_ROOM_STATE_LABEL.data,
     note: "Manual J data entered against settled geometry, not yet exported — unsaved",
   },
   synced: {
     tone: "done",
-    label: "in .r10",
+    label: ATLAS_ROOM_STATE_LABEL.synced,
     note: "exported and the .r10 still agrees with the model",
   },
 };
@@ -133,15 +136,6 @@ const stateMeta = (state: RoomState): RowVerdict => ({
   note: STATE_META[state].note,
   dim: state === "unreviewed",
 });
-
-/** The derivation. `open` is the count of undecided detector flags on this room. */
-function roomState(room: WorldRoom, open: number): RoomState {
-  if (open > 0) return "call";
-  if (room.r10 && room.r10.lastSyncedSqft !== room.sqft) return "call"; // drift is a call
-  if (room.r10) return "synced";
-  if (room.data) return "data";
-  return "unreviewed";
-}
 
 const STAGE_BLURB: Record<Stage, string> = {
   declared: "adopted, no system tag typed",
@@ -333,13 +327,6 @@ const onPlan = (z: WorldZone) => z.zone.declaredSqft >= PLAN_MIN_SQFT;
 
 // ── Row model ───────────────────────────────────────────────────────────────
 
-interface Row {
-  zone: WorldZone;
-  room: WorldRoom;
-  state: RoomState;
-  open: string[];
-}
-
 function RoomNameCell({
   store,
   row,
@@ -416,8 +403,11 @@ export function Atlas({ store }: AtlasProps) {
   const geoReady = AsyncResult.isSuccess(useAtomValue(store.atoms.snapshot));
   const actions = useMemo(() => createAtlasActions(store), [store]);
   const page = useAtomValue(store.atoms.atlasPage);
+  const tableState = useAtomValue(store.atoms.atlasTableState);
+  const rows = useAtomValue(store.atoms.atlasRows);
+  const visibleKeys = useAtomValue(store.atoms.visibleRows);
   const decided = useAtomValue(store.atoms.decisions);
-  const { stageFilter, zoneKey, cursor, fieldsMode, visibleKeys } = page;
+  const { stageFilter, zoneKey, cursor, fieldsMode } = page;
   const level = page.level || world.lanes[0]?.label || "";
   const setStageFilter = (value: Stage | null) =>
     store.actions.setAtlasPage({ stageFilter: value });
@@ -443,7 +433,7 @@ export function Atlas({ store }: AtlasProps) {
   // world arrives with them already applied. The atlas only forwards patches.
   const openFlags = (room: WorldRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
 
-  const stateOf = (room: WorldRoom) => roomState(room, openFlags(room).length);
+  const stateOf = (room: WorldRoom) => atlasRoomState(room, openFlags(room).length);
   const zoneStates = (z: WorldZone) => z.rooms.map((r) => stateOf(r));
   const zoneCalls = (z: WorldZone) => zoneStates(z).filter((s) => s === "call").length;
 
@@ -460,22 +450,6 @@ export function Atlas({ store }: AtlasProps) {
 
   // Scope only — plan selection and the rail's pipeline filter. Every other narrowing (stage,
   // state, type, flags, free text) is the table's own, and shows as a chip in its strip.
-  const scopeZones = useMemo(
-    () => (selected ? [selected] : filteredZones),
-    [selected, filteredZones],
-  );
-  const rows = useMemo<Row[]>(() => {
-    const out: Row[] = [];
-    for (const zone of scopeZones) {
-      for (const room of zone.rooms) {
-        const open = openFlags(room);
-        out.push({ zone, room, state: roomState(room, open.length), open });
-      }
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeZones, decided]);
-
   // What the table is actually showing, in its order.
   const visibleRows = useMemo(() => {
     const byGuid = new Map(rows.map((r) => [r.room.guid, r]));
@@ -1116,16 +1090,14 @@ export function Atlas({ store }: AtlasProps) {
                       )
                     }
                     activeKey={cursor}
+                    tableState={tableState}
+                    onTableStateChange={(state) => store.actions.setTableState(state)}
+                    visibleKeys={visibleKeys}
                     onRowClick={(row) => {
                       setCursor(row.room.guid);
                       if (!selected) setLevel(row.zone.zone.lane.label);
                     }}
                     onRowHover={(row) => store.actions.hover(row?.room.guid ?? "")}
-                    onVisibleChange={(keys) =>
-                      (visibleKeys.length !== keys.length ||
-                        visibleKeys.some((key, index) => key !== keys[index])) &&
-                      store.actions.setAtlasPage({ visibleKeys: keys })
-                    }
                   />
                 }
                 end={
