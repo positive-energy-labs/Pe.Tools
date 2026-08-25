@@ -219,6 +219,7 @@ export function mockWorld(): MockWorld {
   const zones = buildZones();
   let sysCounter = 0;
   let identifier = 100;
+  let parityRoomPending = true;
   const systems = new Map<string, MockSystem>();
 
   const mockZones: MockZone[] = zones.map((zone, zi) => {
@@ -254,8 +255,12 @@ export function mockWorld(): MockWorld {
     }
 
     // Rooms exist from "partitioned" on.
-    const roomCount =
+    const baseRoomCount =
       stageIdx >= 2 ? Math.max(1, Math.min(8, Math.round(zone.declaredSqft / 220))) : 0;
+    // Keep the synthetic fallback's row count aligned with the real-geometry fixture.
+    const roomCount =
+      baseRoomCount + Number(parityRoomPending && baseRoomCount > 0 && baseRoomCount < 8);
+    if (roomCount > baseRoomCount) parityRoomPending = false;
     const pts = interiorPoints(zone, roomCount, rand);
     const runId = `run-2026-08-${String(10 + (zi % 4)).padStart(2, "0")}-${(hash(zone.key) % 900) + 100}`;
     const bedroomsInZone = roomCount >= 3 ? 1 + (hash(zone.key) % 3) : 0;

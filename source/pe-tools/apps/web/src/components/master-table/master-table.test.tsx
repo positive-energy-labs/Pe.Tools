@@ -141,6 +141,20 @@ test("controlled table state can be read and driven without changing the Column 
   });
 });
 
+test("changing the active row re-renders at most the two changed rows", () => {
+  Element.prototype.scrollIntoView = vi.fn();
+  let renders = 0;
+  const countingColumns: Column<Fam>[] = [
+    { key: "name", label: "name", cell: (row) => (renders += 1) && row.name },
+  ];
+  const view = renderTable({ columns: countingColumns, activeKey: "a" });
+
+  renders = 0;
+  view.rerender(table({ columns: countingColumns, activeKey: "b" }));
+
+  expect(renders).toBeLessThanOrEqual(2);
+});
+
 test("nested group paths render true multi-level headers", () => {
   renderTable();
 

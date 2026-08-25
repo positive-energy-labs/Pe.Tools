@@ -290,7 +290,7 @@ describe("takeoff route store", () => {
     await store.actions.settle(store.atoms.snapshot);
     const rows = store.atoms.registry.get(store.atoms.atlasRows);
     const visibleRows = store.atoms.registry.get(store.atoms.visibleRows);
-    expect(rows).toHaveLength(179);
+    expect(rows).toHaveLength(180);
 
     store.actions.setAtlasPage({ cursor: visibleRows[0] });
 
@@ -314,6 +314,9 @@ describe("takeoff route store", () => {
       store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
       await store.actions.settle(store.atoms.snapshot);
       registry.get(store.atoms.visibleRows);
+      const room = registry.get(store.atoms.world).zones.flatMap((zone) => zone.rooms)[0]!;
+      store.actions.decide(room.guid, room.flags[0] ?? "thin residue", "accept");
+      store.actions.patchRoom(room.guid, { name: "Staged room" });
 
       store.dispose();
       await wait(200);

@@ -11,7 +11,7 @@
 // The atlas renders a `World` and calls back through `AtlasActions` — it owns selection and
 // optimistic decision state, nothing else. The route owns the world, the overlay, and every
 // host call.
-import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
@@ -32,6 +32,7 @@ import { MasterTable } from "#/components/master-table/master-table";
 import {
   fmtNum,
   type Column,
+  type MasterTableState,
   type Verdict as RowVerdict,
   type VerdictTone,
 } from "#/components/master-table/model";
@@ -63,6 +64,16 @@ import {
 import { cn } from "#/lib/utils";
 
 export type Verdict = "accept" | "dismiss";
+
+const atlasRowKey = (row: Row) => row.room.guid;
+const atlasGutter = (row: Row) =>
+  row.open.length > 0
+    ? {
+        count: row.open.length,
+        tone: "alarm" as const,
+        title: `${row.open.length} open detector call${row.open.length === 1 ? "" : "s"} owe a verdict — ${row.open.join(", ")} (a/d accepts or dismisses the first)`,
+      }
+    : null;
 
 export interface AtlasActions {
   /** Stage a Manual J / naming edit (session overlay; the .r10 takes it at sync). */
@@ -403,24 +414,33 @@ export function Atlas({ store }: AtlasProps) {
   const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
   const geoReady = AsyncResult.isSuccess(useAtomValue(store.atoms.snapshot));
   const actions = useMemo(() => createAtlasActions(store), [store]);
-  const page = useAtomValue(store.atoms.atlasPage);
+  const stageFilter = useAtomValue(store.atoms.stageFilter);
+  const zoneKey = useAtomValue(store.atoms.zoneKey);
+  const pageLevel = useAtomValue(store.atoms.level);
+  const cursor = useAtomValue(store.atoms.cursor);
+  const fieldsMode = useAtomValue(store.atoms.fieldsMode);
   const tableState = useAtomValue(store.atoms.atlasTableState);
   const rows = useAtomValue(store.atoms.atlasRows);
   const visibleKeys = useAtomValue(store.atoms.visibleRows);
   const decided = useAtomValue(store.atoms.decisions);
-  const { stageFilter, zoneKey, cursor, fieldsMode } = page;
-  const level = page.level || world.lanes[0]?.label || "";
+  const level = pageLevel || world.lanes[0]?.label || "";
   const setStageFilter = (value: Stage | null) =>
     store.actions.setAtlasPage({ stageFilter: value });
-  const setLevel = (value: string) => store.actions.setAtlasPage({ level: value });
+  const setLevel = useCallback(
+    (value: string) => store.actions.setAtlasPage({ level: value }),
+    [store],
+  );
   const setZoneKey = (value: string | null) => {
     store.actions.setAtlasPage({ zoneKey: value });
     store.actions.focusZone(world.zones.find((zone) => zone.zone.key === value)?.zone.guid ?? "");
   };
-  const setCursor = (value: string | null) => {
-    store.actions.setAtlasPage({ cursor: value });
-    store.actions.selectRoom(value ?? "");
-  };
+  const setCursor = useCallback(
+    (value: string | null) => {
+      store.actions.setAtlasPage({ cursor: value });
+      store.actions.selectRoom(value ?? "");
+    },
+    [store],
+  );
   /** Where the per-room Manual J fields live: inline table columns (dense, whole-scope entry)
    *  or the room panel (narrow table, one room in focus). One home at a time, never both. */
   /** The row order the user is actually looking at — MasterTable owns filter/sort/search, and
@@ -447,6 +467,21 @@ export function Atlas({ store }: AtlasProps) {
   );
 
   const selected = zoneKey ? (world.zones.find((z) => z.zone.key === zoneKey) ?? null) : null;
+  const setTableState = useCallback(
+    (state: MasterTableState) => store.actions.setTableState(state),
+    [store],
+  );
+  const selectTableRow = useCallback(
+    (row: Row) => {
+      setCursor(row.room.guid);
+      if (!selected) setLevel(row.zone.zone.lane.label);
+    },
+    [selected, setCursor, setLevel],
+  );
+  const hoverTableRow = useCallback(
+    (row: Row | null) => store.actions.hover(row?.room.guid ?? ""),
+    [store],
+  );
   const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
 
   // Scope only — plan selection and the rail's pipeline filter. Every other narrowing (stage,
@@ -653,12 +688,7 @@ export function Atlas({ store }: AtlasProps) {
         sort: ATLAS_COLUMN_SEMANTICS.flags.sort,
         // Multi-valued: a room carries a SET of flags, so the vocabulary is "any open" /
         // "none open" / one named flag rather than a single cell value.
-        match: (row, value) =>
-          value === "any"
-            ? row.open.length > 0
-            : value === "none"
-              ? row.open.length === 0
-              : row.open.includes(value),
+        match: ATLAS_COLUMN_SEMANTICS.flags.match,
         options: [
           { value: "any", label: "any open" },
           { value: "none", label: "none open" },
@@ -1024,20 +1054,12 @@ export function Atlas({ store }: AtlasProps) {
                   <MasterTable
                     rows={rows}
                     columns={columns}
-                    rowKey={(row) => row.room.guid}
+                    rowKey={atlasRowKey}
                     // THE OWED MARKER (fit reviews, ruled 2026-08-16): open detector calls owe a
                     // human verdict — the gutter locates them with the count in the one alarm.
                     // The flags column keeps the FILTER job; its cell dropped the duplicate
                     // alarm count when this landed.
-                    gutter={(row) =>
-                      row.open.length > 0
-                        ? {
-                            count: row.open.length,
-                            tone: "alarm" as const,
-                            title: `${row.open.length} open detector call${row.open.length === 1 ? "" : "s"} owe a verdict — ${row.open.join(", ")} (a/d accepts or dismisses the first)`,
-                          }
-                        : null
-                    }
+                    gutter={atlasGutter}
                     scopeLabel="rooms in scope"
                     searchPlaceholder="name / type / zone…"
                     chips={chips}
@@ -1095,13 +1117,10 @@ export function Atlas({ store }: AtlasProps) {
                     }
                     activeKey={cursor}
                     tableState={tableState}
-                    onTableStateChange={(state) => store.actions.setTableState(state)}
+                    onTableStateChange={setTableState}
                     visibleKeys={visibleKeys}
-                    onRowClick={(row) => {
-                      setCursor(row.room.guid);
-                      if (!selected) setLevel(row.zone.zone.lane.label);
-                    }}
-                    onRowHover={(row) => store.actions.hover(row?.room.guid ?? "")}
+                    onRowClick={selectTableRow}
+                    onRowHover={hoverTableRow}
                   />
                 }
                 end={

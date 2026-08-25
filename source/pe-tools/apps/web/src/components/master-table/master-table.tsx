@@ -1,4 +1,6 @@
 import {
+  memo,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -6,6 +8,7 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   useTable,
@@ -88,6 +91,56 @@ const emptyTableState = (): MasterTableState => ({ filters: {}, sorts: [], query
 
 /** The gutter's one width — the th/td class and the lock-column offset must agree. */
 const GUTTER_PX = 18;
+
+interface MasterRowProps<Row extends RowData> {
+  row: Row;
+  active: boolean;
+  columns: readonly Column<Row>[];
+  rowMarker?: MasterTableProps<Row>["gutter"];
+  activeRowRef: RefObject<HTMLTableRowElement | null>;
+  className: string;
+  onRowClick?: (row: Row) => void;
+  onRowHover?: (row: Row | null) => void;
+  children: ReactNode;
+}
+
+function MasterRowView<Row extends RowData>({
+  row,
+  active,
+  activeRowRef,
+  className,
+  onRowClick,
+  onRowHover,
+  children,
+}: MasterRowProps<Row>) {
+  return (
+    <tr
+      ref={active ? activeRowRef : undefined}
+      className={className}
+      onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
+      onMouseLeave={onRowHover ? () => onRowHover(null) : undefined}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button,input,select,textarea,a,[role=button]"))
+          return;
+        onRowClick?.(row);
+      }}
+    >
+      {children}
+    </tr>
+  );
+}
+
+const MasterRow = memo(
+  MasterRowView,
+  (previous, next) =>
+    previous.row === next.row &&
+    previous.active === next.active &&
+    previous.columns === next.columns &&
+    previous.rowMarker === next.rowMarker &&
+    previous.className === next.className &&
+    previous.onRowClick === next.onRowClick &&
+    previous.onRowHover === next.onRowHover,
+) as typeof MasterRowView;
 
 /**
  * THE CELL-STATE CLAUSE, executed once at the boundary. A `state` column resolves to a plain
@@ -241,11 +294,14 @@ export function MasterTable<Row extends RowData>({
     const byId = new Map(tableRows.map((row) => [row.id, row]));
     return visibleKeys.map((key) => byId.get(key)).filter((row) => row !== undefined);
   }, [tableRows, visibleKeys]);
-  const cellsFor = (row: (typeof visibleRows)[number]) => [
-    ...row.getStartVisibleCells(),
-    ...row.getCenterVisibleCells(),
-    ...row.getEndVisibleCells(),
-  ];
+  const cellsFor = useCallback(
+    (row: (typeof visibleRows)[number]) => [
+      ...row.getStartVisibleCells(),
+      ...row.getCenterVisibleCells(),
+      ...row.getEndVisibleCells(),
+    ],
+    [],
+  );
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
   useEffect(() => {
     activeRowRef.current?.scrollIntoView({ block: "nearest" });
@@ -276,40 +332,42 @@ export function MasterTable<Row extends RowData>({
   }, [columns]);
   const stickyTop = (rowIndex: number) => rowTops[rowIndex] ?? 0;
 
-  const moveFrom = (origin: HTMLElement, direction: CellMove, wrapHorizontal = false): boolean => {
-    const cell = origin.closest<HTMLTableCellElement>("[data-master-cell]");
-    const row = cell?.parentElement;
-    if (!cell || !row) return false;
-    const siblingRow = direction === "up" ? row.previousElementSibling : row.nextElementSibling;
-    let target: Element | null | undefined;
-    if (direction === "up" || direction === "down") target = siblingRow?.children[cell.cellIndex];
-    if (direction === "left") target = cell.previousElementSibling;
-    if (direction === "right") target = cell.nextElementSibling;
-    if (!target && wrapHorizontal && direction === "left") {
-      target = row.previousElementSibling?.lastElementChild;
-    }
-    if (!target && wrapHorizontal && direction === "right") {
-      target = row.nextElementSibling?.firstElementChild;
-    }
-    // The gutter is a marker, not a data cell: leftward moves stop before it, wraps land past it.
-    if (target instanceof HTMLElement && target.hasAttribute("data-master-gutter")) {
-      target = direction === "left" ? null : target.nextElementSibling;
-    }
-    if (!(target instanceof HTMLElement)) return false;
-    target.focus();
-    return true;
-  };
+  const moveFrom = useCallback(
+    (origin: HTMLElement, direction: CellMove, wrapHorizontal = false): boolean => {
+      const cell = origin.closest<HTMLTableCellElement>("[data-master-cell]");
+      const row = cell?.parentElement;
+      if (!cell || !row) return false;
+      const siblingRow = direction === "up" ? row.previousElementSibling : row.nextElementSibling;
+      let target: Element | null | undefined;
+      if (direction === "up" || direction === "down") target = siblingRow?.children[cell.cellIndex];
+      if (direction === "left") target = cell.previousElementSibling;
+      if (direction === "right") target = cell.nextElementSibling;
+      if (!target && wrapHorizontal && direction === "left")
+        target = row.previousElementSibling?.lastElementChild;
+      if (!target && wrapHorizontal && direction === "right")
+        target = row.nextElementSibling?.firstElementChild;
+      if (target instanceof HTMLElement && target.hasAttribute("data-master-gutter"))
+        target = direction === "left" ? null : target.nextElementSibling;
+      if (!(target instanceof HTMLElement)) return false;
+      target.focus();
+      return true;
+    },
+    [],
+  );
 
-  const handleGridKey = (event: KeyboardEvent<HTMLTableCellElement>) => {
-    if (event.key === "Enter" && editCell(event.currentTarget)) return event.preventDefault();
-    if (isTypingKey(event) && editCell(event.currentTarget, event.key))
-      return event.preventDefault();
-    const direction = keyDirection(event.key, event.shiftKey);
-    if (!direction) return;
-    const tab = event.key === "Tab";
-    const moved = moveFrom(event.currentTarget, direction, tab);
-    if (!tab || moved) event.preventDefault();
-  };
+  const handleGridKey = useCallback(
+    (event: KeyboardEvent<HTMLTableCellElement>) => {
+      if (event.key === "Enter" && editCell(event.currentTarget)) return event.preventDefault();
+      if (isTypingKey(event) && editCell(event.currentTarget, event.key))
+        return event.preventDefault();
+      const direction = keyDirection(event.key, event.shiftKey);
+      if (!direction) return;
+      const tab = event.key === "Tab";
+      const moved = moveFrom(event.currentTarget, direction, tab);
+      if (!tab || moved) event.preventDefault();
+    },
+    [moveFrom],
+  );
 
   const activeFilters = columns.filter((column) => resolvedState.filters[column.key]);
   const setFilter = (key: string, value: string | null) =>
@@ -454,9 +512,13 @@ export function MasterTable<Row extends RowData>({
               const key = tableRow.id;
               const cells = cellsFor(tableRow);
               return (
-                <tr
+                <MasterRow
                   key={key}
-                  ref={activeKey === key ? activeRowRef : undefined}
+                  row={tableRow.original}
+                  active={activeKey === key}
+                  columns={columns}
+                  rowMarker={gutter}
+                  activeRowRef={activeRowRef}
                   className={cn(
                     // THE HOVER LAW: the one neutral veil, composited over whatever fill the row
                     // carries. THE SELECTION LAW: the active row is a fill (--r-select), never a
@@ -465,17 +527,8 @@ export function MasterTable<Row extends RowData>({
                     activeKey === key && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
                     rowClassName?.(tableRow.original),
                   )}
-                  onMouseEnter={onRowHover ? () => onRowHover(tableRow.original) : undefined}
-                  onMouseLeave={onRowHover ? () => onRowHover(null) : undefined}
-                  onClick={(event) => {
-                    if (
-                      (event.target as HTMLElement).closest(
-                        "button,input,select,textarea,a,[role=button]",
-                      )
-                    )
-                      return;
-                    onRowClick?.(tableRow.original);
-                  }}
+                  onRowClick={onRowClick}
+                  onRowHover={onRowHover}
                 >
                   {gutter &&
                     (() => {
@@ -559,7 +612,7 @@ export function MasterTable<Row extends RowData>({
                       </table.Subscribe>
                     );
                   })}
-                </tr>
+                </MasterRow>
               );
             })}
           </tbody>
