@@ -76,6 +76,8 @@ restated here.
 - 2026-07-06 — WebMCP as a bet today: W3C draft (Feb 2026), Chrome 149 origin trial (June 2026), discovery/invocation partly TODO, consumers are Gemini-in-Chrome and an inspector extension. Watch it; the shared toolset shape means zero rework when it matures.
 - 2026-08-16 — `components/document-chips.tsx` (391 LOC): dead, zero importers, deleted.
 
+- 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
+
 ## Owed
 
 - Compressed agent-facing capability/document maps are still unbuilt — the `Toon` library landed but nothing generates a compressed host-capability or Revit-document map. The two specs (`plans/agent-schema-compression.plan.md` — renderer + host-capability map; `plans/revit-document-progressive-discovery.plan.md` — project/schedule/parameter/electrical map shapes) were deleted 2026-08-17 and survive in git history. Verification bar in both, and the part worth keeping: a compressed map must lead Pea to the same next operation a developer would pick from the C# client docs, and must not hide truncation or absence.

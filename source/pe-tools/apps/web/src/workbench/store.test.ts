@@ -49,6 +49,28 @@ function harness() {
 }
 
 describe("chat store", () => {
+  it("does not notify Lens for unchanged controller values across one event", async () => {
+    const h = harness();
+    await vi.waitFor(() => expect(h.registry.get(h.store.atoms.threads)).toHaveLength(1));
+    let notifications = 0;
+    const unsubscribeInspect = h.registry.subscribe(h.store.atoms.lensInspectKey, () => { notifications += 1; });
+    const unsubscribeFollowing = h.registry.subscribe(h.store.atoms.lensFollowing, () => { notifications += 1; });
+    const renderController = () => {
+      h.store.actions.setLensInspectKey(h.registry.get(h.store.atoms.lensInspectKey));
+      h.store.actions.setLensFollowing(h.registry.get(h.store.atoms.lensFollowing));
+    };
+
+    renderController();
+    h.event({ type: "agent_start" });
+    await vi.waitFor(() => expect(h.registry.get(h.store.atoms.state).uiStatus.overall.status).toBe("running"));
+    renderController();
+
+    expect(notifications).toBe(0);
+    unsubscribeInspect();
+    unsubscribeFollowing();
+    h.store.dispose();
+  });
+
   it("reduces SSE in arrival order and refuses send while a run is active", async () => {
     const h = harness();
     await vi.waitFor(() => expect(h.registry.get(h.store.atoms.threads)).toHaveLength(1));

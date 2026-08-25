@@ -107,10 +107,8 @@ export function createChatStore(deps: {
   const paletteOpen = core.owned("page/palette-open", Atom.make(false));
   const sideOpen = core.owned("page/side-open", Atom.make(true));
   const pluginOpen = core.owned("page/plugin-open", Atom.make(Boolean(deps.search.plugin)));
-  const lensIntent = core.owned(
-    "page/lens-intent",
-    Atom.make<{ inspectKey: string | null; following: boolean }>({ inspectKey: null, following: !deps.search.turn }),
-  );
+  const lensInspectKey = core.owned("page/lens-inspect-key", Atom.make<string | null>(null));
+  const lensFollowing = core.owned("page/lens-following", Atom.make(!deps.search.turn));
   const world = core.owned<Atom.Writable<WorldState>>(
     "page/world",
     Atom.make<WorldState>({ density: "inspect", diff: false, open: new Set(["system-prompt"]), openItems: new Set<string>() }),
@@ -149,7 +147,8 @@ export function createChatStore(deps: {
     setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),
     setSideOpen: (value: Setter<boolean>) => set("set-side", sideOpen, value),
     setPluginOpen: (value: Setter<boolean>) => set("set-plugin", pluginOpen, value),
-    setLensIntent: (value: Setter<{ inspectKey: string | null; following: boolean }>) => set("set-lens", lensIntent, value),
+    setLensInspectKey: (value: Setter<string | null>) => set("set-lens-inspect-key", lensInspectKey, value),
+    setLensFollowing: (value: Setter<boolean>) => set("set-lens-following", lensFollowing, value),
     setWorld: (value: Setter<WorldState>) => set("set-world", world, value),
     setDraft,
     setMode: (mode: string) => deps.search.patch({ mode }),
@@ -224,7 +223,7 @@ export function createChatStore(deps: {
     registry: deps.registry,
     search: deps.search,
     slices: { workbench },
-    atoms: { state, threads, loading, sliceError, paletteOpen, sideOpen, pluginOpen, lensIntent, world, draft, busy: core.busy, failure: core.failure, receipt: core.receipt },
+    atoms: { state, threads, loading, sliceError, paletteOpen, sideOpen, pluginOpen, lensInspectKey, lensFollowing, world, draft, busy: core.busy, failure: core.failure, receipt: core.receipt },
     actions,
     dispose() {
       if (promptTimer) clearTimeout(promptTimer);
