@@ -592,13 +592,14 @@ export function createTakeoffStore(deps: {
     if (!AsyncResult.isSuccess(result) || !result.value.bound) return null;
     const patches = get(adoptPatchesAtom);
     return result.value.value.map((region) => {
-      const meta = readZoneMeta(region.blob);
+      // an unstamped designer region carries no provenance blob; only a stamped one parses
+      const meta = region.role === "zoning-region" ? readZoneMeta(region.blob) : null;
       return {
         region,
         view: region.view,
         checked: region.role === "zoning-region",
-        name: meta.name || region.typeName,
-        systemTag: meta.systemTag,
+        name: meta?.name || region.typeName,
+        systemTag: meta?.systemTag ?? "",
         ...patches[`${region.view}:${region.elementId}`],
       };
     });
