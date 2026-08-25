@@ -50,6 +50,8 @@ export interface Bindings {
   isBound: (link: Link) => boolean;
   open: string | null;
   setOpen: (key: string | null) => void;
+  pickerLevel: string | null;
+  setPickerLevel: (key: string) => void;
   stage: Stage;
   setStage: (key: string) => void;
   demanded: Set<string>;
@@ -72,6 +74,8 @@ export function useBindings(
   setState: (patch: Partial<BindingState>) => void,
   open: string | null,
   setOpen: (key: string | null) => void,
+  pickerLevel: string | null,
+  setPickerLevel: (key: string) => void,
 ): Bindings {
   const stage = product.stages.find((s) => s.key === state.stage) ?? product.stages[0]!;
   const demanded = useMemo(() => demandedKeys(stage), [stage]);
@@ -115,6 +119,8 @@ export function useBindings(
     isBound,
     open,
     setOpen,
+    pickerLevel,
+    setPickerLevel,
     stage,
     setStage: (key) => setState({ stage: key }),
     demanded,
@@ -287,7 +293,8 @@ export function Picker({
   const open = b.open === slot;
   const close = useCallback(() => b.setOpen(null), [b.setOpen]);
   const ref = useClickAway(open, close);
-  const [level, setLevel] = useState<string>(link.key);
+  const level = b.pickerLevel ?? link.key;
+  const setLevel = b.setPickerLevel;
   const [q, setQ] = useState("");
   const p = progress(chain, b.bound, b.multi);
   useEffect(() => {
@@ -340,7 +347,10 @@ export function Picker({
       <style>{PULSE_CSS}</style>
       <button
         type="button"
-        onClick={() => b.setOpen(open ? null : slot)}
+        onClick={() => {
+          if (!open) setLevel(link.key);
+          b.setOpen(open ? null : slot);
+        }}
         disabled={inert}
         title={title}
         className="face-mono t-label"

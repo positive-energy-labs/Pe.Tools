@@ -465,6 +465,9 @@ export function createTakeoffStore(deps: {
   const targetingOpenAtom = Atom.make<string | null>(null).pipe(
     owned("takeoffs/page/targeting/open"),
   );
+  const targetingLevelAtom = Atom.make<string | null>(null).pipe(
+    owned("takeoffs/page/targeting/level"),
+  );
   const cursorAtom = Atom.make<AtlasPageState["cursor"]>(null).pipe(
     owned("takeoffs/page/atlas/cursor"),
   );
@@ -1117,6 +1120,11 @@ export function createTakeoffStore(deps: {
         registry.set(targetingOpenAtom, key),
       );
     },
+    setTargetingLevel(key: string) {
+      write("set-targeting-level", "page/targeting/level", () =>
+        registry.set(targetingLevelAtom, key),
+      );
+    },
     openPanel(panel: "adopt" | "sync" | null) {
       write("open-panel", "page/panel", () => registry.set(panelAtom, panel));
     },
@@ -1288,6 +1296,7 @@ export function createTakeoffStore(deps: {
       planOpen: planOpenAtom,
       statsOpen: statsOpenAtom,
       targetingOpen: targetingOpenAtom,
+      targetingLevel: targetingLevelAtom,
       cursor: cursorAtom,
       atlasTableState: atlasTableStateAtom,
       atlasRows: atlasRowsAtom,

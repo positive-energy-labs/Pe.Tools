@@ -151,6 +151,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const receipt = useAtomValue(store.atoms.receipt);
   const panel = useAtomValue(store.atoms.panel);
   const targetingOpen = useAtomValue(store.atoms.targetingOpen);
+  const targetingLevel = useAtomValue(store.atoms.targetingLevel);
   const busy = busyState?.id ?? null;
   const busySeconds = busyState?.seconds ?? 0;
 
@@ -297,6 +298,8 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     setState,
     targetingOpen,
     store.actions.setTargetingOpen,
+    targetingLevel,
+    store.actions.setTargetingLevel,
   );
   const runner = useRunner(product, b, async (_label, work) => void (await work()), busy);
 
