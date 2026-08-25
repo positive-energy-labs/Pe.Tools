@@ -6,6 +6,7 @@
 import type { z } from "zod";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 import {
+  familiesRouteState,
   familyRouteState,
   familyTypesRouteState,
   parameterLinksRouteState,
@@ -14,6 +15,7 @@ import {
 } from "@pe/agent-contracts";
 
 import { createFamilyCommandHandlers } from "./family-commands.ts";
+import { createFamiliesCommandHandlers } from "./families-commands.ts";
 import {
   createFamilyTypesCommandHandlers,
   createParameterLinksCommandHandlers,
@@ -40,6 +42,7 @@ export function createRouteRegistrations(
   options: { hostBaseUrl?: string } = {},
 ): RouteRegistration[] {
   return [
+    entry(familiesRouteState, createFamiliesCommandHandlers(options)),
     entry(familyRouteState, createFamilyCommandHandlers(options)),
     entry(familyTypesRouteState, createFamilyTypesCommandHandlers(options)),
     entry(parameterLinksRouteState, createParameterLinksCommandHandlers(options)),
