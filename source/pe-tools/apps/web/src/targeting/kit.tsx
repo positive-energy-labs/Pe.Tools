@@ -62,16 +62,17 @@ export interface BindingState {
 }
 
 /**
- * The caller owns the state (URL search on a route) and hands in the setter; this hook owns the
- * waterfall and the derived reads. Options come from `feeds`, so the hook never invents them.
+ * The caller owns the state and hands in its setters; this hook owns the waterfall and derived
+ * reads. Options come from `feeds`, so the hook never invents them.
  */
 export function useBindings(
   product: Product,
   feeds: Feeds,
   state: BindingState,
   setState: (patch: Partial<BindingState>) => void,
+  open: string | null,
+  setOpen: (key: string | null) => void,
 ): Bindings {
-  const [open, setOpen] = useState<string | null>(null);
   const stage = product.stages.find((s) => s.key === state.stage) ?? product.stages[0]!;
   const demanded = useMemo(() => demandedKeys(stage), [stage]);
   const { bound, multi } = state;

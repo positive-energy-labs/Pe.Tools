@@ -462,6 +462,9 @@ export function createTakeoffStore(deps: {
   );
   const planOpenAtom = Atom.make(true).pipe(owned("takeoffs/page/atlas/plan-open"));
   const statsOpenAtom = Atom.make(false).pipe(owned("takeoffs/page/atlas/stats-open"));
+  const targetingOpenAtom = Atom.make<string | null>(null).pipe(
+    owned("takeoffs/page/targeting/open"),
+  );
   const cursorAtom = Atom.make<AtlasPageState["cursor"]>(null).pipe(
     owned("takeoffs/page/atlas/cursor"),
   );
@@ -1109,6 +1112,11 @@ export function createTakeoffStore(deps: {
     setTableState(state: MasterTableState) {
       write("set-table-state", "page/atlas-table", () => registry.set(atlasTableStateAtom, state));
     },
+    setTargetingOpen(key: string | null) {
+      write("set-targeting-open", "page/targeting/open", () =>
+        registry.set(targetingOpenAtom, key),
+      );
+    },
     openPanel(panel: "adopt" | "sync" | null) {
       write("open-panel", "page/panel", () => registry.set(panelAtom, panel));
     },
@@ -1279,6 +1287,7 @@ export function createTakeoffStore(deps: {
       fieldsMode: fieldsModeAtom,
       planOpen: planOpenAtom,
       statsOpen: statsOpenAtom,
+      targetingOpen: targetingOpenAtom,
       cursor: cursorAtom,
       atlasTableState: atlasTableStateAtom,
       atlasRows: atlasRowsAtom,

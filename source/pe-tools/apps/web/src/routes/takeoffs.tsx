@@ -150,6 +150,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const failure = useAtomValue(store.atoms.failure);
   const receipt = useAtomValue(store.atoms.receipt);
   const panel = useAtomValue(store.atoms.panel);
+  const targetingOpen = useAtomValue(store.atoms.targetingOpen);
   const busy = busyState?.id ?? null;
   const busySeconds = busyState?.seconds ?? 0;
 
@@ -289,7 +290,14 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     ],
   };
 
-  const b = useBindings(product, feeds, state, setState);
+  const b = useBindings(
+    product,
+    feeds,
+    state,
+    setState,
+    targetingOpen,
+    store.actions.setTargetingOpen,
+  );
   const runner = useRunner(product, b, async (_label, work) => void (await work()), busy);
 
   const addFolder = (link: Link) =>

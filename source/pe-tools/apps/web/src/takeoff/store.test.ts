@@ -216,6 +216,7 @@ describe("takeoff route store", () => {
     store.actions.hover(room.guid);
     store.actions.patchRoom(room.guid, { name: "Staged room" });
     store.actions.decide(room.guid, "thin residue", "accept");
+    store.actions.setTargetingOpen("zones");
 
     expect(store.atoms.registry.get(store.atoms.atlasPage)).toMatchObject({
       level: "Main",
@@ -242,6 +243,7 @@ describe("takeoff route store", () => {
     expect(store.atoms.registry.get(store.atoms.decisions)).toEqual({
       [`${room.guid}::thin residue`]: "accept",
     });
+    expect(store.atoms.registry.get(store.atoms.targetingOpen)).toBe("zones");
     store.dispose();
   });
 
