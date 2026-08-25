@@ -52,7 +52,6 @@ function FamiliesStoreOwner({ thread, target }: { thread: string; target: string
   }
   const store = owner.store;
   useEffect(() => {
-    void store.actions.bind(target).catch(() => undefined);
     if (owner.disposeTimer) clearTimeout(owner.disposeTimer);
     return () => {
       owner.disposeTimer = setTimeout(() => {

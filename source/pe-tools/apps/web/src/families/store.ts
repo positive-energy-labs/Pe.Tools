@@ -146,6 +146,8 @@ export function createFamiliesStore(deps: {
     deps.host
       .command("bind", { target: nextTarget || null })
       .then((result) => expectOk(result, "bind failed"));
+  if (deps.search.target)
+    void write("system", "bind", () => bindDocument(deps.search.target)).catch(() => undefined);
 
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,

@@ -132,13 +132,24 @@ describe("families route store", () => {
     ]);
   });
 
-  it("rebinds a back/direct URL target on mount and before plan", async () => {
-    const patches: Array<{ target?: string }> = [];
+  it("binds a direct URL target once on mount without a verb failure", async () => {
+    const { calls, registry, store } = make(fixture(), {
+      target: "session:new",
+      patch() {},
+    });
+    await tick();
+    expect(registry.get(store.atoms.failure)).toBeNull();
+    expect(calls.filter(({ op }) => op === "bind")).toEqual([
+      { op: "bind", input: { target: "session:new" } },
+    ]);
+  });
+
+  it("rebinds a direct URL target before plan", async () => {
     const { calls, store } = make(fixture(), {
       target: "session:new",
-      patch: (patch) => patches.push(patch),
+      patch() {},
     });
-    await store.actions.bind(store.search.target);
+    await tick();
     store.actions.setDraft({
       placement: "AllLoaded",
       categories: ["Furniture"],
@@ -151,6 +162,5 @@ describe("families route store", () => {
       { op: "bind", input: { target: "session:new" } },
       { op: "plan", input: expect.any(Object) },
     ]);
-    expect(patches).toEqual([{ target: "session:new" }]);
   });
 });
