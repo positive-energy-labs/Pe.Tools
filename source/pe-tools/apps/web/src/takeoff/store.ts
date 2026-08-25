@@ -511,8 +511,16 @@ export function createTakeoffStore(deps: {
     .pipe(Atom.autoDispose);
   const snapshotResult = Atom.make((get) => {
     const slice = get(takeoffsSlice);
-    if (AsyncResult.isSuccess(slice) && slice.value.doc?.snapshot)
-      return AsyncResult.map(slice, (value) => value.doc!.snapshot);
+    if (AsyncResult.isSuccess(slice)) {
+      if (!slice.value.hydrated) return AsyncResult.initial();
+      if (slice.value.error) return AsyncResult.fail(Error(slice.value.error));
+      if (slice.value.doc?.snapshot) {
+        const producer = get(snapshotProducerResult);
+        return AsyncResult.success(slice.value.doc.snapshot, {
+          waiting: AsyncResult.isSuccess(producer) && producer.waiting,
+        });
+      }
+    }
     const producer = get(snapshotProducerResult);
     return AsyncResult.isSuccess(producer)
       ? AsyncResult.map(slice, (value) => value.doc?.snapshot ?? null)

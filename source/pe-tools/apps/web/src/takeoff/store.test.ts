@@ -247,6 +247,43 @@ describe("takeoff route store", () => {
     expect(parsed.success).toBe(true);
   });
 
+  it("makes snapshot feeds ready when the route stream has produced a document", async () => {
+    const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+    const sessions = createFixtureSessionSource();
+    const session = (await sessions.list())[0]!;
+    const document = (await sessions.activeDocument(session))!;
+    const snapshot = await createFixtureTakeoffHost().readSnapshot(
+      session,
+      document,
+      async () => undefined,
+    );
+    const slice = Atom.make(
+      AsyncResult.success(
+        {
+          doc: { binding: { target: null }, snapshot, staged: [] },
+          hydrated: true,
+          connected: true,
+          error: null,
+          peaActive: false,
+        },
+        { waiting: true },
+      ),
+    );
+    const store = createStore({
+      registry,
+      slice,
+      host: createFixtureTakeoffHost(),
+      sessions,
+      search: searchPort().port,
+    });
+
+    expect(registry.get(store.feeds.view)).toMatchObject({ state: "ready", stale: false });
+    expect(registry.get(store.feeds.zones)).toMatchObject({ state: "ready", stale: false });
+    await store.actions.openAdopt();
+    expect(registry.get(store.atoms.panel)).toBe("adopt");
+    store.dispose();
+  });
+
   it("writes the fixture host read into the document and renders only that slice", async () => {
     const patches: RouteStatePatch[][] = [];
     const store = createStore({
