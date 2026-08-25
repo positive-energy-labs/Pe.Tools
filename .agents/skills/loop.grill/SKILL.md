@@ -3,7 +3,7 @@ name: grill
 description: Interview the user until the idea is settled. Trigger on "grill me", "grill", "tastefully grill", "align", "confirm we're aligned", "am I confused", "restate your understanding", "stress-test my thinking", "push back", "help me decide", or when a plan has decisions the user has not made yet. Not for facts you could look up; not for building.
 argument-hint: "What idea, and what is already settled?"
 stop: frontier empty, user confirms
-figure: Socrates: an idea, settleable by talking
+figure: Socrates — an idea, settleable by talking
 ---
 # Grill
 

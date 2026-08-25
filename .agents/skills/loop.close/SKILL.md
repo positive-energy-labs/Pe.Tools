@@ -3,7 +3,7 @@ name: close
 description: Make the whole chain real, end to end, on real parts. Trigger on "close the chain", "finish the backend", "promote this prototype", "make it real", "cutover", or when a surface is settled and its backend is still shims. Not for choosing between shapes; that is `demiurge`.
 argument-hint: "What chain, what's real, what's still shim?"
 stop: shims zero or deferred, workflow driven by hand
-figure: Keystone: a settled surface needs its backend real
+figure: Keystone — a settled surface needs its backend real
 ---
 # Close
 

@@ -4,7 +4,7 @@ description: Pass work to the next agent or session. Trigger on "handoff", "hand
 disable-model-invocation: true
 argument-hint: "Who picks it up, from where, and what is the first thing they must do?"
 stop: baton delivered
-figure: Herald: the message to the next session
+figure: Herald — the message to the next session
 ---
 # Relay
 

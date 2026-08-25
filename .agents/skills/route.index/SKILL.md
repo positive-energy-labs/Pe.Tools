@@ -1,7 +1,7 @@
 ---
 name: index
 description: The one skill to remember. State intent; it routes to the right stance and drives the loop. Trigger on "index", "where do we start", "which skill", "lets pivot", "next prong", "phase this out", at the start of any non-trivial effort, or when chaining phases.
-figure: Ganesha and the Wayfinder: invoked first, names the next island, paddles nothing
+figure: Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing
 ---
 # Index
 
@@ -40,19 +40,19 @@ Ordinary building is not a stance. It is the primary's own work under whatever l
 
 | Kind | Stance | It is | Rounds | User-only | Stop |
 |---|---|---|---|---|---|
-| route | `index` | Ganesha and the Wayfinder: invoked first, names the next island, paddles nothing | no | no |  |
-| lens | `delegate` | Abbot and Falconer: who does what, at what cost, down which line | no | no |  |
-| lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim: a claim is stamped with its lane or not at all | no | no |  |
-| lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss: delete at least as much as you add | no | no |  |
-| pass | `ground` | Witness with the Chain-bearer: writes off; map and restate first | no | no | map, restatement, next stance named |
-| pass | `relay` | Herald: the message to the next session | no | **yes** | baton delivered |
-| loop | `close` | Keystone: a settled surface needs its backend real | yes | no | shims zero or deferred, workflow driven by hand |
+| route | `index` | Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing | no | no |  |
+| lens | `delegate` | Abbot and Falconer — who does what, at what cost, down which line | no | no |  |
+| lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | no | no |  |
+| lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | no | no |  |
+| pass | `ground` | Witness with the Chain-bearer — writes off; map and restate first | no | no | map, restatement, next stance named |
+| pass | `relay` | Herald — the message to the next session | no | **yes** | baton delivered |
+| loop | `close` | Keystone — a settled surface needs its backend real | yes | no | shims zero or deferred, workflow driven by hand |
 | loop | `demiurge` | architecture, API, data shape, seam is open | yes | no | two rounds adding no shape and killing none |
-| loop | `diagnose` | Coroner: something is broken | yes | no | cause, wound, red loop |
-| loop | `goal` | Crusade: an unattended push at a number | yes | **yes** | two dry waves |
-| loop | `grill` | Socrates: an idea, settleable by talking | yes | no | frontier empty, user confirms |
-| loop | `teach` | Master: a concept the user wants to own | yes | no | transfer demonstrated |
-| loop | `triangulate` | Lineup and Toile: a product surface is unsettled | yes | no | two dry rounds |
+| loop | `diagnose` | Coroner — something is broken | yes | no | cause, wound, red loop |
+| loop | `goal` | Crusade — an unattended push at a number | yes | **yes** | two dry waves |
+| loop | `grill` | Socrates — an idea, settleable by talking | yes | no | frontier empty, user confirms |
+| loop | `teach` | Master — a concept the user wants to own | yes | no | transfer demonstrated |
+| loop | `triangulate` | Lineup and Toile — a product surface is unsettled | yes | no | two dry rounds |
 | slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | - | - | - |
 | slot | `execute` | how anything runs and is proven, this repo | - | - | - |
 | slot | `write` | how anything is written, this house | - | - | - |

@@ -2,7 +2,7 @@
 name: purge
 description: Delete first, then fix. Trigger on "purge", "prune", "delete then fix", "LOC down", "gut it", "too much code", "no back compat", "aggressive deletion", "stay occam", "what can we delete", "fewer comments", "squash", "fold", "harvest", "canonicalize", "census what exists", "no legacy", or whenever a change would add code to a place that already has too much. Not for greenfield shape; that is `demiurge`.
 argument-hint: "What is bloated, and what must still work after?"
-figure: Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss: delete at least as much as you add
+figure: Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add
 ---
 # Purge
 

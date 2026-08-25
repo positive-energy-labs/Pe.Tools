@@ -2,7 +2,7 @@
 name: delegate
 description: Who does what, at what cost. Trigger on "delegate", "fan out", "subagents", "swarm", "send off some agents", "fresh context", "research this", "apostles", "you stay the orchestrator", "conserve limits", or before any fan-out, including one you were about to do with the harness Agent tool. Not the mechanics of running agents; that is `execute`.
 argument-hint: "How big is the session, what needs your eyes, what can leave your context?"
-figure: Abbot and Falconer: who does what, at what cost, down which line
+figure: Abbot and Falconer — who does what, at what cost, down which line
 ---
 # Delegate
 
@@ -27,3 +27,19 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 - Priming is contamination the moment the mission is judgment. The context that makes an apostle fast on more of the same makes it the worst available judge of what it built. Judgment goes down a clean line, always.
 - Cross lines on purpose, and only after the clean readings. Handing one apostle two unrelated bodies is where the new idea comes from. Cross before the clean readings exist and you cannot say what produced it.
 - Leave it better than you found it. Delegation leaves a wake of lost sheep, geriatrics, and rejects. Before a fan-out is reported done, every spent runner, server, watcher, and line is retired; what cannot be retired is one Owed line. A resource no foreseeable future needs is let go. An anti-pattern seen on the way is one Owed line, not a fix.
+
+# Models (Scope: `house`)
+
+House policy; it travels with the user, not the codebase.
+
+Cost: price per task. Taste: opinions, pretty code, UI/UX, architecture, decisions. Intelligence: full marks on a big but bounded and/or specified task without derailing. Bounded: a supplied edge or stop condition. Specified: the important choices supplied.
+
+| Model | Cost | Taste | Intelligence | Use for | Notes |
+|--|--|--|--|--|--|
+| Fable 5 | 10 | 9 | 7 | Design, aesthetics, decisions. Only for unbounded AND unspecified work, or an important design opinion. | Low or medium thinking. Never in parallel. |
+| Opus 5 | 6 | 6 | 3 | Initial implementations, **bounded**. Or UI. Talks like it is intelligent, is not; derails on the first tangent not forbidden. | Medium or high thinking. Small task, forbid going beyond it. |
+| Codex (GPT-5.6) | 2 | 4 | 9 | Foot soldier: migrations, brute force, long slogs, compile smashing, censuses. Goal quantifiable AND choices specified. | Codex TOML sets model and thinking (5.6 high). Takes you at face value, no interpretation. Best for swarms and goal loops. |
+
+Imitating intelligence is half the battle: a seemingly insightful opinion can give you a new idea, and pretty architecture is a base that only needs filling in. Different providers give different perspectives; anything below GPT-5.6 and Opus 5 is fair game for cheap perspective.
+
+Research apostles: primary sources only (official docs, source, specs), one claim one citation, findings go where `docs` says. Clone third-party source locally and sync before reading; grep beats the web.

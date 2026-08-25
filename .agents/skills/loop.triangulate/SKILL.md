@@ -3,7 +3,7 @@ name: triangulate
 description: Find the shape of a product surface by building comparable variants. Trigger on "triangulate", "parallax", "find the product", "variants", "find UI", "refine UI", "UI feels wrong", "which layout", "prototype", clean-rooming a precedent, or when the user is circling what a product *is*. Not for backend or API shape; that is `demiurge` or `close`.
 argument-hint: "What surface, what's unsettled, what precedent?"
 stop: two dry rounds
-figure: Lineup and Toile: a product surface is unsettled
+figure: Lineup and Toile — a product surface is unsettled
 ---
 # Triangulate
 

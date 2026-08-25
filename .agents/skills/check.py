@@ -10,7 +10,7 @@ KINDS = ('route', 'lens', 'pass', 'slot', 'loop')
 DIR_RE = re.compile(r'^(route|lens|pass|slot|loop)\.([a-z][a-z0-9-]*)$')
 # A stance is portable. Anything naming this repo, its tools, or its paths belongs in a slot.
 REPO_TOKENS = re.compile(
-    r'\bPe\.[A-Za-z]|\bpe-revit\b|\bRevit\b|\bHerd\w*|\bpnpm\b|\bdotnet\b|\btmux\b|\bCodex\b'
+    r'\bPe\.[A-Za-z]|\bpe-revit\b|\bRevit\b|\bHerd\w*|\bpnpm\b|\bdotnet\b|\btmux\b'
     r'|(?<![\w/.])(?:docs|packages|apps|source|tools)/|\.artifacts/|\.agents/|\.claude/'
     r'|\.ps1\b|\btsx?\b|\bjsx\b|searchParams|\bReact\b|useState|\bnpm\b|\bvitest\b')
 

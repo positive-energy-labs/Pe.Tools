@@ -3,7 +3,7 @@ name: teach
 description: Teach a concept the user wants to own. Trigger on "teach me", "I wanna learn", "help me understand", "dense example+explanation", "DO NOT tell me the way until I ask", or a question that has come up in more than one session. Not for a one-off answer.
 argument-hint: "What concept, and what will they do with it?"
 stop: transfer demonstrated
-figure: Master: a concept the user wants to own
+figure: Master — a concept the user wants to own
 ---
 # Teach
 

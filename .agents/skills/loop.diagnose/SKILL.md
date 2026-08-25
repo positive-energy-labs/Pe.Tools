@@ -3,7 +3,7 @@ name: diagnose
 description: Find the cause of a failure before touching a fix. Trigger on "diagnose", "debug this", "whats the problem", "why does this hang", "why is it slow", or when the user reports something broken, throwing, failing, or slow, or pastes a trace (`ground` routes here). Not a fix skill; it ends with a cause and a red loop, and the user rules on the fix.
 argument-hint: "What failed, what was seen, and what was expected?"
 stop: cause, wound, red loop
-figure: Coroner: something is broken
+figure: Coroner — something is broken
 ---
 # Diagnose
 

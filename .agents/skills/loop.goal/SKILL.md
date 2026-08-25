@@ -4,7 +4,7 @@ description: An unattended push at a measurable frontier, built with the user be
 disable-model-invocation: true
 argument-hint: "What number, what eye, what may never be done to move it?"
 stop: two dry waves
-figure: Crusade: an unattended push at a number
+figure: Crusade — an unattended push at a number
 ---
 # Goal
 

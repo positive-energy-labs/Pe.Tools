@@ -77,3 +77,4 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - `write`: the unslop list is a lint list; distill it to laws.
 - `pass` has two members (session entry and exit), `route` one. If no third pass appears, the honest name is `edge`.
 - Usage watch: `prove` (expected near zero, load-bearing), `diagnose`, `triangulate` (if never typed, `find-the-product` was the adopted name).
+- POTENTIAL OVERRULING: Scope & satellite policy makes sense in the abstract but in practice should be inlined if always hot (Codex will not read MODELS.md unless told, but it should because opus should always be its UI delegate).
