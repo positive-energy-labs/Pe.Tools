@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useAtomValue } from "@effect/atom-react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { selectWorkbenchChrome } from "@pe/agent-contracts";
 import { ModeDial } from "#/components/mode-dial";
@@ -15,10 +16,11 @@ import { SidePane } from "#/components/ui/side-pane";
 import { Verb } from "#/components/lang/verb";
 import { X } from "lucide-react";
 import { chatPluginRegistration, chatPluginTitle } from "#/workbench/route-chat-plugins";
+import { selectRoutePane } from "#/workbench/route-panes";
 import { ChatSentence } from "#/components/chat-sentence";
 import "#/workbench/lens.css";
 
-/** Routes hostable as chat workspace plugins; the iframe src is `/${plugin}`.
+/** Routes hostable as in-realm chat workspace panes.
  * Route names and titles come from the plugin registry — one registration per route. */
 export type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
@@ -28,13 +30,11 @@ export function ChatShell({
   plugin,
   onTurnChange,
   onPluginClose,
-  promptSeed,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
   onTurnChange?: (turn: number | undefined) => void;
   onPluginClose?: () => void;
-  promptSeed?: string;
 }) {
   return (
     <HotkeysProvider>
@@ -42,7 +42,6 @@ export function ChatShell({
         <Surface
           initialTurn={initialTurn}
           plugin={plugin}
-          promptSeed={promptSeed}
           onTurnChange={onTurnChange}
           onPluginClose={onPluginClose}
         />
@@ -56,15 +55,14 @@ function Surface({
   plugin,
   onTurnChange,
   onPluginClose,
-  promptSeed,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
   onTurnChange?: (turn: number | undefined) => void;
   onPluginClose?: () => void;
-  promptSeed?: string;
 }) {
   const {
+    store,
     debug,
     threads,
     currentThreadId,
@@ -76,35 +74,29 @@ function Surface({
     deleteThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const paletteOpen = useAtomValue(store.atoms.paletteOpen);
   // The side lane is a SidePane (rendered inside the Lens grid) that owns its own width, drag,
-  // collapse, and persistence (storageKey "pe.sideWidth"). We mirror its width/open here only to
-  // drive --side, which positions the floating composer lane (margin-left) and feeds nothing else.
-  // Initial width matches the pane's own localStorage read so --side is correct on first paint.
-  const [sideWidth, setSideWidth] = useState(() => {
-    const saved = Number(localStorage.getItem("pe.sideWidth"));
-    return saved >= 240 ? saved : 300;
-  });
-  const [sideOpen, setSideOpen] = useState(true);
+  // collapse, and persistence (storageKey "pe.sideWidth").
+  const sideOpen = useAtomValue(store.atoms.sideOpen);
   // The plugin workspace is a right SidePane. Only ONE flank may be expanded at a time:
   // opening either pane collapses the other to its 40px rail (nothing is unmounted).
-  const [pluginOpen, setPluginOpen] = useState(false);
+  const pluginOpen = useAtomValue(store.atoms.pluginOpen);
   useEffect(() => {
     if (plugin) {
-      setPluginOpen(true);
-      setSideOpen(false);
+      store.actions.setPluginOpen(true);
+      store.actions.setSideOpen(false);
     }
-  }, [plugin]);
+  }, [plugin, store]);
   const openSide = (open: boolean) => {
-    setSideOpen(open);
-    if (open) setPluginOpen(false);
+    store.actions.setSideOpen(open);
+    if (open) store.actions.setPluginOpen(false);
   };
   const openPlugin = (open: boolean) => {
-    setPluginOpen(open);
-    if (open) setSideOpen(false);
+    store.actions.setPluginOpen(open);
+    if (open) store.actions.setSideOpen(false);
   };
   // Collapsed → the pane is a 40px rail (SidePane's RAIL) and the chat column absorbs the rest.
-  const sideSize = sideOpen ? Math.round(sideWidth) : 40;
+  const PluginPane = plugin ? selectRoutePane(plugin) : null;
 
   const chrome = useMemo(() => selectWorkbenchChrome(debug.state), [debug.state]);
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
@@ -136,7 +128,7 @@ function Surface({
   }, []);
 
   useHotkeys([
-    { hotkey: "Mod+K", callback: () => setPaletteOpen((open) => !open) },
+    { hotkey: "Mod+K", callback: () => store.actions.setPaletteOpen((open) => !open) },
     { hotkey: "Mod+1", callback: () => setMode(MODES[0]!) },
     { hotkey: "Mod+2", callback: () => setMode(MODES[1]!) },
     { hotkey: "Mod+3", callback: () => setMode(MODES[2]!) },
@@ -153,7 +145,6 @@ function Surface({
       ref={mainRef}
       data-mode={mode}
       data-plugin={plugin}
-      style={{ "--side": `${sideSize}px` } as React.CSSProperties}
       className="fixed inset-0 bg-background font-pe text-foreground"
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
@@ -207,7 +198,6 @@ function Surface({
               initialTurn={initialTurn}
               scrollKey={currentThreadId}
               onTurnChange={onTurnChange}
-              onSideResize={setSideWidth}
               sideOpen={sideOpen}
               onSideOpenChange={openSide}
               sideHead={<ModeDial mode={mode} setMode={setMode} />}
@@ -218,7 +208,7 @@ function Surface({
                   onSelect={switchThread}
                   onNew={newThread}
                   onDelete={(id) => void deleteThread(id)}
-                  onSearch={() => setPaletteOpen(true)}
+                  onSearch={() => store.actions.setPaletteOpen(true)}
                 />
               }
             />
@@ -227,7 +217,6 @@ function Surface({
                 <div ref={composerRef} className="pointer-events-auto">
                   <Composer
                     setMode={setMode}
-                    promptSeed={promptSeed}
                     topBar={
                       <ContextRibbon
                         breakdown={breakdown}
@@ -264,11 +253,7 @@ function Surface({
               }
             >
               {/* The thread query is the route-workspace identity boundary for this pane. */}
-              <iframe
-                className="size-full border-0"
-                src={`/${plugin}?thread=${encodeURIComponent(currentThreadId)}`}
-                title={chatPluginTitle(plugin)}
-              />
+              {PluginPane ? <PluginPane store={store} /> : null}
             </SidePane>
           ) : null}
         </div>
@@ -278,7 +263,7 @@ function Surface({
         threads={threads}
         currentThreadId={currentThreadId}
         open={paletteOpen}
-        onOpenChange={setPaletteOpen}
+        onOpenChange={store.actions.setPaletteOpen}
         onSelect={switchThread}
         onNew={newThread}
         onDelete={(id) => void deleteThread(id)}

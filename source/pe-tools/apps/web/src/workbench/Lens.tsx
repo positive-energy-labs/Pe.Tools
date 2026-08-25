@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
 import {
   toolTitle,
   type WorkbenchObservationMemoryEntry,
@@ -11,6 +12,7 @@ import { Moments, useThreadMessages } from "./aui";
 import { RouteChatPluginDock } from "./route-chat-plugins";
 import { useCacheView, WorldLane } from "./world";
 import { useToolIo } from "./tool-io";
+import { useWorkbench } from "./provider";
 import { SidePane } from "#/components/ui/side-pane";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { EmptyState } from "#/components/lang/empty";
@@ -134,7 +136,11 @@ export function Lens({
   // The tool whose I/O the static inspect window shows: hover wins, else the focal tool.
   // Changes only at tool boundaries / hover edges, so the setState is coarse, not per-frame.
   const focalToolRef = useRef<string | null>(null);
-  const [inspectKey, setInspectKey] = useState<string | null>(null);
+  const { store } = useWorkbench();
+  const lensIntent = useAtomValue(store.atoms.lensIntent);
+  const inspectKey = lensIntent.inspectKey;
+  const setInspectKey = (inspectKey: string | null) =>
+    store.actions.setLensIntent((previous) => ({ ...previous, inspectKey }));
   const turnRef = useRef<number | undefined>(initialTurn);
   // Read by the controller's initial snap only; kept off the effect deps so the debounced turn→URL
   // write (which updates the `initialTurn` prop) never re-runs/re-measures the controller mid-scroll.
@@ -143,7 +149,9 @@ export function Lens({
   const tailFollowRef = useRef<TailFollowState>(initialTurn ? "detached" : "following");
   // Coarse mirror of tailFollowRef for the mapdial's jump-to-tail button (renders only on
   // attach/detach edges — setState with the same value bails out).
-  const [following, setFollowing] = useState(!initialTurn);
+  const following = lensIntent.following;
+  const setFollowing = (following: boolean) =>
+    store.actions.setLensIntent((previous) => ({ ...previous, following }));
   const scrollTopRef = useRef(0);
   const initialScrollRef = useRef({ key: "", done: false });
   // assistant-ui mounts the moment sections a tick after we render (and again on edits),

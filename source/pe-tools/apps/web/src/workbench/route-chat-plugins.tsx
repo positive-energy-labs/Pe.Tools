@@ -70,34 +70,23 @@ const routeChatPlugins = Object.fromEntries(
   routeChatPluginList.map((registration) => [registration.spec.route, registration]),
 ) as Record<string, RouteChatPluginRegistration>;
 
-/**
- * Workspace-only plugins: iframed routes with NO route-state slice and NO inline tool card —
- * pea has no route tools for them by design (session lifecycle is user-click or the SDK's own
- * `session_*` MCP tools, never a route command).
- */
-const workspaceOnlyPlugins: Record<string, string> = {
-  instances: "Instances",
-};
-
-/** Registered slices whose ROUTE no longer exists: pea still targets the state
- * (`route:family-types` remains for the mcps handlers + inline chat cards), but there is
- * no page to iframe — offering it as a workspace would 404. */
-const WORKSPACELESS_ROUTES = new Set(["family-types"]);
-
-/** Route names hostable as chat workspace plugins — registry + workspace-only routes. */
+/** Routes with an in-realm chat pane. */
 export const CHAT_PLUGIN_ROUTES = [
-  ...Object.keys(routeChatPlugins).filter((route) => !WORKSPACELESS_ROUTES.has(route)),
-  ...Object.keys(workspaceOnlyPlugins),
-] as [string, ...string[]];
-export type ChatPluginRoute = string;
+  "family",
+  "families",
+  "settings",
+  "parameter-links",
+  "schedule-grid",
+] as const;
+export type ChatPluginRoute = (typeof CHAT_PLUGIN_ROUTES)[number];
 
-/** Registration for a plugin route, when it has a route-state slice (workspace-only routes don't). */
+/** Registration for a plugin route when it has an inline route-state card. */
 export function chatPluginRegistration(route: string): RouteChatPluginRegistration | undefined {
   return routeChatPlugins[route];
 }
 
 export function chatPluginTitle(route: string): string {
-  return routeChatPlugins[route]?.spec.title ?? workspaceOnlyPlugins[route] ?? route;
+  return routeChatPlugins[route]?.spec.title ?? (route === "families" ? "Families" : route);
 }
 
 export function selectRouteChatPlugin(

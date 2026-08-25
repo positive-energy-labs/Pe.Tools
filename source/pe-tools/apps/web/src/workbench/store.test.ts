@@ -1,0 +1,79 @@
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import { createWorkbenchState } from "@pe/agent-contracts";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { VerbRefused } from "#/state/route-store";
+import { createChatStore, type ChatApi, type ChatSearch } from "./store";
+import type { WireEvent } from "./wire";
+
+function harness() {
+  let onEvent: (event: WireEvent) => void = () => undefined;
+  const sent: string[] = [];
+  const patches: Array<Partial<Omit<ChatSearch, "patch">>> = [];
+  const api: ChatApi = {
+    session: {
+      listThreads: async () => [{ id: "thread-1", updatedAt: "2026-01-01" }],
+      createThread: async () => ({ id: "thread-2" }),
+    },
+    hydrate: async () => ({
+      ...createWorkbenchState(),
+      threads: {
+        ...createWorkbenchState().threads,
+        items: [{ threadId: "thread-1", title: "one" }],
+        activeThreadId: "thread-1",
+        selectedThreadId: "thread-1",
+      },
+    }),
+    subscribe: async (next) => { onEvent = next; return () => undefined; },
+    deleteThread: async () => undefined,
+    cloneThread: async () => ({ id: "thread-copy" }),
+    sendPrompt: async (text) => { sent.push(text); },
+    abort: async () => undefined,
+    rejectApproval: async () => undefined,
+    resolveApproval: async () => undefined,
+    setModel: async () => undefined,
+    setAccessLevel: async () => undefined,
+  };
+  const registry = AtomRegistry.make();
+  const store = createChatStore({
+    registry,
+    api,
+    land: async () => "thread-2",
+    search: {
+      thread: "thread-1",
+      mode: "threads",
+      patch: (patch) => { patches.push(patch); },
+    },
+  });
+  return { api, registry, store, sent, patches, event: (event: WireEvent) => onEvent(event) };
+}
+
+describe("chat store", () => {
+  it("reduces SSE in arrival order and refuses send while a run is active", async () => {
+    const h = harness();
+    await vi.waitFor(() => expect(h.registry.get(h.store.atoms.threads)).toHaveLength(1));
+    h.event({ type: "message_start", message: { id: "a", role: "assistant", content: [{ type: "text", text: "first" }] } });
+    h.event({ type: "message_start", message: { id: "b", role: "assistant", content: [{ type: "text", text: "second" }] } });
+    h.event({ type: "agent_start" });
+
+    await expect(h.store.actions.send("blocked")).rejects.toBeInstanceOf(VerbRefused);
+    await vi.waitFor(() => expect(h.registry.get(h.store.atoms.state).transcript.messages.map((message) => message.id)).toEqual(["a", "b"]));
+    expect(h.sent).toEqual([]);
+    h.store.dispose();
+  });
+
+  it("keeps only short attachment-free drafts in search and patches a new thread", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    h.store.actions.setDraft({ text: "short", attachments: [] });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(h.patches.at(-1)).toEqual({ prompt: "short" });
+
+    h.store.actions.setDraft({ text: "short", attachments: [{ name: "plan.md", text: "x" }] });
+    expect(h.patches.at(-1)).toEqual({ prompt: undefined });
+    await h.store.actions.newThread();
+    expect(h.patches.at(-1)).toEqual({ thread: "thread-2" });
+    h.store.dispose();
+    vi.useRealTimers();
+  });
+});

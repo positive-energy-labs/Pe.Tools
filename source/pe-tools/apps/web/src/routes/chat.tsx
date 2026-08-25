@@ -10,6 +10,7 @@ import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { ChatShell } from "#/components/chat-shell";
 import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
+import { withThread } from "./-with-thread";
 
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
@@ -22,7 +23,7 @@ import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
  *   prompt — short composer draft; the composer drops it from the URL past PROMPT_MAX or when
  *            attachments are present (attachments never serialize).
  */
-export const PROMPT_MAX = 2000;
+export const PROMPT_MAX = 200;
 
 const DEFAULTS = { mode: "threads" as const };
 
@@ -40,6 +41,7 @@ const chatSearchSchema = z.object({
 });
 
 export const Route = createFileRoute("/chat")({
+  beforeLoad: withThread,
   validateSearch: chatSearchSchema,
   search: {
     middlewares: [retainSearchParams(["thread", "target"]), stripSearchParams(DEFAULTS)],
@@ -48,7 +50,7 @@ export const Route = createFileRoute("/chat")({
 });
 
 function RouteComponent() {
-  const { plugin, prompt, turn } = Route.useSearch();
+  const { plugin, turn } = Route.useSearch();
   const navigate = useNavigate({ from: "/chat" });
   // Debounce the scroll-driven turn → URL write: scrolling fires turn changes every frame, and each
   // navigate re-renders the route. ~1s lag keeps the shareable URL fresh without thrashing the router
@@ -74,7 +76,6 @@ function RouteComponent() {
       <ChatShell
         initialTurn={turn}
         plugin={plugin}
-        promptSeed={prompt}
         onTurnChange={setTurn}
         onPluginClose={() => void navigate({ search: (prev) => ({ ...prev, plugin: undefined }) })}
       />
