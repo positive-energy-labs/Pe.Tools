@@ -61,6 +61,11 @@ export interface ChatApi extends ThreadLandingApi {
 type Setter<A> = A | ((previous: A) => A);
 type Density = "inspect" | "plain";
 type WorldState = { density: Density; diff: boolean; open: Set<string>; openItems: Set<string> };
+type WorldCacheState = {
+  lastTurn: number | null;
+  prevSig: Map<string, string>;
+  baseline: Map<string, string> | null;
+};
 
 export function createChatStore(deps: {
   registry: AtomRegistry.AtomRegistry;
@@ -90,20 +95,6 @@ export function createChatStore(deps: {
       return AsyncResult.isFailure(result) ? String(Cause.squash(result.cause)) : undefined;
     }),
   );
-  const threads = core.owned(
-    "view/threads",
-    Atom.make((get): StoredThreadSummary[] =>
-      get(state).threads.items.map((thread) => ({
-        id: thread.threadId,
-        title: thread.title?.trim() || shortId(thread.threadId),
-        updatedAt: thread.updatedAt ?? new Date(0).toISOString(),
-        messageCount: 0,
-        persisted: true,
-        cwd: thread.cwd,
-      })),
-    ),
-  );
-
   const paletteOpen = core.owned("page/palette-open", Atom.make(false));
   const sideOpen = core.owned("page/side-open", Atom.make(true));
   const pluginOpen = core.owned("page/plugin-open", Atom.make(Boolean(deps.search.plugin)));
@@ -112,6 +103,10 @@ export function createChatStore(deps: {
   const world = core.owned<Atom.Writable<WorldState>>(
     "page/world",
     Atom.make<WorldState>({ density: "inspect", diff: false, open: new Set(["system-prompt"]), openItems: new Set<string>() }),
+  );
+  const worldCache = core.owned(
+    "page/world-cache",
+    Atom.make<WorldCacheState>({ lastTurn: null, prevSig: new Map(), baseline: null }),
   );
   const draft = core.owned(
     "page/composer",
@@ -150,6 +145,7 @@ export function createChatStore(deps: {
     setLensInspectKey: (value: Setter<string | null>) => set("set-lens-inspect-key", lensInspectKey, value),
     setLensFollowing: (value: Setter<boolean>) => set("set-lens-following", lensFollowing, value),
     setWorld: (value: Setter<WorldState>) => set("set-world", world, value),
+    setWorldCache: (value: Setter<WorldCacheState>) => set("set-world-cache", worldCache, value),
     setDraft,
     setMode: (mode: string) => deps.search.patch({ mode }),
     setTurn: (turn?: number) => deps.search.patch({ turn }, true),
@@ -223,7 +219,7 @@ export function createChatStore(deps: {
     registry: deps.registry,
     search: deps.search,
     slices: { workbench },
-    atoms: { state, threads, loading, sliceError, paletteOpen, sideOpen, pluginOpen, lensInspectKey, lensFollowing, world, draft, busy: core.busy, failure: core.failure, receipt: core.receipt },
+    atoms: { state, loading, sliceError, paletteOpen, sideOpen, pluginOpen, lensInspectKey, lensFollowing, world, worldCache, draft, busy: core.busy, failure: core.failure, receipt: core.receipt },
     actions,
     dispose() {
       if (promptTimer) clearTimeout(promptTimer);

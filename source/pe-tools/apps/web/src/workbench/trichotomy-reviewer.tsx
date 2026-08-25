@@ -12,14 +12,13 @@
  * object: approve sets `staged` + review "good"; deny drops the proposal; undo drops
  * `staged` and clears the review.
  */
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Check, RotateCcw, X } from "lucide-react";
 
 import { type CellReview, cellSummary, stagedEntries } from "@pe/agent-contracts";
 
 import { Verb } from "#/components/lang/verb";
-import { useWorkbench } from "./provider";
-import { type RouteStateWriteResult, writeRouteState } from "./route-state";
+import type { RouteStateHandle } from "./route-state";
 
 /** The minimal cell shape the reviewer reads — every route cell satisfies it. */
 export interface ReviewerCell {
@@ -37,8 +36,7 @@ export interface ReviewerCell {
 }
 
 export interface CellTrichotomyReviewerProps {
-  /** Dispatcher route name, e.g. "settings" | "schedule-grid" | "family-types". */
-  route: string;
+  state: RouteStateHandle<unknown>;
   /** State segment holding the cells: "cells" for most routes, "fields" for settings. */
   segment: string;
   /** All cells in the segment (the reviewer filters/summarizes them). */
@@ -58,7 +56,7 @@ export interface CellTrichotomyReviewerProps {
 }
 
 export function CellTrichotomyReviewer({
-  route,
+  state,
   segment,
   cells,
   commitCommand,
@@ -67,10 +65,6 @@ export function CellTrichotomyReviewer({
   renderLabel,
   renderValue = defaultRenderValue,
 }: CellTrichotomyReviewerProps) {
-  const { config, currentThreadId } = useWorkbench();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const items = Object.entries(cells).filter(
     ([, cell]) => cell.proposal != null || cell.staged != null,
   );
@@ -79,48 +73,28 @@ export function CellTrichotomyReviewer({
   const canCommit =
     stagedCount > 0 && stagedEntries(cells).every(([, cell]) => cell.review !== "attention");
 
-  const write = async (key: string, suffix: "apply" | "command", body: Record<string, unknown>) => {
-    setBusy(key);
-    try {
-      const result = await writeRouteState(config, route, suffix, body, {
-        threadId: currentThreadId,
-      });
-      setError(commandFailureNote(result));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Route update failed.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const approve = (key: string, cell: ReviewerCell) =>
-    void write(key, "apply", {
-      patches: [
-        // Stage the proposal's edit verbatim — settings proposals may be { delete: true }.
-        {
-          path: [segment, key, "staged"],
-          value:
-            cell.proposal != null && "delete" in cell.proposal && cell.proposal.delete === true
-              ? { delete: true }
-              : { value: cell.proposal?.value },
-        },
-        { path: [segment, key, "review"], value: "good" },
-      ],
-    });
+    void state.apply([
+      // Stage the proposal's edit verbatim — settings proposals may be { delete: true }.
+      {
+        path: [segment, key, "staged"],
+        value:
+          cell.proposal != null && "delete" in cell.proposal && cell.proposal.delete === true
+            ? { delete: true }
+            : { value: cell.proposal?.value },
+      },
+      { path: [segment, key, "review"], value: "good" },
+    ]).catch(() => undefined);
   const deny = (key: string) =>
-    void write(key, "apply", {
-      patches: [
-        { path: [segment, key, "proposal"] },
-        { path: [segment, key, "review"], value: "none" },
-      ],
-    });
+    void state.apply([
+      { path: [segment, key, "proposal"] },
+      { path: [segment, key, "review"], value: "none" },
+    ]).catch(() => undefined);
   const undo = (key: string) =>
-    void write(key, "apply", {
-      patches: [
-        { path: [segment, key, "staged"] },
-        { path: [segment, key, "review"], value: "none" },
-      ],
-    });
+    void state.apply([
+      { path: [segment, key, "staged"] },
+      { path: [segment, key, "review"], value: "none" },
+    ]).catch(() => undefined);
 
   return (
     <div className="mt-1.5 w-full border-t border-[var(--r-line-2)]">
@@ -148,7 +122,7 @@ export function CellTrichotomyReviewer({
                 <Verb
                   label="Undo"
                   icon={RotateCcw}
-                  disabled={busy != null}
+                  disabled={state.busy != null}
                   reason="Unstage this value and reopen pea's proposal for review"
                   onClick={() => undo(key)}
                 />
@@ -157,14 +131,14 @@ export function CellTrichotomyReviewer({
                   <Verb
                     label="Deny"
                     icon={X}
-                    disabled={busy != null}
+                    disabled={state.busy != null}
                     reason="Drop pea's proposal — the current value stands"
                     onClick={() => deny(key)}
                   />
                   <Verb
                     label="Approve"
                     icon={Check}
-                    disabled={busy != null || !cell.proposal}
+                    disabled={state.busy != null || !cell.proposal}
                     reason="Stage pea's proposal — nothing leaves the page until you commit"
                     onClick={() => approve(key, cell)}
                   />
@@ -177,7 +151,7 @@ export function CellTrichotomyReviewer({
 
       <div className="flex items-center justify-between gap-2 pt-1.5">
         <span className="min-w-0 truncate t-caption text-[var(--r-ink-2)]">
-          {error ??
+          {state.error ??
             (summary.attention > 0
               ? `${summary.attention} value${summary.attention === 1 ? " needs" : "s need"} review`
               : reviewHint)}
@@ -187,7 +161,7 @@ export function CellTrichotomyReviewer({
           tone="commit"
           label={commitLabel(stagedCount)}
           icon={Check}
-          disabled={!canCommit || busy != null}
+          disabled={!canCommit || state.busy != null}
           reason={
             !canCommit
               ? stagedCount === 0
@@ -195,7 +169,7 @@ export function CellTrichotomyReviewer({
                 : "Blocked: staged values still need review"
               : "Write every staged value through — this leaves the page"
           }
-          onClick={() => void write("__commit", "command", { command: commitCommand, input: {} })}
+          onClick={() => void state.command(commitCommand).catch(() => undefined)}
         />
       </div>
     </div>
@@ -204,16 +178,4 @@ export function CellTrichotomyReviewer({
 
 function defaultRenderValue(value: unknown): ReactNode {
   return typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
-}
-
-/** Surface a rejected write (error/hint) or a successful command's per-cell failures. */
-function commandFailureNote(result: RouteStateWriteResult): string | null {
-  if (!result.ok) return result.error ?? result.hint ?? "Route update failed.";
-  const payload = result.result;
-  if (typeof payload !== "object" || payload == null) return null;
-  const failures = (payload as { failures?: unknown }).failures;
-  if (!Array.isArray(failures) || failures.length === 0) return null;
-  const first = failures[0] as { key?: string; error?: string };
-  const detail = [first?.key, first?.error].filter((part) => typeof part === "string").join(": ");
-  return `${failures.length} value${failures.length === 1 ? "" : "s"} failed${detail ? `: ${detail}` : "."}`;
 }

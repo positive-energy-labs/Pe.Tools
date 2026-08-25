@@ -1,4 +1,4 @@
-import { useState, type ComponentType, type ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { z } from "zod";
 import {
   type ParameterLinksDocument,
@@ -19,7 +19,7 @@ import { Link } from "@tanstack/react-router";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
-import { useRouteState, writeRouteState } from "./route-state";
+import { useRouteState, type RouteStateHandle } from "./route-state";
 import { CellTrichotomyReviewer } from "./trichotomy-reviewer";
 import { FamilyChatPlugin } from "./plugins/family-chat-plugin";
 import { ScheduleGridChatPlugin } from "./plugins/schedule-grid-chat-plugin";
@@ -34,9 +34,10 @@ export interface RouteChatPluginProps {
   sessionState: unknown;
   running: boolean;
   active: boolean;
+  routeState: RouteStateHandle<unknown>;
 }
 
-type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active">;
+type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active" | "routeState">;
 
 export interface RouteChatPluginRegistration {
   spec: RouteStateSpec<z.ZodType>;
@@ -145,7 +146,7 @@ export function RouteChatPluginDock() {
 function ConnectedRouteChatPlugin({
   registration,
   ...props
-}: RouteChatPluginProps & { registration: RouteChatPluginRegistration }) {
+}: RouteChatPluginViewProps & { active: boolean; registration: RouteChatPluginRegistration }) {
   const { currentThreadId } = useWorkbench();
   if (!currentThreadId) return null;
   return (
@@ -161,14 +162,15 @@ function AddressedRouteChatPlugin({
   registration,
   currentThreadId,
   ...props
-}: RouteChatPluginProps & {
+}: RouteChatPluginViewProps & {
+  active: boolean;
   registration: RouteChatPluginRegistration;
   currentThreadId: string;
 }) {
   const route = useRouteState(registration.spec, { threadId: currentThreadId });
   if (!route.hydrated || route.slice == null) return null;
   const Renderer = registration.Renderer;
-  return <Renderer {...props} sessionState={route.slice} />;
+  return <Renderer {...props} sessionState={route.slice} routeState={route} />;
 }
 
 function ParameterLinksChatPlugin({
@@ -177,48 +179,20 @@ function ParameterLinksChatPlugin({
   sessionState,
   running,
   active,
+  routeState,
 }: RouteChatPluginProps) {
   const document = parseRouteDoc(sessionState, parameterLinksRouteState);
   const profile = document?.draftProfile ?? document?.profile;
   const evaluation = document?.evaluation;
-  const { config, currentThreadId } = useWorkbench();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [previewedProfile, setPreviewedProfile] = useState<NonNullable<typeof profile> | null>(
-    null,
-  );
+  const previewed =
+    routeState.lastCommand?.command === "preview" && isRecord(routeState.lastCommand.input)
+      ? routeState.lastCommand.input.profile
+      : null;
 
   const errors = evaluation?.issues.filter((issue) => issue.severity === "error") ?? [];
 
-  const command = async (name: "refresh" | "preview" | "apply") => {
-    const commandProfile = name === "apply" ? previewedProfile : profile;
-    if (name !== "refresh" && !commandProfile) return;
-    setBusy(name);
-    setError(null);
-    try {
-      const result = await writeRouteState(
-        config,
-        "parameter-links",
-        "command",
-        {
-          command: name,
-          input: name === "refresh" ? {} : { profile: commandProfile },
-        },
-        { threadId: currentThreadId },
-      );
-      if (!result.ok) {
-        setError(result.error ?? result.hint ?? `${name} failed.`);
-      } else if (name === "preview" && profile) {
-        setPreviewedProfile(profile);
-      } else {
-        setPreviewedProfile(null);
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : `${name} failed.`);
-    } finally {
-      setBusy(null);
-    }
-  };
+  const command = (name: "refresh" | "preview" | "apply") =>
+    routeState.command(name, name === "refresh" ? undefined : { profile });
 
   return (
     <InlineRoutePlugin
@@ -243,11 +217,11 @@ function ParameterLinksChatPlugin({
       {active ? (
         <ParameterLinksReview
           document={document}
-          busy={busy}
-          error={error}
+          busy={routeState.busy}
+          error={routeState.error}
           errors={errors.length}
-          reviewed={sameParameterLinkProfile(profile, previewedProfile)}
-          onCommand={(name) => void command(name)}
+          reviewed={sameParameterLinkProfile(profile, previewed)}
+          onCommand={(name) => void command(name).catch(() => undefined)}
         />
       ) : null}
     </InlineRoutePlugin>
@@ -371,6 +345,7 @@ function FamilyTypesChatPlugin({
   sessionState,
   running,
   active,
+  routeState,
 }: RouteChatPluginProps) {
   const document = parseRouteDoc(sessionState, familyTypesRouteState);
   const cells = document?.cells ?? {};
@@ -399,7 +374,7 @@ function FamilyTypesChatPlugin({
 
       {active && reviewable ? (
         <CellTrichotomyReviewer
-          route="family-types"
+          state={routeState}
           segment="cells"
           cells={cells}
           commitCommand="push"

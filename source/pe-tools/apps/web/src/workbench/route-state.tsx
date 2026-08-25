@@ -1,8 +1,9 @@
 /** Thread-scoped route documents over the host RouteWorkspace API. */
-import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { Cause, Option } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { z } from "zod";
 
 import {
@@ -13,8 +14,11 @@ import {
 
 export type { RouteStatePatch, RouteStateWriteResult } from "@pe/agent-contracts";
 
-import { docAtom, docWriter, type Scope } from "#/state/route-store";
-import { type WorkbenchEndpointConfig, peUrl } from "./config";
+import { appAtomRegistry } from "#/state/registry";
+import { createRouteStoreCore, docAtom, docWriter, type Scope } from "#/state/route-store";
+import { useRouteStore } from "#/state/use-route-store";
+
+type LastCommand = { command: string; input?: unknown } | null;
 
 export interface RouteStateHandle<T> {
   slice: T | null;
@@ -24,61 +28,85 @@ export interface RouteStateHandle<T> {
   peaActive: boolean;
   connected: boolean | null;
   error: string | null;
+  busy: string | null;
+  lastCommand: LastCommand;
 }
 
 export function useRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
   scope: Scope,
 ): RouteStateHandle<z.infer<TSchema>> {
-  const wireResult = useAtomValue(docAtom(spec, scope));
+  const store = useRouteStore(() => createRouteStateStore(appAtomRegistry, spec, scope));
+  const wireResult = useAtomValue(store.slice);
+  const busy = useAtomValue(store.busy);
+  const failure = useAtomValue(store.failure);
+  const lastCommand = useAtomValue(store.lastCommand);
   const wire = AsyncResult.isSuccess(wireResult) ? wireResult.value : null;
-  const failure = AsyncResult.isFailure(wireResult) ? wireResult.cause : null;
-  const writer = useMemo(() => docWriter(spec, scope), [spec, scope.threadId]);
+  const wireFailure = AsyncResult.isFailure(wireResult) ? wireResult.cause : null;
 
   return {
     slice: wire?.doc ?? null,
     hydrated: wire?.hydrated ?? false,
-    apply: writer.apply,
-    command: (command, input) => writer.command(command as keyof TSchema & string, input),
+    apply: store.apply,
+    command: store.command,
     peaActive: wire?.peaActive ?? false,
-    connected: failure ? false : (wire?.connected ?? null),
-    error: failure
-      ? Option.getOrElse(
-          Option.map(Cause.findErrorOption(failure), (caught) => caught.message),
-          () => "wire failed",
-        )
-      : (wire?.error ?? null),
+    connected: wireFailure ? false : (wire?.connected ?? null),
+    error:
+      failure?.message ??
+      (wireFailure
+        ? Option.getOrElse(
+            Option.map(Cause.findErrorOption(wireFailure), (caught) => caught.message),
+            () => "wire failed",
+          )
+        : (wire?.error ?? null)),
+    busy: busy?.id ?? null,
+    lastCommand,
   };
 }
 
-export async function writeRouteState(
-  config: WorkbenchEndpointConfig,
-  route: string,
-  suffix: "apply" | "command",
-  body: Record<string, unknown>,
+function createRouteStateStore<TSchema extends z.ZodType>(
+  registry: AtomRegistry.AtomRegistry,
+  spec: RouteStateSpec<TSchema>,
   scope: Scope,
-): Promise<RouteStateWriteResult> {
-  try {
-    const response = await fetch(routeWorkspaceUrl(config, route, suffix, scope), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const payload = (await response.json().catch(() => null)) as RouteStateWriteResult | null;
-    return payload ?? { ok: false, error: `${suffix} failed (${response.status})` };
-  } catch (caught) {
-    return { ok: false, error: caught instanceof Error ? caught.message : String(caught) };
-  }
+) {
+  const core = createRouteStoreCore(`card/${spec.route}`, registry);
+  const writer = docWriter(spec, scope);
+  const lastCommand = core.owned("page/last-command", Atom.make<LastCommand>(null));
+  const run = (verb: string, write: () => Promise<RouteStateWriteResult>) =>
+    core.runVerb(verb, async () => {
+      const result = await write();
+      const failure = routeWriteFailure(result);
+      if (failure) throw Error(failure);
+      return result;
+    }, [spec.route]);
+  return {
+    registry,
+    slice: core.owned("slice/document", docAtom(spec, scope)),
+    busy: core.busy,
+    failure: core.failure,
+    lastCommand,
+    apply: (patches: RouteStatePatch[]) => run("apply", () => writer.apply(patches)),
+    command: async (command: string, input?: unknown) => {
+      const result = await run(command, () =>
+        writer.command(command as keyof TSchema & string, input),
+      );
+      registry.set(lastCommand, { command, input });
+      return result;
+    },
+    dispose: core.dispose,
+  };
 }
 
-function routeWorkspaceUrl(
-  config: WorkbenchEndpointConfig,
-  route: string,
-  operation: "read" | "events" | "apply" | "command",
-  scope: Scope,
-): string {
-  const suffix = operation === "read" ? "" : `/${operation}`;
-  const url = new URL(peUrl(config, `/route-state/${route}${suffix}`));
-  url.searchParams.set("threadId", scope.threadId);
-  return url.toString();
+function routeWriteFailure(result: RouteStateWriteResult): string | null {
+  if (!result.ok) return result.error ?? result.hint ?? "Route update failed.";
+  const failures =
+    result.result && typeof result.result === "object"
+      ? (result.result as { failures?: unknown }).failures
+      : undefined;
+  if (!Array.isArray(failures) || failures.length === 0) return null;
+  const first = failures[0] as { key?: string; error?: string };
+  const detail = [first?.key, first?.error].filter((part) => typeof part === "string").join(": ");
+  return `${failures.length} value${failures.length === 1 ? "" : "s"} failed${
+    detail ? `: ${detail}` : "."
+  }`;
 }

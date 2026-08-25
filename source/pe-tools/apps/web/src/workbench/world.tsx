@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { WorkbenchContextBreakdown, WorkbenchContextItem } from "@pe/agent-contracts";
 import { EmptyState } from "#/components/lang/empty";
@@ -48,23 +48,29 @@ const PLAIN_CAP: Record<string, string> = {
 /**
  * Tracks the previous send's breakdown as the diff baseline. The baseline only advances when
  * a new user turn lands (a "send"), so streaming pushes within a turn don't flicker the diff.
- * Refs-in-render derived state: idempotent given the same inputs.
+ * The chat store owns the baseline so route remounts do not reset page memory.
  */
 export function useCacheView(
   breakdown: WorkbenchContextBreakdown | undefined,
   userTurns: number,
 ): CacheView {
-  const lastTurn = useRef<number>(userTurns);
-  const prevSig = useRef<Map<string, string>>(signatureMap(breakdown));
-  const baseline = useRef<Map<string, string> | null>(null);
-
-  if (userTurns !== lastTurn.current) {
-    baseline.current = prevSig.current; // the prior send's layers
-    lastTurn.current = userTurns;
-  }
-  const view = computeCacheView(breakdown, baseline.current);
-  prevSig.current = signatureMap(breakdown);
-  return view;
+  const { store } = useWorkbench();
+  const cache = useAtomValue(store.atoms.worldCache);
+  const baseline =
+    cache.lastTurn !== null && userTurns !== cache.lastTurn ? cache.prevSig : cache.baseline;
+  useEffect(() => {
+    store.actions.setWorldCache((previous) => ({
+      lastTurn: userTurns,
+      prevSig: signatureMap(breakdown),
+      baseline:
+        previous.lastTurn === null
+          ? null
+          : previous.lastTurn === userTurns
+            ? previous.baseline
+            : previous.prevSig,
+    }));
+  }, [store, breakdown, userTurns]);
+  return computeCacheView(breakdown, baseline);
 }
 
 // Per-layer identity hue — TAXONOMY, so it spends the viz ladder (never a meaning role).

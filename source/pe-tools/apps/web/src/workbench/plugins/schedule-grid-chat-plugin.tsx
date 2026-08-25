@@ -30,6 +30,7 @@ export function ScheduleGridChatPlugin({
   sessionState,
   running,
   active,
+  routeState,
 }: RouteChatPluginProps) {
   const document = parseRouteDoc(sessionState, scheduleGridRouteState);
   const snapshot = document?.snapshot ?? null;
@@ -92,7 +93,7 @@ export function ScheduleGridChatPlugin({
 
       {active && reviewable ? (
         <CellTrichotomyReviewer
-          route="schedule-grid"
+          state={routeState}
           segment="cells"
           cells={cells}
           commitCommand="push"

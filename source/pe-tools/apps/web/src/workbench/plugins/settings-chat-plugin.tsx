@@ -17,6 +17,7 @@ export function SettingsChatPlugin({
   sessionState,
   running,
   active,
+  routeState,
 }: RouteChatPluginProps) {
   const document = parseRouteDoc(sessionState, settingsRouteState);
   const isFamilyModel =
@@ -53,7 +54,7 @@ export function SettingsChatPlugin({
 
       {active && reviewable ? (
         <CellTrichotomyReviewer
-          route="settings"
+          state={routeState}
           segment="fields"
           cells={fields}
           commitCommand="save"

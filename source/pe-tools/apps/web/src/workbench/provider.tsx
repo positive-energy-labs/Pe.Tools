@@ -85,7 +85,16 @@ function WorkbenchStoreOwner({
     }),
   );
   const state = useAtomValue(store.atoms.state);
-  const threads = useAtomValue(store.atoms.threads);
+  const threads: StoredThreadSummary[] = state.threads.items.map((thread) => ({
+    id: thread.threadId,
+    title:
+      thread.title?.trim() ||
+      (thread.threadId.length <= 12 ? thread.threadId : `${thread.threadId.slice(0, 8)}...`),
+    updatedAt: thread.updatedAt ?? new Date(0).toISOString(),
+    messageCount: 0,
+    persisted: true,
+    cwd: thread.cwd,
+  }));
   const loading = useAtomValue(store.atoms.loading);
   const sliceError = useAtomValue(store.atoms.sliceError);
   const failure = useAtomValue(store.atoms.failure);

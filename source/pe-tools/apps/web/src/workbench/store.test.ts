@@ -51,7 +51,7 @@ function harness() {
 describe("chat store", () => {
   it("does not notify Lens for unchanged controller values across one event", async () => {
     const h = harness();
-    await vi.waitFor(() => expect(h.registry.get(h.store.atoms.threads)).toHaveLength(1));
+    await vi.waitFor(() => expect(h.registry.get(h.store.atoms.state).threads.items).toHaveLength(1));
     let notifications = 0;
     const unsubscribeInspect = h.registry.subscribe(h.store.atoms.lensInspectKey, () => { notifications += 1; });
     const unsubscribeFollowing = h.registry.subscribe(h.store.atoms.lensFollowing, () => { notifications += 1; });
@@ -73,7 +73,7 @@ describe("chat store", () => {
 
   it("reduces SSE in arrival order and refuses send while a run is active", async () => {
     const h = harness();
-    await vi.waitFor(() => expect(h.registry.get(h.store.atoms.threads)).toHaveLength(1));
+    await vi.waitFor(() => expect(h.registry.get(h.store.atoms.state).threads.items).toHaveLength(1));
     h.event({ type: "message_start", message: { id: "a", role: "assistant", content: [{ type: "text", text: "first" }] } });
     h.event({ type: "message_start", message: { id: "b", role: "assistant", content: [{ type: "text", text: "second" }] } });
     h.event({ type: "agent_start" });
