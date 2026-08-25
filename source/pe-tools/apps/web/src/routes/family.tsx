@@ -22,9 +22,15 @@
  * that chose the lane would be able to contradict the page's own state; `?variant`, because there
  * is nothing to switch to.
  */
-import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
+import { EmptyState } from "#/components/lang/empty";
+import { createLiveFamilyHost } from "#/family/host";
+import { createFamilyStore, type FamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
+import { registerInspectableAtomStore } from "#/state/atom-inspect";
+import { appAtomRegistry } from "#/state/registry";
 
 export const Route = createFileRoute("/family")({
   /** Every param is optional, so every `<Link to="/family">` stays search-free. */
@@ -38,6 +44,38 @@ export const Route = createFileRoute("/family")({
 });
 
 function FamilyRoute() {
-  const { family } = Route.useSearch();
-  return <FamilyWorkspace requestedFamily={family} />;
+  const search = Route.useSearch();
+  const { family, thread } = search;
+  if (!thread)
+    return <EmptyState story="scope" exit="open this page from a chat thread">no family workspace is open</EmptyState>;
+  const target = (search as typeof search & { target?: string }).target ?? "";
+  return <FamilyStoreOwner key={`${thread}:${target}`} thread={thread} target={target} family={family} />;
+}
+
+function FamilyStoreOwner({ thread, target, family }: { thread: string; target: string; family?: string }) {
+  const navigate = useNavigate({ from: "/family" });
+  const storeRef = useRef<FamilyStore | null>(null);
+  const disposeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  if (!storeRef.current) {
+    const scope = { threadId: thread };
+    storeRef.current = createFamilyStore({
+      registry: appAtomRegistry,
+      scope,
+      host: createLiveFamilyHost(scope),
+      search: {
+        target,
+        patch: (patch) => void navigate({ search: (previous) => ({ ...previous, ...patch }) }),
+      },
+    });
+  }
+  const store = storeRef.current;
+  useEffect(() => {
+    const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
+    if (disposeTimer.current) clearTimeout(disposeTimer.current);
+    return () => {
+      disposeTimer.current = setTimeout(() => store.dispose(), 0);
+      unregister?.();
+    };
+  }, [store]);
+  return <FamilyWorkspace store={store} requestedFamily={family} />;
 }

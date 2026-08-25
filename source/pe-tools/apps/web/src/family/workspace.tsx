@@ -83,7 +83,7 @@
  *   blind (SURFACE-PHILOSOPHY §2). Per-cell capture/apply stay in the drill-in.
  *
  * ── WHAT IS AND IS NOT WIRED (phase B, 2026-08-17) ──────────────────────────────────────────
- * TWO LANES, ONE SHAPE. `useFamilyLane` answers the only question that separates them — is a
+ * TWO LANES, ONE SHAPE. The family store answers the only question that separates them — is a
  * family document open in `route:settings`? — and the page below it renders ONE `PageWorld` either
  * way. Nothing in this file asks whether a host exists.
  *
@@ -116,7 +116,8 @@
  * and the proposals with their accept/deny (they need `route:settings` field
  * proposals, which the projection deliberately does not invent), and the doc pane's parse.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useAtomValue } from "@effect/atom-react";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -145,12 +146,10 @@ import {
   buildRefusals,
   readBuildReceipt,
   type BuildFacts,
-  type BuildRefusal,
 } from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
 import { NavStateCell, ProposedCell } from "#/family/marks";
-import { FAMILY_MODULE } from "#/family/host";
-import { useFamilyLane } from "#/family/lane";
+import type { FamilyStore } from "#/family/store";
 import {
   AGREEMENT_TONE,
   MARK,
@@ -163,7 +162,6 @@ import {
   draftValueAt,
   effective,
   ghostRows,
-  initialDraft,
   isFormula,
   isUnsavedAt,
   paramNameFor,
@@ -171,18 +169,14 @@ import {
   partsInFocus,
   pinnedSort,
   rowAgreement,
-  savedFrom,
   savedValueAt,
   sortDirOf,
   type CellVerdict,
   type Draft,
   type Focus,
-  type Overlay,
   type PRow,
   type PageWorld,
-  type SavedProfile,
 } from "#/family/model";
-import { draftToPatches } from "#/family/project";
 import {
   boundParam,
   type GeomMeta,
@@ -191,96 +185,69 @@ import {
 } from "#/family/world";
 import { cn } from "#/lib/utils";
 
-type DocMode = "text" | "sheet";
-
-export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string }) {
+export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore; requestedFamily?: string }) {
   /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
-  const lane = useFamilyLane();
-  const { world, store } = lane;
+  const lane = useAtomValue(store.atoms.lane);
+  useAtomValue(store.feeds.profile);
+  const world = lane.world;
   /**
    * The last-read document, as a draft. It is the page's record of the DISK and the baseline the
    * reverse projection diffs against — so a save writes what moved and nothing else, and a draft
    * back at its baseline honestly has nothing to save.
    */
-  const savedDraft = useMemo(() => initialDraft(world), [world]);
-
-  const [draft, setDraft] = useState<Draft>(() => initialDraft(world));
+  const draft = useAtomValue(store.atoms.draft);
+  const setDraft = store.actions.setDraft;
   /** THE PSEUDO-DIMENSION. PAGE state, never the URL: which reading you are looking through is not
    * a place, and a link that restored someone else's overlay would be claiming it is. Draft is the
    * default because it is the only one you can work in. */
-  const [overlay, setOverlay] = useState<Overlay>("draft");
+  const overlay = useAtomValue(store.atoms.overlay);
+  const setOverlay = store.actions.setOverlay;
   /** The disk, per cell. Seeded from the document — it starts saved — and re-snapshotted on save. */
-  const [saved, setSaved] = useState<SavedProfile>(() => savedFrom(initialDraft(world)));
+  const saved = useAtomValue(store.atoms.saved);
   /** Table state is OWNED here, because the sort direction is an input to the ghost-pinning
    * workaround — the sort key has to know which way it is about to be read. */
-  const [tableState, setTableState] = useState<MasterTableState>(() => ({
-    filters: {},
-    sorts: [],
-    query: "",
-  }));
-  const [drillState, setDrillState] = useState<MasterTableState>(() => ({
-    filters: {},
-    sorts: [],
-    query: "",
-  }));
-  const [docMode, setDocMode] = useState<DocMode>("text");
-  const [docZoom, setDocZoom] = useState(1);
-  const [drillType, setDrillType] = useState<string | null>(null);
-  const [stageType, setStageType] = useState<string>(
-    world.typeNames[1] ?? world.typeNames[0] ?? "Standard",
-  );
-  const [focus, setFocus] = useState<Focus>(null);
-  const [focusedProposal, setFocusedProposal] = useState<string | null>(null);
+  const tableState = useAtomValue(store.atoms.table);
+  const setTableState = store.actions.setTable;
+  const drillState = useAtomValue(store.atoms.drill);
+  const setDrillState = store.actions.setDrill;
+  const docMode = useAtomValue(store.atoms.docMode);
+  const setDocMode = store.actions.setDocMode;
+  const docZoom = useAtomValue(store.atoms.docZoom);
+  const setDocZoom = store.actions.setDocZoom;
+  const drillType = useAtomValue(store.atoms.drillType);
+  const setDrillType = store.actions.setDrillType;
+  const stageType = useAtomValue(store.atoms.stageType);
+  const setStageType = store.actions.setStageType;
+  const focus = useAtomValue(store.atoms.focus);
+  const setFocus = store.actions.setFocus;
+  const focusedProposal = useAtomValue(store.atoms.focusedProposal);
+  const setFocusedProposal = store.actions.setFocusedProposal;
   /** The row whose proposals were last LOCATED from the table. Sticky — hover comes and goes, but
    * "I clicked this row's rail dot" has to survive the pointer leaving the row on its way to the
    * sidebar, or the cards would go dark exactly as you reached for them. */
-  const [pinnedParam, setPinnedParam] = useState<string | null>(null);
-  const [anatomyCollapsed, setAnatomyCollapsed] = useState(false);
-  const [receipt, setReceipt] = useState<{ text: string; atMs: number } | null>(null);
-  const [target, setTarget] = useState("");
+  const pinnedParam = useAtomValue(store.atoms.pinnedParam);
+  const setPinnedParam = store.actions.setPinnedParam;
+  const anatomyCollapsed = useAtomValue(store.atoms.anatomyCollapsed);
+  const setAnatomyCollapsed = store.actions.setAnatomyCollapsed;
+  const coreReceipt = useAtomValue(store.atoms.receipt);
+  const receipt = coreReceipt && { text: coreReceipt.text, atMs: coreReceipt.at };
+  const target = useAtomValue(store.atoms.target);
+  const setTarget = store.actions.setTarget;
   /**
    * What the doc pane's LOWER HALF is showing. One slot, two subjects: a constituent's
    * non-bindable metadata, or a parameter's family-level value. They share the slot because they
    * are the same question asked twice — "what is true of this thing itself, rather than of it at
    * some type" — and because a page with two inspectors has no answer to which one you meant.
    */
-  const [inspect, setInspect] = useState<
-    { kind: "part"; slug: string } | { kind: "param"; name: string } | null
-  >(null);
+  const inspect = useAtomValue(store.atoms.inspect);
+  const setInspect = store.actions.setInspect;
   /** The ghost row whose bind picker is open. One at a time; picking or cancelling closes it. */
-  const [binding, setBinding] = useState<{ slug: string; property: string } | null>(null);
+  const binding = useAtomValue(store.atoms.binding);
+  const setBinding = store.actions.setBinding;
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const say = (text: string) => setReceipt({ text, atMs: Date.now() });
+  const say = store.actions.say;
 
-  /**
-   * RE-SEED ON A NEW REVISION, and only then.
-   *
-   * `lane.seedKey` is "which document, at which version token". It changes when you pick a
-   * different document and when a save bumps the token — both of which mean the draft you were
-   * holding describes something that is no longer in front of you. It does NOT change on an
-   * unrelated re-render, which is what keeps work in progress alive.
-   *
-   * The ref rather than the effect's dependency list is load-bearing: React may run an effect twice
-   * for the same value, and a re-seed that fired twice would throw away the edit you made between.
-   */
-  const seededRef = useRef(lane.seedKey);
-  useEffect(() => {
-    if (seededRef.current === lane.seedKey) return;
-    seededRef.current = lane.seedKey;
-    const next = initialDraft(world);
-    setDraft(next);
-    setSaved(savedFrom(next));
-    setStageType(world.typeNames[1] ?? world.typeNames[0] ?? "");
-    // Modes that named something in the OLD document cannot survive it.
-    setDrillType(null);
-    setInspect(null);
-    setBinding(null);
-    setFocus(null);
-    setFocusedProposal(null);
-    setPinnedParam(null);
-    setOverlay("draft");
-  }, [lane.seedKey, world]);
 
   // Esc unwinds ONE thing, innermost first: the bind picker, then the inspector, then the
   // drill-in. Each is a mode of a pane rather than a place, so leaving one must never feel like
@@ -521,7 +488,8 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     say(`applied ${count} value${count === 1 ? "" : "s"} into the live family`);
   };
 
-  const [saving, setSaving] = useState(false);
+  const busy = useAtomValue(store.atoms.busy);
+  const saving = busy?.id === "save";
 
   /**
    * OPEN — the lane switch, and the only verb on this page that changes which file the page IS.
@@ -530,9 +498,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    */
   const openDocument = (relativePath: string) =>
     void (async () => {
-      const opened = await store.settingsCommand("open", {
-        documentId: { ...FAMILY_MODULE, relativePath },
-      });
+      const opened = await store.actions.open(relativePath);
       if (!opened.ok)
         say(
           `Could not open ${relativePath} — ${opened.hint ?? opened.error ?? "the host refused, without saying why"}`,
@@ -541,7 +507,8 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
 
   /** The host's own schema verdict on the SAVED file. Only meaningful on the live lane: the fixture
    * has no schema behind it, and a green chip there would be claiming a check nobody ran. */
-  const validation = lane.document ? (store.snapshot?.validation ?? null) : null;
+  const snapshot = useAtomValue(store.atoms.snapshot);
+  const validation = lane.document ? (snapshot?.validation ?? null) : null;
   const validationSays = (validation?.issues ?? [])
     .slice(0, 3)
     .map((issue) =>
@@ -561,43 +528,14 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * LIVE: the draft is diffed into staged field patches, staged onto `route:settings`, and the
    * host's own `save` writes them under the version token captured at open. Nothing is folded in
    * here on success: the snapshot comes back over SSE with a new token, the lane re-projects, and
-   * the re-seed effect above rebuilds the draft from what actually landed. That is the difference
+   * the store's version-token guard rebuilds the draft from what actually landed. That is the difference
    * between a surface that shows you the write and one that shows you its own optimism.
    */
   const save = async () => {
-    if (!lane.document) {
-      setSaved(savedFrom(draft));
-      setDraft((previous) => ({ ...previous, dirty: false }));
-      say(`saved ${world.path} — ${unsavedCount} value${unsavedCount === 1 ? "" : "s"} written`);
-      return;
-    }
-    const patches = draftToPatches(lane.document.model, draft, savedDraft);
-    if (patches.length === 0) {
-      say(
-        `Nothing to write — every value in the draft already matches ${lane.document.relativePath} on disk.`,
-      );
-      return;
-    }
-    setSaving(true);
     try {
-      // The host refuses in its own words, and those words are the teaching channel — a conflict, a
-      // schema failure and a field flagged for attention are three different refusals, and
-      // flattening them into "save failed" would be the surface throwing away the only help there is.
-      const staged = await store.applyFields(patches);
-      if (!staged.ok) {
-        say(`Refused while staging — ${staged.hint ?? staged.error ?? "the document rejected it"}`);
-        return;
-      }
-      const written = await store.settingsCommand("save");
-      if (!written.ok) {
-        say(`Refused — ${written.hint ?? written.error ?? "save failed"}`);
-        return;
-      }
-      say(
-        `saved ${lane.document.relativePath} — ${patches.length} field${patches.length === 1 ? "" : "s"} written`,
-      );
-    } finally {
-      setSaving(false);
+      await store.actions.save();
+    } catch (error) {
+      say(`Refused — ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -618,19 +556,20 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   // `family.editor.apply` is deliberately NOT wired: the profile-wins direction is a later phase,
   // and the apply verbs above stay page-local and honest about it.
 
-  const [capturing, setCapturing] = useState(false);
+  const capturing = busy?.id === "capture";
   /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
-  const [armedBuild, setArmedBuild] = useState<{ token: string | null; reason: string } | null>(
-    null,
-  );
-  const [building, setBuilding] = useState(false);
+  const armedBuild = useAtomValue(store.atoms.armedBuild);
+  const setArmedBuild = store.actions.setArmedBuild;
+  const building = busy?.id === "build";
   /** The host's own last word on a build, or a latched unknown outcome. Outranks the predicates. */
-  const [buildSaid, setBuildSaid] = useState<BuildRefusal | null>(null);
+  const buildSaid = useAtomValue(store.atoms.buildSaid);
+  const setBuildSaid = store.actions.setBuildSaid;
+  const fields = useAtomValue(store.atoms.fields);
 
   /** Fields staged onto `route:settings` but not yet written — unsaved by another route. */
   const stagedCount = useMemo(
-    () => Object.values(store.fields).filter((field) => field.staged != null).length,
-    [store.fields],
+    () => Object.values(fields).filter((field) => field.staged != null).length,
+    [fields],
   );
 
   /** Everything the ceremony reads, in one flat record. The predicates live in `#/family/build`. */
@@ -641,10 +580,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       validation,
       unsavedCount,
       stagedCount,
-      boundTarget: store.boundTarget,
+      boundTarget: target,
       armedToken: armedBuild?.token ?? null,
     }),
-    [lane.document, validation, unsavedCount, stagedCount, store.boundTarget, armedBuild],
+    [lane.document, validation, unsavedCount, stagedCount, target, armedBuild],
   );
 
   /**
@@ -653,19 +592,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * not move for a capture, because re-seeding would throw away edits in progress. A live value is
    * a READING of Revit, not part of what you are editing, so it is folded in on its own.
    */
-  const evidenceStamp = store.evidence?.from.capturedAt ?? null;
-  const liveValues = world.live?.values ?? null;
-  const evidenceRef = useRef(evidenceStamp);
-  useEffect(() => {
-    if (evidenceRef.current === evidenceStamp) return;
-    evidenceRef.current = evidenceStamp;
-    setDraft((previous) => ({ ...previous, live: structuredClone(liveValues ?? {}) }));
-  }, [evidenceStamp, liveValues]);
-
   const captureLive = async () => {
-    setCapturing(true);
     try {
-      const read = await store.familyCommand("capture_evidence", {});
+      const read = await store.actions.capture();
       if (!read.ok) {
         // The host's words verbatim — "is a family document active in the bound session?" IS the
         // exit, and paraphrasing it into "capture failed" would throw away the only help there is.
@@ -678,8 +607,8 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       say(
         `read ${payload.familyName ?? "the live family"} out of Revit — ${payload.parameterCount ?? 0} parameters; the ⇄ live overlay is now stamped with this read`,
       );
-    } finally {
-      setCapturing(false);
+    } catch (error) {
+      say(`Could not read the live family — ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -691,12 +620,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     const relativePath = lane.document?.relativePath;
     if (relativePath == null || armedBuild == null) return;
     if (buildRefusals({ ...buildFacts, armedToken: armedBuild.token }).length > 0) return;
-    setBuilding(true);
     setBuildSaid(null);
     try {
-      const built = await store.familyCommand("build_evidence", {
-        documentId: { ...FAMILY_MODULE, relativePath },
-      });
+      const built = await store.actions.build(relativePath);
       if (!built.ok) {
         const says = built.hint ?? built.error ?? "the host refused, without saying why";
         setBuildSaid({ code: "host", says });
@@ -716,8 +642,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       // build has already consumed would invite a second, differently-named .rfa.
       setArmedBuild(null);
       say(buildReceiptLine(receipt, new Date().toLocaleTimeString()));
-    } finally {
-      setBuilding(false);
+    } catch (error) {
+      const says = error instanceof Error ? error.message : String(error);
+      setBuildSaid({ code: "host", says });
+      say(`Build refused — ${says}`);
     }
   };
 
