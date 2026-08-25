@@ -177,7 +177,7 @@ export function refusal(...): string | null {
             visibleRows: registry.get(visibleRowsAtom), hover: currentHover, staged: [...stagedIds], ... },
     feeds: Object.fromEntries(Object.entries(feeds).map(([key, atom]) =&gt; [key, registry.get(atom)])),</code></pre>
 <p class="src">takeoff/store.ts:1328–1345</p>
-<p>Three things in eleven lines. <code>registry.get(feedAtom)</code> on an unread feed <em>materializes</em> it — inspecting can fire a Revit read. <code>hover: currentHover</code> is a closure variable, not an atom, so the census mirrors a value the graph doesn't own. And this snapshot is already the honest shape that the 187-line panel re-derives by scanning the registry:</p>
+<p>Three things in eleven lines. <code>registry.get(feedAtom)</code> would materialize an unread feed — but C2's census (2026-08-25) showed the store constructor already does that: <code>owned</code> calls <code>registry.mount</code>, and mount reads immediately (<code>AtomRegistry.ts:520–537</code>), so every feed's host read can start before any pane mounts. The lie is not in <code>inspect()</code>; it is in a store that promises lazy reads while mounting eagerly. <code>hover: currentHover</code> is a closure variable, not an atom, so the census mirrors a value the graph doesn't own. And this snapshot is already the honest shape that the 187-line panel re-derives by scanning the registry:</p>
 <pre><code class="language-tsx">if (!visible) return;
 setSnapshot(inspector.snapshot());
 const unsubscribe = inspector.subscribe(() =&gt; setSnapshot(inspector.snapshot()));
