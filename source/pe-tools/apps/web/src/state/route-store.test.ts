@@ -101,7 +101,6 @@ describe("route store kit", () => {
       route: "test-route",
       title: "Test",
       description: "Test",
-      key: "route:test-route",
       schema: z.object({ value: z.string() }),
       agentWriteMask: [],
       commands: {},

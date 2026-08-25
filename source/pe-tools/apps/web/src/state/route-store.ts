@@ -7,7 +7,7 @@ import { MastraClient } from "@mastra/client-js";
 import { z } from "zod";
 
 import {
-  readRouteState,
+  parseRouteDoc,
   type RouteDocOf,
   type RouteStatePatch,
   type RouteStateSpec,
@@ -293,7 +293,7 @@ function wireStream<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
           ? { ...state, connected: message.value }
         : {
             ...state,
-            doc: readRouteState({ [spec.key]: message.doc }, spec),
+            doc: parseRouteDoc(message.doc, spec),
             hydrated: true,
           },
     ),
