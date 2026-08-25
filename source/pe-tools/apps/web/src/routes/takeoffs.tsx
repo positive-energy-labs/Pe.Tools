@@ -280,7 +280,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
                   key: "retry-r10",
                   label: "retry .r10",
                   demands: ["r10"],
-                  run: async () => store.actions.invalidate(["rhvac-open", "rhvac-list"]),
+                  run: async () => store.actions.retryRhvac(),
                 },
               ]
             : []),

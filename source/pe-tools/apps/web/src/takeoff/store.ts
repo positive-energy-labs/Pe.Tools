@@ -320,40 +320,62 @@ export function atlasRoomState(room: WorldRoom, open: number): AtlasRoomState {
   return "unreviewed";
 }
 
-const atlasFacet = (row: AtlasRow, key: string): string | undefined => {
-  if (key === "stage") return row.zone.stage;
-  if (key === "state") return ATLAS_ROOM_STATE_LABEL[row.state];
-  if (key === "type") return row.room.type;
-  if (key === "r10")
-    return !row.room.r10
-      ? "not exported"
-      : row.room.r10.lastSyncedSqft === row.room.sqft
-        ? "clean"
-        : "drift";
-  return undefined;
-};
+interface AtlasColumnSemantics {
+  readonly sort: (row: AtlasRow) => string | number;
+  readonly facet?: (row: AtlasRow) => string;
+}
+
+export const ATLAS_COLUMN_SEMANTICS = {
+  stage: {
+    sort: (row) => STAGE_ORDER.indexOf(row.zone.stage),
+    facet: (row) => row.zone.stage,
+  },
+  state: {
+    sort: (row) => ATLAS_ROOM_STATES.indexOf(row.state),
+    facet: (row) => ATLAS_ROOM_STATE_LABEL[row.state],
+  },
+  zone: { sort: (row) => row.zone.zone.key },
+  name: { sort: (row) => row.room.name },
+  type: { sort: (row) => row.room.type, facet: (row) => row.room.type },
+  sqft: { sort: (row) => row.room.sqft },
+  ceil: { sort: (row) => row.room.ceilingFt },
+  people: { sort: (row) => row.room.data?.people ?? 0 },
+  lightingW: { sort: (row) => row.room.data?.lightingW ?? 0 },
+  equipSensible: { sort: (row) => row.room.data?.equipSensible ?? 0 },
+  equipLatent: { sort: (row) => row.room.data?.equipLatent ?? 0 },
+  ventilationCfm: { sort: (row) => row.room.data?.ventilationCfm ?? 0 },
+  flags: { sort: (row) => row.open.length },
+  r10: {
+    sort: (row) => (!row.room.r10 ? 5 : row.room.r10.lastSyncedSqft === row.room.sqft ? 6 : 0),
+    facet: (row) =>
+      !row.room.r10
+        ? "not exported"
+        : row.room.r10.lastSyncedSqft === row.room.sqft
+          ? "clean"
+          : "drift",
+  },
+} as const satisfies Readonly<Record<string, AtlasColumnSemantics>>;
+
+type AtlasColumnKey = keyof typeof ATLAS_COLUMN_SEMANTICS;
+const atlasColumnSemantics = (key: string): AtlasColumnSemantics | undefined =>
+  ATLAS_COLUMN_SEMANTICS[key as AtlasColumnKey];
+
+const atlasFacet = (row: AtlasRow, key: string): string | undefined =>
+  atlasColumnSemantics(key)?.facet?.(row);
 
 const atlasSortValue = (
   row: AtlasRow,
   key: string,
   fieldsMode: AtlasPageState["fieldsMode"],
 ): string | number | undefined => {
-  if (key === "stage") return STAGE_ORDER.indexOf(row.zone.stage);
-  if (key === "state") return ATLAS_ROOM_STATES.indexOf(row.state);
-  if (key === "zone") return row.zone.zone.key;
-  if (key === "name") return row.room.name;
-  if (key === "type") return row.room.type;
-  if (key === "sqft") return row.room.sqft;
-  if (key === "flags") return row.open.length;
-  if (key === "r10") return atlasFacet(row, key) === "drift" ? 0 : row.room.r10 ? 6 : 5;
-  if (fieldsMode === "panel") return undefined;
-  if (key === "ceil") return row.room.ceilingFt;
-  if (key === "people") return row.room.data?.people ?? 0;
-  if (key === "lightingW") return row.room.data?.lightingW ?? 0;
-  if (key === "equipSensible") return row.room.data?.equipSensible ?? 0;
-  if (key === "equipLatent") return row.room.data?.equipLatent ?? 0;
-  if (key === "ventilationCfm") return row.room.data?.ventilationCfm ?? 0;
-  return undefined;
+  const semantics = atlasColumnSemantics(key);
+  if (!semantics) return undefined;
+  if (
+    fieldsMode === "panel" &&
+    ["ceil", "people", "lightingW", "equipSensible", "equipLatent", "ventilationCfm"].includes(key)
+  )
+    return undefined;
+  return semantics.sort(row);
 };
 
 const compare = (a: string | number | undefined, b: string | number | undefined): number => {
@@ -372,12 +394,23 @@ export function createTakeoffStore(deps: {
 }) {
   const registry = deps.registry;
   const inspector = inspectAtomRegistry(registry);
+  const releases: Array<() => void> = [];
+  const owned =
+    (label: string) =>
+    <A extends Atom.Atom<any>>(atom: A): A => {
+      const labelled = atom.pipe(Atom.autoDispose, Atom.withLabel(label));
+      releases.push(registry.mount(labelled));
+      return labelled;
+    };
   const write = <A>(verb: string, key: string, run: () => A): A => {
     inspector.note({ verb, key });
     return run();
   };
   const runtimeFactory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() });
-  const runtime = runtimeFactory(Layer.empty).pipe(Atom.withLabel("takeoffs/runtime"));
+  const runtime = runtimeFactory(Layer.empty).pipe(owned("takeoffs/runtime"));
+  // FOOTGUN: Atom.context pins its private layer atom. A route-scoped runtime must let the
+  // shared registry reclaim that parent after the store releases its mounts.
+  Reflect.set(runtime.layer, "keepAlive", false);
   let busyTimer: ReturnType<typeof setInterval> | undefined;
   let inFlight = false;
   let currentHover = "";
@@ -385,65 +418,49 @@ export function createTakeoffStore(deps: {
   let selectedRoom = "";
   const stagedIds = new Set<string>();
 
-  const searchAtom = Atom.make<TakeoffSearch>(EMPTY_TAKEOFF_SEARCH).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/search"),
-  );
+  const searchAtom = Atom.make<TakeoffSearch>(EMPTY_TAKEOFF_SEARCH).pipe(owned("takeoffs/search"));
   const targetAtom = Atom.make((get) => get(searchAtom).target).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/search/target"),
+    owned("takeoffs/search/target"),
   );
   const sourceAtom = Atom.make((get) => get(searchAtom).source).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/search/source"),
+    owned("takeoffs/search/source"),
   );
-  const viewAtom = Atom.make((get) => get(searchAtom).view).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/search/view"),
-  );
-  const zonesAtom = Atom.make((get) => get(searchAtom).zones).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/search/zones"),
-  );
-  const dirAtom = Atom.make((get) => get(searchAtom).dir).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/search/dir"),
-  );
-  const r10PathAtom = Atom.make((get) => get(searchAtom).r10).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/search/r10"),
-  );
-  const stageAtom = Atom.make((get) => get(searchAtom).stage).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/search/stage"),
-  );
+  const viewAtom = Atom.make((get) => get(searchAtom).view).pipe(owned("takeoffs/search/view"));
+  const zonesAtom = Atom.make((get) => get(searchAtom).zones).pipe(owned("takeoffs/search/zones"));
+  const dirAtom = Atom.make((get) => get(searchAtom).dir).pipe(owned("takeoffs/search/dir"));
+  const r10PathAtom = Atom.make((get) => get(searchAtom).r10).pipe(owned("takeoffs/search/r10"));
+  const stageAtom = Atom.make((get) => get(searchAtom).stage).pipe(owned("takeoffs/search/stage"));
   const recentDirsAtom = Atom.make<readonly string[]>([]).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/persisted/recent-dirs"),
+    owned("takeoffs/persisted/recent-dirs"),
   );
-  const actionsLogAtom = Atom.make<string[]>([]).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/actions"),
-  );
+  const actionsLogAtom = Atom.make<string[]>([]).pipe(owned("takeoffs/actions"));
   const busyAtom = Atom.make<{ id: string; seconds: number } | null>(null).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/verb/busy"),
+    owned("takeoffs/verb/busy"),
   );
-  const failureAtom = Atom.make<VerbFailure | null>(null).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/verb/failure"),
+  const failureAtom = Atom.make<VerbFailure | null>(null).pipe(owned("takeoffs/verb/failure"));
+  const receiptAtom = Atom.make<VerbReceipt | null>(null).pipe(owned("takeoffs/verb/receipt"));
+  const zoneKeyAtom = Atom.make<AtlasPageState["zoneKey"]>(null).pipe(
+    Atom.withLabel("takeoffs/page/atlas/zone-key"),
   );
-  const receiptAtom = Atom.make<VerbReceipt | null>(null).pipe(
-    Atom.keepAlive,
-    Atom.withLabel("takeoffs/verb/receipt"),
+  const stageFilterAtom = Atom.make<AtlasPageState["stageFilter"]>(null).pipe(
+    Atom.withLabel("takeoffs/page/atlas/stage-filter"),
   );
-  const atlasPageAtom = Atom.make<AtlasPageState>({
-    stageFilter: null,
-    level: "",
-    zoneKey: null,
-    cursor: null,
-    fieldsMode: "columns",
-  }).pipe(Atom.withLabel("takeoffs/page/atlas"));
+  const levelAtom = Atom.make("").pipe(Atom.withLabel("takeoffs/page/atlas/level"));
+  const fieldsModeAtom = Atom.make<AtlasPageState["fieldsMode"]>("columns").pipe(
+    Atom.withLabel("takeoffs/page/atlas/fields-mode"),
+  );
+  const cursorAtom = Atom.make<AtlasPageState["cursor"]>(null).pipe(
+    Atom.withLabel("takeoffs/page/atlas/cursor"),
+  );
+  const atlasPageAtom = Atom.make(
+    (get): AtlasPageState => ({
+      stageFilter: get(stageFilterAtom),
+      level: get(levelAtom),
+      zoneKey: get(zoneKeyAtom),
+      cursor: get(cursorAtom),
+      fieldsMode: get(fieldsModeAtom),
+    }),
+  ).pipe(Atom.withLabel("takeoffs/page/atlas"));
   const atlasTableStateAtom = Atom.make<MasterTableState>({
     filters: {},
     sorts: [],
@@ -478,10 +495,10 @@ export function createTakeoffStore(deps: {
 
   const sessionsSource = runtime
     .atom(() => timed(["sessions"], () => deps.sessions.list()))
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/sessions"));
+    .pipe(owned("takeoffs/source/sessions"));
   const sessionsResult = runtimeFactory
     .withReactivity(["sessions"])(sessionsSource)
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/sessions"));
+    .pipe(owned("takeoffs/result/sessions"));
   const activeDocumentSource = runtime
     .atom((get) => {
       const target = get(targetAtom);
@@ -495,10 +512,10 @@ export function createTakeoffStore(deps: {
         return document;
       });
     })
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/active-document"));
+    .pipe(owned("takeoffs/source/active-document"));
   const activeDocumentResult = runtimeFactory
     .withReactivity(["active-document"])(activeDocumentSource)
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/active-document"));
+    .pipe(owned("takeoffs/result/active-document"));
   const snapshotSource = runtime
     .atom((get) =>
       Effect.gen(function* () {
@@ -509,12 +526,12 @@ export function createTakeoffStore(deps: {
         );
       }),
     )
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/snapshot"));
+    .pipe(owned("takeoffs/source/snapshot"));
   const snapshotResult = runtimeFactory
     .withReactivity(["snapshot"])(
       Atom.swr(snapshotSource, { staleTime: "30 seconds", revalidateOnMount: false }),
     )
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/snapshot"));
+    .pipe(owned("takeoffs/result/snapshot"));
   const candidatesSource = runtime
     .atom((get) =>
       Effect.gen(function* () {
@@ -526,12 +543,12 @@ export function createTakeoffStore(deps: {
         );
       }),
     )
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/candidates"));
+    .pipe(owned("takeoffs/source/candidates"));
   const candidatesResult = runtimeFactory
     .withReactivity(["candidates"])(
       Atom.swr(candidatesSource, { staleTime: "30 seconds", revalidateOnMount: false }),
     )
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/candidates"));
+    .pipe(owned("takeoffs/result/candidates"));
   const adoptRowsAtom = Atom.make((get): readonly AdoptDraft[] | null => {
     const result = get(candidatesResult);
     if (!AsyncResult.isSuccess(result) || !result.value.bound) return null;
@@ -556,10 +573,10 @@ export function createTakeoffStore(deps: {
         bound: true,
       } satisfies TimedRead<readonly string[]>),
     )
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/folders"));
+    .pipe(owned("takeoffs/source/folders"));
   const foldersResult = runtimeFactory
     .withReactivity(["folders"])(foldersSource)
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/folders"));
+    .pipe(owned("takeoffs/result/folders"));
   const listingSource = runtime
     .atom((get) => {
       const dir = get(dirAtom);
@@ -567,12 +584,12 @@ export function createTakeoffStore(deps: {
         ? timed([dir], () => deps.host.listRhvac(dir))
         : Effect.succeed(unbound<RhvacFile[]>([], []));
     })
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/rhvac-list"));
+    .pipe(owned("takeoffs/source/rhvac-list"));
   const listingResult = runtimeFactory
     .withReactivity(["rhvac-list"])(
       Atom.swr(listingSource, { staleTime: "30 seconds", revalidateOnMount: false }),
     )
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/rhvac-list"));
+    .pipe(owned("takeoffs/result/rhvac-list"));
   const r10Source = runtime
     .atom((get) => {
       const path = get(r10PathAtom);
@@ -584,12 +601,12 @@ export function createTakeoffStore(deps: {
         return yield* timed([path], () => deps.host.openRhvac(path));
       });
     })
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/r10-open"));
+    .pipe(owned("takeoffs/source/r10-open"));
   const r10Result = runtimeFactory
     .withReactivity(["rhvac-open"])(
       Atom.swr(r10Source, { staleTime: "30 seconds", revalidateOnMount: false }),
     )
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/r10-open"));
+    .pipe(owned("takeoffs/result/r10-open"));
 
   const sessionsFeed = Atom.make((get) =>
     resultFeed(
@@ -703,15 +720,14 @@ export function createTakeoffStore(deps: {
     ),
   ).pipe(Atom.withLabel("takeoffs/page/decisions"));
   const atlasRowsAtom = Atom.make((get): readonly AtlasRow[] => {
-    const page = get(atlasPageAtom);
+    const zoneKey = get(zoneKeyAtom);
+    const stageFilter = get(stageFilterAtom);
     const decisions = get(decisionsAtom);
     const world = get(worldAtom);
-    const selected = page.zoneKey
-      ? world.zones.find((zone) => zone.zone.key === page.zoneKey)
-      : undefined;
+    const selected = zoneKey ? world.zones.find((zone) => zone.zone.key === zoneKey) : undefined;
     const zones = selected
       ? [selected]
-      : world.zones.filter((zone) => page.stageFilter === null || zone.stage === page.stageFilter);
+      : world.zones.filter((zone) => stageFilter === null || zone.stage === stageFilter);
     return zones.flatMap((zone) =>
       zone.rooms.map((room) => {
         const open = room.flags.filter((flag) => decisions[`${room.guid}::${flag}`] === undefined);
@@ -720,7 +736,7 @@ export function createTakeoffStore(deps: {
     );
   }).pipe(Atom.withLabel("takeoffs/page/atlas-rows"));
   const visibleRowsAtom = Atom.make((get): readonly string[] => {
-    const page = get(atlasPageAtom);
+    const fieldsMode = get(fieldsModeAtom);
     const state = get(atlasTableStateAtom);
     const query = state.query.trim().toLowerCase();
     return get(atlasRowsAtom)
@@ -743,8 +759,8 @@ export function createTakeoffStore(deps: {
       .sort((left, right) => {
         for (const sort of state.sorts) {
           const order = compare(
-            atlasSortValue(left, sort.key, page.fieldsMode),
-            atlasSortValue(right, sort.key, page.fieldsMode),
+            atlasSortValue(left, sort.key, fieldsMode),
+            atlasSortValue(right, sort.key, fieldsMode),
           );
           if (order !== 0) return sort.dir === "desc" ? -order : order;
         }
@@ -800,7 +816,7 @@ export function createTakeoffStore(deps: {
 
   const invalidateAtom = runtime
     .fn((keys: readonly string[]) => Reactivity.invalidate(keys))
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/invalidate"));
+    .pipe(owned("takeoffs/invalidate"));
   const adoptMutation = runtime
     .fn((input: { readonly view: string; readonly items: readonly AdoptItem[] }, get) =>
       Effect.gen(function* () {
@@ -814,7 +830,7 @@ export function createTakeoffStore(deps: {
         return receipt;
       }),
     )
-    .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/verb/adopt"));
+    .pipe(owned("takeoffs/verb/adopt"));
 
   const log = (verb: string, text: string) =>
     write(verb, "actions", () =>
@@ -999,6 +1015,11 @@ export function createTakeoffStore(deps: {
     settle,
     invalidate: (keys: readonly string[]) =>
       write("invalidate", keys.join(","), () => registry.set(invalidateAtom, keys)),
+    retryRhvac() {
+      write("retry-rhvac", "invalidate/rhvac-open,rhvac-list", () =>
+        registry.set(invalidateAtom, ["rhvac-open", "rhvac-list"]),
+      );
+    },
     rememberDir(dir: string) {
       const value = dir.trim();
       if (!value) return;
@@ -1043,7 +1064,13 @@ export function createTakeoffStore(deps: {
     },
     setAtlasPage(patch: Partial<AtlasPageState>) {
       write("set-atlas-page", "page/atlas", () =>
-        registry.update(atlasPageAtom, (page) => ({ ...page, ...patch })),
+        Atom.batch(() => {
+          if (patch.stageFilter !== undefined) registry.set(stageFilterAtom, patch.stageFilter);
+          if (patch.level !== undefined) registry.set(levelAtom, patch.level);
+          if (patch.zoneKey !== undefined) registry.set(zoneKeyAtom, patch.zoneKey);
+          if (patch.cursor !== undefined) registry.set(cursorAtom, patch.cursor);
+          if (patch.fieldsMode !== undefined) registry.set(fieldsModeAtom, patch.fieldsMode);
+        }),
       );
     },
     setSort(sorts: MasterTableState["sorts"]) {
@@ -1206,6 +1233,10 @@ export function createTakeoffStore(deps: {
       stage: stageAtom,
       world: worldAtom,
       atlasPage: atlasPageAtom,
+      zoneKey: zoneKeyAtom,
+      stageFilter: stageFilterAtom,
+      fieldsMode: fieldsModeAtom,
+      cursor: cursorAtom,
       atlasTableState: atlasTableStateAtom,
       atlasRows: atlasRowsAtom,
       visibleRows: visibleRowsAtom,
@@ -1255,6 +1286,7 @@ export function createTakeoffStore(deps: {
       unsubscribe();
       if (busyTimer) clearInterval(busyTimer);
       inspector.dispose();
+      for (const release of releases.splice(0).reverse()) release();
     },
   };
   return store satisfies InspectableAtomStore;

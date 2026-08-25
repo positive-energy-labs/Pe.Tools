@@ -32,3 +32,12 @@ mounts uses a key containing `(route, scope)`. A more specific coordinate can ad
 - Tests pass a fresh registry to each store. Tests own and may dispose that registry.
 - Route-store constructors expose registry ownership instead of hiding a second registry.
 - A route store cannot tear down another route by disposing shared registry state.
+- `createTakeoffStore` mounts each long-lived store atom through its `owned` helper
+  (`source/pe-tools/apps/web/src/takeoff/store.ts:398`). `dispose()` releases those mounts; the
+  atoms use `Atom.autoDispose`, and the app registry's idle TTL then removes their nodes. Effect's
+  private `Atom.context` layer atom is also made disposable (`store.ts:413`) so it cannot pin the
+  route graph after the last mount is released.
+- `RegistryContext` eagerly creates a default registry
+  (`@effect/atom-react/src/RegistryContext.ts:44`). Any React subtree outside the provider binds to
+  that second graph without an error. `__root.tsx` must keep the provider above all routed panes,
+  portals, and devtools.

@@ -35,6 +35,8 @@ const searchPort = () => {
 };
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const wait = (milliseconds: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 const registries: AtomRegistry.AtomRegistry[] = [];
 afterEach(() => {
@@ -54,6 +56,7 @@ function harness() {
   const events = new Set<(event: SessionEvent) => void>();
   const calls = { sessions: 0, doc: 0, snapshot: 0, candidates: 0, list: 0, open: 0, adopt: 0 };
   let failSnapshot = false;
+  let failR10 = false;
   let liveProjection = false;
   let holdSnapshot = false;
   let releaseSnapshot: (() => void) | undefined;
@@ -109,6 +112,7 @@ function harness() {
     },
     async openRhvac(path) {
       calls.open += 1;
+      if (failR10) throw new Error("r10 rejected");
       return {
         sourceFile: path,
         fileIdentity: { fileName: "projectA.r10", stamp: "test" },
@@ -145,6 +149,8 @@ function harness() {
     sessions,
     emit: (event: SessionEvent) => events.forEach((listener) => listener(event)),
     fail: () => (failSnapshot = true),
+    failR10: () => (failR10 = true),
+    recoverR10: () => (failR10 = false),
     live: () => (liveProjection = true),
     hold: () => (holdSnapshot = true),
     release: () => releaseSnapshot?.(),
@@ -272,6 +278,48 @@ describe("takeoff route store", () => {
     ]);
     store.dispose();
     expect(store.atoms.registry.get(store.atoms.visibleRows)).toEqual(filtered);
+  });
+
+  it("keeps derived row identities stable when only the cursor changes", async () => {
+    const store = createStore({
+      host: createFixtureTakeoffHost(),
+      sessions: createFixtureSessionSource(),
+      search: searchPort().port,
+    });
+    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    await store.actions.settle(store.atoms.snapshot);
+    const rows = store.atoms.registry.get(store.atoms.atlasRows);
+    const visibleRows = store.atoms.registry.get(store.atoms.visibleRows);
+    expect(rows).toHaveLength(179);
+
+    store.actions.setAtlasPage({ cursor: visibleRows[0] });
+
+    expect(store.atoms.registry.get(store.atoms.atlasRows)).toBe(rows);
+    expect(store.atoms.registry.get(store.atoms.visibleRows)).toBe(visibleRows);
+    store.dispose();
+  });
+
+  it("releases its nodes from a shared registry after the idle TTL", async () => {
+    const registry = AtomRegistry.make({ defaultIdleTTL: 20, timeoutResolution: 5 });
+    registries.push(registry);
+    const baseline = registry.getNodes().size;
+
+    for (let cycle = 0; cycle < 4; cycle += 1) {
+      const store = createTakeoffStore({
+        host: createFixtureTakeoffHost(),
+        sessions: createFixtureSessionSource(),
+        search: searchPort().port,
+        registry,
+      });
+      store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+      await store.actions.settle(store.atoms.snapshot);
+      registry.get(store.atoms.visibleRows);
+
+      store.dispose();
+      await wait(200);
+
+      expect(registry.getNodes().size).toBe(baseline);
+    }
   });
 
   it("does not invent a conflict from nested Manual J base fields", async () => {
@@ -407,6 +455,27 @@ describe("takeoff route store", () => {
 
     expect(store.atoms.registry.get(store.atoms.world).r10Path).toBe(bound.r10);
     expect(h.calls.open).toBe(1);
+    store.dispose();
+  });
+
+  it("retries a failed .r10 list and open", async () => {
+    const h = harness();
+    h.failR10();
+    const store = createStore({
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    store.actions.setSearch(bound);
+    await expect(store.actions.settle(store.atoms.r10)).rejects.toThrow("r10 rejected");
+    const before = { ...h.calls };
+
+    h.recoverR10();
+    store.actions.retryRhvac();
+    await store.actions.settle(store.atoms.r10);
+
+    expect(h.calls.list).toBe(before.list + 1);
+    expect(h.calls.open).toBeGreaterThan(before.open);
     store.dispose();
   });
 

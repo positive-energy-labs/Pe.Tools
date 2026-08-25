@@ -40,6 +40,7 @@ import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affi
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { FLAG_MEANING, loopBounds, pathD } from "#/takeoff/model";
 import {
+  ATLAS_COLUMN_SEMANTICS,
   ATLAS_ROOM_STATES as ROOM_STATES,
   ATLAS_ROOM_STATE_LABEL,
   atlasRoomState,
@@ -514,8 +515,8 @@ export function Atlas({ store }: AtlasProps) {
         label: "stage",
         title: "the ZONE's pipeline label — not a claim about this room",
         width: "w-28",
-        sort: (row) => STAGE_ORDER.indexOf(row.zone.stage),
-        facet: (row) => row.zone.stage,
+        sort: ATLAS_COLUMN_SEMANTICS.stage.sort,
+        facet: ATLAS_COLUMN_SEMANTICS.stage.facet,
         options: STAGE_ORDER.map((s) => ({ value: s, label: s })),
         cell: (row) => (
           <ReadCell
@@ -533,7 +534,8 @@ export function Atlas({ store }: AtlasProps) {
         verdict: (row) => stateMeta(row.state),
         // Pipeline order, not alphabetical: "needs a call" sorts before "in .r10" because that
         // is the order the work happens in.
-        sort: (row) => ROOM_STATES.indexOf(row.state),
+        sort: ATLAS_COLUMN_SEMANTICS.state.sort,
+        facet: ATLAS_COLUMN_SEMANTICS.state.facet,
         options: ROOM_STATES.map((s) => ({
           value: STATE_META[s].label,
           label: STATE_META[s].label,
@@ -543,7 +545,7 @@ export function Atlas({ store }: AtlasProps) {
         key: "zone",
         label: "zone",
         width: "w-24",
-        sort: (row) => row.zone.zone.key,
+        sort: ATLAS_COLUMN_SEMANTICS.zone.sort,
         search: (row) => row.zone.zone.key,
         cell: (row) => (
           <span className="face-mono t-value block truncate px-1.5">
@@ -559,7 +561,7 @@ export function Atlas({ store }: AtlasProps) {
         key: "name",
         label: "name",
         width: "min-w-40",
-        sort: (row) => row.room.name,
+        sort: ATLAS_COLUMN_SEMANTICS.name.sort,
         search: (row) => row.room.name,
         cell: (row) => (
           <RoomNameCell
@@ -573,9 +575,9 @@ export function Atlas({ store }: AtlasProps) {
         key: "type",
         label: "type",
         width: "w-32",
-        sort: (row) => row.room.type,
+        sort: ATLAS_COLUMN_SEMANTICS.type.sort,
         search: (row) => row.room.type,
-        facet: (row) => row.room.type,
+        facet: ATLAS_COLUMN_SEMANTICS.type.facet,
         options: ROOM_TYPES.map((t) => ({ value: t, label: t })),
         cell: (row) => (
           <CellSelect
@@ -596,7 +598,7 @@ export function Atlas({ store }: AtlasProps) {
         title: "detected area — geometry is edited in Revit",
         right: true,
         width: "w-16",
-        sort: (row) => row.room.sqft,
+        sort: ATLAS_COLUMN_SEMANTICS.sqft.sort,
         cell: (row) => (
           <ReadCell
             value={row.room.sqft}
@@ -615,7 +617,7 @@ export function Atlas({ store }: AtlasProps) {
               label: "ceil",
               right: true,
               width: "w-14",
-              sort: (row) => row.room.ceilingFt,
+              sort: ATLAS_COLUMN_SEMANTICS.ceil.sort,
               cell: (row) => (
                 <NumberCell
                   value={row.room.ceilingFt}
@@ -631,7 +633,7 @@ export function Atlas({ store }: AtlasProps) {
                 label: mj.label,
                 right: true,
                 width: mj.width,
-                sort: (row) => row.room.data?.[mj.field] ?? 0,
+                sort: ATLAS_COLUMN_SEMANTICS[mj.field].sort,
                 cell: (row) => (
                   <ManualJField
                     room={row.room}
@@ -648,7 +650,7 @@ export function Atlas({ store }: AtlasProps) {
         label: "flags",
         width: "w-24",
         title: "undecided detector calls on this room — a/d accept or dismiss the first one",
-        sort: (row) => row.open.length,
+        sort: ATLAS_COLUMN_SEMANTICS.flags.sort,
         // Multi-valued: a room carries a SET of flags, so the vocabulary is "any open" /
         // "none open" / one named flag rather than a single cell value.
         match: (row, value) =>
@@ -692,6 +694,8 @@ export function Atlas({ store }: AtlasProps) {
         title:
           "this room's line in the .r10, and whether it still agrees with the model. Read-only: the identifier is assigned by sync, never typed.",
         state: r10State,
+        sort: ATLAS_COLUMN_SEMANTICS.r10.sort,
+        facet: ATLAS_COLUMN_SEMANTICS.r10.facet,
         // The domain word for the never rung (`StateColumn.word`, ruled with #1 and R2): the
         // universal "never" is true but the route's fact is sharper — nothing of this room was
         // ever exported. The marks stay universal; every other row keeps the grammar's word.
