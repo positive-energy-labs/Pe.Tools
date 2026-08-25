@@ -190,8 +190,9 @@ panels mounted, so the Atoms panel now subscribes to and polls the registry only
   checks. The requested unscoped `vp check` remains red only on pre-existing formatting in
   `src/routes/api/runs-export.ts`, four files under `src/runs/feedback` (`export.ts`, `staging.ts`,
   `tray.tsx`, `verbs.tsx`), and `src/runs/visual-law.json`; Pass 3 did not rewrite unrelated files.
-- **Browser fixture:** `/takeoffs?source=fixture` rendered 45 zones and 180 room rows. Clicking the
-  controlled `name` sort changed the leading values from `Bath, Bath, Bath` to
+- **Browser fixture:** `/takeoffs?source=fixture` rendered 45 zones. The deterministic fixture
+  fallback had 179 room rows; the browser's real-geometry fixture had 180. Clicking the controlled
+  `name` sort changed the leading values from `Bath, Bath, Bath` to
   `Study, Study, Study`. Ten row-hover transitions consumed 76.582 ms of script total and zero
   layout time with the inactive inspector off the path. Browser warnings/errors: zero.
 - **Live lane:** not run. No Revit session or live Host was needed for G7/G8.
@@ -203,3 +204,38 @@ panels mounted, so the Atoms panel now subscribes to and polls the registry only
 - Atom inspection while its devtools panel is actively visible still intentionally polls the whole
   registry. Pass 3 removes that diagnostic cost from ordinary table interaction rather than
   redesigning the inspector protocol.
+
+## Pass 4
+
+Commit `ee8c1b4` completed G9 through G12 and resolved G14 with executable proof.
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| G9 | **done** | `zoneKeyAtom`, `stageFilterAtom`, `fieldsModeAtom`, and `cursorAtom` are independent writable scalars; `atlasPageAtom` is their aggregate view. `atlasRowsAtom` reads only zone and stage, and `visibleRowsAtom` reads only fields mode. Q4 writes the cursor and asserts both row-array identities remain stable (`source/pe-tools/apps/web/src/takeoff/store.test.ts:283`). |
+| G10 | **done** | The store's `owned` helper mounts auto-disposable atoms for the store lifetime, and `dispose()` releases those mounts. The private `Atom.context` layer atom is also made disposable (`source/pe-tools/apps/web/src/takeoff/store.ts:398`, `:413`, `:1285`). Q1 creates and disposes four stores on one registry; after each idle TTL the node count equals the zero-node baseline (`store.test.ts:302`). |
+| G11 | **done** | `ATLAS_COLUMN_SEMANTICS` is the one exported sort/facet table. Both the store projection and every Atlas column consume it (`source/pe-tools/apps/web/src/takeoff/store.ts:328`; `source/pe-tools/apps/web/src/takeoff/atlas.tsx:518`). The vocabulary-only fallback was not needed. |
+| G12 | **done** | ADR 0009 now records the G10 mount-release-TTL mechanism and the eager `RegistryContext` default-registry footgun. |
+| G13 | **measured** | Ten warmed cursor switches with TanStack devtools closed consumed 3,095.683 ms of script, 57.848 ms of layout, and 4,763.274 ms of task time. The active row changed between Bath and Study, and the console had zero warnings/errors. G9 removed store row derivation from this path, but the React table still renders expensively on cursor changes. |
+| G14 | **resolved** | G1 is covered by the nested Manual J conflict regression (`store.test.ts:325`). G2 is covered by the adopt test that asserts a second candidates read (`:347`). G3 now has `retryRhvac()` and a failed-open recovery test (`:461`); the route's retry verb calls that action. The Pass 2 report was correct. The judge was correct that Pass 3 did not touch G1-G3, but wrong that they remained open at HEAD. |
+
+### Pass 4 proof
+
+- **Deterministic:** `vp test src/takeoff src/targeting src/state src/components/master-table`
+  from `apps/web` passed 5 files and 51 tests.
+- **Compile/static:** `vp check` on the four touched TypeScript/TSX paths passed formatting, lint,
+  and type checks.
+- **Browser fixture:** the HTTP-backed real-geometry fixture rendered 45 zones and 180 rows. This
+  is not the judge's Q3 count: Node cannot fetch the relative `/rhvac-fixture` URL, so
+  `createFixtureTakeoffHost` falls back to `mockWorld()` with 179 rows in deterministic tests. The
+  Pass 3 browser count of 180 was therefore correct; the report now states both fixture variants
+  instead of replacing current browser evidence with Q3's fallback count.
+- **Live lane:** not run. No Revit session or live Host was needed.
+
+### Pass 4 left undone
+
+- Cursor writes no longer rebuild or re-sort row data, but the browser measurement shows that
+  repainting the 180-row table on cursor changes remains expensive. Fixing that needs a separate
+  row-render subscription or memoization pass.
+- The browser real-geometry fixture and deterministic fallback have different room counts, 180 and
+  179. A single fixture data lane would remove that proof ambiguity, but changing the fixture's
+  real-geometry behavior was outside G9-G14.
