@@ -10,6 +10,8 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Decided
 
+- 2026-08-24 — The targeting manifest is canon (`apps/web/src/targeting/`): a route declares a static `Product` (links forest · stages of demanding verbs · panes), supplies one `Feed` per link from its queries, and keeps bindings in URL search; `TargetingHead` renders it as a sentence of TERMINALS only (links with `dir`); trunks (world › rvt, folder) never print — they are the picker's crumbs, and terminals under one trunk share its binding. The verb rail expands in place (`▾`) into verb · needs · state. Seams derive (`feed.options === null`, `run === null`), refusals derive (unwired → unbound → stale → gate). `/takeoffs` is the reference adoption; the round-5 proto stays on main until every route converges.
+
 ### The language
 
 - 2026-08-16 — The design language is settled (base 2, rounds 1–2); `--r-*` tokens are canon in `src/design-lang.css`, grammar in `components/lang/`. Standing law: nothing exists on `/design-system` unless it is a real component with a real consumer (no shims — a workaround is noise that hides a gap).
@@ -239,7 +241,8 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 ### Chat-plugin readiness
 
 - `/takeoffs` and `/families` have zero state outside the React tree — nothing for a plugin to read; only `/family` is registered. Path is not a rewrite: each route's canonical doc (takeoff's `World` + overlay, families' scope/plan/receipts) becomes a route-state slice with commands, as `/family` did. Blocked by MasterTable-internal filter state and component-local proposal state being invisible to plugins.
-- `/takeoffs` is the last `Sentence` holdout: it reimplements a full-screen `TargetGate` over the same `useTarget`/`mintSelector` primitives and prints its addressable URL as raw text. End state: every plugin route declares its sentence via config — today sentence slot config is per-call-site, generalized only as far as the family routes needed (was family SHIMS 3, git history).
+- `/takeoffs` now declares its sentence as a manifest (`targeting/model.ts` `Product`, rendered by `TargetingHead`); `/family`, `/families`, `/chat`, `/settings` still configure `AddressingBar`/`Sentence` per call site. Converge them onto the manifest (each was fixtured in the round-5 proto) and register the manifest with the chat plugin, which is what the "bindings are projections" ruling promised.
+- Targeting primitives still owed after the takeoffs cutover: a gated pane label (disabled-but-readable, reason required — `PaneStrip` draws its own); the in-flight mark (`PathInput` inlines an opacity pulse, the board inlines a run bar); `Switcher` never got the dense tier, so the sentence/board and input-shape modes ride on URL search (`?head=board`, `?input=columns|search`) with no visible switch.
 
 ### Noted, not scheduled
 

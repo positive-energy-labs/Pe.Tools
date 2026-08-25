@@ -699,6 +699,22 @@ export const rhvacLaunchResultSchema = Schema.Struct({
 });
 export type RhvacLaunchResult = Schema.Schema.Type<typeof rhvacLaunchResultSchema>;
 
+/** The legal-options source for the takeoffs `.r10` binding: every .r10 in one folder. */
+export const rhvacListRequestSchema = Schema.Struct({
+  /** Absolute host-visible folder. */
+  dir: Schema.String,
+});
+export type RhvacListRequest = Schema.Schema.Type<typeof rhvacListRequestSchema>;
+export const rhvacListDataSchema = Schema.Struct({
+  dir: Schema.String,
+  /** False when the folder does not exist or is unreadable — an empty list then means "no folder", not "no files". */
+  exists: Schema.Boolean,
+  files: Schema.Array(
+    Schema.Struct({ name: Schema.String, path: Schema.String, modifiedUnixMs: Schema.Number }),
+  ),
+});
+export type RhvacListData = Schema.Schema.Type<typeof rhvacListDataSchema>;
+
 export const rhvacRoomMapSchema = Schema.Struct({
   matches: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, candidate: Schema.String })),
   skip: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, reason: Schema.String })),
@@ -768,6 +784,10 @@ export const tsOnlyOperationSchemas = {
   "rhvac.takeoff": {
     request: rhvacPathRequestSchema,
     response: rhvacTakeoffDataSchema,
+  },
+  "rhvac.list": {
+    request: rhvacListRequestSchema,
+    response: rhvacListDataSchema,
   },
   "settings.document.open": {
     request: openSettingsDocumentRequestSchema,
@@ -913,6 +933,20 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "RhvacPathRequest",
     responseTypeName: "RhvacLaunchResult",
     searchTerms: ["rhvac", "r10", "launch", "open", "start", "elite", "shell"],
+  },
+  {
+    key: "rhvac.list",
+    origin: "host-local",
+    displayName: "List .r10 files",
+    description:
+      "List the .r10 Manual J project files in one host-visible folder. The legal-options source for a route's .r10 binding; a missing folder is an empty list with exists=false.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacListRequest",
+    responseTypeName: "RhvacListData",
+    searchTerms: ["rhvac", "r10", "list", "folder", "files", "manual j"],
   },
   {
     key: "rhvac.takeoff",

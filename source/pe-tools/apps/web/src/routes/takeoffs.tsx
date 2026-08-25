@@ -1,16 +1,25 @@
 /**
- * /takeoffs — the Atlas workspace, canon.
+ * /takeoffs — the Atlas workspace, canon. First route on the targeting manifest.
  *
- * The route owns everything stateful: the target selector (same selector grammar as the chat
- * sentence — `?target=` resolves against the live session list on every render), the raw live
- * reads, the session overlay (partition runs, replay paths, pending Manual J edits), and every
- * host call. The Atlas renders the joined `World` and calls back through `AtlasActions`.
+ * The route declares ONE manifest (`PRODUCT`): what it reaches (world › rvt › view · zones;
+ * folder › r10), the stages and verbs, and the panes. Everything live comes in as a `Feed` per
+ * link. Bindings live in the URL search, so a reload or a shared link addresses the same thing.
+ *
+ * MULTI-SOURCE SYNC — every source is a query whose key carries its BASIS:
+ *   world  · bridge.sessions.list — pushed (SSE invalidation at the root), always live
+ *   rvt    · the bound session's active document — live with the world
+ *   view · zones · rooms — one `readSnapshot` keyed [session, docTitle]; a doc change re-reads,
+ *            a write verb invalidates (adopt, partition, decide, sync-link)
+ *   folder · a per-browser recents list (the legal-options source for a disk root)
+ *   r10    · `rhvac.list` keyed [dir]; the join is `rhvac.open` keyed [path], invalidated by sync
+ *   overlay· this tab's ephemeral state (replays, partition runs, pending Manual J edits)
  *
  * `?source=fixture` mounts the project-a fixture adapter — an explicit dev choice, never a
  * fallback: a live read that fails shows its error, it does not quietly become a fixture.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -18,7 +27,8 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
 import { callHostRpc } from "#/host/client";
-import { mintSelector, sessionLabel, type SessionFacts } from "#/host/target";
+import { HOST_QUERY_KEY, useHostOp } from "#/host/queries";
+import { mintSelector, sessionLabel } from "#/host/target";
 import { useTarget } from "#/host/use-target";
 import { useVerb } from "#/lib/use-verb";
 import { fmtNum } from "#/components/master-table/model";
@@ -33,14 +43,13 @@ import {
   readSnapshot,
   writeDecisions,
   writeRoomType,
+  type LiveSnapshot,
 } from "#/takeoff/host";
 import {
+  DEFAULT_ARTIFACT_DIR,
   upsertResolution,
   type CandidateRegion,
-  type LiveRegion,
-  type ModelStatus,
   type Resolution,
-  type ViewFacts,
 } from "#/takeoff/model";
 import { useFixtureWorld } from "#/takeoff/proto/fixture-world";
 import {
@@ -53,74 +62,394 @@ import {
   type WorldRoom,
   type WorldZone,
 } from "#/takeoff/world";
+import { TargetingHead } from "#/targeting/head";
+import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
+import type { Feed, Feeds, Link, Product } from "#/targeting/model";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import type { RhvacExtractData, RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
+import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
+
+// ── The manifest ─────────────────────────────────────────────────────────────
+
+const LINKS: Link[] = [
+  {
+    key: "world",
+    joiner: "in",
+    placeholder: "pick a world",
+    needs: "a live world — start Revit with the Pe add-in, or start one from /instances",
+    liveness: "attached",
+  },
+  {
+    key: "rvt",
+    parent: "world",
+    joiner: "",
+    placeholder: "no document",
+    needs: "the document arrives with the bound world",
+  },
+  {
+    key: "view",
+    parent: "rvt",
+    joiner: "from",
+    placeholder: "pick a zoning plan",
+    needs: "plan views with filled regions come from the bound model",
+    dir: "read",
+  },
+  {
+    key: "zones",
+    parent: "rvt",
+    joiner: "into",
+    placeholder: "pick zones",
+    multi: true,
+    needs: "zones come from adoption — stamp designer regions first",
+    dir: "write",
+  },
+  {
+    key: "folder",
+    joiner: "beside",
+    placeholder: "pick a folder",
+    needs: "a host-visible folder holding .r10 files — add one below",
+  },
+  {
+    key: "r10",
+    parent: "folder",
+    joiner: "syncing",
+    placeholder: "pick a .r10",
+    needs: ".r10 files come from the bound folder",
+    dir: "sync",
+    liveness: "detached",
+  },
+];
+
+const PANES: Product["panes"] = [
+  { key: "plan", label: "plan image", draws: ["view"] },
+  { key: "rooms", label: "room table", draws: ["zones"] },
+  { key: "r10", label: ".r10 join", draws: ["r10"] },
+];
+
+const STAGES = ["adopt", "audit", "sync"] as const;
+
+// ── Search: the bindings' home ──────────────────────────────────────────────
+
+// the router round-trips arrays as JSON; a hand-typed URL may still carry a comma list
+const csv = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? v.filter((x): x is string => typeof x === "string")
+    : typeof v === "string" && v
+      ? v.split(",").filter(Boolean)
+      : [];
+const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 export const Route = createFileRoute("/takeoffs")({
   validateSearch: (search: Record<string, unknown>) => ({
-    target: typeof search.target === "string" ? search.target : "",
+    target: str(search.target),
     source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
+    view: str(search.view),
+    zones: csv(search.zones),
+    dir: str(search.dir),
+    r10: str(search.r10),
+    stage: STAGES.find((s) => s === search.stage) ?? "adopt",
   }),
   component: TakeoffsRoute,
 });
 
-interface LiveRaw {
-  status: ModelStatus;
-  views: ViewFacts[];
-  zoneFrs: CandidateRegion[];
-  regionsByZone: Record<string, LiveRegion[]>;
-}
+type Search = ReturnType<(typeof Route)["useSearch"]>;
 
-const EMPTY_WORLD: World = {
-  docName: "",
-  r10Path: null,
-  lanes: [],
-  zones: [],
-  systems: [],
+/** Per-browser recents — the legal-options source for the folder root. ponytail: a disk browse
+ *  op would replace this; recents are enough while one firm has one takeoff folder. */
+const DIRS_KEY = "pe.takeoffs.r10-dirs";
+const readDirs = (): string[] => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DIRS_KEY) ?? "[]");
+    return Array.isArray(raw) ? raw.filter((d) => typeof d === "string") : [];
+  } catch {
+    return [];
+  }
 };
 
-function TakeoffsRoute() {
-  const { target, source } = Route.useSearch();
-  const navigate = useNavigate({ from: "/takeoffs" });
-  const setSearch = (patch: Partial<{ target: string; source: "live" | "fixture" }>) =>
-    void navigate({ search: (prev) => ({ ...prev, ...patch }) });
+const EMPTY_WORLD: World = { docName: "", r10Path: null, lanes: [], zones: [], systems: [] };
 
+function TakeoffsRoute() {
+  const search = Route.useSearch();
+  const { target, source, view, zones, dir, r10, stage } = search;
+  const navigate = useNavigate({ from: "/takeoffs" });
+  const setSearch = useCallback(
+    (patch: Partial<Search>) => void navigate({ search: (prev) => ({ ...prev, ...patch }) }),
+    [navigate],
+  );
+  const qc = useQueryClient();
+
+  // ── sources ──
   const { resolution, sessions } = useTarget(target);
-  const scope: HostSessionScope | null =
-    resolution.kind === "resolved" ? { bridgeSessionId: resolution.session.sessionId } : null;
+  const session = resolution.kind === "resolved" ? resolution.session : null;
+  const scope: HostSessionScope | null = session ? { bridgeSessionId: session.sessionId } : null;
+  const docTitle = session?.activeDocumentTitle ?? null;
 
   const fixture = useFixtureWorld();
+  const live = source === "live";
 
-  const [raw, setRaw] = useState<LiveRaw | null>(null);
+  const snapshotKey = ["takeoff-snapshot", scope?.bridgeSessionId ?? "", docTitle ?? ""] as const;
+  const snapshot = useQuery({
+    queryKey: snapshotKey,
+    queryFn: () => readSnapshot(scope!),
+    enabled: live && scope !== null,
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+  });
+  const raw = snapshot.data ?? null;
+
+  const [dirs, setDirs] = useState(readDirs);
+  const addDir = (d: string) => {
+    const next = [d, ...dirs.filter((x) => x !== d)].slice(0, 8);
+    localStorage.setItem(DIRS_KEY, JSON.stringify(next));
+    setDirs(next);
+    setSearch({ dir: d, r10: "" });
+  };
+  const listing = useHostOp("rhvac.list", { dir }, { enabled: dir !== "", staleTime: 30_000 });
+  const r10Query = useHostOp(
+    "rhvac.open",
+    { path: r10 },
+    { enabled: r10 !== "", staleTime: Number.POSITIVE_INFINITY },
+  );
+
   const [overlay, setOverlay] = useState<SessionOverlay>(emptyOverlay);
-  const { busy, seconds: busySeconds, error, setError, run } = useVerb();
-  const [r10Path, setR10Path] = useState("");
-  const [r10, setR10] = useState<RhvacExtractData | null>(null);
+  const { busy, seconds: busySeconds, error, setError, receipt, run } = useVerb();
   const [panel, setPanel] = useState<"adopt" | "sync" | null>(null);
 
-  const load = useCallback(async (s: HostSessionScope) => {
-    setRaw(await readSnapshot(s));
-  }, []);
+  const world: World = live
+    ? raw
+      ? buildLiveWorld({ ...raw, overlay, r10Path: r10 || null, r10: r10Query.data ?? null })
+      : { ...EMPTY_WORLD, docName: scope ? "reading…" : "no target" }
+    : withEdits(fixture.world, overlay);
 
-  // First contact with a resolved session loads the world once; refresh is explicit after that.
-  const loadedFor = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (source !== "live" || !scope) return;
-    if (loadedFor.current === scope.bridgeSessionId) return;
-    loadedFor.current = scope.bridgeSessionId;
-    void run("reading model", () => load(scope));
-  }, [source, scope, run, load]);
+  // ── feeds: one per link, each a projection of a query's state ──
+  const feeds = useMemo<Feeds>(() => {
+    const q = (
+      s: { isFetching: boolean; isError: boolean; error: unknown; dataUpdatedAt: number },
+      options: Feed["options"],
+    ): Feed =>
+      !live
+        ? { options, state: "fixture" }
+        : s.isError
+          ? { options, state: "error", note: String((s.error as Error)?.message ?? s.error) }
+          : s.isFetching
+            ? { options, state: "loading" }
+            : { options, state: "fresh", at: s.dataUpdatedAt };
+    if (!live) {
+      const fx: Feed = { options: [{ id: "fixture", label: "project-a replay" }], state: "fixture" };
+      return {
+        world: fx,
+        rvt: { options: [{ id: "fixture", label: fixture.world.docName }], state: "fixture" },
+        view: {
+          options: fixture.world.lanes.map((l) => ({ id: l.view, label: l.view, sub: l.label })),
+          state: "fixture",
+        },
+        zones: { options: zoneOptions(fixture.world), state: "fixture" },
+        folder: { options: null, state: "fixture" },
+        r10: { options: null, state: "fixture" },
+      };
+    }
+    return {
+      world: {
+        options: sessions.map((s) => ({
+          id: mintSelector(s, sessions),
+          label: sessionLabel(s),
+          sub: `${s.lane ?? "?"} · ${s.custody} · pid ${s.processId}`,
+        })),
+        state: "live",
+      },
+      rvt: {
+        options:
+          session && docTitle ? [{ id: docTitle, label: docTitle, sub: "active document" }] : [],
+        state: "live",
+      },
+      view: q(
+        snapshot,
+        raw?.views.map((v) => ({
+          id: v.name,
+          label: v.name,
+          sub: `${v.level || "no level"} · ${v.regions} region${v.regions === 1 ? "" : "s"}`,
+        })) ?? [],
+      ),
+      zones: q(snapshot, raw ? zoneOptions(world) : []),
+      folder: { options: dirs.map((d) => ({ id: d, label: d })), state: "fresh" },
+      r10: q(
+        listing,
+        listing.data
+          ? listing.data.exists
+            ? listing.data.files.map((f) => ({ id: f.path, label: f.name }))
+            : []
+          : [],
+      ),
+    };
+    // world is derived from raw+overlay; listing/snapshot carry their own identity
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    live,
+    sessions,
+    session,
+    docTitle,
+    snapshot.data,
+    snapshot.isFetching,
+    snapshot.isError,
+    listing.data,
+    listing.isFetching,
+    listing.isError,
+    dirs,
+    overlay.runs,
+    fixture.world,
+  ]);
 
-  const world: World =
-    source === "fixture"
-      ? withEdits(fixture.world, overlay)
-      : raw
-        ? buildLiveWorld({ ...raw, overlay, r10Path: r10Path || null, r10 })
-        : { ...EMPTY_WORLD, docName: scope ? "reading…" : "no target" };
+  // ── bindings: URL ⇄ manifest ──
+  const state: BindingState = useMemo(
+    () => ({
+      bound: {
+        world: live ? (session ? mintSelector(session, sessions) : null) : "fixture",
+        rvt: live ? docTitle : "fixture",
+        view: view || null,
+        folder: dir || null,
+        r10: r10 || null,
+      },
+      multi: { zones: new Set(zones) },
+      stage,
+    }),
+    [live, session, sessions, docTitle, view, dir, r10, zones, stage],
+  );
+  const setState = useCallback(
+    (patch: Partial<BindingState>) => {
+      const next: Partial<Search> = {};
+      if (patch.stage) next.stage = patch.stage as Search["stage"];
+      if (patch.bound) {
+        const b = patch.bound;
+        if (live && b.world !== state.bound.world) next.target = b.world ?? "";
+        next.view = b.view ?? "";
+        next.dir = b.folder ?? "";
+        next.r10 = b.r10 ?? "";
+      }
+      if (patch.multi) next.zones = [...(patch.multi.zones ?? [])];
+      setSearch(next);
+    },
+    [live, state.bound.world, setSearch],
+  );
 
-  const refresh = useCallback(() => {
-    if (scope) void run("reading model", () => load(scope));
-  }, [scope, run, load]);
+  // ── verbs ──
+  const invalidateSnapshot = () => qc.invalidateQueries({ queryKey: snapshotKey });
+  const patchSnapshot = (fn: (prev: LiveSnapshot) => LiveSnapshot) =>
+    qc.setQueryData<LiveSnapshot>(snapshotKey, (prev) => (prev ? fn(prev) : prev));
+  const boundZones = world.zones.filter((z) => zones.includes(z.zone.guid));
+
+  const product: Product = {
+    key: "takeoffs",
+    name: "takeoffs",
+    links: LINKS,
+    panes: PANES,
+    stages: [
+      {
+        key: "adopt",
+        label: "adopt",
+        verbs: [
+          {
+            key: "adopt",
+            label: "adopt zones",
+            demands: ["view"],
+            run: live ? async () => setPanel("adopt") : null,
+            needs: "a live document — the fixture cannot be stamped",
+          },
+        ],
+      },
+      {
+        key: "audit",
+        label: "audit",
+        verbs: [
+          {
+            key: "capture",
+            label: "capture level",
+            demands: ["view"],
+            run: live
+              ? async () => {
+                  const prepared = await prepareCapture(scope!, view);
+                  const detected = await detectCapture(scope!, prepared.level);
+                  setOverlay((prev) => ({
+                    ...prev,
+                    replays: { ...prev.replays, [prepared.level]: detected.replayPath },
+                  }));
+                  return `captured ${prepared.level}: ${detected.rooms} rooms · ${fmtNum(detected.totalSqft, 0)} sf`;
+                }
+              : null,
+            needs: "a live document — the fixture is already captured",
+          },
+          {
+            key: "partition",
+            label: `partition ${zones.length || ""} zone${zones.length === 1 ? "" : "s"}`,
+            demands: ["zones"],
+            refuse: () => {
+              const uncaptured = boundZones.find((z) => !overlay.replays[z.zone.lane.label]);
+              return uncaptured
+                ? `capture ${uncaptured.zone.lane.label} first — the partition replays its snapshot`
+                : null;
+            },
+            run: live
+              ? async () => {
+                  for (const zone of boundZones) {
+                    const result = await partitionZone(scope!, {
+                      replayPath: overlay.replays[zone.zone.lane.label]!,
+                      view: zone.zone.lane.view,
+                      levelFragment: zone.zone.lane.label,
+                      zoneName: zone.name,
+                      zoneGuid: zone.zone.guid,
+                      runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
+                      loops: zone.zone.loops,
+                    });
+                    patchSnapshot((prev) => ({
+                      ...prev,
+                      regionsByZone: { ...prev.regionsByZone, [zone.zone.guid]: result.regions },
+                    }));
+                    setOverlay((prev) => ({
+                      ...prev,
+                      runs: { ...prev.runs, [zone.zone.guid]: result },
+                    }));
+                  }
+                  return `partitioned ${boundZones.map((z) => z.zone.key).join(", ")}`;
+                }
+              : null,
+            needs: "a live document — the fixture is already partitioned",
+          },
+          {
+            key: "refresh",
+            label: "refresh",
+            demands: ["rvt"],
+            run: live ? async () => void (await snapshot.refetch()) : null,
+            needs: "a live document — the replay is already the whole world",
+          },
+        ],
+      },
+      {
+        key: "sync",
+        label: "sync",
+        verbs: [
+          {
+            key: "sync",
+            label: "sync .r10",
+            demands: ["r10"],
+            refuse: () =>
+              r10Query.isError ? `the .r10 did not open — ${r10Query.error?.message}` : null,
+            run: live ? async () => setPanel("sync") : null,
+            needs: "a live document — the fixture has no .r10 to sync into",
+          },
+          {
+            key: "launch",
+            label: "open in RHVAC",
+            nav: true,
+            demands: ["r10"],
+            run: async () => {
+              await callHostRpc("rhvac.launch", { path: r10 }, scope ?? undefined);
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const b = useBindings(product, feeds, state, setState);
+  const runner = useRunner(product, b, run, busy);
 
   const actions: AtlasActions = {
     patch: (guid, patch) => {
@@ -129,11 +458,9 @@ function TakeoffsRoute() {
           ...prev,
           edits: { ...prev.edits, [guid]: { ...prev.edits[guid], ...patch } },
         }));
-      if (source === "live" && scope && patch.type) {
-        const room = world.zones
-          .flatMap((zone) => zone.rooms)
-          .find((candidate) => candidate.guid === guid);
-        if (room?.elementId !== null && room?.elementId !== undefined) {
+      if (live && scope && patch.type) {
+        const room = world.zones.flatMap((z) => z.rooms).find((c) => c.guid === guid);
+        if (room?.elementId != null) {
           void run("writing room type", async () => {
             await writeRoomType(scope, room.elementId!, patch.type!);
             persistOverlay();
@@ -143,9 +470,8 @@ function TakeoffsRoute() {
       }
       persistOverlay();
     },
-
     decide: (room, flag, verb) => {
-      if (source !== "live" || !scope) return; // fixture: local only, and says so
+      if (!live || !scope) return; // fixture: local only, and says so
       if (room.elementId === null) {
         setError(`room ${room.name}: no Room Region home to write the decision to`);
         return;
@@ -163,13 +489,9 @@ function TakeoffsRoute() {
           room.elementId!,
           upsertResolution(room.decisions, next),
         );
-        setRaw((prev) => (prev ? replaceRegionBlob(prev, room.elementId!, result.blob) : prev));
+        patchSnapshot((prev) => replaceRegionBlob(prev, room.elementId!, result.blob));
       });
     },
-
-    openAdopt: () => setPanel("adopt"),
-    openSync: () => setPanel("sync"),
-
     capture: (lane) => {
       if (!scope) return;
       void run(`capturing ${lane.label}`, async () => {
@@ -181,7 +503,6 @@ function TakeoffsRoute() {
         }));
       });
     },
-
     partition: (zone) => {
       if (!scope) return;
       const replayPath = overlay.replays[zone.zone.lane.label];
@@ -199,49 +520,100 @@ function TakeoffsRoute() {
           runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
           loops: zone.zone.loops,
         });
-        setRaw((prev) =>
-          prev
-            ? {
-                ...prev,
-                regionsByZone: { ...prev.regionsByZone, [zone.zone.guid]: result.regions },
-              }
-            : prev,
-        );
+        patchSnapshot((prev) => ({
+          ...prev,
+          regionsByZone: { ...prev.regionsByZone, [zone.zone.guid]: result.regions },
+        }));
         setOverlay((prev) => ({ ...prev, runs: { ...prev.runs, [zone.zone.guid]: result } }));
       });
     },
-
-    refresh,
+    refresh: () => void snapshot.refetch(),
   };
 
-  return (
-    <div className="relative h-screen">
-      {source === "live" && resolution.kind !== "resolved" ? (
-        <TargetGate
-          sessions={sessions}
-          reason={
-            resolution.kind === "ambiguous"
-              ? "more than one session — pin one"
-              : resolution.reason === "no-sessions"
-                ? "no Revit session connected"
-                : `nothing matches "${target}"`
-          }
-          onPick={(s) => setSearch({ target: mintSelector(s, sessions) })}
-          onFixture={() => setSearch({ source: "fixture" })}
+  const addFolder = (link: Link) =>
+    link.key === "folder" ? (
+      <form
+        className="px-2 pt-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const input = e.currentTarget.elements.namedItem("dir") as HTMLInputElement;
+          const d = input.value.trim();
+          if (d) addDir(d);
+        }}
+      >
+        <input
+          name="dir"
+          placeholder={`add a folder — e.g. ${DEFAULT_ARTIFACT_DIR}`}
+          className="face-mono t-caption w-full bg-transparent px-1 py-0.5 outline-none"
+          style={{ borderTop: "1px solid var(--r-line-2)", color: "var(--r-ink)" }}
         />
-      ) : (
-        <Atlas
-          world={world}
-          geoReady={source === "fixture" ? fixture.geoReady : raw !== null}
-          live={source === "live"}
-          busy={busy ? `${busy} · ${busySeconds}s queued/running` : null}
-          actions={actions}
-        />
-      )}
+      </form>
+    ) : null;
 
-      {/* A failed host call is an ERROR, not a seam — the old rendering wore the reserved dashed
-          seam chip, which claimed "this is a stand-in" about a real bridge failure. `error` is
-          caution, deliberately not the alarm: a busy bridge is not the model disagreeing. */}
+  return (
+    <div className="relative flex h-screen flex-col">
+      <div className="px-2 pt-2">
+        <TargetingHead
+          product={product}
+          b={b}
+          runner={runner}
+          extra={addFolder}
+          aside={
+            !live ? (
+              <FactChip
+                dashed
+                title="The fixture lane — the project-a replay, chosen explicitly by ?source=fixture. No document is attached, and nothing here can be written."
+              >
+                fixture · project-a replay
+              </FactChip>
+            ) : undefined
+          }
+          receipt={
+            busy ? (
+              <OutcomeLine
+                kind="busy"
+                label={`${busy} · ${busySeconds}s`}
+                says="the host runs one transaction at a time"
+              />
+            ) : receipt ? (
+              <OutcomeLine kind="receipt" label={receipt.text} />
+            ) : undefined
+          }
+        />
+      </div>
+      <div className="relative min-h-0 flex-1">
+        {live && !session ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2">
+            <EmptyState
+              story="scope"
+              exit={
+                resolution.kind === "ambiguous"
+                  ? "more than one session — pick a world in the sentence above"
+                  : sessions.length === 0
+                    ? "start Revit with the Pe add-in loaded and a world appears in the sentence — or take the fixture lane"
+                    : `nothing matches "${target}" — pick a world in the sentence above`
+              }
+            >
+              no world bound — the sentence's first slot is the live connected-host catalog
+            </EmptyState>
+            <Verb
+              label="open the project-a fixture instead"
+              onClick={() => setSearch({ source: "fixture" })}
+              reason="Mounts the project-a fixture adapter — an explicit dev choice, never a fallback. Nothing in it can be written."
+            />
+          </div>
+        ) : (
+          <Atlas
+            world={world}
+            geoReady={live ? raw !== null : fixture.geoReady}
+            live={live}
+            busy={busy ? `${busy} · ${busySeconds}s queued/running` : null}
+            actions={actions}
+          />
+        )}
+      </div>
+
+      {/* A failed host call is an ERROR, not a seam — caution, deliberately not the alarm. */}
       {error && (
         <div className="absolute bottom-2 left-1/2 z-40 max-w-2xl -translate-x-1/2 bg-background px-2 py-1 shadow-md">
           <OutcomeLine kind="error" label={error} />
@@ -253,14 +625,8 @@ function TakeoffsRoute() {
         </div>
       )}
 
-      {source === "fixture" && (
-        <div className="absolute right-2 bottom-2 z-40 flex items-center gap-1.5">
-          <FactChip
-            dashed
-            title="The fixture lane is an explicit URL choice (?source=fixture), never a fallback: a live read that fails shows its error rather than quietly becoming a fixture."
-          >
-            fixture lane
-          </FactChip>
+      {!live && (
+        <div className="absolute right-2 bottom-2 z-40">
           <Verb
             label="leave fixture → live"
             onClick={() => setSearch({ source: "live" })}
@@ -272,14 +638,14 @@ function TakeoffsRoute() {
       {panel === "adopt" && scope && (
         <AdoptPanel
           scope={scope}
+          view={view}
           zones={world.zones}
-          views={raw?.views ?? []}
           run={run}
           busy={busy}
           onClose={() => setPanel(null)}
           onDone={() => {
             setPanel(null);
-            refresh();
+            void invalidateSnapshot();
           }}
         />
       )}
@@ -287,15 +653,18 @@ function TakeoffsRoute() {
         <SyncPanel
           scope={scope}
           world={world}
-          r10Path={r10Path}
-          setR10Path={setR10Path}
-          setR10={setR10}
+          zoneGuids={zones}
+          r10Path={r10}
           run={run}
           busy={busy}
           onClose={() => setPanel(null)}
           onDone={() => {
             setPanel(null);
-            refresh();
+            void invalidateSnapshot();
+            void qc.invalidateQueries({
+              predicate: (q) =>
+                q.queryKey[0] === HOST_QUERY_KEY[0] && q.queryKey[2] === "rhvac.open",
+            });
           }}
         />
       )}
@@ -303,7 +672,14 @@ function TakeoffsRoute() {
   );
 }
 
-function replaceRegionBlob(raw: LiveRaw, elementId: number, blob: string): LiveRaw {
+const zoneOptions = (world: World) =>
+  world.zones.map((z) => ({
+    id: z.zone.guid,
+    label: z.name || z.zone.key,
+    sub: `${z.zone.lane.label} · ${z.rooms.length} rooms · ${z.stage}`,
+  }));
+
+function replaceRegionBlob(raw: LiveSnapshot, elementId: number, blob: string): LiveSnapshot {
   return {
     ...raw,
     regionsByZone: Object.fromEntries(
@@ -363,12 +739,7 @@ function buildRhvacInsert(
       },
     ],
     roofs: [
-      {
-        assembly: ROOF_ASSEMBLY,
-        uValue: 0.024,
-        areaSquareFeet: room.sqft,
-        areaMultiplier: 1.2,
-      },
+      { assembly: ROOF_ASSEMBLY, uValue: 0.024, areaSquareFeet: room.sqft, areaMultiplier: 1.2 },
     ],
     walls,
     glass: [],
@@ -389,58 +760,6 @@ function withEdits(world: World, overlay: SessionOverlay): World {
   };
 }
 
-// ── Target gate — the sentence's doc slot, atlas-sized ──────────────────────
-
-function TargetGate({
-  sessions,
-  reason,
-  onPick,
-  onFixture,
-}: {
-  sessions: SessionFacts[];
-  reason: string;
-  onPick: (s: SessionFacts) => void;
-  onFixture: () => void;
-}) {
-  return (
-    <main className="flex h-screen flex-col items-center justify-center gap-3 bg-background">
-      <h1 className="font-pe-display text-lg font-semibold tracking-tight">Takeoffs</h1>
-      <p className="face-mono t-value text-muted-foreground">{reason}</p>
-      <div className="w-96 rounded-[var(--radius)] border border-border">
-        {sessions.map((s) => (
-          <button
-            key={s.sessionId}
-            type="button"
-            onClick={() => onPick(s)}
-            className="flex w-full items-baseline gap-2 border-b border-[var(--r-line)] px-2.5 py-1.5 text-left last:border-b-0 hover:bg-muted"
-          >
-            <span className="text-xs">{sessionLabel(s)}</span>
-            <span className="face-mono t-value ml-auto text-muted-foreground">
-              {s.lane} · pid {s.processId}
-            </span>
-          </button>
-        ))}
-        {/* A picker with no options says where options come from (SURFACE-PHILOSOPHY §4). */}
-        {sessions.length === 0 && (
-          <div className="px-2.5 py-3">
-            <EmptyState
-              story="scope"
-              exit="start Revit with the Pe add-in loaded and a session appears here — or take the fixture lane below"
-            >
-              no sessions — this list is the live connected-host catalog
-            </EmptyState>
-          </div>
-        )}
-      </div>
-      <Verb
-        label="open the project-a fixture instead"
-        onClick={onFixture}
-        reason="Mounts the project-a fixture adapter — an explicit dev choice, never a fallback. Nothing in it can be written."
-      />
-    </main>
-  );
-}
-
 // ── Adopt panel — stamp designer FRs in place as Zoning Regions ─────────────
 
 interface AdoptRow {
@@ -452,52 +771,41 @@ interface AdoptRow {
 
 function AdoptPanel({
   scope,
+  view,
   zones,
-  views,
   run,
   busy,
   onClose,
   onDone,
 }: {
   scope: HostSessionScope;
+  /** The bound zoning view — the sentence picked it; the panel only lists its regions. */
+  view: string;
   zones: WorldZone[];
-  views: ViewFacts[];
-  run: (label: string, work: () => Promise<void>) => Promise<void>;
+  run: (label: string, work: () => Promise<string | void>) => Promise<void>;
   busy: string | null;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [view, setView] = useState<string | null>(null);
   const [rows, setRows] = useState<AdoptRow[] | null>(null);
-
-  const pickView = (name: string) => {
-    setView(name);
-    void run("reading regions", async () => {
-      const regions = await readCandidates(scope, name);
-      setRows(
-        regions.map((region) => {
-          const meta = readZoneMeta(region.blob);
-          const stamped = region.role === "zoning-region";
-          return {
-            region,
-            checked: stamped,
-            name: meta.name || region.typeName,
-            systemTag: meta.systemTag,
-          };
-        }),
-      );
-    });
-  };
+  const candidates = useQuery({
+    queryKey: ["takeoff-candidates", scope.bridgeSessionId, view],
+    queryFn: () => readCandidates(scope, view),
+    staleTime: 0,
+  });
+  const listed = rows ?? candidates.data?.map(toRow) ?? null;
 
   const patchRow = (elementId: number, patch: Partial<AdoptRow>) =>
     setRows((prev) =>
-      prev ? prev.map((r) => (r.region.elementId === elementId ? { ...r, ...patch } : r)) : prev,
+      (prev ?? listed ?? []).map((r) =>
+        r.region.elementId === elementId ? { ...r, ...patch } : r,
+      ),
     );
 
-  const picked = rows?.filter((r) => r.checked) ?? [];
+  const picked = listed?.filter((r) => r.checked) ?? [];
 
   const adopt = () => {
-    if (!view || picked.length === 0) return;
+    if (picked.length === 0) return;
     void run(`stamping ${picked.length} zones`, async () => {
       await adoptZones(
         scope,
@@ -509,129 +817,113 @@ function AdoptPanel({
         })),
       );
       onDone();
+      return `stamped ${picked.length} zoning region${picked.length === 1 ? "" : "s"} in ${view}`;
     });
   };
 
   return (
-    <Panel title="adopt zoning regions" onClose={onClose}>
+    <Panel title={`adopt zoning regions — ${view}`} onClose={onClose}>
       <p className="face-mono t-value text-muted-foreground">
-        pick the zoning-plan view, then the designer-drawn regions that are zones. adoption stamps
-        them in place (role, guid, name, system tag) — re-adopt to edit. legends are ignored.
+        tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
+        name, system tag) — re-adopt to edit. legends are ignored.
       </p>
-      {!view ? (
-        <div className="mt-2 max-h-96 overflow-y-auto rounded-[var(--radius)] border border-border">
-          {views.map((v) => (
-            <button
-              key={v.name}
-              type="button"
-              onClick={() => pickView(v.name)}
-              className="flex w-full items-baseline gap-2 border-b border-[var(--r-line)] px-2 py-1 text-left last:border-b-0 hover:bg-muted"
+      <div className="mt-2 max-h-96 overflow-y-auto rounded-[var(--radius)] border border-border">
+        {(listed ?? []).map((r) => (
+          <div
+            key={r.region.elementId}
+            className="flex items-center gap-2 border-b border-[var(--r-line)] px-2 py-1 last:border-b-0"
+          >
+            <input
+              type="checkbox"
+              checked={r.checked}
+              onChange={(e) => patchRow(r.region.elementId, { checked: e.target.checked })}
+            />
+            <span
+              className="inline-block size-2.5 shrink-0 rounded-[1px]"
+              style={{ background: `rgb(${r.region.color})` }}
+            />
+            <span
+              className="face-mono t-value w-24 shrink-0 truncate text-muted-foreground"
+              title={r.region.typeName}
             >
-              <span className="text-xs">{v.name}</span>
-              <span className="face-mono t-value ml-auto shrink-0 text-muted-foreground">
-                {v.level || "no level"} · {v.regions} FR
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <>
-          <p className="mt-2 flex items-center gap-2">
-            <Verb
-              tone="nav"
-              direction="back"
-              label="views"
-              onClick={() => (setView(null), setRows(null))}
-              reason="Back to the view list — nothing picked here has been stamped yet"
+              {r.region.typeName}
+            </span>
+            <span className="face-mono t-value w-16 shrink-0 text-right tabular-nums text-muted-foreground">
+              {fmtNum(r.region.sqft, 0)} sf
+            </span>
+            <input
+              value={r.name}
+              placeholder="zone name"
+              onChange={(e) => patchRow(r.region.elementId, { name: e.target.value })}
+              className="face-mono t-value h-6 min-w-0 flex-1 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
             />
-            <span className="face-mono t-value text-muted-foreground">{view}</span>
-          </p>
-          <div className="mt-1 max-h-96 overflow-y-auto rounded-[var(--radius)] border border-border">
-            {(rows ?? []).map((r) => (
-              <div
-                key={r.region.elementId}
-                className="flex items-center gap-2 border-b border-[var(--r-line)] px-2 py-1 last:border-b-0"
+            <input
+              value={r.systemTag}
+              placeholder="system tag"
+              onChange={(e) => patchRow(r.region.elementId, { systemTag: e.target.value })}
+              className="face-mono t-value h-6 w-24 shrink-0 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
+            />
+            {r.region.role === "zoning-region" && (
+              <FactChip
+                tone="done"
+                className="shrink-0"
+                title="This region is already stamped as a Zoning Region. Re-adopting edits its name and system tag in place."
               >
-                <input
-                  type="checkbox"
-                  checked={r.checked}
-                  onChange={(e) => patchRow(r.region.elementId, { checked: e.target.checked })}
-                />
-                <span
-                  className="inline-block size-2.5 shrink-0 rounded-[1px]"
-                  style={{ background: `rgb(${r.region.color})` }}
-                />
-                <span
-                  className="face-mono t-value w-24 shrink-0 truncate text-muted-foreground"
-                  title={r.region.typeName}
-                >
-                  {r.region.typeName}
-                </span>
-                <span className="face-mono t-value w-16 shrink-0 text-right tabular-nums text-muted-foreground">
-                  {fmtNum(r.region.sqft, 0)} sf
-                </span>
-                <input
-                  value={r.name}
-                  placeholder="zone name"
-                  onChange={(e) => patchRow(r.region.elementId, { name: e.target.value })}
-                  className="face-mono t-value h-6 min-w-0 flex-1 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
-                />
-                <input
-                  value={r.systemTag}
-                  placeholder="system tag"
-                  onChange={(e) => patchRow(r.region.elementId, { systemTag: e.target.value })}
-                  className="face-mono t-value h-6 w-24 shrink-0 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
-                />
-                {r.region.role === "zoning-region" && (
-                  <FactChip
-                    tone="done"
-                    className="shrink-0"
-                    title="This region is already stamped as a Zoning Region. Re-adopting edits its name and system tag in place."
-                  >
-                    stamped
-                  </FactChip>
-                )}
-              </div>
-            ))}
-            {rows === null && (
-              <p className="px-2 py-3">
-                <OutcomeLine kind="busy" label="reading regions" says={view} />
-              </p>
-            )}
-            {rows !== null && rows.length === 0 && (
-              <div className="px-2 py-3">
-                <EmptyState
-                  story="scope"
-                  exit="draw the zones in Revit first, or pick another view"
-                >
-                  no filled regions — this view carries no designer-drawn regions to adopt
-                </EmptyState>
-              </div>
+                stamped
+              </FactChip>
             )}
           </div>
-          <div className="mt-2 flex items-center gap-2">
-            {/* Stamping runs a WriteTransaction against the live document — the one filled blue. */}
-            <Verb
-              tone="commit"
-              label={`stamp ${picked.length} as zoning regions`}
-              disabled={busy !== null || picked.length === 0}
-              reason={
-                busy !== null
-                  ? `${busy} is in flight`
-                  : picked.length === 0
-                    ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
-                    : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} in ${view}. Idempotent: re-adopting edits in place.`
-              }
-              onClick={adopt}
-            />
-            <FactChip title="Zoning Regions already stamped anywhere in this document.">
-              {zones.length} already adopted
-            </FactChip>
+        ))}
+        {listed === null && (
+          <p className="px-2 py-3">
+            {candidates.isError ? (
+              <OutcomeLine
+                kind="error"
+                label={`reading regions failed — ${candidates.error.message}`}
+              />
+            ) : (
+              <OutcomeLine kind="busy" label="reading regions" says={view} />
+            )}
+          </p>
+        )}
+        {listed !== null && listed.length === 0 && (
+          <div className="px-2 py-3">
+            <EmptyState story="scope" exit="draw the zones in Revit first, or bind another view">
+              no filled regions — this view carries no designer-drawn regions to adopt
+            </EmptyState>
           </div>
-        </>
-      )}
+        )}
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <Verb
+          tone="commit"
+          label={`stamp ${picked.length} as zoning regions`}
+          disabled={busy !== null || picked.length === 0}
+          reason={
+            busy !== null
+              ? `${busy} is in flight`
+              : picked.length === 0
+                ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
+                : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} in ${view}. Idempotent: re-adopting edits in place.`
+          }
+          onClick={adopt}
+        />
+        <FactChip title="Zoning Regions already stamped anywhere in this document.">
+          {zones.length} already adopted
+        </FactChip>
+      </div>
     </Panel>
   );
+}
+
+function toRow(region: CandidateRegion): AdoptRow {
+  const meta = readZoneMeta(region.blob);
+  return {
+    region,
+    checked: region.role === "zoning-region",
+    name: meta.name || region.typeName,
+    systemTag: meta.systemTag,
+  };
 }
 
 // ── Sync panel — insert reviewed rooms into a template .r10 copy ────────────
@@ -639,9 +931,8 @@ function AdoptPanel({
 function SyncPanel({
   scope,
   world,
+  zoneGuids,
   r10Path,
-  setR10Path,
-  setR10,
   run,
   busy,
   onClose,
@@ -649,10 +940,10 @@ function SyncPanel({
 }: {
   scope: HostSessionScope;
   world: World;
+  /** Bound zones narrow the insert set; none bound = every eligible zone. */
+  zoneGuids: string[];
   r10Path: string;
-  setR10Path: (p: string) => void;
-  setR10: (extract: RhvacExtractData) => void;
-  run: (label: string, work: () => Promise<void>) => Promise<void>;
+  run: (label: string, work: () => Promise<string | void>) => Promise<void>;
   busy: string | null;
   onClose: () => void;
   onDone: () => void;
@@ -661,14 +952,17 @@ function SyncPanel({
     zone: WorldZone;
     room: WorldRoom;
   }
-  const blockedZones = world.zones.filter(
+  const inScope = world.zones.filter(
+    (z) => zoneGuids.length === 0 || zoneGuids.includes(z.zone.guid),
+  );
+  const blockedZones = inScope.filter(
     (zone) =>
       zone.driftSqft > 0 ||
       zone.rooms.some((room) => room.flags.length > 0) ||
       zone.runs.some((item) => item.orphaned > 0 || item.failures > 0),
   );
   const blockedZoneIds = new Set(blockedZones.map((zone) => zone.zone.guid));
-  const inserts: InsertRow[] = world.zones.flatMap((zone) =>
+  const inserts: InsertRow[] = inScope.flatMap((zone) =>
     blockedZoneIds.has(zone.zone.guid)
       ? []
       : zone.rooms
@@ -677,10 +971,9 @@ function SyncPanel({
   );
   const untagged = inserts.filter(({ zone }) => zone.tags.length === 0);
   const tags = [...new Set(inserts.flatMap(({ zone }) => zone.tags))];
-  const [report, setReport] = useState<string | null>(null);
 
   const sync = () => {
-    if (!r10Path || inserts.length === 0 || untagged.length > 0) return;
+    if (inserts.length === 0 || untagged.length > 0) return;
     void run(`syncing ${inserts.length} rooms`, async () => {
       const before = await callHostRpc("rhvac.open", { path: r10Path }, scope);
       const firstRoomNumber = Math.max(0, ...before.rooms.map((room) => room.number)) + 1;
@@ -713,10 +1006,7 @@ function SyncPanel({
           inserts: inserts.map(({ zone, room }, i) =>
             buildRhvacInsert(room, firstRoomNumber + i, systemNumbers.get(zone.tags[0]!)!),
           ),
-          systems: tags.map((tag) => ({
-            number: systemNumbers.get(tag)!,
-            name: tag,
-          })),
+          systems: tags.map((tag) => ({ number: systemNumbers.get(tag)!, name: tag })),
           deleteUntouchedSeedRoom: true,
         },
         scope,
@@ -742,47 +1032,25 @@ function SyncPanel({
           `.r10 sync returned ${byNumber.size} insert receipts for ${links.length} rooms`,
         );
       await linkRhvacBatch(scope, links);
-      const after = await callHostRpc("rhvac.open", { path: r10Path }, scope);
-      setR10(after);
-      setReport(
-        `synced ${result.insertedRooms.length}/${inserts.length} rooms into ${r10Path}` +
-          ` (${result.roomsBefore}→${result.roomsAfter} rooms, seed room ${result.seedRoom.action})` +
-          (result.backupPath ? ` · backup: ${result.backupPath}` : "") +
-          (result.assemblyFallbacks.length > 0
-            ? ` · ${result.assemblyFallbacks.length} assembly fallbacks`
-            : ""),
-      );
       onDone();
-    });
-  };
-
-  const loadR10 = () => {
-    if (!r10Path) return;
-    void run("reading .r10", async () => {
-      const opened = await callHostRpc("rhvac.open", { path: r10Path }, scope);
-      setR10(opened);
-      setReport(
-        `opened ${opened.sourceFile}: ${opened.rooms.length} rooms, ${opened.systems.length} systems`,
+      return (
+        `synced ${result.insertedRooms.length}/${inserts.length} rooms into ${r10Path}` +
+        ` (${result.roomsBefore}→${result.roomsAfter} rooms, seed room ${result.seedRoom.action})` +
+        (result.backupPath ? ` · backup: ${result.backupPath}` : "") +
+        (result.assemblyFallbacks.length > 0
+          ? ` · ${result.assemblyFallbacks.length} assembly fallbacks`
+          : "")
       );
     });
   };
 
   return (
-    <Panel title="sync to .r10" onClose={onClose}>
+    <Panel title={`sync to ${r10Path}`} onClose={onClose}>
       <p className="face-mono t-value text-muted-foreground">
-        inserts reviewed rooms (with Manual J data) into the target file — always work on a COPY of
+        inserts reviewed rooms (with Manual J data) into the bound .r10 — always work on a COPY of
         the project template, never the original. systems are seeded by number + name only;
         everything else is filled in RHVAC.
       </p>
-      <label className="face-mono t-value mt-2 block text-muted-foreground">
-        target .r10 (host-visible path)
-        <input
-          value={r10Path}
-          onChange={(e) => setR10Path(e.target.value)}
-          placeholder="C:\\...\\ManJ_Architect_Manuella_2026.08.14.r10"
-          className="face-mono t-value mt-0.5 block h-6 w-full rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
-        />
-      </label>
 
       <p className="t-label t-upper mt-2 text-muted-foreground">systems to seed ({tags.length})</p>
       {tags.map((tag) => (
@@ -792,7 +1060,11 @@ function SyncPanel({
       ))}
 
       <p className="t-label t-upper mt-2 text-muted-foreground">
-        rooms to insert ({inserts.length})
+        rooms to insert ({inserts.length}
+        {zoneGuids.length > 0
+          ? ` · ${inScope.length} bound zone${inScope.length === 1 ? "" : "s"}`
+          : ""}
+        )
       </p>
       <div className="max-h-48 overflow-y-auto">
         {inserts.map(({ zone, room }, i) => (
@@ -804,8 +1076,6 @@ function SyncPanel({
             </span>
           </p>
         ))}
-        {/* The FILTER story: rooms exist, and the three eligibility gates — the surface's own
-            narrowing — hid them. The exit names the gates. */}
         {inserts.length === 0 && (
           <div className="py-2">
             <EmptyState
@@ -818,8 +1088,6 @@ function SyncPanel({
         )}
       </div>
 
-      {/* Refusals, per option, drawn from the real gate that produced them — not a seam. These
-          are advisories: they explain what the sync verb below is already refusing. */}
       {untagged.length > 0 && (
         <OutcomeLine
           className="mt-1"
@@ -836,57 +1104,22 @@ function SyncPanel({
           says="resolve room flags, orphaned regions, materialization failures, or post-sync area drift first"
         />
       )}
-      {report && <OutcomeLine className="mt-1" kind="receipt" label={report} />}
 
       <div className="mt-2 flex items-center gap-2">
         <Verb
-          label="load .r10"
-          disabled={busy !== null || !r10Path}
-          reason={
-            busy !== null
-              ? `${busy} is in flight`
-              : !r10Path
-                ? "type a host-visible path to the target .r10 above"
-                : "Opens the .r10 read-only and joins its rooms and systems onto this world"
-          }
-          onClick={loadR10}
-        />
-        <Verb
           tone="commit"
           label={`sync ${inserts.length} rooms`}
-          disabled={busy !== null || !r10Path || inserts.length === 0 || untagged.length > 0}
+          disabled={busy !== null || inserts.length === 0 || untagged.length > 0}
           reason={
             busy !== null
               ? `${busy} is in flight`
-              : !r10Path
-                ? "type a host-visible path to the target .r10 above"
-                : inserts.length === 0
-                  ? "no room is eligible — a room needs a Room Region home, Manual J data, and no existing .r10 link"
-                  : untagged.length > 0
-                    ? `${untagged.length} eligible room(s) sit in zones with no system tag — tag those zones first`
-                    : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`
+              : inserts.length === 0
+                ? "no room is eligible — a room needs a Room Region home, Manual J data, and no existing .r10 link"
+                : untagged.length > 0
+                  ? `${untagged.length} eligible room(s) sit in zones with no system tag — tag those zones first`
+                  : `Inserts ${inserts.length} rooms into ${r10Path} and writes the {file, room} link back onto each Room Region. Work on a COPY of the template.`
           }
           onClick={sync}
-        />
-        {/* Moved off the head when it became the five-slot rail (families #11): this verb acts
-            on the joined .r10, and the join is made — and continued — here. */}
-        <Verb
-          tone="nav"
-          direction="out"
-          label="open in RHVAC"
-          disabled={busy !== null || !r10Path}
-          reason={
-            busy !== null
-              ? `${busy} is in flight`
-              : !r10Path
-                ? "type a host-visible path to the target .r10 above"
-                : "Launches RHVAC on the target .r10, outside this page"
-          }
-          onClick={() =>
-            void run("launching RHVAC", async () => {
-              await callHostRpc("rhvac.launch", { path: r10Path }, scope);
-            })
-          }
         />
       </div>
     </Panel>
@@ -895,12 +1128,6 @@ function SyncPanel({
 
 // ── Shared panel chrome ─────────────────────────────────────────────────────
 
-/**
- * Both panels are modals, so they are the shared `ui/dialog` — not a hand-rolled overlay. The
- * previous implementation was a click-out `div` with no focus trap, no `role="dialog"`, no Esc,
- * and a fake "esc ×" label for a key it never listened for: a control that lies about what it
- * responds to. `Dialog` supplies all three for real, and its own close button.
- */
 function Panel({
   title,
   onClose,

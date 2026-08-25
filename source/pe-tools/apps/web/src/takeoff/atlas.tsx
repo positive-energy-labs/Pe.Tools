@@ -21,7 +21,6 @@ import {
   TextCell,
   VERDICT_INK,
 } from "#/components/master-table/cells";
-import { AddressingBar } from "#/components/lang/addressing-bar";
 import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -60,8 +59,6 @@ export interface AtlasActions {
   patch: (guid: string, patch: RoomEdit) => void;
   /** Write-through: persist onto the Room Region blob (live) or accept locally (fixture). */
   decide: (room: WorldRoom, flag: string, verb: Verdict) => void;
-  openAdopt: () => void;
-  openSync: () => void;
   capture: (lane: WorldLane) => void;
   partition: (zone: WorldZone) => void;
   refresh: () => void;
@@ -702,69 +699,17 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
 
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background">
-      {/* ── ONE head rail (lang AddressingBar — families #11's five-slot rule, adopted).
-             `sync .r10` is THE page-blast verb: it is where reviewed work leaves this page.
-             `adopt zones` and `refresh` act on the world the zones pane indexes, so they live
-             in that pane's action strip; `open in RHVAC` acts on the joined .r10, so it lives
-             in the sync panel beside the join it launches. ── */}
-      <AddressingBar
-        name="takeoffs"
-        sentence={
-          <span
-            className="face-mono t-value text-[var(--r-ink)]"
-            title={
-              live
-                ? "The targeted Revit document. Every read and every write on this page addresses it."
-                : // The nothing-can-be-written stamp lives on the seam chip (its one home).
-                  "The project-a replay fixture — chosen explicitly by ?source=fixture."
-            }
-          >
-            <span className="text-[var(--r-ink-2)]">auditing </span>
-            {world.docName || "…"}
-          </span>
-        }
-        facts={
-          world.r10Path && (
-            <FactChip title="The .r10 this document is joined against — the Manual J file rooms sync into.">
-              {world.r10Path}
-            </FactChip>
-          )
-        }
-        verb={
-          <Verb
-            label="sync .r10"
-            onClick={actions.openSync}
-            disabled={!live || busy !== null}
-            reason={hostReason(
-              live,
-              busy,
-              "Opens the sync panel: insert reviewed rooms with Manual J data into the target .r10",
-              "fixture · no .r10 to sync into",
-            )}
+      {/* The head rail moved to the route's TargetingHead (bindings · stages · verbs · seam
+          chip · busy receipt). What stays here is the one advisory only this pane can know. */}
+      {!geoReady && (
+        <div className="px-2 py-1">
+          <OutcomeLine
+            kind="busy"
+            label="loading room geometry"
+            says="rooms draw as position dots until their boundaries land"
           />
-        }
-        advisory={
-          busy ? (
-            <OutcomeLine kind="busy" label={busy} says="the host runs one transaction at a time" />
-          ) : !geoReady ? (
-            <OutcomeLine
-              kind="busy"
-              label="loading room geometry"
-              says="rooms draw as position dots until their boundaries land"
-            />
-          ) : undefined
-        }
-        seam={
-          !live ? (
-            <FactChip
-              dashed
-              title="The fixture lane — the project-a replay, chosen explicitly by ?source=fixture. No document is attached, and nothing here can be written."
-            >
-              fixture · project-a replay
-            </FactChip>
-          ) : undefined
-        }
-      />
+        </div>
+      )}
 
       <PaneWorkspace
         className="min-h-0 flex-1"
@@ -788,35 +733,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
             kind="navigation"
             title="zones"
             meta={`${world.zones.length} declared`}
-            /* The pane's own action strip: both verbs act on the world this pane indexes —
-               adoption fills the zone list, refresh re-reads it (families #11's standing rule;
-               they left the head when it became the five-slot rail). */
-            actions={
-              <>
-                <Verb
-                  label="adopt zones"
-                  onClick={actions.openAdopt}
-                  disabled={!live || busy !== null}
-                  reason={hostReason(
-                    live,
-                    busy,
-                    "Opens the adoption panel: stamp designer-drawn regions in a zoning view as Zoning Regions",
-                    "fixture · no document to stamp into",
-                  )}
-                />
-                <Verb
-                  label="refresh"
-                  onClick={actions.refresh}
-                  disabled={!live || busy !== null}
-                  reason={hostReason(
-                    live,
-                    busy,
-                    "Re-reads the model: zones, materialized regions, decisions, and the .r10 join",
-                    "fixture · the replay is already the whole world",
-                  )}
-                />
-              </>
-            }
+            /* adopt · refresh moved to the TargetingHead's stage verbs (they demand bindings). */
           >
             <div className="shrink-0 border-b border-border px-2 py-1.5">
               <div className="t-caption t-upper mb-1 text-muted-foreground">
