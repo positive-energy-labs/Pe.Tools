@@ -77,9 +77,7 @@ const createStore = (
   let publishedSlice = slice;
   const publish = (document: TakeoffsRouteDocument) =>
     registry.set(
-      publishedSlice as Atom.Writable<
-        AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>
-      >,
+      publishedSlice as Atom.Writable<AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>>,
       AsyncResult.success({
         doc: document,
         hydrated: true,
@@ -95,7 +93,10 @@ const createStore = (
       if (!AsyncResult.isSuccess(current) || !current.value.doc) return { ok: false as const };
       const document = structuredClone(current.value.doc);
       for (const patch of patches) {
-        if (patch.path[0] === "snapshot") document.snapshot = patch.value as TakeoffSnapshot;
+        if (patch.path[0] === "binding")
+          document.binding = patch.value as TakeoffsRouteDocument["binding"];
+        if (patch.path[0] === "snapshot")
+          document.snapshot = (patch.value ?? null) as TakeoffsRouteDocument["snapshot"];
         if (patch.path[0] === "staged")
           document.staged = patch.value as TakeoffsRouteDocument["staged"];
       }
@@ -131,8 +132,14 @@ function harness() {
   let liveProjection = false;
   let holdSnapshot = false;
   let documentTitle = "Harness.rvt";
+  let documentId = "C:\\Models\\Harness.rvt";
   let releaseSnapshot: (() => void) | undefined;
   const snapshot: TakeoffSnapshot = {
+    from: {
+      target: "dev-26",
+      documentId,
+      observedAt: "2026-08-25T00:00:00Z",
+    },
     world: {
       docName: "Harness.rvt",
       r10Path: null,
@@ -156,13 +163,18 @@ function harness() {
           custody: "controlled",
           year: "2026",
           activeDocumentTitle: documentTitle,
+          activeDocumentId: documentId,
           openDocumentCount: 1,
         },
       ];
     },
     async activeDocument(session) {
       calls.doc += 1;
-      return { session, title: session.activeDocumentTitle! };
+      return {
+        session,
+        documentId: session.activeDocumentId!,
+        title: session.activeDocumentTitle!,
+      };
     },
     subscribe(listener) {
       events.add(listener);
@@ -202,9 +214,11 @@ function harness() {
       calls.snapshot += 1;
       if (failSnapshot) throw new Error("snapshot rejected");
       if (holdSnapshot) await new Promise<void>((resolve) => (releaseSnapshot = resolve));
-      const next = liveProjection
-        ? { ...snapshot, status: { doc: "Harness.rvt", systems: [], regions: [] } }
-        : snapshot;
+      const next = {
+        ...snapshot,
+        from: { target: "dev-26", documentId, observedAt: new Date().toISOString() },
+        ...(liveProjection ? { status: { doc: "Harness.rvt", systems: [], regions: [] } } : {}),
+      };
       await write(next);
       return next;
     },
@@ -249,6 +263,7 @@ function harness() {
     calls,
     documentOpens,
     host,
+    snapshot,
     sessions,
     emit: (event: SessionEvent) => events.forEach((listener) => listener(event)),
     fail: () => (failSnapshot = true),
@@ -257,7 +272,10 @@ function harness() {
     live: () => (liveProjection = true),
     hold: () => (holdSnapshot = true),
     release: () => releaseSnapshot?.(),
-    setDocumentTitle: (title: string) => (documentTitle = title),
+    setDocumentTitle: (title: string) => {
+      documentTitle = title;
+      documentId = `C:\\Models\\${title}`;
+    },
   };
 }
 
@@ -272,8 +290,8 @@ describe("takeoff route store", () => {
     store.actions.setSearch(bound);
     await store.actions.settle(store.atoms.recentDocuments);
 
-    await store.actions.setBindings({ bound: { rvt: "Cloud.rvt" } });
-    await store.actions.setBindings({ bound: { rvt: "Harness.rvt" } });
+    await store.actions.setBindings({ bound: { rvt: "model" } });
+    await store.actions.setBindings({ bound: { rvt: "C:\\Models\\Harness.rvt" } });
 
     expect(h.documentOpens).toEqual([
       { path: "recent:Cloud.rvt", id: "dev-26", conflictPolicy: "keep" },
@@ -306,13 +324,10 @@ describe("takeoff route store", () => {
     store.actions.setSearch(bound);
     await store.actions.settle(store.atoms.recentDocuments);
 
-    await store.actions.setBindings({ bound: { rvt: "Cloud.rvt" } });
+    await store.actions.setBindings({ bound: { rvt: "model" } });
 
     expect(fetch).toHaveBeenCalledOnce();
-    expect(fetch).toHaveBeenCalledWith(
-      "/docs/open",
-      expect.objectContaining({ method: "POST" }),
-    );
+    expect(fetch).toHaveBeenCalledWith("/docs/open", expect.objectContaining({ method: "POST" }));
     expect(store.atoms.registry.get(store.atoms.failure)).toMatchObject({
       verb: "open-document",
       message: "no file at recent:Cloud.rvt",
@@ -339,7 +354,7 @@ describe("takeoff route store", () => {
     store.actions.setSearch(bound);
     await store.actions.settle(store.atoms.sessions);
 
-    await store.actions.setBindings({ bound: { rvt: "Cloud.rvt" } });
+    await store.actions.setBindings({ bound: { rvt: "model" } });
 
     expect(fetch).not.toHaveBeenCalled();
     expect(store.atoms.registry.get(store.atoms.failure)).toMatchObject({
@@ -406,13 +421,146 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("unbinds a persisted snapshot from another document", async () => {
+    const h = harness();
+    h.hold();
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: {
+          binding: { target: "session:dev-26" },
+          snapshot: {
+            ...h.snapshot,
+            from: {
+              target: "dev-26",
+              documentId: "C:\\Models\\Other.rvt",
+              observedAt: "2026-08-25T01:02:03Z",
+            },
+          },
+          staged: [],
+        },
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    const store = createStore({
+      slice,
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    await store.actions.settle(store.atoms.activeDocument);
+
+    const read = await store.actions.settle(store.atoms.snapshot);
+
+    expect(read).toMatchObject({ bound: false, value: null });
+    expect(store.atoms.registry.get(store.feeds.views)).toMatchObject({
+      state: "ready",
+      options: null,
+    });
+    h.release();
+    store.dispose();
+  });
+
+  it("binds a persisted snapshot from the current document with its source freshness", async () => {
+    const h = harness();
+    h.hold();
+    const observedAt = "2026-08-25T01:02:03Z";
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: {
+          binding: { target: "session:dev-26" },
+          snapshot: {
+            ...h.snapshot,
+            from: {
+              target: "dev-26",
+              documentId: "C:\\Models\\Harness.rvt",
+              observedAt,
+            },
+          },
+          staged: [],
+        },
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    const store = createStore({
+      slice,
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    await store.actions.settle(store.atoms.activeDocument);
+
+    const read = await store.actions.settle(store.atoms.snapshot);
+
+    expect(read).toMatchObject({
+      bound: true,
+      at: Date.parse(observedAt),
+      basis: ["dev-26"],
+    });
+    expect(store.atoms.registry.get(store.feeds.views)).toMatchObject({
+      state: "ready",
+      at: Date.parse(observedAt),
+      basis: ["dev-26"],
+    });
+    h.release();
+    store.dispose();
+  });
+
+  it("drops the snapshot in the same write when binding another document", async () => {
+    const h = harness();
+    h.hold();
+    const patches: RouteStatePatch[][] = [];
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: {
+          binding: { target: "session:dev-26" },
+          snapshot: h.snapshot,
+          staged: [],
+        },
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    const store = createStore(
+      {
+        slice,
+        host: h.host,
+        sessions: h.sessions,
+        search: searchPort().port,
+      },
+      (next) => patches.push(next),
+    );
+    await store.actions.settle(store.atoms.sessions);
+
+    await store.actions.setBindings({
+      bound: { world: "session:dev-26", rvt: "model" },
+    });
+    await tick();
+
+    expect(patches).toContainEqual([{ path: ["snapshot"], value: null }]);
+    const landed = store.atoms.registry.get(store.slices.takeoffs);
+    expect(AsyncResult.getOrThrow(landed).doc?.snapshot).toBeNull();
+    h.release();
+    store.dispose();
+  });
+
   it("writes the fixture host read into the document and renders only that slice", async () => {
     const patches: RouteStatePatch[][] = [];
-    const store = createStore({
-      host: createFixtureTakeoffHost(),
-      sessions: createFixtureSessionSource(),
-      search: searchPort().port,
-    }, (next) => patches.push(next));
+    const store = createStore(
+      {
+        host: createFixtureTakeoffHost(),
+        sessions: createFixtureSessionSource(),
+        search: searchPort().port,
+      },
+      (next) => patches.push(next),
+    );
     await store.actions.settle(store.atoms.snapshot);
 
     expect(patches[0]?.[0]).toMatchObject({ path: ["snapshot"] });
@@ -422,11 +570,14 @@ describe("takeoff route store", () => {
 
   it("writes one apply patch for a staged room edit", async () => {
     const patches: RouteStatePatch[][] = [];
-    const store = createStore({
-      host: createFixtureTakeoffHost(),
-      sessions: createFixtureSessionSource(),
-      search: searchPort().port,
-    }, (next) => patches.push(next));
+    const store = createStore(
+      {
+        host: createFixtureTakeoffHost(),
+        sessions: createFixtureSessionSource(),
+        search: searchPort().port,
+      },
+      (next) => patches.push(next),
+    );
     await store.actions.settle(store.atoms.snapshot);
     patches.length = 0;
 
@@ -454,7 +605,7 @@ describe("takeoff route store", () => {
 
     const snapshot = await store.actions.settle(store.atoms.snapshot);
 
-    expect(snapshot!.world.docName).toBe("project-a Residence.rvt");
+    expect(snapshot.value!.world.docName).toBe("project-a Residence.rvt");
     expect(store.atoms.registry.get(store.feeds.world)).toMatchObject({
       state: "ready",
       lane: "fixture",
@@ -602,33 +753,6 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("keeps rendering the document snapshot while adopt reproduces it", async () => {
-    const h = harness();
-    const store = createStore({
-      host: h.host,
-      sessions: h.sessions,
-      search: searchPort().port,
-    });
-    store.actions.setSearch(bound);
-    await Promise.all([
-      store.actions.settle(store.atoms.snapshot),
-      store.actions.settle(store.atoms.candidates),
-    ]);
-    h.hold();
-
-    await store.actions.adopt([{ view: bound.views[0]!, items: [] }]);
-    await tick();
-
-    expect(store.atoms.registry.get(store.atoms.world).docName).toBe("Harness.rvt");
-    h.release();
-    await store.actions.settle(store.atoms.snapshot);
-    expect(h.calls.adopt).toBe(1);
-    expect(h.calls.snapshot).toBe(2);
-    expect(h.calls.candidates).toBe(2);
-    expect(store.atoms.registry.get(store.feeds.zones).stale).toBe(false);
-    store.dispose();
-  });
-
   it("brackets capture and publishes its replay through the store world", async () => {
     const h = harness();
     const store = createStore({
@@ -697,7 +821,7 @@ describe("takeoff route store", () => {
     expect(h.calls.list).toBe(before.list);
     expect(h.calls.open).toBe(before.open);
     expect(store.atoms.registry.get(store.feeds.rvt).options?.[0]).toMatchObject({
-      id: "Second.rvt",
+      id: "C:\\Models\\Second.rvt",
       label: "Second.rvt",
     });
     expect(

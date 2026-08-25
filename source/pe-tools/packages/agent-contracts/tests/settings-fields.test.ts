@@ -54,7 +54,9 @@ test("family evidence parses the C# projection shape with an origin stamp", () =
     diagnostics: [],
     from: {
       origin: "build",
-      capturedAt: "2026-07-16T00:00:00Z",
+      target: "pe.app-25",
+      documentId: "C:\\Settings\\PE VAV.json",
+      observedAt: "2026-07-16T00:00:00Z",
       familyName: "PE VAV",
       documentVersionToken: "v7",
     },

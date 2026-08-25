@@ -125,6 +125,8 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
     sessions: bridgeList
       .filter((bridge) => bridge.connected && bridge.sessionId)
       .map((bridge) => ({
+        activeDocumentCloudModelGuid: bridge.state?.activeDocumentCloudModelGuid ?? null,
+        activeDocumentPath: bridge.state?.activeDocumentPath ?? null,
         activeDocumentTitle: bridge.state?.activeDocumentTitle ?? null,
         activeDocumentIsFamilyDocument: bridge.state?.activeDocumentIsFamilyDocument ?? null,
         // Observation time of the active-document facts — an observation, never computed staleness.

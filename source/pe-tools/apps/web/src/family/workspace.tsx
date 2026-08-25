@@ -136,11 +136,7 @@ import type { Column, MasterTableState, Verdict } from "#/components/master-tabl
 import { Pane, PaneWorkspace } from "#/components/ui/pane";
 import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
-import {
-  BUILD_VERB,
-  BuildStrip,
-  buildOutputPath,
-} from "#/family/build";
+import { BUILD_VERB, BuildStrip, buildOutputPath } from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
 import { NavStateCell, ProposedCell } from "#/family/marks";
 import { FAMILY_PRODUCT } from "#/family/product";
@@ -182,7 +178,13 @@ import { cn } from "#/lib/utils";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 
-export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore; requestedFamily?: string }) {
+export function FamilyWorkspace({
+  store,
+  requestedFamily,
+}: {
+  store: FamilyStore;
+  requestedFamily?: string;
+}) {
   const { profile = "", stage = "author" } = useSearch({ from: "/family" });
   const navigate = useNavigate({ from: "/family" });
   /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
@@ -242,7 +244,6 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const say = store.actions.say;
-
 
   // Esc unwinds ONE thing, innermost first: the bind picker, then the inspector, then the
   // drill-in. Each is a mode of a pane rather than a place, so leaving one must never feel like
@@ -2105,7 +2106,9 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
     profile: useAtomValue(store.feeds.profile),
   };
   const product = FAMILY_PRODUCT({
-    open: store.commandVerb("open", () => ({ documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: profile } })),
+    open: store.commandVerb("open", () => ({
+      documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: profile },
+    })),
     ...store.verbs,
   });
   const bindingState: BindingState = {
@@ -2154,7 +2157,7 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
             <OutcomeLine
               kind="error"
               label="the open document will not parse"
-              says={`${snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
+              says={`${snapshot?.from.settingsDocumentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
             />
           ) : requestedFamily != null ? (
             <OutcomeLine

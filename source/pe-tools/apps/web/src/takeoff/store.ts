@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -21,16 +21,13 @@ import {
   docWriter,
   feed,
   hostRead,
+  readingIsCurrent,
   unbound,
-  type Feed,
   type Scope,
   type Slice,
   type TimedRead,
 } from "#/state/route-store";
-import type {
-  AdoptItem,
-  PartitionArgs,
-} from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
+import type { AdoptItem, PartitionArgs } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import {
   upsertResolution,
   type CandidateRegion,
@@ -83,6 +80,7 @@ export interface TakeoffSessionFacts extends SessionFacts {
 
 export interface ActiveDocument {
   readonly session: TakeoffSessionFacts;
+  readonly documentId: string;
   readonly title: string;
 }
 
@@ -340,31 +338,6 @@ const compare = (a: string | number | undefined, b: string | number | undefined)
   return String(a) < String(b) ? -1 : 1;
 };
 
-const snapshotFeed = (
-  result: AsyncResult.AsyncResult<TakeoffSnapshot | null, Error>,
-  options: (snapshot: TakeoffSnapshot) => Feed["options"],
-  needs: string,
-): Feed => {
-  if (AsyncResult.isInitial(result))
-    return { options: null, state: "loading", lane: "read", stale: false, seam: { needs } };
-  if (AsyncResult.isFailure(result))
-    return {
-      options: null,
-      state: "error",
-      lane: "read",
-      stale: false,
-      note: String(Cause.squash(result.cause)),
-      seam: { needs },
-    };
-  return {
-    options: result.value ? options(result.value) : null,
-    state: "ready",
-    lane: "read",
-    stale: result.waiting,
-    seam: { needs },
-  };
-};
-
 export function createTakeoffStore(deps: {
   host: TakeoffHost;
   sessions: SessionSource;
@@ -393,9 +366,7 @@ export function createTakeoffStore(deps: {
     const result = get(takeoffsSlice);
     return AsyncResult.isSuccess(result) ? (result.value.doc?.binding.target ?? "") : "";
   }).pipe(owned("binding/target"));
-  const sourceAtom = Atom.make((get) => get(searchAtom).source).pipe(
-    owned("search/source"),
-  );
+  const sourceAtom = Atom.make((get) => get(searchAtom).source).pipe(owned("search/source"));
   const viewsAtom = Atom.make((get) => get(searchAtom).views).pipe(owned("search/views"));
   const zonesAtom = Atom.make((get) => get(searchAtom).zones).pipe(owned("search/zones"));
   const dirAtom = Atom.make((get) => get(searchAtom).dir).pipe(owned("search/dir"));
@@ -406,9 +377,7 @@ export function createTakeoffStore(deps: {
   const busyAtom = core.busy;
   const failureAtom = core.failure;
   const receiptAtom = core.receipt;
-  const zoneKeyAtom = Atom.make<AtlasPageState["zoneKey"]>(null).pipe(
-    owned("page/atlas/zone-key"),
-  );
+  const zoneKeyAtom = Atom.make<AtlasPageState["zoneKey"]>(null).pipe(owned("page/atlas/zone-key"));
   const stageFilterAtom = Atom.make<AtlasPageState["stageFilter"]>(null).pipe(
     owned("page/atlas/stage-filter"),
   );
@@ -418,16 +387,10 @@ export function createTakeoffStore(deps: {
   );
   const planOpenAtom = Atom.make(true).pipe(owned("page/atlas/plan-open"));
   const statsOpenAtom = Atom.make(false).pipe(owned("page/atlas/stats-open"));
-  const targetingOpenAtom = Atom.make<string | null>(null).pipe(
-    owned("page/targeting/open"),
-  );
-  const targetingLevelAtom = Atom.make<string | null>(null).pipe(
-    owned("page/targeting/level"),
-  );
+  const targetingOpenAtom = Atom.make<string | null>(null).pipe(owned("page/targeting/open"));
+  const targetingLevelAtom = Atom.make<string | null>(null).pipe(owned("page/targeting/level"));
   const targetingQueryAtom = Atom.make("").pipe(owned("page/targeting/query"));
-  const cursorAtom = Atom.make<AtlasPageState["cursor"]>(null).pipe(
-    owned("page/atlas/cursor"),
-  );
+  const cursorAtom = Atom.make<AtlasPageState["cursor"]>(null).pipe(owned("page/atlas/cursor"));
   const atlasPageAtom = Atom.make(
     (get): AtlasPageState => ({
       stageFilter: get(stageFilterAtom),
@@ -444,9 +407,7 @@ export function createTakeoffStore(deps: {
     sorts: [],
     query: "",
   }).pipe(owned("page/atlas-table"));
-  const replaysAtom = Atom.make<Readonly<Record<string, string>>>({}).pipe(
-    Atom.autoDispose,
-  );
+  const replaysAtom = Atom.make<Readonly<Record<string, string>>>({}).pipe(Atom.autoDispose);
   const panelAtom = Atom.make<"adopt" | "sync" | null>(null).pipe(owned("page/panel"));
   const adoptPatchesAtom = Atom.make<Readonly<Record<string, Partial<AdoptDraft>>>>({}).pipe(
     Atom.autoDispose,
@@ -461,12 +422,8 @@ export function createTakeoffStore(deps: {
       result.value.doc.staged.map(({ roomId, ...edit }) => [roomId, { roomId, ...edit }]),
     );
   }).pipe(Atom.autoDispose);
-  const hoveredAtom = Atom.family((_id: string) =>
-    Atom.make(false).pipe(Atom.autoDispose),
-  );
-  const boundAtom = Atom.family((_id: string) =>
-    Atom.make(false).pipe(Atom.autoDispose),
-  );
+  const hoveredAtom = Atom.family((_id: string) => Atom.make(false).pipe(Atom.autoDispose));
+  const boundAtom = Atom.family((_id: string) => Atom.make(false).pipe(Atom.autoDispose));
   const decidedAtom = Atom.family((id: string) =>
     Atom.make((get) =>
       Object.fromEntries(
@@ -514,9 +471,8 @@ export function createTakeoffStore(deps: {
         const session = read.value.find(
           (candidate) => candidate.sessionId === resolution.session.sessionId,
         )!;
-        return yield* hostRead(
-          [session.sessionId, session.year ?? "all"],
-          () => deps.host.listRecentDocuments!(session.year),
+        return yield* hostRead([session.sessionId, session.year ?? "all"], () =>
+          deps.host.listRecentDocuments!(session.year),
         );
       }),
     )
@@ -531,7 +487,7 @@ export function createTakeoffStore(deps: {
       Effect.gen(function* () {
         const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
         if (!document.value) return unbound<TakeoffSnapshot | null>(null, document.basis);
-        return yield* hostRead([document.value.session.sessionId, document.value.title], () =>
+        return yield* hostRead([document.value.session.sessionId, document.value.documentId], () =>
           deps.host.readSnapshot(document.value!.session, document.value!, async (snapshot) => {
             const result = await takeoffsWriter.apply([{ path: ["snapshot"], value: snapshot }]);
             if (!result.ok) throw Error(result.error ?? "snapshot write failed");
@@ -547,20 +503,35 @@ export function createTakeoffStore(deps: {
     .pipe(Atom.autoDispose);
   const snapshotResult = Atom.make((get) => {
     const slice = get(takeoffsSlice);
+    const producer = get(snapshotProducerResult);
+    if (AsyncResult.isFailure(producer)) return producer;
     if (AsyncResult.isSuccess(slice)) {
       if (!slice.value.hydrated) return AsyncResult.initial();
       if (slice.value.error) return AsyncResult.fail(Error(slice.value.error));
-      if (slice.value.doc?.snapshot) {
-        const producer = get(snapshotProducerResult);
-        return AsyncResult.success(slice.value.doc.snapshot, {
-          waiting: AsyncResult.isSuccess(producer) && producer.waiting,
-        });
+      const snapshot = slice.value.doc?.snapshot;
+      if (snapshot) {
+        const active = get(activeDocumentResult);
+        const document = AsyncResult.isSuccess(active) ? active.value.value : null;
+        const target = document
+          ? (document.session.sdkSessionId ?? `pid:${document.session.processId}`)
+          : "";
+        const current = document ? { target, documentId: document.documentId } : null;
+        return AsyncResult.success(
+          current && readingIsCurrent(snapshot.from, current)
+            ? {
+                value: snapshot,
+                at: Date.parse(snapshot.from.observedAt),
+                basis: [snapshot.from.target],
+                bound: true,
+              }
+            : unbound<TakeoffSnapshot | null>(null, target ? [target] : []),
+          { waiting: AsyncResult.isSuccess(producer) && producer.waiting },
+        );
       }
     }
-    const producer = get(snapshotProducerResult);
     return AsyncResult.isSuccess(producer)
-      ? AsyncResult.map(slice, (value) => value.doc?.snapshot ?? null)
-      : AsyncResult.map(producer, () => null);
+      ? AsyncResult.success(unbound<TakeoffSnapshot | null>(null, producer.value.basis))
+      : AsyncResult.initial();
   }).pipe(Atom.autoDispose);
   const candidatesSource = runtime
     .atom((get) =>
@@ -665,7 +636,7 @@ export function createTakeoffStore(deps: {
     if (deps.host.fixture || !deps.host.listRecentDocuments)
       return feed(
         document,
-        (active) => (active ? [{ id: active.title, label: active.title }] : []),
+        (active) => (active ? [{ id: active.documentId, label: active.title }] : []),
         deps.host.fixture ? "fixture" : "live",
         { needs: TAKEOFF_LINKS[1]!.needs },
       );
@@ -674,11 +645,11 @@ export function createTakeoffStore(deps: {
       (recents) => {
         const active = AsyncResult.isSuccess(document) ? document.value.value : null;
         return [
-          ...(active ? [{ id: active.title, label: active.title }] : []),
+          ...(active ? [{ id: active.documentId, label: active.title }] : []),
           ...recents
-            .filter((recent) => recent.title !== active?.title)
+            .filter((recent) => (recent.modelGuid ?? recent.path) !== active?.documentId)
             .map((recent) => ({
-              id: recent.title,
+              id: recent.modelGuid ?? recent.path,
               label: recent.title,
               sub: recent.isCloud ? "cloud" : recent.path,
             })),
@@ -689,28 +660,27 @@ export function createTakeoffStore(deps: {
     );
   }).pipe(owned("feed/rvt"));
   const viewsFeed = Atom.make((get) =>
-    snapshotFeed(
+    feed(
       get(snapshotResult),
       (snapshot) =>
-        snapshot.views.map((view) => ({ id: view.name, label: view.name, sub: view.level })),
-      TAKEOFF_LINKS[2]!.needs,
+        snapshot?.views.map((view) => ({ id: view.name, label: view.name, sub: view.level })) ?? [],
+      "read",
+      { needs: TAKEOFF_LINKS[2]!.needs },
     ),
   ).pipe(owned("feed/views"));
   const zonesFeed = Atom.make((get) =>
-    snapshotFeed(
+    feed(
       get(snapshotResult),
       (snapshot) =>
-        snapshot.world.zones.map((zone) => ({ id: zone.zone.guid, label: zone.name })),
-      TAKEOFF_LINKS[3]!.needs,
+        snapshot?.world.zones.map((zone) => ({ id: zone.zone.guid, label: zone.name })) ?? [],
+      "read",
+      { needs: TAKEOFF_LINKS[3]!.needs },
     ),
   ).pipe(owned("feed/zones"));
   const folderFeed = Atom.make((get) =>
-    feed(
-      get(foldersResult),
-      (dirs) => dirs.map((dir) => ({ id: dir, label: dir })),
-      "read",
-      { needs: TAKEOFF_LINKS[4]!.needs },
-    ),
+    feed(get(foldersResult), (dirs) => dirs.map((dir) => ({ id: dir, label: dir })), "read", {
+      needs: TAKEOFF_LINKS[4]!.needs,
+    }),
   ).pipe(owned("feed/folder"));
   const r10Feed = Atom.make((get) =>
     feed(
@@ -722,7 +692,9 @@ export function createTakeoffStore(deps: {
   ).pipe(owned("feed/r10"));
   const authorityWorldAtom = Atom.make((get): World => {
     const result = get(snapshotResult);
-    return AsyncResult.isSuccess(result) && result.value ? result.value.world : EMPTY_WORLD;
+    return AsyncResult.isSuccess(result) && result.value.bound && result.value.value
+      ? result.value.value.world
+      : EMPTY_WORLD;
   }).pipe(Atom.autoDispose);
   const worldAtom = Atom.make((get): World => {
     const authority = get(authorityWorldAtom);
@@ -926,7 +898,7 @@ export function createTakeoffStore(deps: {
           );
     });
   };
-  const openSelectedDocument = (title: string) =>
+  const openSelectedDocument = (documentId: string) =>
     runVerb(
       "open-document",
       async () => {
@@ -937,8 +909,10 @@ export function createTakeoffStore(deps: {
         if (!session.sdkSessionId)
           throw Error("open the document in Revit; this session is observed");
         const recents = await settle(recentDocumentsResult);
-        const recent = recents.value.find((candidate) => candidate.title === title);
-        if (!recent) throw Error(`unknown recent document ${title}`);
+        const recent = recents.value.find(
+          (candidate) => (candidate.modelGuid ?? candidate.path) === documentId,
+        );
+        if (!recent) throw Error(`unknown recent document ${documentId}`);
         if (!deps.host.openDocument) throw Error("document opening is unavailable");
         // SHIM: the CLI resolves cloud models only through `recent:<title>`; a literal `cld://`
         // path is read as a local file (Pe.Revit.Sdk NEXT.md gap). Dies when `doc open <cld://…>` resolves.
@@ -985,9 +959,36 @@ export function createTakeoffStore(deps: {
       readonly multi?: Multi;
     }) {
       const current = registry.get(searchAtom);
-      const nextTarget = patch.bound?.world ?? "";
-      if (current.source === "live" && patch.bound && nextTarget !== registry.get(targetAtom))
-        void takeoffsWriter.command?.("bind", { target: nextTarget || null });
+      const currentTarget = registry.get(targetAtom);
+      const nextTarget = patch.bound?.world ?? currentTarget;
+      const sessions = registry.get(sessionsResult);
+      const resolution = AsyncResult.isSuccess(sessions)
+        ? resolveTarget(sessions.value.value, nextTarget)
+        : null;
+      const nextDocument =
+        patch.bound?.rvt ??
+        (resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined);
+      if (current.source === "live" && patch.bound) {
+        const slice = registry.get(takeoffsSlice);
+        const snapshot = AsyncResult.isSuccess(slice) ? slice.value.doc?.snapshot : null;
+        const target =
+          resolution?.kind === "resolved"
+            ? (resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`)
+            : null;
+        const identity = target && nextDocument ? { target, documentId: nextDocument } : null;
+        const patches: RouteStatePatch[] = [];
+        if (nextTarget !== currentTarget)
+          patches.push({
+            path: ["binding"],
+            value: {
+              target: nextTarget || null,
+              boundAt: nextTarget ? new Date().toISOString() : null,
+            },
+          });
+        if (snapshot && (!identity || !readingIsCurrent(snapshot.from, identity)))
+          patches.push({ path: ["snapshot"], value: null });
+        if (patches.length) void takeoffsWriter.apply(patches);
+      }
       deps.search.patch({
         ...(patch.stage ? { stage: patch.stage as TakeoffStage } : {}),
         ...(patch.bound
@@ -1003,25 +1004,16 @@ export function createTakeoffStore(deps: {
             }
           : {}),
       });
-      const nextDocument = patch.bound?.rvt;
-      const sessions = registry.get(sessionsResult);
-      const resolution = AsyncResult.isSuccess(sessions)
-        ? resolveTarget(sessions.value.value, registry.get(targetAtom))
-        : null;
-      const activeTitle =
-        resolution?.kind === "resolved" ? resolution.session.activeDocumentTitle : undefined;
-      if (current.source === "live" && nextDocument && nextDocument !== activeTitle)
+      const activeDocumentId =
+        resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined;
+      if (current.source === "live" && nextDocument && nextDocument !== activeDocumentId)
         return openSelectedDocument(nextDocument);
     },
     settle,
     invalidate: (keys: readonly string[]) =>
       write("invalidate", keys.join(","), () => registry.set(invalidateAtom, keys)),
     retryRhvac() {
-      return runVerb(
-        "retry-r10",
-        async () => "retrying .r10",
-        ["rhvac-open", "rhvac-list"],
-      );
+      return runVerb("retry-r10", async () => "retrying .r10", ["rhvac-open", "rhvac-list"]);
     },
     rememberDir(dir: string) {
       const value = dir.trim();

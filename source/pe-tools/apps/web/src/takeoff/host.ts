@@ -29,12 +29,13 @@ const sdkError = (body: SdkEnvelope<unknown>, fallback: string) =>
   body.diagnostics?.[0]?.detail ?? body.error ?? fallback;
 
 const takeoffOperations = (scope: HostSessionScope) =>
-  createTakeoffOperations((input) =>
-    callHostDynamic("scripting.execute", input, scope) as Promise<{
-      status: string;
-      data?: unknown;
-      diagnostics?: { severity?: string; message?: string }[];
-    }>,
+  createTakeoffOperations(
+    (input) =>
+      callHostDynamic("scripting.execute", input, scope) as Promise<{
+        status: string;
+        data?: unknown;
+        diagnostics?: { severity?: string; message?: string }[];
+      }>,
   );
 
 const WALL_ASSEMBLY =
@@ -169,7 +170,11 @@ export const createHostSessionSource = (): SessionSource => ({
   async activeDocument(session) {
     if (!session.activeDocumentTitle)
       throw new Error(`session ${session.sessionId} has no active document`);
-    return { session, title: session.activeDocumentTitle };
+    if (!session.activeDocumentId)
+      throw new Error(
+        `session ${session.sessionId} active document has no cloud model GUID or absolute path`,
+      );
+    return { session, documentId: session.activeDocumentId, title: session.activeDocumentTitle };
   },
   subscribe(listener) {
     const source = new EventSource("/events");
@@ -214,7 +219,14 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
   },
   readSnapshot(session, _document, write) {
     const operations = takeoffOperations({ bridgeSessionId: session.sessionId });
-    return produceTakeoffSnapshot(operations.snapshot, write);
+    return produceTakeoffSnapshot(
+      operations.snapshot,
+      {
+        target: session.sdkSessionId ?? `pid:${session.processId}`,
+        documentId: _document.documentId,
+      },
+      write,
+    );
   },
   async listRhvac(dir) {
     const response = (await callHostDynamic("rhvac.list", { dir })) as {

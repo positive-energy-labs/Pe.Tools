@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import {
   parseRouteDoc,
+  type ReadingFrom,
   type RouteDocOf,
   type RouteStatePatch,
   type RouteStateSpec,
@@ -92,12 +93,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     );
     try {
       const value = await work();
-      if (
-        typeof value === "object" &&
-        value !== null &&
-        "ok" in value &&
-        value.ok === false
-      ) {
+      if (typeof value === "object" && value !== null && "ok" in value && value.ok === false) {
         const result = value as RouteStateWriteResult;
         throw Error([result.error, result.hint].filter(Boolean).join(": ") || `${id} failed`);
       }
@@ -111,7 +107,8 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
             ? value.text
             : id;
       write(id, "receipt", () => registry.set(receipt, { verb: id, text, at: Date.now() }));
-      if (keys?.length) write(id, `invalidate/${keys.join(",")}`, () => registry.set(invalidate, keys));
+      if (keys?.length)
+        write(id, `invalidate/${keys.join(",")}`, () => registry.set(invalidate, keys));
       return value;
     } catch (cause) {
       const hostFailure = {
@@ -165,6 +162,11 @@ export const unbound = <A>(value: A, basis: readonly string[] = []): TimedRead<A
   basis,
   bound: false,
 });
+
+export const readingIsCurrent = (
+  from: ReadingFrom,
+  current: Pick<ReadingFrom, "target" | "documentId">,
+) => from.target === current.target && from.documentId === current.documentId;
 
 export type FeedState = "ready" | "loading" | "error";
 export type Lane = "live" | "read" | "fixture";
@@ -234,9 +236,16 @@ type WireMessage =
   | { kind: "connected"; value: boolean };
 
 class RouteAtomKey implements Equal.Equal {
-  constructor(readonly spec: RouteStateSpec<any>, readonly scope: Scope) {}
+  constructor(
+    readonly spec: RouteStateSpec<any>,
+    readonly scope: Scope,
+  ) {}
   [Equal.symbol](that: Equal.Equal): boolean {
-    return that instanceof RouteAtomKey && this.spec.route === that.spec.route && this.scope.threadId === that.scope.threadId;
+    return (
+      that instanceof RouteAtomKey &&
+      this.spec.route === that.spec.route &&
+      this.scope.threadId === that.scope.threadId
+    );
   }
   [Hash.symbol]() {
     return Hash.string(`${this.spec.route}\0${this.scope.threadId}`);
@@ -261,62 +270,69 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
     peaActive: false,
   };
   const config = resolveWorkbenchConfig();
-  return Atom.make(Stream.callback<WireMessage, Error>((queue) =>
-    Effect.acquireRelease(
-      Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(peUrl(config, "/info"));
-          if (!response.ok) throw Error(`workbench /info ${response.status}`);
-          const info = peInfoSchema.parse(await response.json());
-          const session = new MastraClient({ baseUrl: config.origin })
-            .getAgentController(info.controllerId)
-            .session(info.resourceId);
-          const hydrated = await fetch(routeUrl(spec.route, "read", scope));
-          if (!hydrated.ok) throw Error(`route workspace read ${hydrated.status}`);
-          const payload = (await hydrated.json()) as { doc?: unknown };
-          if ("doc" in payload) Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
-          const unsubscribeSession = await session.subscribe({
-            onEvent: (raw: unknown) => {
-              const event = parseWireEvent(raw);
-              if (event?.type === "agent_start") Queue.offerUnsafe(queue, { kind: "pea", active: true });
-              else if (event?.type === "agent_end") Queue.offerUnsafe(queue, { kind: "pea", active: false });
-            },
-            onError: () => undefined,
-          });
-          const events = new EventSource(routeUrl(spec.route, "events", scope));
-          events.onopen = () => Queue.offerUnsafe(queue, { kind: "connected", value: true });
-          events.onerror = () => Queue.offerUnsafe(queue, { kind: "connected", value: false });
-          events.onmessage = (raw) => {
-            try {
-              const payload = JSON.parse(raw.data) as { doc?: unknown };
-              if ("doc" in payload)
-                Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
-            } catch {
-              // The next valid snapshot remains authoritative.
-            }
-          };
-          return () => {
-            events.close();
-            unsubscribeSession.unsubscribe();
-          };
-        },
-        catch: (cause) => (cause instanceof Error ? cause : Error(String(cause))),
-      }),
-      (close) => Effect.sync(close),
-    ),
-  ).pipe(
-    Stream.scan(initial, (state, message): Slice<RouteDocOf<typeof spec>> =>
-      message.kind === "pea"
-        ? { ...state, peaActive: message.active }
-        : message.kind === "connected"
-          ? { ...state, connected: message.value }
-        : {
-            ...state,
-            doc: parseRouteDoc(message.doc, spec),
-            hydrated: true,
+  return Atom.make(
+    Stream.callback<WireMessage, Error>((queue) =>
+      Effect.acquireRelease(
+        Effect.tryPromise({
+          try: async () => {
+            const response = await fetch(peUrl(config, "/info"));
+            if (!response.ok) throw Error(`workbench /info ${response.status}`);
+            const info = peInfoSchema.parse(await response.json());
+            const session = new MastraClient({ baseUrl: config.origin })
+              .getAgentController(info.controllerId)
+              .session(info.resourceId);
+            const hydrated = await fetch(routeUrl(spec.route, "read", scope));
+            if (!hydrated.ok) throw Error(`route workspace read ${hydrated.status}`);
+            const payload = (await hydrated.json()) as { doc?: unknown };
+            if ("doc" in payload)
+              Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
+            const unsubscribeSession = await session.subscribe({
+              onEvent: (raw: unknown) => {
+                const event = parseWireEvent(raw);
+                if (event?.type === "agent_start")
+                  Queue.offerUnsafe(queue, { kind: "pea", active: true });
+                else if (event?.type === "agent_end")
+                  Queue.offerUnsafe(queue, { kind: "pea", active: false });
+              },
+              onError: () => undefined,
+            });
+            const events = new EventSource(routeUrl(spec.route, "events", scope));
+            events.onopen = () => Queue.offerUnsafe(queue, { kind: "connected", value: true });
+            events.onerror = () => Queue.offerUnsafe(queue, { kind: "connected", value: false });
+            events.onmessage = (raw) => {
+              try {
+                const payload = JSON.parse(raw.data) as { doc?: unknown };
+                if ("doc" in payload)
+                  Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
+              } catch {
+                // The next valid snapshot remains authoritative.
+              }
+            };
+            return () => {
+              events.close();
+              unsubscribeSession.unsubscribe();
+            };
           },
+          catch: (cause) => (cause instanceof Error ? cause : Error(String(cause))),
+        }),
+        (close) => Effect.sync(close),
+      ),
+    ).pipe(
+      Stream.scan(
+        initial,
+        (state, message): Slice<RouteDocOf<typeof spec>> =>
+          message.kind === "pea"
+            ? { ...state, peaActive: message.active }
+            : message.kind === "connected"
+              ? { ...state, connected: message.value }
+              : {
+                  ...state,
+                  doc: parseRouteDoc(message.doc, spec),
+                  hydrated: true,
+                },
+      ),
     ),
-  ));
+  );
 });
 
 export function docAtom<S extends RouteStateSpec<any>>(

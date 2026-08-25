@@ -19,7 +19,7 @@ export function FamilyChatPlugin({ toolName, args, sessionState, running }: Rout
   const evidenceFresh =
     evidence != null &&
     (evidence.from.documentVersionToken == null ||
-      evidence.from.documentVersionToken === settings?.snapshot?.versionToken);
+      evidence.from.documentVersionToken === settings?.snapshot?.from.documentVersionToken);
 
   return (
     <InlineRoutePlugin title={familyRouteState.title} action={actionLabel(toolName, args, running)}>
@@ -32,7 +32,7 @@ export function FamilyChatPlugin({ toolName, args, sessionState, running }: Rout
             className={`t-label face-mono ${
               evidenceFresh ? "text-[var(--r-done)]" : "text-[var(--r-caution)]"
             }`}
-            title={`Evidence from ${evidence.from.origin} of ${evidence.from.familyName} at ${evidence.from.capturedAt}`}
+            title={`Evidence from ${evidence.from.origin} of ${evidence.from.familyName} at ${evidence.from.observedAt}`}
           >
             evidence · {evidence.from.origin} · {evidenceFresh ? "fresh" : "stale"}
           </span>

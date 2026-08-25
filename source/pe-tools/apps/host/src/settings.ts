@@ -1093,7 +1093,7 @@ const buildSettingsDocumentMetadata = Effect.fnUntraced(function* (
   );
   const entry = entryResult._tag === "Success" ? entryResult.success : null;
   return {
-    documentId,
+    documentId: { ...documentId, stableId: documentPath },
     kind: entry?.kind ?? SettingsFileKind.Profile,
     modifiedUtc: entry?.modifiedUtc ?? null,
     versionToken: yield* createSettingsVersionToken(documentPath, operationKey),

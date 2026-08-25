@@ -5,7 +5,7 @@
  * These are the side-effectful work the agent write mask forbids doing by hand: open a
  * schema-backed settings document, re-read it, validate a candidate splice, and save
  * (human-only). They run where the pea runtime is composed (in-process with the host),
- * reaching the TS host through `HostRpcCaller` — no Revit session required.
+ * reaching the TS host through `HostRpcCaller`; reads resolve the bound world for `from`.
  */
 import {
   type SettingsDocumentId,
@@ -23,6 +23,7 @@ import type {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
+import { currentReadingIdentity } from "./reading-source.ts";
 
 export { settingsRouteState } from "@pe/agent-contracts";
 
@@ -71,7 +72,7 @@ export function createSettingsCommandHandlers(
 
     refresh: async (_input, ctx) => {
       const document = ctx.getDoc();
-      const documentId = document.snapshot?.documentId;
+      const documentId = document.snapshot?.from.settingsDocumentId;
       if (!documentId) {
         throw new Error(
           "No settings document is open. Run the `open` command with a documentId (module/root/relative path) first.",
@@ -101,7 +102,7 @@ export function createSettingsCommandHandlers(
         validation = await caller(resolveTarget(input, document)).call(
           "settings.document.validate",
           {
-            documentId: toHostDocumentId(snapshot.documentId),
+            documentId: toHostDocumentId(snapshot.from.settingsDocumentId),
             rawContent,
           },
         );
@@ -142,10 +143,12 @@ export function createSettingsCommandHandlers(
       let result;
       try {
         result = await rpc.call("settings.document.save", {
-          documentId: toHostDocumentId(snapshot.documentId),
+          documentId: toHostDocumentId(snapshot.from.settingsDocumentId),
           rawContent,
           expectedVersionToken:
-            snapshot.versionToken != null ? { value: snapshot.versionToken } : undefined,
+            snapshot.from.documentVersionToken != null
+              ? { value: snapshot.from.documentVersionToken }
+              : undefined,
         });
       } catch (error) {
         throw new Error(`settings.document.save failed (${message(error)}).`);
@@ -168,7 +171,7 @@ export function createSettingsCommandHandlers(
 
       // Re-open after the write so raw, composed, validation, and metadata describe the
       // same canonical document (including any injected `$schema` or fragment expansion).
-      const savedSnapshot = await openSnapshot(rpc, snapshot.documentId);
+      const savedSnapshot = await openSnapshot(rpc, snapshot.from.settingsDocumentId);
       const latest = ctx.getDoc();
       latest.snapshot = savedSnapshot;
       for (const [path] of stagedPaths) {
@@ -199,14 +202,20 @@ async function openSnapshot(
       `settings.document.open failed (${message(error)}). Check the module/root/relative path against settings.workspaces and settings.tree.`,
     );
   }
+  const absolutePath = raw.metadata.documentId.stableId;
+  if (!absolutePath) throw new Error("settings.document.open returned no absolute document path.");
+  const versionToken = raw.metadata.versionToken?.value;
   return {
-    documentId,
+    from: {
+      ...(await currentReadingIdentity(caller, absolutePath)),
+      settingsDocumentId: documentId,
+      ...(versionToken ? { documentVersionToken: versionToken } : {}),
+      observedAt: new Date().toISOString(),
+    },
     rawContent: raw.rawContent,
     composedContent: raw.composedContent ?? null,
-    versionToken: raw.metadata.versionToken?.value ?? null,
     modifiedUtc: raw.metadata.modifiedUtc ?? null,
     validation: toRouteValidation(raw.validation),
-    takenAt: new Date().toISOString(),
   };
 }
 
@@ -282,8 +291,8 @@ function toRouteValidation(validation: SettingsValidationResult): SettingsSnapsh
 
 function summarizeSnapshot(snapshot: SettingsSnapshot) {
   return {
-    documentId: snapshot.documentId,
-    versionToken: snapshot.versionToken,
+    documentId: snapshot.from.settingsDocumentId,
+    versionToken: snapshot.from.documentVersionToken ?? null,
     isValid: snapshot.validation?.isValid ?? null,
     issueCount: snapshot.validation?.issues.length ?? 0,
   };

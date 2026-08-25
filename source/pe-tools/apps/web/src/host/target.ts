@@ -36,6 +36,7 @@ export interface SessionFacts {
    * already refuses every mutation on `observed`, and a second guard here can only disagree.
    */
   custody: Custody;
+  activeDocumentId?: string;
   activeDocumentTitle?: string;
   activeDocumentIsFamilyDocument?: boolean;
   openDocumentCount: number;
@@ -118,6 +119,8 @@ export function mintSelector(session: SessionFacts, all: readonly SessionFacts[]
 /** Wire entry (bridge.sessions.list) → SessionFacts. Disconnected entries are not targets. */
 export function fromBridgeSessions(
   entries: readonly {
+    activeDocumentCloudModelGuid?: string | null;
+    activeDocumentPath?: string | null;
     sessionId: string;
     connected: boolean;
     lane?: string | null;
@@ -141,6 +144,7 @@ export function fromBridgeSessions(
       // The broker discloses custody; an entry that predates the field is treated as observed —
       // the read-only reading, which is the safe one to be wrong about.
       custody: CUSTODIES.find((c) => c === e.custody) ?? "observed",
+      activeDocumentId: e.activeDocumentCloudModelGuid ?? e.activeDocumentPath ?? undefined,
       activeDocumentTitle: e.activeDocumentTitle ?? undefined,
       activeDocumentIsFamilyDocument: e.activeDocumentIsFamilyDocument ?? undefined,
       observedAtUnixMs: e.activeDocumentObservedAtUnixMs ?? undefined,

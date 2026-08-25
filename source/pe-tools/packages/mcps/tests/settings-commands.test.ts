@@ -21,8 +21,18 @@ async function withHost<T>(responder: HostResponder, run: () => Promise<T>): Pro
     if (typeof rawBody !== "string") throw new Error("expected JSON request body");
     const body = JSON.parse(rawBody) as { key: string; request: unknown };
     calls.push(body);
+    const headers = new Headers(init?.headers);
+    const target = headers.get("x-pe-bridge-session-id")?.replace(/^session:/, "") ?? "test";
     return new Response(
-      JSON.stringify(responder(body.key, body.request, new Headers(init?.headers))),
+      JSON.stringify(
+        body.key === "bridge.sessions.summary"
+          ? {
+              sdkSessionId: target,
+              processId: 42,
+              activeDocument: { path: "C:\\Models\\Test.rvt" },
+            }
+          : responder(body.key, body.request, headers),
+      ),
       {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -38,6 +48,7 @@ async function withHost<T>(responder: HostResponder, run: () => Promise<T>): Pro
 }
 
 const DOCUMENT_ID = { moduleKey: "m", rootKey: "r", relativePath: "settings.json" };
+const DOCUMENT_PATH = "C:\\Settings\\settings.json";
 
 function emptyDocument(): SettingsRouteDocument {
   return { binding: { target: null }, snapshot: null, fields: {}, savedAt: null };
@@ -49,12 +60,28 @@ function openResponse(rawContent: string, versionValue = "v1") {
     composedContent: `composed:${rawContent}`,
     dependencies: [],
     metadata: {
-      documentId: DOCUMENT_ID,
+      documentId: { ...DOCUMENT_ID, stableId: DOCUMENT_PATH },
       kind: "Authoring",
       modifiedUtc: "2026-07-13T00:00:00Z",
       versionToken: { value: versionValue },
     },
     rawContent,
+    validation: { isValid: true, issues: [] },
+  };
+}
+
+function routeSnapshot(rawContent: string, versionToken = "v1") {
+  return {
+    from: {
+      target: "test",
+      documentId: DOCUMENT_PATH,
+      documentVersionToken: versionToken,
+      observedAt: "2026-08-25T00:00:00Z",
+      settingsDocumentId: DOCUMENT_ID,
+    },
+    rawContent,
+    composedContent: null,
+    modifiedUtc: null,
     validation: { isValid: true, issues: [] },
   };
 }
@@ -77,13 +104,14 @@ test("open maps the host snapshot into the route document, flattening the versio
     },
   );
 
-  expect(document.snapshot?.documentId).toEqual(DOCUMENT_ID);
+  expect(document.snapshot?.from.settingsDocumentId).toEqual(DOCUMENT_ID);
+  expect(document.snapshot?.from.documentId).toBe(DOCUMENT_PATH);
   expect(document.snapshot?.rawContent).toBe('{"revit":{"units":"mm"}}');
   expect(document.snapshot?.composedContent).toBe('composed:{"revit":{"units":"mm"}}');
-  expect(document.snapshot?.versionToken).toBe("token-7");
+  expect(document.snapshot?.from.documentVersionToken).toBe("token-7");
   expect(document.snapshot?.modifiedUtc).toBe("2026-07-13T00:00:00Z");
   expect(document.snapshot?.validation?.isValid).toBe(true);
-  expect(document.snapshot?.takenAt).toBeTruthy();
+  expect(document.snapshot?.from.observedAt).toBeTruthy();
 });
 
 test("settings commands target the route binding when module discovery needs a Revit session", async () => {
@@ -136,15 +164,7 @@ test("refresh without an open document throws a hint to run open first", async (
 test("validate splices staged values only; proposals join in with includeProposals", async () => {
   const document: SettingsRouteDocument = {
     binding: { target: null },
-    snapshot: {
-      documentId: DOCUMENT_ID,
-      rawContent: '{"revit":{"units":"mm","scale":1}}',
-      composedContent: null,
-      versionToken: "v1",
-      modifiedUtc: null,
-      validation: { isValid: true, issues: [] },
-      takenAt: null,
-    },
+    snapshot: routeSnapshot('{"revit":{"units":"mm","scale":1}}'),
     fields: {
       "/revit/units": {
         proposal: { value: "cm", by: "pea" },
@@ -186,15 +206,7 @@ test("validate splices staged values only; proposals join in with includeProposa
 test("save can delete an authored JSON property without a sentinel value", async () => {
   const document: SettingsRouteDocument = {
     binding: { target: null },
-    snapshot: {
-      documentId: DOCUMENT_ID,
-      rawContent: '{"types":{"Wide":{"Width":"24in","Depth":"10in"}}}',
-      composedContent: null,
-      versionToken: "v1",
-      modifiedUtc: null,
-      validation: { isValid: true, issues: [] },
-      takenAt: null,
-    },
+    snapshot: routeSnapshot('{"types":{"Wide":{"Width":"24in","Depth":"10in"}}}'),
     fields: {
       "/types/Wide/Width": { staged: { delete: true }, review: "good" },
     },
@@ -234,15 +246,7 @@ test("save can delete an authored JSON property without a sentinel value", async
 test("validate folds the host result into the snapshot", async () => {
   const document: SettingsRouteDocument = {
     binding: { target: null },
-    snapshot: {
-      documentId: DOCUMENT_ID,
-      rawContent: "{}",
-      composedContent: null,
-      versionToken: "v1",
-      modifiedUtc: null,
-      validation: { isValid: true, issues: [] },
-      takenAt: null,
-    },
+    snapshot: routeSnapshot("{}"),
     fields: {},
     savedAt: null,
   };
@@ -265,15 +269,7 @@ test("validate folds the host result into the snapshot", async () => {
 test("save splices staged fields, sends the captured token, folds the result, and clears staged", async () => {
   const document: SettingsRouteDocument = {
     binding: { target: null },
-    snapshot: {
-      documentId: DOCUMENT_ID,
-      rawContent: '{"revit":{"units":"mm"}}',
-      composedContent: null,
-      versionToken: "v1",
-      modifiedUtc: null,
-      validation: { isValid: true, issues: [] },
-      takenAt: null,
-    },
+    snapshot: routeSnapshot('{"revit":{"units":"mm"}}'),
     fields: {
       "/revit/units": {
         proposal: { value: "in", by: "pea" },
@@ -314,7 +310,7 @@ test("save splices staged fields, sends the captured token, folds the result, an
 
   expect(JSON.parse(savedRequest!.rawContent)).toEqual({ revit: { units: "in" } });
   expect(savedRequest!.expectedVersionToken).toEqual({ value: "v1" });
-  expect(document.snapshot?.versionToken).toBe("v2");
+  expect(document.snapshot?.from.documentVersionToken).toBe("v2");
   expect(document.snapshot?.rawContent).toBe(JSON.stringify({ revit: { units: "in" } }, null, 2));
   expect(document.snapshot?.composedContent).toBe(
     `composed:${JSON.stringify({ revit: { units: "in" } }, null, 2)}`,
@@ -326,15 +322,7 @@ test("save splices staged fields, sends the captured token, folds the result, an
 test("save on a host conflict throws with the conflict message and a refresh hint", async () => {
   const document: SettingsRouteDocument = {
     binding: { target: null },
-    snapshot: {
-      documentId: DOCUMENT_ID,
-      rawContent: "{}",
-      composedContent: null,
-      versionToken: "stale",
-      modifiedUtc: null,
-      validation: { isValid: true, issues: [] },
-      takenAt: null,
-    },
+    snapshot: routeSnapshot("{}", "stale"),
     fields: {
       "/a": { staged: { value: 1 }, review: "good" },
     },
@@ -364,15 +352,7 @@ test("save on a host conflict throws with the conflict message and a refresh hin
 test("save blocks when a staged field still needs attention", async () => {
   const document: SettingsRouteDocument = {
     binding: { target: null },
-    snapshot: {
-      documentId: DOCUMENT_ID,
-      rawContent: "{}",
-      composedContent: null,
-      versionToken: "v1",
-      modifiedUtc: null,
-      validation: { isValid: true, issues: [] },
-      takenAt: null,
-    },
+    snapshot: routeSnapshot("{}"),
     fields: { a: { staged: { value: 1 }, review: "attention" } },
     savedAt: null,
   };
@@ -410,7 +390,9 @@ test("families handlers filter the plan, refuse drift, exclude IDs, and write re
               parameters: [],
               requiredApsParameterNames: [],
               familyParameterNames: [],
-              loweredActions: [{ operation: "set", target: "Width", sources: [], reason: "profile" }],
+              loweredActions: [
+                { operation: "set", target: "Width", sources: [], reason: "profile" },
+              ],
             },
           })),
         };
@@ -419,28 +401,35 @@ test("families handlers filter the plan, refuse drift, exclude IDs, and write re
           planHash: "hash-2",
           refused: false,
           diagnostics: [],
-          receipts: [{
-            familyId: 1,
-            familyName: "Desk",
-            success: true,
-            error: null,
-            operationsRun: ["set"],
-            parametersChanged: 1,
-            diffSummary: { added: 1, removed: 0, modified: 0 },
-            artifactDirectoryPath: "artifacts/desk",
-          }],
+          receipts: [
+            {
+              familyId: 1,
+              familyName: "Desk",
+              success: true,
+              error: null,
+              operationsRun: ["set"],
+              parametersChanged: 1,
+              diffSummary: { added: 1, removed: 0, modified: 0 },
+              artifactDirectoryPath: "artifacts/desk",
+            },
+          ],
         };
       throw new Error(`unexpected op ${key}`);
     },
     async () => {
-      await handler.plan({ profilePath: "desk.json", scope: { familyNames: ["Desk", "Chair"] } }, ctx);
+      await handler.plan(
+        { profilePath: "desk.json", scope: { familyNames: ["Desk", "Chair"] } },
+        ctx,
+      );
       expect(document.plan?.entries.map(({ familyName }) => familyName)).toEqual(["Desk", "Chair"]);
       document.excludedIds = [2];
       await expect(handler.apply({ expectedPlanHash: "stale" }, ctx)).rejects.toThrow(/plan drift/);
       await handler.apply({ expectedPlanHash: "hash-2" }, ctx);
     },
   );
-  expect(requests.find(({ key }) => key === "familyfoundry.apply")?.request).toMatchObject({ familyIds: [1] });
+  expect(requests.find(({ key }) => key === "familyfoundry.apply")?.request).toMatchObject({
+    familyIds: [1],
+  });
   expect(document.apply?.receipts).toHaveLength(1);
   expect(document.apply?.artifacts).toEqual(["artifacts/desk"]);
 });

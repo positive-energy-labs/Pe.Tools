@@ -18,9 +18,18 @@ const emptyEntry = {
   },
 };
 const document = (): FamiliesRouteDocument => ({
-  binding: { target: null },
+  binding: { target: "session:test" },
   profilePath: "desk.json",
-  plan: { planHash: "hash-1", takenAt: "2026-08-25T00:00:00Z", entries: [emptyEntry] },
+  plan: {
+    from: {
+      target: "test",
+      documentId: "C:\\Models\\Test.rvt",
+      observedAt: "2026-08-25T00:00:00Z",
+    },
+    planHash: "hash-1",
+    takenAt: "2026-08-25T00:00:00Z",
+    entries: [emptyEntry],
+  },
   excludedIds: [],
   apply: null,
 });
@@ -40,7 +49,17 @@ const fixture = () => {
     return { ok: true };
   };
   const host: FamiliesHost = {
-    sessions: async () => [],
+    sessions: async () =>
+      ["test", "new"].map((id, index) => ({
+        sessionId: `bridge-${id}`,
+        sdkSessionId: id,
+        processId: 40 + index,
+        lane: "dev" as const,
+        custody: "controlled" as const,
+        activeDocumentId: `C:\\Models\\${id === "test" ? "Test" : "New"}.rvt`,
+        activeDocumentTitle: `${id === "test" ? "Test" : "New"}.rvt`,
+        openDocumentCount: 1,
+      })),
     categories: async () => [],
     families: async () => [],
     profiles: async () => [],
@@ -54,7 +73,7 @@ const fixture = () => {
 const make = (
   testFixture = fixture(),
   search: { target: string; patch(partial: { target?: string }): void } = {
-    target: "",
+    target: "session:test",
     patch() {},
   },
 ) => {
@@ -127,9 +146,7 @@ describe("families route store", () => {
   it("emits one excludedIds patch", async () => {
     const { calls, store } = make();
     await store.actions.exclude(1);
-    expect(calls).toEqual([
-      { op: "apply", input: [{ path: ["excludedIds"], value: [1] }] },
-    ]);
+    expect(calls).toEqual([{ op: "apply", input: [{ path: ["excludedIds"], value: [1] }] }]);
   });
 
   it("binds a direct URL target once on mount without a verb failure", async () => {
@@ -139,8 +156,15 @@ describe("families route store", () => {
     });
     await tick();
     expect(registry.get(store.atoms.failure)).toBeNull();
-    expect(calls.filter(({ op }) => op === "bind")).toEqual([
-      { op: "bind", input: { target: "session:new" } },
+    expect(calls.filter(({ op }) => op === "apply")).toEqual([
+      {
+        op: "apply",
+        input: [
+          { path: ["binding"], value: expect.objectContaining({ target: "session:new" }) },
+          { path: ["plan"], value: null },
+          { path: ["apply"], value: null },
+        ],
+      },
     ]);
   });
 
@@ -157,9 +181,9 @@ describe("families route store", () => {
     });
     await store.actions.applyScope();
     await store.actions.plan();
-    expect(calls.filter(({ op }) => op === "bind" || op === "plan")).toEqual([
-      { op: "bind", input: { target: "session:new" } },
-      { op: "bind", input: { target: "session:new" } },
+    expect(calls.filter(({ op }) => op === "apply" || op === "plan")).toEqual([
+      { op: "apply", input: expect.any(Array) },
+      { op: "apply", input: expect.any(Array) },
       { op: "plan", input: expect.any(Object) },
     ]);
   });

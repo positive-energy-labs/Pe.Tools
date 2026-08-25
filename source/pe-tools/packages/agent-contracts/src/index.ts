@@ -2,6 +2,7 @@ export * from "./contracts.ts";
 export * from "./activity.ts";
 export * from "./projection.ts";
 export * from "./route-state.ts";
+export * from "./reading.ts";
 export * from "./trichotomy.ts";
 export * from "./commit.ts";
 export * from "./family-types.ts";

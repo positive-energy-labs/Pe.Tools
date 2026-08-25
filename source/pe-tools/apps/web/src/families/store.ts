@@ -6,18 +6,20 @@ import {
   familiesRouteState,
   type AppliedScope,
   type FamiliesRouteDocument,
+  type RouteStatePatch,
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
 import type { FfProjectData } from "#/host/familyfoundry";
-import { mintSelector, sessionLabel } from "#/host/target";
+import { mintSelector, resolveTarget, sessionLabel } from "#/host/target";
 import type { FamiliesDraft, FamiliesHost } from "#/families/host";
 import {
   createRouteStoreCore,
   docAtom,
   feed,
   hostRead,
+  readingIsCurrent,
   type Scope,
   type Slice,
 } from "#/state/route-store";
@@ -51,7 +53,7 @@ export function createFamiliesStore(deps: {
   const profilePath = Atom.make((get) => get(document)?.profilePath ?? null).pipe(
     owned("view/profile-path"),
   );
-  const plan = Atom.make((get) => get(document)?.plan ?? null).pipe(owned("view/plan"));
+  const persistedPlan = Atom.make((get) => get(document)?.plan ?? null).pipe(Atom.autoDispose);
   const excludedIds = Atom.make((get) => get(document)?.excludedIds ?? []).pipe(
     owned("view/excluded-ids"),
   );
@@ -84,6 +86,22 @@ export function createFamiliesStore(deps: {
       Atom.swr(sessionsSource, { staleTime: "5 seconds", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
+  const plan = Atom.make((get) => {
+    const value = get(persistedPlan);
+    const doc = get(document);
+    if (!value || !doc) return null;
+    const sessions = get(sessionsResult);
+    const resolution = AsyncResult.isSuccess(sessions)
+      ? resolveTarget(sessions.value.value, doc.binding.target ?? "")
+      : null;
+    if (resolution?.kind !== "resolved" || !resolution.session.activeDocumentId) return null;
+    return readingIsCurrent(value.from, {
+      target: resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`,
+      documentId: resolution.session.activeDocumentId,
+    })
+      ? value
+      : null;
+  }).pipe(owned("view/plan"));
   const categorySource = runtime.atom(() =>
     hostRead([deps.search.target], () => deps.host.categories(deps.search.target)),
   );
@@ -143,10 +161,35 @@ export function createFamiliesStore(deps: {
     if (!result.ok) throw Error(result.hint ?? result.error ?? fallback);
     return result;
   };
-  const bindDocument = (nextTarget: string) =>
-    deps.host
-      .command("bind", { target: nextTarget || null })
-      .then((result) => expectOk(result, "bind failed"));
+  const bindDocument = async (nextTarget: string) => {
+    const doc = registry.get(document);
+    const sessions = registry.get(sessionsResult);
+    const sessionItems = AsyncResult.isSuccess(sessions)
+      ? sessions.value.value
+      : await deps.host.sessions();
+    const resolution = resolveTarget(sessionItems, nextTarget);
+    const current =
+      resolution?.kind === "resolved" && resolution.session.activeDocumentId
+        ? {
+            target: resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`,
+            documentId: resolution.session.activeDocumentId,
+          }
+        : null;
+    const patches: RouteStatePatch[] = [];
+    if (doc?.binding.target !== (nextTarget || null))
+      patches.push({
+        path: ["binding"],
+        value: {
+          target: nextTarget || null,
+          boundAt: nextTarget ? new Date().toISOString() : null,
+        },
+      });
+    if (doc?.plan && (!current || !readingIsCurrent(doc.plan.from, current))) {
+      patches.push({ path: ["plan"], value: null });
+      patches.push({ path: ["apply"], value: null });
+    }
+    return patches.length ? expectOk(await deps.host.apply(patches), "bind failed") : { ok: true };
+  };
   if (deps.search.target)
     void write("system", "bind", () => bindDocument(deps.search.target)).catch(() => undefined);
 
@@ -161,9 +204,7 @@ export function createFamiliesStore(deps: {
         registry.set(seenFamilies, available);
         registry.update(draft, (previous) => ({
           ...previous,
-          families: names.filter(
-            (name) => !seen.has(name) || previous.families.includes(name),
-          ),
+          families: names.filter((name) => !seen.has(name) || previous.families.includes(name)),
         }));
       });
     },
@@ -175,8 +216,7 @@ export function createFamiliesStore(deps: {
     setPickedIds: (value: Setter<Set<number>>) => set("set-picked-ids", pickedIds, value),
     setProjection: (value: Setter<FfProjectData | null>) =>
       set("set-projection", projection, value),
-    setShowUncommon: (value: Setter<boolean>) =>
-      set("set-show-uncommon", showUncommon, value),
+    setShowUncommon: (value: Setter<boolean>) => set("set-show-uncommon", showUncommon, value),
     setTable: (value: Setter<MasterTableState>) => set("set-table", table, value),
     setPicker: (value: Setter<PickerState>) => set("set-picker", picker, value),
     applyScope() {
@@ -306,7 +346,12 @@ export function createFamiliesStore(deps: {
       failure: core.failure,
       receipt: core.receipt,
     },
-    feeds: { session: sessionFeed, category: categoryFeed, family: familyFeed, profile: profileFeed },
+    feeds: {
+      session: sessionFeed,
+      category: categoryFeed,
+      family: familyFeed,
+      profile: profileFeed,
+    },
     actions,
     dispose() {
       unsubscribeFamilies();

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import { readingFromSchema } from "./reading.ts";
 
 const pointSchema = z.tuple([z.number(), z.number()]);
 const worldLoopsSchema = z
@@ -255,7 +256,7 @@ export type TakeoffRawSnapshot = z.infer<typeof takeoffRawSnapshotSchema>;
 
 export const takeoffSnapshotSchema = takeoffRawSnapshotSchema
   .partial({ status: true })
-  .extend({ world: worldSchema });
+  .extend({ from: readingFromSchema, world: worldSchema });
 export type TakeoffSnapshot = z.infer<typeof takeoffSnapshotSchema>;
 
 export const stagedRoomEditSchema = z.object({

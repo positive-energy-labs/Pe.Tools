@@ -368,6 +368,8 @@ export const settingsTreeRequestSchema = Schema.Struct({
 export const bridgeSessionsListSchema = Schema.Struct({
   sessions: Schema.Array(
     Schema.Struct({
+      activeDocumentCloudModelGuid: Schema.optional(Schema.NullOr(Schema.String)),
+      activeDocumentPath: Schema.optional(Schema.NullOr(Schema.String)),
       activeDocumentTitle: Schema.optional(Schema.NullOr(Schema.String)),
       activeDocumentIsFamilyDocument: Schema.optional(Schema.NullOr(Schema.Boolean)),
       // Observation time of the active-document facts — an observation, never computed staleness.

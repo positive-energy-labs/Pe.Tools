@@ -32,13 +32,9 @@ import { withThread } from "./-with-thread";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: withThread,
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { thread?: string; source?: "fixture" } => ({
+  validateSearch: (search: Record<string, unknown>): { thread?: string; source?: "fixture" } => ({
     thread:
-      typeof search.thread === "string" && search.thread.trim()
-        ? search.thread.trim()
-        : undefined,
+      typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
     source: search.source === "fixture" ? "fixture" : undefined,
   }),
   component: SettingsRoute,
@@ -56,18 +52,11 @@ function SettingsRoute() {
   );
 }
 
-function SettingsStoreOwner({
-  thread,
-  source,
-}: {
-  thread: string;
-  source?: "fixture";
-}) {
+function SettingsStoreOwner({ thread, source }: { thread: string; source?: "fixture" }) {
   const store = useRouteStore(() => {
     const scope = { threadId: thread };
-    const host = source === "fixture"
-      ? createFixtureSettingsHost(appAtomRegistry)
-      : createLiveSettingsHost();
+    const host =
+      source === "fixture" ? createFixtureSettingsHost(appAtomRegistry) : createLiveSettingsHost();
     return createSettingsStore({
       registry: appAtomRegistry,
       scope,
@@ -93,7 +82,10 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const failure = useAtomValue(store.atoms.failure);
   const busy = useAtomValue(store.atoms.busy);
   const rows = useMemo(
-    () => (snapshot ? buildFieldRows({ binding: { target: null }, snapshot, fields, savedAt: null }) : []),
+    () =>
+      snapshot
+        ? buildFieldRows({ binding: { target: null }, snapshot, fields, savedAt: null })
+        : [],
     [fields, snapshot],
   );
   const formModel = useMemo(
@@ -116,20 +108,41 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
       <FactChip
         dashed={fixture}
         tone={fixture ? "caution" : connected === false ? "caution" : "meta"}
-        title={fixture ? "The explicit fixture capability runs in memory." : "Route-state transport status."}
+        title={
+          fixture
+            ? "The explicit fixture capability runs in memory."
+            : "Route-state transport status."
+        }
       >
-        {fixture ? "fixture lane" : connected === null ? "bridge unknown" : connected ? "bridge connected" : "bridge disconnected"}
+        {fixture
+          ? "fixture lane"
+          : connected === null
+            ? "bridge unknown"
+            : connected
+              ? "bridge connected"
+              : "bridge disconnected"}
       </FactChip>
-      <FactChip title="Open Pea proposals." tone={proposals.length ? "pea" : "meta"}>{proposals.length} proposed</FactChip>
-      <FactChip title="Fields staged for save." tone={formDirty ? "caution" : "meta"}>{stagedCount} staged</FactChip>
+      <FactChip title="Open Pea proposals." tone={proposals.length ? "pea" : "meta"}>
+        {proposals.length} proposed
+      </FactChip>
+      <FactChip title="Fields staged for save." tone={formDirty ? "caution" : "meta"}>
+        {stagedCount} staged
+      </FactChip>
       {validation ? (
-        <FactChip title="The last settings validation result." tone={validation.isValid ? "done" : "caution"}>
+        <FactChip
+          title="The last settings validation result."
+          tone={validation.isValid ? "done" : "caution"}
+        >
           {validation.isValid ? "valid" : `${validation.issues.length} invalid`}
         </FactChip>
       ) : null}
       <Verb
         label={fixture ? "leave fixture" : "open fixture"}
-        reason={fixture ? "Return to the host-backed lane." : "Use the declared in-memory settings capability."}
+        reason={
+          fixture
+            ? "Return to the host-backed lane."
+            : "Use the declared in-memory settings capability."
+        }
         onClick={() => setSource(fixture ? undefined : "fixture")}
       />
     </>
@@ -162,17 +175,21 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
     multi: {},
     stage: "document",
   };
-  const setState = useCallback((patch: Partial<BindingState>) => {
-    if (!patch.bound) return;
-    store.actions.setPicker({
-      workspaceKey: patch.bound.workspace ?? undefined,
-      moduleKey: patch.bound.module ?? undefined,
-      rootKey: patch.bound.root ?? undefined,
-      filePath: patch.bound.file ?? undefined,
-    });
-    const session = patch.bound.session ?? null;
-    if (session !== (binding.target ?? null)) void store.actions.bind(session).catch(() => undefined);
-  }, [binding.target, store]);
+  const setState = useCallback(
+    (patch: Partial<BindingState>) => {
+      if (!patch.bound) return;
+      store.actions.setPicker({
+        workspaceKey: patch.bound.workspace ?? undefined,
+        moduleKey: patch.bound.module ?? undefined,
+        rootKey: patch.bound.root ?? undefined,
+        filePath: patch.bound.file ?? undefined,
+      });
+      const session = patch.bound.session ?? null;
+      if (session !== (binding.target ?? null))
+        void store.actions.bind(session).catch(() => undefined);
+    },
+    [binding.target, store],
+  );
   const bindings = useBindings(
     product,
     feeds,
@@ -201,12 +218,18 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           {busy ? <OutcomeLine kind="busy" label={`${busy.id} · ${busy.seconds}s`} /> : null}
           {failure ? <OutcomeLine kind="error" label={failure.message} /> : null}
-          {sliceError ? <OutcomeLine kind="error" label="route stream failed" says={sliceError} /> : null}
-          {snapshot?.versionToken ? (
-            <FactChip title="The open document version token.">v{snapshot.versionToken}</FactChip>
+          {sliceError ? (
+            <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
+          ) : null}
+          {snapshot?.from.documentVersionToken ? (
+            <FactChip title="The open document version token.">
+              v{snapshot.from.documentVersionToken}
+            </FactChip>
           ) : null}
           {snapshot?.modifiedUtc ? (
-            <FactChip title="The open file's modification time.">read {timeAgo(snapshot.modifiedUtc)}</FactChip>
+            <FactChip title="The open file's modification time.">
+              read {timeAgo(snapshot.modifiedUtc)}
+            </FactChip>
           ) : null}
 
           {snapshot && formModel ? (
@@ -215,12 +238,14 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                 <div className="px-4 py-3">
                   <SchemaToFieldRender
                     schema={formModel.schema}
-                    moduleKey={snapshot.documentId.moduleKey}
-                    rootKey={snapshot.documentId.rootKey}
+                    moduleKey={snapshot.from.settingsDocumentId.moduleKey}
+                    rootKey={snapshot.from.settingsDocumentId.rootKey}
                     baselineValues={formModel.baseline}
                     values={values}
                     onChange={(path, value) =>
-                      void store.actions.stage(settingsFieldPointer(path.split(".")), value).catch(() => undefined)
+                      void store.actions
+                        .stage(settingsFieldPointer(path.split(".")), value)
+                        .catch(() => undefined)
                     }
                     validationResult={toValidationResult(validation)}
                   />
@@ -272,7 +297,8 @@ function buildFieldRows(document: SettingsRouteDocument): FieldRowModel[] {
   let parsed: Record<string, unknown> = {};
   try {
     const value: unknown = JSON.parse(document.snapshot?.rawContent ?? "{}");
-    if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
+    if (value && typeof value === "object" && !Array.isArray(value))
+      parsed = value as Record<string, unknown>;
   } catch {
     // The route stream owns the parse error; staged fields remain reviewable.
   }
@@ -311,7 +337,9 @@ function FieldRow({
           onCommit={(value) =>
             void store.actions.stage(row.path, parseLike(shown, value)).catch(() => undefined)
           }
-          note={row.field?.review === "attention" ? "needs attention" : proposal?.note ?? undefined}
+          note={
+            row.field?.review === "attention" ? "needs attention" : (proposal?.note ?? undefined)
+          }
         />
       </div>
       {staged ? (
@@ -327,19 +355,23 @@ function FieldRow({
             label="deny"
             disabled={busy}
             reason="Clear Pea's proposal."
-            onClick={() => patchField(store, [
-              { path: ["fields", row.path, "proposal"] },
-              { path: ["fields", row.path, "review"], value: "none" },
-            ])}
+            onClick={() =>
+              patchField(store, [
+                { path: ["fields", row.path, "proposal"] },
+                { path: ["fields", row.path, "review"], value: "none" },
+              ])
+            }
           />
           <Verb
             label="approve"
             disabled={busy}
             reason="Stage Pea's proposed value."
-            onClick={() => patchField(store, [
-              { path: ["fields", row.path, "staged"], value: { value: proposal.value } },
-              { path: ["fields", row.path, "review"], value: "good" },
-            ])}
+            onClick={() =>
+              patchField(store, [
+                { path: ["fields", row.path, "staged"], value: { value: proposal.value } },
+                { path: ["fields", row.path, "review"], value: "good" },
+              ])
+            }
           />
         </span>
       ) : null}
@@ -351,7 +383,9 @@ function patchField(store: SettingsStore, patches: RouteStatePatch[]) {
   void store.actions.apply(patches).catch(() => undefined);
 }
 
-function toValidationResult(validation: SettingsValidation | null | undefined): SettingsValidationResult | undefined {
+function toValidationResult(
+  validation: SettingsValidation | null | undefined,
+): SettingsValidationResult | undefined {
   if (!validation) return undefined;
   return {
     isValid: validation.isValid,

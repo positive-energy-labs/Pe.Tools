@@ -4,6 +4,7 @@ import type {
   ModelStatus,
   PartitionRun,
   RegistryState,
+  ReadingFrom,
   Resolution,
   TakeoffRawSnapshot,
   TakeoffSnapshot,
@@ -108,7 +109,11 @@ function parse<T>(response: ScriptResponse, sourceName: string): T {
 }
 
 export function createTakeoffOperations(execute: ScriptExecutor) {
-  const run = async <T>(scriptContent: string, permissionMode: PermissionMode, sourceName: string) =>
+  const run = async <T>(
+    scriptContent: string,
+    permissionMode: PermissionMode,
+    sourceName: string,
+  ) =>
     parse<T>(
       await execute({ scriptContent, permissionMode, timeoutSeconds: 300, sourceName }),
       sourceName,
@@ -120,7 +125,11 @@ export function createTakeoffOperations(execute: ScriptExecutor) {
         const lanes: World["lanes"] = [];
         const ordinals = new Map<string, number>();
         const zones: WorldZone[] = raw.zoneFrs.map((region) => {
-          const meta = JSON.parse(region.blob) as { view?: string; name?: string; systemTag?: string };
+          const meta = JSON.parse(region.blob) as {
+            view?: string;
+            name?: string;
+            systemTag?: string;
+          };
           if (!meta.view || !meta.name)
             throw Error("Zoning Region provenance is missing view or name");
           const view = region.view || meta.view;
@@ -195,7 +204,9 @@ export function createTakeoffOperations(execute: ScriptExecutor) {
             zones,
             systems: raw.status.systems.map((system) => ({
               ...system,
-              zoneKeys: zones.filter((zone) => zone.tags.includes(system.tag)).map((zone) => zone.zone.key),
+              zoneKeys: zones
+                .filter((zone) => zone.tags.includes(system.tag))
+                .map((zone) => zone.zone.key),
               sensibleBtuh: 0,
               overCap: false,
             })),
@@ -269,10 +280,11 @@ export function createTakeoffOperations(execute: ScriptExecutor) {
 }
 
 export async function produceTakeoffSnapshot(
-  read: () => Promise<TakeoffSnapshot>,
+  read: () => Promise<Omit<TakeoffSnapshot, "from">>,
+  source: Pick<ReadingFrom, "target" | "documentId">,
   write: (snapshot: TakeoffSnapshot) => Promise<unknown>,
 ): Promise<TakeoffSnapshot> {
-  const snapshot = await read();
+  const snapshot = { ...(await read()), from: { ...source, observedAt: new Date().toISOString() } };
   await write(snapshot);
   return snapshot;
 }

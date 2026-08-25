@@ -117,15 +117,18 @@ const fixtureFields: Record<string, SettingsFieldState> = {
 export const fixtureDocument: SettingsRouteDocument = {
   binding: { target: "thread:fixture" },
   snapshot: {
-    documentId: {
-      moduleKey: "CmdScheduleManager",
-      rootKey: "schedules",
-      relativePath: "MechEquip/TEST.json",
+    from: {
+      target: "thread:fixture",
+      documentId: fixtureFiles[0]!.path,
+      settingsDocumentId: {
+        moduleKey: "CmdScheduleManager",
+        rootKey: "schedules",
+        relativePath: "MechEquip/TEST.json",
+      },
+      observedAt: "2026-08-17T00:00:00Z",
     },
     rawContent: FIXTURE_DOCUMENT_RAW,
     composedContent: null,
-    // ponytail: null version token — the fixture cannot be written through, by construction.
-    versionToken: null,
     modifiedUtc: "2026-06-16T22:50:54Z",
     validation: {
       isValid: false,
@@ -139,7 +142,6 @@ export const fixtureDocument: SettingsRouteDocument = {
         },
       ],
     },
-    takenAt: "2026-08-17T00:00:00Z",
   },
   fields: fixtureFields,
   savedAt: "2026-06-16T22:50:54Z",

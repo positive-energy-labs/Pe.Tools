@@ -12,6 +12,7 @@
  */
 import { z } from "zod";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import { readingFromSchema } from "./reading.ts";
 import {
   cellReviewSchema,
   LOW_CONFIDENCE_REFINE_ERROR,
@@ -83,15 +84,13 @@ export const settingsValidationSchema = z.object({
 export type SettingsValidation = z.infer<typeof settingsValidationSchema>;
 
 export const settingsSnapshotSchema = z.object({
-  documentId: settingsDocumentIdSchema,
+  from: readingFromSchema.extend({ settingsDocumentId: settingsDocumentIdSchema }),
   /** Raw JSON text as stored on disk — the save target. */
   rawContent: z.string(),
   /** Composed content (directives resolved), display-only. */
   composedContent: z.string().nullish(),
-  versionToken: z.string().nullish(),
   modifiedUtc: z.string().nullish(),
   validation: settingsValidationSchema.nullish(),
-  takenAt: z.string().nullish(),
 });
 export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 

@@ -8,22 +8,48 @@ import { FAMILY_MODULE, type FamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
 
 const MODEL = {
-  family: { name: "Test Family", category: "Generic Models", template: "Generic Model", placement: "Unhosted" },
+  family: {
+    name: "Test Family",
+    category: "Generic Models",
+    template: "Generic Model",
+    placement: "Unhosted",
+  },
   familyParameters: { Width: { dataType: "Length (Common)", value: "24in" } },
-  types: { Standard: {} }, planes: {}, frames: {}, solids: {}, connectors: {},
+  types: { Standard: {} },
+  planes: {},
+  frames: {},
+  solids: {},
+  connectors: {},
 };
 const settings = (versionToken = "v1") => ({
-  binding: { target: "" },
+  binding: { target: "session:test" },
   snapshot: {
-    documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: "test.family.json" },
-    rawContent: JSON.stringify(MODEL), versionToken, validation: { isValid: true, issues: [] },
+    from: {
+      target: "test",
+      documentId: "C:\\Settings\\test.family.json",
+      documentVersionToken: versionToken,
+      observedAt: "2026-08-25T00:00:00Z",
+      settingsDocumentId: {
+        moduleKey: "FamilyFoundry",
+        rootKey: "models",
+        relativePath: "test.family.json",
+      },
+    },
+    rawContent: JSON.stringify(MODEL),
+    validation: { isValid: true, issues: [] },
   },
   fields: {},
 });
 const family = { binding: { target: "" }, doc: null, evidence: null };
 const registries: AtomRegistry.AtomRegistry[] = [];
 afterEach(() => registries.splice(0).forEach((registry) => registry.dispose()));
-const slice = <D>(doc: D) => ({ doc, hydrated: true, connected: null, error: null, peaActive: false });
+const slice = <D>(doc: D) => ({
+  doc,
+  hydrated: true,
+  connected: null,
+  error: null,
+  peaActive: false,
+});
 const fixture = () => {
   const calls: Array<{ op: string; input: unknown }> = [];
   const record = async (op: string, input: unknown): Promise<RouteStateWriteResult> => {
@@ -31,7 +57,18 @@ const fixture = () => {
     return { ok: true, result: {} };
   };
   const host: FamilyHost = {
-    sessions: async () => [],
+    sessions: async () => [
+      {
+        sessionId: "bridge-test",
+        sdkSessionId: "test",
+        processId: 42,
+        lane: "dev",
+        custody: "controlled",
+        activeDocumentId: "C:\\Models\\Test.rfa",
+        activeDocumentTitle: "Test.rfa",
+        openDocumentCount: 1,
+      },
+    ],
     profile: async () => [],
     settingsApply: (patches) => record("settings.apply", patches),
     settingsCommand: (name, input) => record(`settings.${name}`, input ?? {}),
@@ -49,7 +86,13 @@ const make = (testFixture = fixture(), profile = "") => {
     registry,
     settingsSlice,
     calls: testFixture.calls,
-    store: createFamilyStore({ registry, scope: { threadId: "thread-1" }, host: testFixture.host, search: { target: "session:test", profile, patch() {} }, slices: { settings: settingsSlice, family: familySlice } }),
+    store: createFamilyStore({
+      registry,
+      scope: { threadId: "thread-1" },
+      host: testFixture.host,
+      search: { target: "session:test", profile, patch() {} },
+      slices: { settings: settingsSlice, family: familySlice },
+    }),
   };
 };
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -60,23 +103,40 @@ describe("family route store", () => {
     await tick();
     expect(registry.get(store.atoms.failure)).toBeNull();
     expect(calls.filter(({ op }) => op === "settings.open")).toEqual([
-      { op: "settings.open", input: { documentId: { ...FAMILY_MODULE, relativePath: "pe-vav-test.json" } } },
+      {
+        op: "settings.open",
+        input: { documentId: { ...FAMILY_MODULE, relativePath: "pe-vav-test.json" } },
+      },
     ]);
   });
 
   it("does not reseed draft for a second slice snapshot with the same version token", () => {
     const { registry, settingsSlice, store } = make();
-    store.actions.setDraft((draft) => ({ ...draft, authored: { ...draft.authored, Width: "30in" }, dirty: true }));
+    store.actions.setDraft((draft) => ({
+      ...draft,
+      authored: { ...draft.authored, Width: "30in" },
+      dirty: true,
+    }));
     registry.set(settingsSlice, AsyncResult.success(slice({ ...settings(), savedAt: "later" })));
     expect(registry.get(store.atoms.draft).authored.Width).toBe("30in");
   });
 
   it("save stages the reverse-projection patches before the save command", async () => {
     const { store, calls } = make();
-    store.actions.setDraft((draft) => ({ ...draft, authored: { ...draft.authored, Width: "30in" }, dirty: true }));
+    await tick();
+    store.actions.setDraft((draft) => ({
+      ...draft,
+      authored: { ...draft.authored, Width: "30in" },
+      dirty: true,
+    }));
     await store.actions.save();
     expect(calls).toEqual([
-      { op: "settings.apply", input: [{ path: ["fields", "/familyParameters/Width/value", "staged"], value: { value: "30in" } }] },
+      {
+        op: "settings.apply",
+        input: [
+          { path: ["fields", "/familyParameters/Width/value", "staged"], value: { value: "30in" } },
+        ],
+      },
       { op: "settings.save", input: {} },
     ]);
   });
@@ -86,9 +146,14 @@ describe("family route store", () => {
     const testFixture = fixture();
     const host: FamilyHost = {
       ...testFixture.host,
-      familyCommand: (name: "capture_evidence" | "build_evidence", input?: Record<string, unknown>) =>
+      familyCommand: (
+        name: "capture_evidence" | "build_evidence",
+        input?: Record<string, unknown>,
+      ) =>
         name === "capture_evidence"
-          ? new Promise<{ ok: true; result: {} }>((resolve) => { release = resolve; })
+          ? new Promise<{ ok: true; result: {} }>((resolve) => {
+              release = resolve;
+            })
           : testFixture.host.familyCommand(name, input),
     };
     const { store } = make({ ...testFixture, host });
@@ -103,11 +168,16 @@ describe("family route store", () => {
     const testFixture = fixture();
     const host: FamilyHost = {
       ...testFixture.host,
-      settingsCommand: async () => { throw Error("open refused"); },
+      settingsCommand: async () => {
+        throw Error("open refused");
+      },
     };
     const { registry, store } = make({ ...testFixture, host });
     await expect(store.actions.open("picked.family.json")).rejects.toThrow("open refused");
-    expect(registry.get(store.atoms.failure)).toMatchObject({ verb: "open", message: "open refused" });
+    expect(registry.get(store.atoms.failure)).toMatchObject({
+      verb: "open",
+      message: "open refused",
+    });
     expect(registry.get(store.atoms.receipt)).toBeNull();
   });
 
@@ -119,8 +189,13 @@ describe("family route store", () => {
 
   it("latches an unknown build outcome in the store receipt", async () => {
     const { registry, store } = make();
-    store.actions.armBuild(); await store.actions.build();
-    expect(registry.get(store.atoms.receipt)).toMatchObject({ verb: "build", text: expect.stringContaining("OUTCOME UNKNOWN") });
+    await tick();
+    store.actions.armBuild();
+    await store.actions.build();
+    expect(registry.get(store.atoms.receipt)).toMatchObject({
+      verb: "build",
+      text: expect.stringContaining("OUTCOME UNKNOWN"),
+    });
     expect(registry.get(store.atoms.armedBuild)).not.toBeNull();
   });
 
@@ -129,8 +204,13 @@ describe("family route store", () => {
     const testFixture = fixture();
     const host: FamilyHost = {
       ...testFixture.host,
-      sessions: () => new Promise<[]>((resolve) => { releaseSessions = resolve; }),
-      profile: async () => { throw Error("tree refused"); },
+      sessions: () =>
+        new Promise<[]>((resolve) => {
+          releaseSessions = resolve;
+        }),
+      profile: async () => {
+        throw Error("tree refused");
+      },
     };
     const { registry, store } = make({ ...testFixture, host });
     expect(registry.get(store.feeds.session).state).toBe("loading");

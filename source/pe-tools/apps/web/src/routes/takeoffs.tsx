@@ -20,6 +20,7 @@
 import { useEffect, useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import { Cause } from "effect";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { FactChip } from "#/components/lang/chip";
@@ -100,13 +101,7 @@ function TakeoffsRoute() {
   return <TakeoffsStoreOwner key={`${source}:${thread}`} source={source} thread={thread} />;
 }
 
-function TakeoffsStoreOwner({
-  source,
-  thread,
-}: {
-  source: Search["source"];
-  thread: string;
-}) {
+function TakeoffsStoreOwner({ source, thread }: { source: Search["source"]; thread: string }) {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: "/takeoffs" });
   const store = useRouteStore(() => {
@@ -506,7 +501,11 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
         {listed === null && (
           <div className="px-2 py-3">
             {AsyncResult.isFailure(candidates) ? (
-              <OutcomeLine kind="error" label="reading regions failed" />
+              <OutcomeLine
+                kind="error"
+                label="reading regions failed"
+                says={String(Cause.squash(candidates.cause))}
+              />
             ) : (
               <OutcomeLine kind="busy" label="reading regions" says={views.join(", ")} />
             )}

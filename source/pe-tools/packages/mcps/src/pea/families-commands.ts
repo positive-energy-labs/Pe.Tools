@@ -6,6 +6,7 @@ import {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
+import { currentReadingIdentity } from "./reading-source.ts";
 
 const PROFILE_MODULE = { moduleKey: "CmdFFDesiredMigrator", rootKey: "profiles" } as const;
 
@@ -33,10 +34,12 @@ export function createFamiliesCommandHandlers(
 
       const allowed = new Set(input.scope.familyNames);
       const document = ctx.getDoc();
+      const observedAt = new Date().toISOString();
       document.profilePath = input.profilePath;
       document.plan = {
+        from: { ...(await currentReadingIdentity(rpc)), observedAt },
         planHash: result.planHash,
-        takenAt: new Date().toISOString(),
+        takenAt: observedAt,
         entries: result.families.filter((entry) => allowed.has(entry.familyName)),
       };
       document.excludedIds = [];

@@ -17,6 +17,7 @@ import {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
+import { currentReadingIdentity } from "./reading-source.ts";
 
 export { familyRouteState } from "@pe/agent-contracts";
 
@@ -102,6 +103,7 @@ export function createFamilyCommandHandlers(
 
     capture_evidence: async (input, ctx) => {
       const target = resolveTarget(input, ctx.getDoc());
+      const rpc = caller(target);
       let raw: {
         familyName: string;
         modelJson: string;
@@ -120,15 +122,9 @@ export function createFamilyCommandHandlers(
       document.evidence = {
         ...raw.evidence,
         from: {
+          ...(await currentReadingIdentity(rpc)),
           origin: "capture",
-          capturedAt: new Date().toISOString(),
-          target: target ?? null,
-          // A capture is read out of REVIT, not out of a document: this slice carries only a
-          // session binding, never a settings documentId, so there is no revision to stamp.
-          // The nulls are the truth, and consumers must render them as UNVERIFIED — never as
-          // fresh. Evidence pinned to a revision comes from `build_evidence`.
-          documentId: null,
-          documentVersionToken: null,
+          observedAt: new Date().toISOString(),
           familyName: raw.familyName,
           rfaPath: null,
         },
@@ -151,6 +147,7 @@ export function createFamilyCommandHandlers(
         modelDirectory?: string;
       };
       const target = resolveTarget(input, ctx.getDoc());
+      const rpc = caller(target);
 
       // Build the SAVED revision — read it through the same open path every consumer uses.
       const opened = (await untyped(target)("settings.document.open", {
@@ -160,7 +157,16 @@ export function createFamilyCommandHandlers(
           relativePath: documentId.relativePath,
         },
         includeComposedContent: false,
-      })) as { rawContent: string; metadata?: { versionToken?: { value?: string } | null } };
+      })) as {
+        rawContent: string;
+        metadata?: {
+          documentId?: { stableId?: string };
+          versionToken?: { value?: string } | null;
+        };
+      };
+      const sourcePath = opened.metadata?.documentId?.stableId;
+      if (!sourcePath)
+        throw new Error("settings.document.open returned no absolute document path.");
 
       // Resolve host-side: Revit resolves relative paths against ITS cwd (Program Files → denied).
       // The default name carries a timestamp: `revit.apply.family-model` refuses to overwrite,
@@ -185,14 +191,14 @@ export function createFamilyCommandHandlers(
         throw new Error("The build succeeded but returned no evidence projection.");
 
       const document = ctx.getDoc();
+      const documentVersionToken = opened.metadata?.versionToken?.value;
       document.evidence = {
         ...built.evidence,
         from: {
+          ...(await currentReadingIdentity(rpc, sourcePath)),
           origin: "build",
-          capturedAt: new Date().toISOString(),
-          target: target ?? null,
-          documentId,
-          documentVersionToken: opened.metadata?.versionToken?.value ?? null,
+          ...(documentVersionToken ? { documentVersionToken } : {}),
+          observedAt: new Date().toISOString(),
           familyName: built.familyName ?? documentId.relativePath,
           rfaPath: built.outputPath ?? rfaPath,
         },

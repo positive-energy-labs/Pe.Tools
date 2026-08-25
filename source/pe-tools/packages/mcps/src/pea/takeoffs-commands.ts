@@ -8,10 +8,8 @@ import {
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { ScriptingTools } from "../shared/scripting.ts";
-import {
-  createTakeoffOperations,
-  produceTakeoffSnapshot,
-} from "../shared/takeoff-ops.ts";
+import { currentReadingIdentity } from "./reading-source.ts";
+import { createTakeoffOperations, produceTakeoffSnapshot } from "../shared/takeoff-ops.ts";
 
 type Selection = { view: string; zones: string[]; commit?: true };
 
@@ -31,7 +29,7 @@ export function createTakeoffsCommandHandlers(
   return {
     adopt: async (raw, ctx) => {
       const input = raw as Selection;
-      const { takeoff } = runtime(ctx.getDoc());
+      const { caller, takeoff } = runtime(ctx.getDoc());
       const before = await takeoff.snapshot();
       const candidates = before.zoneFrs.filter(
         (zone) =>
@@ -47,17 +45,21 @@ export function createTakeoffsCommandHandlers(
           systemTag: zoneMeta(zone.blob).systemTag,
         })),
       );
-      await produceTakeoffSnapshot(takeoff.snapshot, async (snapshot) => {
-        const document = ctx.getDoc();
-        document.snapshot = snapshot;
-        await ctx.setDoc(document);
-      });
+      await produceTakeoffSnapshot(
+        takeoff.snapshot,
+        await currentReadingIdentity(caller),
+        async (snapshot) => {
+          const document = ctx.getDoc();
+          document.snapshot = snapshot;
+          await ctx.setDoc(document);
+        },
+      );
       return { adopted: adopted.length };
     },
 
     audit: async (raw, ctx) => {
       const input = raw as Selection;
-      const { takeoff } = runtime(ctx.getDoc());
+      const { caller, takeoff } = runtime(ctx.getDoc());
       const before = await takeoff.snapshot();
       const prepared = await takeoff.prepare(input.view);
       const capture = await takeoff.detect(prepared.level);
@@ -73,11 +75,15 @@ export function createTakeoffsCommandHandlers(
           loops: zone.zone.loops,
         });
       }
-      await produceTakeoffSnapshot(takeoff.snapshot, async (snapshot) => {
-        const document = ctx.getDoc();
-        document.snapshot = snapshot;
-        await ctx.setDoc(document);
-      });
+      await produceTakeoffSnapshot(
+        takeoff.snapshot,
+        await currentReadingIdentity(caller),
+        async (snapshot) => {
+          const document = ctx.getDoc();
+          document.snapshot = snapshot;
+          await ctx.setDoc(document);
+        },
+      );
       return { captured: prepared.level, partitioned: zones.length };
     },
 

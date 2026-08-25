@@ -16,6 +16,7 @@ import { z } from "zod";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
 import { specDocSchema } from "./family-types.ts";
 import { settingsDocumentIdSchema } from "./settings.ts";
+import { readingFromSchema } from "./reading.ts";
 
 /* ── Evidence projection (mirror of C# FamilyModelEvidence, camelCase) ──────── */
 
@@ -54,12 +55,8 @@ export const familyEvidenceDiagnosticSchema = z.object({
 /** Where the evidence came from — the staleness contract. A UI compares
  * `documentVersionToken` against the open settings snapshot's token: equal means
  * the evidence describes what you're editing; different means dashed/stale. */
-export const familyEvidenceOriginSchema = z.object({
+export const familyEvidenceOriginSchema = readingFromSchema.extend({
   origin: z.enum(["capture", "build"]),
-  capturedAt: z.string(),
-  target: z.string().nullish(),
-  documentId: settingsDocumentIdSchema.nullish(),
-  documentVersionToken: z.string().nullish(),
   familyName: z.string(),
   rfaPath: z.string().nullish(),
 });

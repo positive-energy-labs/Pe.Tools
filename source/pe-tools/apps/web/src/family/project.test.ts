@@ -252,7 +252,9 @@ describe("projectFamilyModel — evidence → the live substrate", () => {
     diagnostics: [],
     from: {
       origin: "capture",
-      capturedAt: new Date().toISOString(),
+      target: "pe.app-25",
+      documentId: "C:\\Models\\office-tower.rvt",
+      observedAt: new Date().toISOString(),
       familyName: "PE Family Model Showcase",
       rfaPath: "office-tower.rvt",
     },

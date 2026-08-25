@@ -12,29 +12,72 @@ import { docWriter, type Scope } from "#/state/route-store";
 
 export const FAMILY_MODULE = { moduleKey: "FamilyFoundry", rootKey: "models" };
 export type FieldState = {
-  proposal?: { value?: unknown; delete?: true; note?: string | null; confidence?: "high" | "low" | null; sources?: SettingsProposalSource[] | null } | null;
+  proposal?: {
+    value?: unknown;
+    delete?: true;
+    note?: string | null;
+    confidence?: "high" | "low" | null;
+    sources?: SettingsProposalSource[] | null;
+  } | null;
   staged?: { value?: unknown; delete?: true } | null;
   review?: string;
 };
 export interface FamilySnapshot {
-  documentId: { moduleKey: string; rootKey: string; relativePath: string };
+  from: {
+    target: string;
+    documentId: string;
+    documentVersionToken?: string;
+    observedAt: string;
+    settingsDocumentId: { moduleKey: string; rootKey: string; relativePath: string };
+  };
   rawContent: string;
-  versionToken?: string | null;
   validation?: { isValid: boolean; issues: unknown[] } | null;
 }
 export interface EvidenceSlice {
   typeNames: string[];
-  parameters: Array<{ name: string; isShared?: boolean; propertiesGroup?: string | null; valuesPerType: Record<string, { value?: string | null; source?: "AuthoredGlobal" | "AuthoredTypeOverride" | "Formula" | "RevitDefault" | "Unresolved"; provenance?: "Exact" | "Inferred" | "Unresolved"; formula?: string | null }> }>;
+  parameters: Array<{
+    name: string;
+    isShared?: boolean;
+    propertiesGroup?: string | null;
+    valuesPerType: Record<
+      string,
+      {
+        value?: string | null;
+        source?:
+          | "AuthoredGlobal"
+          | "AuthoredTypeOverride"
+          | "Formula"
+          | "RevitDefault"
+          | "Unresolved";
+        provenance?: "Exact" | "Inferred" | "Unresolved";
+        formula?: string | null;
+      }
+    >;
+  }>;
   diagnostics: unknown[];
-  from: { origin: string; capturedAt: string; documentVersionToken?: string | null; familyName: string; rfaPath?: string | null };
+  from: {
+    origin: string;
+    target: string;
+    documentId: string;
+    observedAt: string;
+    documentVersionToken?: string;
+    familyName: string;
+    rfaPath?: string | null;
+  };
 }
 export interface FamilyHost {
   sessions(): Promise<SessionFacts[]>;
   profile(target: string): Promise<string[]>;
   settingsApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  settingsCommand(name: "open" | "save", input?: Record<string, unknown>): Promise<RouteStateWriteResult>;
+  settingsCommand(
+    name: "open" | "save",
+    input?: Record<string, unknown>,
+  ): Promise<RouteStateWriteResult>;
   familyApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  familyCommand(name: "capture_evidence" | "build_evidence", input?: Record<string, unknown>): Promise<RouteStateWriteResult>;
+  familyCommand(
+    name: "capture_evidence" | "build_evidence",
+    input?: Record<string, unknown>,
+  ): Promise<RouteStateWriteResult>;
 }
 
 export function createLiveFamilyHost(scope: Scope): FamilyHost {
@@ -47,10 +90,18 @@ export function createLiveFamilyHost(scope: Scope): FamilyHost {
     async profile(target) {
       const result = await callHostRpc(
         "settings.tree",
-        { ...FAMILY_MODULE, subDirectory: "", recursive: true, includeFragments: false, includeSchemas: false },
+        {
+          ...FAMILY_MODULE,
+          subDirectory: "",
+          recursive: true,
+          includeFragments: false,
+          includeSchemas: false,
+        },
         { bridgeSessionId: target || undefined },
       );
-      return result.files.filter((entry) => entry.relativePath.toLowerCase().endsWith(".json")).map((entry) => entry.relativePath);
+      return result.files
+        .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
+        .map((entry) => entry.relativePath);
     },
     settingsApply: settings.apply,
     settingsCommand: settings.command,

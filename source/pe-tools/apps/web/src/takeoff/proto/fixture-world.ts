@@ -88,15 +88,19 @@ export const projectFixtureWorld = (fixture: MockWorld): World => ({
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
   readSnapshot(_session, _document, write) {
-    return produceTakeoffSnapshot(async () => {
-      const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
-      return {
-        world,
-        views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
-        zoneFrs: [],
-        regionsByZone: {},
-      };
-    }, write);
+    return produceTakeoffSnapshot(
+      async () => {
+        const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
+        return {
+          world,
+          views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
+          zoneFrs: [],
+          regionsByZone: {},
+        };
+      },
+      { target: "pid:0", documentId: "C:\\Fixtures\\project-a Residence.rvt" },
+      write,
+    );
   },
   async listRhvac(dir) {
     return [{ path: `${dir}\\projectA.r10`, name: "projectA.r10" }];
@@ -153,6 +157,7 @@ export const createFixtureSessionSource = (): SessionSource => {
     processId: 0,
     lane: null,
     custody: "observed" as const,
+    activeDocumentId: "C:\\Fixtures\\project-a Residence.rvt",
     activeDocumentTitle: "project-a Residence.rvt",
     openDocumentCount: 1,
   };
@@ -161,7 +166,7 @@ export const createFixtureSessionSource = (): SessionSource => {
       return [session];
     },
     async activeDocument() {
-      return { session, title: session.activeDocumentTitle };
+      return { session, documentId: session.activeDocumentId, title: session.activeDocumentTitle };
     },
     subscribe() {
       return () => undefined;

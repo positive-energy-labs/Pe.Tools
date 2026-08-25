@@ -413,7 +413,8 @@ export function Atlas({ store }: AtlasProps) {
   const live = useAtomValue(store.atoms.source) === "live";
   const busyState = useAtomValue(store.atoms.busy);
   const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
-  const geoReady = AsyncResult.isSuccess(useAtomValue(store.atoms.snapshot));
+  const snapshot = useAtomValue(store.atoms.snapshot);
+  const geoReady = AsyncResult.isSuccess(snapshot) && snapshot.value.bound;
   const actions = useMemo(() => createAtlasActions(store), [store]);
   const stageFilter = useAtomValue(store.atoms.stageFilter);
   const zoneKey = useAtomValue(store.atoms.zoneKey);

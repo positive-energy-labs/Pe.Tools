@@ -21,7 +21,13 @@ import {
 export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): SettingsHost {
   let document = structuredClone(fixtureDocument);
   let revision = 0;
-  const state = () => ({ doc: document, hydrated: true, connected: true, error: null, peaActive: false });
+  const state = () => ({
+    doc: document,
+    hydrated: true,
+    connected: true,
+    error: null,
+    peaActive: false,
+  });
   const changed = Atom.make(0);
   const slice = Atom.make((get) => {
     get(changed);
@@ -38,13 +44,24 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
     workspaces: async () => fixtureWorkspaces,
     tree: async (moduleKey, rootKey) =>
       moduleKey === "CmdScheduleManager" && rootKey === "schedules" ? fixtureFiles : [],
-    schema: async (moduleKey) => moduleKey === "CmdScheduleManager" ? FIXTURE_SCHEMA_JSON : "{}",
+    schema: async (moduleKey) => (moduleKey === "CmdScheduleManager" ? FIXTURE_SCHEMA_JSON : "{}"),
     sessions: async () => [],
     async apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult> {
       const fields = { ...document.fields };
+      let binding = document.binding;
+      let snapshot = document.snapshot;
       for (const patch of patches) {
         const [head, pointer, member] = patch.path;
-        if (head !== "fields" || typeof pointer !== "string" || typeof member !== "string") continue;
+        if (head === "binding") {
+          binding = patch.value as SettingsRouteDocument["binding"];
+          continue;
+        }
+        if (head === "snapshot") {
+          snapshot = (patch.value ?? null) as SettingsRouteDocument["snapshot"];
+          continue;
+        }
+        if (head !== "fields" || typeof pointer !== "string" || typeof member !== "string")
+          continue;
         const field: SettingsFieldState = fields[pointer] ?? {
           proposal: null,
           staged: null,
@@ -52,7 +69,7 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
         };
         fields[pointer] = { ...field, [member]: patch.value ?? null } as SettingsFieldState;
       }
-      publish({ ...document, fields });
+      publish({ ...document, binding, snapshot, fields });
       return { ok: true, doc: document };
     },
     async command(name, input): Promise<RouteStateWriteResult> {
@@ -62,23 +79,33 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
         return { ok: true, doc: document };
       }
       if (name === "open") {
-        const documentId = (input as {
-          documentId?: { moduleKey: string; rootKey: string; relativePath: string };
-        } | undefined)?.documentId;
+        const documentId = (
+          input as
+            | {
+                documentId?: { moduleKey: string; rootKey: string; relativePath: string };
+              }
+            | undefined
+        )?.documentId;
         if (!documentId) return { ok: false, error: "open needs a documentId." };
         publish({
           ...document,
           snapshot: {
-            documentId,
+            from: {
+              target: document.binding.target ?? "thread:fixture",
+              documentId:
+                fixtureFiles.find((file) => file.relativePath === documentId.relativePath)?.path ??
+                `C:\\Fixtures\\${documentId.relativePath}`,
+              settingsDocumentId: documentId,
+              documentVersionToken: version(),
+              observedAt: new Date().toISOString(),
+            },
             rawContent: fixtureRawFor(documentId.relativePath),
             composedContent: null,
-            versionToken: version(),
             modifiedUtc: new Date().toISOString(),
             validation:
               documentId.relativePath === "MechEquip/TEST.json"
                 ? fixtureDocument.snapshot?.validation
                 : { isValid: true, issues: [] },
-            takenAt: new Date().toISOString(),
           },
           fields:
             documentId.relativePath === "MechEquip/TEST.json"
@@ -93,8 +120,11 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
           ...document,
           snapshot: {
             ...document.snapshot,
-            versionToken: version(),
-            takenAt: new Date().toISOString(),
+            from: {
+              ...document.snapshot.from,
+              documentVersionToken: version(),
+              observedAt: new Date().toISOString(),
+            },
           },
         });
         return { ok: true, doc: document };
@@ -125,7 +155,11 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
           snapshot: {
             ...document.snapshot,
             rawContent,
-            versionToken: version(),
+            from: {
+              ...document.snapshot.from,
+              documentVersionToken: version(),
+              observedAt: new Date().toISOString(),
+            },
             validation: { isValid: true, issues: [] },
           },
           fields,

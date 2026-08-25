@@ -47,10 +47,12 @@ describe("settings route store", () => {
     await waitForStage();
 
     expect(calls).toHaveLength(2);
-    expect(calls.flat()).toEqual(expect.arrayContaining([
-      { path: ["fields", "/Name", "staged"], value: { value: "latest" } },
-      { path: ["fields", "/IsItemized", "staged"], value: { value: false } },
-    ]));
+    expect(calls.flat()).toEqual(
+      expect.arrayContaining([
+        { path: ["fields", "/Name", "staged"], value: { value: "latest" } },
+        { path: ["fields", "/IsItemized", "staged"], value: { value: false } },
+      ]),
+    );
   });
 
   it("flushes the latest staged value before save", async () => {
@@ -58,7 +60,9 @@ describe("settings route store", () => {
     const { store } = make((fixture) => ({
       ...fixture,
       async apply(patches) {
-        calls.push(`apply:${String(patches[0]?.value && (patches[0].value as { value?: unknown }).value)}`);
+        calls.push(
+          `apply:${String(patches[0]?.value && (patches[0].value as { value?: unknown }).value)}`,
+        );
         return fixture.apply!(patches);
       },
       async command(name, input) {
@@ -89,7 +93,9 @@ describe("settings route store", () => {
       ...fixture,
       command: (name, input) =>
         name === "open"
-          ? new Promise<RouteStateWriteResult>((resolve) => { release = resolve; })
+          ? new Promise<RouteStateWriteResult>((resolve) => {
+              release = resolve;
+            })
           : fixture.command!(name, input),
     }));
     store.actions.setPicker({
@@ -115,18 +121,18 @@ describe("settings route store", () => {
       filePath: "MechEquip/TEST.json",
     };
     store.actions.setPicker(picker);
-    const before = registry.get(store.atoms.snapshot)?.versionToken;
+    const before = registry.get(store.atoms.snapshot)?.from.documentVersionToken;
 
     await store.actions.refresh();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    expect(registry.get(store.atoms.snapshot)?.versionToken).not.toBe(before);
+    expect(registry.get(store.atoms.snapshot)?.from.documentVersionToken).not.toBe(before);
     expect(registry.get(store.atoms.picker)).toEqual(picker);
   });
 
   it("does not change the open document identity when the picker changes", () => {
     const { registry, store } = make();
-    const before = registry.get(store.atoms.snapshot)?.documentId;
+    const before = registry.get(store.atoms.snapshot)?.from.settingsDocumentId;
 
     store.actions.setPicker({
       workspaceKey: "default",
@@ -135,6 +141,6 @@ describe("settings route store", () => {
       filePath: "other.json",
     });
 
-    expect(registry.get(store.atoms.snapshot)?.documentId).toEqual(before);
+    expect(registry.get(store.atoms.snapshot)?.from.settingsDocumentId).toEqual(before);
   });
 });
