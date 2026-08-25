@@ -1,48 +1,79 @@
 # skills ledger
 
-The one ledger outside `docs/features/`; the skill set is not a feature. Same three sections, same rules.
+The one ledger outside `docs/features/`; the skill set is not a feature. Same three sections, same rules. Rewritten 2026-08-25 as the current truth; the history it squashes is in git.
 
 ## Decided
 
-- 2026-08-24, the unit is a stance: one figure above the fold, laws below, portable; `write` owns the form. One figure, not a stack; a figure that does not compress 3+ rules is cut.
-- 2026-08-24, figures are pre-modern vocations with a charge, chosen for the size of the latent space they light: Witness (ground), Thomas (doubt), Assayer (prove), Occam with the Iconoclast (purge), Keystone (close), Lineup (triangulate), Crusade (goal), Abbot and Apostles (delegate), Herald (relay), Laconic (distill), Coroner (diagnose), Socrates (grill), Demiurge.
-- 2026-08-24, grammar is `[mode…] loop`: modes change what the agent may do (ground, purge, doubt, prove, distill, delegate, relay) and never own a round; loops own rounds and a stop (demiurge, triangulate, close, grill, diagnose, goal).
-- 2026-08-24, runbooks (`execute`, `docs`) are not stances; they stay, named as runbooks, not portable.
-- 2026-08-24, `wave` → `goal`: `/goal` is the user's loop word (442× in Codex sessions); `wave` returns to its meaning as the round unit inside a goal.
-- 2026-08-24, `parallax` → `triangulate`: "parallax" reads as the scroll effect to anyone building UI. "parallax", "find the product", "prototype" stay as triggers; those two deleted skills carried 25 triggers of muscle memory.
-- 2026-08-24, `concisify` → `distill`; `diagnosing-bugs` → `diagnose`; `code-review` → `doubt`. Descriptions keep Pocock's trigger words ("review", "diagnose", "failing", "slow") because Codex self-routes on them (deduplicated: code-review 14 reads, diagnosing-bugs 33, tdd 31, rising monthly).
-- 2026-08-24, `prove` added; "dis/prove", "falsify", "prove then fix" was the 70-count family with no stance.
-- 2026-08-24, satellites inline; the ≤500-word law yields to "inline, as short as the laws allow".
-- 2026-08-24, stances carry no prompt parameters (variant count, shape count, width); the prompt or the `goal` form carries them.
-- 2026-08-24, trigger phrases are the user's verbs verbatim, from `.artifacts/runs/prompt-mining-20260824/SYNTHESIS.md`.
-- 2026-08-24, vault, not delete: `wayfinder`, `to-spec`, `to-tickets` `implement`, `tdd`, `handoff` moved to `.agents/vault/skills/`: never auto-wanted on either client. `research`, `codebase-design`, `teach`, `domain-modeling`, `writing-for-agents` stay loaded.
-- 2026-08-24, name once. Rename churn (delegate ×4 names, demiurge ×3, index ×2 in one week) resets muscle memory and splits usage history.
-- 2026-08-24, Codex census, deduplicated (replays inflate raw greps ~10×): execute 138, index 89, docs 79, ponytail 42, diagnosing-bugs 33, tdd 31, delegate 16, code-review 14, research 13, to-spec 12, codebase-design 9, implement 0. Half of the Pocock loads are `index`-chained or mission-mandated; zero user pushback on any load in 561 reads. The only bad verdicts were writing redirects ("absorb my style"). One noise pattern: a docs-only mission loaded tdd+code-review+to-spec+diagnosing-bugs back to back.
-- 2026-08-24, Claude census, all channels (Skill tool, Read, Bash, PowerShell, user slash), all Aug: docs 61, delegate 55, execute 47, find-the-product 45, grilling 40, index 38, prototype 21, demiurge 20, wayfinder 13, live-loop 13, writing-for-agents 12, domain-modeling 11, to-tickets 10, handoff 10, research 10, to-spec 9, code-review 8, diagnosing-bugs 8, tdd 7, implement 7, teach 6, codebase-design 5. Caveat: Bash column includes skill-authoring commands (~⅓ for the own skills) and the 08-18 "re-evaluate every skill" session read the whole set, which is where the vaulted three get their reads. User-typed only: delegate 12, find-the-product 10, index 9, handoff 6, grilling 4, prototype 4, domain-modeling 3, idealize 3, demiurge 2, execute 2, teach 2, goal 1.
-- 2026-08-24, harness `Agent` census runs: one burned 15 min on shell escaping and delivered no per-instance table; a 25-min grep job is the time-on-task alarm. Redone as a Codex apostle in Herdr (`skills-census`), report at `.artifacts/runs/prompt-mining-20260824/CLAUDE-USAGE-FEEDBACK.md`.
-- 2026-08-24, `delegate` did not fire in the session that wrote this ledger; three fan-outs went through the harness Agent tool. Cause: the description carries none of the user's verbs (fan out, subagents, swarm, census) and the harness tool is one call away while Herdr needs `execute`. Description gets the verbs; the stance form must make Herdr the cheap path.
-- 2026-08-24, per-instance feedback, Claude side (`.artifacts/runs/prompt-mining-20260824/CLAUDE-USAGE-FEEDBACK.md`, Codex apostle, 5 s extraction): never auto-wanted: to-spec, to-tickets, wayfinder, implement, tdd, code-review, handoff outside an explicit handoff; all vaulted or superseded. Under-invoked: diagnosing-bugs for regressions, codebase-design for seam/API asks, delegate (installed twice as a standing rule, still did not fire). Explicit demiurge, concisify, teach, domain-modeling, delegate all good. Failures: grilling auto-hit ignored a direct question; execute's Herdr ceremony drew "more commands than necessary"; find-the-product/prototype rounds with an unrenderable variant drew "Fix, I cant review" (now a `triangulate` law); docs captured too late in a big cutover.
-- 2026-08-24, second vault pass: `grilling`+`grill-me` → `grill` (Socrates; answer their question first; glossary and ADR laws folded from `domain-modeling`, formats moved beside `docs`); `codebase-design` → one deep-module paragraph in `demiurge`; `research` → one paragraph in `delegate/MODELS.md`; `writing-for-agents` → `write`. `teach` stays, explicit use good. `delegate` cut to stance form, posture table is the mode, model table in `MODELS.md`. `index` regains the failure-mode table (from ca904f8), the user's stated routing justification.
+### Drivers
 
-- 2026-08-24, adversarial review (`.artifacts/runs/skills-review-20260824/REPORT.md`, Fable apostle): 11/20 verbatim requests routed right before, misses in build-with-stop, visual output, and untaken verbs. Landed: descriptions carry the missed verbs and one owner per phrase (ground takes "report back"/"audit", grill takes "am I confused", purge takes "occam"/"no legacy"/"census", doubt narrows to "skeptical review", demiurge drops nouns Codex self-routed on); one verdict vocabulary and stop words (polish, dry, plateau) in the index Lexicon; `prove` stamp format; artifact laws in `write` (mermaid for loops, one HTML page for systems, contact sheet for variants); readback and glossary laws in `grill`; `goal` and `relay` user-only with ABSENT in the goal form; `close` stops owning shape comparison; `distill` caps at 150 or half; `teach` becomes `my.teach`, the guild Master; tdd's one law lives in execute's deterministic lane; `close-the-chain` dir renamed `my.close` so slash and name agree; PHASE-BOUNDARIES.md deleted; a PreToolUse hook on the harness Agent tool blocks with "delegate first" unless `.artifacts/allow-harness-agent` exists, the one non-prose fix for delegate never firing.
-- 2026-08-24, refused from the review: cutting the Iconoclast from `purge` (user ruled it stays); an `implement`/`bite` stance (the prompt carries scope and stop); a diagram stance (a register law covers it).
+- 2026-08-25, three drivers, named once: **purity** (a stance is portable; anything repo-shaped lives in a slot), **single source of truth** (one file owns each fact; mirrors are junctions, tables are projections, the check asserts the projection), **modularity** (one capability, one skill; merge on overlap, split on two stops). A fourth, softly: **gate over disposition** below the fold. Every line here derives from one of them.
+- 2026-08-25, authority runs user, then skill, then `index`. A stance is a posture, not a prescription; it leaves room for what the user asks. The set was built on "no prescriptions, just stances".
+- 2026-08-25, the set is still finding its shape; renames are free and muscle memory is the cheaper loss.
+- 2026-08-25, usage as observed by the user: `triangulate`, `demiurge`, `close` open most sessions; `delegate` and `purge` are stacked near-always; `prove` fires by trigger; the rest fire from `index`, rarely typed. Self-routed descriptions must stay verbatim-tight; index-routed ones may loosen.
+- 2026-08-25, a number that fires a law is a gate; a number that sizes the work is a param and lives in the prompt or a `write` register. Where the failure is internal and uncountable, the disposition is the gate; do not dress it as a number. Gate pass source: `.artifacts/runs/skills-crusade-20260825/GATES-*.md`.
 
-- 2026-08-24, Herdr friction census (`.artifacts/runs/herdr-friction-20260824/REPORT.md`, Codex apostle): 69 instances 08-18→24, session targeting 26, liveness 15, wait/timeout 8, prompt delivery 6; `herdr-up.ps1` alone 18. Three scripts replaced by one `herdr.ps1` with six verbs (up, send, status, wait, read, stop), proven live on a Codex and a Claude pane, plus one patch: `up` reports an already-working agent instead of stalling on it (the friction hit in this session). `execute`'s Herdr section now opens with the priming (tmux with agent-aware panes; observability, collaboration, background) and the verb table.
+### The unit: a stance
+
+- 2026-08-24, the unit is a stance: invocations above the fold, laws below, portable; `write` owns the form. Runbooks (`execute`, `docs`, `write`) are slots, not stances.
+- 2026-08-25, invocations are figures, physical processes, and formal objects, stacked where the stance earns them (the `demiurge` opener is the standard: Demiurge, slime mold, wet-molded glove, Steiner tree, drum skin). Each compresses 3+ rules or is cut. A figure names what the agent may *not* do; a figure that only licenses dissolves. Figures are pre-modern vocations with a charge, chosen for the latent space they light: Witness with the Chain-bearer, Herald, Assayer striking the Hallmark and Thomas, Shiva at the winnowing floor with Occam, the Iconoclast and the burn boss, Abbot (also Shepherd) and Falconer, Socrates, Demiurge, Lineup and Toile, Keystone, Coroner, Crusade, Master, Ganesha and the Wayfinder; slots: Lapidary (`write`), Ise shrine and sand mandala (`docs`).
+- 2026-08-25, figure rulings of this date: Hallmark is the stamp's four marks; Falconer replaces Breeder (regalia are the laws, graft kept as one clause), Shepherd is one line under Abbot; Winnower and burn compress different laws so both stand; Shiva enters as the opener's arm with the wind as its gate, on trial; Wayfinder over Helmsman (register collision with Abbot) and Light tower (no drive); dowsing rejected, divination is what `prove` refuses. Deferred, not rejected: proof load (`close`), lost-wax (`demiurge`), proof coin (`prove`), maquette (`triangulate`), midwife and wind-egg (`grill`), siege (`goal`), shu-ha-ri (`teach`), yam rider (`relay`), proof house (`execute`).
+- 2026-08-25, figures are taste, ruled four times, not owed a measurement. They are load-bearing for Codex's methodology and tone, cheap insurance for Claude; the user runs both equally. Figure-speech lives above the fold only, never in a reply register.
+- 2026-08-25, below the fold prefer a gate to a disposition: a number, a forbidden action, a Lexicon word, or a slot pointer moves the model; a description of good behavior does not. Gates stay general enough to survive another repo.
+- 2026-08-24, stances carry no prompt parameters (variant count, width, word budget); the prompt or the `goal` form carries them. Satellites inline; as short as the laws allow.
+- 2026-08-24, trigger phrases are the user's verbs verbatim (mined from `.artifacts/runs/prompt-mining-20260824/SYNTHESIS.md`); one owner per phrase inside the set; each description names the one case it is not for. Codex self-routes on exact phrases, so verbatim earns its place.
+
+### Grammar and kinds
+
+- 2026-08-25, kinds are **route / lens / pass / loop / slot**, carried as the directory prefix so `ls` is the taxonomy. Grammar `[lens...] one primary [slot...]`: a lens stacks and changes what is allowed, what counts as evidence, what the work costs; invoked bare it is the primary. A pass makes one pass and hands over an artifact. A loop owns rounds and a stop. A slot is always available, never a route, and the only home for anything repo-shaped. Derived independently by a `gpt-5.6-terra` apostle and the user's own flow diagram; the agreement is why it beat four other carves.
+- 2026-08-25, a diff-constraining lens bounds the primary's net, not each edit; where lens and primary cannot both hold the lens yields and says so.
+- 2026-08-24, ordinary building is not a stance; it is the primary's own work under the stacked lenses, with its stop named from the Lexicon. No `implement`, no `diagram`, no `research` stance.
+- 2026-08-25, every primary has a real stop (`stop:` frontmatter): grill frontier empty; demiurge two rounds adding no shape and killing none; triangulate two dry rounds; close shims zero or deferred; diagnose cause, wound, red loop; goal two dry waves; teach transfer demonstrated; ground map and next stance; relay baton delivered.
+- 2026-08-25, `goal` and `relay` are user-only; `index` hands back their slash command and stops.
+
+### Index laws
+
+- 2026-08-25, default entry for real work is `ground`. An ungrounded entry is a fresh-perspective move the user may ask for in exploratory phases, never the default, and named as such.
+- 2026-08-25, object once, in one sentence, before the first edit; a repeated direction is a ruling, built in full. More objection is wanted; the wording is tunable.
+- 2026-08-25, a skill changes method, never authorization. Persistence, instrumentation, and glossary writes wait for an authorized write.
+- 2026-08-25, a stop is reported with `prove`'s stamp on the claim inside it or not as a stop. `prove`'s load count will stay near zero while it carries this; the count is not the instrument.
+- 2026-08-24, one verdict vocabulary: state proven / blocked / not done; claim PROVEN / FALSIFIED / UNPROVEN; candidate ADOPT / KILL / FALSIFIED. Stop words in the Lexicon: polish, dry, plateau. A round is over when the reply quotes the ledger `path:line`.
+
+### Members
+
+- 2026-08-25, sixteen: `route.index`; `lens.delegate`, `lens.prove`, `lens.purge`; `pass.ground`, `pass.relay`; `loop.grill`, `loop.demiurge`, `loop.triangulate`, `loop.close`, `loop.diagnose`, `loop.goal`, `loop.teach`; `slot.execute`, `slot.docs`, `slot.write`. A six-model crusade (`.artifacts/runs/skills-crusade-20260825/`) kept all sixteen unanimously.
+- 2026-08-25, `prove` carries both bars: Assayer on your own claim, Thomas on another's. Whose claim it is changes where you look first, never the bar. The stamp is `PROVEN[lane, where, commit, when]` / `FALSIFIED[lane, what broke]` / `UNPROVEN[why]`.
+- 2026-08-25, `delegate` is Abbot and Breeder. A **line** is one apostle and every prompt sent down it; isolation distance and the graft are the physical process. Reuse before re-brief; priming is contamination once the mission is judgment; one ask per turn; cross lines on purpose after the clean readings. A PreToolUse hook blocks the harness Agent tool unless `.artifacts/allow-harness-agent` exists: the one non-prose fix for `delegate` never firing. `MODELS.md` beside it is house policy.
+- 2026-08-24, `purge` keeps the Iconoclast (user ruled). `grill` answers the question first, then interviews; glossary and ADR laws live there. `teach` stays on explicit use. `write` holds the distilled register (150 words or half) and the artifact laws (mermaid for loops, one HTML page for systems, contact sheet for variants). `triangulate` mechanics live in `execute`'s host/web lane.
+- 2026-08-25, `demiurge`, `triangulate`, `close` stay separate: shape, felt surface, and shim retirement have different evidence and stops. `ground` stays separate from `prove`: a map is not a stamp.
+
+### Mechanics
+
+- 2026-08-25, `check.py` beside the set is the executable check; a stance edit that does not pass is not landed. It asserts: `<kind>.<name>` directories; frontmatter `name`, `figure`, `stop` on primaries, `scope: repo|house` on slots; one owner per trigger; the `index` table equals its projection of those fields (`--fix` rewrites it); no repo-shaped content or code fence in a stance or its satellites (a satellite may declare `scope: house`); `.claude/skills` is a junction; `~/.claude/skills` is empty. Every defect the reviews found was downstream of nothing being able to fail; the first version of the check passed everything, which falsified the check.
+- 2026-08-25, one home. `.claude/skills` is a junction to `.agents/skills`; the copy had drifted on 6 of 18 files, and a stale global `~/.claude/skills/delegate` shadowed the real one.
+- 2026-08-25, `herdr.ps1` is the whole fan-out surface: spec `name:kind[:model][:effort]`, seven verbs (up, send, status, wait, read, retire, stop). Ad-hoc launcher scripts are refused by the auto-mode classifier; the wrapper must cover everything.
+
+### Legacy, briefly
+
+- 2026-08-24, the Pocock-era set (`wayfinder`, `to-spec`, `to-tickets`, `implement`, `tdd`, `handoff`, `code-review`, `research`, `codebase-design`, `domain-modeling`, `writing-for-agents`, `grilling`, `find-the-product`, `prototype`, `concisify`, `diagnosing-bugs`) was vaulted to `.agents/vault/skills/` or folded: their laws live on in `grill`, `demiurge`, `delegate/MODELS.md`, `write`, `triangulate`, `diagnose`, and `execute`'s deterministic lane. Censuses and per-instance feedback that drove it: `.artifacts/runs/prompt-mining-20260824/`. Then `my.*` → `<kind>.<name>`, `doubt` → `prove`, `distill` → `write`.
+- 2026-08-25, two adversarial reviews: four models on the taxonomy (`.artifacts/runs/skills-taxonomy-20260825/`), six on the whole set (`.artifacts/runs/skills-crusade-20260825/`). Adopted from them: the kind carve, the merges, real stops, the generated table, the trigger-parser fix, the figure sub-law, the index laws above. Their remaining argument, that a check proves syntax not routing, is true and accepted.
 
 ## Tried & rejected
 
-- 2026-08-24, one disposition doc instead of skills; stances are phase activation, a cold model cannot be primed for every phase at once.
-- 2026-08-24, lexicon-only modes the user types; the user invokes by name and expects the loop to drive itself.
-- 2026-08-24, standards/spec `code-review` shape; user rejected it in session ("stop doing subagent standards/spec reviews").
-- 2026-08-24, one metaphor family per setting (expedition: surveyor, quartermaster, sitrep); user did not resonate. The family is a register, not a setting.
-- 2026-08-24, mechanical figures (telegraph, lab notebook) as the leading word; they prime brevity but not disposition. Brevity is a law under the figure, not the figure.
+- One disposition doc instead of skills: a cold model cannot be primed for every phase at once.
+- Lexicon-only modes the user types: the user invokes by name and expects the loop to drive itself.
+- Standards/spec review shape: user rejected in session.
+- One metaphor family per setting, and mechanical figures (telegraph, lab notebook) as the leading word: neither primes disposition.
+- One figure per stance, and the figureless A/B: overruled and struck, four rulings.
+- "Name once", the rename ban: the set is still finding its shape.
+- A routing corpus the check runs: user ruled no; a misroute that bites is the trigger to revisit.
+- An `implement`/`bite` stance, a diagram stance, a fifth kind for house policy: the prompt, a register law, and a `scope` field cover them.
 
 ## Owed
 
-- `execute` absorbs RIG.md mechanics (worktree naming, waiters); RIG.md still names the deleted `herdr-up/send` scripts; then `docs/loop/` deletes.
+- The gate pass, remainder: landed 2026-08-25 for `triangulate` overreach, `demiurge` typologize and feedback, `delegate` leave-it-better and reports, `grill` stress, `purge` census, `ground` visual lane; `prove` finding cap moved to `write`'s reply register; cut `relay` memoirs, `demiurge` order note, `teach` repeat-question. Refused as gates (disposition is the mechanism): `triangulate` layout-loss, `demiurge` self-catch, `delegate` priming, `prove` incentive, `goal` adopt-nothing. Still to walk: every other law below a fold, one `grill` round per stance.
+- Crusade lines (six, primed on the whole set): one more read, "does each new opener forbid something or only license", then retire.
+- The objection law's wording; tune after a week of use.
+- `execute` absorbs RIG.md mechanics (worktree naming, waiters); RIG.md still names deleted scripts; then `docs/loop/` deletes.
 - `write`: the unslop list is a lint list; distill it to laws.
-- `prove`, `diagnose`, `triangulate`: zero usage history; watch a week. If `prove` never fires because "done" routes through `close`, fold it in. If `triangulate` is never typed, `find-the-product` was the adopted name.
-- The review's argument: figures were never measured. Run one stance figureless for a week (mode line only), compare redirects, before betting the portable set on them. The user wants figures; this is the proof they are owed.
-- `triangulate` mechanics (tsx, `?variant=`, switcher) are the one repo-shaped block left in a stance; move to execute's host/web lane when execute is reworked.
-- Why the censuses disagree on tdd: Claude side 0 real use, Codex side 31 deduped loads mostly index-chained; vaulted on the Claude evidence, its law kept in execute.
-- Mirror `.agents/skills` → `.claude/skills` after every rename; a test that diffs the two is owed.
+- `pass` has two members (session entry and exit), `route` one. If no third pass appears, the honest name is `edge`.
+- Usage watch: `prove` (expected near zero, load-bearing), `diagnose`, `triangulate` (if never typed, `find-the-product` was the adopted name).
