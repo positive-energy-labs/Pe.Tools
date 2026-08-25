@@ -1,5 +1,5 @@
 import { RegistryContext } from "@effect/atom-react";
-import { useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   getInspectableAtomStore,
@@ -23,6 +23,8 @@ const styles = `
 `;
 
 function AtomsPanel() {
+  const panel = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
   const registry = useContext(RegistryContext);
   const store = useSyncExternalStore(
     subscribeInspectableAtomStore,
@@ -38,6 +40,20 @@ function AtomsPanel() {
   const [nextValue, setNextValue] = useState("");
 
   useEffect(() => {
+    const element = panel.current;
+    if (!element) return;
+    const update = () => setVisible(element.getClientRects().length > 0);
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    // FOOTGUN: TanStack keeps hidden plugin panels mounted. Polling the full registry while this
+    // panel was hidden made fixture-table hover cost about 600 ms of script per row transition.
+    if (!visible) return;
     setSnapshot(inspector.snapshot());
     const unsubscribe = inspector.subscribe(() => setSnapshot(inspector.snapshot()));
     if (import.meta.env.DEV) Object.assign(globalThis, { __PE_ATOMS__: inspector });
@@ -47,7 +63,7 @@ function AtomsPanel() {
       if ((globalThis as { __PE_ATOMS__?: unknown }).__PE_ATOMS__ === inspector)
         Reflect.deleteProperty(globalThis, "__PE_ATOMS__");
     };
-  }, [inspector, store]);
+  }, [inspector, store, visible]);
 
   const rows = snapshot.nodes
     .filter(({ label }) => label.startsWith(prefix))
@@ -55,7 +71,7 @@ function AtomsPanel() {
   const node = snapshot.nodes.find(({ id }) => id === selected);
 
   return (
-    <div className="atoms">
+    <div ref={panel} className="atoms">
       <style>{styles}</style>
       <header>
         <strong>Atoms</strong>
