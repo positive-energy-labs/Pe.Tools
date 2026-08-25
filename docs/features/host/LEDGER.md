@@ -52,6 +52,8 @@ design-system ledger, not restated here.
 
 ### Settings
 
+- 2026-08-25 — (/settings) runs on `settings/store.ts`; TanStack Form deleted; the form pane is controlled over `slice.fields[*].staged` with one `stage` writer emitting `apply` patches; `formDirty` is derived from staged fields. 17 state sites → 0. PROVEN[deterministic, worktree, 04e7b99]: 7/7, tsc 0.
+- 2026-08-25 — (/settings) `SETTINGS_PRODUCT` (`workspace › module › root › file`, `session`) runs on `TargetingHead`; `?thread` is declared in `validateSearch`.
 - 2026-08-16 — /settings stays a list of `StateCell`s at CARD scale, not a table: it is a small trichotomy reviewer over a JSON file, and at list scale per-row approve/deny/unstage verbs are the honest form even at ~3 verb widths per row.
 - 2026-08-16 — Prior value under a proposal/stage rides "was X" leading the note: card scale has an inline ghost only for `drift`, and a schema-flagged or pea-proposed value is not drift. Prose where the chat card renders a real diff — accepted until the model carries the proposal's prior value.
 - 2026-08-16 — A busy/down SSE bridge is a caution `FactChip`, not an agreement signal: a broken lane is not the model disagreeing.
@@ -60,6 +62,7 @@ design-system ledger, not restated here.
 
 ## Tried & rejected
 
+- 2026-08-25 — (/settings) TanStack Form as a second draft beside `document.fields[*].staged`; save had to convert one into patches for the other (C1 settings #1).
 - 2026-08-16 — Rendering "response shape the view cannot narrow" as an `EmptyState` (~40 call sites): claims absence when rows may exist. Now `UnrecognizedShape` — an error `OutcomeLine` pointing at the raw-response disclosure. Mirror image of takeoffs' finding that an empty state must never stand in for an unreadable result.
 - 2026-08-16 — `--pe-blue` circuit-number gutter in the panelboard and `--pe-green` for the curated-view list marker: Revit-flavoured decoration spending blue (commit/nav only) and pea's identity on a non-pea fact. Both neutralized; Revit verisimilitude knowingly traded away.
 - 2026-08-16 — Hue carrying rank in `revit.resolve.references` (blue edge/wash for the leader, kiln for demoted): grayscale law. Rank now rides order + `#n` gutter + a single-series `--viz-1` score bar.
@@ -69,6 +72,7 @@ design-system ledger, not restated here.
 
 ## Owed
 
+- 2026-08-25 — (/settings) `@tanstack/react-form` removal needs the next `pnpm install`.
 - Installed-lane `host.json` `sessionId` is a write-once-on-attach cache with no invalidation: a host process that outlives the session it attached to keeps advertising a reaped id until the next attach overwrites it. Evidence 2026-08-21: `host.log:23797` records the attach to `slot3-25`, the file now reads `"sessionId": "ovn-25"`, and `pe-revit session status --json` reports zero live sessions — so an agent reading the service file and an agent reading `/call` disagree about which session is current. Routing was never wrong (the typed op used the live bridge); the cost is a misleading read during triage. Self-heals on the next attach. Fix by clearing the field when the named session's receipt is gone, or by stamping it with the session's generation so a stale read is detectable.
 - Headless `pea --prompt` without `--workspace-root` refuses before the Mastra runtime exists: `scripting.workspace.bootstrap` answers "No Revit session is connected to the bridge" (2026-08-20, installed host 5180, zero Revit). A prompt that needs no Revit must not need Revit to bootstrap a workspace; `--workspace-root <dir>` bypasses it today.
 - `pea` workspace bootstrap writes the product skills (`packages/mcps/src/pea/skills.ts`) into `<workspace-root>/.agents/skills/`; pointed at this checkout it pollutes the repo's own skill dir (7 untracked dirs, 2026-08-20). Write them under a product-owned dir or exclude them from the checkout.
