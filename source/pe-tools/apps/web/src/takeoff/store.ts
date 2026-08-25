@@ -48,8 +48,6 @@ import {
 } from "#/takeoff/world";
 import { type Bound, type Link, type Multi } from "#/targeting/model";
 
-export type { TakeoffSnapshot } from "@pe/agent-contracts";
-
 export type TakeoffStage = "adopt" | "audit" | "sync";
 
 export interface TakeoffSearch {

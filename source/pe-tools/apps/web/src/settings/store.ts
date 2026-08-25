@@ -44,16 +44,6 @@ interface PendingStage {
   value: unknown;
 }
 
-function authoringFile(entry: SettingsFileEntry) {
-  return (
-    entry.kind !== SettingsFileKind.Fragment &&
-    entry.kind !== SettingsFileKind.Schema &&
-    !entry.isFragment &&
-    !entry.isSchema &&
-    entry.relativePath.toLowerCase().endsWith(".json")
-  );
-}
-
 export function projectStagedValues(rawContent: string, fields: Record<string, SettingsFieldState>) {
   let values: Record<string, unknown>;
   try {
@@ -183,7 +173,7 @@ export function createSettingsStore(deps: {
     }, lane, { needs: "a module" }),
   ).pipe(owned("feed/root"));
   const fileFeed = Atom.make((get) =>
-    feed(get(treeResult), (items) => items.filter(authoringFile).map((item) => ({ id: item.relativePath, label: item.relativePath })), lane, { needs: "a module and root" }),
+    feed(get(treeResult), (items) => items.filter((entry) => entry.kind !== SettingsFileKind.Fragment && entry.kind !== SettingsFileKind.Schema && !entry.isFragment && !entry.isSchema && entry.relativePath.toLowerCase().endsWith(".json")).map((item) => ({ id: item.relativePath, label: item.relativePath })), lane, { needs: "a module and root" }),
   ).pipe(owned("feed/file"));
   const sessionFeed = Atom.make((get) =>
     feed(get(sessionsResult), (items) => items.map((item) => ({ id: mintSelector(item, items), label: sessionLabel(item) })), lane),

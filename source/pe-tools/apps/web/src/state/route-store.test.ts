@@ -2,11 +2,12 @@ import { Effect } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import { defineRouteState } from "@pe/agent-contracts";
 
+import { inspectAtomRegistry } from "./atom-inspect";
 import {
   createRouteStoreCore,
   docAtom,
@@ -94,6 +95,53 @@ describe("route store kit", () => {
 
     expect(released.slice(0, 2)).toEqual(["test/b", "test/a"]);
     expect(released).toHaveLength(releasedOnce);
+  });
+
+  it("keeps the app inspector live when one of two route stores is disposed", async () => {
+    vi.useFakeTimers();
+    const registry = AtomRegistry.make({ defaultIdleTTL: 4 });
+    const first = createRouteStoreCore("first", registry);
+    const second = createRouteStoreCore("second", registry);
+    first.owned("value", Atom.make(1));
+    const remaining = second.owned("value", Atom.make(1));
+    const inspector = inspectAtomRegistry(registry);
+    const changed = vi.fn();
+    const unsubscribe = inspector.subscribe(changed);
+    try {
+      inspector.inspect();
+      first.dispose();
+      registry.set(remaining, 2);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(changed).toHaveBeenCalled();
+      const node = inspector.inspect().nodes.find(({ label }) => label === "second/value");
+      expect(node).toBeDefined();
+      expect(inspector.refresh(node!.id)).toBe(true);
+    } finally {
+      unsubscribe();
+      inspector.dispose();
+      first.dispose();
+      second.dispose();
+      registry.dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns the registry node census to baseline after disposal and idle TTL", async () => {
+    vi.useFakeTimers();
+    const registry = AtomRegistry.make({ defaultIdleTTL: 4 });
+    const baseline = registry.getNodes().size;
+    const core = createRouteStoreCore("test", registry);
+    core.owned("value", Atom.make(1));
+    try {
+      expect(registry.getNodes().size).toBeGreaterThan(baseline);
+      core.dispose();
+      await vi.advanceTimersByTimeAsync(20);
+      expect(registry.getNodes().size).toBe(baseline);
+    } finally {
+      core.dispose();
+      registry.dispose();
+      vi.useRealTimers();
+    }
   });
 
   it("returns one document atom for the same route and thread", () => {

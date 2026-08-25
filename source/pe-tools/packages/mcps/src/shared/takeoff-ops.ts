@@ -115,9 +115,80 @@ export function createTakeoffOperations(execute: ScriptExecutor) {
     );
   return {
     snapshot: () =>
-      run<TakeoffRawSnapshot>(snapshotScript(), "ReadOnly", "takeoff-snapshot.cs").then(
-        takeoffSnapshot,
-      ),
+      run<TakeoffRawSnapshot>(snapshotScript(), "ReadOnly", "takeoff-snapshot.cs").then((raw) => {
+        const levelByView = new Map(raw.views.map((view) => [view.name, view.level]));
+        const lanes: World["lanes"] = [];
+        const ordinals = new Map<string, number>();
+        const zones: WorldZone[] = raw.zoneFrs.map((region) => {
+          const meta = zoneMeta(region.blob);
+          const view = region.view || meta.view;
+          const label = levelByView.get(view) || view;
+          let lane = lanes.find((item) => item.view === view);
+          if (!lane) {
+            lane = { view, label, replayPath: null };
+            lanes.push(lane);
+          }
+          const ordinal = (ordinals.get(view) ?? 0) + 1;
+          ordinals.set(view, ordinal);
+          const materialized = raw.regionsByZone[region.guid ?? ""] ?? [];
+          const rooms = materialized.filter((item) => item.role !== "held-residue").map(room);
+          const residues = materialized
+            .filter((item) => item.role === "held-residue")
+            .map((item) => ({
+              id: item.guid,
+              reason: "held",
+              rawSqft: item.sqft,
+              label: centroid(item.outer),
+              outer: item.outer,
+              holes: [],
+            }));
+          const tags = meta.systemTag ? [meta.systemTag] : [];
+          const stage =
+            rooms.length === 0
+              ? tags.length > 0
+                ? "registered"
+                : "declared"
+              : rooms.some((item) => item.flags.length > 0)
+                ? "partitioned"
+                : "reviewed";
+          return {
+            zone: {
+              guid: region.guid ?? "",
+              elementId: region.elementId,
+              key: `${label}#${String(ordinal).padStart(2, "0")}`,
+              ordinal,
+              lane,
+              color: region.color,
+              loops: region.loops,
+              declaredSqft: region.loops.reduce((sum, loop) => sum + area(loop), 0),
+              bounds: bounds(region.loops),
+            },
+            stage,
+            tags,
+            name: meta.name,
+            rooms,
+            residues,
+            heldSqft: residues.reduce((sum, item) => sum + item.rawSqft, 0),
+            runs: [],
+            driftSqft: 0,
+          };
+        });
+        return {
+          ...raw,
+          world: {
+            docName: raw.status.doc,
+            r10Path: null,
+            lanes,
+            zones,
+            systems: raw.status.systems.map((system) => ({
+              ...system,
+              zoneKeys: zones.filter((zone) => zone.tags.includes(system.tag)).map((zone) => zone.zone.key),
+              sensibleBtuh: 0,
+              overCap: false,
+            })),
+          },
+        };
+      }),
     status: () => run<ModelStatus>(statusScript(), "ReadOnly", "takeoff-status.cs"),
     views: () =>
       run<{ views: TakeoffRawSnapshot["views"] }>(
@@ -262,80 +333,5 @@ function room(region: LiveRegion): WorldRoom {
     data: null,
     outer: region.outer,
     holes: [],
-  };
-}
-
-function takeoffSnapshot(raw: TakeoffRawSnapshot): TakeoffSnapshot {
-  const levelByView = new Map(raw.views.map((view) => [view.name, view.level]));
-  const lanes: World["lanes"] = [];
-  const ordinals = new Map<string, number>();
-  const zones: WorldZone[] = raw.zoneFrs.map((region) => {
-    const meta = zoneMeta(region.blob);
-    const view = region.view || meta.view;
-    const label = levelByView.get(view) || view;
-    let lane = lanes.find((item) => item.view === view);
-    if (!lane) {
-      lane = { view, label, replayPath: null };
-      lanes.push(lane);
-    }
-    const ordinal = (ordinals.get(view) ?? 0) + 1;
-    ordinals.set(view, ordinal);
-    const materialized = raw.regionsByZone[region.guid ?? ""] ?? [];
-    const rooms = materialized.filter((item) => item.role !== "held-residue").map(room);
-    const residues = materialized
-      .filter((item) => item.role === "held-residue")
-      .map((item) => ({
-        id: item.guid,
-        reason: "held",
-        rawSqft: item.sqft,
-        label: centroid(item.outer),
-        outer: item.outer,
-        holes: [],
-      }));
-    const tags = meta.systemTag ? [meta.systemTag] : [];
-    const stage =
-      rooms.length === 0
-        ? tags.length > 0
-          ? "registered"
-          : "declared"
-        : rooms.some((item) => item.flags.length > 0)
-          ? "partitioned"
-          : "reviewed";
-    return {
-      zone: {
-        guid: region.guid ?? "",
-        elementId: region.elementId,
-        key: `${label}#${String(ordinal).padStart(2, "0")}`,
-        ordinal,
-        lane,
-        color: region.color,
-        loops: region.loops,
-        declaredSqft: region.loops.reduce((sum, loop) => sum + area(loop), 0),
-        bounds: bounds(region.loops),
-      },
-      stage,
-      tags,
-      name: meta.name,
-      rooms,
-      residues,
-      heldSqft: residues.reduce((sum, item) => sum + item.rawSqft, 0),
-      runs: [],
-      driftSqft: 0,
-    };
-  });
-  return {
-    ...raw,
-    world: {
-      docName: raw.status.doc,
-      r10Path: null,
-      lanes,
-      zones,
-      systems: raw.status.systems.map((system) => ({
-        ...system,
-        zoneKeys: zones.filter((zone) => zone.tags.includes(system.tag)).map((zone) => zone.zone.key),
-        sensibleBtuh: 0,
-        overCap: false,
-      })),
-    },
   };
 }

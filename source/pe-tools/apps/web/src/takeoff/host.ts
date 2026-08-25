@@ -1,9 +1,8 @@
 /**
  * The /takeoffs route's live wire into Revit.
  *
- * Every call is `scripting.execute` against the connected host — the scripts in scripts.ts stand
- * in for the `takeoffs.*` operations that do not exist yet. Keep this file thin: it owns the
- * transport, the structured script result, and the session scope; nothing about the pipeline's meaning.
+ * Every call is `scripting.execute` against the connected host. The shared takeoff operations own
+ * the scripts and structured results; this file owns transport, session scope, and RHVAC orchestration.
  */
 import { callHostDynamic, callHostRpc } from "#/host/client";
 import { fromBridgeSessions } from "#/host/target";

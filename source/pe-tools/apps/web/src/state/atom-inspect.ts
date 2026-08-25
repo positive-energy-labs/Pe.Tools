@@ -42,13 +42,6 @@ export interface AtomInspector {
   dispose(): void;
 }
 
-export const registerInspectableAtomStore = (store: {
-  readonly registry: AtomRegistry.AtomRegistry;
-}) => {
-  const inspector = inspectAtomRegistry(store.registry);
-  return () => inspector.dispose();
-};
-
 type Node = AtomRegistry.Node<unknown>;
 type Record = {
   id: string;

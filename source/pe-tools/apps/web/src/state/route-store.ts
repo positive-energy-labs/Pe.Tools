@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer, Queue, Stream } from "effect";
+import { Cause, Effect, Equal, Hash, Layer, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -131,7 +131,6 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
       if (disposed) return;
       disposed = true;
       if (busyTimer) clearInterval(busyTimer);
-      inspector.dispose();
       for (const release of releases.splice(0).reverse()) release();
     },
   };
@@ -223,7 +222,16 @@ type WireMessage =
   | { kind: "doc"; doc: unknown }
   | { kind: "pea"; active: boolean }
   | { kind: "connected"; value: boolean };
-const routeAtoms = new Map<string, Atom.Atom<AsyncResult.AsyncResult<Slice<any>, Error>>>();
+
+class RouteAtomKey implements Equal.Equal {
+  constructor(readonly spec: RouteStateSpec<any>, readonly scope: Scope) {}
+  [Equal.symbol](that: Equal.Equal): boolean {
+    return that instanceof RouteAtomKey && this.spec.route === that.spec.route && this.scope.threadId === that.scope.threadId;
+  }
+  [Hash.symbol]() {
+    return Hash.string(`${this.spec.route}\0${this.scope.threadId}`);
+  }
+}
 
 function routeUrl(route: string, operation: "read" | "events" | "apply" | "command", scope: Scope) {
   const config = resolveWorkbenchConfig();
@@ -233,8 +241,9 @@ function routeUrl(route: string, operation: "read" | "events" | "apply" | "comma
   return url.toString();
 }
 
-function wireStream<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
-  const initial: Slice<RouteDocOf<S>> = {
+const routeAtom = Atom.family((key: RouteAtomKey) => {
+  const { spec, scope } = key;
+  const initial: Slice<RouteDocOf<typeof spec>> = {
     doc: null,
     hydrated: false,
     connected: null,
@@ -242,7 +251,7 @@ function wireStream<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
     peaActive: false,
   };
   const config = resolveWorkbenchConfig();
-  return Stream.callback<WireMessage, Error>((queue) =>
+  return Atom.make(Stream.callback<WireMessage, Error>((queue) =>
     Effect.acquireRelease(
       Effect.tryPromise({
         try: async () => {
@@ -286,7 +295,7 @@ function wireStream<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
       (close) => Effect.sync(close),
     ),
   ).pipe(
-    Stream.scan(initial, (state, message): Slice<RouteDocOf<S>> =>
+    Stream.scan(initial, (state, message): Slice<RouteDocOf<typeof spec>> =>
       message.kind === "pea"
         ? { ...state, peaActive: message.active }
         : message.kind === "connected"
@@ -297,20 +306,14 @@ function wireStream<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
             hydrated: true,
           },
     ),
-  );
-}
+  ));
+});
 
 export function docAtom<S extends RouteStateSpec<any>>(
   spec: S,
   scope: Scope,
 ): Atom.Atom<AsyncResult.AsyncResult<Slice<RouteDocOf<S>>, Error>> {
-  const key = JSON.stringify({ route: spec.route, threadId: scope.threadId });
-  let atom = routeAtoms.get(key);
-  if (!atom) {
-    atom = Atom.make(wireStream(spec, scope)) as Atom.Atom<AsyncResult.AsyncResult<Slice<any>, Error>>;
-    routeAtoms.set(key, atom);
-  }
-  return atom;
+  return routeAtom(new RouteAtomKey(spec, scope));
 }
 
 export function docWriter<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {

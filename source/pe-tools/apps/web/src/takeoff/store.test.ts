@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import type { RouteStatePatch, TakeoffsRouteDocument } from "@pe/agent-contracts";
+import type { RouteStatePatch, TakeoffSnapshot, TakeoffsRouteDocument } from "@pe/agent-contracts";
 import type { Slice } from "#/state/route-store";
 
 import {
@@ -17,7 +17,6 @@ import {
   type SessionSource,
   type TakeoffHost,
   type TakeoffSearch,
-  type TakeoffSnapshot,
 } from "#/takeoff/store";
 
 const bound: TakeoffSearch = {
