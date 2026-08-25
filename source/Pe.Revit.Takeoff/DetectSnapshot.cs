@@ -72,10 +72,67 @@ public sealed class DetectSnapshot
             throw new InvalidOperationException("snapshot ink disagrees with its captured grid");
         var seals = TakeoffPolicy.SealClasses(this, profile);
         var evidence = new bool[this.SeedInk.Length];
+        // Door-scaled components only: an oversize lintel component (SealDoorHeadOversize) is a
+        // soffit or low slab, not door geometry — its fringe may close the partition but must not
+        // back a boundary. Counting it manufactured trust (LL08: 0.73 "backed" vs 0.09 ink-only).
         for (int i = 0; i < evidence.Length; i++)
             evidence[i] = this.SeedInk[i] || seals[i] == Detector.SealDoorHead;
         var cells = Detector.Chamfer(evidence, width, height, invert: false);
         return DistanceOracle(cells);
+    }
+
+    /// <summary>Nearest heuristic closure class within the review support radius.</summary>
+    public Func<double, double, byte> HeuristicClosureAt(LevelProfile profile)
+    {
+        const double radiusFt = 0.75;
+        var seals = TakeoffPolicy.SealClasses(this, profile);
+        var wallRun = new bool[seals.Length];
+        var gapClose = new bool[seals.Length];
+        for (int i = 0; i < seals.Length; i++)
+        {
+            wallRun[i] = seals[i] == Detector.SealWallRunGap;
+            gapClose[i] = seals[i] == Detector.SealGapClose;
+        }
+        Despeckle(wallRun, this.Field.W, this.Field.H, this.Field.CellFt);
+        Despeckle(gapClose, this.Field.W, this.Field.H, this.Field.CellFt);
+        var wallDistance = DistanceOracle(Detector.Chamfer(
+            wallRun, this.Field.W, this.Field.H, invert: false));
+        var gapDistance = DistanceOracle(Detector.Chamfer(
+            gapClose, this.Field.W, this.Field.H, invert: false));
+        return (x, y) => wallDistance(x, y) <= radiusFt
+            ? Detector.SealWallRunGap
+            : gapDistance(x, y) <= radiusFt ? Detector.SealGapClose : Detector.SealNone;
+    }
+
+    private static void Despeckle(bool[] mask, int width, int height, double cellFt)
+    {
+        int minimumCells = (int)Math.Ceiling(0.25 / (cellFt * cellFt));
+        var seen = new bool[mask.Length];
+        var stack = new Stack<int>();
+        for (int start = 0; start < mask.Length; start++)
+        {
+            if (!mask[start] || seen[start]) continue;
+            var cells = new List<int>();
+            seen[start] = true;
+            stack.Push(start);
+            while (stack.Count > 0)
+            {
+                int cell = stack.Pop();
+                cells.Add(cell);
+                int x = cell % width, y = cell / width;
+                foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1) })
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+                    int neighbor = ny * width + nx;
+                    if (!mask[neighbor] || seen[neighbor]) continue;
+                    seen[neighbor] = true;
+                    stack.Push(neighbor);
+                }
+            }
+            if (cells.Count >= minimumCells) continue;
+            foreach (int cell in cells) mask[cell] = false;
+        }
     }
 
     private Func<double, double, double> DistanceOracle(float[] cells)

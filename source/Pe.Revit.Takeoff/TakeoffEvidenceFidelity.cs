@@ -51,6 +51,36 @@ internal static class TakeoffEvidenceFidelity
         return sampled == 0 ? null : (double)supported / sampled;
     }
 
+    /// <summary>
+    /// Longest contiguous run of non-exempt boundary samples without lawful backing. Runs reset at
+    /// segment boundaries; segments shorter than two samples are intentionally ignored.
+    /// </summary>
+    internal static double WorstUnbackedRunFt(
+        RoomResult room,
+        Func<double, double, double> distanceToInk,
+        Geometry? exemptBoundary,
+        double exemptFt)
+    {
+        int worst = 0;
+        foreach (var edge in Edges(ToPolygon(room)))
+        {
+            if (edge.Length < 2 * SampleStepFt) continue;
+            int count = Math.Max(2, (int)(edge.Length / SampleStepFt) + 1);
+            int run = 0;
+            for (int index = 0; index < count; index++)
+            {
+                double distance = edge.Length * index / (count - 1);
+                var point = PointAlong(edge, distance);
+                bool exempt = exemptBoundary != null
+                    && exemptBoundary.Distance(Factory.CreatePoint(point)) <= exemptFt + Epsilon;
+                bool backed = distanceToInk(point.X, point.Y) <= 0.25 + Epsilon;
+                run = exempt || backed ? 0 : run + 1;
+                worst = Math.Max(worst, run);
+            }
+        }
+        return worst * SampleStepFt;
+    }
+
     internal static double BoundarySupportFraction(
         IReadOnlyList<RoomResult> rooms,
         Func<double, double, double> distanceToInk)
@@ -69,6 +99,48 @@ internal static class TakeoffEvidenceFidelity
             }
         }
         return sampled == 0 ? 0 : (double)supported / sampled;
+    }
+
+    internal static (int Runs, int Vertices) HeuristicClosureComplexity(
+        RoomResult room,
+        Func<double, double, double> distanceToWallInk,
+        Geometry zoneBoundary,
+        Func<double, double, byte> closureAt,
+        double sampleStepFt)
+    {
+        int runs = 0, vertices = 0;
+        var polygon = ToPolygon(room);
+        foreach (var ring in new[] { polygon.ExteriorRing }
+                     .Concat(Enumerable.Range(0, polygon.NumInteriorRings)
+                         .Select(polygon.GetInteriorRingN)))
+        {
+            var points = CollapseCollinear(ring.Coordinates.Take(ring.NumPoints - 1).ToList());
+            vertices += points.Count;
+            var classes = new List<byte>();
+            for (int edge = 0; edge < points.Count; edge++)
+            {
+                var start = points[edge];
+                var end = points[(edge + 1) % points.Count];
+                double length = start.Distance(end);
+                int count = Math.Max(1, (int)Math.Ceiling(length / sampleStepFt));
+                for (int index = 0; index < count; index++)
+                {
+                    double t = (index + 0.5) / count;
+                    var point = Factory.CreatePoint(new Coordinate(
+                        start.X + t * (end.X - start.X), start.Y + t * (end.Y - start.Y)));
+                    byte support = zoneBoundary.Distance(point) <= 0.75 + Epsilon
+                                   || distanceToWallInk(point.X, point.Y) <= 0.75 + Epsilon
+                        ? Detector.SealNone
+                        : closureAt(point.X, point.Y);
+                    classes.Add(support);
+                }
+            }
+            for (int index = 0; index < classes.Count; index++)
+                if (classes[index] is Detector.SealWallRunGap or Detector.SealGapClose
+                    && classes[index] != classes[(index + classes.Count - 1) % classes.Count])
+                    runs++;
+        }
+        return (runs, vertices);
     }
 
     internal static IReadOnlyList<MisalignedExposedRail> Evaluate(

@@ -22,12 +22,7 @@ import {
   normalizeApsTokenRequest,
   resolveApsScopes,
 } from "../src/aps-auth.ts";
-import {
-  getBridgeSessionSummary,
-  getSettingsWorkspaces,
-  openShellPath,
-  parseRegistryRecentDocumentRows,
-} from "../src/local-ops.ts";
+import { getBridgeSessionSummary, getSettingsWorkspaces, openShellPath } from "../src/local-ops.ts";
 import { LocalOpError } from "../src/local-error.ts";
 import {
   discoverSettingsTree,
@@ -82,31 +77,6 @@ test("ts-only dispatch rejects malformed requests before running the operation",
   await expect(
     runDispatch(dispatchTsOnlyOperation("settings.tree", { moduleKey: 123 }, undefined, bridge)),
   ).rejects.toBeInstanceOf(InvalidHostRequest);
-});
-
-test("recent document registry parser reads Revit profile MRU values", () => {
-  const rows = parseRegistryRecentDocumentRows(`
-HKEY_CURRENT_USER\\Software\\Autodesk\\Revit\\Autodesk Revit 2025\\Profiles\\Default
-    FileNameMRU1    REG_SZ    C:\\Models\\A.rvt
-    OtherValue      REG_SZ    ignored
-HKEY_CURRENT_USER\\Software\\Autodesk\\Revit\\Autodesk Revit 2024\\Profiles\\Design
-    FileNameMRU2    REG_SZ    cld://project/model
-`);
-
-  expect(rows).toEqual([
-    {
-      path: "C:\\Models\\A.rvt",
-      profile: "Default",
-      revitYear: "2025",
-      valueName: "FileNameMRU1",
-    },
-    {
-      path: "cld://project/model",
-      profile: "Design",
-      revitYear: "2024",
-      valueName: "FileNameMRU2",
-    },
-  ]);
 });
 
 test("host shell open validates an absolute existing path and returns the launched path", async () => {

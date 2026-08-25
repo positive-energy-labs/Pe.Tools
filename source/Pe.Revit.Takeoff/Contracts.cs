@@ -30,12 +30,9 @@ public sealed class TakeoffOptions
     public bool SealDoorHeads = false;      // seal a doorway where a low lintel sits between taller ceilings
     public double DoorHeadMaxFt = 8.75;     // max headroom that can still be a door/opening lintel
     public double DoorHeadContrastFt = 1.5; // neighbor must be this much taller to call the low cell a lintel
+    public double DoorHeadMaxComponentFt = 9.0; // widest connected lintel component that still reads as a door/opening; larger is a soffit/low slab (seals wall fringe only, never backs)
     public bool SealWallRunGaps = false;    // close a colinear break in a wall run (headerless doorway)
-    public double DoorGapMaxFt = 4.5;       // widest colinear break that can still be a doorway
-                                            // 4.5 is settled: 6.75 was falsified twice and closed
-                                            // 2026-08-15 (59->40 rooms, -4,104 sf; it seals wall runs,
-                                            // not doors), and lowering it gutted Lower Level 2026-08-14.
-                                            // See docs/features/takeoffs/LEDGER.md before re-queuing it.
+    public double DoorGapMaxFt = 6.0;       // 6.0 is adopted atop diagonal-honest scan steps; 6.75 is tombstoned in the takeoffs ledger
     public double DoorJambMinFt = 2.0;      // ink run required on BOTH sides to call it a doorway
     public double StoryCapFt = 14.0;        // ceiling search cap above the level plane
     public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only roofs read patchy)
@@ -76,7 +73,7 @@ public sealed class TakeoffOptions
     // ---- Partition formulation knobs (PartitionFormulation.cs) ----
     // Defaults, not per-project constants: evidence weights are calibratable; widths follow building
     // conventions (door ~2.5 ft).
-    public TakeoffSeedSource SeedSource = TakeoffSeedSource.Hybrid;
+    public TakeoffSeedSource SeedSource = TakeoffSeedSource.RegionCores;
     public double SeedClearFt = 1.5;        // DistanceMaxima: seed plateau must sit this clear of strong evidence
     public double CeilStepEvidenceFt = 0.75;   // ceiling-height jump where boundary evidence starts
     public double CeilStepSaturationFt = 2.5;  // jump size at which it saturates to CeilStepWeight
@@ -93,22 +90,58 @@ public sealed class TakeoffOptions
     public double SuspectMaxSqft = 60;         // non-geometric suspect signals only target pockets
     public double MinSuspectCeilingStdDevFt = 0.5; // chases/voids cross multiple ceiling bands; uniform closets do not
     // ---- Pre-solve zone triage (ZoneTriage.cs) ----
-    // Defaults are the project-a-tuned values (2026-08-14 A/B sweep; docs/features/takeoffs/LEDGER.md "Solver defaults settled by A/B sweep");
-    // 0 disables any of them. SmallZoneLowInkSqft/MinZoneInkRatio stay off: with band-composed ink
-    // the ratio measures clutter, not wall density — revisit when ink comes from the DWG lane.
-    public double SmallZoneSqft = 750;      // zone at or under this holds whole, unsolved (0 = off);
-                                            // 17 of 19 such project-a zones never produced an accepted room
-    public double SmallZoneLowInkSqft = 0;  // larger hold threshold for a zone below MinZoneInkRatio (0 = off)
-    public double MinZoneInkRatio = 0.0;    // in-zone ink cells / zone cells below which ink is too
-                                            // sparse to be a wall network worth partitioning
+    // SmallZoneSqft is a user-exposed per-project toggle (kaitpw 2026-08-16): high-end residential
+    // wants ~750, typical projects smaller. Do not fixture-tune the default. The low-ink refinement
+    // (SmallZoneLowInkSqft/MinZoneInkRatio) was deleted 2026-08-16: never armed, and inkRatio was
+    // falsified as a per-zone discriminator on framing-clean bins (DECISIONS 2026-08-16).
+    public double SmallZoneSqft = 750;      // at or under: solve, then hold whole if no room survives (0 = off);
+                                            // current projectA: 5 of 16 solve; the other 11 fall back whole
     // ---- Pre-solve ink hygiene (InkHygiene.cs) ----
     public int InkClusterWhiteoutCells = 100; // drop floating in-zone ink clusters smaller than this (0 = off)
-    public double InkClusterWhiteoutBboxFt = 0; // ...or fitting inside this square, whatever their cell count
+    // ---- Zone-edge ink pull (PartitionFormulation.Run) ----
+    // Designers draw zone edges THROUGH walls (2026-08-16 survey: 83% of all project-a zone-boundary
+    // length has ink within 0.5 ft), so the mask clips a wall-thickness band of ink — and, raster-
+    // side, often a free sliver between that band and the declared line. Both are padding, not
+    // room: armed, the partition's effective domain pulls to the ink band's INTERIOR face.
+    // Edge-hugging obstruction within this depth of the declared edge leaves the working mask
+    // (never claimable), together with free slivers sealed between that ink and the edge; a free
+    // strip that opens into the room (an OPEN zone edge — the zone is authority, not evidence) is
+    // never touched. The declared zone remains the authority for clip, scope, and accounting.
+    // DEFAULT 0 — falsified as a global default (2026-08-16 R3c): the hybrid seeder reads
+    // distance-transform plateaus over the domain, so shaving even 0.75 ft off the domain edge
+    // moves seeds deep inside edge-adjacent rooms and re-rolls whole partitions (UL02 +4 oracle
+    // rooms, ML09 0->3, LL08 0->1 — but ML00 3->0, UL03 6->2, UL05 8->3, Attic00 4->1; board
+    // savedWork -16% at every swept depth). Reopen only WITH seed placement that is stable under
+    // edge shave. The zone-fit snap's refusal to sweep an edge across ink (same taste source:
+    // kaitpw round-2, "zone edges often clip walls") is unconditional and lives in SnapToZone,
+    // not behind this knob.
+    public double ZoneEdgeInkPullFt = 0;
     // ---- Post-solve disposition recombination (TakeoffPromotion.cs stages) ----
     public double AbsorbNeighborMaxSqft = 60;  // room under this area may absorb into a neighbor (0 = off)
     public double AbsorbNeighborSharedPerimeterFraction = 0.45; // ...holding this share of its perimeter; measured
                                             // project-a ceiling is 0.54 (0.6 never fires); 0.30 is a per-zone lever
                                             // that cracks lattice zones (LL08) but bulldozes good rooms elsewhere
+    public double AbsorbNakedMaxSqft = 0;   // naked-separator absorb candidacy extends to rooms under this
+                                            // area (0 = candidacy stays AbsorbNeighborMaxSqft). FALSIFIED AS
+                                            // A GLOBAL DEFAULT at 400 (exp/ll08-forensics 2026-08-17): in the
+                                            // starved zone it was aimed at (LL08 inkRatio 0.05) nakedness
+                                            // cannot tell a real wall from a watershed line — it absorbed the
+                                            // zone's one high-confidence oracle room (Mech 023, naked=0.93,
+                                            // its real walls have no raster ink) — and elsewhere one 64 sf
+                                            // naked=0.94 merge re-rolled a neighbor's zone-fit and broke the
+                                            // per-room honesty bar (ML05 R12 edge-on-ink -0.021). Nakedness
+                                            // ordering cannot separate the harm (0.94) from the good (ML08's
+                                            // honest +2 rooms came at naked=0.84). Reopen only as a per-zone
+                                            // rule keyed on ink trust (AdaptivePolicy seam, recalibration
+                                            // ritual) — never as a default.
+    public double AbsorbNakedSeparatorFraction = 0.6; // multi-neighbor absorb: when no single neighbor
+                                            // clears the share bar but the TOTAL neighbor-shared perimeter does,
+                                            // merge only if at least this fraction of the shared boundary stands
+                                            // on NO WALL INK (seed ink; door-heads are openings, plugs are
+                                            // heuristics — neither is a wall). An unbacked separator is a
+                                            // watershed line, not a wall. Board raw census 2026-08-16: genuine
+                                            // small rooms (closets) top out at 0.46 naked; watershed slivers sit
+                                            // at 0.64-1.00 (LL09 R04 = 0.95). 0.6 splits with margin. 0 = off.
     public double EdgeBandFt = 2.0;            // band inside the zone boundary that recombines outward (0 = off)
     public double EdgeBandAreaFraction = 0.5;  // room with this much area inside the band merges inward
     // ---- Frame-local projection (FrameLocalProjector.cs) ----
@@ -152,6 +185,23 @@ public sealed class TakeoffOptions
     // TODO: ZoneSnapFt = 1.0 buys exactly one room on project-a — re-measure it or retire the knob.
     public double ZoneSnapFt = 1.0;         // room vertex this close to the zone boundary snaps onto it (0 = off)
     public bool ZoneClipEnabled = true;     // a room overhanging the zone is intersected with it, not rejected
+    // Clipping a rail-aligned room against the zone MANUFACTURES edges the detector never proposed:
+    // where the zone line crosses a projected corner or runs a fraction of a degree off the room's
+    // rails, the cut leaves off-frame edges (plus non-right corners), the strict audit refuses
+    // them, and the refusal sends the whole room back to die at the scope gate over a sub-1%
+    // overhang sliver. Every room entering zone-fit already passed the canonical editability audit,
+    // so an off-frame edge in the fitted polygon is fit output by construction — never detector
+    // geometry. Squaring replaces such an edge with the two frame-aligned edges of its own axis
+    // decomposition, preferring the repair that keeps the room inside the zone, and the FULL
+    // strict audit re-judges the squared polygon: input hygiene for the audit, never a relaxation
+    // of it. The budget is the DISPLACEMENT the repair introduces (the edge's perpendicular
+    // deviation from the frame axis), not the edge's length — a 20 ft zone cut 1 degree off frame
+    // moves the boundary 0.35 ft; a genuine 5 ft corner chamfer would move it 3.5 ft and is
+    // refused as the geometric statement it is. The default equals ZoneSnapFt: squaring licenses
+    // exactly the motion this stage already licenses for snapping, no more. Swept 1.0/1.5/2.5 on
+    // the 2026-08-16 bins: board-identical, so the tightest value that achieves the effect wins.
+    // 0 disables.
+    public double ZoneClipSquareFt = 1.0;   // max boundary displacement a squaring repair may introduce
     // ---- Ink-backing acceptance gate (TakeoffPromotion ink-backing stage) ----
     // Teal must mean trustworthy: an accepted room's boundary must actually stand on wall ink.
     // Samples near the zone edge are exempt (zone is authority, not evidence), so a room whose
@@ -161,19 +211,13 @@ public sealed class TakeoffOptions
     public double InkBackedZoneEdgeExemptFt = 1.0; // boundary samples this close to the zone edge don't count
     // ---- Per-zone adaptive policy (ZonePolicy.cs) ----
     // On: a zone's census + raw partition may override the knobs above for that zone alone, and
-    // every deviation is reported into report.json. See ZonePolicy for the rules and their grounding.
-    // MEASURED COST, 2026-08-14 composite: ON costs 6 accepted rooms and 115 sf against OFF, all of
-    // it in the two zones the sparse-wall rule fires on (Lower 08: 8 vs 12, Lower 09: 7 vs 9). The
-    // rule was calibrated when the frame projector held those lattice cells at 1.5 ft / 10% drift,
-    // so absorbing them was a gain; under the relaxed 2.5 ft / 20% budget the projector now ACCEPTS
-    // them as rooms and the rule spends them. OFF by that evidence: the seam stays (pure, inert,
-    // fully attributed via adaptedKnobs) but its one live rule is falsified at the current drift
-    // budget — rearm only after recalibrating SparseWallInkRatio against a projector this loose.
+    // every deviation is reported into report.json. The seam is pure and fully attributed via
+    // adaptedKnobs, but it currently carries NO live rules: the sparse-wall absorb rule and its
+    // SparseWall* knobs were falsified at the 2.5 ft drift budget (measured -6 rooms; DECISIONS
+    // 2026-08-14) and their keying signal, inkRatio, was falsified as a discriminator on
+    // framing-clean bins (DECISIONS 2026-08-16); both deleted 2026-08-16. The earned successor
+    // keys on ZoneCensus.EdgeBandInkFraction (attic-scoped, round-2 slate).
     public bool AdaptivePolicy = false;
-    public double SparseWallInkRatio = 0.09;   // below this in-zone ink ratio the wall network is too
-                                               // sparse to certify the partitions drawn against it
-    public int SparseWallMinRawRooms = 4;      // ...and only where a real multi-room partition exists
-    public double SparseWallAbsorbSharedPerimeterFraction = 0.30; // absorb share such a zone uses
     public string Marker = "PE-TAKEOFF";    // stamped into Comments of everything we create
     public string? ArtifactDir;             // where TSV/PNG artifacts land (default: temp)
 
@@ -206,6 +250,56 @@ public sealed class ResidueResult
     public List<List<double[]>> Holes = new();
 }
 
+internal enum DetectorOwnerDisposition { Room, Residue, Excluded }
+
+internal enum DetectorUnownedCause { None, OutsideScope, OutsideFootprint, Obstruction, NonHabitable }
+
+internal sealed record DetectorOwnerMetadata(
+    int Label,
+    string? OutputId,
+    DetectorOwnerDisposition Disposition,
+    ResidueReason? ResidueReason);
+
+// Exact detector authority retained in-process. Geometry remains derived output; this is deliberately
+// absent from TSV until the whole partition can be serialized and round-tripped together.
+internal sealed class DetectorOwnership
+{
+    private readonly int[] ownerByCell;
+    private readonly bool[] claimedByCell;
+    private readonly DetectorUnownedCause[] unownedCauseByCell;
+    private readonly Dictionary<int, DetectorOwnerMetadata> metadata;
+
+    internal DetectorOwnership(
+        int width, int height, double minX, double minY, double cellFt,
+        int[] ownerByCell, bool[] claimedByCell, DetectorUnownedCause[] unownedCauseByCell,
+        IReadOnlyDictionary<int, DetectorOwnerMetadata> metadata)
+    {
+        if (ownerByCell.Length != width * height
+            || claimedByCell.Length != ownerByCell.Length
+            || unownedCauseByCell.Length != ownerByCell.Length)
+            throw new ArgumentException("ownership arrays disagree with the detector grid");
+        this.Width = width;
+        this.Height = height;
+        this.MinX = minX;
+        this.MinY = minY;
+        this.CellFt = cellFt;
+        this.ownerByCell = (int[])ownerByCell.Clone();
+        this.claimedByCell = (bool[])claimedByCell.Clone();
+        this.unownedCauseByCell = (DetectorUnownedCause[])unownedCauseByCell.Clone();
+        this.metadata = new Dictionary<int, DetectorOwnerMetadata>(metadata);
+    }
+
+    internal int Width { get; }
+    internal int Height { get; }
+    internal double MinX { get; }
+    internal double MinY { get; }
+    internal double CellFt { get; }
+    internal IReadOnlyCollection<DetectorOwnerMetadata> Owners => this.metadata.Values;
+    internal int OwnerAt(int cell) => this.ownerByCell[cell];
+    internal bool ClaimedAt(int cell) => this.claimedByCell[cell];
+    internal DetectorUnownedCause UnownedCauseAt(int cell) => this.unownedCauseByCell[cell];
+}
+
 public sealed class TakeoffResult
 {
     public string LevelName = "";
@@ -223,9 +317,15 @@ public sealed class TakeoffResult
     public List<string> LevelFlags = new();
     public string? SeedViewA, SeedViewB;    // names of the stripped seed views (until cleanup)
     public string? EvidenceView;            // rainbow view name (after Annotate)
+    internal DetectorOwnership? Ownership;  // exact detector cells; never serialized
+    // True once TakeoffPromotion has closed this result: every surviving ROOM is accepted (held
+    // rooms were moved to Rejected residues) and ToTsv persists that disposition as an explicit
+    // ROOM column instead of leaving it as a convention readers must know. Raw detector output
+    // stays false — its rooms have no disposition yet, and its TSV honestly omits the column.
+    public bool DispositionsResolved;
 
-    // Tab-separated payload; F6 precision is load-bearing — rounding flips geometric tie-breaks and
-    // changes room counts. Never serialize detection geometry at display precision.
+    // Tab-separated payload. Polygon coordinates use round-trip precision: six-decimal rounding
+    // made valid overlay residue self-intersect on reload. Never serialize geometry at display precision.
     public string ToTsv()
     {
         var ic = CultureInfo.InvariantCulture;
@@ -236,9 +336,15 @@ public sealed class TakeoffResult
         sb.AppendLine($"META\trooms\t{this.Rooms.Count}\nMETA\ttotalSqft\t{this.TotalSqft.ToString("F1", ic)}");
         if (this.ProfileProvenance != null) sb.AppendLine($"META\tprofile\t{this.ProfileProvenance}");
         foreach (string flag in this.LevelFlags) sb.AppendLine($"META\tflag\t{flag}");
+        // Disposition column (SHIMS.md #3 close): a promoted TSV says "accepted" on every ROOM
+        // line outright. Held rooms are the Rejected residues below — that mapping is the
+        // persisted contract (ZonePromotionDiagnostics counts HeldRooms exactly that way), not a
+        // renderer convention. A 7-column ROOM line means the package predates the column or is
+        // raw detector output: disposition unknown, and readers must not assume accepted.
+        string disposition = this.DispositionsResolved ? "\taccepted" : "";
         foreach (var r in this.Rooms)
         {
-            sb.AppendLine($"ROOM\t{r.Id}\t{r.RawSqft.ToString("F1", ic)}\t{r.PerimeterFt.ToString("F1", ic)}\t{r.LabelX.ToString("F6", ic)}\t{r.LabelY.ToString("F6", ic)}\t{r.MeanCeilingFt.ToString("F2", ic)}");
+            sb.AppendLine($"ROOM\t{r.Id}\t{r.RawSqft.ToString("F1", ic)}\t{r.PerimeterFt.ToString("F1", ic)}\t{r.LabelX.ToString("F6", ic)}\t{r.LabelY.ToString("F6", ic)}\t{r.MeanCeilingFt.ToString("F2", ic)}{disposition}");
             sb.AppendLine($"POLY\t{r.Id}\touter\t{PolyStr(r.Polygon)}");
             foreach (var h in r.Holes) sb.AppendLine($"POLY\t{r.Id}\thole\t{PolyStr(h)}");
         }
@@ -255,5 +361,5 @@ public sealed class TakeoffResult
     }
 
     private static string PolyStr(List<double[]> p) =>
-        string.Join("|", p.Select(v => v[0].ToString("F6", CultureInfo.InvariantCulture) + ";" + v[1].ToString("F6", CultureInfo.InvariantCulture)));
+        string.Join("|", p.Select(v => v[0].ToString("R", CultureInfo.InvariantCulture) + ";" + v[1].ToString("R", CultureInfo.InvariantCulture)));
 }

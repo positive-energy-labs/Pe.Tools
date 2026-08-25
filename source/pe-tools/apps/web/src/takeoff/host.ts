@@ -5,8 +5,10 @@
  * in for the `takeoffs.*` operations that do not exist yet. Keep this file thin: it owns the
  * transport, the structured script result, and the session scope; nothing about the pipeline's meaning.
  */
-import { callHostDynamic } from "#/host/client";
+import { callHostDynamic, callHostRpc } from "#/host/client";
+import { fromBridgeSessions } from "#/host/target";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
 import {
   adoptZonesScript,
   candidateRegionsScript,
@@ -36,6 +38,8 @@ import type {
   Resolution,
   ViewFacts,
 } from "#/takeoff/model";
+import type { SessionEvent, SessionSource, TakeoffHost } from "#/takeoff/store";
+import { buildLiveWorld, emptyOverlay, type WorldRoom, type WorldZone } from "#/takeoff/world";
 
 export interface LiveSnapshot {
   status: ModelStatus;
@@ -43,6 +47,210 @@ export interface LiveSnapshot {
   zoneFrs: CandidateRegion[];
   regionsByZone: Record<string, LiveRegion[]>;
 }
+
+const WALL_ASSEMBLY =
+  "R-3 insulated sheathing, R-13 closed cell sprayfoam in a 2x6 wood stud cavity, R-15 Fiberglass batt";
+const ROOF_ASSEMBLY = "R49 closed cell sprayfoam in 2x14 joist cavity";
+const FLOOR_ASSEMBLY =
+  "R-19 open cell 1/2 lb. spray foam insulation, 5 inches in 2 x 10 joist cavity, any cover";
+
+function buildRhvacInsert(
+  room: WorldRoom,
+  number: number,
+  systemNumber: number,
+): RhvacInsertRoomData {
+  const height = room.ceilingFt || 8;
+  const outer = room.outer ?? [];
+  const walls = outer.map(([x1, y1], index) => {
+    const [x2, y2] = outer[(index + 1) % outer.length]!;
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const octant = ((Math.round((angle + Math.PI / 2) / (Math.PI / 4)) % 8) + 8) % 8;
+    return {
+      index1: index + 1,
+      assembly: WALL_ASSEMBLY,
+      uValue: 0.036,
+      lengthFeet: Math.hypot(x2 - x1, y2 - y1),
+      heightFeet: height,
+      direction: octant + 1,
+    };
+  });
+  return {
+    number,
+    name: room.name,
+    systemNumber,
+    zoneNumber: 1,
+    areaSquareFeet: room.sqft,
+    ceilingHeightFeet: height,
+    people: room.data!.people,
+    lightingWatts: room.data!.lightingW,
+    equipmentSensibleBtuh: room.data!.equipSensible,
+    equipmentLatentBtuh: room.data!.equipLatent,
+    ventilationCfm: room.data!.ventilationCfm,
+    floors: [
+      {
+        assembly: FLOOR_ASSEMBLY,
+        uValue: 0.051,
+        areaSquareFeet: room.sqft,
+        exposedPerimeterFeet: walls.reduce((sum, wall) => sum + wall.lengthFeet, 0),
+      },
+    ],
+    roofs: [
+      { assembly: ROOF_ASSEMBLY, uValue: 0.024, areaSquareFeet: room.sqft, areaMultiplier: 1.2 },
+    ],
+    walls,
+    glass: [],
+    doors: [],
+  };
+}
+
+async function syncRhvacRooms(
+  sessionId: string,
+  path: string,
+  inserts: readonly { readonly zone: WorldZone; readonly room: WorldRoom }[],
+) {
+  const scope = { bridgeSessionId: sessionId };
+  const before = await callHostRpc("rhvac.open", { path }, scope);
+  const firstRoomNumber = Math.max(0, ...before.rooms.map((room) => room.number)) + 1;
+  const bySystemName = new Map(
+    before.systems
+      .filter((system) => system.name.trim().length > 0)
+      .map((system) => [system.name.trim().toLocaleLowerCase(), system.number]),
+  );
+  const firstRun =
+    before.rooms.length === 1 &&
+    before.rooms[0]!.number === 1 &&
+    before.rooms[0]!.name.trim().length === 0 &&
+    before.rooms[0]!.areaSquareFeet === 0;
+  let nextSystemNumber = Math.max(0, ...before.systems.map((system) => system.number)) + 1;
+  const tags = [...new Set(inserts.map(({ zone }) => zone.tags[0]!))];
+  const systemNumbers = new Map<string, number>();
+  for (const tag of tags) {
+    const existing = bySystemName.get(tag.trim().toLocaleLowerCase());
+    if (existing !== undefined) systemNumbers.set(tag, existing);
+    else if (firstRun) systemNumbers.set(tag, nextSystemNumber++);
+    else throw Error(`system '${tag}' does not exist in this non-first-run .r10`);
+  }
+  const result = await callHostRpc(
+    "rhvac.sync",
+    {
+      targetPath: path,
+      updates: [],
+      inserts: inserts.map(({ zone, room }, index) =>
+        buildRhvacInsert(room, firstRoomNumber + index, systemNumbers.get(zone.tags[0]!)!),
+      ),
+      systems: tags.map((tag) => ({ number: systemNumbers.get(tag)!, name: tag })),
+      deleteUntouchedSeedRoom: true,
+    },
+    scope,
+  );
+  const fileIdentity = `${result.fileIdentity.fileName}#${result.fileIdentity.stamp}`;
+  const byNumber = new Map(result.insertedRooms.map((room) => [room.number, room.identifier]));
+  const now = new Date().toISOString();
+  const links = inserts.map(({ room }, index) => {
+    const number = firstRoomNumber + index;
+    const identifier = byNumber.get(number);
+    if (identifier === undefined) throw Error(`.r10 sync omitted room ${number}`);
+    return {
+      elementId: room.elementId!,
+      link: { identifier, fileIdentity, syncedAt: now, lastSyncedSqft: room.sqft },
+    };
+  });
+  if (byNumber.size !== links.length)
+    throw Error(`.r10 sync returned ${byNumber.size} receipts for ${links.length} rooms`);
+  await linkRhvacBatch(scope, links);
+  return {
+    text:
+      `synced ${result.insertedRooms.length}/${inserts.length} rooms into ${path}` +
+      ` (${result.roomsBefore}→${result.roomsAfter} rooms, seed room ${result.seedRoom.action})` +
+      (result.backupPath ? ` · backup: ${result.backupPath}` : ""),
+  };
+}
+
+export const createHostSessionSource = (): SessionSource => ({
+  async list() {
+    const response = await callHostRpc("bridge.sessions.list", undefined);
+    return fromBridgeSessions(response.sessions);
+  },
+  async activeDocument(session) {
+    if (!session.activeDocumentTitle)
+      throw new Error(`session ${session.sessionId} has no active document`);
+    return { session, title: session.activeDocumentTitle };
+  },
+  subscribe(listener) {
+    const source = new EventSource("/events");
+    source.onmessage = (message) => {
+      try {
+        const event = JSON.parse(message.data) as {
+          readonly sessionId?: string;
+          readonly kind?: "connected" | "disconnected" | "state-sync" | "event";
+        };
+        if (!event.sessionId) return;
+        const kind: SessionEvent["kind"] =
+          event.kind === "connected" || event.kind === "disconnected"
+            ? "sessionsChanged"
+            : "docChanged";
+        listener({ kind, sessionId: event.sessionId });
+      } catch {
+        // The next well-formed host event remains usable; malformed SSE cannot name a safe key.
+      }
+    };
+    return () => source.close();
+  },
+});
+
+export const createLiveTakeoffHost = (): TakeoffHost => ({
+  fixture: false,
+  async readSnapshot(session) {
+    const raw = await readSnapshot({ bridgeSessionId: session.sessionId });
+    return {
+      ...raw,
+      world: buildLiveWorld({
+        ...raw,
+        overlay: emptyOverlay(),
+        r10Path: null,
+        r10: null,
+      }),
+    };
+  },
+  async listRhvac(dir) {
+    const response = (await callHostDynamic("rhvac.list", { dir })) as {
+      readonly exists?: boolean;
+      readonly files?: readonly { readonly path: string; readonly name: string }[];
+    };
+    return response.exists ? [...(response.files ?? [])] : [];
+  },
+  openRhvac: (path) => callHostRpc("rhvac.open", { path }),
+  readCandidates: (session, view) => readCandidates({ bridgeSessionId: session.sessionId }, view),
+  async adopt(session, input) {
+    const adopted = await adoptZones({ bridgeSessionId: session.sessionId }, input.view, [
+      ...input.items,
+    ]);
+    return { text: `adopted ${adopted.length} zoning regions` };
+  },
+  async capture(session, lane) {
+    const scope = { bridgeSessionId: session.sessionId };
+    const prepared = await prepareCapture(scope, lane.view);
+    return detectCapture(scope, prepared.level);
+  },
+  partition: (session, input) => partitionZone({ bridgeSessionId: session.sessionId }, input),
+  async writeDecisions(session, elementId, resolutions) {
+    const result = await writeDecisions({ bridgeSessionId: session.sessionId }, elementId, [
+      ...resolutions,
+    ]);
+    return { blob: result.blob };
+  },
+  writeRoomType: async (session, elementId, roomType) => {
+    await writeRoomType({ bridgeSessionId: session.sessionId }, elementId, roomType);
+  },
+  async launchRhvac(session, path) {
+    await callHostRpc(
+      "rhvac.launch",
+      { path },
+      session ? { bridgeSessionId: session.sessionId } : undefined,
+    );
+  },
+  syncRhvac: (session, path, inserts) => syncRhvacRooms(session.sessionId, path, inserts),
+});
 
 interface ScriptResponse {
   status: string;

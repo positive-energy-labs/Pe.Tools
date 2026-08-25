@@ -118,60 +118,6 @@ export const hostShellOpenDataSchema = Schema.Struct({
 });
 export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchema>;
 
-export const RevitRecentDocumentSource = {
-  RevitIni: "RevitIni",
-  RegistryProfileMru: "RegistryProfileMru",
-} as const;
-
-export type RevitRecentDocumentSource =
-  (typeof RevitRecentDocumentSource)[keyof typeof RevitRecentDocumentSource];
-
-export const revitRecentDocumentSourceSchema = Schema.Literals(["RevitIni", "RegistryProfileMru"]);
-
-export const RevitRecentDocumentPathKind = {
-  LocalPath: "LocalPath",
-  CloudPath: "CloudPath",
-  Unknown: "Unknown",
-} as const;
-
-export type RevitRecentDocumentPathKind =
-  (typeof RevitRecentDocumentPathKind)[keyof typeof RevitRecentDocumentPathKind];
-
-export const revitRecentDocumentPathKindSchema = Schema.Literals([
-  "LocalPath",
-  "CloudPath",
-  "Unknown",
-]);
-
-export type RevitRecentDocumentsRequest = Schema.Schema.Type<
-  typeof revitRecentDocumentsRequestSchema
->;
-
-export const revitRecentDocumentsRequestSchema = Schema.Struct({
-  includeRegistryMru: Schema.optional(Schema.Boolean),
-  localFilesOnly: Schema.optional(Schema.Boolean),
-  revitYear: Schema.optional(Schema.NullOr(Schema.String)),
-});
-
-export type RevitRecentDocumentEntry = Schema.Schema.Type<typeof revitRecentDocumentEntrySchema>;
-
-export const revitRecentDocumentEntrySchema = Schema.Struct({
-  exists: Schema.optional(Schema.NullOr(Schema.Boolean)),
-  path: Schema.String,
-  pathKind: revitRecentDocumentPathKindSchema,
-  profile: Schema.optional(Schema.NullOr(Schema.String)),
-  rank: Schema.optional(Schema.NullOr(Schema.Number)),
-  revitYear: Schema.String,
-  source: revitRecentDocumentSourceSchema,
-  title: Schema.String,
-});
-
-export type RevitRecentDocumentsData = Schema.Schema.Type<typeof revitRecentDocumentsDataSchema>;
-
-export const revitRecentDocumentsDataSchema = Schema.Struct({
-  documents: Schema.Array(revitRecentDocumentEntrySchema),
-});
-
 export const SettingsFileKind = {
   Profile: "Profile",
   Fragment: "Fragment",
@@ -753,6 +699,22 @@ export const rhvacLaunchResultSchema = Schema.Struct({
 });
 export type RhvacLaunchResult = Schema.Schema.Type<typeof rhvacLaunchResultSchema>;
 
+/** The legal-options source for the takeoffs `.r10` binding: every .r10 in one folder. */
+export const rhvacListRequestSchema = Schema.Struct({
+  /** Absolute host-visible folder. */
+  dir: Schema.String,
+});
+export type RhvacListRequest = Schema.Schema.Type<typeof rhvacListRequestSchema>;
+export const rhvacListDataSchema = Schema.Struct({
+  dir: Schema.String,
+  /** False when the folder does not exist or is unreadable — an empty list then means "no folder", not "no files". */
+  exists: Schema.Boolean,
+  files: Schema.Array(
+    Schema.Struct({ name: Schema.String, path: Schema.String, modifiedUnixMs: Schema.Number }),
+  ),
+});
+export type RhvacListData = Schema.Schema.Type<typeof rhvacListDataSchema>;
+
 export const rhvacRoomMapSchema = Schema.Struct({
   matches: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, candidate: Schema.String })),
   skip: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, reason: Schema.String })),
@@ -803,10 +765,6 @@ export const tsOnlyOperationSchemas = {
     request: hostLogsRequestSchema,
     response: hostLogsDataSchema,
   },
-  "revit.catalog.recent-documents": {
-    request: revitRecentDocumentsRequestSchema,
-    response: revitRecentDocumentsDataSchema,
-  },
   "rhvac.open": {
     request: rhvacPathRequestSchema,
     response: rhvacExtractSchema,
@@ -826,6 +784,10 @@ export const tsOnlyOperationSchemas = {
   "rhvac.takeoff": {
     request: rhvacPathRequestSchema,
     response: rhvacTakeoffDataSchema,
+  },
+  "rhvac.list": {
+    request: rhvacListRequestSchema,
+    response: rhvacListDataSchema,
   },
   "settings.document.open": {
     request: openSettingsDocumentRequestSchema,
@@ -907,28 +869,6 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     searchTerms: ["host", "shell", "open", "file", "directory", "default app", "artifact"],
   },
   {
-    key: "revit.catalog.recent-documents",
-    origin: "host-local",
-    displayName: "Recent Documents",
-    description:
-      "Recently opened Revit documents, read from Revit.ini and the per-profile registry MRU on this machine. Works without a connected Revit session.",
-    intent: "Read",
-    visibility: "DefaultVisible",
-    costTier: "Cheap",
-    requiresActiveDocument: false,
-    requestTypeName: "RevitRecentDocumentsRequest",
-    responseTypeName: "RevitRecentDocumentsData",
-    searchTerms: [
-      "recent",
-      "documents",
-      "recent files",
-      "mru",
-      "revit.ini",
-      "open recent",
-      "projects",
-    ],
-  },
-  {
     key: "rhvac.open",
     origin: "host-local",
     displayName: "Open RHVAC Project",
@@ -993,6 +933,20 @@ export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
     requestTypeName: "RhvacPathRequest",
     responseTypeName: "RhvacLaunchResult",
     searchTerms: ["rhvac", "r10", "launch", "open", "start", "elite", "shell"],
+  },
+  {
+    key: "rhvac.list",
+    origin: "host-local",
+    displayName: "List .r10 files",
+    description:
+      "List the .r10 Manual J project files in one host-visible folder. The legal-options source for a route's .r10 binding; a missing folder is an empty list with exists=false.",
+    intent: "Read",
+    visibility: "DefaultVisible",
+    costTier: "Cheap",
+    requiresActiveDocument: false,
+    requestTypeName: "RhvacListRequest",
+    responseTypeName: "RhvacListData",
+    searchTerms: ["rhvac", "r10", "list", "folder", "files", "manual j"],
   },
   {
     key: "rhvac.takeoff",

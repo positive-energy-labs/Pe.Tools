@@ -870,40 +870,6 @@ public static class RevitBridgeOps {
             static (request, context, ct) => context.RevitData.RefreshParametersServiceCacheAsync(ct)
         );
 
-    public static readonly BridgeOp OpenRevitDocument =
-        BridgeOp.Create<OpenRevitDocumentRequest, OpenRevitDocumentData>(
-            "revit.apply.document.open",
-            "Open Revit Document",
-            HostOperationAgentMetadata.Create(
-                "Open and activate a local or Autodesk cloud Revit document in the connected Revit session; local workshared files can be opened detached.",
-                new[] { "document", "open", "activate", "cross-document", "cloud", "detach", "workshared" },
-                intent: HostOperationIntent.Mutate,
-                requiresActiveDocument: false,
-                costTier: HostOperationCostTier.Mutation,
-                requestExamples: [
-                    Example(
-                        "open local model",
-                        "Open a local Revit project or family file by absolute path.",
-                        """
-                        { "path": "C:/Models/Project.rvt" }
-                        """
-                    ),
-                    Example(
-                        "open local workshared model detached",
-                        "Open a local workshared file detached from central; the response isDetached reports the verified state.",
-                        """
-                        { "path": "C:/Models/Project.rvt", "detach": "DetachAndPreserveWorksets" }
-                        """
-                    )
-                ],
-                callGuidance: [
-                    "Pass a local RVT/RFA/RTE path, or cloudProjectGuid + cloudModelGuid (+ cloudRegion when not US); cloud opens need Autodesk sign-in and access, and do not support detach.",
-                    "detach=DetachAndPreserveWorksets (or DetachAndDiscardWorksets) applies to local workshared files only; do not call while Revit is blocked by a modal dialog."
-                ]
-            ),
-            static (request, context, ct) => context.RevitData.OpenRevitDocumentAsync(request, ct)
-        );
-
     public static readonly BridgeOp GlanceModel =
         BridgeOp.Create<NoRequest, GlanceModelData>(
             "revit.glance.model",

@@ -4,7 +4,6 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { RevitBridge, BridgeError, NoRevitSession, type BridgeSessionView } from "./bridge.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import {
-  collectRecentDocuments,
   discoverSettingsTree,
   getBridgeSessionSummary,
   getHostStatus,
@@ -18,7 +17,14 @@ import {
   validateSettingsDocument,
 } from "./local-ops.ts";
 import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
-import { rhvacAssemblies, rhvacLaunch, rhvacOpen, rhvacSync, rhvacTakeoff } from "./rhvac-ops.ts";
+import {
+  rhvacAssemblies,
+  rhvacLaunch,
+  rhvacList,
+  rhvacOpen,
+  rhvacSync,
+  rhvacTakeoff,
+} from "./rhvac-ops.ts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
@@ -226,8 +232,6 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
         invokeBridge: (operationKey, payload, scopedBridgeSessionId) =>
           bridge.invoke(operationKey, payload, scopedBridgeSessionId),
       });
-    case "revit.catalog.recent-documents":
-      return yield* collectRecentDocuments(yield* decodeRequest(key, request));
     case "rhvac.open":
       return yield* rhvacOpen(yield* decodeRequest(key, request));
     case "rhvac.assemblies":
@@ -238,6 +242,8 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
       return yield* rhvacLaunch(yield* decodeRequest(key, request));
     case "rhvac.takeoff":
       return yield* rhvacTakeoff(yield* decodeRequest(key, request));
+    case "rhvac.list":
+      return yield* rhvacList(yield* decodeRequest(key, request));
     case "aps.auth.status":
       return yield* apsAuthStatus(yield* decodeRequest(key, request));
     case "aps.auth.login":

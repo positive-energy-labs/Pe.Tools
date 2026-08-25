@@ -1,3 +1,5 @@
+using System.Windows.Media.Imaging;
+
 namespace Pe.Revit.Takeoff;
 
 // Takeoff annotation: rainbow FilledRegions on a fresh, marker-named evidence view, plus
@@ -10,6 +12,127 @@ namespace Pe.Revit.Takeoff;
 //   script run and Revit will not export mid-transaction.
 public static class Annotate
 {
+    private const string PlanReferenceMarker = "PE-TAKEOFF REVIEW";
+
+    public static TakeoffPlanReferencePrepared PreparePlanReference(
+        Document doc,
+        string sourceViewName,
+        string token,
+        IReadOnlyList<List<double[]>> loops,
+        Action<string> log)
+    {
+        if (string.IsNullOrWhiteSpace(token)
+            || token.Any(ch => !char.IsLetterOrDigit(ch) && ch != '_'))
+            throw new ArgumentException("plan reference token must contain only letters, digits, or underscore");
+        var points = loops.SelectMany(loop => loop).ToList();
+        if (points.Count < 3)
+            throw new ArgumentException("plan reference requires at least one non-degenerate loop");
+
+        var source = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+            .FirstOrDefault(view => !view.IsTemplate && view.Name == sourceViewName)
+            ?? throw new InvalidOperationException($"no ViewPlan named '{sourceViewName}'");
+        string viewName = $"{PlanReferenceMarker} {token}";
+        var stale = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+            .Where(view => view.Name == viewName).Select(view => view.Id).ToList();
+        if (stale.Count > 0) doc.Delete(stale);
+
+        var view = (ViewPlan)doc.GetElement(source.Duplicate(ViewDuplicateOption.Duplicate));
+        view.Name = viewName;
+        var scopeBox = view.get_Parameter(BuiltInParameter.VIEWER_VOLUME_OF_INTEREST_CROP);
+        if (scopeBox is { IsReadOnly: false }) scopeBox.Set(ElementId.InvalidElementId);
+        var regions = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion))
+            .Select(region => region.Id).ToList();
+        if (regions.Count > 0) view.HideElements(regions);
+
+        var crop = view.CropBox;
+        var toView = crop.Transform.Inverse;
+        double elevation = view.GenLevel?.Elevation ?? 0;
+        var local = points.Select(point =>
+            toView.OfPoint(new XYZ(point[0], point[1], elevation))).ToList();
+        double minX = local.Min(point => point.X) - 25;
+        double minY = local.Min(point => point.Y) - 25;
+        double maxX = local.Max(point => point.X) + 25;
+        double maxY = local.Max(point => point.Y) + 25;
+        crop.Min = new XYZ(minX, minY, crop.Min.Z);
+        crop.Max = new XYZ(maxX, maxY, crop.Max.Z);
+        view.CropBox = crop;
+        view.CropBoxActive = true;
+        view.CropBoxVisible = false;
+        log($"[plan-reference] prepared source='{sourceViewName}' view='{viewName}' regionsHidden={regions.Count}");
+        return new TakeoffPlanReferencePrepared(viewName, token);
+    }
+
+    public static TakeoffPlanReferenceExported ExportPlanReference(
+        Document doc,
+        string sourceViewName,
+        string token,
+        string outDir,
+        Action<string> log)
+    {
+        string viewName = $"{PlanReferenceMarker} {token}";
+        var view = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+            .FirstOrDefault(candidate => !candidate.IsTemplate && candidate.Name == viewName)
+            ?? throw new InvalidOperationException($"plan reference view '{viewName}' missing - prepare it first");
+        Directory.CreateDirectory(outDir);
+        string basePath = Path.Combine(outDir, $"plan_{token}");
+        var crop = view.CropBox;
+        var options = new ImageExportOptions {
+            ExportRange = ExportRange.SetOfViews,
+            FilePath = basePath,
+            HLRandWFViewsFileType = ImageFileType.PNG,
+            ShadowViewsFileType = ImageFileType.PNG,
+            ImageResolution = ImageResolution.DPI_150,
+            PixelSize = 6000,
+            FitDirection = crop.Max.X - crop.Min.X >= crop.Max.Y - crop.Min.Y
+                ? FitDirectionType.Horizontal
+                : FitDirectionType.Vertical,
+            ZoomType = ZoomFitType.FitToPage,
+        };
+        options.SetViewsAndSheets(new List<ElementId> { view.Id });
+        doc.ExportImage(options);
+        string exported = Directory.GetFiles(outDir, Path.GetFileName(basePath) + "*.png")
+            .OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault()
+            ?? throw new InvalidOperationException($"Revit exported no PNG for '{viewName}'");
+        string imagePath = basePath + ".png";
+        if (!string.Equals(exported, imagePath, StringComparison.OrdinalIgnoreCase))
+        {
+            if (File.Exists(imagePath)) File.Delete(imagePath);
+            File.Move(exported, imagePath);
+        }
+
+        BitmapFrame frame;
+        using (var stream = new FileStream(imagePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            frame = BitmapFrame.Create(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+        var transform = crop.Transform;
+        double z = crop.Min.Z;
+        double[] Point(double x, double y)
+        {
+            var point = transform.OfPoint(new XYZ(x, y, z));
+            return [point.X, point.Y];
+        }
+        string imageSha;
+        using (var sha = System.Security.Cryptography.SHA256.Create())
+        using (var stream = File.OpenRead(imagePath))
+            imageSha = BitConverter.ToString(sha.ComputeHash(stream))
+                .Replace("-", "")
+                .ToLowerInvariant();
+        string manifestPath = basePath + ".json";
+        File.WriteAllText(manifestPath, TakeoffJson.Serialize(new {
+            schemaVersion = 1,
+            sourceView = sourceViewName,
+            token,
+            image = Path.GetFileName(imagePath),
+            imageSha256 = imageSha,
+            width = frame.PixelWidth,
+            height = frame.PixelHeight,
+            topLeft = Point(crop.Min.X, crop.Max.Y),
+            topRight = Point(crop.Max.X, crop.Max.Y),
+            bottomLeft = Point(crop.Min.X, crop.Min.Y),
+        }) + Environment.NewLine);
+        log($"[plan-reference] exported {frame.PixelWidth}x{frame.PixelHeight} -> {imagePath}");
+        return new TakeoffPlanReferenceExported(viewName, token, imagePath, manifestPath);
+    }
+
     public static string DrawEvidence(
         Document doc, Level level, TakeoffResult result, TakeoffOptions opt, Action<string> log)
     {

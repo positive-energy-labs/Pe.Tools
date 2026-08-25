@@ -1,6 +1,6 @@
-using NetTopologySuite.Algorithm.Distance;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Utilities;
+using NetTopologySuite.Operation.Buffer;
 using NetTopologySuite.Operation.Union;
 
 namespace Pe.Revit.Takeoff;
@@ -39,7 +39,8 @@ internal sealed record FrameLocalRejectedRoom(
     FrameLocalRejectionReason Reason,
     string Detail,
     double? AreaDrift = null,
-    double? BoundaryDriftFt = null);
+    double? BoundaryDriftFt = null,
+    RoomResult? AttemptedProjection = null);
 
 internal sealed record FrameLocalConservation(
     int SourceRooms,
@@ -264,7 +265,8 @@ internal static class FrameLocalProjector
                     continue;
 
                 var candidate = new ProjectedRoom(
-                    index, assignment.FrameIndex, sourceRoom, (Polygon)geometry.Copy());
+                    index, assignment.FrameIndex, sourceRoom, (Polygon)geometry.Copy(),
+                    assignment.Frame);
                 var together = projected.Values.Append(candidate).OrderBy(room => room.Index).ToList();
                 if (!TakeoffEditability.Evaluate(ToLevelTakeoff(source, together)).IsStrictlyEditable)
                     continue;
@@ -275,20 +277,51 @@ internal static class FrameLocalProjector
 
         // TakeoffEditability is the canonical public contract. The projector's local checks are
         // useful early exits, but no candidate is accepted unless the canonical final audit agrees.
+        // A room the audit refuses ONLY for handle-scale detail (ExcessiveDetail / MicroStepRun)
+        // gets one repair attempt first: its lattice micro-jogs are straightened in its own frame,
+        // and the repair stands only if the same drift/label gates still pass AND the full-set
+        // re-audit accepts the room without making any other room worse. The contract itself never
+        // moves — only the degenerate lattice output handed to it does.
         if (projected.Count > 0)
         {
-            var ordered = projected.Values.OrderBy(room => room.Index).ToList();
-            var audit = TakeoffEditability.Evaluate(ToLevelTakeoff(source, ordered));
-            var failed = ordered.Zip(audit.Rooms, (room, roomAudit) => new { room, roomAudit })
-                .Where(item => !item.roomAudit.IsStrictlyEditable)
-                .ToList();
-            foreach (var item in failed)
+            var attempted = new HashSet<int>();
+            while (true)
             {
-                projected.Remove(item.room.Index);
-                string violations = string.Join(", ", item.roomAudit.Violations
-                    .Select(violation => violation.Kind).Distinct());
-                Reject(item.room.Index, FrameLocalRejectionReason.CanonicalEditability,
-                    $"canonical editability rejected projected room ({violations})");
+                var ordered = projected.Values.OrderBy(room => room.Index).ToList();
+                var audit = TakeoffEditability.Evaluate(ToLevelTakeoff(source, ordered));
+                var failed = ordered.Zip(audit.Rooms, (room, roomAudit) => new { room, roomAudit })
+                    .Where(item => !item.roomAudit.IsStrictlyEditable)
+                    .ToList();
+                var repairable = failed.FirstOrDefault(item =>
+                    !attempted.Contains(item.room.Index)
+                    && item.roomAudit.Violations.All(violation => violation.Kind
+                        is EditabilityViolationKind.ExcessiveDetail
+                        or EditabilityViolationKind.MicroStepRun));
+                if (repairable != null)
+                {
+                    attempted.Add(repairable.room.Index);
+                    var beforeKinds = ordered.Zip(audit.Rooms, (room, roomAudit) => new { room, roomAudit })
+                        .ToDictionary(
+                            item => item.room.Source.Room.Id,
+                            item => item.roomAudit.Violations.Select(violation => violation.Kind)
+                                .ToHashSet(),
+                            StringComparer.Ordinal);
+                    var repairedSet = TryDetailRepair(
+                        repairable.room, projected, beforeKinds, source, knobs);
+                    if (repairedSet != null)
+                        foreach (var member in repairedSet) projected[member.Index] = member;
+                    continue;
+                }
+
+                foreach (var item in failed)
+                {
+                    projected.Remove(item.room.Index);
+                    string violations = string.Join(", ", item.roomAudit.Violations
+                        .Select(violation => violation.Kind).Distinct());
+                    Reject(item.room.Index, FrameLocalRejectionReason.CanonicalEditability,
+                        $"canonical editability rejected projected room ({violations})");
+                }
+                break;
             }
         }
 
@@ -361,6 +394,13 @@ internal static class FrameLocalProjector
             }
 
             Geometry local = UnaryUnionOp.Union(cellsByOwner[room.Index]);
+            // A room's owned cells can come out edge-disconnected — a checkerboard pinch at one
+            // rail crossing, or an orphan cluster across a strip another owner claimed. That is a
+            // lattice representation defect, not a claim about the room, so the parts are dissolved
+            // back together (or dropped) BEFORE the drift gates measure the candidate: every repair
+            // is judged by the same area/invention/drop/label gates as any other projection.
+            if (local is MultiPolygon fragmented)
+                local = DissolveFragments(fragmented, OtherOwnedCells(room.Index), knobs);
             Geometry candidate = Rotate(local, frame);
             if (candidate is not Polygon polygon || !polygon.IsValid || polygon.IsEmpty)
             {
@@ -377,20 +417,28 @@ internal static class FrameLocalProjector
             // attribution; guessing the magnitudes afterwards is not available at any price.
             double areaDrift = Math.Abs(candidate.Area - room.Source.Geometry.Area) /
                                Math.Max(room.Source.Geometry.Area, Epsilon);
-            double boundaryDrift = DiscreteHausdorffDistance.Distance(
-                room.Source.Geometry.Boundary, candidate.Boundary);
-            // The symmetric Hausdorff above is one number for two different failures, and they are
-            // not equally dishonest. projected->source is INVENTION: an accepted boundary standing
-            // where the detector proposed nothing. source->projected is a DROP: a thin source
-            // appendage the rail lattice swallowed. Invention has no other backstop and stays on the
-            // tight tolerance; a drop is already bounded twice over — by the area-drift gate above,
-            // and downstream by ink-backing, which refuses any accepted boundary that no ink
-            // supports. Measuring them together made a 547 sf room with a 0.3 ft-wide spike
-            // indistinguishable from a room whose walls had wandered off the evidence.
-            double sourceDrop = new DiscreteHausdorffDistance(
-                room.Source.Geometry.Boundary, candidate.Boundary).OrientedDistance();
-            double invention = new DiscreteHausdorffDistance(
-                candidate.Boundary, room.Source.Geometry.Boundary).OrientedDistance();
+            // Drift is measured against the DE-STAIRCASED source (the same geometry the frame
+            // estimator, frame support, and rails already trust — never the raw raster trace), and
+            // in AXIS units, not Euclidean feet. The upstream boundary simplifier moves vertices of
+            // an axis-aligned raster staircase, so the motion it licenses is a BoundarySimplifyFt
+            // box in x and y — which composes to BoundarySimplifyFt·√2 of Euclidean offset
+            // perpendicular to a 45-degree wall but only BoundarySimplifyFt perpendicular to an
+            // orthogonal one. A Euclidean Hausdorff therefore taxed rotated frames ~√2 for licensed
+            // motion orthogonal frames paid face value for: 45-degree drifts clustered at 2.59–2.98
+            // against the 2.5 budget, argmax pairs perpendicular to the walls. Measuring the
+            // vertex-to-boundary offsets with the axis-frame L∞ norm charges every frame the same
+            // price for the same licensed motion — the sealer's stepFt = CellFt·√2 fix, applied to
+            // the drift audit. The budget itself is unchanged.
+            var reference = DeStaircase(room.Source.Geometry, knobs.DeStaircaseFt).Boundary;
+            // projected->source is INVENTION: an accepted boundary standing where the detector
+            // proposed nothing; it has no other backstop and keeps the tight tolerance.
+            // source->projected is a DROP: a thin source appendage the rail lattice swallowed,
+            // already bounded by the area-drift gate above and by ink-backing downstream. One
+            // symmetric number made a 547 sf room with a 0.3 ft spike indistinguishable from a
+            // room whose walls had wandered off the evidence.
+            double sourceDrop = AxisOrientedDistance(reference, candidate.Boundary);
+            double invention = AxisOrientedDistance(candidate.Boundary, reference);
+            double boundaryDrift = Math.Max(sourceDrop, invention);
             string probe = $"frameDeg={frame * 180 / Math.PI:F2} " +
                 $"support={FrameSupport(room.Source.Geometry, frame, knobs.DeStaircaseFt):F3} " +
                 $"srcArea={room.Source.Geometry.Area:F0} " +
@@ -414,14 +462,16 @@ internal static class FrameLocalProjector
             if (invention > knobs.MaxBoundaryDriftFt)
             {
                 Reject(room, FrameLocalRejectionReason.BoundaryDrift,
-                    $"boundary drift {boundaryDrift:F2} ft {probe}", areaDrift, boundaryDrift);
+                    $"boundary drift {boundaryDrift:F2} ft {probe}", areaDrift, boundaryDrift,
+                    polygon);
                 continue;
             }
 
             if (sourceDrop > knobs.MaxSourceDropFt)
             {
                 Reject(room, FrameLocalRejectionReason.SourceFeatureDrop,
-                    $"source feature drop {sourceDrop:F2} ft {probe}", areaDrift, boundaryDrift);
+                    $"source feature drop {sourceDrop:F2} ft {probe}", areaDrift, boundaryDrift,
+                    polygon);
                 continue;
             }
 
@@ -433,13 +483,321 @@ internal static class FrameLocalProjector
             }
 
             projected.Add(room.Index, new ProjectedRoom(
-                room.Index, room.FrameIndex, room.Source, (Polygon)candidate.Copy()));
+                room.Index, room.FrameIndex, room.Source, (Polygon)candidate.Copy(), frame));
         }
 
         void Reject(Assignment room, FrameLocalRejectionReason reason, string detail,
-            double? areaDrift = null, double? boundaryDriftFt = null) =>
+            double? areaDrift = null, double? boundaryDriftFt = null,
+            Polygon? attemptedProjection = null) =>
             rejected.TryAdd(room.Index, new FrameLocalRejectedRoom(
-                CloneRoom(room.Source.Room), reason, detail, areaDrift, boundaryDriftFt));
+                CloneRoom(room.Source.Room), reason, detail, areaDrift, boundaryDriftFt,
+                attemptedProjection == null
+                    ? null
+                    : CloneRoom(room.Source.Room, attemptedProjection)));
+
+        Geometry OtherOwnedCells(int index) => UnaryUnionOp.Union(component
+            .Where(other => other.Index != index)
+            .SelectMany(other => cellsByOwner[other.Index])
+            .ToList()) ?? Factory.CreatePolygon();
+    }
+
+    /// <summary>
+    /// Reconnects a fragmented cell union into one polygon. Parts within <see
+    /// cref="FrameLocalKnobs.RailGapFt"/> of the largest part are joined by the smallest
+    /// axis-aligned bridge that spans their approach; parts further away, or whose bridge would
+    /// stand on another room's cells, are dropped — and the drift gates then measure that drop
+    /// against the source like any other lattice loss.
+    /// </summary>
+    private static Geometry DissolveFragments(
+        MultiPolygon fragmented, Geometry otherOwnedCells, FrameLocalKnobs knobs)
+    {
+        var parts = Enumerable.Range(0, fragmented.NumGeometries)
+            .Select(i => (Polygon)fragmented.GetGeometryN(i))
+            .OrderByDescending(part => part.Area)
+            .ThenBy(part => part.Coordinate.X)
+            .ThenBy(part => part.Coordinate.Y)
+            .ToList();
+        Geometry main = parts[0];
+        foreach (var part in parts.Skip(1))
+        {
+            double gap = main.Distance(part);
+            if (gap > knobs.RailGapFt) continue;
+            double reach = gap / 2 + BridgeHalfFt;
+            var bridge = MitreBuffer(main, reach).Intersection(MitreBuffer(part, reach));
+            if (bridge.IsEmpty || bridge.Intersection(otherOwnedCells).Area > Epsilon) continue;
+            if (UnaryUnionOp.Union(new List<Geometry> { main, part, bridge })
+                is Polygon merged && merged.IsValid)
+                main = merged;
+        }
+        return main;
+    }
+
+    private const double BridgeHalfFt = 0.125;
+
+    private static Geometry MitreBuffer(Geometry geometry, double distance) =>
+        geometry.Buffer(distance, new BufferParameters { JoinStyle = JoinStyle.Mitre });
+
+    // Matches the canonical audit's ShortTurnEdgeMaxFt: a jog longer than what the audit calls a
+    // "short turn edge" is real design detail and is never straightened.
+    private const double JogStepMaxFt = 2.25;
+    private const double AxisEps = 1e-6;
+
+    /// <summary>
+    /// One repair attempt for a room the canonical audit refused purely for handle-scale detail.
+    /// The candidate is de-jogged in its own frame, re-measured by every projection gate against
+    /// its source, and swapped in only when the full-set audit turns strict for this room without
+    /// any other room losing strictness.
+    /// </summary>
+    private static List<ProjectedRoom>? TryDetailRepair(
+        ProjectedRoom room,
+        Dictionary<int, ProjectedRoom> projected,
+        IReadOnlyDictionary<string, HashSet<EditabilityViolationKind>> beforeKinds,
+        TakeoffResult source,
+        FrameLocalKnobs knobs)
+    {
+        var local = Rotate(room.Geometry, -room.Frame);
+        var dejogged = DeJog(local, JogStepMaxFt);
+        if (dejogged == null) return null;
+        if (Rotate(dejogged, room.Frame) is not Polygon candidate
+            || !candidate.IsValid || candidate.IsEmpty)
+            return null;
+        if (!PassesRoomGates(room.Source, candidate, knobs)) return null;
+
+        // A lattice-jagged wall is jagged on BOTH of its sides: straightening one room alone can
+        // only produce overlap or mismatched linework, so whatever the straightened room now
+        // covers is carved out of every neighbor it intersects — the same repair seen from the
+        // other side of the wall. Each carved neighbor must still pass its own gates, and the
+        // full-set audit below refuses the whole repair if any of them loses strictness.
+        var repaired = room with { Geometry = (Polygon)candidate.Copy() };
+        var swapped = new List<ProjectedRoom>();
+        foreach (var other in projected.Values.OrderBy(other => other.Index))
+        {
+            if (other.Index == room.Index) { swapped.Add(repaired); continue; }
+            if (other.Geometry.Intersection(candidate).Area <= Epsilon)
+            {
+                swapped.Add(other);
+                continue;
+            }
+            // Buffer(0) renodes the difference so that zero-width slivers and fold-back spikes
+            // left where the straightened wall grazes the neighbor collapse away.
+            if (other.Geometry.Difference(candidate).Buffer(0) is not Polygon carved
+                || !carved.IsValid || carved.IsEmpty)
+                return null;
+            if (!PassesRoomGates(other.Source, carved, knobs)) return null;
+            swapped.Add(other with { Geometry = (Polygon)carved.Copy() });
+        }
+
+        // The canonical coverage contract demands vertex-matched linework: a vertex one room has
+        // on a shared wall must exist on the neighbor's ring too. Straightening dropped vertices
+        // on one side only, so every ring re-absorbs the vertices other rooms still hold on it.
+        swapped = RenodeShared(swapped);
+        // The repaired room must turn strict, and no room — repaired, carved, or untouched — may
+        // gain a violation kind it did not already have: a repair never makes any hold uglier.
+        var audit = TakeoffEditability.Evaluate(ToLevelTakeoff(source, swapped));
+        var outcomes = swapped.Zip(audit.Rooms, (other, otherAudit) => new { other, otherAudit }).ToList();
+        var repairedAudit = outcomes.Single(item => item.other.Index == room.Index).otherAudit;
+        if (!repairedAudit.IsStrictlyEditable) return null;
+        foreach (var item in outcomes)
+        {
+            var allowed = beforeKinds.TryGetValue(item.other.Source.Room.Id, out var kinds)
+                ? kinds
+                : new HashSet<EditabilityViolationKind>();
+            if (item.other.Index != room.Index && item.otherAudit.Violations
+                    .Any(violation => !allowed.Contains(violation.Kind)))
+                return null;
+        }
+        return swapped;
+    }
+
+    /// <summary>
+    /// Restores vertex-matched shared linework after a repair: every ring gains the vertices that
+    /// other rooms still carry on its edges. Shapes do not change — only their segmentation does.
+    /// </summary>
+    private static List<ProjectedRoom> RenodeShared(List<ProjectedRoom> rooms)
+    {
+        var vertices = rooms
+            .SelectMany(room => room.Geometry.Coordinates)
+            .GroupBy(coordinate => (coordinate.X, coordinate.Y))
+            .Select(group => group.First())
+            .ToList();
+        return rooms.Select(room =>
+        {
+            var polygon = room.Geometry;
+            var shell = RenodeRing(polygon.ExteriorRing, vertices);
+            var holes = Enumerable.Range(0, polygon.NumInteriorRings)
+                .Select(i => RenodeRing(polygon.GetInteriorRingN(i), vertices))
+                .ToArray();
+            return room with { Geometry = Factory.CreatePolygon(shell, holes) };
+        }).ToList();
+    }
+
+    private static LinearRing RenodeRing(LineString ring, List<Coordinate> vertices)
+    {
+        var coordinates = ring.Coordinates;
+        var output = new List<Coordinate>();
+        for (int i = 0; i < coordinates.Length - 1; i++)
+        {
+            var from = coordinates[i];
+            var to = coordinates[i + 1];
+            output.Add(from);
+            var segment = new NetTopologySuite.Geometries.LineSegment(from, to);
+            output.AddRange(vertices
+                .Where(vertex => !vertex.Equals2D(from) && !vertex.Equals2D(to)
+                    && segment.Distance(vertex) <= 1e-9)
+                .Select(vertex => new { vertex, t = segment.ProjectionFactor(vertex) })
+                .Where(item => item.t > 0 && item.t < 1)
+                .OrderBy(item => item.t)
+                .Select(item => new Coordinate(item.vertex.X, item.vertex.Y)));
+        }
+        output.Add(coordinates[^1]);
+        return Factory.CreateLinearRing(output.ToArray());
+    }
+
+    private static bool PassesRoomGates(SourceRoom sourceRoom, Polygon candidate, FrameLocalKnobs knobs)
+    {
+        double areaDrift = Math.Abs(candidate.Area - sourceRoom.Geometry.Area) /
+                           Math.Max(sourceRoom.Geometry.Area, Epsilon);
+        if (areaDrift > knobs.MaxAreaDrift) return false;
+        // Same pricing as the main drift gate: axis-L∞ against the de-staircased reference, so a
+        // repair in a rotated frame pays the same price as one in an orthogonal frame.
+        var reference = DeStaircase(sourceRoom.Geometry, knobs.DeStaircaseFt).Boundary;
+        double invention = AxisOrientedDistance(candidate.Boundary, reference);
+        if (invention > knobs.MaxBoundaryDriftFt) return false;
+        double sourceDrop = AxisOrientedDistance(reference, candidate.Boundary);
+        if (sourceDrop > knobs.MaxSourceDropFt) return false;
+        var label = Factory.CreatePoint(
+            new Coordinate(sourceRoom.Room.LabelX, sourceRoom.Room.LabelY));
+        if (!candidate.Covers(label)) return false;
+        return !HasMicroStepRun(candidate);
+    }
+
+    /// <summary>
+    /// Straightens lattice micro-jogs in an axis-aligned (frame-local) polygon: a perpendicular
+    /// step no longer than <paramref name="stepFt"/> between two edges continuing in the same
+    /// direction is removed by extending the longer edge over the shorter one. Geometry-only —
+    /// every honesty judgment stays with the gates that re-measure the result. Internal because
+    /// zone-fit runs the same dissolve on squared fit polygons (rotated into the audit's frame,
+    /// budgeted by ZoneClipSquareFt); the judgment there stays with the zone-fit admission test.
+    /// The optional <paramref name="jogMovable"/> predicate (points in the local frame) lets a
+    /// caller that may not edit shared linework restrict the dissolve to free boundary: a jog
+    /// whose chain touches a forbidden line is left standing. The projector passes null — it
+    /// carves neighbors instead.
+    /// </summary>
+    internal static Geometry? DeJog(
+        Geometry local, double stepFt, Func<Coordinate, bool>? jogMovable = null)
+    {
+        if (local is not Polygon polygon) return null;
+        var shell = DeJogRing(polygon.ExteriorRing, stepFt, jogMovable);
+        if (shell == null) return null;
+        var holes = new List<LinearRing>();
+        for (int i = 0; i < polygon.NumInteriorRings; i++)
+        {
+            var hole = DeJogRing(polygon.GetInteriorRingN(i), stepFt, jogMovable);
+            if (hole == null) return null;
+            holes.Add(hole);
+        }
+        var repaired = Factory.CreatePolygon(shell, holes.ToArray());
+        return repaired.IsValid && repaired.Area > Epsilon ? repaired : null;
+    }
+
+    private static LinearRing? DeJogRing(
+        LineString ring, double stepFt, Func<Coordinate, bool>? jogMovable = null)
+    {
+        var points = ring.Coordinates.Take(ring.NumPoints - 1)
+            .Select(coordinate => new Coordinate(coordinate.X, coordinate.Y))
+            .ToList();
+        int guard = 0;
+        bool changed = true;
+        while (changed && guard++ < 500)
+        {
+            changed = false;
+            CollapseAxisCollinear(points);
+            int n = points.Count;
+            if (n < 4) break;
+            for (int i = 0; i < n; i++)
+            {
+                var z = points[(i + n - 2) % n];
+                var a = points[(i + n - 1) % n];
+                var b = points[i];
+                var c = points[(i + 1) % n];
+                var d = points[(i + 2) % n];
+                var e = points[(i + 3) % n];
+                bool horizontal = Math.Abs(c.Y - b.Y) > AxisEps && Math.Abs(c.X - b.X) <= AxisEps;
+                bool vertical = Math.Abs(c.X - b.X) > AxisEps && Math.Abs(c.Y - b.Y) <= AxisEps;
+                if (!horizontal && !vertical) continue;
+                double Along(Coordinate p) => horizontal ? p.X : p.Y;
+                double Across(Coordinate p) => horizontal ? p.Y : p.X;
+                Coordinate At(double along, double across) => horizontal
+                    ? new Coordinate(along, across)
+                    : new Coordinate(across, along);
+                // step b->c is perpendicular to the two neighbors a->b and c->d; the neighbors
+                // must run along the same axis in the same direction for this to be a jog.
+                double step = Across(c) - Across(b);
+                if (Math.Abs(step) > stepFt || Math.Abs(step) <= AxisEps) continue;
+                if (Math.Abs(Across(b) - Across(a)) > AxisEps) continue;
+                if (Math.Abs(Across(d) - Across(c)) > AxisEps) continue;
+                double prev = Along(b) - Along(a);
+                double next = Along(d) - Along(c);
+                if (prev * next <= AxisEps * AxisEps) continue;
+                // A caller that may not edit shared linework vetoes any jog whose REMOVED step
+                // sits on a forbidden line — that is a jag OF the shared wall, jagged on both
+                // sides, and straightening one side alone breaks the sharing. The end vertices
+                // that merely slide are exempt: each slides along the LINE of its own far-end
+                // perpendicular edge, so a shared line it sits on is shortened, never left.
+                if (jogMovable != null && !(jogMovable(b) && jogMovable(c)))
+                    continue;
+                // Two ways to remove the jog: drop the next edge onto prev's offset (sliding d), or
+                // raise the prev edge onto next's offset (sliding a). Prefer moving the shorter
+                // edge; either slide is legal only if the perpendicular edge at its far end keeps
+                // its direction — i.e. its endpoint is not strictly between the two offsets.
+                bool dropLegal = (Across(e) - Across(b)) * (Across(e) - Across(c)) >= 0;
+                bool raiseLegal = (Across(z) - Across(a)) * (Across(z) - Across(c)) >= 0;
+                bool preferDrop = Math.Abs(prev) >= Math.Abs(next);
+                if (dropLegal && (preferDrop || !raiseLegal))
+                {
+                    points[(i + 2) % n] = At(Along(d), Across(b));
+                    points.RemoveAt((i + 1) % n);
+                }
+                else if (raiseLegal)
+                {
+                    points[(i + n - 1) % n] = At(Along(a), Across(c));
+                    points.RemoveAt(i);
+                }
+                else continue;
+                changed = true;
+                break;
+            }
+        }
+        CollapseAxisCollinear(points);
+        if (points.Count < 4) return null;
+        var closed = points.Append(new Coordinate(points[0].X, points[0].Y)).ToArray();
+        try { return Factory.CreateLinearRing(closed); }
+        catch (ArgumentException) { return null; }
+    }
+
+    private static void CollapseAxisCollinear(List<Coordinate> points)
+    {
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (int i = 0; i < points.Count && points.Count >= 3; i++)
+            {
+                var previous = points[(i + points.Count - 1) % points.Count];
+                var current = points[i];
+                var next = points[(i + 1) % points.Count];
+                double ax = current.X - previous.X, ay = current.Y - previous.Y;
+                double bx = next.X - current.X, by = next.Y - current.Y;
+                bool degenerate = Math.Abs(ax) <= AxisEps && Math.Abs(ay) <= AxisEps;
+                bool collinear = Math.Abs(ax * by - ay * bx) <=
+                    AxisEps * (Math.Abs(ax) + Math.Abs(ay) + Math.Abs(bx) + Math.Abs(by))
+                    && ax * bx + ay * by > 0;
+                if (!degenerate && !collinear) continue;
+                points.RemoveAt(i);
+                changed = true;
+                break;
+            }
+        }
     }
 
     private static List<List<Assignment>> ConnectedComponents(
@@ -545,6 +903,28 @@ internal static class FrameLocalProjector
             result[^1].Add(value);
         }
         return result;
+    }
+
+    // The discrete oriented Hausdorff (max over FROM's vertices of distance to TO), except the
+    // vertex-to-boundary offset is priced with the world-axis L∞ norm instead of Euclidean length.
+    // The raster and its simplifier move boundaries in axis-aligned steps, so axis units are the
+    // units the licensed motion is actually denominated in; Euclidean pricing charges rotated
+    // frames √2 on the same motion. The nearest point is still found euclideanly — for offsets
+    // perpendicular to a straight wall (the drift regime) the two argmins coincide, and anywhere
+    // they differ the Euclidean choice only overestimates, never forgives.
+    private static double AxisOrientedDistance(Geometry from, Geometry to)
+    {
+        double max = 0;
+        foreach (var vertex in from.Coordinates)
+        {
+            var nearest = NetTopologySuite.Operation.Distance.DistanceOp
+                .NearestPoints(Factory.CreatePoint(vertex), to);
+            double distance = Math.Max(
+                Math.Abs(nearest[0].X - nearest[1].X),
+                Math.Abs(nearest[0].Y - nearest[1].Y));
+            if (distance > max) max = distance;
+        }
+        return max;
     }
 
     // A rotated wall traced from the raster is a staircase of cell-scale axis-aligned steps, and a
@@ -880,5 +1260,6 @@ internal static class FrameLocalProjector
 
     private sealed record SourceRoom(RoomResult Room, Polygon Geometry);
     private sealed record Assignment(int Index, int FrameIndex, double Frame, SourceRoom Source);
-    private sealed record ProjectedRoom(int Index, int FrameIndex, SourceRoom Source, Polygon Geometry);
+    private sealed record ProjectedRoom(
+        int Index, int FrameIndex, SourceRoom Source, Polygon Geometry, double Frame);
 }

@@ -19,7 +19,7 @@ const call = (
   ...extra,
 });
 
-test("op key ladder: read families look, apply edits, document.open navigates, scripting scripts", () => {
+test("op key ladder: read families look, family editor open navigates, scripting scripts", () => {
   expect(deriveOpActivity("revit.catalog.loaded-families").verb).toBe("looking");
   expect(deriveOpActivity("revit.detail.elements").verb).toBe("looking");
   expect(deriveOpActivity("revit.matrix.parameter-coverage").verb).toBe("looking");
@@ -30,7 +30,6 @@ test("op key ladder: read families look, apply edits, document.open navigates, s
     target: "apply.parameter-values",
   });
   expect(deriveOpActivity("family.editor.apply").verb).toBe("editing");
-  expect(deriveOpActivity("revit.apply.document.open").verb).toBe("navigating");
   expect(deriveOpActivity("family.editor.open").verb).toBe("navigating");
   expect(deriveOpActivity("scripting.execute").verb).toBe("scripting");
 });
@@ -71,7 +70,7 @@ test("sentence snapshot: idle → working(active tool) → asking(approval) → 
 
   const active = call(
     "host_operation_call",
-    { key: "revit.apply.document.open" },
+    { key: "family.editor.open" },
     { status: "in_progress" },
   );
   const working = withRun(base, {

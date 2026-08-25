@@ -814,92 +814,6 @@ function ConceptEvidenceView({ data }: OpViewProps) {
   );
 }
 
-/* ── revit.catalog.recent-documents — the Revit Home screen ───────────────── */
-
-/** File extension is doc-kind taxonomy. */
-const DOC_KIND_VIZ: Record<string, VizIndex> = {
-  rvt: 1,
-  rfa: 2,
-  rte: 4,
-};
-
-function splitPath(path: string): { stem: string; ext: string; dir: string } {
-  const normalized = path.replace(/\\/g, "/");
-  const lastSlash = normalized.lastIndexOf("/");
-  const file = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
-  const dir = lastSlash >= 0 ? path.slice(0, lastSlash) : "";
-  const lastDot = file.lastIndexOf(".");
-  return {
-    stem: lastDot > 0 ? file.slice(0, lastDot) : file,
-    ext: lastDot > 0 ? file.slice(lastDot + 1).toLowerCase() : "",
-    dir,
-  };
-}
-
-function RecentDocumentsView({ data }: OpViewProps) {
-  const record = asRecord(data);
-  if (!record) return <UnrecognizedShape />;
-  const documents = asRecords(record.documents);
-  if (documents.length === 0)
-    return (
-      <EmptyState story="scope" exit="open a document in Revit so the MRU has an entry">
-        no recent documents found in Revit.ini or the registry MRU
-      </EmptyState>
-    );
-
-  return (
-    <Section label="Recent Documents" aside={<MonoAside>{documents.length} entries</MonoAside>}>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2">
-        {documents.map((doc, i) => {
-          const path = asString(doc.path) ?? "";
-          const { stem, ext, dir } = splitPath(path);
-          const source = asString(doc.source);
-          const rank = asNumber(doc.rank);
-          const exists = doc.exists;
-          return (
-            <div
-              key={path || `${i}`}
-              className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line)] px-2.5 py-2"
-              title={path}
-            >
-              <div className="flex items-baseline gap-1.5">
-                <VizChip viz={DOC_KIND_VIZ[ext] ?? 3}>{ext || "?"}</VizChip>
-                {exists === false && (
-                  <FactChip tone="caution" title="file was not found at read time">
-                    missing
-                  </FactChip>
-                )}
-              </div>
-              <p className="t-prose mt-1 truncate font-medium" title={stem}>
-                {asString(doc.title) || stem || "∅"}
-              </p>
-              <p className="t-label truncate text-[var(--r-ink-2)]" title={dir}>
-                {dir || asString(doc.pathKind) || "—"}
-              </p>
-              <div className="mt-1">
-                <MonoAside>
-                  {source === "RevitIni"
-                    ? "Revit.ini"
-                    : source === "RegistryProfileMru"
-                      ? "registry MRU"
-                      : "?"}
-                  {" · "}
-                  {asString(doc.revitYear) ?? "?"}
-                  {rank !== undefined ? ` · #${rank}` : ""}
-                </MonoAside>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <Provenance>
-        read from this machine's Revit.ini and per-profile registry MRU — existence checked at read
-        time, not proof the file still opens
-      </Provenance>
-    </Section>
-  );
-}
-
 /* ── revit.catalog.field-options — the value domain ───────────────────────── */
 
 const FIELD_OPTIONS_CAP = 60;
@@ -957,6 +871,5 @@ export const views: OpViewRegistry = {
   "revit.catalog.parameter-bindings": ParameterBindingsView,
   "revit.catalog.parameter-evidence": ParameterEvidenceView,
   "revit.catalog.concept-evidence": ConceptEvidenceView,
-  "revit.catalog.recent-documents": RecentDocumentsView,
   "revit.catalog.field-options": FieldOptionsView,
 };

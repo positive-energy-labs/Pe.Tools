@@ -37,26 +37,17 @@ public sealed record ZonePolicyResult(
 
 /// <summary>
 /// Per-zone knob adaptation: pure, and inert unless <see cref="TakeoffOptions.AdaptivePolicy"/> is
-/// set. It exists because one global value is demonstrably wrong across a mixed building — the
-/// 2026-08-14 sweep found absorb 0.30 cracks Lower Level#08 while bulldozing good rooms elsewhere,
-/// a net −3 rooms. A knob that helps one zone and hurts another is not a bad constant; it is a
-/// constant asked to answer a question that depends on the zone.
+/// set. The seam exists because one global value is demonstrably wrong across a mixed building —
+/// a knob that helps one zone and hurts another is not a bad constant; it is a constant asked to
+/// answer a question that depends on the zone. It currently carries NO live rules: the sparse-wall
+/// absorb rule (keyed on <see cref="ZoneCensus.InkRatio"/>) was falsified twice — measured −6
+/// rooms at the 2.5 ft drift budget (DECISIONS 2026-08-14), and inkRatio itself does not separate
+/// zones on framing-clean ink (DECISIONS 2026-08-16). The earned successor keys on
+/// <see cref="ZoneCensus.EdgeBandInkFraction"/> (attic-scoped, round-2 slate); until a rule lands,
+/// an armed policy adapts nothing and reports nothing.
 /// </summary>
 public static class ZonePolicy
 {
-    /// <summary>
-    /// Rule — sparse wall network. <see cref="ZoneCensus.InkRatio"/> is in-zone ink over zone area:
-    /// how much of the zone is drawn on at all. Where it is high, the watershed's partition
-    /// boundaries are backed by real wall ink, and absorbing a small room into its neighbour
-    /// destroys a room the drawing actually asserts. Where it is low the network is too thin to
-    /// certify anything, so the partition is mostly invented and the small cells it invents should
-    /// merge back. That is exactly the split the measurement shows: across the 25 solved projectA
-    /// zones, every zone that GAINS a room under absorb 0.30 sits at ink ratio ≤ 0.056 (Lower 08
-    /// 0.036 +2, Lower 09 0.056 +1) and every zone that LOSES one sits at ≥ 0.12 (Upper 03 0.121
-    /// −1, Upper 07 0.139 −1, Upper 02 0.151 −2, Attic 01 0.207 −2). The 0.09 threshold sits in
-    /// the empty middle; anything in (0.079, 0.097] selects the same zones, and on outcomes alone
-    /// the safe interval is wider still — (0.056, 0.121).
-    /// </summary>
     public static ZonePolicyResult Adapt(
         ZoneCensus census, ZonePartitionStats stats, TakeoffOptions baseline)
     {
@@ -66,27 +57,7 @@ public static class ZonePolicy
         var none = (IReadOnlyDictionary<string, string>)
             new SortedDictionary<string, string>(StringComparer.Ordinal);
         if (!baseline.AdaptivePolicy) return new ZonePolicyResult(baseline, none);
-
-        var adapted = baseline.Clone();
-        var deviations = new SortedDictionary<string, string>(StringComparer.Ordinal);
-
-        // The raw-room floor keeps the rule off zones that merely happen to be sparsely drawn: a
-        // big open room reads as low ink too (Upper 10, ratio 0.050, one room, 100% conversion),
-        // and there is no lattice there to absorb. A rule that fires where it cannot act is noise
-        // in the artifact even when it is harmless.
-        if (census.InkRatio < baseline.SparseWallInkRatio
-            && stats.RawRooms >= baseline.SparseWallMinRawRooms
-            && baseline.AbsorbNeighborSharedPerimeterFraction
-               != baseline.SparseWallAbsorbSharedPerimeterFraction)
-        {
-            adapted.AbsorbNeighborSharedPerimeterFraction =
-                baseline.SparseWallAbsorbSharedPerimeterFraction;
-            deviations["AbsorbNeighborSharedPerimeterFraction"] =
-                $"{baseline.AbsorbNeighborSharedPerimeterFraction:0.###}->" +
-                $"{adapted.AbsorbNeighborSharedPerimeterFraction:0.###} " +
-                $"(sparse-wall-network: inkRatio {census.InkRatio:0.###}, {stats.RawRooms} raw rooms)";
-        }
-
-        return new ZonePolicyResult(adapted, deviations);
+        // Armed, but no live rules exist (see class doc): adapt nothing, attribute nothing.
+        return new ZonePolicyResult(baseline, none);
     }
 }

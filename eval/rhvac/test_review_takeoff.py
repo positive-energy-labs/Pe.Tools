@@ -1,4 +1,6 @@
+import gzip
 import hashlib
+import importlib.util
 import json
 import struct
 import subprocess
@@ -7,28 +9,328 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / "review-takeoff.py"
 ZONE_SCRIPT = HERE / "render-zone-promotion.py"
+COMPARE_SCRIPT = HERE / "compare-zone-runs.py"
 
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def write_replay_bin(path, w, h, minx, miny, cell, bits, level="Test"):
+    """Minimal gzipped DetectSnapshot (SKAT) matching overlay.load_replay_seed_ink —
+    the only evidence source the renderers accept (stale ink_*.bin lane deleted)."""
+    def prefixed(data):
+        assert len(data) < 128  # single-byte 7-bit length is enough for tests
+        return bytes([len(data)]) + data
+
+    blob = struct.pack("<Ii", 0x54414B53, 1)
+    blob += prefixed(level.encode())
+    blob += struct.pack("<d", 0.0)            # elevation
+    blob += prefixed(b"{}")                   # capture options
+    blob += struct.pack("<ii", w, h)
+    blob += struct.pack("<ddd", minx, miny, cell)
+    blob += b"\x00" * (8 * w * h)             # FloorZ + CeilZ
+    blob += bits
+    with gzip.open(path, "wb") as f:
+        f.write(blob)
+
+
+def write_plan_reference(root, token="Test", size=(100, 100), color=(220, 220, 220)):
+    path = root / "input" / f"plan_{token}.png"
+    Image.new("RGB", size, color).save(path)
+    (root / "input" / f"plan_{token}.json").write_text(json.dumps({
+        "schemaVersion": 1, "sourceView": f"Plan - {token}", "token": token,
+        "image": path.name, "imageSha256": digest(path),
+        "width": size[0], "height": size[1],
+        "topLeft": [0, 10], "topRight": [10, 10], "bottomLeft": [0, 0],
+    }), encoding="utf-8")
+    return path
+
+
+def write_zone_run(root, name, zones):
+    run = root / name
+    (run / "input").mkdir(parents=True)
+    (run / "zones").mkdir()
+    write_replay_bin(run / "input" / "replay_Test.bin", 128, 96, 0, 0, 0.25,
+                     bytes([0xFF]) * 1536)
+    report_zones = []
+    for index, (zone_name, loops) in enumerate(zones):
+        tsv = run / "zones" / f"rooms_Test_{index:02d}.tsv"
+        lines = ["META\tlevel\tTest\n", "META\telev\t0\n"]
+        for room_index, loop in enumerate(loops):
+            room = f"R{room_index + 1:02d}"
+            points = "|".join(f"{x};{y}" for x, y in loop)
+            lines.extend((f"ROOM\t{room}\t4\t8\t1\t1\t9\n",
+                          f"POLY\t{room}\touter\t{points}\n"))
+        tsv.write_text("".join(lines), encoding="utf-8")
+        zone_min_x = index * 12
+        zone_max_x = zone_min_x + 10
+        report_zones.append({
+            "Level": "Test", "Zone": zone_name, "MinX": zone_min_x, "MinY": 0,
+            "MaxX": zone_max_x, "MaxY": 10, "Tsv": f"zones/{tsv.name}",
+            "ZoneLoops": [[[zone_min_x, 0], [zone_max_x, 0],
+                            [zone_max_x, 10], [zone_min_x, 10]]],
+            "Ink": "input/ink_Test.bin", "RawRooms": len(loops),
+            "AcceptedRooms": len(loops), "AcceptedSqft": 4 * len(loops),
+            "HeldRooms": 0, "HeldSqft": 0, "ExcludedSqft": 100 - 4 * len(loops),
+            "ZoneSqft": 100, "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+            "InkBackedEdgeFraction": 1, "ClosureErrorSqft": 0,
+            "Rejections": {}, "RejectionDetails": {},
+        })
+    report = run / "report.json"
+    report.write_text(json.dumps({"Zones": report_zones}), encoding="utf-8")
+    return report
+
+
+def build_focus_atlas(before, after, output, expected_zones, *extra):
+    result = subprocess.run([
+        sys.executable, str(COMPARE_SCRIPT), str(before), str(after),
+        "--out-dir", str(output), "--expected-zone-count", str(expected_zones), *extra,
+    ], cwd=HERE, capture_output=True, text=True)
+    if result.returncode:
+        raise AssertionError(result.stderr)
+    return result
+
+
 class ReviewTakeoffTests(unittest.TestCase):
+    def test_bare_zone_title_separates_zone_status_from_candidates(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("zone_renderer_title", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        zone = {
+            "Zone": "Attic Level#03", "ZoneSqft": 5609, "RawRooms": 0,
+            "AcceptedRooms": 0, "HeldRooms": 1, "ExcludedSqft": 0,
+        }
+
+        title = renderer.zone_title(zone, [], bare_zone=True)
+
+        self.assertIn("held 0", title)
+        self.assertIn("zone-status held", title)
+        self.assertNotIn("held 1", title)
+
+    def test_atlas_fill_color_survives_status_change_and_unrelated_insertion(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("zone_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        zone = {"Zone": "Test#00", "zoneKey": "stable-zone"}
+        accepted = ("accepted", zone, "R02")
+        held = ("held", zone, "R02")
+        key = lambda candidate: renderer._atlas_candidate_key(candidate[1], candidate[2])
+        before = renderer._atlas_colors([key(accepted), "stable-zone\0R03"])
+        after = renderer._atlas_colors(["another-zone\0R01", key(held),
+                                        "stable-zone\0R03"])
+
+        self.assertEqual(key(accepted), "Test#00R02")
+        self.assertEqual(key(accepted), key(held))
+        self.assertEqual(before[key(accepted)], after[key(held)])
+        self.assertEqual(before["stable-zone\0R03"], after["stable-zone\0R03"])
+        self.assertEqual(len(set(after.values())), len(after))
+
+    def test_zone_mask_uses_even_odd_scope(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("zone_renderer_mask", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        mask = renderer.polygon_mask(
+            (12, 8),
+            [[(1, 1), (10, 1), (10, 7), (1, 7)],
+             [(4, 3), (7, 3), (7, 5), (4, 5)]],
+            lambda value: value)
+
+        self.assertTrue(mask[2, 2])
+        self.assertFalse(mask[4, 5])
+        self.assertFalse(mask[0, 0])
+
+    def test_focus_atlas_tiny_boundary_change_gets_one_tight_panel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [
+                ("Test#00", [[(1, 1), (5, 1), (5, 5), (1, 5)]])])
+            after = write_zone_run(root, "after", [
+                ("Test#00", [[(1, 1), (5, 1), (5, 4), (1, 4)]])])
+            output = root / "atlas"
+
+            build_focus_atlas(before, after, output, 1)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["changedComponents"], 1)
+            self.assertEqual(manifest["counts"]["focusPanels"], 1)
+            panel = manifest["panels"][0]
+            self.assertLess(panel["crop"]["maxX"] - panel["crop"]["minX"], 10)
+            rendered = panel["fit"]["renderedContent"]
+            self.assertTrue(rendered[0] == 900 or rendered[1] == 588)
+            self.assertTrue(Path(panel["absolutePath"]).is_file())
+
+    def test_focus_atlas_covers_two_disjoint_boundary_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [("Test#00", [
+                [(1, 1), (2, 1), (2, 3), (1, 3)],
+                [(8, 1), (9, 1), (9, 3), (8, 3)],
+            ])])
+            after = write_zone_run(root, "after", [("Test#00", [
+                [(1, 1), (2.25, 1), (2.25, 3), (1, 3)],
+                [(7.75, 1), (9, 1), (9, 3), (7.75, 3)],
+            ])])
+            output = root / "atlas"
+
+            build_focus_atlas(before, after, output, 1)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["changedComponents"], 2)
+            self.assertEqual(manifest["counts"]["focusPanels"], 2)
+            self.assertTrue(all(item["panelIds"] for item in manifest["changedComponents"]))
+
+    def test_focus_atlas_detects_boundary_only_move_with_same_count_and_area(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]])])
+            after = write_zone_run(root, "after", [
+                ("Test#00", [[(2, 1), (5, 1), (5, 4), (2, 4)]])])
+            output = root / "atlas"
+
+            build_focus_atlas(before, after, output, 1)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertGreater(manifest["counts"]["changedComponents"], 0)
+            self.assertEqual(manifest["counts"]["focusPanels"],
+                             manifest["counts"]["changedComponents"])
+
+    def test_focus_atlas_verify_rejects_missing_mapping_and_panel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]])])
+            after = write_zone_run(root, "after", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 3), (1, 3)]])])
+            output = root / "atlas"
+            build_focus_atlas(before, after, output, 1)
+            manifest_path = output / "focus-manifest.json"
+            original = manifest_path.read_text(encoding="utf-8")
+            manifest = json.loads(original)
+            manifest["changedComponents"][0]["panelIds"] = []
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            missing_mapping = subprocess.run([
+                sys.executable, str(COMPARE_SCRIPT), "--verify", str(manifest_path),
+            ], cwd=HERE, capture_output=True, text=True)
+
+            self.assertNotEqual(missing_mapping.returncode, 0)
+            self.assertIn("has no valid focus panel", missing_mapping.stderr)
+            manifest_path.write_text(original, encoding="utf-8")
+            panel = output / json.loads(original)["panels"][0]["path"]
+            panel.unlink()
+            missing_panel = subprocess.run([
+                sys.executable, str(COMPARE_SCRIPT), "--verify", str(manifest_path),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(missing_panel.returncode, 0)
+            self.assertIn("got missing", missing_panel.stderr)
+
+    def test_focus_atlas_aa_identity_has_full_census_and_no_focus_panels(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = write_zone_run(root, "same", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]]),
+                ("Test#01", [[(13, 1), (16, 1), (16, 4), (13, 4)]]),
+            ])
+            output = root / "atlas"
+
+            build_focus_atlas(report, report, output, 2)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(manifest["aaIdentity"])
+            self.assertEqual(manifest["census"]["zoneIds"], ["Test#00", "Test#01"])
+            self.assertEqual(manifest["census"]["actualContactPanels"], 2)
+            self.assertEqual(manifest["counts"]["changedComponents"], 0)
+            self.assertEqual(manifest["counts"]["focusPanels"], 0)
+            self.assertTrue(Path(manifest["contactSheet"]["absolutePath"]).is_file())
+
+    def test_focus_atlas_maps_explicit_flag_to_focus_panel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            before = write_zone_run(root, "before", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]])])
+            after = write_zone_run(root, "after", [
+                ("Test#00", [[(1, 1), (4, 1), (4, 4), (1, 4)]])])
+            flags = root / "flags.json"
+            flags.write_text(json.dumps({"flags": [{
+                "id": "stairstep-1", "zone": "Test#00",
+                "bounds": [3.5, 1, 4.5, 2], "detail": "stairstep edge",
+            }]}), encoding="utf-8")
+            output = root / "atlas"
+
+            build_focus_atlas(before, after, output, 1, "--flag-manifest", str(flags))
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["flags"], 1)
+            self.assertEqual(manifest["counts"]["focusPanels"], 1)
+            self.assertEqual(manifest["flags"][0]["panelIds"], ["focus:stairstep-1"])
+            manifest["flags"] = []
+            (output / "focus-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            stale = subprocess.run([
+                sys.executable, str(COMPARE_SCRIPT), "--verify",
+                str(output / "focus-manifest.json"),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertIn("flag manifest entries are stale", stale.stderr)
+
+    def test_zone_run_compare_panels_boundary_only_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+
+            def write_run(name, points):
+                run = root / name
+                (run / "input").mkdir(parents=True)
+                (run / "zones").mkdir()
+                write_replay_bin(run / "input" / "replay_Test.bin", 4, 4, 0, 0, 1,
+                                 bytes([0xFF, 0xFF]))
+                (run / "zones" / "rooms_Test.tsv").write_text(
+                    "ROOM\tR01\t4\t8\t1\t1\t9\n"
+                    f"POLY\tR01\touter\t{points}\n", encoding="utf-8")
+                zone = {
+                    "Level": "Test", "Zone": "Test#00", "MinX": 0, "MinY": 0,
+                    "MaxX": 4, "MaxY": 4, "Tsv": "zones/rooms_Test.tsv",
+                    "ZoneLoops": [[[0, 0], [4, 0], [4, 4], [0, 4]]],
+                    "Ink": "input/ink_Test.bin", "RawRooms": 1, "AcceptedRooms": 1,
+                    "AcceptedSqft": 4, "HeldRooms": 0, "HeldSqft": 0,
+                    "ExcludedSqft": 12, "ZoneSqft": 16, "SharedEdgePairs": 0,
+                    "LostSharedEdgePairs": 0, "InkBackedEdgeFraction": 1,
+                    "ClosureErrorSqft": 0,
+                }
+                report = run / "report.json"
+                report.write_text(json.dumps({"Zones": [zone]}), encoding="utf-8")
+                return report
+
+            before = write_run("before", "0;0|2;0|2;2|0;2")
+            after = write_run("after", "1;0|3;0|3;2|1;2")
+            output = root / "ab"
+            result = subprocess.run([
+                sys.executable, str(COMPARE_SCRIPT), str(before), str(after),
+                "--out-dir", str(output), "--expected-zone-count", "1",
+            ], check=True, cwd=HERE, capture_output=True, text=True)
+
+            manifest = json.loads((output / "focus-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["counts"]["changedComponents"], 1)
+
     def test_zone_promotion_renderer_crops_registered_disposition(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "input").mkdir()
             (root / "zones").mkdir()
-            bits = bytes([0b10011001, 0b10011001])
-            (root / "input" / "ink_Test.bin").write_bytes(
-                struct.pack("<Iii", 0x504B4E49, 4, 4)
-                + struct.pack("<ddd", 0, 0, 1) + bits)
+            bits = bytes([0xFF]) * 100
+            # zone["Ink"] stays in the report schema (C#-owned) but only locates the
+            # replay alongside; the renderer reads replay_Test.bin exclusively.
+            write_replay_bin(root / "input" / "replay_Test.bin", 40, 20, 0, 0, 1,
+                             bits)
             (root / "zones" / "rooms_Test.tsv").write_text(
                 "META\tlevel\tTest\nMETA\telev\t0\n"
                 "ROOM\tR01\t4\t8\t1\t1\t9\n"
@@ -53,7 +355,375 @@ class ReviewTakeoffTests(unittest.TestCase):
 
             manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
             self.assertTrue((root / manifest["contactSheet"]).is_file())
+            self.assertNotIn("verdictContactSheet", manifest)
+            self.assertEqual(manifest["verdictRenders"], [])
             self.assertEqual(len(manifest["files"]), 3)
+            self.assertEqual(manifest["panelCount"], 2)
+            verified = subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], check=True, cwd=HERE, capture_output=True, text=True)
+            self.assertIn("verified 2 panels", verified.stdout)
+
+            with open(root / "input" / "replay_Test.bin", "ab") as stream:
+                stream.write(b"tampered")
+            rejected = subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("input/replay_Test.bin", rejected.stderr)
+
+    def test_zone_promotion_renderer_uses_registered_plan_outside_replay(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            write_replay_bin(root / "input" / "replay_Test.bin", 4, 4, 0, 0, 1,
+                             bytes(2))
+            plan_path = root / "input" / "plan_Test.png"
+            Image.new("RGB", (300, 100), (20, 120, 200)).save(plan_path)
+            (root / "input" / "plan_Test.json").write_text(json.dumps({
+                "schemaVersion": 1, "sourceView": "Mechanical Zoning Plan - Test",
+                "token": "Test", "image": plan_path.name,
+                "imageSha256": digest(plan_path), "width": 300, "height": 100,
+                "topLeft": [0, 10], "topRight": [30, 10], "bottomLeft": [0, 0],
+            }), encoding="utf-8")
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "META\tlevel\tTest\nMETA\telev\t0\n"
+                "META\tresidue\tR01\trejected\t64\t24\t5\t9\t20;1|28;1|28;9|20;9\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "MinX": 20, "MinY": 1,
+                "MaxX": 28, "MaxY": 9, "Tsv": "zones/rooms_Test.tsv",
+                "ZoneLoops": [[[20, 1], [28, 1], [28, 9], [20, 9]]],
+                "Ink": "input/ink_Test.bin", "RawRooms": 1, "AcceptedRooms": 0,
+                "HeldRooms": 1, "ExcludedSqft": 0, "ZoneSqft": 64,
+                "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+                "InkBackedEdgeFraction": 0, "ClosureErrorSqft": 0,
+                "triage": {"verdict": "hold", "reason": "no-raster"},
+            }
+            (root / "report.json").write_text(
+                json.dumps({"Zones": [zone]}), encoding="utf-8")
+
+            subprocess.run([sys.executable, str(ZONE_SCRIPT), str(root / "report.json"),
+                            "--require-plan"],
+                           check=True, cwd=HERE)
+
+            manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["rasterBackedPanels"], 1)
+            self.assertIn("input/plan_Test.png", manifest["inputs"])
+            self.assertIn("input/plan_Test.json", manifest["inputs"])
+            panel_path = root / "review" / "01_Test_00.png"
+            with Image.open(panel_path) as panel:
+                colors = {color for _count, color in panel.getcolors(panel.width * panel.height)}
+                self.assertIn((0, 0, 76), colors)
+
+    def test_verdict_uses_law_and_has_no_invented_or_ink_layer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            write_plan_reference(root)
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "ROOM\tR01\t50\t30\t2\t5\t5\n"
+                "POLY\tR01\touter\t0;0|5;0|5;10|0;10\n"
+                "META\tresidue\tV01\tcrumb\t50\t30\t5\t9\t5;0|10;0|10;10|5;10\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "zoneKey": "stable-zone",
+                "MinX": 0, "MinY": 0, "MaxX": 10, "MaxY": 10,
+                "Tsv": "zones/rooms_Test.tsv", "Ink": "input/ink_Test.bin",
+                "ZoneLoops": [[[0, 0], [10, 0], [10, 10], [0, 10]]],
+            }
+            spec = importlib.util.spec_from_file_location("verdict_renderer", ZONE_SCRIPT)
+            renderer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(renderer)
+            baseline = renderer.render_level_verdict(root, "Test", [zone])
+
+            no_invented = json.loads(json.dumps(renderer.LAW))
+            no_invented["substrate"]["ink"]["rgba"] = [255, 0, 255, 255]
+            no_invented["invented"]["close"] = [0, 255, 0, 255]
+            no_invented["invented"]["sealRun"] = [0, 255, 0, 255]
+            no_invented["invented"]["sealDoor"] = [0, 255, 0, 255]
+            self.assertEqual(baseline.tobytes(), renderer.render_level_verdict(
+                root, "Test", [zone], law=no_invented).tobytes())
+
+            changed = json.loads(json.dumps(renderer.LAW))
+            changed["void"]["outline"]["rgba"] = [255, 0, 255, 255]
+            self.assertNotEqual(baseline.tobytes(), renderer.render_level_verdict(
+                root, "Test", [zone], law=changed).tobytes())
+            self.assertEqual(baseline.size, (100, 100))
+
+    def test_zone_promotion_renderer_emits_verifiable_boundary_provenance(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            (root / "raw-zones").mkdir()
+            for stage in ("shared-network", "frame-projector"):
+                (root / "promotion-stages" / stage).mkdir(parents=True)
+            write_replay_bin(root / "input" / "replay_Test.bin", 16, 16, 0, 0, 0.25,
+                             bytes([0xFF]) * 32)
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "ROOM\tR01\t4\t8\t1\t1\t9\n"
+                "POLY\tR01\touter\t0;0|2;0|2;2|0;2\n"
+                "META\tresidue\tR02\trejected\t4\t3\t1\t9\t2;0|4;0|4;2|2;2\n",
+                encoding="utf-8")
+            raw_tsv = root / "raw-zones" / "rooms_Test.tsv"
+            raw_tsv.write_text(
+                "ROOM\tR01\t8\t12\t2\t1\t9\n"
+                "POLY\tR01\touter\t0;0|4;0|4;2|0;2\n",
+                encoding="utf-8")
+            stage_tsvs = []
+            for stage in ("shared-network", "frame-projector"):
+                stage_tsv = root / "promotion-stages" / stage / "rooms_Test.tsv"
+                stage_tsv.write_text(raw_tsv.read_text(encoding="utf-8"), encoding="utf-8")
+                stage_tsvs.append(stage_tsv)
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "MinX": 0, "MinY": 0,
+                "MaxX": 4, "MaxY": 2, "Tsv": "zones/rooms_Test.tsv",
+                "ZoneLoops": [[[0, 0], [4, 0], [4, 2], [0, 2]]],
+                "Ink": "input/ink_Test.bin", "RawRooms": 2, "AcceptedRooms": 1,
+                "AcceptedSqft": 4, "HeldRooms": 1, "HeldSqft": 4,
+                "ExcludedSqft": 0, "ZoneSqft": 8, "SharedEdgePairs": 0,
+                "LostSharedEdgePairs": 0, "InkBackedEdgeFraction": 1,
+                "ClosureErrorSqft": 0,
+            }
+            (root / "report.json").write_text(
+                json.dumps({"Zones": [zone]}), encoding="utf-8")
+
+            subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), str(root / "report.json"), "--provenance",
+            ], check=True, cwd=HERE, capture_output=True, text=True)
+
+            provenance = json.loads(
+                (root / "boundary-provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(provenance["schemaVersion"], 2)
+            self.assertEqual(provenance["scope"], "external evaluation data; never solver input")
+            self.assertEqual({item["status"] for item in provenance["zones"][0]["boundaries"]},
+                             {"accepted", "held"})
+            self.assertGreater(provenance["zones"][0]["totalsFeet"]["zone-backed"], 0)
+            self.assertEqual({item["status"] for item in provenance["zones"][0]["regions"]},
+                             {"accepted", "held"})
+            self.assertTrue(all(item["syntheticSplices"] == 0
+                                for item in provenance["zones"][0]["regions"]))
+            self.assertTrue(all(len(item["bounds"]) == 4
+                                for item in provenance["zones"][0]["regions"]))
+            runs = [run for boundary in provenance["zones"][0]["boundaries"]
+                    for run in boundary["runs"]]
+            self.assertTrue(all({"edgeIndex", "edgeIndexes", "from", "to"} <= run.keys()
+                                for run in runs))
+            self.assertTrue(all(run["edgeIndex"] == run["edgeIndexes"][0]
+                                and len(run["from"]) == len(run["to"]) == 2
+                                for run in runs))
+            manifest = json.loads((root / "review-manifest.json").read_text(encoding="utf-8"))
+            self.assertIn("boundary-provenance.json", manifest["files"])
+            self.assertIn("raw-zones/rooms_Test.tsv", manifest["inputs"])
+            self.assertIn("promotion-stages/shared-network/rooms_Test.tsv", manifest["inputs"])
+            self.assertIn("promotion-stages/frame-projector/rooms_Test.tsv", manifest["inputs"])
+            self.assertTrue((root / manifest["provenanceContactSheet"]).is_file())
+            subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], check=True, cwd=HERE, capture_output=True, text=True)
+            original_stage = stage_tsvs[1].read_text(encoding="utf-8")
+            stage_tsvs[1].write_text(original_stage + "# tampered\n", encoding="utf-8")
+            rejected = subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("promotion-stages/frame-projector/rooms_Test.tsv", rejected.stderr)
+            stage_tsvs[1].write_text(original_stage, encoding="utf-8")
+            raw_tsv.write_text(raw_tsv.read_text(encoding="utf-8") + "# tampered\n",
+                               encoding="utf-8")
+            rejected = subprocess.run([
+                sys.executable, str(ZONE_SCRIPT), "--verify",
+                str(root / "review-manifest.json"),
+            ], cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("raw-zones/rooms_Test.tsv", rejected.stderr)
+
+    def test_zone_promotion_renderer_uses_declared_excluded_and_void_residue(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            write_replay_bin(root / "input" / "replay_Test.bin", 80, 40, 0, 0, 0.25,
+                             bytes(400))
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "META\tlevel\tTest\nMETA\telev\t0\n"
+                "META\tresidue\tZONE-EXCLUDED\texcluded\t25\t7.5\t7.5\t0\t"
+                "5;5|10;5|10;10|5;10\n"
+                "META\tresidue\tVOID\tcrumb\t25\t12.5\t7.5\t0\t"
+                "10;5|15;5|15;10|10;10\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "MinX": 5, "MinY": 5,
+                "MaxX": 15, "MaxY": 10, "Tsv": "zones/rooms_Test.tsv",
+                "ZoneLoops": [[[5, 5], [15, 5], [15, 10], [5, 10]]],
+                "Ink": "input/ink_Test.bin", "RawRooms": 0, "AcceptedRooms": 0,
+                "HeldRooms": 0, "ExcludedSqft": 25, "ZoneSqft": 50,
+                "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+                "InkBackedEdgeFraction": 0, "ClosureErrorSqft": 0,
+            }
+            (root / "report.json").write_text(
+                json.dumps({"Zones": [zone]}), encoding="utf-8")
+
+            subprocess.run([sys.executable, str(ZONE_SCRIPT), str(root / "report.json")],
+                           check=True, cwd=HERE, capture_output=True, text=True)
+
+            spec = importlib.util.spec_from_file_location("residue_panel_renderer", ZONE_SCRIPT)
+            renderer = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(renderer)
+            with Image.open(root / "review" / "01_Test_00.png") as panel:
+                colors = {color for _count, color in panel.getcolors(panel.width * panel.height)}
+            for name in ("void", "excluded"):
+                for stroke in ("outline", "hatch"):
+                    image = Image.new("RGBA", (1, 1), "white")
+                    renderer.composite_mask(image, Image.new("L", (1, 1), 255),
+                                            renderer.LAW[name][stroke]["rgba"])
+                    self.assertIn(image.convert("RGB").getpixel((0, 0)), colors)
+
+    def test_visual_law_residue_styles_are_distinct_and_unfilled(self):
+        law = json.loads((HERE.parents[1]
+                          / "source/pe-tools/apps/web/src/runs/visual-law.json").read_text())
+        for name in ("voidWash", "excludedWash"):
+            self.assertNotIn(name, law)
+        self.assertIsNone(law["void"]["fill"])
+        self.assertIsNone(law["excluded"]["fill"])
+        self.assertNotEqual(law["void"]["outline"]["rgba"],
+                            law["excluded"]["outline"]["rgba"])
+        self.assertNotEqual(law["void"]["hatch"]["rgba"],
+                            law["excluded"]["hatch"]["rgba"])
+
+    def test_reduced_plan_uses_declared_filtered_resample_before_tone_stretch(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("reduced_plan_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        source = Image.new("RGB", (16, 16), "white")
+        for x in (3, 7, 11):
+            for y in range(16):
+                source.putpixel((x, y), (0, 0, 0))
+        law = renderer.LAW["substrate"]["plan"]
+
+        reduced = renderer.reduce_plan(source, (4, 4), law)
+        expected = renderer.stretch_plan(
+            source.resize((4, 4), Image.Resampling.LANCZOS), native=False, law=law)
+        nearest = renderer.stretch_plan(
+            source.resize((4, 4), Image.Resampling.NEAREST), native=False, law=law)
+
+        self.assertEqual(reduced.tobytes(), expected.tobytes())
+        self.assertNotEqual(reduced.tobytes(), nearest.tobytes())
+        self.assertNotEqual(renderer.plan_resample(law), Image.Resampling.NEAREST)
+
+    def test_void_and_excluded_draw_outline_and_hatch_without_solid_fill(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("residue_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        loop = [[(3, 3), (36, 3), (36, 36), (3, 36)]]
+        for name in ("void", "excluded"):
+            image = Image.new("RGBA", (40, 40), "white")
+            renderer.draw_residue(image, loop, lambda value: value, renderer.LAW[name])
+            inside = [image.convert("RGB").getpixel((x, y))
+                      for y in range(5, 35) for x in range(5, 35)]
+            self.assertIn((255, 255, 255), inside)
+            self.assertTrue(any(pixel != (255, 255, 255) for pixel in inside))
+            self.assertIsNone(renderer.LAW[name]["fill"])
+
+    def test_cropped_residue_outline_matches_full_frame_oracle(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("outline_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        outline = renderer.LAW["excluded"]["outline"]
+        point = lambda value: (value[0] * 1.17 + 0.31, value[1] * 0.91 + 0.47)
+        cases = {
+            "outer": [[(3, 3), (29, 4), (27, 22), (4, 20)]],
+            "hole": [[(2, 2), (31, 2), (31, 23), (2, 23)],
+                     [(9, 8), (23, 8), (23, 17), (9, 17)]],
+            "fractional": [[(4.2, 3.7), (25.8, 5.1), (21.4, 21.6), (5.3, 18.9)]],
+            "image-edges": [[(-3.4, -2.1), (34.7, 0.2), (35.1, 25.8), (-1.2, 24.6)]],
+        }
+
+        def oracle(image, loops):
+            mask = Image.new("L", image.size)
+            draw = ImageDraw.Draw(mask)
+            for loop in loops:
+                points = [point(value) for value in loop]
+                draw.line(points + [points[0]], fill=255, width=outline["widthPx"])
+            renderer.composite_mask(image, mask, outline["rgba"])
+
+        for name, loops in cases.items():
+            with self.subTest(name=name):
+                expected = Image.new("RGBA", (40, 28), (211, 223, 227, 255))
+                actual = expected.copy()
+                oracle(expected, loops)
+                mask, box = renderer.cropped_polygon_mask(actual.size, loops, point)
+                renderer.draw_residue_outline(
+                    actual, loops, point, outline, mask.size, box)
+                self.assertEqual((actual.mode, actual.size), (expected.mode, expected.size))
+                self.assertEqual(actual.tobytes(), expected.tobytes())
+
+    def test_cropped_residue_outline_matches_full_frame_oracle_when_residues_overlap(self):
+        sys.path.insert(0, str(HERE))
+        spec = importlib.util.spec_from_file_location("overlap_outline_renderer", ZONE_SCRIPT)
+        renderer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(renderer)
+        outline = renderer.LAW["excluded"]["outline"]
+        point = lambda value: value
+        residues = [
+            [[(2.4, 2.6), (24.8, 2.1), (24.2, 20.7), (2.9, 20.4)]],
+            [[(14.3, 0.4), (37.6, 1.2), (36.9, 25.9), (14.1, 24.8)]],
+        ]
+        expected = Image.new("RGBA", (40, 28), (211, 223, 227, 255))
+        actual = expected.copy()
+        for loops in residues:
+            full_mask = Image.new("L", expected.size)
+            draw = ImageDraw.Draw(full_mask)
+            for loop in loops:
+                draw.line(loop + [loop[0]], fill=255, width=outline["widthPx"])
+            renderer.composite_mask(expected, full_mask, outline["rgba"])
+            mask, box = renderer.cropped_polygon_mask(actual.size, loops, point)
+            renderer.draw_residue_outline(actual, loops, point, outline, mask.size, box)
+
+        self.assertEqual((actual.mode, actual.size), (expected.mode, expected.size))
+        self.assertEqual(actual.tobytes(), expected.tobytes())
+
+    def test_zone_promotion_renderer_refuses_missing_replay(self):
+        # The stale ink_*.bin lane is deleted: no replay seed ink = hard error naming
+        # the recapture runbook, never a silent render on stale evidence.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "input").mkdir()
+            (root / "zones").mkdir()
+            (root / "zones" / "rooms_Test.tsv").write_text(
+                "META\tlevel\tTest\nMETA\telev\t0\n"
+                "ROOM\tR01\t4\t8\t1\t1\t9\n"
+                "POLY\tR01\touter\t0;0|2;0|2;2|0;2\n",
+                encoding="utf-8")
+            zone = {
+                "Level": "Test", "Zone": "Test#00", "MinX": 0, "MinY": 0,
+                "MaxX": 3, "MaxY": 2, "Tsv": "zones/rooms_Test.tsv",
+                "ZoneLoops": [[[0, 0], [3, 0], [3, 2], [0, 2]]],
+                "Ink": "input/ink_Test.bin", "RawRooms": 1, "AcceptedRooms": 1,
+                "HeldRooms": 0, "ExcludedSqft": 0, "ZoneSqft": 6,
+                "SharedEdgePairs": 0, "LostSharedEdgePairs": 0,
+                "InkBackedEdgeFraction": 0.5, "ClosureErrorSqft": 0,
+            }
+            (root / "report.json").write_text(
+                json.dumps({"Zones": [zone]}), encoding="utf-8")
+
+            result = subprocess.run(
+                [sys.executable, str(ZONE_SCRIPT), str(root / "report.json")],
+                cwd=HERE, capture_output=True, text=True)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing replay seed ink", result.stderr)
+            self.assertIn("manual-e2e-runbook.md", result.stderr)
 
     def test_bundle_is_blind_hashed_and_verifiable(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -184,6 +854,95 @@ class ReviewTakeoffTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("stale audit", result.stderr)
+
+    def test_semantic_census_binds_manifest_and_refuses_tamper_or_missing_panel(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            review = root / "review"
+            review.mkdir()
+            zones = [
+                ("Lower Level#00", 100.0, 40.0, 30.0, 10.0, 20.0),
+                ("Main Level#00", 200.0, 100.0, 80.0, 0.0, 20.0),
+                ("Attic Level#00", 50.0, 0.0, 50.0, 0.0, 0.0),
+            ]
+            report = root / "report.json"
+            report.write_text(json.dumps({"Zones": [{
+                "Zone": zone, "zoneKey": f"zone-{index}", "ZoneSqft": area,
+                "AcceptedSqft": accepted, "HeldSqft": held,
+                "VoidSqft": void, "ExcludedSqft": excluded,
+            } for index, (zone, area, accepted, held, void, excluded)
+                in enumerate(zones)]}), encoding="utf-8")
+            panel_paths = []
+            for index, (zone, *_rest) in enumerate(zones, start=1):
+                panel = review / (
+                    f"{index:02d}_{zone.replace(' ', '_').replace('#', '_')}.png")
+                panel.write_bytes(f"panel {index}".encode())
+                panel_paths.append(panel)
+            contact = review / "contact-sheet.png"
+            contact.write_bytes(b"contact")
+            manifest = root / "review-manifest.json"
+            manifest_data = {
+                "schemaVersion": 2,
+                "report": report.name,
+                "reportSha256": digest(report),
+                "panelCount": len(zones),
+                "inputs": {},
+                "contactSheet": "review/contact-sheet.png",
+                "files": {
+                    path.relative_to(root).as_posix(): digest(path)
+                    for path in [*panel_paths, contact]
+                },
+            }
+            manifest_text = json.dumps(manifest_data, indent=2) + "\n"
+            manifest.write_text(manifest_text, encoding="utf-8")
+            verdict = root / "verdict.md"
+
+            def verdict_text(rows):
+                return (
+                    "# Verdict\n\n"
+                    f"- Manifest SHA-256: `{digest(manifest)}`\n\n"
+                    "| # | Panel | Verdict | Highest severity | Named defect | Concrete location |\n"
+                    "|---:|---|---|---|---|---|\n"
+                    + "\n".join(rows) + "\n")
+
+            rows = [
+                "| 1 | `01_Lower_Level_00.png` | PASS | None | None visible | All |",
+                "| 2 | `02_Main_Level_00.png` | FAIL | 2 | Excluded space | Center |",
+                "| 3 | `03_Attic_Level_00.png` | AMBIGUOUS | N/A | No source | Whole |",
+            ]
+            verdict.write_text(verdict_text(rows), encoding="utf-8")
+            output = root / "semantic-census.json"
+            command = [
+                sys.executable, str(ZONE_SCRIPT),
+                "--semantic-verdict", str(verdict),
+                "--manifest", str(manifest),
+                "--out", str(output),
+            ]
+
+            result = subprocess.run(command, cwd=HERE, capture_output=True, text=True)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            census = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(census["counts"], {"PASS": 1, "FAIL": 1, "AMBIGUOUS": 1})
+            self.assertEqual(census["verifiedHashes"], 5)
+            self.assertEqual(census["zones"][0]["dispositions"], {
+                "accepted": {"sqft": 40.0, "fraction": 0.4},
+                "held": {"sqft": 30.0, "fraction": 0.3},
+                "void": {"sqft": 10.0, "fraction": 0.1},
+                "excluded": {"sqft": 20.0, "fraction": 0.2},
+            })
+
+            manifest.write_text(manifest_text + "\n", encoding="utf-8")
+            tampered = subprocess.run(command, cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(tampered.returncode, 0)
+            self.assertIn("semantic verdict manifest mismatch", tampered.stderr)
+
+            manifest.write_text(manifest_text, encoding="utf-8")
+            verdict.write_text(verdict_text(rows[:-1]), encoding="utf-8")
+            missing = subprocess.run(command, cwd=HERE, capture_output=True, text=True)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("semantic verdict panel census failed", missing.stderr)
+            self.assertIn("03_Attic_Level_00.png", missing.stderr)
 
 
 if __name__ == "__main__":

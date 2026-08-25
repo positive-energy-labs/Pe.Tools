@@ -65,6 +65,9 @@ public sealed class ZoneBoundedDetectTests
         double VoidFraction,
         double InkBackedEdgeFraction,
         double ClosureErrorSqft,
+        double GapSqft,
+        double OverlapSqft,
+        double OutsideZoneSqft,
         bool StrictlyEditable,
         bool Contained,
         int SharedEdgePairs,
@@ -76,13 +79,32 @@ public sealed class ZoneBoundedDetectTests
         [property: JsonProperty("census")] object Census,
         [property: JsonProperty("triage")] object Triage,
         [property: JsonProperty("whiteoutCells")] int WhiteoutCells,
+        [property: JsonProperty("domainReflood")] object? DomainReflood,
         [property: JsonProperty("partition")] object Partition,
         [property: JsonProperty("adaptedKnobs")] IReadOnlyDictionary<string, string> AdaptedKnobs,
         // Closure accounting: how much of this zone's obstruction the sealers invented rather than
         // read off the drawing. closureSqft is the door/window closure area drawn on the panel;
         // the closure block splits it and reports the generic morphological close separately.
         [property: JsonProperty("closureSqft")] double ClosureSqft,
-        [property: JsonProperty("closure")] object Closure);
+        [property: JsonProperty("closure")] object Closure,
+        // report.json v4: stable cross-run zone identity (SHIMS.md #2). Zone names are ordinals
+        // assigned during zoning; this key is what A/B pairing may trust.
+        [property: JsonProperty("zoneKey")] string ZoneKey);
+
+    /// <summary>
+    /// Stable cross-run zone identity: sha256 over the level name plus the zone's bbox quantized
+    /// to 0.5 ft, first 12 hex chars. Nothing ordinal goes in, so the key survives re-zoning
+    /// REORDERINGS and sub-half-foot jitter; it changes exactly when the zone's geography
+    /// actually moves — which is the event A/B pairing must refuse to paper over.
+    /// </summary>
+    private static string ZoneKey(string view, double minX, double minY, double maxX, double maxY)
+    {
+        static double Quantized(double value) => Math.Round(value * 2, MidpointRounding.AwayFromZero) / 2;
+        string payload = FormattableString.Invariant(
+            $"{view}|{Quantized(minX):F1}|{Quantized(minY):F1}|{Quantized(maxX):F1}|{Quantized(maxY):F1}");
+        byte[] hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hash)[..12].ToLowerInvariant();
+    }
 
     [Test]
     public void Zone_mask_bounds_partition_to_west_block()
@@ -183,6 +205,126 @@ public sealed class ZoneBoundedDetectTests
         });
     }
 
+    [Test]
+    public void Zone_domain_diagnostics_explain_crop_reflood_loss()
+    {
+        const int width = 20, height = 20;
+        var field = new Heightfield {
+            W = width, H = height, CellFt = 1,
+            FloorZ = new float[width * height],
+            CeilZ = Enumerable.Repeat(9f, width * height).ToArray(),
+        };
+        var ink = new bool[width * height];
+        for (int x = 1; x < width - 1; x++)
+        {
+            ink[1 * width + x] = true;
+            ink[(height - 2) * width + x] = true;
+        }
+        for (int y = 1; y < height - 1; y++)
+        {
+            ink[y * width + 1] = true;
+            ink[y * width + width - 2] = true;
+        }
+        ink[10 * width + 10] = true;
+        var options = new TakeoffOptions {
+            CellFt = 1,
+            GapSealFt = 0.1,
+            InkClusterWhiteoutCells = 2,
+            MinSqft = 1,
+            MinFeatureWidthFt = 1,
+            WallClaimFt = 0,
+        };
+        var prepared = Detector.Prepare(field, ink, "Diagnostic", 0, options, _ => { });
+        var ordinary = prepared.Detect(RectZone("inside", 5, 5, 15, 15), _ => { });
+
+        var result = prepared.Detect(
+            RectZone("inside", 5, 5, 15, 15), _ => { },
+            out int whiteoutCells, out ZoneDomainDiagnostics diagnostics);
+
+        Assert.Multiple(() => {
+            Assert.That(whiteoutCells, Is.EqualTo(1));
+            Assert.That(diagnostics.PreparedDomainSqft, Is.EqualTo(100));
+            Assert.That(diagnostics.CropRecomputedDomainSqft, Is.Zero);
+            Assert.That(diagnostics.ExclusionProvenance, Is.EqualTo("crop-reflood"));
+            Assert.That(diagnostics.LostComponents, Has.Count.EqualTo(1));
+            Assert.That(diagnostics.LostComponents.Single().AreaSqft, Is.EqualTo(100));
+            Assert.That(diagnostics.LostComponents.Single().Polygons, Has.Count.EqualTo(1));
+            Assert.That(diagnostics.HeldCandidates, Has.Count.EqualTo(1));
+            Assert.That(diagnostics.HeldCandidates.Single().AreaSqft, Is.EqualTo(100));
+            Assert.That(result.DomainSqft, Is.EqualTo(diagnostics.CropRecomputedDomainSqft),
+                "diagnostics must observe, not alter, the effective partition domain");
+            Assert.That(result.ToTsv(), Is.EqualTo(ordinary.ToTsv()),
+                "review candidates must not change an incumbent disposition or polygon");
+        });
+    }
+
+    [Test]
+    public void Domain_reflood_requires_received_ink_for_nonconvex_review_geometry()
+    {
+        var rectangle = new ZoneDomainLossComponent(120, [
+            [new[] { 0d, 0d }, new[] { 12d, 0d }, new[] { 12d, 10d }, new[] { 0d, 10d }],
+        ]);
+        var concave = new ZoneDomainLossComponent(64, [
+            [new[] { 0d, 20d }, new[] { 10d, 20d }, new[] { 10d, 24d },
+             new[] { 4d, 24d }, new[] { 4d, 30d }, new[] { 0d, 30d }],
+        ]);
+        var scalloped = new ZoneDomainLossComponent(110, [
+            [new[] { 20d, 0d }, new[] { 32d, 0d }, new[] { 32d, 10d },
+             new[] { 31.5, 10d }, new[] { 31.5, 4d }, new[] { 31d, 4d },
+             new[] { 31d, 10d }, new[] { 30.5, 10d }, new[] { 30.5, 4d },
+             new[] { 30d, 4d }, new[] { 30d, 10d }, new[] { 29.5, 10d },
+             new[] { 29.5, 4d }, new[] { 29d, 4d }, new[] { 29d, 10d },
+             new[] { 28.5, 10d }, new[] { 28.5, 4d }, new[] { 28d, 4d },
+             new[] { 28d, 10d }, new[] { 27.5, 10d }, new[] { 27.5, 4d },
+             new[] { 27d, 4d }, new[] { 27d, 10d }, new[] { 20d, 10d }],
+        ]);
+
+        var unsupported = PreparedTakeoffDetection.DomainRefloodHeldCandidates(
+            [rectangle, concave, scalloped], "Diagnostic", 0,
+            new TakeoffOptions { MinimumPromotedRoomSqft = 30 });
+        var supported = PreparedTakeoffDetection.DomainRefloodHeldCandidates(
+            [rectangle, concave, scalloped], "Diagnostic", 0,
+            new TakeoffOptions { MinimumPromotedRoomSqft = 30 },
+            distanceToReceivedInk: (x, _) => x < 15 ? 0 : double.PositiveInfinity);
+
+        Assert.Multiple(() => {
+            Assert.That(unsupported.Select(candidate => candidate.Id),
+                Is.EqualTo(new[] { "CROP-REFLOOD-HELD:1" }));
+            Assert.That(supported.Select(candidate => candidate.Id),
+                Is.EqualTo(new[] { "CROP-REFLOOD-HELD:1", "CROP-REFLOOD-HELD:2" }));
+        });
+    }
+
+    [Test]
+    public void Domain_reflood_review_geometry_subtracts_accepted_or_drops_a_split()
+    {
+        var candidates = new[] {
+            new ZoneDomainHeldCandidate("clip", 100,
+                [[new[] { 0d, 0d }, new[] { 10d, 0d }, new[] { 10d, 10d }, new[] { 0d, 10d }]]),
+            new ZoneDomainHeldCandidate("split", 100,
+                [[new[] { 0d, 20d }, new[] { 10d, 20d }, new[] { 10d, 30d }, new[] { 0d, 30d }]]),
+        };
+        var accepted = new TakeoffResult {
+            LevelName = "Diagnostic",
+            Rooms = {
+                new RoomResult { Id = "edge", RawSqft = 20,
+                    Polygon = [new[] { 8d, 0d }, new[] { 10d, 0d },
+                        new[] { 10d, 10d }, new[] { 8d, 10d }] },
+                new RoomResult { Id = "stripe", RawSqft = 20,
+                    Polygon = [new[] { 4d, 20d }, new[] { 6d, 20d },
+                        new[] { 6d, 30d }, new[] { 4d, 30d }] },
+            },
+        };
+
+        var normalized = TakeoffPromotion.NormalizeDomainRefloodHeldCandidates(
+            candidates, accepted);
+
+        Assert.Multiple(() => {
+            Assert.That(normalized.Select(candidate => candidate.Id), Is.EqualTo(new[] { "clip" }));
+            Assert.That(normalized.Single().AreaSqft, Is.EqualTo(80).Within(1e-6));
+        });
+    }
+
     // ---- projectA: real capture x real designer zones ----
 
     private sealed record ZoneRecord(string View, string TypeName, string? Comments, double[][][] Loops);
@@ -211,6 +353,15 @@ public sealed class ZoneBoundedDetectTests
             }
             .Where(Directory.Exists)
             .Select(dir => Path.Combine(dir, $"ink_{token}.bin"))
+            .FirstOrDefault(File.Exists);
+
+    private static string? FindPlanReference(string token, string extension) =>
+        new[] {
+                Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\OneDrive\Documents\Pe.Tools\takeoff"),
+                Environment.ExpandEnvironmentVariables(@"%USERPROFILE%\Documents\Pe.Tools\takeoff"),
+            }
+            .Where(Directory.Exists)
+            .Select(dir => Path.Combine(dir, $"plan_{token}.{extension}"))
             .FirstOrDefault(File.Exists);
 
     private static List<ZoneScope> ZonesFor(string viewFragment)
@@ -263,6 +414,8 @@ public sealed class ZoneBoundedDetectTests
         if (Directory.Exists(artifactDir)) Directory.Delete(artifactDir, recursive: true);
         Directory.CreateDirectory(Path.Combine(artifactDir, "input"));
         Directory.CreateDirectory(Path.Combine(artifactDir, "zones"));
+        string rawZonesDir = Path.Combine(artifactDir, "raw-zones");
+        Directory.CreateDirectory(rawZonesDir);
         string? zoneFilter = Environment.GetEnvironmentVariable("PE_TAKEOFF_ZONE");
         int zonesRun = 0, zonesWithRooms = 0, abstained = 0;
         var effectiveOptions = new ConcurrentDictionary<string, TakeoffOptions>(StringComparer.Ordinal);
@@ -280,19 +433,36 @@ public sealed class ZoneBoundedDetectTests
             // Door-head seals are model-derived evidence, so the promotion oracle counts them;
             // wall-run and gap-close plugs stay heuristic and do not back a room's boundary.
             var distanceToInk = snap.EvidenceInkDistance(profile);
+            // Wall-ink oracle (seed ink only): the absorb stage's separator judgment asks "is this
+            // boundary a WALL", and a door-head is an opening, not a wall.
+            var distanceToWallInk = snap.SeedInkDistance();
             var oracle = OracleCentroids(floor);
             effectiveOptions[view] = profile.Options;
             string token = LevelMap.Single(item => item.View == view).BinToken;
             string? ink = FindInkBin(token);
+            string? planImage = FindPlanReference(token, "png");
+            string? planManifest = FindPlanReference(token, "json");
             if (ink == null)
             {
                 failures.Add($"{view}: missing ink_{token}.bin for registered promotion review");
+                return;
+            }
+            if ((planImage == null) != (planManifest == null))
+            {
+                failures.Add($"{view}: incomplete plan_{token}.png/json review reference");
                 return;
             }
             string copiedInk = Path.Combine(artifactDir, "input", $"ink_{token}.bin");
             string copiedReplay = Path.Combine(artifactDir, "input", $"replay_{token}.bin");
             File.Copy(ink!, copiedInk, overwrite: true);
             File.Copy(bin!, copiedReplay, overwrite: true);
+            if (planImage != null)
+            {
+                File.Copy(planImage, Path.Combine(artifactDir, "input", $"plan_{token}.png"),
+                    overwrite: true);
+                File.Copy(planManifest!, Path.Combine(artifactDir, "input", $"plan_{token}.json"),
+                    overwrite: true);
+            }
             // Sealed cells are obstruction the drawing never drew. Persisting them next to the raw
             // ink is what makes a closure arguable in review instead of an invisible policy effect.
             var sealClasses = TakeoffPolicy.SealClasses(snap, profile);
@@ -300,7 +470,8 @@ public sealed class ZoneBoundedDetectTests
             var gapClose = new bool[sealClasses.Length];
             for (int i = 0; i < sealClasses.Length; i++)
             {
-                doorClosure[i] = sealClasses[i] is Detector.SealDoorHead or Detector.SealWallRunGap;
+                doorClosure[i] = sealClasses[i] is Detector.SealDoorHead
+                    or Detector.SealDoorHeadOversize or Detector.SealWallRunGap;
                 gapClose[i] = sealClasses[i] == Detector.SealGapClose;
             }
             string sealBin = Path.Combine(artifactDir, "input", $"seals_{token}.bin");
@@ -309,12 +480,21 @@ public sealed class ZoneBoundedDetectTests
                 snap.Field.MinX, snap.Field.MinY, snap.Field.CellFt, doorClosure);
             InkSupport.Save(closeBin, snap.Field.W, snap.Field.H,
                 snap.Field.MinX, snap.Field.MinY, snap.Field.CellFt, gapClose);
+            // The merged seals bin is lossy (door-head + oversize + wall-run collapse to one bit);
+            // the INKC sidecar keeps per-cell attribution so review can split door/run honestly.
+            // No report field: readers derive classes_<token>.bin from the zone's Seals path, so
+            // the report schema (and older artifacts) stay valid.
+            InkSupport.SaveClasses(
+                Path.Combine(artifactDir, "input", $"classes_{token}.bin"),
+                snap.Field.W, snap.Field.H,
+                snap.Field.MinX, snap.Field.MinY, snap.Field.CellFt, sealClasses);
             double cellSqft = snap.Field.CellFt * snap.Field.CellFt;
             TestContext.Out.WriteLine($"{view}: profile {profile.Provenance}");
             TestContext.Out.WriteLine(
                 $"{view}: sealDoorHeads={profile.Options.SealDoorHeads} " +
                 $"sealWallRunGaps={profile.Options.SealWallRunGaps} " +
                 $"doorHead={sealClasses.Count(c => c == Detector.SealDoorHead) * cellSqft:F0}sf " +
+                $"doorHeadOversize={sealClasses.Count(c => c == Detector.SealDoorHeadOversize) * cellSqft:F0}sf " +
                 $"wallRunGap={sealClasses.Count(c => c == Detector.SealWallRunGap) * cellSqft:F0}sf " +
                 $"gapClose={sealClasses.Count(c => c == Detector.SealGapClose) * cellSqft:F0}sf");
             var zones = ZonesFor(view)
@@ -331,10 +511,14 @@ public sealed class ZoneBoundedDetectTests
                     snap.SeedInk, mask, snap.Field.W, snap.Field.H, snap.Field.CellFt);
                 var timer = System.Diagnostics.Stopwatch.StartNew();
                 int whiteoutCells = 0;
+                ZoneDomainDiagnostics? domainDiagnostics = null;
                 var result = prepared == null
                     ? TakeoffPolicy.Detect(snap, profile, _ => { }, zoneMask: mask)
-                    : prepared.Detect(zone, _ => { }, out whiteoutCells);
+                    : prepared.Detect(
+                        zone, _ => { }, out whiteoutCells, out domainDiagnostics,
+                        distanceToWallInk);
                 long rawMilliseconds = timer.ElapsedMilliseconds;
+                File.WriteAllText(Path.Combine(rawZonesDir, $"rooms_{slug}.tsv"), result.ToTsv());
                 File.WriteAllText(progress, $"raw={rawMilliseconds}ms\nstage=promotion\n");
                 timer.Restart();
                 // Per-zone policy reads the census and the raw partition — both settled before any
@@ -345,8 +529,18 @@ public sealed class ZoneBoundedDetectTests
                 var promotion = TakeoffPromotion.PromoteZone(
                     result, zone, policy.Options, distanceToInk,
                     message => File.AppendAllText(progress, message + Environment.NewLine),
-                    census);
+                    census, distanceToWallInk, snap.HeuristicClosureAt(profile),
+                    (stage, snapshot) => {
+                        string path = Path.Combine(
+                            artifactDir, "promotion-stages", stage, $"rooms_{slug}.tsv");
+                        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                        File.WriteAllText(path, snapshot.ToTsv());
+                    });
                 var triage = promotion.Diagnostics.Triage ?? ZoneTriageVerdict.Solve;
+                IReadOnlyList<ZoneDomainHeldCandidate> reviewHeldCandidates = domainDiagnostics == null
+                    ? []
+                    : TakeoffPromotion.NormalizeDomainRefloodHeldCandidates(
+                        domainDiagnostics.HeldCandidates, promotion.Result);
                 long promotionMilliseconds = timer.ElapsedMilliseconds;
                 // Append, not overwrite: the promotion stage log written above this point is the
                 // per-zone tuning evidence, and rewriting the file would erase it.
@@ -411,25 +605,30 @@ public sealed class ZoneBoundedDetectTests
 
                 string tsv = Path.Combine(artifactDir, "zones", $"rooms_{slug}.tsv");
                 File.WriteAllText(tsv, promotion.Result.ToTsv());
-                int doorHeadCells = 0, wallRunCells = 0, gapCloseCells = 0;
+                int doorHeadCells = 0, doorHeadOversizeCells = 0, wallRunCells = 0, gapCloseCells = 0;
                 for (int i = 0; i < sealClasses.Length; i++)
                 {
                     if (!mask[i]) continue;
                     switch (sealClasses[i])
                     {
                         case Detector.SealDoorHead: doorHeadCells++; break;
+                        case Detector.SealDoorHeadOversize: doorHeadOversizeCells++; break;
                         case Detector.SealWallRunGap: wallRunCells++; break;
                         case Detector.SealGapClose: gapCloseCells++; break;
                     }
                 }
                 var points = zone.Loops.SelectMany(loop => loop).ToList();
+                double zoneMinX = points.Min(point => point[0]);
+                double zoneMinY = points.Min(point => point[1]);
+                double zoneMaxX = points.Max(point => point[0]);
+                double zoneMaxY = points.Max(point => point[1]);
                 reports.Add(new PromotionZoneReport(
                     view,
                     zone.Name,
-                    points.Min(point => point[0]),
-                    points.Min(point => point[1]),
-                    points.Max(point => point[0]),
-                    points.Max(point => point[1]),
+                    zoneMinX,
+                    zoneMinY,
+                    zoneMaxX,
+                    zoneMaxY,
                     zone.Loops,
                     Path.GetRelativePath(artifactDir, tsv).Replace('\\', '/'),
                     Path.GetRelativePath(artifactDir, copiedInk).Replace('\\', '/'),
@@ -453,6 +652,9 @@ public sealed class ZoneBoundedDetectTests
                     promotion.Diagnostics.VoidFraction,
                     promotion.Diagnostics.InkBackedEdgeFraction,
                     promotion.Diagnostics.ClosureErrorSqft,
+                    promotion.Diagnostics.GapSqft,
+                    promotion.Diagnostics.OverlapSqft,
+                    promotion.Diagnostics.OutsideZoneSqft,
                     promotion.Diagnostics.IsStrictlyEditable,
                     promotion.Diagnostics.IsContained,
                     promotion.Diagnostics.SharedEdgePairs,
@@ -471,18 +673,34 @@ public sealed class ZoneBoundedDetectTests
                         reason = triage.Reason,
                     },
                     whiteoutCells,
+                    domainDiagnostics == null ? null : new {
+                        preparedDomainSqft = domainDiagnostics.PreparedDomainSqft,
+                        cropRecomputedDomainSqft = domainDiagnostics.CropRecomputedDomainSqft,
+                        lostComponents = domainDiagnostics.LostComponents.Select(component => new {
+                            areaSqft = component.AreaSqft,
+                            polygons = component.Polygons,
+                        }),
+                        heldCandidates = reviewHeldCandidates.Select(candidate => new {
+                            id = candidate.Id,
+                            areaSqft = candidate.AreaSqft,
+                            polygons = candidate.Polygons,
+                        }),
+                        exclusionProvenance = domainDiagnostics.ExclusionProvenance,
+                    },
                     new {
                         rawRooms = stats.RawRooms,
                         medianRawRoomSqft = stats.MedianRawRoomSqft,
                         roomsPer1000Sqft = stats.RoomsPer1000Sqft,
                     },
                     policy.AdaptedKnobs,
-                    (doorHeadCells + wallRunCells) * cellSqft,
+                    (doorHeadCells + doorHeadOversizeCells + wallRunCells) * cellSqft,
                     new {
                         doorHeadSqft = doorHeadCells * cellSqft,
+                        doorHeadOversizeSqft = doorHeadOversizeCells * cellSqft,
                         wallRunGapSqft = wallRunCells * cellSqft,
                         gapCloseSqft = gapCloseCells * cellSqft,
-                    }));
+                    },
+                    ZoneKey(view, zoneMinX, zoneMinY, zoneMaxX, zoneMaxY)));
                 TestContext.Out.WriteLine(
                     $"{zone.Name}: raw={result.Rooms.Count} accepted={promotion.Diagnostics.AcceptedRooms} " +
                     $"held={promotion.Diagnostics.HeldRooms} ink={promotion.Diagnostics.InkBackedEdgeFraction:P0} " +
@@ -494,6 +712,9 @@ public sealed class ZoneBoundedDetectTests
             .OrderBy(report => Array.FindIndex(LevelMap, item => item.View == report.Level))
             .ThenBy(report => report.Zone, StringComparer.Ordinal)
             .ToList();
+        int rawTsvCount = Directory.GetFiles(rawZonesDir, "rooms_*.tsv").Length;
+        if (rawTsvCount != zonesRun)
+            failures.Add($"raw TSV census: expected {zonesRun}, found {rawTsvCount}");
         // Self-describing artifact: two runs are only comparable if the knobs that produced them
         // travel with them. The hash is over canonical (key-sorted, unindented) JSON of the
         // effective options, so a knob change is one visibly different token.
@@ -503,12 +724,19 @@ public sealed class ZoneBoundedDetectTests
             : effectiveOptions[canonicalLevel];
         File.WriteAllText(Path.Combine(artifactDir, "report.json"),
             JsonConvert.SerializeObject(new {
-                // v3 adds per-zone closure attribution (closureSqft/closure) and the Seals/Close
-                // raster paths. Readers tolerate their absence, so v2 artifacts still render.
-                SchemaVersion = 3,
+                // v3 added per-zone closure attribution (closureSqft/closure) and the Seals/Close
+                // raster paths; v4 adds zoneKey (stable cross-run zone identity — sha256 of level
+                // + 0.5ft-quantized bbox) and, additively (2026-08-17, still v4), zoneFilter.
+                // Readers tolerate absence, so older artifacts still render — they just cannot
+                // claim what they do not carry.
+                SchemaVersion = 4,
                 GeneratedUtc = DateTimeOffset.UtcNow,
                 options = JsonConvert.DeserializeObject(JsonConvert.SerializeObject(canonicalOptions)),
-                optionsHash = OptionsHash(canonicalOptions),
+                optionsHash = OptionsHash(canonicalOptions, zoneFilter),
+                // Partial-run truth: the PE_TAKEOFF_ZONE filter this run executed under. An
+                // explicit null says "unfiltered — the full baseline scope"; a pre-field package
+                // lacks the key entirely and can only be assessed heuristically.
+                zoneFilter,
                 // Level-profile inference can hand each level its own effective options; per-level
                 // hashes make that divergence visible instead of hiding behind one top-level blob.
                 optionsHashPerLevel = LevelMap.Select(item => item.View)
@@ -524,7 +752,97 @@ public sealed class ZoneBoundedDetectTests
         TestContext.Out.WriteLine(
             $"zones={zonesRun} withRooms={zonesWithRooms} abstained={abstained} " +
             $"artifact={artifactDir}");
+        // Auto-persist every run into the pool the /runs dev surface scrolls. Pool lives in
+        // .artifacts by ruling (kaitpw 2026-08-16: occasional wipes are no harm); PE_TAKEOFF_RUNS_DIR
+        // points experiment worktrees at a shared pool when cross-worktree history matters.
+        var runsPool = Environment.GetEnvironmentVariable("PE_TAKEOFF_RUNS_DIR")
+            ?? Path.Combine(repoRoot, ".artifacts", "takeoff-runs");
+        var runStamp = DateTimeOffset.UtcNow;
+        var runId = $"{runStamp:yyyyMMdd-HHmmss}-{OptionsHash(canonicalOptions, zoneFilter)}";
+        var runDir = Path.Combine(runsPool, runId);
+        Directory.CreateDirectory(runDir);
+        foreach (var file in Directory.EnumerateFiles(artifactDir, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(runDir, Path.GetRelativePath(artifactDir, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target, overwrite: true);
+        }
+        File.WriteAllText(Path.Combine(runDir, "meta.json"), JsonConvert.SerializeObject(new {
+            runId,
+            generatedUtc = runStamp,
+            optionsHash = OptionsHash(canonicalOptions, zoneFilter),
+            label = Environment.GetEnvironmentVariable("PE_TAKEOFF_RUN_LABEL"),
+            // Duplicated from report.json so the index (which never opens reports) can mark
+            // partial packages without a fetch. null = explicitly unfiltered.
+            zoneFilter,
+        }, Formatting.Indented) + Environment.NewLine);
+        PersistScores(repoRoot, runDir);
+        TestContext.Out.WriteLine($"run persisted: {runDir}");
         Assert.That(failures, Is.Empty, string.Join("\n", failures.OrderBy(item => item)));
+    }
+
+    /// <summary>
+    /// scores.json joins the run package at persist time (SHIMS.md #1). The python scorer stays
+    /// the single measure authority — the harness only invokes it against the run's own persisted
+    /// report. A machine without python, or a scorer failure, degrades to an honest gap: the run
+    /// carries no scores.json and the /runs surface says exactly that. It never fails the gate
+    /// run, and it never becomes a TypeScript recompute.
+    /// </summary>
+    private static void PersistScores(string repoRoot, string runDir)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo {
+            FileName = "python",
+            WorkingDirectory = repoRoot,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add(Path.Combine(repoRoot, "eval", "rhvac", "score-looks-good.py"));
+        psi.ArgumentList.Add("score");
+        psi.ArgumentList.Add(Path.Combine(runDir, "report.json"));
+        psi.ArgumentList.Add("--out");
+        psi.ArgumentList.Add(Path.Combine(runDir, "scores.json"));
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(psi)
+                ?? throw new InvalidOperationException("Process.Start returned null");
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(600_000))
+            {
+                process.Kill(entireProcessTree: true);
+                TestContext.Out.WriteLine("scores.json SKIPPED: scorer exceeded 10 minutes");
+                return;
+            }
+            if (process.ExitCode != 0)
+            {
+                TestContext.Out.WriteLine(
+                    $"scores.json SKIPPED: scorer exit {process.ExitCode}\n{stderr.Result.Trim()}");
+                return;
+            }
+            TestContext.Out.WriteLine(
+                $"scores.json written by score-looks-good.py: " +
+                $"{stdout.Result.Split('\n').FirstOrDefault(l => l.Contains("board"))?.Trim()}");
+        }
+        catch (Exception exception) when (
+            exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            TestContext.Out.WriteLine($"scores.json SKIPPED: python unavailable ({exception.Message})");
+        }
+    }
+
+    [Test]
+    public void Zone_filter_lands_in_options_hash()
+    {
+        // The 20260817-161144 law: a PE_TAKEOFF_ZONE run may never persist under the full
+        // baseline's hash, and an unfiltered run keeps its historical hash.
+        var options = new TakeoffOptions();
+        Assert.Multiple(() => {
+            Assert.That(OptionsHash(options, "Lower Level#08"), Is.Not.EqualTo(OptionsHash(options)));
+            Assert.That(OptionsHash(options, null), Is.EqualTo(OptionsHash(options)));
+            Assert.That(OptionsHash(options, "Lower Level#08"),
+                Is.Not.EqualTo(OptionsHash(options, "Main Level#03")));
+        });
     }
 
     [Test]
@@ -567,6 +885,8 @@ public sealed class ZoneBoundedDetectTests
     /// compiled: <c>PE_TAKEOFF_KNOBS="SmallZoneSqft=750;EdgeBandFt=2.0"</c>. Unset — the normal
     /// case — this changes nothing, and whatever it does change lands in report.json's
     /// <c>options</c>/<c>optionsHash</c>, so no artifact can be misattributed to the wrong knobs.
+    /// PE_TAKEOFF_ZONE is the other run-shaping input, and it lands too — in
+    /// <c>optionsHash</c>/runId AND explicitly as <c>zoneFilter</c> in report.json + meta.json.
     /// </summary>
     private static void ApplyKnobOverrides(TakeoffOptions options)
     {
@@ -588,10 +908,18 @@ public sealed class ZoneBoundedDetectTests
         }
     }
 
-    /// <summary>First 12 hex chars of SHA-256 over key-sorted, unindented JSON of the options.</summary>
-    private static string OptionsHash(TakeoffOptions options)
+    /// <summary>
+    /// First 12 hex chars of SHA-256 over key-sorted, unindented JSON of the options. The zone
+    /// filter is run IDENTITY, not a solver knob — but a PE_TAKEOFF_ZONE run must never hash like
+    /// the full baseline (run 20260817-161144-5973e5c14825 carried 1 zone under the 45-zone
+    /// baseline's hash and got picked as an A/B baseline). Filter absent = unfiltered = the
+    /// historical hash, so every existing full package keeps its identity.
+    /// </summary>
+    private static string OptionsHash(TakeoffOptions options, string? zoneFilter = null)
     {
-        string canonical = Canonical(JToken.FromObject(options)).ToString(Formatting.None);
+        var canonicalToken = (JObject)Canonical(JToken.FromObject(options));
+        if (zoneFilter != null) canonicalToken["~zoneFilter"] = zoneFilter;
+        string canonical = canonicalToken.ToString(Formatting.None);
         using var sha = System.Security.Cryptography.SHA256.Create();
         return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(canonical)))
             .ToLowerInvariant()[..12];

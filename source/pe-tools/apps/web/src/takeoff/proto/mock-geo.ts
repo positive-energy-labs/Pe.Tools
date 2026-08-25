@@ -8,8 +8,6 @@
  * flags, synthetic lifecycle metadata (stage, decisions, Manual J data, .r10 links) as before.
  * Zones the fixture doesn't cover keep their synthetic dot-rooms (outer stays null).
  */
-import { useEffect, useMemo, useState } from "react";
-
 import { loadFixtureTakeoff } from "#/rhvac/fixture";
 import type { RhvacTakeoffData, TakeoffResidueShape, TakeoffRoomShape } from "#/rhvac/types";
 import { containsEvenOdd } from "#/takeoff/model";
@@ -156,33 +154,5 @@ export function joinGeometry(world: MockWorld, takeoff: RhvacTakeoffData): GeoWo
   return { ...world, zones };
 }
 
-/** The round-2 data hook: mock world + real geometry. Renders synthetic-only until the fixture
- *  arrives; `geoReady` tells the page whether outlines are real yet. */
-export function useMockWorldGeo(): { world: GeoWorld; geoReady: boolean } {
-  const base = useMemo(() => mockWorld(), []);
-  const [takeoff, setTakeoff] = useState<RhvacTakeoffData | null>(null);
-  useEffect(() => {
-    let alive = true;
-    loadFixtureTakeoff()
-      .then((data) => alive && setTakeoff(data))
-      .catch(() => alive && setTakeoff(null));
-    return () => {
-      alive = false;
-    };
-  }, []);
-  const world = useMemo(
-    () =>
-      takeoff
-        ? joinGeometry(base, takeoff)
-        : {
-            ...base,
-            zones: base.zones.map((z) => ({
-              ...z,
-              rooms: z.rooms.map((r) => ({ ...r, outer: null as null, holes: [] })),
-              residues: [],
-            })),
-          },
-    [base, takeoff],
-  );
-  return { world, geoReady: takeoff !== null };
-}
+export const loadMockWorldGeo = async (): Promise<GeoWorld> =>
+  joinGeometry(mockWorld(), await loadFixtureTakeoff());

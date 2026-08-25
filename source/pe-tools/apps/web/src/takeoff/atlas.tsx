@@ -11,7 +11,9 @@
 // The atlas renders a `World` and calls back through `AtlasActions` — it owns selection and
 // optimistic decision state, nothing else. The route owns the world, the overlay, and every
 // host call.
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
 import {
   CellSelect,
@@ -21,7 +23,6 @@ import {
   TextCell,
   VERDICT_INK,
 } from "#/components/master-table/cells";
-import { AddressingBar } from "#/components/lang/addressing-bar";
 import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -31,6 +32,7 @@ import { MasterTable } from "#/components/master-table/master-table";
 import {
   fmtNum,
   type Column,
+  type MasterTableState,
   type Verdict as RowVerdict,
   type VerdictTone,
 } from "#/components/master-table/model";
@@ -39,13 +41,21 @@ import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affi
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { FLAG_MEANING, loopBounds, pathD } from "#/takeoff/model";
 import {
+  ATLAS_COLUMN_SEMANTICS,
+  ATLAS_ROOM_STATES as ROOM_STATES,
+  ATLAS_ROOM_STATE_LABEL,
+  atlasRoomState,
+  type AtlasRoomState as RoomState,
+  type AtlasRow as Row,
+  type TakeoffStore,
+} from "#/takeoff/store";
+import {
   SENSIBLE_CAP_BTUH,
   STAGE_ORDER,
   type RoomData,
   type RoomEdit,
   type RoomType,
   type Stage,
-  type World,
   type WorldLane,
   type WorldRoom,
   type WorldSystem,
@@ -55,28 +65,37 @@ import { cn } from "#/lib/utils";
 
 export type Verdict = "accept" | "dismiss";
 
+const atlasRowKey = (row: Row) => row.room.guid;
+const atlasGutter = (row: Row) =>
+  row.open.length > 0
+    ? {
+        count: row.open.length,
+        tone: "alarm" as const,
+        title: `${row.open.length} open detector call${row.open.length === 1 ? "" : "s"} owe a verdict — ${row.open.join(", ")} (a/d accepts or dismisses the first)`,
+      }
+    : null;
+
 export interface AtlasActions {
   /** Stage a Manual J / naming edit (session overlay; the .r10 takes it at sync). */
   patch: (guid: string, patch: RoomEdit) => void;
   /** Write-through: persist onto the Room Region blob (live) or accept locally (fixture). */
   decide: (room: WorldRoom, flag: string, verb: Verdict) => void;
-  openAdopt: () => void;
-  openSync: () => void;
   capture: (lane: WorldLane) => void;
   partition: (zone: WorldZone) => void;
   refresh: () => void;
 }
 
 export interface AtlasProps {
-  world: World;
-  /** Real room boundaries loaded (fixture fetch / live regions read finished). */
-  geoReady: boolean;
-  /** True when talking to a targeted Revit document; false on the explicit fixture adapter. */
-  live: boolean;
-  /** Label of the operation in flight, or null. One at a time — the host owns one transaction. */
-  busy: string | null;
-  actions: AtlasActions;
+  store: TakeoffStore;
 }
+
+const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
+  patch: (id, patch) => store.actions.patchRoom(id, patch),
+  decide: (room, flag, verdict) => store.actions.decideRoom(room, flag, verdict),
+  capture: (lane) => void store.actions.capture(lane).catch(() => undefined),
+  partition: (zone) => void store.actions.partition(zone).catch(() => undefined),
+  refresh: () => void store.actions.refresh().catch(() => undefined),
+});
 
 // ── Room state — the one progress vocabulary ────────────────────────────────
 //
@@ -95,29 +114,25 @@ export interface AtlasProps {
 // row-level PIPELINE VERDICT, not the cell grammar's state axes — the column rides the table's
 // `verdict:` clause, whose tone union is the meaning band by construction.
 
-type RoomState = "call" | "unreviewed" | "data" | "synced";
-
-const ROOM_STATES: RoomState[] = ["call", "unreviewed", "data", "synced"];
-
 const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; note: string }> = {
   call: {
     tone: "alarm",
-    label: "needs a call",
+    label: ATLAS_ROOM_STATE_LABEL.call,
     note: "a human must decide: an open detector flag, or the .r10 no longer matches the model",
   },
   unreviewed: {
     tone: "mute",
-    label: "no Manual J",
+    label: ATLAS_ROOM_STATE_LABEL.unreviewed,
     note: "nothing open, but no Manual J data entered yet — export would refuse this room",
   },
   data: {
     tone: "caution",
-    label: "data entered",
+    label: ATLAS_ROOM_STATE_LABEL.data,
     note: "Manual J data entered against settled geometry, not yet exported — unsaved",
   },
   synced: {
     tone: "done",
-    label: "in .r10",
+    label: ATLAS_ROOM_STATE_LABEL.synced,
     note: "exported and the .r10 still agrees with the model",
   },
 };
@@ -133,15 +148,6 @@ const stateMeta = (state: RoomState): RowVerdict => ({
   note: STATE_META[state].note,
   dim: state === "unreviewed",
 });
-
-/** The derivation. `open` is the count of undecided detector flags on this room. */
-function roomState(room: WorldRoom, open: number): RoomState {
-  if (open > 0) return "call";
-  if (room.r10 && room.r10.lastSyncedSqft !== room.sqft) return "call"; // drift is a call
-  if (room.r10) return "synced";
-  if (room.data) return "data";
-  return "unreviewed";
-}
 
 const STAGE_BLURB: Record<Stage, string> = {
   declared: "adopted, no system tag typed",
@@ -333,11 +339,45 @@ const onPlan = (z: WorldZone) => z.zone.declaredSqft >= PLAN_MIN_SQFT;
 
 // ── Row model ───────────────────────────────────────────────────────────────
 
-interface Row {
-  zone: WorldZone;
-  room: WorldRoom;
-  state: RoomState;
-  open: string[];
+function RoomNameCell({
+  store,
+  row,
+  onCommit,
+}: {
+  store: TakeoffStore;
+  row: Row;
+  onCommit: (value: string) => void;
+}) {
+  const entity = useAtomValue(store.atoms.entity(row.room.guid));
+  const state = [
+    entity.hovered ? "hovered" : null,
+    entity.selected ? "table selection" : null,
+    entity.dirty ? "staged" : null,
+    entity.conflict ? "authority changed" : null,
+  ].filter(Boolean);
+  return (
+    <div
+      data-dirty={entity.dirty || undefined}
+      data-conflict={entity.conflict || undefined}
+      title={state.join(" · ") || undefined}
+      className={cn(
+        "flex min-w-0 items-center",
+        entity.hovered && "[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
+        entity.selected && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <TextCell value={row.room.name} onCommit={onCommit} className="text-left" />
+      </div>
+      {entity.dirty && (
+        <span
+          className={cn("face-mono t-caption pr-1", entity.conflict && "text-[var(--r-caution)]")}
+        >
+          {entity.conflict ? "conflict" : "staged"}
+        </span>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -367,23 +407,44 @@ const PLAN_MAX_PX = 720;
 const PLAN_DEFAULT_PX = 340;
 const PLAN_CHROME_PX = 34;
 
-export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
-  const [stageFilter, setStageFilter] = useState<Stage | null>(null);
-  const [level, setLevel] = useState<string>("");
-  const [zoneKey, setZoneKey] = useState<string | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [decided, setDecided] = useState<Record<string, Verdict>>({});
+export function Atlas({ store }: AtlasProps) {
+  const world = useAtomValue(store.atoms.world);
+  const live = useAtomValue(store.atoms.source) === "live";
+  const busyState = useAtomValue(store.atoms.busy);
+  const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
+  const geoReady = AsyncResult.isSuccess(useAtomValue(store.atoms.snapshot));
+  const actions = useMemo(() => createAtlasActions(store), [store]);
+  const stageFilter = useAtomValue(store.atoms.stageFilter);
+  const zoneKey = useAtomValue(store.atoms.zoneKey);
+  const pageLevel = useAtomValue(store.atoms.level);
+  const cursor = useAtomValue(store.atoms.cursor);
+  const fieldsMode = useAtomValue(store.atoms.fieldsMode);
+  const tableState = useAtomValue(store.atoms.atlasTableState);
+  const rows = useAtomValue(store.atoms.atlasRows);
+  const visibleKeys = useAtomValue(store.atoms.visibleRows);
+  const decided = useAtomValue(store.atoms.decisions);
+  const level = pageLevel || world.lanes[0]?.label || "";
+  const setStageFilter = (value: Stage | null) =>
+    store.actions.setAtlasPage({ stageFilter: value });
+  const setLevel = useCallback(
+    (value: string) => store.actions.setAtlasPage({ level: value }),
+    [store],
+  );
+  const setZoneKey = (value: string | null) => {
+    store.actions.setAtlasPage({ zoneKey: value });
+    store.actions.focusZone(world.zones.find((zone) => zone.zone.key === value)?.zone.guid ?? "");
+  };
+  const setCursor = useCallback(
+    (value: string | null) => {
+      store.actions.setAtlasPage({ cursor: value });
+      store.actions.selectRoom(value ?? "");
+    },
+    [store],
+  );
   /** Where the per-room Manual J fields live: inline table columns (dense, whole-scope entry)
    *  or the room panel (narrow table, one room in focus). One home at a time, never both. */
-  const [fieldsMode, setFieldsMode] = useState<"columns" | "panel">("columns");
   /** The row order the user is actually looking at — MasterTable owns filter/sort/search, and
    *  reports the result here so j/k walks the SAME order rather than the pre-filter scope. */
-  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
-
-  // First lane to arrive names the initial level tab (lanes are live data, not a constant).
-  useEffect(() => {
-    if (!level && world.lanes.length > 0) setLevel(world.lanes[0]!.label);
-  }, [level, world.lanes]);
 
   // Plan geometry: controlled collapse; PaneWorkspace owns and persists its resized height.
   const [planOpen, setPlanOpen] = useState(true);
@@ -393,7 +454,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
   // world arrives with them already applied. The atlas only forwards patches.
   const openFlags = (room: WorldRoom) => room.flags.filter((f) => !decided[flagKey(room.guid, f)]);
 
-  const stateOf = (room: WorldRoom) => roomState(room, openFlags(room).length);
+  const stateOf = (room: WorldRoom) => atlasRoomState(room, openFlags(room).length);
   const zoneStates = (z: WorldZone) => z.rooms.map((r) => stateOf(r));
   const zoneCalls = (z: WorldZone) => zoneStates(z).filter((s) => s === "call").length;
 
@@ -406,26 +467,25 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
   );
 
   const selected = zoneKey ? (world.zones.find((z) => z.zone.key === zoneKey) ?? null) : null;
+  const setTableState = useCallback(
+    (state: MasterTableState) => store.actions.setTableState(state),
+    [store],
+  );
+  const selectTableRow = useCallback(
+    (row: Row) => {
+      setCursor(row.room.guid);
+      if (!selected) setLevel(row.zone.zone.lane.label);
+    },
+    [selected, setCursor, setLevel],
+  );
+  const hoverTableRow = useCallback(
+    (row: Row | null) => store.actions.hover(row?.room.guid ?? ""),
+    [store],
+  );
   const levelZones = world.zones.filter((z) => z.zone.lane.label === level);
 
   // Scope only — plan selection and the rail's pipeline filter. Every other narrowing (stage,
   // state, type, flags, free text) is the table's own, and shows as a chip in its strip.
-  const scopeZones = useMemo(
-    () => (selected ? [selected] : filteredZones),
-    [selected, filteredZones],
-  );
-  const rows = useMemo<Row[]>(() => {
-    const out: Row[] = [];
-    for (const zone of scopeZones) {
-      for (const room of zone.rooms) {
-        const open = openFlags(room);
-        out.push({ zone, room, state: roomState(room, open.length), open });
-      }
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeZones, decided]);
-
   // What the table is actually showing, in its order.
   const visibleRows = useMemo(() => {
     const byGuid = new Map(rows.map((r) => [r.room.guid, r]));
@@ -441,37 +501,38 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
   }, [world]);
 
   // ── Keyboard: j/k cursor, a/d verbs, Esc clears scope (←/→ belong to the switcher) ──
+  const keydown = useRef<(event: KeyboardEvent) => void>(() => undefined);
+  keydown.current = (e) => {
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.isContentEditable)) return;
+    if (e.key === "Escape") {
+      setZoneKey(null);
+      setCursor(null);
+      return;
+    }
+    if (e.key === "j" || e.key === "k") {
+      e.preventDefault();
+      if (visibleRows.length === 0) return;
+      const i = visibleRows.findIndex((r) => r.room.guid === cursor);
+      const next = e.key === "j" ? Math.min(visibleRows.length - 1, i + 1) : Math.max(0, i - 1);
+      setCursor(visibleRows[i === -1 ? 0 : next]!.room.guid);
+      return;
+    }
+    if ((e.key === "a" || e.key === "d") && cursorRow) {
+      if (cursorRow.open.length === 0) return;
+      e.preventDefault();
+      decide(cursorRow.room, cursorRow.open[0]!, e.key === "a" ? "accept" : "dismiss");
+    }
+  };
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.isContentEditable)) return;
-      if (e.key === "Escape") {
-        setZoneKey(null);
-        setCursor(null);
-        return;
-      }
-      if (e.key === "j" || e.key === "k") {
-        e.preventDefault();
-        if (visibleRows.length === 0) return;
-        const i = visibleRows.findIndex((r) => r.room.guid === cursor);
-        const next = e.key === "j" ? Math.min(visibleRows.length - 1, i + 1) : Math.max(0, i - 1);
-        setCursor(visibleRows[i === -1 ? 0 : next]!.room.guid);
-        return;
-      }
-      if ((e.key === "a" || e.key === "d") && cursorRow) {
-        if (cursorRow.open.length === 0) return;
-        e.preventDefault();
-        decide(cursorRow.room, cursorRow.open[0]!, e.key === "a" ? "accept" : "dismiss");
-      }
-    };
+    const onKey = (event: KeyboardEvent) => keydown.current(event);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, []);
 
   // Optimistic: mark locally, then write through. The route re-reads on demand; a failed
   // write surfaces through the route's error lane, never as a silently-kept decision.
   const decide = (room: WorldRoom, flag: string, verb: Verdict) => {
-    setDecided((prev) => ({ ...prev, [flagKey(room.guid, flag)]: verb }));
     actions.decide(room, flag, verb);
   };
 
@@ -489,8 +550,8 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         label: "stage",
         title: "the ZONE's pipeline label — not a claim about this room",
         width: "w-28",
-        sort: (row) => STAGE_ORDER.indexOf(row.zone.stage),
-        facet: (row) => row.zone.stage,
+        sort: ATLAS_COLUMN_SEMANTICS.stage.sort,
+        facet: ATLAS_COLUMN_SEMANTICS.stage.facet,
         options: STAGE_ORDER.map((s) => ({ value: s, label: s })),
         cell: (row) => (
           <ReadCell
@@ -508,7 +569,8 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         verdict: (row) => stateMeta(row.state),
         // Pipeline order, not alphabetical: "needs a call" sorts before "in .r10" because that
         // is the order the work happens in.
-        sort: (row) => ROOM_STATES.indexOf(row.state),
+        sort: ATLAS_COLUMN_SEMANTICS.state.sort,
+        facet: ATLAS_COLUMN_SEMANTICS.state.facet,
         options: ROOM_STATES.map((s) => ({
           value: STATE_META[s].label,
           label: STATE_META[s].label,
@@ -518,7 +580,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         key: "zone",
         label: "zone",
         width: "w-24",
-        sort: (row) => row.zone.zone.key,
+        sort: ATLAS_COLUMN_SEMANTICS.zone.sort,
         search: (row) => row.zone.zone.key,
         cell: (row) => (
           <span className="face-mono t-value block truncate px-1.5">
@@ -534,13 +596,13 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         key: "name",
         label: "name",
         width: "min-w-40",
-        sort: (row) => row.room.name,
+        sort: ATLAS_COLUMN_SEMANTICS.name.sort,
         search: (row) => row.room.name,
         cell: (row) => (
-          <TextCell
-            value={row.room.name}
-            onCommit={(v) => actions.patch(row.room.guid, { name: v })}
-            className="text-left"
+          <RoomNameCell
+            store={store}
+            row={row}
+            onCommit={(value) => actions.patch(row.room.guid, { name: value })}
           />
         ),
       },
@@ -548,9 +610,9 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         key: "type",
         label: "type",
         width: "w-32",
-        sort: (row) => row.room.type,
+        sort: ATLAS_COLUMN_SEMANTICS.type.sort,
         search: (row) => row.room.type,
-        facet: (row) => row.room.type,
+        facet: ATLAS_COLUMN_SEMANTICS.type.facet,
         options: ROOM_TYPES.map((t) => ({ value: t, label: t })),
         cell: (row) => (
           <CellSelect
@@ -571,7 +633,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         title: "detected area — geometry is edited in Revit",
         right: true,
         width: "w-16",
-        sort: (row) => row.room.sqft,
+        sort: ATLAS_COLUMN_SEMANTICS.sqft.sort,
         cell: (row) => (
           <ReadCell
             value={row.room.sqft}
@@ -590,7 +652,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
               label: "ceil",
               right: true,
               width: "w-14",
-              sort: (row) => row.room.ceilingFt,
+              sort: ATLAS_COLUMN_SEMANTICS.ceil.sort,
               cell: (row) => (
                 <NumberCell
                   value={row.room.ceilingFt}
@@ -606,7 +668,7 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
                 label: mj.label,
                 right: true,
                 width: mj.width,
-                sort: (row) => row.room.data?.[mj.field] ?? 0,
+                sort: ATLAS_COLUMN_SEMANTICS[mj.field].sort,
                 cell: (row) => (
                   <ManualJField
                     room={row.room}
@@ -623,15 +685,10 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         label: "flags",
         width: "w-24",
         title: "undecided detector calls on this room — a/d accept or dismiss the first one",
-        sort: (row) => row.open.length,
+        sort: ATLAS_COLUMN_SEMANTICS.flags.sort,
         // Multi-valued: a room carries a SET of flags, so the vocabulary is "any open" /
         // "none open" / one named flag rather than a single cell value.
-        match: (row, value) =>
-          value === "any"
-            ? row.open.length > 0
-            : value === "none"
-              ? row.open.length === 0
-              : row.open.includes(value),
+        match: ATLAS_COLUMN_SEMANTICS.flags.match,
         options: [
           { value: "any", label: "any open" },
           { value: "none", label: "none open" },
@@ -667,6 +724,8 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
         title:
           "this room's line in the .r10, and whether it still agrees with the model. Read-only: the identifier is assigned by sync, never typed.",
         state: r10State,
+        sort: ATLAS_COLUMN_SEMANTICS.r10.sort,
+        facet: ATLAS_COLUMN_SEMANTICS.r10.facet,
         // The domain word for the never rung (`StateColumn.word`, ruled with #1 and R2): the
         // universal "never" is true but the route's fact is sharper — nothing of this room was
         // ever exported. The marks stay universal; every other row keeps the grammar's word.
@@ -702,69 +761,17 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
 
   return (
     <main className="flex h-screen min-h-0 flex-col bg-background">
-      {/* ── ONE head rail (lang AddressingBar — families #11's five-slot rule, adopted).
-             `sync .r10` is THE page-blast verb: it is where reviewed work leaves this page.
-             `adopt zones` and `refresh` act on the world the zones pane indexes, so they live
-             in that pane's action strip; `open in RHVAC` acts on the joined .r10, so it lives
-             in the sync panel beside the join it launches. ── */}
-      <AddressingBar
-        name="takeoffs"
-        sentence={
-          <span
-            className="face-mono t-value text-[var(--r-ink)]"
-            title={
-              live
-                ? "The targeted Revit document. Every read and every write on this page addresses it."
-                : // The nothing-can-be-written stamp lives on the seam chip (its one home).
-                  "The project-a replay fixture — chosen explicitly by ?source=fixture."
-            }
-          >
-            <span className="text-[var(--r-ink-2)]">auditing </span>
-            {world.docName || "…"}
-          </span>
-        }
-        facts={
-          world.r10Path && (
-            <FactChip title="The .r10 this document is joined against — the Manual J file rooms sync into.">
-              {world.r10Path}
-            </FactChip>
-          )
-        }
-        verb={
-          <Verb
-            label="sync .r10"
-            onClick={actions.openSync}
-            disabled={!live || busy !== null}
-            reason={hostReason(
-              live,
-              busy,
-              "Opens the sync panel: insert reviewed rooms with Manual J data into the target .r10",
-              "fixture · no .r10 to sync into",
-            )}
+      {/* The head rail moved to the route's TargetingHead (bindings · stages · verbs · seam
+          chip · busy receipt). What stays here is the one advisory only this pane can know. */}
+      {!geoReady && (
+        <div className="px-2 py-1">
+          <OutcomeLine
+            kind="busy"
+            label="loading room geometry"
+            says="rooms draw as position dots until their boundaries land"
           />
-        }
-        advisory={
-          busy ? (
-            <OutcomeLine kind="busy" label={busy} says="the host runs one transaction at a time" />
-          ) : !geoReady ? (
-            <OutcomeLine
-              kind="busy"
-              label="loading room geometry"
-              says="rooms draw as position dots until their boundaries land"
-            />
-          ) : undefined
-        }
-        seam={
-          !live ? (
-            <FactChip
-              dashed
-              title="The fixture lane — the project-a replay, chosen explicitly by ?source=fixture. No document is attached, and nothing here can be written."
-            >
-              fixture · project-a replay
-            </FactChip>
-          ) : undefined
-        }
-      />
+        </div>
+      )}
 
       <PaneWorkspace
         className="min-h-0 flex-1"
@@ -784,386 +791,354 @@ export function Atlas({ world, geoReady, live, busy, actions }: AtlasProps) {
           },
         }}
         navigation={
-          <Pane
-            kind="navigation"
-            title="zones"
-            meta={`${world.zones.length} declared`}
-            /* The pane's own action strip: both verbs act on the world this pane indexes —
-               adoption fills the zone list, refresh re-reads it (families #11's standing rule;
-               they left the head when it became the five-slot rail). */
-            actions={
-              <>
-                <Verb
-                  label="adopt zones"
-                  onClick={actions.openAdopt}
-                  disabled={!live || busy !== null}
-                  reason={hostReason(
-                    live,
-                    busy,
-                    "Opens the adoption panel: stamp designer-drawn regions in a zoning view as Zoning Regions",
-                    "fixture · no document to stamp into",
-                  )}
-                />
-                <Verb
-                  label="refresh"
-                  onClick={actions.refresh}
-                  disabled={!live || busy !== null}
-                  reason={hostReason(
-                    live,
-                    busy,
-                    "Re-reads the model: zones, materialized regions, decisions, and the .r10 join",
-                    "fixture · the replay is already the whole world",
-                  )}
-                />
-              </>
-            }
-          >
-            <div className="shrink-0 border-b border-border px-2 py-1.5">
-              <div className="t-caption t-upper mb-1 text-muted-foreground">
-                room states — one per room
-              </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                {ROOM_STATES.map((s) => (
-                  <span
-                    key={s}
-                    title={STATE_META[s].note}
-                    className="face-mono t-value inline-flex items-center gap-1 text-muted-foreground"
-                  >
-                    <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
-                    {STATE_META[s].label}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="shrink-0 border-b border-border px-2 py-2">
-              <div className="t-caption t-upper mb-1 text-muted-foreground">
-                zone pipeline — global filter
-              </div>
-              <div className="flex flex-col">
-                {stageCounts.map(({ stage, n }, i) => {
-                  const on = stageFilter === stage;
-                  return (
-                    <button
-                      key={stage}
-                      type="button"
-                      title={STAGE_BLURB[stage]}
-                      onClick={() => {
-                        setStageFilter(on ? null : stage);
-                        setZoneKey(null);
-                        setCursor(null);
-                      }}
-                      // Selection is a FILL, never a hue: `bg-accent` resolves to `--r-select`,
-                      // the ground ladder's fourth rung. The old `bg-primary/[0.08]` spent the
-                      // one filled blue — reserved for writes that leave the page — on "what is lit".
-                      className={cn(
-                        "flex items-baseline gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
-                        on && "bg-accent",
-                      )}
+          <Suspense fallback={<div className="p-2 text-muted-foreground">reading zones…</div>}>
+            <Pane
+              kind="navigation"
+              title="zones"
+              meta={`${world.zones.length} declared`}
+              /* adopt · refresh moved to the TargetingHead's stage verbs (they demand bindings). */
+            >
+              <div className="shrink-0 border-b border-border px-2 py-1.5">
+                <div className="t-caption t-upper mb-1 text-muted-foreground">
+                  room states — one per room
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {ROOM_STATES.map((s) => (
+                    <span
+                      key={s}
+                      title={STATE_META[s].note}
+                      className="face-mono t-value inline-flex items-center gap-1 text-muted-foreground"
                     >
-                      <span className="face-mono t-value w-3 shrink-0 text-muted-foreground">
-                        {i + 1}
-                      </span>
-                      <span
+                      <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
+                      {STATE_META[s].label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="shrink-0 border-b border-border px-2 py-2">
+                <div className="t-caption t-upper mb-1 text-muted-foreground">
+                  zone pipeline — global filter
+                </div>
+                <div className="flex flex-col">
+                  {stageCounts.map(({ stage, n }, i) => {
+                    const on = stageFilter === stage;
+                    return (
+                      <button
+                        key={stage}
+                        type="button"
+                        title={STAGE_BLURB[stage]}
+                        onClick={() => {
+                          setStageFilter(on ? null : stage);
+                          setZoneKey(null);
+                          setCursor(null);
+                        }}
+                        // Selection is a FILL, never a hue: `bg-accent` resolves to `--r-select`,
+                        // the ground ladder's fourth rung. The old `bg-primary/[0.08]` spent the
+                        // one filled blue — reserved for writes that leave the page — on "what is lit".
                         className={cn(
-                          "face-mono t-value flex-1 truncate",
-                          !on && "text-muted-foreground",
+                          "flex items-baseline gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
+                          on && "bg-accent",
                         )}
                       >
-                        {stage}
-                      </span>
-                      <span className="face-mono t-value tabular-nums text-muted-foreground">
-                        {n}
-                      </span>
-                    </button>
+                        <span className="face-mono t-value w-3 shrink-0 text-muted-foreground">
+                          {i + 1}
+                        </span>
+                        <span
+                          className={cn(
+                            "face-mono t-value flex-1 truncate",
+                            !on && "text-muted-foreground",
+                          )}
+                        >
+                          {stage}
+                        </span>
+                        <span className="face-mono t-value tabular-nums text-muted-foreground">
+                          {n}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {stageFilter && (
+                  <button
+                    type="button"
+                    className="t-caption mt-1 text-muted-foreground hover:text-foreground"
+                    onClick={() => setStageFilter(null)}
+                  >
+                    clear filter — show all {world.zones.length}
+                  </button>
+                )}
+              </div>
+
+              {/* Group by level only so the list stays consistent — level is never the organizer. */}
+              <div>
+                {world.lanes.map((lane) => {
+                  const zs = filteredZones.filter((z) => z.zone.lane.label === lane.label);
+                  if (zs.length === 0) return null;
+                  return (
+                    <div key={lane.label}>
+                      <div className="t-caption t-upper sticky top-0 z-10 border-y border-[var(--r-line)] bg-muted px-2 py-0.5 text-muted-foreground">
+                        {lane.label} · {zs.length}
+                      </div>
+                      <ul>
+                        {zs.map((z) => {
+                          const states = zoneStates(z);
+                          const calls = states.filter((s) => s === "call").length;
+                          const on = z.zone.key === zoneKey;
+                          const off = !onPlan(z);
+                          return (
+                            <li key={z.zone.key}>
+                              <button
+                                type="button"
+                                onClick={() => selectZone(on ? null : z)}
+                                title={
+                                  off
+                                    ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
+                                    : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
+                                }
+                                className={cn(
+                                  "flex w-full items-center gap-1.5 border-b border-[var(--r-line)] px-2 py-1 text-left hover:bg-muted",
+                                  on && "bg-accent",
+                                  off && "opacity-55",
+                                )}
+                              >
+                                <ZoneThumb zone={z.zone} className="size-5" />
+                                <span className="face-mono t-value shrink-0">{z.zone.key}</span>
+                                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                                  {off ? "off-plan scribble" : z.name}
+                                </span>
+                                {calls > 0 && (
+                                  <FactChip
+                                    tone="alarm"
+                                    className="shrink-0"
+                                    title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
+                                  >
+                                    {calls} call{calls === 1 ? "" : "s"}
+                                  </FactChip>
+                                )}
+                                <ZoneStateBar zone={z} states={states} />
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
                   );
                 })}
               </div>
-              {stageFilter && (
-                <button
-                  type="button"
-                  className="t-caption mt-1 text-muted-foreground hover:text-foreground"
-                  onClick={() => setStageFilter(null)}
-                >
-                  clear filter — show all {world.zones.length}
-                </button>
-              )}
-            </div>
-
-            {/* Group by level only so the list stays consistent — level is never the organizer. */}
-            <div>
-              {world.lanes.map((lane) => {
-                const zs = filteredZones.filter((z) => z.zone.lane.label === lane.label);
-                if (zs.length === 0) return null;
-                return (
-                  <div key={lane.label}>
-                    <div className="t-caption t-upper sticky top-0 z-10 border-y border-[var(--r-line)] bg-muted px-2 py-0.5 text-muted-foreground">
-                      {lane.label} · {zs.length}
-                    </div>
-                    <ul>
-                      {zs.map((z) => {
-                        const states = zoneStates(z);
-                        const calls = states.filter((s) => s === "call").length;
-                        const on = z.zone.key === zoneKey;
-                        const off = !onPlan(z);
-                        return (
-                          <li key={z.zone.key}>
-                            <button
-                              type="button"
-                              onClick={() => selectZone(on ? null : z)}
-                              title={
-                                off
-                                  ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
-                                  : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
-                              }
-                              className={cn(
-                                "flex w-full items-center gap-1.5 border-b border-[var(--r-line)] px-2 py-1 text-left hover:bg-muted",
-                                on && "bg-accent",
-                                off && "opacity-55",
-                              )}
-                            >
-                              <ZoneThumb zone={z.zone} className="size-5" />
-                              <span className="face-mono t-value shrink-0">{z.zone.key}</span>
-                              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                                {off ? "off-plan scribble" : z.name}
-                              </span>
-                              {calls > 0 && (
-                                <FactChip
-                                  tone="alarm"
-                                  className="shrink-0"
-                                  title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
-                                >
-                                  {calls} call{calls === 1 ? "" : "s"}
-                                </FactChip>
-                              )}
-                              <ZoneStateBar zone={z} states={states} />
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          </Pane>
+            </Pane>
+          </Suspense>
         }
         visual={
-          <Pane
-            kind="visual"
-            toolbar={
-              <>
-                {world.lanes.map((lane) => {
-                  const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
-                  const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
-                  return (
-                    <button
-                      key={lane.label}
-                      type="button"
-                      onClick={() => setLevel(lane.label)}
-                      title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
-                      className={cn(
-                        "face-mono t-value rounded-[var(--radius)] border px-2 py-0.5",
-                        lane.label === level
-                          ? "border-[var(--r-line-2)] bg-accent"
-                          : "border-transparent text-muted-foreground hover:bg-muted",
-                      )}
-                    >
-                      {lane.label}
-                      <span className="ml-1 opacity-60">{zs.length}</span>
-                      {calls > 0 && <span className="ml-1 text-[var(--r-alarm)]">·{calls}</span>}
-                    </button>
-                  );
-                })}
+          <Suspense fallback={<div className="p-2 text-muted-foreground">reading plan…</div>}>
+            <Pane
+              kind="visual"
+              toolbar={
+                <>
+                  {world.lanes.map((lane) => {
+                    const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
+                    const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
+                    return (
+                      <button
+                        key={lane.label}
+                        type="button"
+                        onClick={() => setLevel(lane.label)}
+                        title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
+                        className={cn(
+                          "face-mono t-value rounded-[var(--radius)] border px-2 py-0.5",
+                          lane.label === level
+                            ? "border-[var(--r-line-2)] bg-accent"
+                            : "border-transparent text-muted-foreground hover:bg-muted",
+                        )}
+                      >
+                        {lane.label}
+                        <span className="ml-1 opacity-60">{zs.length}</span>
+                        {calls > 0 && <span className="ml-1 text-[var(--r-alarm)]">·{calls}</span>}
+                      </button>
+                    );
+                  })}
 
-                <button
-                  type="button"
-                  onClick={() => setStatsOpen((v) => !v)}
-                  title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
-                  className={cn(
-                    "face-mono t-value ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5",
-                    statsOpen ? "bg-accent" : "text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  level stats
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPlanOpen((v) => !v)}
-                  title={
-                    planOpen
-                      ? "collapse the plan — give the table the full height"
-                      : "show the plan"
-                  }
-                  className="face-mono t-value rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
-                >
-                  {planOpen ? "▴ hide plan" : "▾ show plan"}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatsOpen((v) => !v)}
+                    title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
+                    className={cn(
+                      "face-mono t-value ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5",
+                      statsOpen ? "bg-accent" : "text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    level stats
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanOpen((v) => !v)}
+                    title={
+                      planOpen
+                        ? "collapse the plan — give the table the full height"
+                        : "show the plan"
+                    }
+                    className="face-mono t-value rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
+                  >
+                    {planOpen ? "▴ hide plan" : "▾ show plan"}
+                  </button>
 
-                <span className="face-mono t-value ml-auto text-muted-foreground">
-                  {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc
-                  clears
-                </span>
-              </>
-            }
-          >
-            <LevelPlan
-              zones={levelZones}
-              stageFilter={stageFilter}
-              selectedKey={zoneKey}
-              cursor={cursor}
-              stateOf={stateOf}
-              onSelectZone={selectZone}
-              onCursor={(z, guid) => {
-                setZoneKey(z.zone.key);
-                setLevel(z.zone.lane.label);
-                setCursor(guid);
-              }}
-              onClear={() => {
-                setZoneKey(null);
-                setCursor(null);
-              }}
-            />
-            {statsOpen && (
-              <LevelStats
-                level={level}
+                  <span className="face-mono t-value ml-auto text-muted-foreground">
+                    {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc
+                    clears
+                  </span>
+                </>
+              }
+            >
+              <LevelPlan
                 zones={levelZones}
+                stageFilter={stageFilter}
+                selectedKey={zoneKey}
+                cursor={cursor}
                 stateOf={stateOf}
-                onClose={() => setStatsOpen(false)}
+                onSelectZone={selectZone}
+                onHover={(id) => store.actions.hover(id)}
+                onCursor={(z, guid) => {
+                  setZoneKey(z.zone.key);
+                  setLevel(z.zone.lane.label);
+                  setCursor(guid);
+                }}
+                onClear={() => {
+                  setZoneKey(null);
+                  setCursor(null);
+                }}
               />
-            )}
-            {/* Zone info lives ON the plan, where the zone is — not in a far-away rail. */}
-            {selected && (
-              <ZoneCard
-                zone={selected}
-                cursorRoom={cursorRow?.room ?? null}
-                geoReady={geoReady}
-                live={live}
-                busy={busy}
-                actions={actions}
-                stateOf={stateOf}
-                systems={world.systems}
-                onClose={() => selectZone(null)}
-              />
-            )}
-          </Pane>
+              {statsOpen && (
+                <LevelStats
+                  level={level}
+                  zones={levelZones}
+                  stateOf={stateOf}
+                  onClose={() => setStatsOpen(false)}
+                />
+              )}
+              {/* Zone info lives ON the plan, where the zone is — not in a far-away rail. */}
+              {selected && (
+                <ZoneCard
+                  store={store}
+                  zone={selected}
+                  cursorRoom={cursorRow?.room ?? null}
+                  geoReady={geoReady}
+                  live={live}
+                  busy={busy}
+                  actions={actions}
+                  stateOf={stateOf}
+                  systems={world.systems}
+                  onClose={() => selectZone(null)}
+                />
+              )}
+            </Pane>
+          </Suspense>
         }
         content={
-          <Pane kind="content" scroll="clip">
-            {/* Room data sits BESIDE the rooms it describes. The panel exists exactly when a
+          <Suspense fallback={<div className="p-2 text-muted-foreground">reading rooms…</div>}>
+            <Pane kind="content" scroll="clip">
+              {/* Room data sits BESIDE the rooms it describes. The panel exists exactly when a
                 room is under the cursor; Esc clears both. The table never unmounts (its filter
                 state must survive the cursor coming and going). */}
-            <PaneSplit
-              axis="horizontal"
-              resize={{
-                target: "end",
-                defaultSize: 320,
-                minSize: 240,
-                maxSize: 520,
-                minOtherSize: 360,
-                persist: "pe.takeoffs.room-panel-width",
-                collapse: { collapsed: cursorRow == null, collapsedSize: 0 },
-              }}
-              start={
-                <MasterTable
-                  rows={rows}
-                  columns={columns}
-                  rowKey={(row) => row.room.guid}
-                  // THE OWED MARKER (fit reviews, ruled 2026-08-16): open detector calls owe a
-                  // human verdict — the gutter locates them with the count in the one alarm.
-                  // The flags column keeps the FILTER job; its cell dropped the duplicate
-                  // alarm count when this landed.
-                  gutter={(row) =>
-                    row.open.length > 0
-                      ? {
-                          count: row.open.length,
-                          tone: "alarm" as const,
-                          title: `${row.open.length} open detector call${row.open.length === 1 ? "" : "s"} owe a verdict — ${row.open.join(", ")} (a/d accepts or dismisses the first)`,
-                        }
-                      : null
-                  }
-                  scopeLabel="rooms in scope"
-                  searchPlaceholder="name / type / zone…"
-                  chips={chips}
-                  summary={
-                    <>
-                      {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
-                      {scopeCalls > 0 && (
-                        <span className="text-[var(--r-alarm)]">
-                          {" "}
-                          · {scopeCalls} needing a call
-                        </span>
-                      )}
-                      <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
-                      {/* The fields-mode control lives HERE, not in the room panel — the panel
+              <PaneSplit
+                axis="horizontal"
+                resize={{
+                  target: "end",
+                  defaultSize: 320,
+                  minSize: 240,
+                  maxSize: 520,
+                  minOtherSize: 360,
+                  persist: "pe.takeoffs.room-panel-width",
+                  collapse: { collapsed: cursorRow == null, collapsedSize: 0 },
+                }}
+                start={
+                  <MasterTable
+                    rows={rows}
+                    columns={columns}
+                    rowKey={atlasRowKey}
+                    // THE OWED MARKER (fit reviews, ruled 2026-08-16): open detector calls owe a
+                    // human verdict — the gutter locates them with the count in the one alarm.
+                    // The flags column keeps the FILTER job; its cell dropped the duplicate
+                    // alarm count when this landed.
+                    gutter={atlasGutter}
+                    scopeLabel="rooms in scope"
+                    searchPlaceholder="name / type / zone…"
+                    chips={chips}
+                    summary={
+                      <>
+                        {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
+                        {scopeCalls > 0 && (
+                          <span className="text-[var(--r-alarm)]">
+                            {" "}
+                            · {scopeCalls} needing a call
+                          </span>
+                        )}
+                        <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
+                        {/* The fields-mode control lives HERE, not in the room panel — the panel
                           vanishes with the cursor, and a mode's off-switch must not vanish
                           with it. */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFieldsMode((mode) => (mode === "panel" ? "columns" : "panel"))
-                        }
-                        title={
-                          fieldsMode === "panel"
-                            ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
-                            : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
-                        }
-                        className="ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
-                      >
-                        fields: {fieldsMode}
-                      </button>
-                    </>
-                  }
-                  empty={
-                    // §4's two kinds, derived: the table's own narrowing (its filters, or the
-                    // rail/plan scope) hid rooms that exist — or the world genuinely has none.
-                    rows.length > 0 ? (
-                      <EmptyState story="filter" exit="clear a column filter or the search">
-                        the narrowing hid all {rows.length} rooms in scope
-                      </EmptyState>
-                    ) : world.zones.some((z) => z.rooms.length > 0) ? (
-                      <EmptyState story="filter" exit="widen the rail filter or press Esc">
-                        no rooms in this scope — the rail filter or the plan selection narrowed past
-                        every partitioned zone
-                      </EmptyState>
-                    ) : (
-                      <EmptyState
-                        story="scope"
-                        exit="capture a level, then partition a zone — rooms are materialized by partition"
-                      >
-                        no rooms anywhere yet — zones before partitioned have no rooms
-                      </EmptyState>
-                    )
-                  }
-                  activeKey={cursor}
-                  onRowClick={(row) => {
-                    setCursor(row.room.guid);
-                    if (!selected) setLevel(row.zone.zone.lane.label);
-                  }}
-                  onVisibleChange={(keys) =>
-                    setVisibleKeys((prev) =>
-                      prev.length === keys.length && prev.every((k, i) => k === keys[i])
-                        ? prev
-                        : keys,
-                    )
-                  }
-                />
-              }
-              end={
-                cursorRow && (
-                  <RoomPanel
-                    row={cursorRow}
-                    decided={decided}
-                    live={live}
-                    fieldsMode={fieldsMode}
-                    onDecide={decide}
-                    onPatch={(patch) => actions.patch(cursorRow.room.guid, patch)}
-                    url={proposedUrl}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            store.actions.setAtlasPage({
+                              fieldsMode: fieldsMode === "panel" ? "columns" : "panel",
+                            })
+                          }
+                          title={
+                            fieldsMode === "panel"
+                              ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
+                              : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
+                          }
+                          className="ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
+                        >
+                          fields: {fieldsMode}
+                        </button>
+                      </>
+                    }
+                    empty={
+                      // §4's two kinds, derived: the table's own narrowing (its filters, or the
+                      // rail/plan scope) hid rooms that exist — or the world genuinely has none.
+                      rows.length > 0 ? (
+                        <EmptyState story="filter" exit="clear a column filter or the search">
+                          the narrowing hid all {rows.length} rooms in scope
+                        </EmptyState>
+                      ) : world.zones.some((z) => z.rooms.length > 0) ? (
+                        <EmptyState story="filter" exit="widen the rail filter or press Esc">
+                          no rooms in this scope — the rail filter or the plan selection narrowed
+                          past every partitioned zone
+                        </EmptyState>
+                      ) : (
+                        <EmptyState
+                          story="scope"
+                          exit="capture a level, then partition a zone — rooms are materialized by partition"
+                        >
+                          no rooms anywhere yet — zones before partitioned have no rooms
+                        </EmptyState>
+                      )
+                    }
+                    activeKey={cursor}
+                    tableState={tableState}
+                    onTableStateChange={setTableState}
+                    visibleKeys={visibleKeys}
+                    onRowClick={selectTableRow}
+                    onRowHover={hoverTableRow}
                   />
-                )
-              }
-            />
-          </Pane>
+                }
+                end={
+                  cursorRow && (
+                    <RoomPanelFromStore
+                      store={store}
+                      row={cursorRow}
+                      live={live}
+                      fieldsMode={fieldsMode}
+                      onDecide={decide}
+                      onPatch={(patch) => actions.patch(cursorRow.room.guid, patch)}
+                      url={proposedUrl}
+                    />
+                  )
+                }
+              />
+            </Pane>
+          </Suspense>
         }
       />
     </main>
@@ -1179,6 +1154,7 @@ function LevelPlan({
   cursor,
   stateOf,
   onSelectZone,
+  onHover,
   onCursor,
   onClear,
 }: {
@@ -1188,6 +1164,7 @@ function LevelPlan({
   cursor: string | null;
   stateOf: (room: WorldRoom) => RoomState;
   onSelectZone: (z: WorldZone) => void;
+  onHover: (id: string) => void;
   onCursor: (z: WorldZone, guid: string) => void;
   onClear: () => void;
 }) {
@@ -1261,7 +1238,12 @@ function LevelPlan({
             (z.zone.bounds.minY + z.zone.bounds.maxY) / 2,
           ]);
           return (
-            <g key={z.zone.key} opacity={dimmed ? 0.15 : 1}>
+            <g
+              key={z.zone.key}
+              opacity={dimmed ? 0.15 : 1}
+              onMouseEnter={() => onHover(z.zone.guid)}
+              onMouseLeave={() => onHover("")}
+            >
               <path
                 d={pathD(z.zone.loops, frame)}
                 fillRule="evenodd"
@@ -1539,6 +1521,7 @@ function Line({ label, value, muted }: { label: string; value: string; muted?: b
  * click-out) removes it, so collapsing the plan hides only plan-local information.
  */
 function ZoneCard({
+  store,
   zone,
   cursorRoom,
   geoReady,
@@ -1549,6 +1532,7 @@ function ZoneCard({
   systems,
   onClose,
 }: {
+  store: TakeoffStore;
   zone: WorldZone;
   cursorRoom: WorldRoom | null;
   geoReady: boolean;
@@ -1559,6 +1543,7 @@ function ZoneCard({
   systems: WorldSystem[];
   onClose: () => void;
 }) {
+  const entity = useAtomValue(store.atoms.entity(zone.zone.guid));
   const states = zone.rooms.map(stateOf);
   const run = zone.runs[zone.runs.length - 1] ?? null;
   const closure = run
@@ -1569,7 +1554,18 @@ function ZoneCard({
   return (
     // Capped to the plan body and scrolling internally — at the default plan height the verbs
     // at the bottom must stay reachable without enlarging the plan first.
-    <div className="absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur">
+    <div
+      data-hovered={entity.hovered || undefined}
+      data-selected={entity.selected || undefined}
+      data-dirty={entity.dirty || undefined}
+      data-conflict={entity.conflict || undefined}
+      className={cn(
+        "absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur",
+        entity.hovered && "ring-1 ring-[var(--r-line-2)]",
+        entity.selected && "border-[var(--r-line-2)]",
+        entity.conflict && "border-[var(--r-caution)]",
+      )}
+    >
       <div className="flex items-center gap-1.5 px-2 py-1.5">
         <ZoneThumb zone={zone.zone} className="size-5" />
         <span className="face-mono t-value">{zone.zone.key}</span>
@@ -1589,6 +1585,24 @@ function ZoneCard({
       <ZonePeek zone={zone} cursorRoom={cursorRoom} geoReady={geoReady} stateOf={stateOf} />
 
       <div className="space-y-1 px-2 py-1.5">
+        <div className="flex flex-wrap gap-1">
+          {entity.bound && (
+            <FactChip title="This zone is bound in the URL scope.">URL bound</FactChip>
+          )}
+          {entity.selected && <FactChip title="This zone has plan focus.">plan focus</FactChip>}
+          {entity.dirty && (
+            <FactChip
+              tone={entity.conflict ? "alarm" : undefined}
+              title={
+                entity.conflict
+                  ? "Authority changed since this edit was staged."
+                  : "This entity has staged edits."
+              }
+            >
+              {entity.conflict ? "edit conflict" : "staged edit"}
+            </FactChip>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           <ZoneStateBar zone={zone} states={states} className="w-16" />
           <span className="face-mono t-value text-muted-foreground" title={STAGE_BLURB[zone.stage]}>
@@ -1658,6 +1672,17 @@ function ZoneCard({
 /** Per-room data, living beside the rooms it narrates. Exists exactly while a row is under the
  *  cursor. In "panel" fields mode the Manual J fields render here and leave the table narrow;
  *  in "columns" mode they stay inline and this panel carries calls + provenance only. */
+function RoomPanelFromStore({
+  store,
+  row,
+  ...props
+}: Omit<Parameters<typeof RoomPanel>[0], "decided"> & {
+  store: TakeoffStore;
+}) {
+  const entity = useAtomValue(store.atoms.entity(row.room.guid));
+  return <RoomPanel {...props} row={row} decided={entity.decided} />;
+}
+
 function RoomPanel({
   row,
   decided,
@@ -1668,7 +1693,7 @@ function RoomPanel({
   url,
 }: {
   row: Row;
-  decided: Record<string, Verdict>;
+  decided: Readonly<Record<string, Verdict>>;
   live: boolean;
   fieldsMode: "columns" | "panel";
   onDecide: (room: WorldRoom, flag: string, verb: Verdict) => void;
@@ -1677,7 +1702,7 @@ function RoomPanel({
 }) {
   const { room, zone, state, open } = row;
   const localDecisions = room.flags
-    .map((f) => ({ flag: f, verb: decided[flagKey(room.guid, f)] }))
+    .map((f) => ({ flag: f, verb: decided[f] }))
     .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
 
   return (

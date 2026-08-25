@@ -5,6 +5,7 @@ import {
   DownloadCloud,
   FileScan,
   Boxes,
+  History,
   LayoutGrid,
   Link2,
   Map,
@@ -242,7 +243,21 @@ const TOOLS = [
   },
 ] as const;
 
+/** Surfaces the dev server serves but a shipped build does not — listed only under DEV so the
+ * directory never advertises a route that 403s. */
+const DEV_TOOLS = [
+  {
+    to: "/runs",
+    title: "Runs",
+    label: "Manual J · dev only",
+    icon: History,
+    description:
+      "The takeoff run browser — every persisted solver run as a sheet of zone cards, A/B against its predecessor by default, with the plan and the run ledger docked.",
+  },
+] as const;
+
 function App() {
+  const tools = import.meta.env.DEV ? [...TOOLS, ...DEV_TOOLS] : TOOLS;
   return (
     <div className="min-h-screen">
       <header className="border-b border-border">
@@ -276,7 +291,7 @@ function App() {
         </section>
 
         <section className="mt-12 grid gap-4 sm:grid-cols-2">
-          {TOOLS.map((tool) => (
+          {tools.map((tool) => (
             <div key={tool.to} className="flex flex-col gap-1.5">
               <Card
                 render={<Link to={tool.to} />}

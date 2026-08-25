@@ -52,6 +52,68 @@ public sealed class TakeoffTsvTests
     }
 
     [Test]
+    public void Room_disposition_column_round_trips_and_absence_stays_unknown()
+    {
+        string Line(string tail) => string.Join("\n", new[] {
+            "META\tlevel\tL1",
+            "META\telev\t0",
+            "META\trooms\t1",
+            $"ROOM\tR01\t100\t40\t1.0\t1.0\t9{tail}",
+            "POLY\tR01\touter\t0;0|10;0|10;10|0;10",
+        });
+
+        Assert.Multiple(() => {
+            // 8-column ROOM: persisted disposition surfaces on the shape.
+            Assert.That(TakeoffTsv.ParseTsv(Line("\taccepted")).Rooms.Single().Disposition,
+                Is.EqualTo("accepted"));
+            // 7-column ROOM (pre-column package / raw detector output): unknown, never accepted.
+            Assert.That(TakeoffTsv.ParseTsv(Line("")).Rooms.Single().Disposition, Is.Null);
+            Assert.Throws<InvalidDataException>(() => TakeoffTsv.ParseTsv(Line("\tmaybe")),
+                "unknown disposition token must fail fast");
+        });
+
+        // The promoted writer emits the column; the raw writer must not.
+        var result = new TakeoffResult {
+            LevelName = "L1",
+            Rooms = {
+                new RoomResult {
+                    Id = "R01", RawSqft = 100, PerimeterFt = 40, LabelX = 1, LabelY = 1,
+                    MeanCeilingFt = 9,
+                    Polygon = { new[] { 0d, 0d }, new[] { 10d, 0d }, new[] { 10d, 10d }, new[] { 0d, 10d } },
+                },
+            },
+        };
+        Assert.That(result.ToTsv(), Does.Contain("ROOM\tR01\t100.0\t40.0")
+            .And.Not.Contain("\taccepted"));
+        result.DispositionsResolved = true;
+        Assert.That(result.ToTsv(), Does.Contain("\t9.00\taccepted"));
+    }
+
+    [Test]
+    public void Writer_preserves_sub_micro_residue_topology()
+    {
+        var result = new TakeoffResult {
+            LevelName = "L1",
+            Residues = {
+                new ResidueResult {
+                    Id = "X01", Reason = ResidueReason.Excluded, RawSqft = 4,
+                    LabelX = 0.5, LabelY = 0.5,
+                    Polygon = {
+                        new[] { 0d, 0d }, new[] { 2d, 0d }, new[] { 2d, 2d },
+                        new[] { 1.0000004, 2d }, new[] { 1.0000004, 1d },
+                        new[] { 0.9999996, 1d }, new[] { 0.9999996, 2d }, new[] { 0d, 2d },
+                    },
+                },
+            },
+        };
+
+        var loaded = RoomTakeoff.LoadResult(result.ToTsv(), result.LevelName, result.LevelElevation);
+
+        Assert.That(TakeoffGeometry.ToPolygon(loaded.Residues.Single()).IsValid, Is.True,
+            "serialization must not collapse a narrow valid channel into a self-touch");
+    }
+
+    [Test]
     public void Checked_in_ProjectA_takeoffs_are_valid_shared_coverages()
     {
         var factory = new GeometryFactory(new PrecisionModel(1_000_000));

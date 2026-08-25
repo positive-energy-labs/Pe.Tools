@@ -1,13 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Effect, FileSystem, Stream } from "effect";
+import { Effect, FileSystem, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import type {
   RhvacAssemblyCatalogData,
   RhvacExtractData,
   RhvacInsertRoomData,
   RhvacLaunchResult,
+  RhvacListData,
+  RhvacListRequest,
   RhvacPathRequest,
   RhvacSyncRequest,
   RhvacSyncResult,
@@ -183,6 +185,22 @@ export const rhvacLaunch = Effect.fnUntraced(function* (input: RhvacPathRequest)
       new LocalOpError(key, `the shell refused to open ${input.path} (exit ${exitCode})`),
     );
   return { path: input.path, launched: true } satisfies RhvacLaunchResult;
+});
+
+/** Every .r10 in one folder — the legal-options source for a route's `.r10` binding. */
+export const rhvacList = Effect.fnUntraced(function* (input: RhvacListRequest) {
+  const key = "rhvac.list";
+  const exists = (yield* statOrNull(input.dir, key))?.type === "Directory";
+  const entries = exists ? yield* readDirectoryEntriesOrEmpty(input.dir, key) : [];
+  const files = entries
+    .filter((entry) => entry.info.type === "File" && entry.name.toLowerCase().endsWith(".r10"))
+    .map((entry) => ({
+      name: entry.name,
+      path: join(input.dir, entry.name),
+      modifiedUnixMs: Option.getOrUndefined(entry.info.mtime)?.getTime() ?? 0,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { dir: input.dir, exists, files } satisfies RhvacListData;
 });
 
 /**

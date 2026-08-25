@@ -102,9 +102,8 @@ public sealed record ZoneCensus(
 public enum ZoneTriageAction { Solve, HoldWhole }
 
 /// <summary>
-/// Pre-solve verdict for one zone. <see cref="ZoneTriageAction.HoldWhole"/> means the solver never
-/// runs: the zone emits zero rooms and its whole area as one held residue. That is abstention, not
-/// failure — the accounting law still closes, and <see cref="Reason"/> is the visible explanation.
+/// Triage verdict for one zone. A no-raster hold is immediate; a small-zone hold is the fallback
+/// when solving produces no Accepted room. Either way the whole zone remains visible Held residue.
 /// </summary>
 public sealed record ZoneTriageVerdict(ZoneTriageAction Action, string Reason)
 {
@@ -135,13 +134,6 @@ public static class ZoneTriage
         // nothing to partition and wanders. Hold them whole.
         if (options.SmallZoneSqft > 0 && census.ZoneSqft <= options.SmallZoneSqft)
             return new ZoneTriageVerdict(ZoneTriageAction.HoldWhole, "small-zone");
-        // Wall-ratio refinement: a zone with barely any ink has no wall network to follow, so a
-        // LARGER small-zone threshold applies before the solver is trusted with it.
-        if (options.SmallZoneLowInkSqft > 0
-            && options.MinZoneInkRatio > 0
-            && census.InkRatio < options.MinZoneInkRatio
-            && census.ZoneSqft <= options.SmallZoneLowInkSqft)
-            return new ZoneTriageVerdict(ZoneTriageAction.HoldWhole, "low-wall-ratio");
         return ZoneTriageVerdict.Solve;
     }
 }

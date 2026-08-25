@@ -107,3 +107,16 @@ test("product.payloads.json host payload mirrors the host service contract", () 
   expect(host!.service?.health).toBe(hostProcessIdentity.healthPath);
   expect(host!.service?.shutdown).toBe(hostProcessIdentity.shutdownPath);
 });
+
+test("pea dev shim pins the workspace package manager", () => {
+  const manifest = JSON.parse(readFileSync(fileURLToPath(manifestUrl), "utf8")) as {
+    payloads: { type: string; name: string; dev?: string }[];
+  };
+  const workspace = JSON.parse(
+    readFileSync(fileURLToPath(new URL("../../../package.json", import.meta.url)), "utf8"),
+  ) as { packageManager: string };
+  const pea = manifest.payloads.find((p) => p.type === "PathShim" && p.name === "pea");
+  expect(pea?.dev).toBe(
+    `corepack ${workspace.packageManager} --dir "{root}/source/pe-tools" --filter @pe/pea pea`,
+  );
+});

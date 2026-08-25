@@ -53,6 +53,17 @@ internal static class PartitionFormulation
             for (int i = 0; i < n; i++)
                 if (footprint[i] && !zoneMask[i]) { footprint[i] = false; excludedSqft += cellArea; }
             log($"[partition] zone mask: {excludedSqft:F0}sf of level footprint excluded by declaration");
+            if (opt.ZoneEdgeInkPullFt > 0
+                && PullZoneEdgeInk(zoneMask, obst, W, H, opt.CellFt, opt.ZoneEdgeInkPullFt, log)
+                    is { } pulled)
+            {
+                // The pulled mask governs everything downstream in this run: the domain (via
+                // footprint) and the wall-band claim's scope check both read it, so the clipped
+                // half-wall is never partitioned into a room and never claimable as centerline.
+                zoneMask = pulled;
+                for (int i = 0; i < n; i++)
+                    if (footprint[i] && !zoneMask[i]) footprint[i] = false;
+            }
         }
         var domain = BuildDomain(hf, lvlZ, opt, footprint);
         int domainCells = domain.Count(d => d);
@@ -314,6 +325,7 @@ internal static class PartitionFormulation
             $"borderDropped={touchesBorder.Count} ({borderSqft:F0}sf) rooms={emitIds.Count}");
 
         var result = new TakeoffResult { LevelName = levelName, LevelElevation = lvlZ };
+        var ownerMetadata = new Dictionary<int, DetectorOwnerMetadata>();
         int rank = 0;
         foreach (int id in emitIds)
         {
@@ -351,6 +363,8 @@ internal static class PartitionFormulation
             for (int i = 0; i < polys.Count; i++) if (i != outerIdx) room.Holes.Add(polys[i]);
             if (flags.TryGetValue(id, out var fl)) room.Flags.AddRange(fl);
             result.Rooms.Add(room);
+            ownerMetadata.Add(id, new DetectorOwnerMetadata(
+                id, room.Id, DetectorOwnerDisposition.Room, null));
         }
         int residueRank = 0, excludedResidues = 0;
         double excludedResidueSqft = 0;
@@ -361,6 +375,8 @@ internal static class PartitionFormulation
             {
                 excludedResidues++;
                 excludedResidueSqft += sqft;
+                ownerMetadata.Add(id, new DetectorOwnerMetadata(
+                    id, null, DetectorOwnerDisposition.Excluded, reason));
                 continue;
             }
             var polys = Detector.TraceLoops(cells, owner, id, W, H)
@@ -382,6 +398,8 @@ internal static class PartitionFormulation
             };
             for (int i = 0; i < polys.Count; i++) if (i != outerIdx) residue.Holes.Add(polys[i]);
             result.Residues.Add(residue);
+            ownerMetadata.Add(id, new DetectorOwnerMetadata(
+                id, residue.Id, DetectorOwnerDisposition.Residue, reason));
         }
         log($"[partition] residue={result.Residues.Count} ({result.Residues.Sum(r => r.RawSqft):F0}sf) " +
             $"excluded<{opt.MinResidueSqft:F0}sf={excludedResidues} ({excludedResidueSqft:F0}sf)");
@@ -389,7 +407,120 @@ internal static class PartitionFormulation
         result.DomainSqft = domainCells * cellArea;
         result.ClaimedWallSqft = claimedCellsTotal * cellArea;
         result.ExcludedResidueSqft = excludedResidueSqft;
+        var unownedCause = new DetectorUnownedCause[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (owner[i] != 0) continue;
+            unownedCause[i] = zoneMask != null && !zoneMask[i]
+                ? DetectorUnownedCause.OutsideScope
+                : !footprint[i] ? DetectorUnownedCause.OutsideFootprint
+                : obst[i] ? DetectorUnownedCause.Obstruction
+                : DetectorUnownedCause.NonHabitable;
+        }
+        result.Ownership = new DetectorOwnership(
+            W, H, hf.MinX, hf.MinY, opt.CellFt,
+            owner, claimed, unownedCause, ownerMetadata);
         return result;
+    }
+
+    // A free sliver this close to the declared edge may be traversed when hunting for the
+    // edge-hugging ink band: the designer's line rides the wall's OUTER face as often as its
+    // centerline, leaving a couple of raster cells of walkable floor between the line and the ink.
+    private const double EdgeSliverFt = 0.75;
+
+    /// <summary>
+    /// The zone-edge ink pull (<see cref="TakeoffOptions.ZoneEdgeInkPullFt"/>). Flood inward from
+    /// the mask exterior, traversing obstruction freely and free cells only within
+    /// <see cref="EdgeSliverFt"/> of the edge, never deeper than the pull depth. Visited
+    /// obstruction is the clipped wall band — removed from the mask. A visited FREE component is
+    /// removed only when it is sealed: no 4-neighbor that is an unvisited, unobstructed in-mask
+    /// cell. An open zone edge (no wall — the declaration cuts through space, which is its right
+    /// as authority) leaves a free strip that opens into the room and is kept untouched.
+    /// Returns null when nothing would be removed.
+    /// </summary>
+    private static bool[]? PullZoneEdgeInk(
+        bool[] mask, bool[] obst, int W, int H, double cellFt, double pullFt, Action<string> log)
+    {
+        int n = W * H;
+        int reach = Math.Max(1, (int)Math.Round(pullFt / cellFt));
+        int sliver = Math.Min(reach, Math.Max(1, (int)Math.Round(EdgeSliverFt / cellFt)));
+
+        // Depth = 4-conn BFS distance (in cells) from the mask exterior; grid border counts as
+        // exterior so a mask flush against the crop still has an edge. 0 = deeper than reach.
+        var depth = new int[n];
+        var queue = new Queue<int>();
+        for (int i = 0; i < n; i++)
+        {
+            if (!mask[i]) continue;
+            int x = i % W, y = i / W;
+            if (x == 0 || x == W - 1 || y == 0 || y == H - 1
+                || !mask[i - 1] || !mask[i + 1] || !mask[i - W] || !mask[i + W])
+            { depth[i] = 1; queue.Enqueue(i); }
+        }
+        while (queue.Count > 0)
+        {
+            int c = queue.Dequeue();
+            if (depth[c] >= reach) continue;
+            int cx = c % W, cy = c / W;
+            Step(c - 1, cx > 0); Step(c + 1, cx < W - 1); Step(c - W, cy > 0); Step(c + W, cy < H - 1);
+            void Step(int j, bool inGrid)
+            { if (inGrid && mask[j] && depth[j] == 0) { depth[j] = depth[c] + 1; queue.Enqueue(j); } }
+        }
+
+        // Flood the traversable edge band. Seeds are the depth-1 cells; expansion stays inside it.
+        bool Traversable(int j) => depth[j] > 0 && (obst[j] || depth[j] <= sliver);
+        var visited = new bool[n];
+        for (int i = 0; i < n; i++)
+            if (depth[i] == 1 && Traversable(i)) { visited[i] = true; queue.Enqueue(i); }
+        while (queue.Count > 0)
+        {
+            int c = queue.Dequeue();
+            int cx = c % W, cy = c / W;
+            Grow(c - 1, cx > 0); Grow(c + 1, cx < W - 1); Grow(c - W, cy > 0); Grow(c + W, cy < H - 1);
+            void Grow(int j, bool inGrid)
+            { if (inGrid && !visited[j] && mask[j] && Traversable(j)) { visited[j] = true; queue.Enqueue(j); } }
+        }
+
+        // Visited free cells partition into components; a component with any door into the
+        // unvisited free interior is part of the room and survives whole.
+        var remove = new bool[n];
+        int inkCells = 0;
+        for (int i = 0; i < n; i++)
+            if (visited[i] && obst[i]) { remove[i] = true; inkCells++; }
+        int sliverCells = 0;
+        var component = new List<int>();
+        var seen = new bool[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (!visited[i] || obst[i] || seen[i]) continue;
+            component.Clear();
+            bool sealedOff = true;
+            seen[i] = true; queue.Enqueue(i);
+            while (queue.Count > 0)
+            {
+                int c = queue.Dequeue(); component.Add(c);
+                int cx = c % W, cy = c / W;
+                Walk(c - 1, cx > 0); Walk(c + 1, cx < W - 1); Walk(c - W, cy > 0); Walk(c + W, cy < H - 1);
+                void Walk(int j, bool inGrid)
+                {
+                    if (!inGrid || !mask[j] || obst[j]) return;
+                    if (!visited[j]) { sealedOff = false; return; }
+                    if (!seen[j]) { seen[j] = true; queue.Enqueue(j); }
+                }
+            }
+            if (!sealedOff) continue;
+            foreach (int c in component) remove[c] = true;
+            sliverCells += component.Count;
+        }
+        if (inkCells + sliverCells == 0) return null;
+
+        var pulled = (bool[])mask.Clone();
+        for (int i = 0; i < n; i++) if (remove[i]) pulled[i] = false;
+        double cellArea = cellFt * cellFt;
+        log($"[partition] zone-edge ink pull: {inkCells * cellArea:F0}sf clipped wall + " +
+            $"{sliverCells * cellArea:F0}sf sealed sliver leave the working mask " +
+            $"(pull={pullFt:F2}ft, declared zone unchanged for accounting)");
+        return pulled;
     }
 
     // A checkerboard 2x2 makes a raster ring touch itself at one point. Give that one-cell

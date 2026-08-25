@@ -32,8 +32,6 @@ Format: **op → what the UI needed → what the contract returns → suggested 
 
 ## Catalog ops
 
-- **revit.catalog.recent-documents → recency → rank only** — no last-opened timestamp, and only
-  registry-sourced entries. Return `lastOpenedUtc` when the registry has it.
 - **revit.catalog.schedules vs project-index → consistent field counts → projection-dependent
   `fieldCount`** — the two ops disagree depending on projection. Make `fieldCount` mean the same
   thing everywhere or name them differently. Same class: "schedules" is three different numbers

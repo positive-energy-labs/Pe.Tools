@@ -96,29 +96,12 @@ public sealed class ZoneTriageTests
     }
 
     [Test]
-    public void Low_wall_ratio_lets_the_larger_hold_threshold_apply()
-    {
-        var (ink, zone) = Grid();       // ring only: ink ratio 52/196 = 0.265
-        var census = ZoneCensus.Compute(ink, zone, W, H, 1.0);
-
-        Assert.Multiple(() => {
-            Assert.That(ZoneTriage.Evaluate(census, new TakeoffOptions {
-                    SmallZoneSqft = 30, SmallZoneLowInkSqft = 200, MinZoneInkRatio = 0.5,
-                }),
-                Is.EqualTo(new ZoneTriageVerdict(ZoneTriageAction.HoldWhole, "low-wall-ratio")));
-            Assert.That(ZoneTriage.Evaluate(census, new TakeoffOptions {
-                SmallZoneSqft = 30, SmallZoneLowInkSqft = 200, MinZoneInkRatio = 0.2,
-            }).IsHold, Is.False, "ink-rich enough to solve, and above the plain small-zone bar");
-        });
-    }
-
-    [Test]
     public void Hygiene_removes_floating_blobs_and_never_the_boundary_ring()
     {
         var (ink, zone) = Grid(Blob(3, 3, 2).Concat(Blob(8, 8, 3)).ToArray());
 
         var small = InkHygiene.RemoveFloatingClusters(
-            ink, zone, W, H, minClusterCells: 5, maxClusterBboxFt: 0, cellFt: 1.0);
+            ink, zone, W, H, minClusterCells: 5);
 
         Assert.Multiple(() => {
             Assert.That(small.RemovedCells, Is.EqualTo(4), "only the 2x2 blob is under 5 cells");
@@ -130,22 +113,10 @@ public sealed class ZoneTriageTests
     }
 
     [Test]
-    public void Hygiene_bbox_rule_catches_a_compact_cluster_above_the_cell_count()
-    {
-        var (ink, zone) = Grid(Blob(8, 8, 3));
-
-        var byBbox = InkHygiene.RemoveFloatingClusters(
-            ink, zone, W, H, minClusterCells: 5, maxClusterBboxFt: 3.0, cellFt: 1.0);
-
-        Assert.That(byBbox.RemovedCells, Is.EqualTo(9),
-            "9 cells is over the count bar but fits inside a 3 ft square");
-    }
-
-    [Test]
-    public void Hygiene_is_a_no_op_when_both_knobs_are_off()
+    public void Hygiene_is_a_no_op_when_the_knob_is_off()
     {
         var (ink, zone) = Grid(Blob(6, 6, 2));
-        var untouched = InkHygiene.RemoveFloatingClusters(ink, zone, W, H, 0, 0, 1.0);
+        var untouched = InkHygiene.RemoveFloatingClusters(ink, zone, W, H, 0);
         Assert.Multiple(() => {
             Assert.That(untouched.RemovedCells, Is.Zero);
             Assert.That(untouched.Ink, Is.EqualTo(ink));
@@ -160,7 +131,7 @@ public sealed class ZoneTriageTests
         ink[7 * W + 2] = true;
         ink[7 * W + 3] = true;
         var census = ZoneCensus.Compute(ink, zone, W, H, 1.0);
-        var cleaned = InkHygiene.RemoveFloatingClusters(ink, zone, W, H, 1000, 0, 1.0);
+        var cleaned = InkHygiene.RemoveFloatingClusters(ink, zone, W, H, 1000);
 
         Assert.Multiple(() => {
             Assert.That(census.InkClusterCells, Is.Empty);

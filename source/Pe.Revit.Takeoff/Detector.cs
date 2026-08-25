@@ -1,5 +1,21 @@
 namespace Pe.Revit.Takeoff;
 
+internal sealed record ZoneDomainLossComponent(
+    double AreaSqft,
+    IReadOnlyList<List<double[]>> Polygons);
+
+internal sealed record ZoneDomainHeldCandidate(
+    string Id,
+    double AreaSqft,
+    IReadOnlyList<List<double[]>> Polygons);
+
+internal sealed record ZoneDomainDiagnostics(
+    double PreparedDomainSqft,
+    double CropRecomputedDomainSqft,
+    IReadOnlyList<ZoneDomainLossComponent> LostComponents,
+    IReadOnlyList<ZoneDomainHeldCandidate> HeldCandidates,
+    string? ExclusionProvenance);
+
 internal sealed class PreparedTakeoffDetection
 {
     private readonly Heightfield field;
@@ -38,7 +54,33 @@ internal sealed class PreparedTakeoffDetection
     /// </summary>
     internal TakeoffResult Detect(ZoneScope zone, Action<string> log, out int whiteoutCells)
     {
+        return this.DetectCore(zone, log, out whiteoutCells, out _, collectDiagnostics: false);
+    }
+
+    internal TakeoffResult Detect(
+        ZoneScope zone,
+        Action<string> log,
+        out int whiteoutCells,
+        out ZoneDomainDiagnostics diagnostics,
+        Func<double, double, double>? distanceToReceivedInk = null)
+    {
+        return this.DetectCore(
+            zone, log, out whiteoutCells, out diagnostics, collectDiagnostics: true,
+            distanceToReceivedInk);
+    }
+
+    private TakeoffResult DetectCore(
+        ZoneScope zone,
+        Action<string> log,
+        out int whiteoutCells,
+        out ZoneDomainDiagnostics diagnostics,
+        bool collectDiagnostics,
+        Func<double, double, double>? distanceToReceivedInk = null)
+    {
         whiteoutCells = 0;
+        diagnostics = collectDiagnostics
+            ? new ZoneDomainDiagnostics(0, 0, [], [], null)
+            : null!;
         if (zone == null) throw new ArgumentNullException(nameof(zone));
         const int paddingCells = 2;
         var points = zone.Loops.SelectMany(loop => loop).ToList();
@@ -67,7 +109,8 @@ internal sealed class PreparedTakeoffDetection
             CeilZ = Crop(this.field.CeilZ),
         };
         var croppedObstruction = Crop(this.obstruction);
-        bool[]? croppedFootprint = Crop(this.footprint);
+        var preparedFootprint = Crop(this.footprint);
+        bool[]? croppedFootprint = preparedFootprint;
         float[]? croppedEvidence = Crop(this.evidence);
         var croppedMask = zone.CellMask(croppedField);
         log($"[partition] zone crop {this.field.W}x{this.field.H} -> {width}x{height}");
@@ -77,22 +120,31 @@ internal sealed class PreparedTakeoffDetection
         // network". A removal invalidates the level-derived footprint and evidence rasters, so both
         // are recomputed from the cleaned obstruction — otherwise the whited clutter would leave a
         // hole in the domain instead of joining the room around it.
-        if (this.options.InkClusterWhiteoutCells > 0 || this.options.InkClusterWhiteoutBboxFt > 0)
+        if (this.options.InkClusterWhiteoutCells > 0)
         {
             var hygiene = InkHygiene.RemoveFloatingClusters(
                 croppedObstruction, croppedMask, width, height,
-                this.options.InkClusterWhiteoutCells, this.options.InkClusterWhiteoutBboxFt,
-                this.field.CellFt);
+                this.options.InkClusterWhiteoutCells);
             whiteoutCells = hygiene.RemovedCells;
             if (hygiene.RemovedCells > 0)
             {
                 croppedObstruction = hygiene.Ink;
+                if (collectDiagnostics)
+                {
+                    var recomputedFootprint = Detector.InkBoundedFloor(
+                        croppedField, croppedObstruction, this.levelElevation, this.options.FloorTolFt);
+                    diagnostics = CompareDomains(
+                        croppedField, croppedMask, preparedFootprint, recomputedFootprint);
+                }
                 croppedFootprint = null;
                 croppedEvidence = null;
                 log($"[partition] ink hygiene whited out {hygiene.RemovedCells} floating cell(s) " +
                     $"= {hygiene.RemovedCells * this.field.CellFt * this.field.CellFt:F0}sf");
             }
         }
+        if (collectDiagnostics && whiteoutCells == 0)
+            diagnostics = CompareDomains(
+                croppedField, croppedMask, preparedFootprint, preparedFootprint);
         return PartitionFormulation.Run(
             croppedField, croppedObstruction, this.levelName, this.levelElevation, this.options,
             log, croppedMask, croppedFootprint, croppedEvidence);
@@ -105,6 +157,160 @@ internal sealed class PreparedTakeoffDetection
                     cropped, y * width, width);
             return cropped;
         }
+
+        ZoneDomainDiagnostics CompareDomains(
+            Heightfield domainField,
+            bool[] zoneDomainMask,
+            bool[] prepared,
+            bool[] recomputed)
+        {
+            var preparedDomain = PartitionFormulation.BuildDomain(
+                domainField, this.levelElevation, this.options, prepared);
+            var recomputedDomain = PartitionFormulation.BuildDomain(
+                domainField, this.levelElevation, this.options, recomputed);
+            for (int i = 0; i < preparedDomain.Length; i++)
+            {
+                preparedDomain[i] &= zoneDomainMask[i];
+                recomputedDomain[i] &= zoneDomainMask[i];
+            }
+
+            double cellArea = domainField.CellFt * domainField.CellFt;
+            var lost = new bool[preparedDomain.Length];
+            for (int i = 0; i < lost.Length; i++)
+                lost[i] = preparedDomain[i] && !recomputedDomain[i];
+            var labels = new int[lost.Length];
+            var components = new List<(int Start, ZoneDomainLossComponent Component)>();
+            var queue = new Queue<int>();
+            int id = 0;
+            for (int start = 0; start < lost.Length; start++)
+            {
+                if (!lost[start] || labels[start] != 0) continue;
+                id++;
+                labels[start] = id;
+                queue.Enqueue(start);
+                var cells = new List<int>();
+                while (queue.Count > 0)
+                {
+                    int cell = queue.Dequeue();
+                    cells.Add(cell);
+                    int x = cell % domainField.W, y = cell / domainField.W;
+                    Add(x - 1, y);
+                    Add(x + 1, y);
+                    Add(x, y - 1);
+                    Add(x, y + 1);
+                }
+                var polygons = Detector.TraceLoops(
+                        cells, labels, id, domainField.W, domainField.H)
+                    .Select(loop => Detector.CollapseCollinear(loop.Select(point => new[] {
+                        domainField.MinX + point.x * domainField.CellFt,
+                        domainField.MinY + point.y * domainField.CellFt,
+                    }).ToList()))
+                    .Where(polygon => polygon.Count >= 3)
+                    .ToList();
+                components.Add((start,
+                    new ZoneDomainLossComponent(cells.Count * cellArea, polygons)));
+
+                void Add(int x, int y)
+                {
+                    if (x < 0 || x >= domainField.W || y < 0 || y >= domainField.H) return;
+                    int neighbor = y * domainField.W + x;
+                    if (!lost[neighbor] || labels[neighbor] != 0) return;
+                    labels[neighbor] = id;
+                    queue.Enqueue(neighbor);
+                }
+            }
+            var ordered = components
+                .OrderByDescending(item => item.Component.AreaSqft)
+                .ThenBy(item => item.Start)
+                .Select(item => item.Component)
+                .ToList();
+            var heldCandidates = DomainRefloodHeldCandidates(
+                ordered, this.levelName, this.levelElevation, this.options,
+                zone.ExactGeometry(), distanceToReceivedInk);
+            return new ZoneDomainDiagnostics(
+                preparedDomain.Count(value => value) * cellArea,
+                recomputedDomain.Count(value => value) * cellArea,
+                ordered,
+                heldCandidates,
+                ordered.Count == 0 ? null : "crop-reflood");
+        }
+    }
+
+    internal static IReadOnlyList<ZoneDomainHeldCandidate> DomainRefloodHeldCandidates(
+        IReadOnlyList<ZoneDomainLossComponent> components,
+        string levelName,
+        double levelElevation,
+        TakeoffOptions options,
+        NetTopologySuite.Geometries.Geometry? declaredZone = null,
+        Func<double, double, double>? distanceToReceivedInk = null)
+    {
+        var candidates = new List<ZoneDomainHeldCandidate>();
+        for (int index = 0; index < components.Count; index++)
+        {
+            var component = components[index];
+            if (component.AreaSqft < options.MinimumPromotedRoomSqft
+                || component.Polygons.Count != 1)
+                continue;
+            var room = new RoomResult {
+                Id = $"CROP-REFLOOD-HELD:{index + 1}",
+                RawSqft = component.AreaSqft,
+                Polygon = component.Polygons[0].Select(point => (double[])point.Clone()).ToList(),
+            };
+            try
+            {
+                var polygon = TakeoffGeometry.ToPolygon(room);
+                if (!polygon.IsValid || polygon.IsEmpty) continue;
+                room.PerimeterFt = polygon.Length;
+                room.LabelX = polygon.InteriorPoint.X;
+                room.LabelY = polygon.InteriorPoint.Y;
+                var source = new TakeoffResult {
+                    LevelName = levelName,
+                    LevelElevation = levelElevation,
+                    DomainSqft = component.AreaSqft,
+                    TotalSqft = component.AreaSqft,
+                    Rooms = { room },
+                };
+                var projected = FrameLocalProjector.Project(
+                    source, FrameLocalKnobs.From(options), declaredZone);
+                var accepted = projected.Accepted.Rooms.SingleOrDefault();
+                bool strictProjection = accepted != null;
+                accepted ??= projected.Rejected.SingleOrDefault(rejection =>
+                        rejection.Reason is FrameLocalRejectionReason.BoundaryDrift
+                            or FrameLocalRejectionReason.SourceFeatureDrop)
+                    ?.AttemptedProjection;
+                if (accepted == null) continue;
+                var acceptedPolygon = TakeoffGeometry.ToPolygon(accepted);
+                var shape = new TakeoffRoomShape(
+                    accepted.Id, accepted.RawSqft, accepted.PerimeterFt, accepted.MeanCeilingFt,
+                    accepted.Polygon, accepted.Holes) {
+                    Label = new[] { accepted.LabelX, accepted.LabelY },
+                };
+                if (!TakeoffEditability.Evaluate(
+                        new LevelTakeoff(levelName, levelElevation, [shape])).IsStrictlyEditable)
+                    continue;
+                bool convex = acceptedPolygon.ConvexHull().Area - acceptedPolygon.Area
+                    <= 1d / TakeoffGeometry.CoverageScale;
+                double? receivedSupport = distanceToReceivedInk == null
+                    ? null
+                    : TakeoffEvidenceFidelity.RoomBoundarySupportFraction(
+                        accepted, distanceToReceivedInk, declaredZone?.Boundary,
+                        options.InkBackedZoneEdgeExemptFt);
+                // Strict convex projections retain the original conservative lane. Any concavity,
+                // or an attempted projection refused for drift/drop, must instead stand on received
+                // drawing ink at the same support bar used by Accepted promotion.
+                if ((!strictProjection || !convex)
+                    && !(receivedSupport >= options.InkBackedAcceptMin))
+                    continue;
+                candidates.Add(new ZoneDomainHeldCandidate(
+                    room.Id, accepted.RawSqft,
+                    new[] { accepted.Polygon }.Concat(accepted.Holes).ToList()));
+            }
+            catch (InvalidOperationException)
+            {
+                // Malformed diagnostic geometry is not reviewable room geometry.
+            }
+        }
+        return candidates;
     }
 }
 
@@ -146,6 +352,15 @@ public static class Detector
     public const byte SealWallRunGap = 3;
 
     /// <summary>
+    /// Cell sealed by the door-head pass but belonging to a connected lintel component wider than
+    /// a plausible door (<see cref="TakeoffOptions.DoorHeadMaxComponentFt"/>): a duct soffit, low
+    /// slab, or ceiling step, not a doorway. Only the wall-adjacent fringe of such a component
+    /// seals (closure the partition may use); it is NOT model-door evidence and must not back a
+    /// room boundary the way <see cref="SealDoorHead"/> does.
+    /// </summary>
+    public const byte SealDoorHeadOversize = 4;
+
+    /// <summary>
     /// The sealing decisions BuildObstruction makes, as a reviewable raster: one class byte per
     /// cell, zero everywhere the obstruction mask is just raw seed ink. Closures are otherwise
     /// invisible in review — a sealed doorway looks exactly like a drawn wall downstream.
@@ -183,22 +398,76 @@ public static class Detector
                 tallCore[i] = !float.IsNaN(hf.FloorZ[i]) && !float.IsNaN(hf.CeilZ[i])
                               && hf.CeilZ[i] - hf.FloorZ[i] > opt.DoorHeadMaxFt + opt.DoorHeadContrastFt;
             var dist = Chamfer(tallCore, W, H, false);
-            var tall = new bool[n];
-            for (int i = 0; i < n; i++) tall[i] = dist[i] <= 3f + 1e-4f;
-            int sealed_ = 0;
+            var cand = new bool[n];
             for (int i = 0; i < n; i++)
             {
-                if (obst[i] || !tall[i]) continue;
+                if (obst[i] || dist[i] > 3f + 1e-4f) continue;
                 if (float.IsNaN(hf.FloorZ[i]) || float.IsNaN(hf.CeilZ[i])) continue;
                 double head = hf.CeilZ[i] - hf.FloorZ[i];
-                if (head >= opt.MinHeadroomFt && head <= opt.DoorHeadMaxFt)
+                cand[i] = head >= opt.MinHeadroomFt && head <= opt.DoorHeadMaxFt;
+            }
+            // Door-width bound: the lintel predicate alone cannot tell a doorway from a duct
+            // soffit or a low basement slab — both are "low covered headroom near taller cover".
+            // A doorway lintel is a compact component; sealing an oversized component wholesale
+            // turns a soffit crossing a room into a wall (LL08: one 255 sf component, ~34x54 ft
+            // bbox). Oversized components keep only their wall-adjacent fringe (within GapSealFt
+            // of pre-existing obstruction) so doorways *under* a soffit still close, and carry a
+            // distinct class so they can be excluded from backing evidence.
+            var wallDist = Chamfer(obst, W, H, false);
+            float fringeCells = (float)(opt.GapSealFt / opt.CellFt) + 1e-4f;
+            var comp = new int[n];
+            int sealedDoor = 0, sealedFringe = 0, droppedCells = 0, oversizeComponents = 0;
+            var stack = new Stack<int>();
+            var members = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                if (!cand[i] || comp[i] != 0) continue;
+                members.Clear();
+                int minX = int.MaxValue, minY = int.MaxValue, maxX = -1, maxY = -1;
+                stack.Push(i);
+                comp[i] = 1;
+                while (stack.Count > 0)
                 {
-                    obst[i] = true;
-                    sealClass[i] = SealDoorHead;
-                    sealed_++;
+                    int c = stack.Pop();
+                    int cx = c % W, cy = c / W;
+                    members.Add(c);
+                    minX = Math.Min(minX, cx); minY = Math.Min(minY, cy);
+                    maxX = Math.Max(maxX, cx); maxY = Math.Max(maxY, cy);
+                    for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        int nx = cx + dx, ny = cy + dy;
+                        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+                        int ni = ny * W + nx;
+                        if (cand[ni] && comp[ni] == 0) { comp[ni] = 1; stack.Push(ni); }
+                    }
+                }
+                double maxDimFt = Math.Max(maxX - minX + 1, maxY - minY + 1) * opt.CellFt;
+                if (maxDimFt <= opt.DoorHeadMaxComponentFt)
+                {
+                    foreach (int c in members) { obst[c] = true; sealClass[c] = SealDoorHead; }
+                    sealedDoor += members.Count;
+                }
+                else
+                {
+                    oversizeComponents++;
+                    foreach (int c in members)
+                    {
+                        if (wallDist[c] <= fringeCells)
+                        {
+                            obst[c] = true;
+                            sealClass[c] = SealDoorHeadOversize;
+                            sealedFringe++;
+                        }
+                        else droppedCells++;
+                    }
                 }
             }
-            log($"[detect] door-head seal: {sealed_ * opt.CellFt * opt.CellFt:F0} sf of lintel cells became obstruction");
+            double cellSf = opt.CellFt * opt.CellFt;
+            log($"[detect] door-head seal: {sealedDoor * cellSf:F0} sf of lintel cells became obstruction; " +
+                $"{oversizeComponents} oversize components (> {opt.DoorHeadMaxComponentFt:F1} ft) kept " +
+                $"{sealedFringe * cellSf:F0} sf wall fringe, dropped {droppedCells * cellSf:F0} sf");
         }
 
         if (opt.SealWallRunGaps)
@@ -206,11 +475,15 @@ public static class Detector
             // Headerless doorways (framing models): a gap counts as a door only when it is a short
             // colinear break between two solid ink runs. Scanning H, V and both diagonals covers
             // rotated wings; diagonal walls >= 2 cells thick stay contiguous along 45-degree lines.
-            int maxGap = (int)Math.Round(opt.DoorGapMaxFt / opt.CellFt);
-            int minRun = (int)Math.Round(opt.DoorJambMinFt / opt.CellFt);
             var filled = new bool[n];
             void Scan(int sx, int sy, int dx, int dy)
             {
+                // Thresholds are declared in FEET along the scan line. A diagonal step spans
+                // cell*sqrt(2), so cell-count thresholds must shrink accordingly or diagonal
+                // scans bridge DoorGapMaxFt*sqrt(2) where DoorGapMaxFt was declared.
+                double stepFt = opt.CellFt * (dx != 0 && dy != 0 ? Math.Sqrt(2.0) : 1.0);
+                int maxGap = (int)Math.Round(opt.DoorGapMaxFt / stepFt);
+                int minRun = (int)Math.Round(opt.DoorJambMinFt / stepFt);
                 int x = sx, y = sy;
                 var line = new List<int>();
                 while (x >= 0 && x < W && y >= 0 && y < H) { line.Add(y * W + x); x += dx; y += dy; }

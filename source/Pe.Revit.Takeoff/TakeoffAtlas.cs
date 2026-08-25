@@ -79,6 +79,16 @@ public sealed record TakeoffCaptureResult(
     string ReplayPath,
     int Rooms,
     double TotalSqft);
+public sealed record TakeoffPlanReferenceArgs(
+    string View,
+    string Token,
+    List<List<double[]>> Loops);
+public sealed record TakeoffPlanReferencePrepared(string View, string Token);
+public sealed record TakeoffPlanReferenceExported(
+    string View,
+    string Token,
+    string ImagePath,
+    string ManifestPath);
 
 public sealed record TakeoffPartitionArgs(
     string ReplayPath,
@@ -271,6 +281,23 @@ public static class TakeoffAtlas
         return new TakeoffCaptureResult(result.LevelName, replay, result.Rooms.Count, result.TotalSqft);
     }
 
+    public static TakeoffPlanReferencePrepared PreparePlanReference(
+        Document doc,
+        string argsJson,
+        Action<string> log)
+    {
+        var args = TakeoffJson.Deserialize<TakeoffPlanReferenceArgs>(argsJson);
+        return Annotate.PreparePlanReference(doc, args.View, args.Token, args.Loops, log);
+    }
+
+    public static TakeoffPlanReferenceExported ExportPlanReference(
+        Document doc,
+        string sourceView,
+        string token,
+        string outDir,
+        Action<string> log) =>
+        Annotate.ExportPlanReference(doc, sourceView, token, outDir, log);
+
     public static TakeoffPartitionResult Partition(
         Document doc,
         string argsJson,
@@ -283,7 +310,9 @@ public static class TakeoffAtlas
         var result = snapshot.ReplayInferred(log, null, zone.CellMask(snapshot.Field));
         var profile = TakeoffPolicy.InferLevelProfile(snapshot);
         var promotion = TakeoffPromotion.PromoteZone(
-            result, zone, profile.Options, snapshot.EvidenceInkDistance(profile), log);
+            result, zone, profile.Options, snapshot.EvidenceInkDistance(profile), log,
+            distanceToWallInk: snapshot.SeedInkDistance(),
+            heuristicClosureAt: snapshot.HeuristicClosureAt(profile));
         result = promotion.Result;
 
         var view = FindView(doc, args.View);

@@ -32,6 +32,20 @@ internal sealed class PreparedLevelTakeoffDetection
         result.LevelFlags.AddRange(this.flags);
         return result;
     }
+
+    internal TakeoffResult Detect(
+        ZoneScope zone,
+        Action<string> log,
+        out int whiteoutCells,
+        out ZoneDomainDiagnostics diagnostics,
+        Func<double, double, double>? distanceToReceivedInk = null)
+    {
+        var result = this.detection.Detect(
+            zone, log, out whiteoutCells, out diagnostics, distanceToReceivedInk);
+        result.ProfileProvenance = this.provenance;
+        result.LevelFlags.AddRange(this.flags);
+        return result;
+    }
 }
 
 // Mechanism thresholds for evidence-derived level policy. Defaults are calibrated against the
@@ -47,7 +61,6 @@ public sealed class LevelProfileThresholds
     public double DoubleHeightFractionMin = 0.02;
     public double CeilingStepFt = 2.5;
     public double CeilingStepNearInkFt = 1.5;
-    public double CeilingStepInkLiftMin = 1.3;
 }
 
 public sealed class LevelProfile
@@ -201,17 +214,8 @@ public static class TakeoffPolicy
             profile.Options.StoryCapFt = Math.Ceiling(maxCeilingAboveLevel);
         }
 
-        // TODO: LevelProfile region-cores rule silently subsumed by the Hybrid SeedSource default —
-        // make the rule or the default explicit (owed since 2026-08-14; do not just rediscover it).
-        // COLLISION (2026-08-14 fan-out): TakeoffOptions.SeedSource now defaults to Hybrid, and this
-        // rule only ever upgrades TO Hybrid — it never asks for RegionCores back. So the "below-grade
-        // or non-flat levels use region cores" domain rule is silently subsumed by the default: every
-        // level arrives Hybrid regardless. The composite A/B numbers were measured that way (knob
-        // override forced Hybrid everywhere), so they are honest — but either this rule or the default
-        // should be made explicit rather than left to override order.
-        bool regionCores = snap.LevelElevation < 0 || !flat;
-        if (!regionCores && profile.CeilingStepInkLift >= thresholds.CeilingStepInkLiftMin)
-            profile.Options.SeedSource = TakeoffSeedSource.Hybrid;
+        // SeedSource stays at the RegionCores default everywhere. Hybrid remains an explicit
+        // experiment; it created extra Held partitions without improving Accepted truth on projectA.
         if (profile.NoHabitableDomain)
             profile.Flags.Add("no-habitable-domain");
         return profile;

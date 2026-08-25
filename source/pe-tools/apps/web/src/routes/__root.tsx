@@ -1,9 +1,12 @@
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
+import { RegistryContext } from "@effect/atom-react";
 
+import AtomDevtools from "../integrations/atoms/devtools";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import { useHostLiveInvalidation } from "../host/live";
+import { appAtomRegistry } from "../state/registry";
 
 import appCss from "../styles.css?url";
 
@@ -53,19 +56,22 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-accent selection:text-accent-foreground">
-        {children}
-        <TanStackDevtools
-          config={{
-            position: "bottom-right",
-          }}
-          plugins={[
-            {
-              name: "Tanstack Router",
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            TanStackQueryDevtools,
-          ]}
-        />
+        <RegistryContext.Provider value={appAtomRegistry}>
+          {children}
+          <TanStackDevtools
+            config={{
+              position: "bottom-right",
+            }}
+            plugins={[
+              {
+                name: "Tanstack Router",
+                render: <TanStackRouterDevtoolsPanel />,
+              },
+              AtomDevtools,
+              TanStackQueryDevtools,
+            ]}
+          />
+        </RegistryContext.Provider>
         <Scripts />
       </body>
     </html>

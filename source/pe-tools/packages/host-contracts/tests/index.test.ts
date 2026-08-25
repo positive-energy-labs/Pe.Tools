@@ -51,11 +51,6 @@ test("does not ship the legacy plain TypeGen DTO projection", () => {
 
 test("exports generic operation request and response typing", () => {
   const noRequest = {} satisfies HostOpRequest<"host.status">;
-  const recentDocumentsRequest = {
-    includeRegistryMru: true,
-    localFilesOnly: false,
-    revitYear: "2025",
-  } satisfies HostOpRequest<"revit.catalog.recent-documents">;
   const status = {
     bridgeContractVersion: 0,
     bridgeIsConnected: false,
@@ -66,7 +61,6 @@ test("exports generic operation request and response typing", () => {
     serviceName: "host",
   } satisfies HostOpResponse<"host.status">;
   expect(noRequest).toEqual({});
-  expect(recentDocumentsRequest.revitYear).toBe("2025");
   expect(status.bridgeIsConnected).toBe(false);
   expect(new HostCallError("failed", 500)).toBeInstanceOf(HostCallError);
 });

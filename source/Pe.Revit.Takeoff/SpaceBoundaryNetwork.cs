@@ -89,6 +89,7 @@ internal static class SpaceBoundaryNetwork
         if (simplifyFt == 0) return;
         var sourceAdjacency = SharedEdges(source);
         double sourceArea = source.Sum(room => room.Area);
+        double frame = DominantFrame(source);
 
         double tolerance = simplifyFt;
         for (int attempt = 0; attempt < 5; attempt++, tolerance /= 2)
@@ -107,16 +108,51 @@ internal static class SpaceBoundaryNetwork
             // a failed snap must not cost the attempt its (good) simplification: fall back to the
             // unsnapped coverage before halving the tolerance toward raw raster
             var simplifiedAdjacency = SharedEdges(simplified);
-            Polygon[]? polygons = Accept(snapped, "snapped", simplifiedAdjacency);
+            Polygon[]? polygons = Accept(snapped, "snapped", simplifiedAdjacency, tolerance);
             if (polygons == null && !ReferenceEquals(snapped, simplified))
-                polygons = Accept(simplified, "simplified", sourceAdjacency);
+                polygons = Accept(simplified, "simplified", sourceAdjacency, tolerance);
             if (polygons == null)
             {
                 continue;
             }
 
+            if (attempt == 0)
+            {
+                double finerTolerance = tolerance / 2;
+                var finerSimplified = CoverageSimplifier.Simplify(source, finerTolerance);
+                var finerSnapped = SnapToFrames(
+                    finerSimplified, rooms, finerTolerance, options, log);
+                if (debugDir != null)
+                {
+                    File.WriteAllLines(Path.Combine(debugDir, $"simplified_{finerTolerance:F3}.wkt"),
+                        finerSimplified.Select((geometry, i) => rooms[i].Id + "\t" + geometry));
+                    File.WriteAllLines(Path.Combine(debugDir, $"snapped_{finerTolerance:F3}.wkt"),
+                        finerSnapped.Select((geometry, i) => rooms[i].Id + "\t" + geometry));
+                }
+                var finerAdjacency = SharedEdges(finerSimplified);
+                var finer = Accept(
+                    finerSnapped, "snapped", finerAdjacency, finerTolerance);
+                if (finer == null && !ReferenceEquals(finerSnapped, finerSimplified))
+                    finer = Accept(
+                        finerSimplified, "simplified", sourceAdjacency, finerTolerance);
+                if (finer != null)
+                {
+                    double baselineOffGrid = NonOrthogonalLength(polygons, frame);
+                    double finerOffGrid = NonOrthogonalLength(finer, frame);
+                    log?.Invoke($"[coverage] regularity tolerance={tolerance:F3}ft " +
+                                $"offGrid={baselineOffGrid:F1}ft; " +
+                                $"tolerance={finerTolerance:F3}ft offGrid={finerOffGrid:F1}ft");
+                    if (PreferFiner(finerOffGrid, baselineOffGrid, tolerance))
+                    {
+                        polygons = finer;
+                        tolerance = finerTolerance;
+                    }
+                }
+            }
+
             Polygon[]? Accept(
-                Geometry[] candidate, string stage, Dictionary<(int A, int B), double> baseline)
+                Geometry[] candidate, string stage, Dictionary<(int A, int B), double> baseline,
+                double candidateTolerance)
             {
                 bool ogcValid = candidate.All(room => room.IsValid);
                 bool coverageValid = ogcValid && CoverageValidator.IsValid(candidate);
@@ -131,7 +167,7 @@ internal static class SpaceBoundaryNetwork
                 Polygon[] read = [];
                 bool labelsValid = ogcValid && TryReadRooms(candidate, rooms, out read);
                 if (ogcValid && coverageValid && adjacencyValid && areaValid && labelsValid) return read;
-                log?.Invoke($"[coverage] rejected {stage} tolerance={tolerance:F3}ft " +
+                log?.Invoke($"[coverage] rejected {stage} tolerance={candidateTolerance:F3}ft " +
                             $"ogc={ogcValid} shared={coverageValid} adjacency={adjacencyValid} " +
                             $"area={areaValid} labels={labelsValid}");
                 if (!ogcValid && log != null)
@@ -560,6 +596,25 @@ internal static class SpaceBoundaryNetwork
 
     private static double EdgeAngle(WallEdge edge) =>
         NormalizeAngle(Math.Atan2(edge.B.Y - edge.A.Y, edge.B.X - edge.A.X));
+
+    private static double DominantFrame(IEnumerable<Geometry> coverage)
+    {
+        var edges = UniqueEdges(coverage).Values;
+        double sumSin = edges.Sum(edge => edge.Length * Math.Sin(4 * EdgeAngle(edge)));
+        double sumCos = edges.Sum(edge => edge.Length * Math.Cos(4 * EdgeAngle(edge)));
+        return NormalizeAngle90(0.25 * Math.Atan2(sumSin, sumCos));
+    }
+
+    private static double NonOrthogonalLength(IEnumerable<Geometry> coverage, double frame) =>
+        UniqueEdges(coverage).Values.Where(edge =>
+        {
+            double offAxis = Difference90(EdgeAngle(edge), frame);
+            return Math.Min(offAxis, Math.Abs(Math.PI / 4 - offAxis)) > 3 * Degrees;
+        }).Sum(edge => edge.Length);
+
+    internal static bool PreferFiner(double finerOffGrid, double baselineOffGrid, double tolerance) =>
+        finerOffGrid <= baselineOffGrid / 2
+        && baselineOffGrid - finerOffGrid >= 10 * tolerance;
 
     private static double NormalizeAngle(double angle)
     {

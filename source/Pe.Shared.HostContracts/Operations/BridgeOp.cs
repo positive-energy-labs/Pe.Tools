@@ -66,7 +66,6 @@ public interface IRevitDataService {
         CancellationToken cancellationToken
     );
     Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync(CancellationToken cancellationToken);
-    Task<OpenRevitDocumentData> OpenRevitDocumentAsync(OpenRevitDocumentRequest request, CancellationToken cancellationToken);
     Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync(CancellationToken cancellationToken);
     Task<GlanceModelData> GetGlanceModelAsync(CancellationToken cancellationToken);
     Task<GlanceAttentionData> GetGlanceAttentionAsync(CancellationToken cancellationToken);
