@@ -73,6 +73,10 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 - 2026-08-25 — Refusing a second verb is LAW: `Atom.fn` supersedes (installed `Atom.ts:1336–1392`); the host transaction cannot be interrupted, so `runVerb` refuses and records `busy`. `useVerb` records the same refusal.
 - 2026-08-25 — ≥2-route bar: `TargetingHead` renders and is consumed on `/family` and `/families` (deterministic lane); the browser observation from W2-C is still owed for the ruling.
 - 2026-08-25 — Route-store cutover now covers `/takeoffs`, `/family`, `/families`, `/settings`, and `/chat`. A chat plugin is an in-realm pane by construction: the five-route pane registry builds in the parent `AtomRegistry`, and card, dock, sentence, and pane share the keyed `docAtom`; the iframe door and its second registry/wire copy are deleted (`234901e`).
+- 2026-08-25 — A mount-derived write (bind the URL target, open the URL profile) is a system write (`core.write("system", …)` straight through the writer), never a verb: on `/families` and `/family` the mount call raced the picker/catalog verb and the immediate-refusal LAW printed `refused; another verb is running` on first paint (PROVEN[browser, worktree host 5180 + installed-25]; fixes `a3be4fa`, W9-B). Only user-initiated actions take the verb bracket.
+- 2026-08-25 — Page atoms hold primitives or identity-stable values, one writer each: `/chat` looped (`Maximum update depth`, `<Lens>`) because an object-valued `page/lens-intent` atom was rewritten with fresh identities from an effect whose deps were fresh objects (`13469e0`); `Object.is` on primitives ends it. Regression test in `workbench/store.test.ts`.
+- 2026-08-25 — Verbs ≡ commands is PROVEN at the store, not the render kit: `commandVerb(name, input)` in a route store joins a rail verb to a `RouteStateSpec` command through `runVerb` + `docWriter.command`; `/family` joins 4/4 (`540b665`, net −37) with arming/refusal/receipt in the store. `targeting/**` never imports `docWriter`. The first FALSIFIED ("build needs a closure") was LORE; fresh-eyes critic caught it.
+- 2026-08-25 — A route's agent-shared slice is producible without page memory: `/takeoffs` doc = `binding · snapshot · staged` with one producer `produceTakeoffSnapshot` (host read → `apply`; pea `adopt`/`audit` → `setDoc`), one zod schema in `agent-contracts/takeoffs.ts`, one exec seam `mcps/shared/takeoff-ops.ts`, `scope` required (`ad36f1f`; S-A's first pass shipped a snapshot with no producer and was FALSIFIED by critic w5).
 
 ### Enforcement
 
@@ -129,6 +133,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 - 2026-08-16 — Sweep governance for a route pass: `components/lang/*`, `components/master-table/*`, `design-lang.css` tokens and the state-model axes are NOT changed by a route pass. Where the language cannot say something, leave the code honest and write the gap down here. Gaps become numbered findings, never unilateral language changes.
 ## Tried & rejected
 
+- 2026-08-25 — A shared targeting-controller hook across `/takeoffs`, `/family`, `/settings` (W3-B fix): the three controllers differ in picker state and navigation, not only in product/store args; `state/use-route-store.ts` (owner ceremony) is the shared part, the controller stays per route.
 - 2026-08-16 — **Base 1 (byte-identical specimen isolating token scope)** retired: it isolated the variable so well the round stopped judging a product. Verdicts on 12 abstract rows and caption prose did not transfer; every verdict that stuck came from a concrete product moment, never from the five-axis taxonomy. Raw findings survive in git history (`docs/design/DESIGN-LANG-HANDOFF.md`, deleted 2026-08-17).
 - 2026-08-16 — **a · control-plus** (round 1): beaten as its own control. Donated verb grouping + outcome colour coordination and the green proposal card as originally intended.
 - 2026-08-16 — **b · ink** (colour nearly abolished): looks good but noisier than c's axis discipline. Donated the outcome text-decoration direction (squiggly-under / italic; bold stays reserved) and the dark-mode green card.
@@ -165,6 +170,9 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 ## Owed
 
 - 2026-08-25 — Pre-existing guard census, identical on main and `goal/route-cutover`: dead shim tokens 14; bare hairlines 29; deleted tele classes 83; hex colour literals 8; sub-10px type 1; docs authority registry 1 missing path (`.agents/skills/docs/SKILL.md`); repo-root markdown 1 stray (`TASTE.md`).
+- 2026-08-25 — The fixture lane has two spellings: `?source=fixture` (`/takeoffs`, `/settings`) and none on `/family` (lane = whether a document is open). Rule one spelling before a chat pane needs a fixture lane.
+- 2026-08-25 — `withThread` (`routes/-with-thread.tsx`) creates a thread during route load when none exists — a GET that writes. Rule whether landing may mint or must show a "pick/create a thread" state (agent ledger owns the transport).
+- 2026-08-25 — Live-lane proof for the cutover is partial: PROVEN[browser, worktree host 5180 + installed-25] for `/family` (`open` → `opened`), `/families` (`bind`), `/settings` (`open` via family), `/takeoffs` fixture (`adopt` → receipt), `/chat?plugin=family` (in-realm, one wire). Not exercised: a pea-initiated command through the three route-state tools against a route store's pane; a Revit document open on `/takeoffs` live.
 
 ### Cross-route language gaps (the single owners)
 
