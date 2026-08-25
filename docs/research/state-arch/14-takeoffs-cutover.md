@@ -165,3 +165,41 @@ devtools on the full fixture graph. The initial global handoff let an already-mo
 the wrong inspector, and the route-sized 100 ms scan made semantic browser clicks slow. Replacing
 that handoff with the small active-store subscription fixed correctness; scan cost remains a known
 devtools limitation.
+
+## Pass 3
+
+Pass 3 completed G7 and G8 in commit `2a19873`. The app now owns one `AtomRegistry`, and both the
+root provider and takeoffs route composition use it. Route stores are handles over that registry:
+their `dispose()` releases only store-owned subscriptions and timers. Tests still create and dispose
+fresh registries. ADR 0009 records the app-registry and `(route, scope)` family-key decision.
+
+Atlas no longer writes rendered `visibleKeys` back into page state. The takeoff store owns the
+table filter and sort inputs and derives `visibleRowsAtom`; the table, keyboard next/previous, and
+select-visible behavior all consume that ordered key list. The deterministic store test changes
+filters and sort direction and asserts the derived order.
+
+The Pass 2 inspector-cost note was also closed in commit `171716b`: TanStack keeps inactive plugin
+panels mounted, so the Atoms panel now subscribes to and polls the registry only while visible.
+
+### Pass 3 proof
+
+- **Deterministic:** `vp test src/takeoff src/targeting src/state` from `apps/web` - 4 files,
+  39 tests passed. The additional MasterTable proof, `vp test src/components/master-table`, passed
+  1 file and 9 tests.
+- **Compile/static:** `vp check` on all seven G7/G8 touched paths passed formatting, lint, and type
+  checks. The requested unscoped `vp check` remains red only on pre-existing formatting in
+  `src/routes/api/runs-export.ts`, four files under `src/runs/feedback` (`export.ts`, `staging.ts`,
+  `tray.tsx`, `verbs.tsx`), and `src/runs/visual-law.json`; Pass 3 did not rewrite unrelated files.
+- **Browser fixture:** `/takeoffs?source=fixture` rendered 45 zones and 180 room rows. Clicking the
+  controlled `name` sort changed the leading values from `Bath, Bath, Bath` to
+  `Study, Study, Study`. Ten row-hover transitions consumed 76.582 ms of script total and zero
+  layout time with the inactive inspector off the path. Browser warnings/errors: zero.
+- **Live lane:** not run. No Revit session or live Host was needed for G7/G8.
+
+### Pass 3 left undone
+
+- The repo-wide `vp check` formatting baseline above remains for its owning work; every Pass 3
+  path is green.
+- Atom inspection while its devtools panel is actively visible still intentionally polls the whole
+  registry. Pass 3 removes that diagnostic cost from ordinary table interaction rather than
+  redesigning the inspector protocol.
