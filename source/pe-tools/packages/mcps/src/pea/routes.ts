@@ -12,6 +12,7 @@ import {
   parameterLinksRouteState,
   scheduleGridRouteState,
   settingsRouteState,
+  takeoffsRouteState,
 } from "@pe/agent-contracts";
 
 import { createFamilyCommandHandlers } from "./family-commands.ts";
@@ -22,6 +23,7 @@ import {
 } from "./route-state-commands.ts";
 import { createScheduleGridCommandHandlers } from "./schedule-grid-commands.ts";
 import { createSettingsCommandHandlers } from "./settings-commands.ts";
+import { createTakeoffsCommandHandlers } from "./takeoffs-commands.ts";
 
 export interface RouteRegistration {
   spec: RouteStateSpec<z.ZodType>;
@@ -48,5 +50,6 @@ export function createRouteRegistrations(
     entry(parameterLinksRouteState, createParameterLinksCommandHandlers(options)),
     entry(settingsRouteState, createSettingsCommandHandlers(options)),
     entry(scheduleGridRouteState, createScheduleGridCommandHandlers(options)),
+    entry(takeoffsRouteState, createTakeoffsCommandHandlers(options)),
   ];
 }

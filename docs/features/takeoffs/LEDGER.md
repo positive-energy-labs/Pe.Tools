@@ -2,6 +2,8 @@
 
 ## Decided
 
+- 2026-08-25 — `takeoffsRouteState` owns `binding`, `snapshot`, and `staged`; `/takeoffs` reads `slice/takeoffs` by `thread`, writes staged proposals with `docWriter.apply`, and keeps hover, sort, cursor, panes, pickers, `AdoptDraft`, and `SyncPlan` in page memory.
+
 - 2026-08-25 — `takeoff/store.ts` runs on the kit; `BINDINGS`, `actions.pick`, `store.inspect()` deleted (test-only); `currentHover` is `page/hover`. PROVEN[deterministic, worktree, 83cc2c1]: 53/53, tsc 0.
 - 2026-08-24 — `rhvac.list` is a typed host op on main (`host-contracts/src/operation-types.ts:788`, `apps/host/src/call-route.ts:245`), merged from `takeoff-frontier` in `fa09c0f`; `takeoff/host.ts:216` `callHostDynamic("rhvac.list")` resolves. Closes doubt-0824 host #1–2 (E11).
 - 2026-08-24 — `/takeoffs` is the reference adoption of the targeting manifest (`apps/web/src/targeting/`): one static `Product` (world › rvt › view · zones; folder › r10), bindings in the URL search (`view`, `zones`, `dir`, `r10`, `stage`), and one `Feed` per link whose freshness is the query's state. Every source is a react-query whose key carries its basis — the snapshot keys `[session, docTitle]` so a document change re-reads; adopt/sync invalidate; partition/decide patch the cache. `TargetGate`, the `AddressingBar` head, the pane-strip `adopt`/`refresh` verbs, and the typed `.r10` path all fell out; the new `rhvac.list` host op is the `.r10` binding's legal-options source.

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import type { RouteStatePatch, TakeoffsRouteDocument } from "@pe/agent-contracts";
 
 import {
   createFixtureTakeoffHost,
@@ -158,6 +161,90 @@ function harness() {
 }
 
 describe("takeoff route store", () => {
+  it("replaces the world when a slice document arrives", async () => {
+    const host = createFixtureTakeoffHost();
+    const snapshot = await host.readSnapshot(null as never, null as never);
+    const document: TakeoffsRouteDocument = {
+      binding: { target: null },
+      snapshot,
+      staged: [],
+    };
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: document,
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    const store = createStore({
+      host,
+      sessions: createFixtureSessionSource(),
+      search: searchPort().port,
+      scope: { threadId: "thread-1" },
+      slice,
+    });
+    await store.actions.settle(store.atoms.snapshot);
+    expect(store.atoms.registry.get(store.atoms.world).docName).toBe("project-a Residence.rvt");
+
+    store.atoms.registry.set(
+      store.slices.takeoffs! as typeof slice,
+      AsyncResult.success({
+        doc: {
+          ...document,
+          snapshot: { ...snapshot, world: { ...snapshot.world, docName: "New.rvt" } },
+        },
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    await store.actions.settle(store.atoms.snapshot);
+    expect(store.atoms.registry.get(store.atoms.world).docName).toBe("New.rvt");
+    store.dispose();
+  });
+
+  it("writes one apply patch for a staged room edit", async () => {
+    const host = createFixtureTakeoffHost();
+    const snapshot = await host.readSnapshot(null as never, null as never);
+    const patches: RouteStatePatch[][] = [];
+    const store = createStore({
+      host,
+      sessions: createFixtureSessionSource(),
+      search: searchPort().port,
+      scope: { threadId: "thread-1" },
+      slice: Atom.make(
+        AsyncResult.success({
+          doc: { binding: { target: null }, snapshot, staged: [] },
+          hydrated: true,
+          connected: true,
+          error: null,
+          peaActive: false,
+        }),
+      ),
+      writer: {
+        async apply(next) {
+          patches.push(next);
+          return { ok: true };
+        },
+      },
+    });
+
+    await store.actions.stage("room-1", { name: "Old" }, { name: "Proposed" });
+
+    expect(patches).toEqual([
+      [
+        {
+          path: ["staged"],
+          value: [{ roomId: "room-1", base: { name: "Old" }, next: { name: "Proposed" } }],
+        },
+      ],
+    ]);
+    store.dispose();
+  });
+
   it("swaps the whole capability root for the project-a fixture", async () => {
     const search = searchPort();
     const store = createStore({

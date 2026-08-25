@@ -3,25 +3,34 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
+import {
+  takeoffsRouteState,
+  type RouteStatePatch,
+  type RouteStateWriteResult,
+  type StagedRoomEdit,
+  type TakeoffSnapshot,
+  type TakeoffsRouteDocument,
+} from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
 import {
   createRouteStoreCore,
+  docAtom,
+  docWriter,
   feed,
   hostRead,
   unbound,
+  type Scope,
+  type Slice,
   type TimedRead,
 } from "#/state/route-store";
 import type { AdoptItem } from "#/takeoff/scripts";
 import {
   upsertResolution,
   type CandidateRegion,
-  type LiveRegion,
-  type ModelStatus,
   type PartitionRun,
   type Resolution,
-  type ViewFacts,
 } from "#/takeoff/model";
 import type { PartitionArgs } from "#/takeoff/scripts";
 import {
@@ -37,6 +46,8 @@ import {
   type WorldZone,
 } from "#/takeoff/world";
 import { type Bound, type Link, type Multi } from "#/targeting/model";
+
+export type { TakeoffSnapshot } from "@pe/agent-contracts";
 
 export type TakeoffStage = "adopt" | "audit" | "sync";
 
@@ -79,14 +90,6 @@ export interface SessionSource {
   subscribe(listener: (event: SessionEvent) => void): () => void;
 }
 
-export interface TakeoffSnapshot {
-  readonly world: World;
-  readonly status?: ModelStatus;
-  readonly views: ViewFacts[];
-  readonly zoneFrs: CandidateRegion[];
-  readonly regionsByZone: Record<string, LiveRegion[]>;
-}
-
 export interface RhvacFile {
   readonly path: string;
   readonly name: string;
@@ -119,11 +122,6 @@ export interface TakeoffHost {
     path: string,
     inserts: readonly { readonly zone: WorldZone; readonly room: WorldRoom }[],
   ): Promise<{ readonly text: string }>;
-}
-
-export interface StagedRoomEdit {
-  readonly base: RoomEdit;
-  readonly next: RoomEdit;
 }
 
 export interface AtlasPageState {
@@ -333,6 +331,9 @@ export function createTakeoffStore(deps: {
   sessions: SessionSource;
   search: SearchPort;
   registry: AtomRegistry.AtomRegistry;
+  scope?: Scope;
+  slice?: Atom.Atom<AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>>;
+  writer?: { apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult> };
 }) {
   const core = createRouteStoreCore("takeoffs", deps.registry);
   const { registry, owned, write, runVerb } = core;
@@ -340,6 +341,12 @@ export function createTakeoffStore(deps: {
   const runtime = runtimeFactory(Layer.empty).pipe(Atom.autoDispose);
   // FOOTGUN: reads and core invalidation must share Atom.runtime's Reactivity memo map.
   Reflect.set(runtime.layer, "keepAlive", false);
+  const takeoffsSlice = deps.scope
+    ? core.owned("slice/takeoffs", deps.slice ?? docAtom(takeoffsRouteState, deps.scope))
+    : null;
+  const takeoffsWriter = deps.scope
+    ? (deps.writer ?? docWriter(takeoffsRouteState, deps.scope))
+    : null;
   const searchAtom = Atom.make<TakeoffSearch>(EMPTY_TAKEOFF_SEARCH).pipe(owned("search"));
   const targetAtom = Atom.make((get) => get(searchAtom).target).pipe(
     owned("search/target"),
@@ -405,9 +412,18 @@ export function createTakeoffStore(deps: {
   const decisionsAtom = Atom.make<Readonly<Record<string, "accept" | "dismiss">>>({}).pipe(
     owned("page/decisions"),
   );
-  const stagedEditsAtom = Atom.make<Readonly<Record<string, StagedRoomEdit>>>({}).pipe(
+  const localStagedEditsAtom = Atom.make<Readonly<Record<string, StagedRoomEdit>>>({}).pipe(
     Atom.autoDispose,
   );
+  const stagedEditsAtom = takeoffsSlice
+    ? Atom.make((get): Readonly<Record<string, StagedRoomEdit>> => {
+        const result = get(takeoffsSlice);
+        if (!AsyncResult.isSuccess(result) || !result.value.doc) return {};
+        return Object.fromEntries(
+          result.value.doc.staged.map(({ roomId, ...edit }) => [roomId, { roomId, ...edit }]),
+        );
+      }).pipe(Atom.autoDispose)
+    : localStagedEditsAtom;
   const hoveredAtom = Atom.family((_id: string) =>
     Atom.make(false).pipe(Atom.autoDispose),
   );
@@ -461,11 +477,27 @@ export function createTakeoffStore(deps: {
       }),
     )
     .pipe(Atom.autoDispose);
-  const snapshotResult = runtimeFactory
-    .withReactivity(["snapshot"])(
-      Atom.swr(snapshotSource, { staleTime: "30 seconds", revalidateOnMount: false }),
-    )
-    .pipe(Atom.autoDispose);
+  const sliceSnapshotResult = takeoffsSlice
+    ? Atom.make((get) =>
+        AsyncResult.map(
+          get(takeoffsSlice),
+          (slice) =>
+            ({
+              value: slice.doc?.snapshot ?? null,
+              at: Date.now(),
+              basis: ["slice/takeoffs"],
+              bound: slice.doc !== null,
+            }) satisfies TimedRead<TakeoffSnapshot | null>,
+        ),
+      ).pipe(Atom.autoDispose)
+    : null;
+  const snapshotResult = sliceSnapshotResult
+    ? sliceSnapshotResult
+    : runtimeFactory
+        .withReactivity(["snapshot"])(
+          Atom.swr(snapshotSource, { staleTime: "30 seconds", revalidateOnMount: false }),
+        )
+        .pipe(Atom.autoDispose);
   const candidatesSource = runtime
     .atom((get) =>
       Effect.gen(function* () {
@@ -772,8 +804,26 @@ export function createTakeoffStore(deps: {
     registry.get(atom);
     return Effect.runPromise(AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true }));
   };
+  const replaceStaging = (
+    verb: string,
+    update: (
+      edits: Readonly<Record<string, StagedRoomEdit>>,
+    ) => Readonly<Record<string, StagedRoomEdit>>,
+  ) => {
+    const next = update(registry.get(stagedEditsAtom));
+    return takeoffsWriter
+      ? write(verb, "slice/takeoffs/staged", () =>
+          takeoffsWriter.apply([
+            {
+              path: ["staged"],
+              value: Object.entries(next).map(([roomId, edit]) => ({ ...edit, roomId })),
+            },
+          ]),
+        )
+      : write(verb, "page/staged-edits", () => registry.set(localStagedEditsAtom, next));
+  };
   const clearStaging = () => {
-    write("clear-staging", "page/staged-edits", () => registry.set(stagedEditsAtom, {}));
+    return replaceStaging("clear-staging", () => ({}));
   };
   const stageRoom = (id: string, patch: RoomEdit) => {
     const authority = registry.get(roomsByIdAtom).get(id);
@@ -781,9 +831,10 @@ export function createTakeoffStore(deps: {
     const staged = registry.get(stagedAtom(id));
     const base = staged?.base ?? roomEdit(authority);
     const next = { ...(staged?.next ?? base), ...patch };
-    write("stage-room", `entity/${id}/staged`, () =>
-      registry.update(stagedEditsAtom, (edits) => ({ ...edits, [id]: { base, next } })),
-    );
+    void replaceStaging("stage-room", (edits) => ({
+      ...edits,
+      [id]: { roomId: id, base, next },
+    }));
     return authority;
   };
   const commitRoomField = (id: string, patch: RoomEdit) => {
@@ -792,16 +843,15 @@ export function createTakeoffStore(deps: {
     const base = { ...staged.base, ...patch };
     const next = { ...staged.next, ...patch };
     if (JSON.stringify(base) === JSON.stringify(next)) {
-      write("commit-room", `entity/${id}/staged`, () =>
-        registry.update(stagedEditsAtom, (edits) => {
-          const { [id]: _, ...rest } = edits;
-          return rest;
-        }),
-      );
+      void replaceStaging("commit-room", (edits) => {
+        const { [id]: _, ...rest } = edits;
+        return rest;
+      });
     } else
-      write("commit-room", `entity/${id}/staged`, () =>
-        registry.update(stagedEditsAtom, (edits) => ({ ...edits, [id]: { base, next } })),
-      );
+      void replaceStaging("commit-room", (edits) => ({
+        ...edits,
+        [id]: { roomId: id, base, next },
+      }));
   };
   const activeSession = async () => {
     const document = await settle(activeDocumentResult);
@@ -820,7 +870,8 @@ export function createTakeoffStore(deps: {
             registry.set(boundAtom(id), after.has(id)),
           );
     });
-    if (previous.target !== next.target || previous.view !== next.view) clearStaging();
+    if (!takeoffsSlice && (previous.target !== next.target || previous.view !== next.view))
+      clearStaging();
   };
   const unsubscribe = deps.sessions.subscribe((event) => {
     if (event.kind === "sessionsChanged") {
@@ -974,13 +1025,11 @@ export function createTakeoffStore(deps: {
     },
     stage(id: string, base: RoomEdit, next: RoomEdit) {
       const staged = JSON.stringify(base) === JSON.stringify(next) ? null : { base, next };
-      write("stage", `entity/${id}/staged`, () =>
-        registry.update(stagedEditsAtom, (edits) => {
-          if (staged) return { ...edits, [id]: staged };
-          const { [id]: _, ...rest } = edits;
-          return rest;
-        }),
-      );
+      return replaceStaging("stage", (edits) => {
+        if (staged) return { ...edits, [id]: { roomId: id, ...staged } };
+        const { [id]: _, ...rest } = edits;
+        return rest;
+      });
     },
     patchRoom(id: string, patch: RoomEdit) {
       const room = stageRoom(id, patch);
@@ -1112,6 +1161,7 @@ export function createTakeoffStore(deps: {
 
   const store = {
     registry,
+    slices: { takeoffs: takeoffsSlice },
     atoms: {
       registry,
       search: searchAtom,
