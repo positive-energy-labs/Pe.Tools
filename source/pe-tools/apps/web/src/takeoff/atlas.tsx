@@ -409,6 +409,7 @@ const PLAN_CHROME_PX = 34;
 
 export function Atlas({ store }: AtlasProps) {
   const world = useAtomValue(store.atoms.world);
+  const views = useAtomValue(store.atoms.views);
   const live = useAtomValue(store.atoms.source) === "live";
   const busyState = useAtomValue(store.atoms.busy);
   const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
@@ -425,7 +426,9 @@ export function Atlas({ store }: AtlasProps) {
   const rows = useAtomValue(store.atoms.atlasRows);
   const visibleKeys = useAtomValue(store.atoms.visibleRows);
   const decided = useAtomValue(store.atoms.decisions);
-  const level = pageLevel || world.lanes[0]?.label || "";
+  // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
+  const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
+  const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
   const setStageFilter = (value: Stage | null) =>
     store.actions.setAtlasPage({ stageFilter: value });
   const setLevel = useCallback(

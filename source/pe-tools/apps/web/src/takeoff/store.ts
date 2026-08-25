@@ -53,7 +53,7 @@ export type TakeoffStage = "adopt" | "audit" | "sync";
 
 export interface TakeoffSearch {
   readonly source: "live" | "fixture";
-  readonly view: string;
+  readonly views: readonly string[];
   readonly zones: readonly string[];
   readonly dir: string;
   readonly r10: string;
@@ -62,7 +62,7 @@ export interface TakeoffSearch {
 
 export const EMPTY_TAKEOFF_SEARCH: TakeoffSearch = {
   source: "live",
-  view: "",
+  views: [],
   zones: [],
   dir: "",
   r10: "",
@@ -171,6 +171,7 @@ export interface AtlasRow {
 
 export interface AdoptDraft {
   readonly region: CandidateRegion;
+  readonly view: string;
   readonly checked: boolean;
   readonly name: string;
   readonly systemTag: string;
@@ -200,12 +201,13 @@ export const TAKEOFF_LINKS: Link[] = [
     needs: "the document arrives with the bound world",
   },
   {
-    key: "view",
+    key: "views",
     parent: "rvt",
     joiner: "from",
-    placeholder: "pick a zoning plan",
+    placeholder: "pick zoning plans",
     needs: "plan views with filled regions come from the bound model",
     dir: "read",
+    multi: true,
   },
   {
     key: "zones",
@@ -394,7 +396,7 @@ export function createTakeoffStore(deps: {
   const sourceAtom = Atom.make((get) => get(searchAtom).source).pipe(
     owned("search/source"),
   );
-  const viewAtom = Atom.make((get) => get(searchAtom).view).pipe(owned("search/view"));
+  const viewsAtom = Atom.make((get) => get(searchAtom).views).pipe(owned("search/views"));
   const zonesAtom = Atom.make((get) => get(searchAtom).zones).pipe(owned("search/zones"));
   const dirAtom = Atom.make((get) => get(searchAtom).dir).pipe(owned("search/dir"));
   const r10PathAtom = Atom.make((get) => get(searchAtom).r10).pipe(owned("search/r10"));
@@ -446,7 +448,7 @@ export function createTakeoffStore(deps: {
     Atom.autoDispose,
   );
   const panelAtom = Atom.make<"adopt" | "sync" | null>(null).pipe(owned("page/panel"));
-  const adoptPatchesAtom = Atom.make<Readonly<Record<number, Partial<AdoptDraft>>>>({}).pipe(
+  const adoptPatchesAtom = Atom.make<Readonly<Record<string, Partial<AdoptDraft>>>>({}).pipe(
     Atom.autoDispose,
   );
   const decisionsAtom = Atom.make<Readonly<Record<string, "accept" | "dismiss">>>({}).pipe(
@@ -564,11 +566,19 @@ export function createTakeoffStore(deps: {
     .atom((get) =>
       Effect.gen(function* () {
         const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
-        const view = get(viewAtom);
-        if (!document.value || !view) return unbound<CandidateRegion[]>([], document.basis);
-        return yield* hostRead([document.value.session.sessionId, view], () =>
-          deps.host.readCandidates(document.value!.session, view),
-        );
+        const views = get(viewsAtom);
+        if (!document.value || views.length === 0)
+          return unbound<CandidateRegion[]>([], document.basis);
+        return yield* hostRead([document.value.session.sessionId, ...views], async () => {
+          const candidates: CandidateRegion[] = [];
+          for (const view of views)
+            candidates.push(
+              ...(await deps.host.readCandidates(document.value!.session, view)).map(
+                (candidate) => ({ ...candidate, view }),
+              ),
+            );
+          return candidates;
+        });
       }),
     )
     .pipe(Atom.autoDispose);
@@ -585,10 +595,11 @@ export function createTakeoffStore(deps: {
       const meta = readZoneMeta(region.blob);
       return {
         region,
+        view: region.view,
         checked: region.role === "zoning-region",
         name: meta.name || region.typeName,
         systemTag: meta.systemTag,
-        ...patches[region.elementId],
+        ...patches[`${region.view}:${region.elementId}`],
       };
     });
   }).pipe(owned("page/adopt-rows"));
@@ -676,14 +687,14 @@ export function createTakeoffStore(deps: {
       { needs: TAKEOFF_LINKS[1]!.needs },
     );
   }).pipe(owned("feed/rvt"));
-  const viewFeed = Atom.make((get) =>
+  const viewsFeed = Atom.make((get) =>
     snapshotFeed(
       get(snapshotResult),
       (snapshot) =>
         snapshot.views.map((view) => ({ id: view.name, label: view.name, sub: view.level })),
       TAKEOFF_LINKS[2]!.needs,
     ),
-  ).pipe(owned("feed/view"));
+  ).pipe(owned("feed/views"));
   const zonesFeed = Atom.make((get) =>
     snapshotFeed(
       get(snapshotResult),
@@ -845,20 +856,6 @@ export function createTakeoffStore(deps: {
   const invalidateAtom = runtime
     .fn((keys: readonly string[]) => Reactivity.invalidate(keys))
     .pipe(Atom.autoDispose);
-  const adoptMutation = runtime
-    .fn((input: { readonly view: string; readonly items: readonly AdoptItem[] }, get) =>
-      Effect.gen(function* () {
-        const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
-        if (!document.value) return yield* Effect.fail(Error("no document bound"));
-        const receipt = yield* Effect.tryPromise({
-          try: () => deps.host.adopt(document.value!.session, input),
-          catch: (cause) => (cause instanceof Error ? cause : Error(String(cause))),
-        });
-        return receipt;
-      }),
-    )
-    .pipe(owned("verb/adopt"));
-
   const settle = <A>(atom: Atom.Atom<AsyncResult.AsyncResult<A, Error>>) => {
     registry.get(atom);
     return Effect.runPromise(AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true }));
@@ -969,7 +966,7 @@ export function createTakeoffStore(deps: {
   const feeds = {
     world: sessionsFeed,
     rvt: documentFeed,
-    view: viewFeed,
+    views: viewsFeed,
     zones: zonesFeed,
     folder: folderFeed,
     r10: r10Feed,
@@ -992,12 +989,16 @@ export function createTakeoffStore(deps: {
         ...(patch.stage ? { stage: patch.stage as TakeoffStage } : {}),
         ...(patch.bound
           ? {
-              view: patch.bound.view ?? "",
               dir: patch.bound.folder ?? "",
               r10: patch.bound.r10 ?? "",
             }
           : {}),
-        ...(patch.multi ? { zones: [...(patch.multi.zones ?? [])] } : {}),
+        ...(patch.multi
+          ? {
+              views: [...(patch.multi.views ?? [])],
+              zones: [...(patch.multi.zones ?? [])],
+            }
+          : {}),
       });
       const nextDocument = patch.bound?.rvt;
       const sessions = registry.get(sessionsResult);
@@ -1094,11 +1095,12 @@ export function createTakeoffStore(deps: {
     clearFailure() {
       write("clear-failure", "failure", () => registry.set(failureAtom, null));
     },
-    patchAdopt(elementId: number, patch: Partial<AdoptDraft>) {
+    patchAdopt(view: string, elementId: number, patch: Partial<AdoptDraft>) {
+      const key = `${view}:${elementId}`;
       write("patch-adopt", "page/adopt-patches", () =>
         registry.update(adoptPatchesAtom, (patches) => ({
           ...patches,
-          [elementId]: { ...patches[elementId], ...patch },
+          [key]: { ...patches[key], ...patch },
         })),
       );
     },
@@ -1216,28 +1218,46 @@ export function createTakeoffStore(deps: {
         ["snapshot", "rhvac-open"],
       );
     },
-    adopt(input: { readonly view: string; readonly items: readonly AdoptItem[] }) {
+    adopt(inputs: readonly { readonly view: string; readonly items: readonly AdoptItem[] }[]) {
       return runVerb(
         "adopt",
         async () => {
-          write("adopt", "verb/adopt", () => registry.set(adoptMutation, input));
-          return settle(adoptMutation);
+          const session = await activeSession();
+          const landed: string[] = [];
+          for (const input of inputs) {
+            try {
+              await deps.host.adopt(session, input);
+            } catch (cause) {
+              const message = cause instanceof Error ? cause.message : String(cause);
+              throw Error(
+                `${input.view} failed after ${landed.length ? `${landed.join(", ")} landed` : "no views landed"}: ${message}`,
+              );
+            }
+            landed.push(input.view);
+          }
+          return {
+            text: `${inputs.reduce((total, input) => total + input.items.length, 0)} regions across ${landed.length} views`,
+          };
         },
         ["snapshot", "candidates"],
       );
     },
     adoptSelected() {
-      const view = registry.get(viewAtom);
+      const views = registry.get(viewsAtom);
       const rows = registry.get(adoptRowsAtom)?.filter((row) => row.checked) ?? [];
       return actions
-        .adopt({
-          view,
-          items: rows.map((row) => ({
-            elementId: row.region.elementId,
-            name: row.name,
-            systemTag: row.systemTag,
+        .adopt(
+          views.map((view) => ({
+            view,
+            items: rows
+              .filter((row) => row.view === view)
+              .map((row) => ({
+                elementId: row.region.elementId,
+                name: row.name,
+                systemTag: row.systemTag,
+              })),
           })),
-        })
+        )
         .then((result) => {
           write("adopt", "page/adopt-patches", () => registry.set(adoptPatchesAtom, {}));
           write("adopt", "page/panel", () => registry.set(panelAtom, null));
@@ -1254,7 +1274,7 @@ export function createTakeoffStore(deps: {
       search: searchAtom,
       target: targetAtom,
       source: sourceAtom,
-      view: viewAtom,
+      views: viewsAtom,
       zones: zonesAtom,
       dir: dirAtom,
       r10Path: r10PathAtom,

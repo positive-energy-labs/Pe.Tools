@@ -26,7 +26,7 @@ import {
 
 const bound: TakeoffSearch = {
   ...EMPTY_TAKEOFF_SEARCH,
-  view: "Mechanical Zoning Plan - Main Level",
+  views: ["Mechanical Zoning Plan - Main Level"],
   zones: ["zone-1"],
   dir: "C:\\Takeoffs",
   r10: "C:\\Takeoffs\\projectA.r10",
@@ -133,11 +133,11 @@ function harness() {
     world: {
       docName: "Harness.rvt",
       r10Path: null,
-      lanes: [{ view: bound.view, label: "Main", replayPath: null }],
+      lanes: [{ view: bound.views[0]!, label: "Main", replayPath: null }],
       zones: [],
       systems: [],
     },
-    views: [{ name: bound.view, level: "Main", regions: 1 }],
+    views: [{ name: bound.views[0]!, level: "Main", regions: 1 }],
     zoneFrs: [],
     regionsByZone: {},
   };
@@ -326,7 +326,7 @@ describe("takeoff route store", () => {
       search: searchPort().port,
     });
 
-    expect(registry.get(store.feeds.view)).toMatchObject({ state: "ready", stale: false });
+    expect(registry.get(store.feeds.views)).toMatchObject({ state: "ready", stale: false });
     expect(registry.get(store.feeds.zones)).toMatchObject({ state: "ready", stale: false });
     await store.actions.openAdopt();
     expect(registry.get(store.atoms.panel)).toBe("adopt");
@@ -413,7 +413,7 @@ describe("takeoff route store", () => {
     store.actions.patchRoom(room.guid, { name: "Staged room" });
     store.actions.decide(room.guid, "thin residue", "accept");
     store.actions.setTargetingOpen("zones");
-    store.actions.setTargetingLevel("view");
+    store.actions.setTargetingLevel("views");
     store.actions.setTargetingQuery("main");
 
     expect(store.atoms.registry.get(store.atoms.atlasPage)).toMatchObject({
@@ -441,7 +441,7 @@ describe("takeoff route store", () => {
       [`${room.guid}::thin residue`]: "accept",
     });
     expect(store.atoms.registry.get(store.atoms.targetingOpen)).toBe("zones");
-    expect(store.atoms.registry.get(store.atoms.targetingLevel)).toBe("view");
+    expect(store.atoms.registry.get(store.atoms.targetingLevel)).toBe("views");
     expect(store.atoms.registry.get(store.atoms.targetingQuery)).toBe("main");
     store.dispose();
   });
@@ -543,7 +543,7 @@ describe("takeoff route store", () => {
     ]);
     h.hold();
 
-    await store.actions.adopt({ view: bound.view, items: [] });
+    await store.actions.adopt([{ view: bound.views[0]!, items: [] }]);
     await tick();
 
     expect(store.atoms.registry.get(store.atoms.world).docName).toBe("Harness.rvt");
@@ -566,7 +566,7 @@ describe("takeoff route store", () => {
     store.actions.setSearch(bound);
     await store.actions.settle(store.atoms.snapshot);
 
-    await store.actions.capture({ view: bound.view, label: "Main" });
+    await store.actions.capture({ view: bound.views[0]!, label: "Main" });
 
     expect(store.atoms.registry.get(store.atoms.busy)).toBeNull();
     expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
@@ -591,7 +591,7 @@ describe("takeoff route store", () => {
 
     await expect(store.actions.settle(store.atoms.snapshot)).rejects.toThrow("snapshot rejected");
 
-    expect(store.atoms.registry.get(store.feeds.view)).toMatchObject({
+    expect(store.atoms.registry.get(store.feeds.views)).toMatchObject({
       state: "error",
       note: expect.stringContaining("snapshot rejected"),
     });
@@ -665,6 +665,55 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("concatenates candidates and adopts once per bound view", async () => {
+    const h = harness();
+    const adopted: Array<Parameters<TakeoffHost["adopt"]>[1]> = [];
+    const host: TakeoffHost = {
+      ...h.host,
+      async readCandidates(_session, view) {
+        return [
+          {
+            elementId: view === "North" ? 1 : 2,
+            typeName: `${view} zone`,
+            view: "wrong source tag",
+            color: "1,2,3",
+            sqft: 100,
+            role: "zoning-region",
+            guid: null,
+            blob: JSON.stringify({ view, name: `${view} zone`, systemTag: "A" }),
+            loops: [],
+          },
+        ];
+      },
+      async adopt(_session, input) {
+        adopted.push(input);
+        return { text: "host receipt" };
+      },
+    };
+    const store = createStore({ host, sessions: h.sessions, search: searchPort().port });
+    store.actions.setSearch({ ...bound, views: ["North", "South"] });
+
+    const candidates = await store.actions.settle(store.atoms.candidates);
+    expect(candidates.value.map((candidate) => candidate.view)).toEqual(["North", "South"]);
+    await store.actions.adoptSelected();
+
+    expect(adopted).toEqual([
+      {
+        view: "North",
+        items: [{ elementId: 1, name: "North zone", systemTag: "A" }],
+      },
+      {
+        view: "South",
+        items: [{ elementId: 2, name: "South zone", systemTag: "A" }],
+      },
+    ]);
+    expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
+      verb: "adopt",
+      text: "2 regions across 2 views",
+    });
+    store.dispose();
+  });
+
   it("adopts the selected view through the fixture host", async () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
@@ -674,7 +723,7 @@ describe("takeoff route store", () => {
     store.actions.setSearch({
       ...EMPTY_TAKEOFF_SEARCH,
       source: "fixture",
-      view: "Mechanical Zoning Plan - Lower Level",
+      views: ["Mechanical Zoning Plan - Lower Level"],
     });
     await store.actions.settle(store.atoms.candidates);
     await tick();
@@ -686,7 +735,7 @@ describe("takeoff route store", () => {
     expect(store.atoms.registry.get(store.atoms.panel)).toBeNull();
     expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
       verb: "adopt",
-      text: "fixture adopted 11 zoning regions",
+      text: "11 regions across 1 views",
     });
     store.dispose();
   });

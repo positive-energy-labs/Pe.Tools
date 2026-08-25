@@ -1,14 +1,14 @@
 /**
  * /takeoffs — the Atlas workspace, canon. First route on the targeting manifest.
  *
- * The route declares ONE manifest (`PRODUCT`): what it reaches (world › rvt › view · zones;
+ * The route declares ONE manifest (`PRODUCT`): what it reaches (world › rvt › views · zones;
  * folder › r10), the stages and verbs, and the panes. Everything live comes in as a `Feed` per
  * link. Bindings live in the URL search, so a reload or a shared link addresses the same thing.
  *
  * MULTI-SOURCE SYNC — every source is a query whose key carries its BASIS:
  *   world  · bridge.sessions.list — pushed (SSE invalidation at the root), always live
  *   rvt    · the bound session's active document — live with the world
- *   view · zones · rooms — one `readSnapshot` keyed [session, docTitle]; a doc change re-reads,
+ *   views · zones · rooms — one `readSnapshot` keyed [session, docTitle]; a doc change re-reads,
  *            a write verb invalidates (adopt, partition, decide, sync-link)
  *   folder · a per-browser recents list (the legal-options source for a disk root)
  *   r10    · `rhvac.list` keyed [dir]; the join is `rhvac.open` keyed [path], invalidated by sync
@@ -48,7 +48,7 @@ import { withThread } from "./-with-thread";
 // ── The manifest ─────────────────────────────────────────────────────────────
 
 const PANES: Product["panes"] = [
-  { key: "plan", label: "plan image", draws: ["view"] },
+  { key: "plan", label: "plan image", draws: ["views"] },
   { key: "rooms", label: "room table", draws: ["zones"] },
   { key: "r10", label: ".r10 join", draws: ["r10"] },
 ];
@@ -69,7 +69,7 @@ const str = (v: unknown) => (typeof v === "string" ? v : "");
 export const Route = createFileRoute("/takeoffs")({
   validateSearch: (search: Record<string, unknown>) => ({
     source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
-    view: str(search.view),
+    views: csv(search.views),
     zones: csv(search.zones),
     dir: str(search.dir),
     r10: str(search.r10),
@@ -119,6 +119,7 @@ function TakeoffsStoreOwner({
             search: (previous) => ({
               ...previous,
               ...patch,
+              views: patch.views ? [...patch.views] : previous.views,
               zones: patch.zones ? [...patch.zones] : previous.zones,
             }),
           }),
@@ -135,7 +136,7 @@ function TakeoffsStoreOwner({
 
 function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const search = Route.useSearch();
-  const { source, view, zones, dir, r10, stage } = search;
+  const { source, views, zones, dir, r10, stage } = search;
   const target = useAtomValue(store.atoms.target);
   // ── sources ──
   const sessionsResult = useAtomValue(store.atoms.sessions);
@@ -170,7 +171,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const projectedFeeds: Feeds = {
     world: useAtomValue(store.feeds.world),
     rvt: useAtomValue(store.feeds.rvt),
-    view: useAtomValue(store.feeds.view),
+    views: useAtomValue(store.feeds.views),
     zones: useAtomValue(store.feeds.zones),
     folder: useAtomValue(store.feeds.folder),
     r10: useAtomValue(store.feeds.r10),
@@ -183,14 +184,13 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
       bound: {
         world: live ? (session ? mintSelector(session, sessions) : null) : "fixture",
         rvt: live ? docTitle : "fixture",
-        view: view || null,
         folder: dir || null,
         r10: r10 || null,
       },
-      multi: { zones: new Set(zones) },
+      multi: { views: new Set(views), zones: new Set(zones) },
       stage,
     }),
-    [live, session, sessions, docTitle, view, dir, r10, zones, stage],
+    [live, session, sessions, docTitle, views, dir, r10, zones, stage],
   );
   const setState = (patch: Partial<BindingState>) => store.actions.setBindings(patch);
 
@@ -210,7 +210,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
           {
             key: "adopt",
             label: "adopt zones",
-            demands: ["view"],
+            demands: ["views"],
             run: () => store.actions.openAdopt(),
             needs: "a zoning view with filled regions",
           },
@@ -223,12 +223,14 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
           {
             key: "capture",
             label: "capture level",
-            demands: ["view"],
+            demands: ["views"],
             run: live
               ? async () => {
-                  const lane = world.lanes.find((candidate) => candidate.view === view);
-                  if (!lane) throw new Error(`unknown zoning view ${view}`);
-                  await store.actions.capture(lane);
+                  for (const view of views) {
+                    const lane = world.lanes.find((candidate) => candidate.view === view);
+                    if (!lane) throw new Error(`unknown zoning view ${view}`);
+                    await store.actions.capture(lane);
+                  }
                 }
               : null,
             needs: "a live document — the fixture is already captured",
@@ -416,20 +418,21 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
 
 interface AdoptRow {
   region: CandidateRegion;
+  view: string;
   checked: boolean;
   name: string;
   systemTag: string;
 }
 
 function AdoptPanel({ store }: { store: TakeoffStore }) {
-  const view = useAtomValue(store.atoms.view);
+  const views = useAtomValue(store.atoms.views);
   const zones = useAtomValue(store.atoms.world).zones;
   const listed = useAtomValue(store.atoms.adoptRows);
   const candidates = useAtomValue(store.atoms.candidates);
   const busy = useAtomValue(store.atoms.busy)?.id ?? null;
 
-  const patchRow = (elementId: number, patch: Partial<AdoptRow>) =>
-    store.actions.patchAdopt(elementId, patch);
+  const patchRow = (view: string, elementId: number, patch: Partial<AdoptRow>) =>
+    store.actions.patchAdopt(view, elementId, patch);
 
   const picked = listed?.filter((r) => r.checked) ?? [];
 
@@ -439,7 +442,10 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
   };
 
   return (
-    <Panel title={`adopt zoning regions — ${view}`} onClose={() => store.actions.openPanel(null)}>
+    <Panel
+      title={`adopt zoning regions — ${views.length} view${views.length === 1 ? "" : "s"}`}
+      onClose={() => store.actions.openPanel(null)}
+    >
       <p className="face-mono t-value text-muted-foreground">
         tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
         name, system tag) — re-adopt to edit. legends are ignored.
@@ -447,14 +453,20 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
       <div className="mt-2 max-h-96 overflow-y-auto rounded-[var(--radius)] border border-border">
         {(listed ?? []).map((r) => (
           <div
-            key={r.region.elementId}
+            key={`${r.view}:${r.region.elementId}`}
             className="flex items-center gap-2 border-b border-[var(--r-line)] px-2 py-1 last:border-b-0"
           >
             <input
               type="checkbox"
               checked={r.checked}
-              onChange={(e) => patchRow(r.region.elementId, { checked: e.target.checked })}
+              onChange={(e) => patchRow(r.view, r.region.elementId, { checked: e.target.checked })}
             />
+            <span
+              className="face-mono t-value w-28 shrink-0 truncate text-muted-foreground"
+              title={r.view}
+            >
+              {r.view}
+            </span>
             <span
               className="inline-block size-2.5 shrink-0 rounded-[1px]"
               style={{ background: `rgb(${r.region.color})` }}
@@ -471,13 +483,13 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
             <input
               value={r.name}
               placeholder="zone name"
-              onChange={(e) => patchRow(r.region.elementId, { name: e.target.value })}
+              onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
               className="face-mono t-value h-6 min-w-0 flex-1 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
             />
             <input
               value={r.systemTag}
               placeholder="system tag"
-              onChange={(e) => patchRow(r.region.elementId, { systemTag: e.target.value })}
+              onChange={(e) => patchRow(r.view, r.region.elementId, { systemTag: e.target.value })}
               className="face-mono t-value h-6 w-24 shrink-0 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
             />
             {r.region.role === "zoning-region" && (
@@ -496,14 +508,14 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
             {AsyncResult.isFailure(candidates) ? (
               <OutcomeLine kind="error" label="reading regions failed" />
             ) : (
-              <OutcomeLine kind="busy" label="reading regions" says={view} />
+              <OutcomeLine kind="busy" label="reading regions" says={views.join(", ")} />
             )}
           </div>
         )}
         {listed !== null && listed.length === 0 && (
           <div className="px-2 py-3">
-            <EmptyState story="scope" exit="draw the zones in Revit first, or bind another view">
-              no filled regions — this view carries no designer-drawn regions to adopt
+            <EmptyState story="scope" exit="draw the zones in Revit first, or bind other views">
+              no filled regions — these views carry no designer-drawn regions to adopt
             </EmptyState>
           </div>
         )}
@@ -518,7 +530,7 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
               ? `${busy} is in flight`
               : picked.length === 0
                 ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
-                : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} in ${view}. Idempotent: re-adopting edits in place.`
+                : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} across ${new Set(picked.map((row) => row.view)).size} views. Idempotent: re-adopting edits in place.`
           }
           onClick={adopt}
         />
