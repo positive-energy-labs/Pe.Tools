@@ -93,13 +93,22 @@ function createRoutePaneStore(chat: ChatStore, spec: RouteStateSpec<z.ZodType>) 
   const core = createRouteStoreCore(`pane/${spec.route}`, chat.registry);
   const scope = { threadId: chat.search.thread ?? "" };
   const slice = core.owned("slice/document", docAtom(spec, scope));
-  const search = core.owned("page/search", Atom.make({ target: chat.search.target ?? "" }));
+  const searchState = core.owned("page/search", Atom.make({ target: chat.search.target ?? "" }));
+  const search = {
+    get target() { return chat.registry.get(searchState).target; },
+    patch(partial: { target?: string }) {
+      core.write("set-search", "page/search", () =>
+        chat.registry.update(searchState, (previous) => ({ ...previous, ...partial })),
+      );
+    },
+  };
   const writer = docWriter(spec, scope);
   return {
     registry: chat.registry,
     spec,
     slice,
     search,
+    atoms: { search: searchState },
     actions: {
       apply: (patches: RouteStatePatch[]) => core.runVerb("apply", async () => {
         const result = await writer.apply(patches);
