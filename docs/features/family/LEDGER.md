@@ -26,6 +26,7 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 - 2026-08-17 — `FamilyModel` scope non-goals (same fold), part 2 — no roundtrip semantics encoded in extensible storage / hidden parameters / `DataStorage`; no `roomCalculationPoint` direction or offset authoring beyond `{ "enabled": true }`; no Revit formula parser in web preview and no custom JSON language server; no resolved values, provenance, confidence, or generated geometry in authored `family.json`; no type descriptions/default flags or type-conditional constituent existence, and no `symbolics`/`companions`, without a checked-in family and a portable C# contract behind them; no renaming every command-named settings module as part of Family Model convergence.
 - 2026-08-17 — Family Foundry bulk value-mapping proof ladder, accepted exclusions (folded from source/Pe.Revit.Tests/TEST_HARNESS_PRD.md, deleted — harness shipped as `Harness/`, `Performance/`, `Proofs/`): ElementId storage stays excluded until a stable, safely-settable family-parameter case adds product signal without making the generated fixture brittle; connectors and other associable Revit elements stay out of scope until a product behaviour needs them; do NOT widen `ParameterSnapshot` for theoretical completeness — its current fields cover storage, data type, group, instance/type, shared GUID, formula, and per-type value assertions, and a field is added only when a real artifact-backed assertion has no durable source.
 - (undated) — /family(-ies) intentional gaps, deliberate not scheduled: no profile editor UI, no artifact viewer (receipt rows + `host.shell.open` instead), no pea proposal engine in /families v1, per-family plan flags limited to "no actions"; stale profiles fail-fast with named diagnostics in the picker — an upgrade lane is built only when that pain proves recurring.
+- 2026-08-25 — `/family` runs on `family/store.ts` (kit `state/route-store.ts`); two slices (`settings`, `family`) read through `docAtom`, never held; `draft` is the one page copy, seeded once per version token, turned into `apply` patches by the `save` verb. 24 React state sites → 0. PROVEN[deterministic, worktree, caa6560]: 108/108, tsc 0.
 
 ### Fleet lane (`/families`)
 
@@ -77,6 +78,8 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 - 2026-08-17 — (same fold) chasing visually tight whole-view exports: stock-template annotations make some whole-view exports visually loose, and that is a template fact, not a bug to grind on. The accepted GRD image plus structural assertions are the bar. Do not resume the capture experiment unless a separate `capture_view` requirement justifies it.
 
 ## Owed
+
+- `armedBuild` and `buildSaid` are page atoms; ruled home is the doc (C1). Move them into `familyRouteState` (schema + `build_evidence` handler) so the unknown-outcome latch survives navigation.
 
 - A home for the review VERDICT tuple (family, type, run) — a human fact nothing in the repo can hold; parked 2026-08-19 until runs are cheap to produce from the UI.
 
