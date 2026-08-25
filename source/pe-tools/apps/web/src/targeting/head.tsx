@@ -1,10 +1,10 @@
 /**
- * TARGETING HEAD â€” the one artifact a route mounts to say what it reaches and what it can do.
+ * TARGETING HEAD — the one artifact a route mounts to say what it reaches and what it can do.
  *
- * Head: the sentence â€” one clause `joiner <Picker>` per TERMINAL, nothing else (trunks live
+ * Head: the sentence — one clause `joiner <Picker>` per TERMINAL, nothing else (trunks live
  * inside the pickers). Body: the stage strip with its readiness meter, then the current
- * stage's verbs as a compact rail; the rail's trailing `â–¾` expands it in place into the
- * vertical grid (verb Â· needs Â· state) when the user wants context. Foot: panes
+ * stage's verbs as a compact rail; the rail's trailing `▾` expands it in place into the
+ * vertical grid (verb · needs · state) when the user wants context. Foot: panes
  * (demand-gated) + the last receipt.
  */
 import { useState } from "react";
@@ -36,8 +36,8 @@ function Caption({ b, link }: { b: Bindings; link: Link }) {
       style={{ color: warn ? "var(--r-caution)" : "var(--r-ink-mute)", lineHeight: 1 }}
     >
       {link.dir}
-      {link.liveness ? ` Â· ${link.liveness}` : ""}
-      {fresh ? ` Â· ${fresh}` : ""}
+      {link.liveness ? ` · ${link.liveness}` : ""}
+      {fresh ? ` · ${fresh}` : ""}
       {f?.basis?.length ? ` | basis ${f.basis.join(" / ")}` : ""}
     </span>
   );
@@ -51,14 +51,14 @@ function Demand({ product, k, b }: { product: Product; k: string; b: Bindings })
   return (
     <span
       className="face-mono t-caption"
-      title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` â€” seam, needs ${link.needs}` : ""}`}
+      title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${link.needs}` : ""}`}
       style={{
         color: bound ? "var(--r-ink)" : "var(--r-caution)",
         borderBottom: seam ? "1px dashed var(--r-caution)" : "1px solid transparent",
       }}
     >
       {k}
-      {bound ? "" : " âˆ…"}
+      {bound ? "" : " ∅"}
     </span>
   );
 }
@@ -121,7 +121,7 @@ export function TargetingHead({
         <span className="flex flex-wrap items-baseline gap-x-2">
           {v.demands.length === 0 ? (
             <span className="face-mono t-caption" style={{ color: "var(--r-ink-mute)" }}>
-              â€”
+              —
             </span>
           ) : (
             v.demands.map((k) => <Demand key={k} product={product} k={k} b={b} />)
@@ -168,7 +168,7 @@ export function TargetingHead({
       className="face-mono t-caption px-2.5"
       style={{ borderLeft: "1px solid var(--r-line-2)", color: "var(--r-ink-2)" }}
     >
-      {expanded ? "â–´" : "â–¾"}
+      {expanded ? "▴" : "▾"}
     </button>
   );
 
@@ -241,7 +241,7 @@ export function TargetingHead({
           {verbs.map((v) => verbButton(v, runner))}
           {note ? (
             <span className="t-caption pl-2" style={{ color: "var(--r-pea-ink)" }}>
-              pea Â· {note}
+              pea · {note}
             </span>
           ) : null}
         </div>

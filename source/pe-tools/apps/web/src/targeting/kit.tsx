@@ -1,18 +1,18 @@
 /**
- * TARGETING kit â€” the mechanics every rendering shares.
+ * TARGETING kit — the mechanics every rendering shares.
  *
- *   useBindings  â€” bound ids per link over CALLER-OWNED state (a route's URL search);
+ *   useBindings  — bound ids per link over CALLER-OWNED state (a route's URL search);
  *                  picking a trunk clears its descendants (waterfall).
- *   Picker       â€” ONE control per terminal. Closed: the leaf, or where the pick stopped.
- *                  Open: crumbs (the trunk) Â· search Â· the current level's list.
- *   StageStrip   â€” stage tabs carrying the readiness meter.
- *   PaneStrip    â€” a pane whose `draws` are unbound or undemanded is disabled, and says why.
- *   SeamChip     â€” the page-level derived seam chip ("r10 unsourced Â· 2 verbs unwired").
- *   peaNote      â€” pea's line, only when a wired verb is blocked by an unbound demand.
+ *   Picker       — ONE control per terminal. Closed: the leaf, or where the pick stopped.
+ *                  Open: crumbs (the trunk) · search · the current level's list.
+ *   StageStrip   — stage tabs carrying the readiness meter.
+ *   PaneStrip    — a pane whose `draws` are unbound or undemanded is disabled, and says why.
+ *   SeamChip     — the page-level derived seam chip ("r10 unsourced · 2 verbs unwired").
+ *   peaNote      — pea's line, only when a wired verb is blocked by an unbound demand.
  *
- * GLANCE LAW: first glance = leaf noun Â· unbound caution Â· in-flight pulse; second look = the
- * small mute caption (direction Â· liveness Â· freshness); hover = full path + needs.
- * The in-flight mark is an OPACITY pulse â€” dashed stays the seam slot.
+ * GLANCE LAW: first glance = leaf noun · unbound caution · in-flight pulse; second look = the
+ * small mute caption (direction · liveness · freshness); hover = full path + needs.
+ * The in-flight mark is an OPACITY pulse — dashed stays the seam slot.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -139,7 +139,7 @@ export function useClickAway(open: boolean, onAway: () => void) {
 export interface Runner {
   /** Verb key in flight, if any (the host runs one transaction at a time). */
   busy: string | null;
-  /** Link keys being read/written right now â€” the pulse source. */
+  /** Link keys being read/written right now — the pulse source. */
   active: Set<string>;
   run: (verb: Verb) => void;
   canRun: (verb: Verb) => { ok: boolean; reason: string };
@@ -191,11 +191,11 @@ export function paneState(
   for (const k of pane.draws) {
     const link = product.links.find((l) => l.key === k);
     if (!link) continue;
-    if (!b.isBound(link)) return { ok: false, reason: `${pane.label} draws from ${k} â€” unbound` };
+    if (!b.isBound(link)) return { ok: false, reason: `${pane.label} draws from ${k} — unbound` };
     if (!b.demanded.has(k) && link.dir !== undefined)
       return {
         ok: false,
-        reason: `${pane.label} draws from ${k} â€” out of scope at ${b.stage.label}`,
+        reason: `${pane.label} draws from ${k} — out of scope at ${b.stage.label}`,
       };
   }
   return { ok: true, reason: `${pane.label} draws from ${pane.draws.join(", ") || "nothing"}` };
@@ -215,7 +215,7 @@ export function SeamChip({ product, feeds }: { product: Product; feeds: Feeds })
     verbs.length ? `${verbs.length} verb${verbs.length > 1 ? "s" : ""} unwired` : null,
   ]
     .filter(Boolean)
-    .join(" Â· ");
+    .join(" · ");
   const title = list.map((s) => `${s.subject}: needs ${s.needs}`).join("\n");
   return (
     <FactChip dashed title={title}>
@@ -238,7 +238,7 @@ export function freshnessWord(b: Bindings, link: Link): string | null {
     case "stale":
       return "stale";
     case "loading":
-      return "readingâ€¦";
+      return "reading…";
     case "error":
       return "read failed";
     case "fixture":
@@ -248,7 +248,7 @@ export function freshnessWord(b: Bindings, link: Link): string | null {
 
 /* ------------------------------------------------------------------ picker */
 
-/** The ONE in-flight mark. Opacity only â€” dashed stays the seam slot. */
+/** The ONE in-flight mark. Opacity only — dashed stays the seam slot. */
 export const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
 
 const POP: React.CSSProperties = {
@@ -260,7 +260,7 @@ const POP: React.CSSProperties = {
 
 /**
  * ONE PICKER PER TERMINAL. Closed: the leaf label when the chain is picked through, else
- * `<deepest bound> â€º <next placeholder>` in caution (where the pick stopped). Open: the whole
+ * `<deepest bound> › <next placeholder>` in caution (where the pick stopped). Open: the whole
  * chain as crumbs, a search field, and the current level's list; picking a level auto-advances.
  * Keyed by the terminal; a trunk two terminals share re-picks from either (state is per link).
  * `extra(link)` lets a route append its own control to a level's list (an "add folder" field).
@@ -305,12 +305,12 @@ export function Picker({
   // and the title carries where it stopped (kaitpw, round 7 verdict)
   const closedText = p.complete ? (leafLabel ?? link.placeholder) : p.next!.placeholder;
   const title = [
-    chain.map((l) => `${l.key}: ${b.labelOf(l) ?? "unbound"}`).join(" â€º "),
-    `${link.dir}${link.liveness ? ` Â· ${link.liveness}` : ""}`,
+    chain.map((l) => `${l.key}: ${b.labelOf(l) ?? "unbound"}`).join(" › "),
+    `${link.dir}${link.liveness ? ` · ${link.liveness}` : ""}`,
     freshnessWord(b, link),
     feed?.note ?? null,
     p.complete ? null : `needs ${p.next!.needs}`,
-    feed?.options === null ? "seam â€” no legal option source yet" : null,
+    feed?.options === null ? "seam — no legal option source yet" : null,
     lit ? "in flight" : null,
   ]
     .filter(Boolean)
@@ -321,7 +321,7 @@ export function Picker({
   const opts = b.optionsOf(cur);
   const match = (o: Option) => `${o.label} ${o.sub ?? ""}`.toLowerCase().includes(q.toLowerCase());
   const hits = (opts ?? []).filter(match);
-  // one level down, only from the feed already in hand (the bound parent's children) â€” a
+  // one level down, only from the feed already in hand (the bound parent's children) — a
   // deeper search would fan out one host read per option (kaitpw: waterfall risk)
   const below = chain[chain.indexOf(cur) + 1];
   const belowHits =
@@ -357,7 +357,7 @@ export function Picker({
       </button>
       {open ? (
         <span className="absolute left-0 top-full z-40 mt-1 block overflow-hidden" style={POP}>
-          {/* crumbs â€” the trunk, one segment per level; the current level is underlined */}
+          {/* crumbs — the trunk, one segment per level; the current level is underlined */}
           <div
             className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"
             style={{ borderBottom: "1px solid var(--r-line-2)" }}
@@ -369,7 +369,7 @@ export function Picker({
                 <span key={l.key} className="inline-flex items-baseline gap-1">
                   {i > 0 ? (
                     <span className="face-mono t-caption" style={{ color: "var(--r-ink-mute)" }}>
-                      â€º
+                      ›
                     </span>
                   ) : null}
                   <button
@@ -389,7 +389,7 @@ export function Picker({
               );
             })}
           </div>
-          {/* search â€” the current level only; the crumbs are how you move levels */}
+          {/* search — the current level only; the crumbs are how you move levels */}
           <input
             autoFocus
             value={q}
@@ -401,7 +401,7 @@ export function Picker({
               }
               if (e.key === "Escape") b.setOpen(null);
             }}
-            placeholder={`search ${cur.key}${opts ? ` Â· ${opts.length}` : ""}`}
+            placeholder={`search ${cur.key}${opts ? ` · ${opts.length}` : ""}`}
             className="t-value w-full px-2 py-1"
             style={{
               background: "transparent",
@@ -413,7 +413,7 @@ export function Picker({
           <div className="max-h-64 overflow-y-auto py-1">
             {opts === null ? (
               <div className="t-caption px-2 py-1" style={{ color: "var(--r-caution)" }}>
-                no legal options â€” needs {cur.needs}
+                no legal options — needs {cur.needs}
               </div>
             ) : curFeed?.state === "error" ? (
               <div className="t-caption px-2 py-1" style={{ color: "var(--r-caution)" }}>
@@ -422,7 +422,7 @@ export function Picker({
             ) : opts.length === 0 ? (
               <div className="t-caption px-2 py-1" style={{ color: "var(--r-ink-2)" }}>
                 {curFeed?.state === "loading"
-                  ? "readingâ€¦"
+                  ? "reading…"
                   : cur.parent && b.bound[cur.parent] == null
                     ? `bind ${cur.parent} first`
                     : cur.needs}
@@ -446,7 +446,7 @@ export function Picker({
                     style={{ background: on ? "var(--r-select)" : undefined }}
                   >
                     {cur.multi ? (
-                      <span className="face-mono t-caption">{on ? "â˜‘" : "â˜"}</span>
+                      <span className="face-mono t-caption">{on ? "☑" : "☐"}</span>
                     ) : null}
                     <span className="t-value" style={{ color: "var(--r-ink)" }}>
                       {o.label}
@@ -466,7 +466,7 @@ export function Picker({
                   className="face-mono t-caption t-upper px-2 pt-1.5"
                   style={{ color: "var(--r-ink-mute)", borderTop: "1px solid var(--r-line-2)" }}
                 >
-                  {b.labelOf(cur)} â€º {below!.key}
+                  {b.labelOf(cur)} › {below!.key}
                 </div>
                 {belowHits.map((o) => (
                   <button
@@ -484,7 +484,7 @@ export function Picker({
                   >
                     {below!.multi ? (
                       <span className="face-mono t-caption">
-                        {b.isPicked(below!, o.id) ? "â˜‘" : "â˜"}
+                        {b.isPicked(below!, o.id) ? "☑" : "☐"}
                       </span>
                     ) : null}
                     <span className="t-value" style={{ color: "var(--r-ink)" }}>
@@ -539,12 +539,12 @@ export function StageStrip({
             role="tab"
             aria-selected={on}
             onClick={() => b.setStage(s.key)}
-            title={`${s.label}: ${ready} of ${s.verbs.length} verbs runnable â€” ${s.verbs
+            title={`${s.label}: ${ready} of ${s.verbs.length} verbs runnable — ${s.verbs
               .map((v) => {
                 const c = runner.canRun(v);
                 return c.ok ? `${v.label}: ready` : `${v.label}: ${c.reason}`;
               })
-              .join(" Â· ")}`}
+              .join(" · ")}`}
             className="face-mono t-caption t-upper flex items-baseline gap-2 px-2.5 py-1"
             style={{
               borderLeft: i > 0 ? "1px solid var(--r-line-2)" : undefined,
@@ -573,7 +573,7 @@ export function StageStrip({
   );
 }
 
-/** Pane strip â€” demands gate panes, made visible. Disabled panes read as locked text and say why. */
+/** Pane strip — demands gate panes, made visible. Disabled panes read as locked text and say why. */
 export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
   return (
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -601,7 +601,7 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
   );
 }
 
-/** Pea's line â€” ONLY when a wired verb is blocked by an unbound demand. Null otherwise. */
+/** Pea's line — ONLY when a wired verb is blocked by an unbound demand. Null otherwise. */
 export function peaNote(product: Product, b: Bindings, runner: Runner): string | null {
   const missing = new Set<string>();
   for (const v of b.stage.verbs) {

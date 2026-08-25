@@ -135,9 +135,9 @@ Counts are hook calls only, excluding imports and comments. The baseline is `335
 
 | File | `useState` | `useEffect` | `useMemo` | `useRef` | `useCallback` | ESLint suppressions | Lines |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `routes/takeoffs.tsx` | 8 â†’ 0 | 1 â†’ 2 | 0 â†’ 1 | 1 â†’ 2 | 2 â†’ 0 | 0 â†’ 0 | 925 â†’ 633 |
-| `takeoff/atlas.tsx` | 9 â†’ 2 | 2 â†’ 1 | 10 â†’ 11 | 0 â†’ 1 | 0 â†’ 0 | 2 â†’ 2 | 2,015 â†’ 2,045 |
-| `targeting/kit.tsx` | absent â†’ 3 | absent â†’ 2 | absent â†’ 2 | absent â†’ 1 | absent â†’ 8 | absent â†’ 1 | absent â†’ 617 |
+| `routes/takeoffs.tsx` | 8 → 0 | 1 → 2 | 0 → 1 | 1 → 2 | 2 → 0 | 0 → 0 | 925 → 633 |
+| `takeoff/atlas.tsx` | 9 → 2 | 2 → 1 | 10 → 11 | 0 → 1 | 0 → 0 | 2 → 2 | 2,015 → 2,045 |
+| `targeting/kit.tsx` | absent → 3 | absent → 2 | absent → 2 | absent → 1 | absent → 8 | absent → 1 | absent → 617 |
 
 The judge's `targeting/kit.tsx` hook totals included its hook import and a comment despite saying
 those were excluded. The table above counts executable hook calls. Pass 2 also found two devtools
@@ -150,9 +150,9 @@ made browser automation noticeably slow (1,127 nodes after Atlas families materi
 
 ### Pass 2 proof
 
-- **Deterministic:** `vp test src/takeoff src/targeting` â€” 3 files, 34 tests passed.
+- **Deterministic:** `vp test src/takeoff src/targeting` — 3 files, 34 tests passed.
 - **Compile/static:** `vp check` on the touched store, route, Atlas, targeting, inspector, and
-  devtools paths â€” correctly formatted; zero warnings, lint errors, or type errors.
+  devtools paths — correctly formatted; zero warnings, lint errors, or type errors.
 - **Browser fixture:** `/takeoffs?source=fixture` rendered the sentence, Atlas, room table, and
   Adopt panel. Binding Lower Level and committing 11 candidates closed the panel. The Atoms panel
   reported 1,127 nodes, 1,531 edges, and 208 subscribed; its last-20 list showed

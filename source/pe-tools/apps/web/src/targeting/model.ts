@@ -1,25 +1,25 @@
 /**
- * TARGETING â€” the route binding manifest (canon; promoted from targeting-proto round 5,
+ * TARGETING — the route binding manifest (canon; promoted from targeting-proto round 5,
  * reframed round 7 on kaitpw's notes).
  *
  * A route declares ONE `Product`: a forest of `Link`s, `Stage`s of `Verb`s, and `Pane`s.
  * The forest has two kinds of node:
- *   TERMINAL (has `dir`) â€” the smallest unit of targeting the user thinks about when using the
+ *   TERMINAL (has `dir`) — the smallest unit of targeting the user thinks about when using the
  *     route for its purpose (a zoning plan, the zones, an .r10). Terminals ARE the sentence.
- *   TRUNK   (no `dir`)  â€” how you get to a terminal (world â€º rvt; folder). Trunks never print
+ *   TRUNK   (no `dir`)  — how you get to a terminal (world › rvt; folder). Trunks never print
  *     in the sentence; they live inside the terminal's picker as crumbs, and two terminals that
  *     share a trunk share its binding (re-pick from either picker, both update).
  * Direction lives on the terminal only. A write terminal's target is implied by its trunk.
  *
- * The manifest is STATIC data â€” what the sentence, the census, and a chat-plugin registration
+ * The manifest is STATIC data — what the sentence, the census, and a chat-plugin registration
  * all project. Everything live comes in beside it as a `Feed` per link: the legal options, and
  * how fresh they are. Bindings are the CALLER's state (URL search on a route).
  *
  * Seams are DERIVED, never flagged:
- *   feed.options === null   â†’ legal-options seam (no real source yet; `link.needs` says what)
- *   feed.state === "fixture"â†’ page-level seam chip
- *   verb.run === null       â†’ verb seam (declared, not wired)
- *   pane.draws âŠ„ boundâˆ©demanded â†’ pane disabled with reason (demands gate panes)
+ *   feed.options === null   → legal-options seam (no real source yet; `link.needs` says what)
+ *   feed.state === "fixture"→ page-level seam chip
+ *   verb.run === null       → verb seam (declared, not wired)
+ *   pane.draws ⊄ bound∩demanded → pane disabled with reason (demands gate panes)
  *
  * Authoring questions the shape forces: what are the terminals (fewest nouns)? which trunks do
  * they share (`parent`)? which stage demands which terminal?
@@ -42,7 +42,7 @@ export interface Link {
   joiner: string;
   placeholder: string;
   multi?: boolean;
-  /** What discharges an empty picker or a seam â€” the sentence the user reads when options are missing. */
+  /** What discharges an empty picker or a seam — the sentence the user reads when options are missing. */
   needs: string;
   /** Terminal-only. Links without one are trunks. */
   dir?: Dir;
@@ -51,12 +51,12 @@ export interface Link {
 
 /**
  * Where a feed's options stand right now.
- *   live    â€” pushed (SSE); always current
- *   fresh   â€” read on demand; matches its basis
- *   stale   â€” read on demand; the basis moved (doc changed, a write landed) and no re-read yet
- *   loading â€” first read in flight
- *   error   â€” the read failed; `note` carries the message (an ERROR, not a seam)
- *   fixture â€” seeded by a declared mock lane
+ *   live    — pushed (SSE); always current
+ *   fresh   — read on demand; matches its basis
+ *   stale   — read on demand; the basis moved (doc changed, a write landed) and no re-read yet
+ *   loading — first read in flight
+ *   error   — the read failed; `note` carries the message (an ERROR, not a seam)
+ *   fixture — seeded by a declared mock lane
  */
 export type FeedState = "live" | "fresh" | "stale" | "loading" | "error" | "fixture";
 
@@ -102,7 +102,7 @@ export interface Stage {
 export interface Pane {
   key: string;
   label: string;
-  /** Link keys this pane draws from. Unbound or undemanded â‡’ pane disabled. */
+  /** Link keys this pane draws from. Unbound or undemanded ⇒ pane disabled. */
   draws: string[];
 }
 
@@ -118,10 +118,10 @@ export interface Product {
 
 export const isTerminal = (l: Link) => l.dir !== undefined;
 
-/** Terminals in declaration order â€” the sentence, big â†’ small. */
+/** Terminals in declaration order — the sentence, big → small. */
 export const terminals = (p: Product) => p.links.filter(isTerminal);
 
-/** Root â†’ leaf chain for a link (the picker's crumbs). */
+/** Root → leaf chain for a link (the picker's crumbs). */
 export function pathOf(product: Product, key: string): Link[] {
   const byKey = new Map(product.links.map((l) => [l.key, l]));
   const out: Link[] = [];
@@ -167,8 +167,8 @@ export function pickInto(
 
 /**
  * How far down a chain the picks reach. `complete` = leaf bound. Otherwise `deepest` is the
- * last bound link (null = nothing bound) and `next` the first unbound one â€” the closed picker
- * prints `<deepest label> â€º <next placeholder>` so an incomplete pick says where it stopped.
+ * last bound link (null = nothing bound) and `next` the first unbound one — the closed picker
+ * prints `<deepest label> › <next placeholder>` so an incomplete pick says where it stopped.
  */
 export function progress(
   chain: Link[],
@@ -187,7 +187,7 @@ export interface Seam {
   needs: string;
 }
 
-/** Every seam a product carries right now â€” the page chip and the census both read this. */
+/** Every seam a product carries right now — the page chip and the census both read this. */
 export function seams(p: Product, feeds: Feeds): Seam[] {
   const out: Seam[] = [];
   for (const l of p.links) {
@@ -202,7 +202,7 @@ export function seams(p: Product, feeds: Feeds): Seam[] {
   return out;
 }
 
-/** Why a verb cannot run, or null when it can. Unwired â†’ unbound demand â†’ stale demand â†’ gate. */
+/** Why a verb cannot run, or null when it can. Unwired → unbound demand → stale demand → gate. */
 export function refusal(
   product: Product,
   v: Verb,
@@ -210,16 +210,16 @@ export function refusal(
   multi: Multi,
   feeds: Feeds,
 ): string | null {
-  if (v.run === null) return `not wired â€” needs ${v.needs ?? "a handler"}`;
+  if (v.run === null) return `not wired — needs ${v.needs ?? "a handler"}`;
   const missing = v.demands.filter((k) => {
     const link = product.links.find((l) => l.key === k);
     return link ? !isBound(link, bound, multi) : true;
   });
   if (missing.length > 0) {
     const first = product.links.find((l) => l.key === missing[0]);
-    return `needs ${missing.join(", ")} bound${first ? ` â€” ${first.needs}` : ""}`;
+    return `needs ${missing.join(", ")} bound${first ? ` — ${first.needs}` : ""}`;
   }
   const stale = v.demands.find((k) => feeds[k]?.state === "stale");
-  if (stale) return `${stale} is stale â€” refresh before ${v.label}`;
+  if (stale) return `${stale} is stale — refresh before ${v.label}`;
   return v.refuse?.() ?? null;
 }

@@ -99,7 +99,7 @@ describe("targeting manifest", () => {
     ]);
   });
 
-  it("refuses in order: unwired â†’ unbound demand â†’ stale demand â†’ the verb's own gate", () => {
+  it("refuses in order: unwired → unbound demand → stale demand → the verb's own gate", () => {
     const bound = { world: "w1", rvt: "d1", view: "v1", folder: null, r10: null };
     const go = P.stages[0]!.verbs[0]!;
     expect(refusal(P, P.stages[0]!.verbs[1]!, bound, {}, feeds)).toMatch(/not wired/);
