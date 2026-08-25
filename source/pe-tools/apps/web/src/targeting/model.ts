@@ -27,7 +27,7 @@
 
 import type { Feed } from "#/state/route-store";
 
-export type Dir = "read" | "write" | "sync";
+export type Dir = "read" | "write" | "sync" | "duplex";
 export type Liveness = "attached" | "detached";
 
 export interface Option {

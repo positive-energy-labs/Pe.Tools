@@ -27,6 +27,7 @@ import {
   refusal,
   seams,
   type Bound,
+  type Dir,
   type Feeds,
   type Link,
   type Multi,
@@ -36,6 +37,8 @@ import {
   type Stage,
   type Verb,
 } from "#/targeting/model";
+
+const DIR_GLYPH: Record<Dir, string> = { read: "←", write: "→", sync: "⇄", duplex: "⇆" };
 
 /* ------------------------------------------------------------------ bindings */
 
@@ -366,7 +369,7 @@ export function Picker({
           animation: lit ? "tp-pulse 0.9s ease-in-out infinite" : undefined,
         }}
       >
-        {closedText}
+        {link.dir ? `${DIR_GLYPH[link.dir]} ${closedText}` : closedText}
       </button>
       {open ? (
         <span className="absolute left-0 top-full z-40 mt-1 block overflow-hidden" style={POP}>

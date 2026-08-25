@@ -132,9 +132,7 @@ import {
 } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
-import { Sentence } from "#/components/sentence";
 import { Pane, PaneWorkspace } from "#/components/ui/pane";
-import { AddressingBar } from "#/components/lang/addressing-bar";
 import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
 import {
@@ -148,6 +146,7 @@ import {
   type BuildFacts,
 } from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
+import { FamilyHead } from "#/family/head";
 import { NavStateCell, ProposedCell } from "#/family/marks";
 import type { FamilyStore } from "#/family/store";
 import {
@@ -489,7 +488,6 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
   };
 
   const busy = useAtomValue(store.atoms.busy);
-  const saving = busy?.id === "save";
 
   /**
    * OPEN — the lane switch, and the only verb on this page that changes which file the page IS.
@@ -2225,70 +2223,39 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
 
   return (
     <main className="flex h-screen min-h-0 flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
-      {/* ── ONE head rail (lang AddressingBar — the five-slot rule this head proved).
-             Everything else — the overlay switch, the crossings, the doc's own verbs — lives
-             in the pane that owns it, so no fact and no verb is ever far from the thing it
-             describes (SURFACE-PHILOSOPHY §4). ── */}
-      <AddressingBar
-        name="family"
-        sentence={
-          <Sentence
-            prefix={
-              openProposals.length > 0 ? `${openProposals.length} proposals against` : "editing"
-            }
-            prefixTone={openProposals.length > 0 ? "awaiting" : "rest"}
-            documentLabel={world.path}
-            /* THE DOCUMENT SLOT IS THE LANE SWITCH — there is no separate mode toggle, which is
-               the Sentence's own law. The list is always what the bound session can SEE, and the
-               label is always what the page is READING: on the fixture lane those disagree, which
-               is exactly the honest state (the label names the fixture, the list offers the way
-               out). Picking one runs settings `open`; nothing else on the page changes shape. */
-            documents={store.documents}
-            onPickDocument={openDocument}
-            documentsEmpty="No family.json is visible from here — bind a world in the clause to the right, or author one under FamilyFoundry/models. Until one is open this page reads its declared fixture, and says so."
-            slots={[
-              {
-                key: "family",
-                joiner: "against",
-                text: world.live ? `${world.live.familyName} in ${world.live.worldLabel}` : null,
-                placeholder: "nothing live",
-                options: null,
-                title:
-                  "The family open in the bound Revit session — what the ⇄ live overlay reads and the only thing apply writes into. Without it the profile still edits; it just cannot disagree with anything.",
-              },
-            ]}
-            target={target}
-            onBind={(selector) => {
-              setTarget(selector ?? "");
-              // Pointing the page at a different world changes WHICH documents it can see, so the
-              // list is re-read in the same beat rather than going quietly stale.
-              store.refreshDocuments();
-            }}
-            receipt={receipt}
-          />
+      <FamilyHead
+        store={store}
+        onOpen={openDocument}
+        onPickSession={setTarget}
+        onSave={save}
+        onCapture={captureLive}
+        onBuild={runBuild}
+        receipt={
+          receipt ? (
+            <OutcomeLine kind="receipt" label={receipt.text} />
+          ) : lane.parseError != null ? (
+            <OutcomeLine
+              kind="error"
+              label="the open document will not parse"
+              says={`${store.snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
+            />
+          ) : requestedFamily != null ? (
+            <OutcomeLine
+              kind="advisory"
+              label={`?family=${requestedFamily} ignored`}
+              says="this surface opens an authored family.json, not a placed element — pick the profile"
+            />
+          ) : undefined
         }
-        facts={
+        aside={
           <>
-            {world.live && (
-              <FactChip
-                tone={lane.document?.evidenceStale ? "caution" : "meta"}
-                title={
-                  lane.document?.evidenceStale
-                    ? "STALE — this read was stamped with a different revision of the document than the one you are editing, so every claim under the ⇄ live overlay describes a family that has moved since. Capture again before trusting it."
-                    : "How long ago the live family was read. Every claim under the ⇄ live overlay is only as true as this number — an old read is a weaker claim, not a wrong one."
-                }
-              >
-                live · read {world.live.readAgo}
-                {lane.document?.evidenceStale ? " · stale" : ""}
-              </FactChip>
-            )}
             {validation && (
               <FactChip
                 tone={validation.isValid ? "done" : "caution"}
                 title={
                   validation.isValid
-                    ? "The host validated this document against its schema on the last read or save, and it passed."
-                    : `The host reports ${validation.issues.length} schema issue(s) in the saved document: ${validationSays}`
+                    ? "The host validated this document against its schema on the last read or save."
+                    : `The host reports ${validation.issues.length} schema issue(s): ${validationSays}`
                 }
               >
                 {validation.isValid
@@ -2298,69 +2265,19 @@ export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore
             )}
             <FactChip
               tone={draft.dirty ? "caution" : "meta"}
-              title={
-                draft.dirty
-                  ? "The profile document has changes that are not on disk — an edit, an accepted proposal, or a capture. Nothing about Revit is implied by this; it is a fact about the file."
-                  : "The profile on disk matches what you are looking at. Edits and accepted proposals flip this the moment they land."
-              }
+              title="Whether the family profile has edits that are not saved to its document."
             >
               {draft.dirty ? `unsaved draft · ${unsavedCount}` : "saved"}
             </FactChip>
+            {!lane.document && (
+              <FactChip
+                dashed
+                title="This page reads the checked-in family fixture. Bind a session and pick a profile to replace it with host state."
+              >
+                fixture · no host
+              </FactChip>
+            )}
           </>
-        }
-        verb={
-          <Verb
-            label="save profile"
-            tone="commit"
-            busy={saving}
-            onClick={() => void save()}
-            disabled={!draft.dirty || saving}
-            reason={
-              !draft.dirty
-                ? "Nothing to save — the document already matches the file."
-                : lane.document
-                  ? `Stage every value you moved and write them into ${lane.document.relativePath} through route:settings, under the version token this snapshot was read at. If someone else saved first the write is REFUSED rather than merged, and the reason lands on the sentence verbatim. It touches nothing in Revit — that is what apply is for.`
-                  : `Write the profile back to ${world.path}. This commits the DOCUMENT — it touches nothing in Revit, which is what apply is for.`
-            }
-          />
-        }
-        advisory={
-          /* Two advisories, and only ever one at a time — the second is strictly worse news.
-             A document that is OPEN but unparseable must never quietly become the fixture. */
-          lane.parseError != null ? (
-            <OutcomeLine
-              kind="error"
-              label="the open document will not parse"
-              says={`${store.snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, NOT your file; fix the JSON and re-read.`}
-            />
-          ) : requestedFamily != null ? (
-            <OutcomeLine
-              kind="advisory"
-              label={`?family=${requestedFamily} ignored`}
-              says="this surface opens an authored family.json, not a placed element — pick the document in the sentence"
-            />
-          ) : undefined
-        }
-        seam={
-          lane.document ? (
-            /* THE LIVE LANE'S CHIP. Not dashed: nothing is standing in. It names what you are
-               actually editing and the token the next save will be guarded by, because "which
-               revision" is the fact a save can refuse over. */
-            <FactChip
-              title={`LIVE — reading ${lane.document.relativePath} through route:settings. The version token guards the next save: if the file moved underneath you, the write is REFUSED rather than merged. Capture, apply and pea's proposals stay page-local.`}
-            >
-              {lane.document.versionToken
-                ? `live · v${lane.document.versionToken}`
-                : "live · untokened"}
-            </FactChip>
-          ) : (
-            <FactChip
-              dashed
-              title="FIXTURE LANE, declared rather than fallen back to. Every value, proposal and live reading on this page comes from the checked-in world in `src/family/world.ts`; no host, no store, no network, and every verb rewrites page-local state. What replaces it: route:settings for the document, family.editor.snapshot/apply for the live half, and the grounded-doc camera for the sheet mode."
-            >
-              fixture · no host
-            </FactChip>
-          )
         }
       />
 

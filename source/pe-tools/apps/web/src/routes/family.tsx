@@ -23,6 +23,7 @@
  * is nothing to switch to.
  */
 import { useEffect, useRef } from "react";
+import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { EmptyState } from "#/components/lang/empty";
@@ -34,25 +35,53 @@ import { appAtomRegistry } from "#/state/registry";
 
 export const Route = createFileRoute("/family")({
   /** Every param is optional, so every `<Link to="/family">` stays search-free. */
-  validateSearch: (search: Record<string, unknown>): { family?: string; thread?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): {
+    family?: string;
+    thread?: string;
+    target?: string;
+    profile?: string;
+    stage?: "author" | "evidence";
+  } => ({
     family:
       typeof search.family === "string" && search.family.trim() ? search.family.trim() : undefined,
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
+    target: typeof search.target === "string" ? search.target.trim() : "",
+    profile: typeof search.profile === "string" ? search.profile.trim() : "",
+    stage: search.stage === "evidence" ? "evidence" : "author",
   }),
   component: FamilyRoute,
 });
 
 function FamilyRoute() {
   const search = Route.useSearch();
-  const { family, thread } = search;
+  const { family, thread, target = "", profile = "" } = search;
   if (!thread)
     return <EmptyState story="scope" exit="open this page from a chat thread">no family workspace is open</EmptyState>;
-  const target = (search as typeof search & { target?: string }).target ?? "";
-  return <FamilyStoreOwner key={`${thread}:${target}`} thread={thread} target={target} family={family} />;
+  return (
+    <FamilyStoreOwner
+      key={`${thread}:${target}`}
+      thread={thread}
+      target={target}
+      profile={profile}
+      family={family}
+    />
+  );
 }
 
-function FamilyStoreOwner({ thread, target, family }: { thread: string; target: string; family?: string }) {
+function FamilyStoreOwner({
+  thread,
+  target,
+  profile,
+  family,
+}: {
+  thread: string;
+  target: string;
+  profile: string;
+  family?: string;
+}) {
   const navigate = useNavigate({ from: "/family" });
   const storeRef = useRef<FamilyStore | null>(null);
   const disposeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -69,6 +98,17 @@ function FamilyStoreOwner({ thread, target, family }: { thread: string; target: 
     });
   }
   const store = storeRef.current;
+  const snapshot = useAtomValue(store.atoms.snapshot);
+  const openProfile = snapshot?.documentId.relativePath ?? "";
+  useEffect(() => {
+    if (!profile || store.registry.get(store.atoms.snapshot)?.documentId.relativePath === profile)
+      return;
+    void store.actions.open(profile).catch(() => undefined);
+  }, [profile, store]);
+  useEffect(() => {
+    if (!openProfile) return;
+    void navigate({ search: (previous) => ({ ...previous, profile: openProfile }) });
+  }, [navigate, openProfile]);
   useEffect(() => {
     const unregister = import.meta.env.DEV ? registerInspectableAtomStore(store) : undefined;
     if (disposeTimer.current) clearTimeout(disposeTimer.current);
