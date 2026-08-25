@@ -14,7 +14,7 @@
  * small mute caption (direction · liveness · freshness); hover = full path + needs.
  * The in-flight mark is an OPACITY pulse — dashed stays the seam slot.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { FactChip } from "#/components/lang/chip";
 
@@ -52,6 +52,8 @@ export interface Bindings {
   setOpen: (key: string | null) => void;
   pickerLevel: string | null;
   setPickerLevel: (key: string) => void;
+  pickerQuery: string;
+  setPickerQuery: (query: string) => void;
   stage: Stage;
   setStage: (key: string) => void;
   demanded: Set<string>;
@@ -76,6 +78,8 @@ export function useBindings(
   setOpen: (key: string | null) => void,
   pickerLevel: string | null,
   setPickerLevel: (key: string) => void,
+  pickerQuery: string,
+  setPickerQuery: (query: string) => void,
 ): Bindings {
   const stage = product.stages.find((s) => s.key === state.stage) ?? product.stages[0]!;
   const demanded = useMemo(() => demandedKeys(stage), [stage]);
@@ -121,6 +125,8 @@ export function useBindings(
     setOpen,
     pickerLevel,
     setPickerLevel,
+    pickerQuery,
+    setPickerQuery,
     stage,
     setStage: (key) => setState({ stage: key }),
     demanded,
@@ -295,7 +301,8 @@ export function Picker({
   const ref = useClickAway(open, close);
   const level = b.pickerLevel ?? link.key;
   const setLevel = b.setPickerLevel;
-  const [q, setQ] = useState("");
+  const q = b.pickerQuery;
+  const setQ = b.setPickerQuery;
   const p = progress(chain, b.bound, b.multi);
   useEffect(() => {
     if (!open) return;

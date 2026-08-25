@@ -218,6 +218,7 @@ describe("takeoff route store", () => {
     store.actions.decide(room.guid, "thin residue", "accept");
     store.actions.setTargetingOpen("zones");
     store.actions.setTargetingLevel("view");
+    store.actions.setTargetingQuery("main");
 
     expect(store.atoms.registry.get(store.atoms.atlasPage)).toMatchObject({
       level: "Main",
@@ -246,6 +247,7 @@ describe("takeoff route store", () => {
     });
     expect(store.atoms.registry.get(store.atoms.targetingOpen)).toBe("zones");
     expect(store.atoms.registry.get(store.atoms.targetingLevel)).toBe("view");
+    expect(store.atoms.registry.get(store.atoms.targetingQuery)).toBe("main");
     store.dispose();
   });
 
