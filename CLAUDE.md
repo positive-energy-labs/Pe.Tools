@@ -34,8 +34,8 @@ No external issue tracker. Durable knowledge lives in feature ledgers (`docs/fea
 
 ### Product surfaces
 
-`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `find-the-product` skill is the loop that produces and updates it. The live design frontier — rulings, gaps, and owed work for the one-system design cluster — lives at `docs/features/design-system/LEDGER.md`; the `/design-system` route is the executable design authority.
+`docs/design/SURFACE-PHILOSOPHY.md` holds what our UI surfaces are for and how they behave; the `triangulate` skill is the loop that produces and updates it. The live design frontier — rulings, gaps, and owed work for the one-system design cluster — lives at `docs/features/design-system/LEDGER.md`; the `/design-system` route is the executable design authority.
 
 ### Domain docs
 
-Glossaries are scoped: package terms in that package's `AGENTS.md` Shared Language table, feature terms in `docs/features/<name>/GLOSSARY.md` (lazy). ADRs in `docs/adr/`. The `domain-modeling` skill owns both.
+Glossaries are scoped: package terms in that package's `AGENTS.md` Shared Language table, feature terms in `docs/features/<name>/GLOSSARY.md` (lazy). ADRs in `docs/adr/`. The `grill` skill grows both; formats live beside the `docs` skill.

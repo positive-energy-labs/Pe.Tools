@@ -93,7 +93,7 @@ public sealed class TakeoffOptions
     public double SuspectMaxSqft = 60;         // non-geometric suspect signals only target pockets
     public double MinSuspectCeilingStdDevFt = 0.5; // chases/voids cross multiple ceiling bands; uniform closets do not
     // ---- Pre-solve zone triage (ZoneTriage.cs) ----
-    // Defaults are the project-a-tuned values (2026-08-14 A/B sweep, exp-e4/e7 in the reeval doc);
+    // Defaults are the project-a-tuned values (2026-08-14 A/B sweep; docs/features/takeoffs/LEDGER.md "Solver defaults settled by A/B sweep");
     // 0 disables any of them. SmallZoneLowInkSqft/MinZoneInkRatio stay off: with band-composed ink
     // the ratio measures clutter, not wall density — revisit when ink comes from the DWG lane.
     public double SmallZoneSqft = 750;      // zone at or under this holds whole, unsolved (0 = off);

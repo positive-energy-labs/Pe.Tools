@@ -19,7 +19,7 @@ lives in the route; this file is the honest list of what can't (yet), plus the p
 never will. Where an unmigrated position is waiting on a specific component, it says so in place:
 *(specimen owed when X ships)*.
 
-The loop that produces surfaces is the `find-the-product` skill.
+The loop that produces surfaces is the `triangulate` skill.
 
 ---
 

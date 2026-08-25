@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>State for routes — what the bake-off taught</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark-dimmed.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+body{max-width:62rem;margin:3rem auto;padding:0 1.5rem;font:16px/1.55 system-ui,sans-serif;color:#1b1f23;background:#fbfbfa}
+h1{font-size:1.7rem;margin-bottom:.2rem}h2{margin-top:3rem;border-bottom:1px solid #ddd;padding-bottom:.2rem}h3{margin-top:1.8rem}
+pre{border-radius:6px;font-size:13px;line-height:1.45;overflow:auto}code{font-family:ui-monospace,Consolas,monospace}
+p code,li code,td code{background:#eee;padding:0 .3em;border-radius:3px;font-size:.9em}
+table{border-collapse:collapse;width:100%;font-size:.93em}td,th{border:1px solid #ddd;padding:.35em .6em;text-align:left;vertical-align:top}th{background:#f0f0ee}
+.src{font-size:.8em;color:#666;margin:-.4rem 0 .3rem}.rule{background:#fff7d6;border-left:4px solid #e0b000;padding:.6rem 1rem;margin:1rem 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1rem}@media(max-width:800px){.two{grid-template-columns:1fr}}
+.dim{color:#666}
+</style></head><body>
+
+<h1>State for routes — what the bake-off taught</h1>
+<p class="dim">For kaitpw, 2026-08-24. Use: decide the substrate for every route and every chat plugin, then cut <code>/takeoffs</code> over. All code below is verbatim from the worktrees; paths under each block. Deep dives: <code>08-synthesis.md</code>, <code>READING-GUIDE.md</code>.</p>
+
+<h2>0. The one sentence</h2>
+<div class="rule">A route is one importable object that owns a <b>dependency graph</b>. URL bindings are leaves, host reads are async nodes that <b>track their parents across <code>await</code></b>, feeds are pure projections, and writes name what they invalidate. React only subscribes.</div>
+<p>Every candidate could do the "one object, zero <code>useState</code> in panes" part — that was discipline, not library. Only one primitive did the bolded part. That is the whole verdict.</p>
+
+<h2>1. The pattern you liked, and its one flaw</h2>
+<p>qr-repo's <code>asyncCompute</code>: a signal that holds an <code>AsyncState</code>, recomputed by an <code>effect</code> when its inputs change, with an <code>AbortController</code> to drop stale runs.</p>
+<pre><code class="language-ts">function asyncCompute&lt;T&gt;(cb: () =&gt; Promise&lt;T&gt;) {
+  const loading = new AsyncLoading&lt;T&gt;();
+  const s = signal&lt;AsyncState&lt;T&gt;&gt;(loading);
+  const c = computed&lt;Promise&lt;T&gt;&gt;(cb);          // ← tracking happens HERE, synchronously
+  let controller: AbortController | null;
+
+  function execute(cb: Promise&lt;T&gt;, cancel: AbortSignal) {
+    s.value = loading;
+    new Promise&lt;T&gt;((resolve, reject) =&gt; { /* race cb against cancel */ })
+      .then((result) =&gt; { s.value = new AsyncData&lt;T&gt;(result); })
+      .catch((error) =&gt; { s.value = error === reset ? loading : new AsyncError&lt;T&gt;(error); });
+  }
+  effect(() =&gt; {
+    if (controller != null) controller.abort(reset);
+    controller = new AbortController();
+    execute(c.value, controller.signal);
+  });
+  return s;
+}</code></pre>
+<p class="src">.explore/qr-repo/lib/preact.ts:99–151</p>
+<pre><code class="language-ts">ashraeMeteoDataRaw = asyncCompute(async () =&gt; {
+  const stations = await awaitAsync(this.ashraeStations);   // W1: everything read after this await is invisible
+  return (await Promise.all(stations.slice(0, 5).map((station) =&gt;
+    trpc.ashrae.getMeteoParams.query({ wmo: station.wmo, units: this.units.value })  // ← untracked
+  ))).map((r) =&gt; r.meteo_stations[0]);
+});</code></pre>
+<p class="src">.explore/qr-repo/islands/ClimateToolPage.tsx:319–336</p>
+<p><b>W1.</b> <code>computed(cb)</code> tracks only what <code>cb</code> reads before its first <code>await</code>. Here <code>this.units.value</code> is read after <code>await awaitAsync(...)</code>, so changing units does not recompute. The shape is right — a node that owns its own loading/error/data and cancels itself — but the tracking primitive is synchronous. This is the flaw every candidate was measured against.</p>
+
+<h2>2. The same waterfall, four ways</h2>
+<p>session → doc → view → zones. Watch <em>how step N learns that step N−1 changed.</em></p>
+
+<h3>2a. Preact control arm — fix W1 by passing <code>get</code> through the await</h3>
+<pre><code class="language-ts">const views = asyncCompute(async (get, abort) =&gt; {
+  const sessionId = get(session); const docId = get(doc);
+  if (!sessionId || !docId) return [];
+  await awaitAsync(activeDoc, get, abort);      // get re-registers the dependency after the await
+  return host.listViews(sessionId, docId, abort);
+});
+const zones = asyncCompute(async (get, abort) =&gt; {
+  const sessionId = get(session); const docId = get(doc); const viewId = get(view);
+  if (!sessionId || !docId || !viewId) return [];
+  await awaitAsync(views, get, abort);
+  return host.listZones(sessionId, docId, viewId, abort);
+});</code></pre>
+<p class="src">Pe.Tools-sb-preact …/state-bench/preact/model.ts:89–108 — 9/10 non-negotiables; ~180 lines you own forever, no cache/SWR/devtools</p>
+
+<h3>2b. Jotai + TanStack Query — dependency by <em>key</em>, not by graph</h3>
+<pre><code class="language-ts">const zonesQuery = atomWithQuery&lt;Zone[], Error&gt;((get) =&gt; {
+  const { session, doc, view } = get(search);           // reads the URL, NOT viewsQuery
+  return {
+    queryKey: [host.key, "zones", session, doc, view],  // identity = the tuple you remembered to list
+    enabled: Boolean(session &amp;&amp; doc &amp;&amp; view),
+    queryFn: () =&gt; host.listZones(session!, doc!, view!),
+  };
+}, getClient);</code></pre>
+<p class="src">Pe.Tools-sb-jotai …/state-bench/jotai/store.ts:284–292; TanStack's <code>zonesOptions()</code> at sb-tanstack …/tanstack/model.ts:477–483 is the same shape</p>
+<p>There is no edge from <code>views</code> to <code>zones</code>. When a <code>docChanged</code> push arrives you invalidate by key prefix and hope the tuple was complete. Excellent cache (dedup, retry, stale-time, best devtools) — but the <em>chain</em> is in your head, not in the runtime. Census smells S9/S15 (wrong producer, effect loops) come from exactly this gap.</p>
+
+<h3>2c. Effect v4 atoms — the edge is real</h3>
+<pre><code class="language-ts">const activeDocumentSource = runtime
+  .atom((get) =&gt; {
+    const target = get(targetAtom);                                   // sync read: URL leaf
+    return Effect.gen(function* () {
+      const read = yield* get.result(sessionsResult, { suspendOnWaiting: true });  // async read: a tracked edge
+      const resolution = resolveTarget(read.value, target);
+      if (resolution.kind !== "resolved") return unbound&lt;ActiveDocument | null&gt;(null, [target]);
+      return yield* timed([resolution.session.sessionId], () =&gt;
+        deps.sessions.activeDocument(resolution.session));
+    });
+  })
+  .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/active-document"));
+const activeDocumentResult = runtimeFactory
+  .withReactivity(["active-document"])(activeDocumentSource)          // S8: name I answer to
+  .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/active-document"));
+
+const candidatesSource = runtime.atom((get) =&gt;
+  Effect.gen(function* () {
+    const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
+    const view = get(viewAtom);
+    if (!document.value || !view) return unbound&lt;CandidateRegion[]&gt;([], document.basis);
+    return yield* timed([document.value.session.sessionId, view], () =&gt;
+      deps.host.readCandidates(document.value!.session, view));
+  }))
+  .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/source/candidates"));
+const candidatesResult = runtimeFactory.withReactivity(["candidates"])(
+  Atom.swr(candidatesSource, { staleTime: "30 seconds", revalidateOnMount: false }),
+).pipe(Atom.keepAlive, Atom.withLabel("takeoffs/result/candidates"));</code></pre>
+<p class="src">Pe.Tools-takeoff-cutover …/takeoff/store.ts:399–454</p>
+<p><code>yield* get.result(parent)</code> is <code>await awaitAsync(parent, get)</code> with the tracking built into the runtime instead of hand-threaded. The proof (judge probe P1): <code>viewsResultAtom</code> read <em>nothing</em> from doc in its body except via <code>get.result</code>; one <code>Reactivity.invalidate(["sessions"])</code> produced <code>{sessions:1, doc:1, views:1, zones:1, folder:0, r10:0}</code>. Three hops re-ran, the unrelated branch did not. Round-2 code had needed a <code>setTimeout(refreshZones, 60)</code> and 11 manual <code>registry.refresh</code> calls; round 3 has 0 and 1.</p>
+
+<table><tr><th></th><th>qr asyncCompute</th><th>Preact arm</th><th>Jotai/TanStack Query</th><th>Effect atoms</th></tr>
+<tr><td>Dependency across await</td><td>lost (W1)</td><td>manual <code>get</code> threading</td><td>none — key tuple</td><td>runtime (<code>get.result</code>)</td></tr>
+<tr><td>Cancellation</td><td>AbortController</td><td>AbortController</td><td>query cancel</td><td>fiber interrupt, free</td></tr>
+<tr><td>Cache / SWR / dedup</td><td>no</td><td>no</td><td>best in class</td><td><code>Atom.swr</code>, per-node; no global cache</td></tr>
+<tr><td>Push invalidation</td><td>—</td><td>—</td><td>by key prefix</td><td>by declared key (<code>withReactivity</code>)</td></tr>
+<tr><td>No-React test</td><td>yes</td><td>yes</td><td>needs QueryClient</td><td>yes (<code>registry.get</code>)</td></tr>
+<tr><td>Devtools</td><td>—</td><td>—</td><td>TanStack</td><td>built this week (§6)</td></tr>
+<tr><td>Risk</td><td>yours</td><td>yours</td><td>stable</td><td><code>effect/unstable/*</code> may break on minors</td></tr></table>
+
+<h2>3. Feeds: one projector, six words</h2>
+<p>The library gives <code>AsyncResult</code> (Initial | Success{waiting} | Failure). Users and agents read <code>FeedState</code>. Exactly one function crosses that line, so "stale" means the same thing on every route.</p>
+<div class="two">
+<pre><code class="language-ts">export type FeedState =
+  "live" | "fresh" | "stale" | "loading" | "error" | "fixture";
+
+export interface Feed {
+  options: Option[] | null;   // null = legal-options SEAM
+  state: FeedState;
+  at?: number;                // when read
+  basis?: readonly string[];  // exact input tuple of that read
+  note?: string;
+}</code></pre>
+<pre><code class="language-ts">export function resultFeed&lt;A&gt;(result, options, fixture, live = false): TakeoffFeed {
+  if (AsyncResult.isInitial(result))
+    return { options: null, state: "loading", note: "not read yet" };
+  if (AsyncResult.isFailure(result))
+    return { options: null, state: "error", note: String(Cause.squash(result.cause)) };
+  if (!result.value.bound)
+    return { options: null, state: fixture ? "fixture" : "fresh",
+             note: "unbound; no host read", basis: result.value.basis };
+  return {
+    options: options(result.value.value),
+    state: result.waiting ? "stale" : fixture ? "fixture" : live ? "live" : "fresh",
+    at: result.value.at, basis: result.value.basis,
+  };
+}</code></pre></div>
+<p class="src">targeting/model.ts:55–77 · takeoff/store.ts:267–290. <code>waiting</code> (SWR revalidating) ⇒ <code>stale</code>; <code>basis</code> is what the badge shows instead of "3s ago".</p>
+
+<h2>4. Writes name what they invalidate</h2>
+<pre><code class="language-ts">const adoptMutation = runtime
+  .fn((input, get) =&gt; Effect.gen(function* () {
+    const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
+    if (!document.value) return yield* Effect.fail(Error("no document bound"));
+    const receipt = yield* Effect.tryPromise({ try: () =&gt; deps.host.adopt(document.value!.session, input), catch: toError });
+    yield* Reactivity.invalidate(["snapshot", "candidates"]);   // the receipt makes these stale → SWR re-reads
+    return receipt;
+  }))
+  .pipe(Atom.keepAlive, Atom.withLabel("takeoffs/verb/adopt"));
+
+adopt(input) {
+  return runVerb("adopt", async () =&gt; {                  // serial bracket: busy ticker, receipt, failure, single-flight
+    write("adopt", "verb/adopt", () =&gt; registry.set(adoptMutation, input));
+    return settle(adoptMutation);
+  });
+}</code></pre>
+<p class="src">takeoff/store.ts:671–687, 1030–1035; <code>runVerb</code> at 697–745</p>
+<p>Compare the census baseline: after a write, components called refresh functions in <code>useEffect</code>s and hoped ordering held (S8, S15). Here the write cannot forget: the judge's pass-1 finding "missing <code>["candidates"]</code>" was a one-token fix, and the test <code>adopt → stale → refresh</code> catches it without React.</p>
+
+<h2>5. Entities: one atom per id, panes read one atom</h2>
+<div class="two">
+<pre><code class="language-ts">const hoveredAtom  = Atom.family((id: string) =&gt; Atom.make(false));
+const selectedAtom = Atom.family((id: string) =&gt; Atom.make(false));
+const stagedAtom   = Atom.family((id: string) =&gt; Atom.make&lt;StagedRoomEdit | null&gt;(null));
+
+const entityAtom = Atom.family((id: string) =&gt;
+  Atom.make((get) =&gt; {
+    const authority = get(roomsByIdAtom).get(id);
+    const staged = get(stagedAtom(id));
+    return {
+      hovered: get(hoveredAtom(id)), selected: get(selectedAtom(id)),
+      bound: get(boundAtom(id)), decided: get(decidedAtom(id)),
+      staged, dirty: staged !== null,
+      conflict: staged !== null &amp;&amp; authority !== undefined &amp;&amp;
+        JSON.stringify(staged.base) !== JSON.stringify(roomEdit(authority)),
+    };
+  }));</code></pre>
+<pre><code class="language-tsx">// a row in the atlas — the ONLY store read it makes
+const entity = useAtomValue(store.atoms.entity(row.room.guid));
+return (
+  &lt;div
+    data-dirty={entity.dirty || undefined}
+    data-conflict={entity.conflict || undefined}
+    title={[
+      entity.hovered &amp;&amp; "hovered",
+      entity.selected &amp;&amp; "table selection",
+      entity.dirty &amp;&amp; "staged",
+      entity.conflict &amp;&amp; "authority changed",
+    ].filter(Boolean).join(" · ")}
+  /&gt;
+);</code></pre></div>
+<p class="src">takeoff/store.ts:381–397, 652–669 · takeoff/atlas.tsx:352–364</p>
+<p>Hover at 500 zones re-renders 2 rows (old, new), not 3 panes. <code>conflict</code> is derived from <code>{base, next}</code> vs host authority (S9) — pass 1 had it as a cast that always read false; the type system caught it once the cast was removed.</p>
+
+<h2>6. Mockable, inspectable — the tests that don't render React</h2>
+<div class="two">
+<pre><code class="language-ts">it("swaps the whole host for the zero-latency fixture", async () =&gt; {
+  const live = createMockHost({ latency: 0 });
+  const fixture = createMockHost({ fixture: true });
+  const state = createEffectAtomBench(live, fixture);   // host is a constructor arg (S5)
+  state.dispatch.setFixture(true);
+  await state.testing.readResult(state.atoms.zonesResult);
+  expect(fixture.calls).toMatchObject({ sessions: 1, doc: 1, views: 1, zones: 1 });
+  expect(live.calls.zones).toBe(0);
+  expect(state.registry.get(state.atoms.zonesFeed)).toMatchObject({ state: "fixture" });
+});</code></pre>
+<pre><code class="language-ts">inspect() {
+  return {
+    ...inspector.snapshot(),          // every labeled atom, parents/children, last cause
+    url: registry.get(searchAtom),
+    persisted: { recentDirs: registry.get(recentDirsAtom) },
+    page: { hover: currentHover, staged: [...stagedIds],
+            busy: registry.get(busyAtom), failure: registry.get(failureAtom),
+            receipt: registry.get(receiptAtom) },
+    feeds: Object.fromEntries(Object.entries(feeds).map(([k, a]) =&gt; [k, registry.get(a)])),
+    actions: registry.get(actionsLogAtom),
+  };
+}</code></pre></div>
+<p class="src">sb-effect-atom …/effect-atom/bench.test.ts:19–32 · takeoff/store.ts:1088–1105</p>
+<p><code>inspect()</code> is the seam three things hang off: the TanStack Devtools panel (<code>integrations/atoms/devtools.tsx</code>, shows the cause of the last write via <code>note({verb,key})</code>), the deterministic diagram generator (<code>13-diagram-gen.md</code>: 70 nodes/63 edges from labels + Product), and any agent asking "what is this route's state right now". URL / persisted / page / feeds are separate keys because they are separate atoms — the separation is structural, not a comment.</p>
+
+<h2>7. The two decisions you didn't understand</h2>
+
+<h3>G7 — who owns the visible row order</h3>
+<p>The atlas table (TanStack Table) filters and sorts rows. Keyboard next/prev and "select all visible" need that order. Today the <em>table component</em> computes it during render and writes it <em>back</em> into the store:</p>
+<pre><code class="language-tsx">onVisibleChange={(keys) =&gt;
+  (visibleKeys.length !== keys.length || visibleKeys.some((key, i) =&gt; key !== keys[i])) &amp;&amp;
+  store.actions.setAtlasPage({ visibleKeys: keys })      // render → store write → re-render
+}</code></pre>
+<p class="src">takeoff/atlas.tsx:1124–1128; <code>AtlasPageState.visibleKeys</code> at store.ts:157</p>
+<p>That is census smell S2 (derived state copied into a store) wearing a new coat: the store holds a value it cannot compute, fed by a component effect. Two honest options:</p>
+<table><tr><th>Option</th><th>What moves</th><th>Cost</th></tr>
+<tr><td><b>A. Store derives order</b> (recommended)</td><td>filter/sort become atoms (<code>visibleRowsAtom</code> from <code>stageFilter</code>, <code>level</code>, sort key); the table renders that list with sorting controlled</td><td>you re-implement the sorts TanStack Table did; but keyboard nav, "select visible", and the diagram all read one atom, and no render-time write exists</td></tr>
+<tr><td>B. Table owns order</td><td>delete <code>visibleKeys</code> from the store; next/prev live in the table component via a ref</td><td>keyboard verbs become table-private; <code>inspect()</code> can't say what's visible; a second pane (plan) can't mirror the order</td></tr></table>
+<p>Rule to carry: <em>if a store field can only be written by a component, it is not state — it is a derived value in the wrong place.</em></p>
+
+<h3>G8 — one registry per app, or one per store?</h3>
+<p>An <code>AtomRegistry</code> is the graph instance: values, subscriptions, TTL. The cutover does <code>AtomRegistry.make()</code> inside <code>createTakeoffStore</code> (store.ts:297) — your instinct. Two facts weigh against it:</p>
+<ol>
+<li><b>The Suspense hook keys promises by atom only, in a module-global Map</b> (<code>@effect/atom-react/dist/Hooks.js:221</code>): if the same atom object is read through two registries they share one promise; if a store is disposed mid-read the entry leaks. Per-store atoms avoid the collision but not the leak.</li>
+<li><b>Your chat plugins already need one shared graph.</b> <code>workbench/route-state.tsx:134</code> keeps route docs in an <code>Atom.family</code> keyed <code>{route, stateKey, scope}</code>, and the comment says why: "shares one wire across every inline card and dock for the same coordinate." A route is on screen 3–4 times at once (N inline cards + dock + sentence + the route's own iframe). A per-store registry would give each mount its own copy of the host reads.</li></ol>
+<div class="rule"><b>Recommendation:</b> keep the per-route <em>store object</em> (namespace, actions, <code>inspect()</code>, fixture seam) but make it a handle over the <b>one app registry</b>, passed in like the host: <code>createTakeoffStore({ host, sessions, search, registry })</code>. Atoms stay per-store-instance; families that must dedupe across mounts (route docs, host reads) key on <code>(route, scope)</code> exactly like <code>route-state.tsx</code> already does. Write it as an ADR; the cost is one constructor arg and deleting line 297.</div>
+
+<h2>8. Chat plugins — what I missed, and what it changes</h2>
+<p>Not considered in the bake-off. Reading it now (<code>workbench/route-chat-plugins.tsx</code>, ADR 0001):</p>
+<ul>
+<li>A plugin is <code>{ spec: RouteStateSpec, Renderer }</code>; the same <code>spec</code> drives the pea MCP tool, the runtime workspace, and the web card. Route identity is the URL segment. Good — that is the S1 "Product" noun already living server-side.</li>
+<li>State reaches a plugin through <code>useRouteState(spec)</code> → Effect atom family → SSE. Writes go out-of-band (<code>writeRouteState</code> POST) and come back only via SSE. <b>This is already substrate B</b>, minus the shape: no feeds, no basis, no declared invalidation, and scope re-derived from <code>window.location.search</code> on every write (<code>route-state.tsx:20–24</code>) — so a chat-side card and the iframe of the same route read two different documents (workspace vs thread scope).</li>
+<li>The dock unmounts on every turn start and remounts at <code>agent_end</code>, so plugin <code>useState</code> dies each turn — S7 (zero useState in panes) is not a style preference here, it is the only way plugin UI survives a turn.</li>
+<li>Design-system ledger 243–246 already names the gap: <code>/takeoffs</code> and <code>/families</code> keep all state inside the React tree, so no plugin can read them.</li></ul>
+<p><b>So the substrate question was already answered by the plugin system</b>; the cutover's job is to give it the shape: route store = <code>RouteStateSpec</code> + atoms in the shared registry, keyed by <code>(route, scope)</code>; the route page, the inline card, the dock and the sentence are four panes of one store. That collapses "make every route a plugin" into "every route is a store; a plugin is a pane".</p>
+
+<h2>9. Apply it (transfer check)</h2>
+<p>Answer these against <code>/families</code> or <code>/runs</code> before we cut anything else:</p>
+<ol>
+<li>Name its waterfall as <code>a → b → c</code>. Which step reads something <em>after</em> an await that could change independently? (That's where W1 would have bitten.)</li>
+<li>Which of its writes should invalidate which keys? If you can't list the keys, the route has an S15 loop somewhere today.</li>
+<li>Which of its component-local values would a chat card need to show? Those are the fields that belong in the store, and nothing else.</li>
+<li>For G7: is there any store field on that route that only a component can compute?</li></ol>
+
+<h2>Links</h2>
+<p class="dim">08-synthesis.md §2 (shape S1–S10), §6 (why B) · 09-wildcards.md §0 (F2: useSyncExternalStore is SyncLane — no useTransition on store picks; F3: Activity unmounts subscriptions) · 12-devtools.md · 14-takeoffs-cutover.md · judge-effect-atom.md P1 · docs/adr/0001-route-workspace-framework.md</p>
+<script>hljs.highlightAll()</script>
+</body></html>
