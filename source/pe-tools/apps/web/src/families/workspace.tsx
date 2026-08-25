@@ -40,7 +40,6 @@ import {
   visibleParameters,
   LoadedFamilyPlacementScope,
   type FamilyParameterSnapshot,
-  type FamilySnapshotRecord,
   type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
 import {
@@ -112,67 +111,6 @@ const CLUSTER_ORDER: Record<Cluster, number> = {
   uncommon: 2,
   "project-only": 3,
 };
-
-function flatten(families: readonly FamilySnapshotRecord[]): {
-  rows: TypeRow[];
-  params: ParamColumn[];
-} {
-  const params = new Map<string, ParamColumn & { seen: Set<string> }>();
-  const rows: TypeRow[] = [];
-
-  for (const family of families) {
-    const visible = visibleParameters(family);
-    for (const param of visible) {
-      const key = param.definition.identity.key;
-      let entry = params.get(key);
-      if (!entry) {
-        entry = {
-          key,
-          name: param.definition.identity.name,
-          kind: param.kind,
-          isInstance: param.definition.isInstance ?? false,
-          isBuiltIn: param.definition.identity.kind === "BuiltInParameter",
-          isProjectOnly: param.kind === "ProjectParameter",
-          familyCount: 0,
-          seen: new Set<string>(),
-        };
-        params.set(key, entry);
-      }
-      if (!entry.seen.has(family.familyUniqueId)) {
-        entry.seen.add(family.familyUniqueId);
-        entry.familyCount += 1;
-      }
-    }
-
-    for (const typeName of family.typeNames) {
-      const values: TypeRow["values"] = {};
-      const scopes: TypeRow["scopes"] = {};
-      const formulas: TypeRow["formulas"] = {};
-      for (const param of visible) {
-        const key = param.definition.identity.key;
-        values[key] = cellText(param.valuesPerType[typeName]);
-        scopes[key] = param.scope;
-        formulas[key] = param.formulaState;
-      }
-      rows.push({
-        key: `${family.familyUniqueId}::${typeName}`,
-        familyId: family.familyId,
-        familyName: family.familyName,
-        categoryName: family.categoryName ?? "",
-        typeName,
-        typeCount: family.typeNames.length,
-        values,
-        scopes,
-        formulas,
-      });
-    }
-  }
-
-  return {
-    rows,
-    params: [...params.values()].map(({ seen: _seen, ...rest }) => rest),
-  };
-}
 
 /** What a cell's value MEANS — the title text, so a read-only cell still explains itself. */
 function cellReason(row: TypeRow, key: string): string {
@@ -433,7 +371,57 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   }, [pickedIds]);
 
   // ── table model ──────────────────────────────────────────────────────────────────────────────
-  const { rows, params } = useMemo(() => flatten(families), [families]);
+  const { rows, params } = useMemo(() => {
+    const params = new Map<string, ParamColumn & { seen: Set<string> }>();
+    const rows: TypeRow[] = [];
+    for (const family of families) {
+      const visible = visibleParameters(family);
+      for (const param of visible) {
+        const key = param.definition.identity.key;
+        let entry = params.get(key);
+        if (!entry) {
+          entry = {
+            key,
+            name: param.definition.identity.name,
+            kind: param.kind,
+            isInstance: param.definition.isInstance ?? false,
+            isBuiltIn: param.definition.identity.kind === "BuiltInParameter",
+            isProjectOnly: param.kind === "ProjectParameter",
+            familyCount: 0,
+            seen: new Set<string>(),
+          };
+          params.set(key, entry);
+        }
+        if (!entry.seen.has(family.familyUniqueId)) {
+          entry.seen.add(family.familyUniqueId);
+          entry.familyCount += 1;
+        }
+      }
+      for (const typeName of family.typeNames) {
+        const values: TypeRow["values"] = {};
+        const scopes: TypeRow["scopes"] = {};
+        const formulas: TypeRow["formulas"] = {};
+        for (const param of visible) {
+          const key = param.definition.identity.key;
+          values[key] = cellText(param.valuesPerType[typeName]);
+          scopes[key] = param.scope;
+          formulas[key] = param.formulaState;
+        }
+        rows.push({
+          key: `${family.familyUniqueId}::${typeName}`,
+          familyId: family.familyId,
+          familyName: family.familyName,
+          categoryName: family.categoryName ?? "",
+          typeName,
+          typeCount: family.typeNames.length,
+          values,
+          scopes,
+          formulas,
+        });
+      }
+    }
+    return { rows, params: [...params.values()].map(({ seen: _seen, ...rest }) => rest) };
+  }, [families]);
   const totalFamilies = families.length;
 
   const planByFamilyId = useMemo(() => {
