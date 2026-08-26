@@ -9,6 +9,7 @@ using Pe.Revit.FamilyFoundry.DesiredState;
 using Pe.Revit.FamilyFoundry.Profiles;
 using Pe.Revit.FamilyFoundry.Snapshots;
 using Pe.Revit.Global;
+using Pe.Revit.Operations;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
@@ -22,24 +23,23 @@ internal static class FamilyFoundryBridgeOps {
     private static readonly JsonSerializerSettings ProfileOutputSettings =
         RevitJsonFormatting.CreateRevitIndentedSettings();
 
-    [Op("familyfoundry.plan", Does = "Strictly compile inline desired-state Family Foundry profile JSON into per-family reconciliation plans with provenance and a deterministic drift hash.", Title = "Plan Family Foundry Migration", Finds = ["family-foundry", "familyfoundry", "migration", "plan", "provenance", "plan-hash"], Cost = OpCost.Bounded, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
-    private static Task<FamilyFoundryPlanData> Plan(FamilyFoundryPlanRequest request, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => PlanFamilies(request), cancellationToken);
+    [Op("familyfoundry.plan", Does = "Strictly compile inline desired-state Family Foundry profile JSON into per-family reconciliation plans with provenance and a deterministic drift hash.", Title = "Plan Family Foundry Migration", Finds = ["family-foundry", "familyfoundry", "migration", "plan", "provenance", "plan-hash"], Cost = OpCost.Bounded)]
+    private static Task<FamilyFoundryPlanData> Plan(FamilyFoundryPlanRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => PlanFamilies(request, document.Value), cancellationToken);
 
-    [Op("familyfoundry.apply", Does = "Recompile inline desired-state Family Foundry profile JSON, refuse plan drift, then migrate each explicit loaded family independently with receipts.", Title = "Apply Family Foundry Migration", Finds = ["family-foundry", "familyfoundry", "migration", "apply", "plan-hash", "receipts"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
-    private static Task<FamilyFoundryApplyData> Apply(FamilyFoundryApplyRequest request, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => ApplyFamilies(request), cancellationToken);
+    [Op("familyfoundry.apply", Does = "Recompile inline desired-state Family Foundry profile JSON, refuse plan drift, then migrate each explicit loaded family independently with receipts.", Title = "Apply Family Foundry Migration", Finds = ["family-foundry", "familyfoundry", "migration", "apply", "plan-hash", "receipts"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static Task<FamilyFoundryApplyData> Apply(FamilyFoundryApplyRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => ApplyFamilies(request, document.Value), cancellationToken);
 
-    [Op("familyfoundry.project", Does = "Open selected loaded families read-only, capture full snapshots, and return dense runnable FFManagerProfile JSON inline.", Title = "Project Family Foundry Profiles", Finds = ["family-foundry", "familyfoundry", "project", "snapshot", "profile", "manager"], Cost = OpCost.Expensive, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
-    private static Task<FamilyFoundryProjectData> Project(FamilyFoundryProjectRequest request, CancellationToken cancellationToken) =>
-        PaletteThreading.RunRevitAsync(() => ProjectFamilies(request), cancellationToken);
+    [Op("familyfoundry.project", Does = "Open selected loaded families read-only, capture full snapshots, and return dense runnable FFManagerProfile JSON inline.", Title = "Project Family Foundry Profiles", Finds = ["family-foundry", "familyfoundry", "project", "snapshot", "profile", "manager"], Cost = OpCost.Expensive)]
+    private static Task<FamilyFoundryProjectData> Project(FamilyFoundryProjectRequest request, ProjectDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => ProjectFamilies(request, document.Value), cancellationToken);
 
-    private static FamilyFoundryPlanData PlanFamilies(FamilyFoundryPlanRequest request) {
+    private static FamilyFoundryPlanData PlanFamilies(FamilyFoundryPlanRequest request, Document document) {
         var parsed = ParseProfile(request.ProfileJson);
         if (parsed.Profile == null)
             return new FamilyFoundryPlanData(null, [], parsed.Diagnostics);
 
-        var document = GetProjectDocument();
         FamilyFoundryReconciliationPlanData projectedPlan;
         try {
             projectedPlan = ProjectPlan(document.CompileDesiredFamilyMigrationProfile(parsed.Profile));
@@ -64,7 +64,7 @@ internal static class FamilyFoundryBridgeOps {
             families.Diagnostics);
     }
 
-    private static FamilyFoundryApplyData ApplyFamilies(FamilyFoundryApplyRequest request) {
+    private static FamilyFoundryApplyData ApplyFamilies(FamilyFoundryApplyRequest request, Document document) {
         var parsed = ParseProfile(request.ProfileJson);
         if (parsed.Profile == null)
             return new FamilyFoundryApplyData(null, true, [], parsed.Diagnostics);
@@ -83,7 +83,6 @@ internal static class FamilyFoundryBridgeOps {
                 "expectedPlanHash is required; call familyfoundry.plan immediately before apply.")]);
         }
 
-        var document = GetProjectDocument();
         FamilyFoundryReconciliationPlanData projectedPlan;
         try {
             projectedPlan = ProjectPlan(document.CompileDesiredFamilyMigrationProfile(parsed.Profile));
@@ -179,8 +178,7 @@ internal static class FamilyFoundryBridgeOps {
             artifactDirectory);
     }
 
-    private static FamilyFoundryProjectData ProjectFamilies(FamilyFoundryProjectRequest request) {
-        var document = GetProjectDocument();
+    private static FamilyFoundryProjectData ProjectFamilies(FamilyFoundryProjectRequest request, Document document) {
         if (request.FamilyIds == null || request.FamilyIds.Count == 0) {
             return new FamilyFoundryProjectData([], [Diagnostic(
                 "FamilyIdsRequired",
@@ -221,14 +219,6 @@ internal static class FamilyFoundryBridgeOps {
             if (shouldClose && familyDocument != null)
                 _ = familyDocument.Close(false);
         }
-    }
-
-    private static Document GetProjectDocument() {
-        var document = RevitUiSession.CurrentUIApplication.ActiveUIDocument?.Document
-                       ?? throw BridgeOperationExceptions.Conflict("No active Revit document.");
-        if (document.IsFamilyDocument)
-            throw BridgeOperationExceptions.Conflict("The active Revit document is not a project document.");
-        return document;
     }
 
     private static (DesiredFamilyMigrationProfile? Profile, IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics)

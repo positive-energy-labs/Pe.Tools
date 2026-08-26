@@ -21,10 +21,11 @@ public enum HostOperationVisibility {
 // Which active document kind a bridge-backed operation supports (see AGENTS.md
 // "supported active document kind"). Metadata/gating signal only — request scopes
 // (selection, active view, handles) stay separate.
-public enum HostOperationActiveDocumentKind {
-    Any,
-    ProjectOnly,
-    FamilyOnly
+public enum OpNeeds {
+    Nothing,
+    Document,
+    ProjectDocument,
+    FamilyDocument
 }
 
 // Machine-readable failure classification the host emits in problem.extensions.kind,
@@ -47,8 +48,6 @@ public sealed record HostOperationAgentMetadata(
     string Description,
     IReadOnlyList<string> SearchTerms,
     HostOperationIntent Intent,
-    bool RequiresActiveDocument,
-    HostOperationActiveDocumentKind SupportedActiveDocumentKind,
     HostOperationCostTier CostTier,
     HostOperationVisibility Visibility,
     IReadOnlyList<HostOperationRequestExample> RequestExamples,
@@ -59,19 +58,15 @@ public sealed record HostOperationAgentMetadata(
         string description,
         IReadOnlyList<string>? searchTerms = null,
         HostOperationIntent intent = HostOperationIntent.Read,
-        bool requiresActiveDocument = false,
         HostOperationCostTier? costTier = null,
         HostOperationVisibility? visibility = null,
         IReadOnlyList<HostOperationRequestExample>? requestExamples = null,
         string? safeDefaultRequestJson = null,
-        IReadOnlyList<string>? callGuidance = null,
-        HostOperationActiveDocumentKind supportedActiveDocumentKind = HostOperationActiveDocumentKind.Any
+        IReadOnlyList<string>? callGuidance = null
     ) => new(
         description,
         searchTerms ?? Array.Empty<string>(),
         intent,
-        requiresActiveDocument,
-        supportedActiveDocumentKind,
         costTier ?? InferCostTier(intent),
         visibility ?? HostOperationVisibility.EscalationVisible,
         requestExamples ?? Array.Empty<HostOperationRequestExample>(),
@@ -93,7 +88,8 @@ public sealed record HostOperationDefinition(
     Type ResponseType,
     bool IsPublic = true,
     string? DisplayName = null,
-    HostOperationAgentMetadata? Metadata = null
+    HostOperationAgentMetadata? Metadata = null,
+    OpNeeds Needs = OpNeeds.Nothing
 ) {
     public HostOperationAgentMetadata AgentMetadata => EnrichMetadata(
         this.Key,

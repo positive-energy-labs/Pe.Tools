@@ -16,16 +16,19 @@ public sealed record ValueDomainExecutionContext {
 
     public ValueDomainExecutionContext(
         SettingsRuntimeMode runtimeMode,
-        IReadOnlyDictionary<string, string>? fieldValues = null
+        IReadOnlyDictionary<string, string>? fieldValues = null,
+        Document? document = null
     ) {
         this.RuntimeMode = runtimeMode;
         this.FieldValues = fieldValues ?? EmptyFieldValues;
+        this.Document = document;
     }
 
     public SettingsRuntimeMode RuntimeMode { get; }
     public IReadOnlyDictionary<string, string> FieldValues { get; }
+    private Document? Document { get; }
 
-    public Document GetActiveDocument() => RevitUiSession.CurrentUIApplication.GetActiveDocument()!;
+    public Document GetActiveDocument() => this.Document ?? RevitUiSession.CurrentUIApplication.GetActiveDocument()!;
 
     public bool TryGetFieldValue(string key, out string value) =>
         this.FieldValues.TryGetValue(key, out value!);

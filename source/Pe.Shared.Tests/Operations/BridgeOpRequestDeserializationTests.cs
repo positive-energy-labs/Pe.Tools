@@ -22,6 +22,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     public void A_string_field_sent_as_an_object_is_a_400_naming_op_type_and_field() {
         var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe().ExecuteAsync(
             """{"timeoutSeconds":60,"scriptContent":{"Ast":"a powershell script block"}}""",
+            null,
             CancellationToken.None
         ))!;
 
@@ -35,6 +36,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     public void Malformed_json_is_a_400_not_a_500() {
         var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe().ExecuteAsync(
             "{\"scriptContent\": \"unterminated",
+            null,
             CancellationToken.None
         ))!;
 
@@ -45,6 +47,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     public void A_null_payload_is_a_400_naming_the_expected_type() {
         var exception = Assert.ThrowsAsync<BridgeOperationException>(() => Probe().ExecuteAsync(
             "null",
+            null,
             CancellationToken.None
         ))!;
 
@@ -56,6 +59,7 @@ public sealed class BridgeOpRequestDeserializationTests {
     public async Task A_valid_multiline_script_payload_deserializes_and_executes() {
         var response = await Probe().ExecuteAsync(
             """{"timeoutSeconds":60,"scriptContent":"using System;\nvar x = 1;\nConsole.WriteLine(x);"}""",
+            null,
             CancellationToken.None
         );
 

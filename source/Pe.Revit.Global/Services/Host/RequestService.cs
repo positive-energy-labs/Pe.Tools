@@ -1,5 +1,6 @@
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global.Services.Document;
+using Pe.Revit.Operations;
 using Pe.Revit.SettingsRuntime.Json;
 using Pe.Revit.SettingsRuntime.Json.ValueDomains;
 using Pe.Revit.SettingsRuntime.Json.SchemaDefinitions;
@@ -37,9 +38,10 @@ public class RequestService {
         this._throttleGate = throttleGate;
     }
 
-    [Op("settings.field-options", Does = "Read document-specific field option values for a settings module.", Title = "Get Settings Field Options", Finds = ["settings", "field-options", "schema", "document"], Tier = OpTier.Expert, RequiresDocument = true)]
+    [Op("settings.field-options", Does = "Read document-specific field option values for a settings module.", Title = "Get Settings Field Options", Finds = ["settings", "field-options", "schema", "document"], Tier = OpTier.Expert)]
     public async Task<FieldOptionsData> GetFieldOptionsAsync(
         FieldOptionsRequest request,
+        RevitDocument document,
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
@@ -54,15 +56,16 @@ public class RequestService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             FieldOptionsThrottleWindow,
-            () => this.GetFieldOptionsCore(request, cancellationToken)
+            () => this.GetFieldOptionsCore(request, document, cancellationToken)
         );
         LogThrottleDecision(nameof(this.GetFieldOptionsAsync), decision, request.ModuleKey, request.PropertyPath);
         return response;
     }
 
-    [Op("settings.parameter-catalog", Does = "Read Revit parameter definitions and available parameter facts from the active document for settings authoring.", Title = "Get Parameter Catalog", Finds = ["parameters", "catalog", "settings", "document"], RequiresDocument = true)]
+    [Op("settings.parameter-catalog", Does = "Read Revit parameter definitions and available parameter facts from the active document for settings authoring.", Title = "Get Parameter Catalog", Finds = ["parameters", "catalog", "settings", "document"])]
     public async Task<ParameterCatalogData> GetParameterCatalogAsync(
         ParameterCatalogRequest request,
+        RevitDocument document,
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
@@ -76,15 +79,16 @@ public class RequestService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             ParameterCatalogThrottleWindow,
-            () => this.GetParameterCatalogCore(request, cancellationToken)
+            () => this.GetParameterCatalogCore(request, document, cancellationToken)
         );
         LogThrottleDecision(nameof(this.GetParameterCatalogAsync), decision, request.ModuleKey, null);
         return response;
     }
 
-    [Op("revit.catalog.loaded-families.filter-field-options", Does = "Read document-specific option values for loaded-family query filters.", Title = "Get Loaded Families Filter Field Options", Finds = ["loaded-families", "families", "filter", "field-options"], Tier = OpTier.Expert, RequiresDocument = true)]
+    [Op("revit.catalog.loaded-families.filter-field-options", Does = "Read document-specific option values for loaded-family query filters.", Title = "Get Loaded Families Filter Field Options", Finds = ["loaded-families", "families", "filter", "field-options"], Tier = OpTier.Expert)]
     public async Task<FieldOptionsData> GetLoadedFamiliesFilterFieldOptionsAsync(
         LoadedFamiliesFilterFieldOptionsRequest request,
+        RevitDocument document,
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
@@ -99,7 +103,7 @@ public class RequestService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             FieldOptionsThrottleWindow,
-            () => this.GetLoadedFamiliesFilterFieldOptionsCore(request, cancellationToken)
+            () => this.GetLoadedFamiliesFilterFieldOptionsCore(request, document, cancellationToken)
         );
         LogThrottleDecision(
             nameof(this.GetLoadedFamiliesFilterFieldOptionsAsync),
@@ -110,9 +114,10 @@ public class RequestService {
         return response;
     }
 
-    [Op("revit.catalog.field-options", Does = "Read document-specific option values for a value-domain source key (e.g. category-names, family-names). Request schemas mark option-backed fields with an x-options.key annotation that resolves through this operation.", Title = "Get Field Options", Finds = ["field-options", "value-domain", "options", "categories", "families", "suggestions"], Tier = OpTier.Expert, RequiresDocument = true, Example = "{ \"sourceKey\": \"category-names\" }")]
+    [Op("revit.catalog.field-options", Does = "Read document-specific option values for a value-domain source key (e.g. category-names, family-names). Request schemas mark option-backed fields with an x-options.key annotation that resolves through this operation.", Title = "Get Field Options", Finds = ["field-options", "value-domain", "options", "categories", "families", "suggestions"], Tier = OpTier.Expert, Example = "{ \"sourceKey\": \"category-names\" }")]
     public async Task<FieldOptionsData> GetValueDomainOptionsAsync(
         ValueDomainOptionsRequest request,
+        RevitDocument document,
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
@@ -127,14 +132,14 @@ public class RequestService {
         var (response, decision) = await this._throttleGate.ExecuteAsync(
             key,
             FieldOptionsThrottleWindow,
-            () => this.GetValueDomainOptionsCore(request, cancellationToken)
+            () => this.GetValueDomainOptionsCore(request, document, cancellationToken)
         );
         LogThrottleDecision(nameof(this.GetValueDomainOptionsAsync), decision, request.SourceKey, null);
         return response;
     }
 
-    [Op("settings.schema", Does = "Read a settings schema from the connected Revit runtime.", Title = "Get Schema", Finds = ["schema", "settings", "profile", "profiles", "module", "family-foundry"], RequiresDocument = true)]
-    public Task<SchemaData> GetSchemaAsync(SchemaRequest request, CancellationToken cancellationToken) =>
+    [Op("settings.schema", Does = "Read a settings schema from the connected Revit runtime.", Title = "Get Schema", Finds = ["schema", "settings", "profile", "profiles", "module", "family-foundry"])]
+    public Task<SchemaData> GetSchemaAsync(SchemaRequest request, RevitDocument _, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var binding = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey);
@@ -175,8 +180,8 @@ public class RequestService {
                 issue.Suggestion)).ToList()));
     }
 
-    [Op("revit.catalog.loaded-families.filter-schema", Does = "Read the filter schema for loaded-family catalog and matrix queries.", Title = "Get Loaded Families Filter Schema", Finds = ["loaded-families", "families", "filter", "schema"], Tier = OpTier.Expert, RequiresDocument = true)]
-    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(NoRequest _, CancellationToken cancellationToken) =>
+    [Op("revit.catalog.loaded-families.filter-schema", Does = "Read the filter schema for loaded-family catalog and matrix queries.", Title = "Get Loaded Families Filter Schema", Finds = ["loaded-families", "families", "filter", "schema"], Tier = OpTier.Expert)]
+    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(NoRequest _, RevitDocument __, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var schema = RevitJsonSchemaFactory.CreateEditorSchemaData(
@@ -195,12 +200,11 @@ public class RequestService {
             }
         }, cancellationToken);
 
-    [Op("settings.module-catalog", Does = "Read the settings module catalog from Revit for bridge-side schema work.", Title = "Get Settings Module Catalog", Finds = ["settings", "module", "catalog", "schema"], RequiresDocument = true, IsPublic = false)]
-    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(NoRequest _, CancellationToken cancellationToken) => this.EnqueueAsync(() => {
-        var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+    [Op("settings.module-catalog", Does = "Read the settings module catalog from Revit for bridge-side schema work.", Title = "Get Settings Module Catalog", Finds = ["settings", "module", "catalog", "schema"], IsPublic = false)]
+    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(NoRequest _, RevitDocument document, CancellationToken cancellationToken) => this.EnqueueAsync(() => {
         var modules = this._moduleRegistry.GetModules()
             .Where(SettingsModuleAvailability.IsBridgeDiscoverable)
-            .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, activeDocument))
+            .Where(module => SettingsModuleAvailability.IsAvailableForDocument(module, document.Value))
             .OrderBy(module => module.ModuleKey, StringComparer.OrdinalIgnoreCase)
             .Select(SettingsModuleAvailability.CreateSettingsModuleDescriptor)
             .ToList();
@@ -208,24 +212,10 @@ public class RequestService {
         return new GetSettingsModuleCatalogBridgeResponse(modules);
     }, cancellationToken);
 
-    private Task<ParameterCatalogData> GetParameterCatalogCore(ParameterCatalogRequest request, CancellationToken cancellationToken) =>
+    private Task<ParameterCatalogData> GetParameterCatalogCore(ParameterCatalogRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
-                var valueDomainContext = CreateValueDomainContext(request.ContextValues);
-                var doc = valueDomainContext.GetActiveDocument();
-                if (doc == null) {
-                    throw BridgeOperationExceptions.Conflict(
-                        "No active document.",
-                        [
-                            BridgeOperationExceptions.Issue(
-                                "$",
-                                "NoActiveDocument",
-                                "No active document.",
-                                "Open a Revit document and retry."
-                            )
-                        ]
-                    );
-                }
+                var valueDomainContext = CreateValueDomainContext(document, request.ContextValues);
 
                 var entries = ParameterCatalogOptionFactory.Build(valueDomainContext)
                     .Select(ToHostParameterCatalogEntry)
@@ -249,6 +239,7 @@ public class RequestService {
 
     private Task<FieldOptionsData> GetLoadedFamiliesFilterFieldOptionsCore(
         LoadedFamiliesFilterFieldOptionsRequest request,
+        RevitDocument document,
         CancellationToken cancellationToken
     ) => this.EnqueueAsync(() => {
         try {
@@ -256,7 +247,7 @@ public class RequestService {
                     typeof(LoadedFamiliesFilter),
                     request.PropertyPath,
                     request.SourceKey,
-                    CreateValueDomainContext(request.ContextValues)
+                    CreateValueDomainContext(document, request.ContextValues)
                 )
                 .AsTask()
                 .GetAwaiter()
@@ -281,7 +272,7 @@ public class RequestService {
 
     // Resolves a value domain by source key alone — no settings module or property binding.
     // This is the runtime side of FieldOptionsAttribute / x-options on request schemas.
-    private Task<FieldOptionsData> GetValueDomainOptionsCore(ValueDomainOptionsRequest request, CancellationToken cancellationToken) =>
+    private Task<FieldOptionsData> GetValueDomainOptionsCore(ValueDomainOptionsRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             if (!SettingsValueDomainRegistry.Shared.TryCreate(request.SourceKey, out var domain))
                 throw BridgeOperationExceptions.BadRequest(
@@ -297,7 +288,7 @@ public class RequestService {
                 );
 
             try {
-                var items = domain.GetOptionsAsync(CreateValueDomainContext(request.ContextValues))
+                var items = domain.GetOptionsAsync(CreateValueDomainContext(document, request.ContextValues))
                     .AsTask()
                     .GetAwaiter()
                     .GetResult();
@@ -320,7 +311,7 @@ public class RequestService {
             }
         }, cancellationToken);
 
-    private Task<FieldOptionsData> GetFieldOptionsCore(FieldOptionsRequest request, CancellationToken cancellationToken) =>
+    private Task<FieldOptionsData> GetFieldOptionsCore(FieldOptionsRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var type = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey).SettingsType;
@@ -333,7 +324,7 @@ public class RequestService {
                         type,
                         request.PropertyPath,
                         request.SourceKey,
-                        CreateValueDomainContext(request.ContextValues)
+                        CreateValueDomainContext(document, request.ContextValues)
                     )
                     .AsTask()
                     .GetAwaiter()
@@ -429,10 +420,12 @@ public class RequestService {
         );
 
     private static ValueDomainExecutionContext CreateValueDomainContext(
+        RevitDocument document,
         IReadOnlyDictionary<string, string>? contextValues = null
     ) => new(
         SettingsRuntimeMode.LiveDocument,
-        contextValues
+        contextValues,
+        document.Value
     );
 
     private static ParameterCatalogEntry ToHostParameterCatalogEntry(ParameterCatalogOption entry) =>

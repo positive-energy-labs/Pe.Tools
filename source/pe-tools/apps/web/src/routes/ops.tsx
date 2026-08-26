@@ -166,7 +166,7 @@ function OpsPage({ store }: { store: OpsStore }) {
                   : undefined,
             from: {
               target: session.sdkSessionId ?? `pid:${session.processId}`,
-              ...(selected.requiresActiveDocument && session.activeDocumentId
+              ...(selected.needs !== "nothing" && session.activeDocumentId
                 ? { documentId: session.activeDocumentId }
                 : {}),
             },
@@ -314,9 +314,9 @@ function OperationPane({
           <FactChip tone={costTone(operation.costTier)} title="host-declared cost tier">
             {operation.costTier}
           </FactChip>
-          {operation.requiresActiveDocument ? (
-            <FactChip tone="caution" title="requires the active Revit document">
-              active doc
+          {operation.needs !== "nothing" ? (
+            <FactChip tone="caution" title="host-declared document requirement">
+              {operation.needs}
             </FactChip>
           ) : null}
         </div>

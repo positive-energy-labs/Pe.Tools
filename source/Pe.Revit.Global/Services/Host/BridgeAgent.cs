@@ -13,6 +13,7 @@ using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Loader;
+using Pe.Revit.Operations;
 using Pe.Revit.Tasks;
 using Serilog;
 using System.Net.WebSockets;
@@ -266,21 +267,26 @@ internal sealed class BridgeAgent : IDisposable {
             if (!OpRegistry.TryGet(request.OperationKey, out var op))
                 throw new InvalidOperationException($"Unsupported bridge operation '{request.OperationKey}'.");
 
-            var responseEnvelope = op.HandlerType == typeof(RevitDataRequestService) && !op.ReturnsTask
+            var runOnRevitThread = op.HandlerType == typeof(RevitDataRequestService) && !op.ReturnsTask;
+            object? document = null;
+            if (op.Definition.Needs != OpNeeds.Nothing && !runOnRevitThread)
+                document = await this._revitTaskQueue.Run(
+                    context => ResolveDocument(op, context.Cancellation),
+                    RevitRunOptionsFor(op),
+                    cancellationToken
+                ).ConfigureAwait(false);
+
+            var responseEnvelope = runOnRevitThread
                 ? await this._revitTaskQueue.Run(
-                    context => {
-                        context.Cancellation.ThrowIfCancellationRequested();
-                        return op.ExecuteAsync(request.PayloadJson, context.Cancellation).GetAwaiter().GetResult();
-                    },
-                    new RevitRunOptions {
-                        Label = op.Key,
-                        Timeout = op.Definition.AgentMetadata.CostTier is HostOperationCostTier.Expensive or HostOperationCostTier.Mutation
-                            ? TimeSpan.FromMinutes(5)
-                            : TimeSpan.FromMinutes(2)
-                    },
+                    context => op.ExecuteAsync(
+                            request.PayloadJson,
+                            ResolveDocument(op, context.Cancellation),
+                            context.Cancellation)
+                        .GetAwaiter().GetResult(),
+                    RevitRunOptionsFor(op),
                     cancellationToken
                 ).ConfigureAwait(false)
-                : await op.ExecuteAsync(request.PayloadJson, cancellationToken).ConfigureAwait(false);
+                : await op.ExecuteAsync(request.PayloadJson, document, cancellationToken).ConfigureAwait(false);
             Log.Information(
                 "Host bridge dispatch completed: OperationKey={OperationKey}, RequestId={RequestId}",
                 request.OperationKey,
@@ -400,6 +406,28 @@ internal sealed class BridgeAgent : IDisposable {
                     this._inFlightOperationKey = null;
             }
         }
+    }
+
+    private static RevitRunOptions RevitRunOptionsFor(Op op) => new() {
+        Label = op.Key,
+        Timeout = op.Definition.AgentMetadata.CostTier is HostOperationCostTier.Expensive or HostOperationCostTier.Mutation
+            ? TimeSpan.FromMinutes(5)
+            : TimeSpan.FromMinutes(2)
+    };
+
+    private static object? ResolveDocument(Op op, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (op.Definition.Needs == OpNeeds.Nothing)
+            return null;
+
+        var document = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+        OpDocumentGate.Require(op.Definition.Needs, document != null, document?.IsFamilyDocument == true);
+        return op.Definition.Needs switch {
+            OpNeeds.Document => new RevitDocument(document!),
+            OpNeeds.ProjectDocument => new ProjectDocument(document!),
+            OpNeeds.FamilyDocument => new FamilyDocument(document!),
+            _ => null
+        };
     }
 
     /// <summary>

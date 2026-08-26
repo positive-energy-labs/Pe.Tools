@@ -5,6 +5,8 @@ namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class OpRegistryTests {
+    private readonly record struct ProjectDocument(object Value);
+
     [Op(
         "test.registry.probe",
         Does = "Prove attributed handlers are discovered.",
@@ -12,6 +14,9 @@ public sealed class OpRegistryTests {
         IsPublic = false
     )]
     private static SchemaData Handle(NoRequest _) => null!;
+
+    [Op("test.project-document", Does = "Prove presence-based project document needs.", IsPublic = false)]
+    private static SchemaData HandleProject(NoRequest _, ProjectDocument __) => null!;
 
     [Test]
     public void Discovers_attributed_handlers_and_registration_is_idempotent() {
@@ -42,5 +47,19 @@ public sealed class OpRegistryTests {
 
         Assert.Throws<InvalidOperationException>(() =>
             OpRegistry.Define(attribute, typeof(NoRequest), typeof(SchemaData)));
+    }
+
+    [Test]
+    public void A_ProjectDocument_op_refuses_a_family_document_as_an_invalid_request() {
+        OpRegistry.RegisterFrom(typeof(OpRegistryTests).Assembly);
+        Assert.That(OpRegistry.TryGet("test.project-document", out var op), Is.True);
+        Assert.That(op.Definition.Needs, Is.EqualTo(OpNeeds.ProjectDocument));
+
+        var exception = Assert.Throws<BridgeOperationException>(() =>
+            OpDocumentGate.Require(op.Definition.Needs, hasDocument: true, isFamilyDocument: true));
+        Assert.That(exception!.StatusCode, Is.EqualTo(BridgeOperationExceptions.BadRequestStatusCode));
+        Assert.That(exception.Message, Does.Contain("project document"));
+        Assert.That(exception.Message, Does.Contain("family document"));
+        Assert.That(exception.Issues.Single().Code, Is.EqualTo("InvalidRequest"));
     }
 }

@@ -84,42 +84,28 @@ internal static class OpsCatalogCommand {
                 if (data == null)
                     continue;
 
-                var attribute = ReadAttribute(data);
+                var attribute = OpRegistry.ReadAttribute(data);
                 var requestType = ResolveRuntimeType(method.GetParameters()[0].ParameterType);
                 var responseMetadataType = method.ReturnType.IsGenericType
                                            && method.ReturnType.GetGenericTypeDefinition().FullName == typeof(Task<>).FullName
                     ? method.ReturnType.GetGenericArguments()[0]
                     : method.ReturnType;
-                var definition = OpRegistry.Define(attribute, requestType, ResolveRuntimeType(responseMetadataType));
+                var parameters = method.GetParameters();
+                var documentParameter = parameters.Length > 1
+                                        && parameters[1].ParameterType.FullName != typeof(CancellationToken).FullName
+                    ? parameters[1].ParameterType
+                    : null;
+                var definition = OpRegistry.Define(
+                    attribute,
+                    requestType,
+                    ResolveRuntimeType(responseMetadataType),
+                    OpRegistry.GetNeeds(documentParameter));
                 if (!definitions.TryAdd(definition.Key, definition))
                     throw new InvalidOperationException($"Bridge op '{definition.Key}' is registered twice.");
             }
         }
 
         return definitions.Values.ToArray();
-    }
-
-    private static OpAttribute ReadAttribute(CustomAttributeData data) {
-        object? Named(string name) => data.NamedArguments
-            .SingleOrDefault(argument => argument.MemberName == name).TypedValue.Value;
-        string[]? Strings(string name) => Named(name) is IReadOnlyCollection<CustomAttributeTypedArgument> values
-            ? values.Select(value => (string)value.Value!).ToArray()
-            : null;
-        int EnumValue(string name, int fallback) => Named(name) is { } value ? Convert.ToInt32(value) : fallback;
-
-        return new OpAttribute((string)data.ConstructorArguments[0].Value!) {
-            Title = Named(nameof(OpAttribute.Title)) as string,
-            Does = Named(nameof(OpAttribute.Does)) as string
-                   ?? throw new InvalidOperationException("[Op] requires Does."),
-            Finds = Strings(nameof(OpAttribute.Finds)),
-            Intent = (OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read),
-            Cost = (OpCost)EnumValue(nameof(OpAttribute.Cost), (int)OpCost.Cheap),
-            Tier = (OpTier)EnumValue(nameof(OpAttribute.Tier), (int)OpTier.Escalation),
-            Example = Named(nameof(OpAttribute.Example)) as string,
-            IsPublic = Named(nameof(OpAttribute.IsPublic)) as bool? ?? true,
-            RequiresDocument = Named(nameof(OpAttribute.RequiresDocument)) as bool? ?? false,
-            DocumentKind = (OpDocumentKind)EnumValue(nameof(OpAttribute.DocumentKind), (int)OpDocumentKind.Any)
-        };
     }
 
     private static Type ResolveRuntimeType(Type metadataType) {

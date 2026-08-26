@@ -19,8 +19,7 @@ const operation = (intent: "read" | "mutate"): HostOperationCatalogEntry => ({
   intent,
   costTier: "cheap",
   visibility: "public",
-  requiresActiveDocument: true,
-  supportedActiveDocumentKind: "Any",
+  needs: "document",
   description: intent,
   searchTerms: [],
   requestExamples: [],
@@ -97,7 +96,7 @@ function gatedRun(
         request: () => ({}),
         from: {
           target: "observed",
-          ...(selected.requiresActiveDocument && activeDocumentId
+          ...(selected.needs !== "nothing" && activeDocumentId
             ? { documentId: activeDocumentId }
             : {}),
         },

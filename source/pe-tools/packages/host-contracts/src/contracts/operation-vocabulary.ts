@@ -21,6 +21,14 @@ export const hostOperationVisibilitySchema = Schema.Literals([
 ]);
 export type HostOperationVisibility = Schema.Schema.Type<typeof hostOperationVisibilitySchema>;
 
+export const hostOperationNeedsSchema = Schema.Literals([
+  "nothing",
+  "document",
+  "project-document",
+  "family-document",
+]);
+export type HostOperationNeeds = Schema.Schema.Type<typeof hostOperationNeedsSchema>;
+
 export const hostErrorKindSchema = Schema.Literals([
   "Disconnected",
   "BridgeBusy",
@@ -47,10 +55,7 @@ export const hostOperationDefinitionSchema = Schema.Struct({
   description: Schema.optional(Schema.String),
   searchTerms: Schema.optional(Schema.Array(Schema.String)),
   intent: Schema.optional(hostOperationIntentSchema),
-  requiresActiveDocument: Schema.optional(Schema.Boolean),
-  supportedActiveDocumentKind: Schema.optional(
-    Schema.Literals(["Any", "ProjectOnly", "FamilyOnly"]),
-  ),
+  needs: hostOperationNeedsSchema,
   costTier: Schema.optional(hostOperationCostTierSchema),
   visibility: Schema.optional(hostOperationVisibilitySchema),
   requestExamples: Schema.optional(Schema.Array(hostOperationRequestExampleSchema)),

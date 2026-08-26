@@ -1,4 +1,5 @@
 using Autodesk.Revit.UI;
+using Pe.Revit.Operations;
 using Pe.Revit.Scripting.Bootstrap;
 using Pe.Revit.Scripting.Execution;
 using Pe.Revit.Scripting.Pods;
@@ -91,9 +92,10 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         cancellationToken
     );
 
-    [Op("scripting.execute", Does = "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep document edits, or NoTransaction only for APIs such as Document.SaveAs that reject an open transaction.", Title = "Execute Revit Script", Finds = ["script", "execute", "csharp", "revit", "pod"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert, RequiresDocument = true)]
+    [Op("scripting.execute", Does = "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep document edits, or NoTransaction only for APIs such as Document.SaveAs that reject an open transaction.", Title = "Execute Revit Script", Finds = ["script", "execute", "csharp", "revit", "pod"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public async Task<ExecuteRevitScriptData> ExecuteAsync(
         ExecuteRevitScriptRequest request,
+        RevitDocument _,
         CancellationToken cancellationToken
     ) {
         var executionId = Guid.NewGuid().ToString("N");

@@ -25,12 +25,6 @@ public enum OpTier {
     Expert
 }
 
-public enum OpDocumentKind {
-    Any,
-    Project,
-    Family
-}
-
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class OpAttribute(string key) : Attribute {
     public string Key { get; } = key;
@@ -42,10 +36,6 @@ public sealed class OpAttribute(string key) : Attribute {
     public OpTier Tier { get; init; } = OpTier.Escalation;
     public string? Example { get; init; }
     public bool IsPublic { get; init; } = true;
-
-    // Compile bridge for brief 1. Brief 2 replaces both with the handler's document parameter.
-    public bool RequiresDocument { get; init; }
-    public OpDocumentKind DocumentKind { get; init; } = OpDocumentKind.Any;
 }
 
 public sealed class Op {
@@ -76,7 +66,7 @@ public sealed class Op {
 
     internal bool SameHandler(Op other) => this._method == other._method;
 
-    public async Task<object?> ExecuteAsync(string payloadJson, CancellationToken cancellationToken) {
+    public async Task<object?> ExecuteAsync(string payloadJson, object? document, CancellationToken cancellationToken) {
         object? request;
         try {
             request = JsonConvert.DeserializeObject(payloadJson, this.Definition.RequestType, JsonSettings);
@@ -93,11 +83,14 @@ public sealed class Op {
         if (!this._method.IsStatic && this._target == null)
             throw new InvalidOperationException($"Bridge op '{this.Key}' has no bound handler instance.");
 
-        var parameters = this._method.GetParameters();
-        object?[] arguments = parameters.Length == 1 ? [request] : [request, cancellationToken];
+        var arguments = new List<object?> { request };
+        if (this.Definition.Needs != OpNeeds.Nothing)
+            arguments.Add(document ?? throw new InvalidOperationException($"Bridge op '{this.Key}' has no resolved document."));
+        if (this._method.GetParameters().Last().ParameterType == typeof(CancellationToken))
+            arguments.Add(cancellationToken);
         object? result;
         try {
-            result = this._method.Invoke(this._target, arguments);
+            result = this._method.Invoke(this._target, arguments.ToArray());
         } catch (TargetInvocationException exception) when (exception.InnerException != null) {
             ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
             throw;
@@ -136,7 +129,7 @@ public static class OpRegistry {
         foreach (var handler in handlers) {
             foreach (var method in handler.GetType().GetMethods(
                          BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
-                var attribute = method.GetCustomAttribute<OpAttribute>();
+                var attribute = GetOpAttribute(method);
                 if (attribute != null)
                     Add(discovered, Create(attribute, method, handler));
             }
@@ -152,7 +145,7 @@ public static class OpRegistry {
             foreach (var type in EnumerateTypes(assembly)) {
                 foreach (var method in type.GetMethods(
                              BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)) {
-                    var attribute = method.GetCustomAttribute<OpAttribute>();
+                    var attribute = GetOpAttribute(method);
                     if (attribute != null)
                         Add(discovered, Create(attribute, method, target));
                 }
@@ -184,29 +177,71 @@ public static class OpRegistry {
         }
     }
 
+    private static OpAttribute? GetOpAttribute(MethodInfo method) {
+        var data = method.CustomAttributes.SingleOrDefault(attribute => attribute.AttributeType == typeof(OpAttribute));
+        return data == null ? null : ReadAttribute(data);
+    }
+
+    public static OpAttribute ReadAttribute(CustomAttributeData data) {
+        object? Named(string name) => data.NamedArguments
+            .SingleOrDefault(argument => argument.MemberName == name).TypedValue.Value;
+        string[]? Strings(string name) => Named(name) is IReadOnlyCollection<CustomAttributeTypedArgument> values
+            ? values.Select(value => (string)value.Value!).ToArray()
+            : null;
+        int EnumValue(string name, int fallback) => Named(name) is { } value ? Convert.ToInt32(value) : fallback;
+
+        return new OpAttribute((string)data.ConstructorArguments[0].Value!) {
+            Title = Named(nameof(OpAttribute.Title)) as string,
+            Does = Named(nameof(OpAttribute.Does)) as string
+                   ?? throw new InvalidOperationException("[Op] requires Does."),
+            Finds = Strings(nameof(OpAttribute.Finds)),
+            Intent = (OpIntent)EnumValue(nameof(OpAttribute.Intent), (int)OpIntent.Read),
+            Cost = (OpCost)EnumValue(nameof(OpAttribute.Cost), (int)OpCost.Cheap),
+            Tier = (OpTier)EnumValue(nameof(OpAttribute.Tier), (int)OpTier.Escalation),
+            Example = Named(nameof(OpAttribute.Example)) as string,
+            IsPublic = Named(nameof(OpAttribute.IsPublic)) as bool? ?? true
+        };
+    }
+
     private static Op Create(OpAttribute attribute, MethodInfo method, object? target) {
         var parameters = method.GetParameters();
         var responseType = method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>)
             ? method.ReturnType.GetGenericArguments()[0]
             : method.ReturnType;
-        var signatureIsValid = parameters.Length is 1 or 2
-                               && (parameters.Length == 1 || parameters[1].ParameterType == typeof(CancellationToken))
+        var hasCancellationToken = parameters.Length > 1 && parameters[^1].ParameterType == typeof(CancellationToken);
+        var documentParameter = parameters.Length - (hasCancellationToken ? 1 : 0) == 2 ? parameters[1].ParameterType : null;
+        var needs = GetNeeds(documentParameter);
+        var signatureIsValid = parameters.Length is >= 1 and <= 3
+                               && parameters.Length == 1 + (documentParameter == null ? 0 : 1) + (hasCancellationToken ? 1 : 0)
                                && responseType != typeof(void)
                                && method.ReturnType != typeof(Task);
         if (!signatureIsValid)
             throw new InvalidOperationException(
-                $"[Op(\"{attribute.Key}\")] on '{method.DeclaringType?.FullName}.{method.Name}' must return TResponse or Task<TResponse> and accept (TRequest) or (TRequest, CancellationToken)."
+                $"[Op(\"{attribute.Key}\")] on '{method.DeclaringType?.FullName}.{method.Name}' must return TResponse or Task<TResponse> and accept a request, optional RevitDocument/ProjectDocument/FamilyDocument, and optional CancellationToken."
             );
 
-        return new Op(Define(attribute, parameters[0].ParameterType, responseType), method, target);
+        return new Op(Define(attribute, parameters[0].ParameterType, responseType, needs), method, target);
     }
 
-    public static HostOperationDefinition Define(OpAttribute attribute, Type requestType, Type responseType) {
+    public static OpNeeds GetNeeds(Type? documentParameter) => documentParameter?.Name switch {
+        null => OpNeeds.Nothing,
+        "RevitDocument" => OpNeeds.Document,
+        "ProjectDocument" => OpNeeds.ProjectDocument,
+        "FamilyDocument" => OpNeeds.FamilyDocument,
+        _ => throw new InvalidOperationException(
+            $"Unsupported [Op] document parameter '{documentParameter.FullName}'; use RevitDocument, ProjectDocument, or FamilyDocument.")
+    };
+
+    public static HostOperationDefinition Define(
+        OpAttribute attribute,
+        Type requestType,
+        Type responseType,
+        OpNeeds needs = OpNeeds.Nothing
+    ) {
         var metadata = HostOperationAgentMetadata.Create(
             attribute.Does,
             attribute.Finds,
             (HostOperationIntent)attribute.Intent,
-            attribute.RequiresDocument,
             (HostOperationCostTier)attribute.Cost,
             attribute.Tier switch {
                 OpTier.Default => HostOperationVisibility.DefaultVisible,
@@ -215,12 +250,7 @@ public static class OpRegistry {
             },
             attribute.Example == null
                 ? null
-                : [new HostOperationRequestExample("example", "Example request.", attribute.Example)],
-            supportedActiveDocumentKind: attribute.DocumentKind switch {
-                OpDocumentKind.Project => HostOperationActiveDocumentKind.ProjectOnly,
-                OpDocumentKind.Family => HostOperationActiveDocumentKind.FamilyOnly,
-                _ => HostOperationActiveDocumentKind.Any
-            }
+                : [new HostOperationRequestExample("example", "Example request.", attribute.Example)]
         );
         var definition = new HostOperationDefinition(
             attribute.Key,
@@ -228,7 +258,8 @@ public static class OpRegistry {
             responseType,
             attribute.IsPublic,
             attribute.Title,
-            metadata
+            metadata,
+            needs
         );
         Validate(definition);
         return definition;
@@ -304,8 +335,7 @@ public sealed record HostOpsCatalogEntry(
     string Intent,
     string CostTier,
     string Visibility,
-    bool RequiresActiveDocument,
-    string SupportedActiveDocumentKind,
+    string Needs,
     string Description,
     IReadOnlyList<string> SearchTerms,
     IReadOnlyList<HostOperationRequestExample> RequestExamples,
@@ -326,8 +356,12 @@ public sealed record HostOpsCatalogEntry(
             metadata.Intent.ToString(),
             metadata.CostTier.ToString(),
             metadata.Visibility.ToString(),
-            metadata.RequiresActiveDocument,
-            metadata.SupportedActiveDocumentKind.ToString(),
+            definition.Needs switch {
+                OpNeeds.Document => "document",
+                OpNeeds.ProjectDocument => "project-document",
+                OpNeeds.FamilyDocument => "family-document",
+                _ => "nothing"
+            },
             metadata.Description,
             metadata.SearchTerms,
             metadata.RequestExamples,
@@ -340,3 +374,27 @@ public sealed record HostOpsCatalogEntry(
 }
 
 public sealed record HostOpsCatalogData(IReadOnlyList<HostOpsCatalogEntry> Operations);
+
+public static class OpDocumentGate {
+    public static void Require(OpNeeds needs, bool hasDocument, bool isFamilyDocument) {
+        var expected = needs switch {
+            OpNeeds.Document => "Revit document",
+            OpNeeds.ProjectDocument => "project document",
+            OpNeeds.FamilyDocument => "family document",
+            _ => null
+        };
+        if (expected == null)
+            return;
+
+        var actual = !hasDocument ? "no document" : isFamilyDocument ? "family document" : "project document";
+        if (hasDocument && (needs == OpNeeds.Document
+                            || needs == OpNeeds.ProjectDocument && !isFamilyDocument
+                            || needs == OpNeeds.FamilyDocument && isFamilyDocument))
+            return;
+
+        var message = $"Operation requires a {expected}, but the active document is {actual}.";
+        throw BridgeOperationExceptions.BadRequest(
+            message,
+            [BridgeOperationExceptions.Issue("$", "InvalidRequest", message, $"Open a {expected} and retry.")]);
+    }
+}
