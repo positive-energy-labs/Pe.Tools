@@ -19,13 +19,11 @@ export function createTakeoffsCommandHandlers(
   options: { hostBaseUrl?: string } = {},
 ): RouteStateCommandHandlers<TakeoffsRouteDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
-  const runtime = (document: TakeoffsRouteDocument) => {
-    const caller = new HostRpcCaller({
+  const runtime = (document: TakeoffsRouteDocument) =>
+    new HostRpcCaller({
       hostBaseUrl,
       bridgeSessionId: resolveTarget(undefined, document),
     });
-    return caller;
-  };
 
   return {
     adopt: async (raw, ctx) => {

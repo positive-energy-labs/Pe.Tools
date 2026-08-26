@@ -28,7 +28,7 @@ const mulberry32 = (seed: number) => () => {
 
 /** Mock lifecycle stage — richer than the derived ZoneStage on purpose: the progress-tracking
  *  dimension of the exploration needs states worth rendering. */
-export type MockStage =
+type MockStage =
   | "declared" // drawn, no tags typed
   | "registered" // tags resolved against the registry
   | "partitioned" // rooms materialized, decisions open
@@ -85,7 +85,7 @@ const FLAG_POOL = [
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
-export interface MockRoomData {
+interface MockRoomData {
   people: number;
   lightingW: number;
   equipSensible: number;
@@ -93,7 +93,7 @@ export interface MockRoomData {
   ventilationCfm: number;
 }
 
-export interface MockDecision {
+interface MockDecision {
   flag: string;
   verb: "accept" | "dismiss";
   at: string;
@@ -119,7 +119,7 @@ export interface MockRoom {
   data: MockRoomData | null;
 }
 
-export interface MockRun {
+interface MockRun {
   runId: string;
   at: string;
   /** Rebind census — the accounting-closure story of one partition run. */
@@ -146,7 +146,7 @@ export interface MockZone {
   driftSqft: number;
 }
 
-export interface MockSystem {
+interface MockSystem {
   guid: string;
   tag: string;
   zoneKeys: string[];
@@ -367,10 +367,3 @@ export function mockWorld(): MockWorld {
     docName: "project-a Residence.rvt",
   };
 }
-
-/** Open decision count across a zone — the "review debt" number. */
-export const openDecisions = (z: MockZone) =>
-  z.rooms.reduce(
-    (n, r) => n + r.flags.filter((f) => !r.decisions.some((d) => d.flag === f)).length,
-    0,
-  );

@@ -33,7 +33,7 @@ const roomEditSchema = z.object({
   ventilationCfm: z.number().optional(),
 });
 
-export const resolutionSchema = z.object({
+const resolutionSchema = z.object({
   subject: z.string(),
   flag: z.string(),
   verb: z.enum(["accept", "dismiss"]),
@@ -43,7 +43,7 @@ export const resolutionSchema = z.object({
 
 export type Resolution = z.infer<typeof resolutionSchema>;
 
-export const worldLaneSchema = z.object({
+const worldLaneSchema = z.object({
   view: z.string(),
   label: z.string(),
   replayPath: z.string().nullable(),
@@ -59,7 +59,7 @@ const roomDataSchema = z.object({
   ventilationCfm: z.number(),
 });
 
-export const worldRoomSchema = z.object({
+const worldRoomSchema = z.object({
   guid: z.string(),
   elementId: z.number().nullable(),
   name: z.string(),
@@ -87,7 +87,7 @@ export type WorldRoom = z.infer<typeof worldRoomSchema>;
 export type RoomType = WorldRoom["type"];
 export type RoomData = NonNullable<WorldRoom["data"]>;
 
-export const worldZoneSchema = z.object({
+const worldZoneSchema = z.object({
   zone: z.object({
     guid: z.string(),
     elementId: z.number().nullable(),
@@ -132,12 +132,9 @@ export const worldZoneSchema = z.object({
 });
 
 export type WorldZone = z.infer<typeof worldZoneSchema>;
-export type WorldZoneIdentity = WorldZone["zone"];
-export type WorldResidue = WorldZone["residues"][number];
-export type WorldRun = WorldZone["runs"][number];
 export type Stage = WorldZone["stage"];
 
-export const candidateRegionSchema = z.object({
+const candidateRegionSchema = z.object({
   elementId: z.number(),
   typeName: z.string(),
   view: z.string(),
@@ -151,7 +148,7 @@ export const candidateRegionSchema = z.object({
 
 export type CandidateRegion = z.infer<typeof candidateRegionSchema>;
 
-export const liveRegionSchema = z.object({
+const liveRegionSchema = z.object({
   elementId: z.number(),
   role: z.string(),
   guid: z.string(),
@@ -163,20 +160,19 @@ export const liveRegionSchema = z.object({
 
 export type LiveRegion = z.infer<typeof liveRegionSchema>;
 
-export const viewFactsSchema = z.object({
+const viewFactsSchema = z.object({
   name: z.string(),
   level: z.string(),
   regions: z.number(),
 });
 export type ViewFacts = z.infer<typeof viewFactsSchema>;
 
-export const modelStatusSchema = z.object({
+const modelStatusSchema = z.object({
   systems: z.array(z.object({ guid: z.string(), tag: z.string() })),
 });
-export type ModelStatus = z.infer<typeof modelStatusSchema>;
-export type RegistrySystem = ModelStatus["systems"][number];
+export type RegistrySystem = z.infer<typeof modelStatusSchema>["systems"][number];
 
-export const detectedRoomSchema = z.object({
+const detectedRoomSchema = z.object({
   id: z.string(),
   rawSqft: z.number(),
   perimeterFt: z.number(),
@@ -187,16 +183,15 @@ export const detectedRoomSchema = z.object({
 });
 export type DetectedRoom = z.infer<typeof detectedRoomSchema>;
 
-export const detectedResidueSchema = z.object({
+const detectedResidueSchema = z.object({
   id: z.string(),
   reason: z.string(),
   rawSqft: z.number(),
   label: pointSchema,
   outer: z.array(pointSchema),
 });
-export type DetectedResidue = z.infer<typeof detectedResidueSchema>;
 
-export const partitionRunSchema = z.object({
+const partitionRunSchema = z.object({
   levelName: z.string(),
   elevation: z.number(),
   created: z.number(),
@@ -215,7 +210,7 @@ export const partitionRunSchema = z.object({
 });
 export type PartitionRun = z.infer<typeof partitionRunSchema>;
 
-export const worldSchema = z.object({
+const worldSchema = z.object({
   docName: z.string(),
   r10Path: z.string().nullable(),
   lanes: z.array(worldLaneSchema),
@@ -233,7 +228,7 @@ export const worldSchema = z.object({
 export type World = z.infer<typeof worldSchema>;
 export type WorldSystem = World["systems"][number];
 
-export const takeoffSnapshotSchema = z.object({
+const takeoffSnapshotSchema = z.object({
   from: readingFromSchema,
   world: worldSchema,
   zoneFrs: z.array(candidateRegionSchema),
@@ -241,14 +236,14 @@ export const takeoffSnapshotSchema = z.object({
 });
 export type TakeoffSnapshot = z.infer<typeof takeoffSnapshotSchema>;
 
-export const stagedRoomEditSchema = z.object({
+const stagedRoomEditSchema = z.object({
   roomId: z.string(),
   base: roomEditSchema,
   next: roomEditSchema,
 });
 export type StagedRoomEdit = z.infer<typeof stagedRoomEditSchema>;
 
-export const takeoffsDocumentSchema = z.object({
+const takeoffsDocumentSchema = z.object({
   binding: routeBindingSchema,
   snapshot: takeoffSnapshotSchema.nullable().default(null),
   staged: z.array(stagedRoomEditSchema).default([]),

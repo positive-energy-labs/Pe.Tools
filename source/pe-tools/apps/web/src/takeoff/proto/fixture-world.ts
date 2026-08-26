@@ -68,7 +68,7 @@ const zone = (z: GeoZone | MockZone): WorldZone => ({
   driftSqft: z.driftSqft,
 });
 
-export const projectFixtureWorld = (fixture: MockWorld): World => ({
+const projectFixtureWorld = (fixture: MockWorld): World => ({
   docName: fixture.docName,
   r10Path: fixture.r10Path,
   lanes: [...new Map(fixture.zones.map((z) => [z.zone.lane.view, z.zone.lane])).values()].map(

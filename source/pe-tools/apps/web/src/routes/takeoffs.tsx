@@ -1,22 +1,3 @@
-/**
- * /takeoffs — the Atlas workspace, canon. First route on the targeting manifest.
- *
- * The route declares ONE manifest (`PRODUCT`): what it reaches (world › rvt › views · zones;
- * folder › r10), the stages and verbs, and the panes. Everything live comes in as a `Feed` per
- * link. Bindings live in the URL search, so a reload or a shared link addresses the same thing.
- *
- * MULTI-SOURCE SYNC — every source is a query whose key carries its BASIS:
- *   world  · SDK registry + bridge sessions — one fused fleet, always live
- *   rvt    · active document + SDK recents, keyed by document id/path — live with the world
- *   views · zones · rooms — one `readSnapshot` keyed [world, documentId]; a doc change re-reads,
- *            a write verb invalidates (adopt, partition, decide, sync-link)
- *   folder · a per-browser recents list (the legal-options source for a disk root)
- *   r10    · `rhvac.list` keyed [dir]; the join is `rhvac.open` keyed [path], invalidated by sync
- *   staged · registry-owned `{base,next}` room edits, replays, panel state, and verb receipts
- *
- * `?source=fixture` mounts the project-a fixture adapter — an explicit dev choice, never a
- * fallback: a live read that fails shows its error, it does not quietly become a fixture.
- */
 import { useEffect, useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
@@ -48,8 +29,6 @@ import { documentTrunk, worldTrunk } from "#/targeting/trunks";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { withThread } from "./-with-thread";
 
-// ── The manifest ─────────────────────────────────────────────────────────────
-
 const PANES: Product["panes"] = [
   { key: "plan", label: "plan image", draws: ["views"] },
   { key: "rooms", label: "room table", draws: ["zones"] },
@@ -57,8 +36,6 @@ const PANES: Product["panes"] = [
 ];
 
 const STAGES = ["adopt", "audit", "sync"] as const;
-
-// ── Search: the bindings' home ──────────────────────────────────────────────
 
 // The router round-trips arrays as JSON; a scalar stays one legal name, including commas.
 export const csv = (v: unknown): string[] =>
@@ -143,7 +120,6 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const search = Route.useSearch();
   const { source, views, zones, dir, r10, stage } = search;
   const target = useAtomValue(store.atoms.target);
-  // ── sources ──
   const sessionsResult = useAtomValue(store.atoms.sessions);
   const activeDocumentResult = useAtomValue(store.atoms.activeDocument);
   const recentDocumentsResult = useAtomValue(store.atoms.recentDocuments);
@@ -192,8 +168,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   };
   const r10Result = useAtomValue(store.atoms.r10);
 
-  // ── feeds: one per link, each a projection of a query's state ──
-  const projectedFeeds: Feeds = {
+  const feeds: Feeds = {
     world: worldTrunk.feed(targetingFleet),
     rvt: documentTrunk.feed(
       activeDocumentResult,
@@ -205,9 +180,6 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     folder: useAtomValue(store.feeds.folder),
     r10: useAtomValue(store.feeds.r10),
   };
-  const feeds = projectedFeeds;
-
-  // ── bindings: URL ⇄ manifest ──
   const state: BindingState = useMemo(
     () => ({
       bound: {
@@ -222,8 +194,6 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     [resolution, sessions, activeDocument?.documentId, views, dir, r10, zones, stage],
   );
   const setState = (patch: Partial<BindingState>) => store.actions.setBindings(patch);
-
-  // ── verbs ──
   const boundZones = world.zones.filter((z) => zones.includes(z.zone.guid));
 
   const product: Product = {
@@ -443,8 +413,6 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   );
 }
 
-// ── Adopt panel — stamp designer FRs in place as Zoning Regions ─────────────
-
 interface AdoptRow {
   region: CandidateRegion;
   view: string;
@@ -575,8 +543,6 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
   );
 }
 
-// ── Sync panel — insert reviewed rooms into a template .r10 copy ────────────
-
 function SyncPanel({ store }: { store: TakeoffStore }) {
   const { zones: zoneGuids, r10: r10Path } = useAtomValue(store.atoms.search);
   const { inScope, blockedZones, inserts, untagged, tags } = useAtomValue(store.atoms.syncPlan);
@@ -664,8 +630,6 @@ function SyncPanel({ store }: { store: TakeoffStore }) {
     </Panel>
   );
 }
-
-// ── Shared panel chrome ─────────────────────────────────────────────────────
 
 function Panel({
   title,

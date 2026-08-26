@@ -57,7 +57,7 @@ export interface GeoZone extends Omit<MockZone, "rooms"> {
   residues: TakeoffResidueShape[];
 }
 
-export interface GeoWorld extends Omit<MockWorld, "zones"> {
+interface GeoWorld extends Omit<MockWorld, "zones"> {
   zones: GeoZone[];
 }
 
@@ -72,7 +72,7 @@ function laneOf(levelName: string): string | null {
   return null;
 }
 
-export function joinGeometry(world: MockWorld, takeoff: RhvacTakeoffData): GeoWorld {
+function joinGeometry(world: MockWorld, takeoff: RhvacTakeoffData): GeoWorld {
   const byZone = new Map<string, TakeoffRoomShape[]>();
   const residuesByZone = new Map<string, TakeoffResidueShape[]>();
 

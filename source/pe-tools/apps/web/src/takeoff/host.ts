@@ -1,8 +1,3 @@
-/**
- * The /takeoffs route's live wire into Revit.
- *
- * Typed Takeoff operations own Revit work; this file owns session scope and RHVAC orchestration.
- */
 import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions } from "#/host/target";
 import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";

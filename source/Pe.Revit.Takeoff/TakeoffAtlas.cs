@@ -3,9 +3,6 @@ using Newtonsoft.Json.Serialization;
 
 namespace Pe.Revit.Takeoff;
 
-/// <summary>
-/// JSON formatting for durable Takeoff provenance and artifacts.
-/// </summary>
 internal static class TakeoffJson
 {
     private static readonly JsonSerializerSettings Settings = new()
@@ -124,22 +121,20 @@ public static class TakeoffAtlas
 
     public static TakeoffCapturePrepared PrepareCapture(
         Document doc,
-        TakeoffPrepareCaptureRequest request,
-        Action<string>? log = null)
+        TakeoffPrepareCaptureRequest request)
     {
         var view = FindView(doc, request.View);
         string level = view.GenLevel?.Name
                        ?? throw new InvalidOperationException($"view '{request.View}' has no level");
-        RoomTakeoff.Prepare(doc, new TakeoffOptions { LevelNameContains = level }, log ?? (static _ => { }));
+        RoomTakeoff.Prepare(doc, new TakeoffOptions { LevelNameContains = level }, static _ => { });
         return new TakeoffCapturePrepared(level);
     }
 
     public static TakeoffCaptureResult DetectCapture(
         Document doc,
-        TakeoffDetectCaptureRequest request,
-        Action<string>? log = null)
+        TakeoffDetectCaptureRequest request)
     {
-        var result = RoomTakeoff.Detect(doc, request.Level, log ?? (static _ => { }));
+        var result = RoomTakeoff.Detect(doc, request.Level, static _ => { });
         string token = string.Concat(result.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
         string replay = Path.Combine(RoomTakeoff.DefaultArtifactDir, $"replay_{token}.bin");
         if (!File.Exists(replay))
@@ -165,10 +160,9 @@ public static class TakeoffAtlas
 
     public static TakeoffPartitionResult Partition(
         Document doc,
-        TakeoffPartitionRequest request,
-        Action<string>? log = null)
+        TakeoffPartitionRequest request)
     {
-        log ??= static _ => { };
+        Action<string> log = static _ => { };
         var zone = new ZoneScope { Name = request.ZoneName, Loops = request.Loops };
         var snapshot = DetectSnapshot.Load(Environment.ExpandEnvironmentVariables(request.ReplayPath));
         log($"[partition] replaying zone '{request.ZoneName}'");

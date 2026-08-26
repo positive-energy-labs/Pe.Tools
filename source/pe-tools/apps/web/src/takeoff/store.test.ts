@@ -629,12 +629,10 @@ describe("takeoff route store", () => {
     store.actions.setTargetingLevel("views");
     store.actions.setTargetingQuery("main");
 
-    expect(store.atoms.registry.get(store.atoms.atlasPage)).toMatchObject({
-      level: "Main",
-      cursor: room.guid,
-      planOpen: false,
-      statsOpen: true,
-    });
+    expect(store.atoms.registry.get(store.atoms.level)).toBe("Main");
+    expect(store.atoms.registry.get(store.atoms.cursor)).toBe(room.guid);
+    expect(store.atoms.registry.get(store.atoms.planOpen)).toBe(false);
+    expect(store.atoms.registry.get(store.atoms.statsOpen)).toBe(true);
     expect(store.atoms.registry.get(store.atoms.entity(room.guid))).toMatchObject({
       hovered: true,
       selected: true,

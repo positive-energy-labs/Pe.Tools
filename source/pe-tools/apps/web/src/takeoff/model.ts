@@ -8,16 +8,10 @@
  */
 import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
 import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
-import type {
-  DetectedRoom,
-  LiveRegion,
-  PartitionRun,
-  Resolution,
-} from "@pe/agent-contracts";
+import type { DetectedRoom, LiveRegion, PartitionRun, Resolution } from "@pe/agent-contracts";
 
 export type {
   CandidateRegion,
-  DetectedResidue,
   DetectedRoom,
   LiveRegion,
   PartitionRun,
@@ -26,12 +20,10 @@ export type {
   ViewFacts,
 } from "@pe/agent-contracts";
 
-// ── Levels ──────────────────────────────────────────────────────────────────
-//
 // A zoning view, its Revit level, and the level-wide capture the partition replays. The capture
 // is the honesty boundary (DetectSnapshot's header): everything upstream of the .bin is baked.
 
-export interface LevelLane {
+interface LevelLane {
   /** Zoning view name — matched exactly against a non-template ViewPlan. */
   view: string;
   /** Short label for the board. */
@@ -42,7 +34,7 @@ export interface LevelLane {
   replayFile: string;
 }
 
-export const LEVEL_LANES: LevelLane[] = [
+const LEVEL_LANES: LevelLane[] = [
   {
     view: "Mechanical Zoning Plan - Lower Level",
     label: "Lower",
@@ -71,8 +63,6 @@ export const LEVEL_LANES: LevelLane[] = [
 
 /** Default artifact directory — where the live runs dumped the replay snapshots. */
 export const DEFAULT_ARTIFACT_DIR = "%USERPROFILE%\\OneDrive\\Documents\\Pe.Tools\\takeoff";
-
-// ── Zones ───────────────────────────────────────────────────────────────────
 
 export interface Zone extends Omit<DeclaredZone, "color"> {
   color: string;
@@ -177,14 +167,10 @@ export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
   return zones;
 }
 
-// ── Zone status (step the zone is at) ───────────────────────────────────────
-
-export type ZoneStage = "unregistered" | "registered" | "partitioned";
+type ZoneStage = "unregistered" | "registered" | "partitioned";
 
 export const zoneStage = (tags: string[], materializedRooms: number): ZoneStage =>
   materializedRooms > 0 ? "partitioned" : tags.length > 0 ? "registered" : "unregistered";
-
-// ── Decisions (the write-through blob extension) ────────────────────────────
 
 /**
  * Two verbs, per README's review law: `accept` takes the recalculation's proposal, `dismiss`
@@ -216,9 +202,7 @@ export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRe
   );
 }
 
-// ── Decision queue rows ─────────────────────────────────────────────────────
-
-export interface DecisionRow {
+interface DecisionRow {
   /** Stable row key. */
   key: string;
   kind: "flag" | "orphan" | "failure";

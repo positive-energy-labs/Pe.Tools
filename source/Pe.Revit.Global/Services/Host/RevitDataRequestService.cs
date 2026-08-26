@@ -171,54 +171,91 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
     ) => this.EnqueueAsync(() => this.GetRevitViewImageCore(request), cancellationToken);
 
     public Task<TakeoffSnapshotResponse> GetTakeoffSnapshotAsync(CancellationToken cancellationToken) =>
-        this.EnqueueAsync(this.GetTakeoffSnapshotCore, cancellationToken);
+        this.EnqueueAsync(
+            () => RunTakeoff(RevitBridgeOps.TakeoffSnapshot.Definition, document =>
+                new TakeoffSnapshotResponse(this.CreateTakeoffReadingFrom(document), TakeoffAtlas.Snapshot(document))),
+            cancellationToken);
 
     public Task<TakeoffViewsData> GetTakeoffViewsAsync(CancellationToken cancellationToken) =>
-        this.EnqueueAsync(this.GetTakeoffViewsCore, cancellationToken);
+        this.EnqueueAsync(
+            () => RunTakeoff(
+                RevitBridgeOps.TakeoffViews.Definition,
+                document => new TakeoffViewsData(TakeoffAtlas.Views(document))),
+            cancellationToken);
 
     public Task<TakeoffCandidatesData> GetTakeoffCandidatesAsync(
         TakeoffCandidatesRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetTakeoffCandidatesCore(request), cancellationToken);
+    ) => this.EnqueueAsync(
+        () => RunTakeoff(
+            RevitBridgeOps.TakeoffCandidates.Definition,
+            document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request))),
+        cancellationToken);
 
     public Task<TakeoffAdoptResult> AdoptTakeoffRegionsAsync(
         TakeoffAdoptRequest request, CancellationToken cancellationToken
     ) => this.EnqueueAsync(
-        () => this.AdoptTakeoffRegionsCore(request),
+        () => RunTakeoff(
+            RevitBridgeOps.TakeoffAdopt.Definition,
+            document => TakeoffAtlas.AdoptZones(document, request),
+            "Pe Adopt Takeoff Regions"),
         cancellationToken,
         TimeSpan.FromMinutes(5));
 
     public Task<TakeoffCapturePrepared> PrepareTakeoffCaptureAsync(
         TakeoffPrepareCaptureRequest request, CancellationToken cancellationToken
     ) => this.EnqueueAsync(
-        () => this.PrepareTakeoffCaptureCore(request),
+        () => RunTakeoff(
+            RevitBridgeOps.TakeoffPrepareCapture.Definition,
+            document => TakeoffAtlas.PrepareCapture(document, request),
+            "Pe Prepare Takeoff Capture"),
         cancellationToken,
         TimeSpan.FromMinutes(5));
 
     public Task<TakeoffCaptureResult> DetectTakeoffCaptureAsync(
         TakeoffDetectCaptureRequest request, CancellationToken cancellationToken
     ) => this.EnqueueAsync(
-        () => this.DetectTakeoffCaptureCore(request),
+        () => RunTakeoff(
+            RevitBridgeOps.TakeoffDetectCapture.Definition,
+            document => TakeoffAtlas.DetectCapture(document, request)),
         cancellationToken,
         TimeSpan.FromMinutes(5));
 
     public Task<TakeoffPartitionResult> PartitionTakeoffAsync(
         TakeoffPartitionRequest request, CancellationToken cancellationToken
     ) => this.EnqueueAsync(
-        () => this.PartitionTakeoffCore(request),
+        () => RunTakeoff(
+            RevitBridgeOps.TakeoffPartition.Definition,
+            document => TakeoffAtlas.Partition(document, request),
+            "Pe Partition Takeoff Zone"),
         cancellationToken,
         TimeSpan.FromMinutes(5));
 
     public Task<TakeoffWriteResult> WriteTakeoffDecisionsAsync(
         TakeoffDecisionsRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.WriteTakeoffDecisionsCore(request), cancellationToken);
+    ) => this.EnqueueAsync(
+        () => RunTakeoff(
+            RevitBridgeOps.TakeoffDecisions.Definition,
+            document => TakeoffAtlas.WriteDecisions(document, request),
+            "Pe Write Takeoff Decisions"),
+        cancellationToken);
 
     public Task<TakeoffRhvacLinksData> LinkTakeoffRhvacAsync(
         TakeoffRhvacLinksRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.LinkTakeoffRhvacCore(request), cancellationToken);
+    ) => this.EnqueueAsync(
+        () => RunTakeoff(
+            RevitBridgeOps.TakeoffRhvacLinks.Definition,
+            document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
+            "Pe Link Takeoff Rooms to RHVAC"),
+        cancellationToken);
 
     public Task<TakeoffRoomTypeData> WriteTakeoffRoomTypeAsync(
         TakeoffRoomTypeRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.WriteTakeoffRoomTypeCore(request), cancellationToken);
+    ) => this.EnqueueAsync(
+        () => RunTakeoff(
+            RevitBridgeOps.TakeoffRoomType.Definition,
+            document => new TakeoffRoomTypeData(TakeoffAtlas.WriteRoomType(document, request)),
+            "Pe Write Takeoff Room Type"),
+        cancellationToken);
 
     public Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync(CancellationToken cancellationToken) =>
         cancellationToken.IsCancellationRequested
@@ -286,63 +323,6 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
                 : null
         );
     }
-
-    private TakeoffSnapshotResponse GetTakeoffSnapshotCore() =>
-        RunTakeoff(RevitBridgeOps.TakeoffSnapshot.Definition, document => {
-            var snapshot = TakeoffAtlas.Snapshot(document);
-            return new TakeoffSnapshotResponse(this.CreateTakeoffReadingFrom(document), snapshot);
-        });
-
-    private TakeoffViewsData GetTakeoffViewsCore() =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffViews.Definition,
-            document => new TakeoffViewsData(TakeoffAtlas.Views(document)));
-
-    private TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request) =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffCandidates.Definition,
-            document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request)));
-
-    private TakeoffAdoptResult AdoptTakeoffRegionsCore(TakeoffAdoptRequest request) =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffAdopt.Definition,
-            document => TakeoffAtlas.AdoptZones(document, request),
-            "Pe Adopt Takeoff Regions");
-
-    private TakeoffCapturePrepared PrepareTakeoffCaptureCore(TakeoffPrepareCaptureRequest request) =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffPrepareCapture.Definition,
-            document => TakeoffAtlas.PrepareCapture(document, request),
-            "Pe Prepare Takeoff Capture");
-
-    private TakeoffCaptureResult DetectTakeoffCaptureCore(TakeoffDetectCaptureRequest request) =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffDetectCapture.Definition,
-            document => TakeoffAtlas.DetectCapture(document, request));
-
-    private TakeoffPartitionResult PartitionTakeoffCore(TakeoffPartitionRequest request) =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffPartition.Definition,
-            document => TakeoffAtlas.Partition(document, request),
-            "Pe Partition Takeoff Zone");
-
-    private TakeoffWriteResult WriteTakeoffDecisionsCore(TakeoffDecisionsRequest request) =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffDecisions.Definition,
-            document => TakeoffAtlas.WriteDecisions(document, request),
-            "Pe Write Takeoff Decisions");
-
-    private TakeoffRhvacLinksData LinkTakeoffRhvacCore(TakeoffRhvacLinksRequest request) =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffRhvacLinks.Definition,
-            document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
-            "Pe Link Takeoff Rooms to RHVAC");
-
-    private TakeoffRoomTypeData WriteTakeoffRoomTypeCore(TakeoffRoomTypeRequest request) =>
-        RunTakeoff(
-            RevitBridgeOps.TakeoffRoomType.Definition,
-            document => new TakeoffRoomTypeData(TakeoffAtlas.WriteRoomType(document, request)),
-            "Pe Write Takeoff Room Type");
 
     private TakeoffReadingFrom CreateTakeoffReadingFrom(RevitDocument document) {
         var target = BridgeSessionIdentity.Resolve().SdkSessionId;

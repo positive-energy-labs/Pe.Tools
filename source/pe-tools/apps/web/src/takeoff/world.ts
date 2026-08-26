@@ -1,8 +1,4 @@
-import type {
-  RoomType,
-  Stage,
-  WorldRoom,
-} from "@pe/agent-contracts";
+import type { RoomType, Stage, WorldRoom } from "@pe/agent-contracts";
 
 export type {
   RoomData,
@@ -10,12 +6,9 @@ export type {
   Stage,
   World,
   WorldLane,
-  WorldResidue,
   WorldRoom,
-  WorldRun,
   WorldSystem,
   WorldZone,
-  WorldZoneIdentity,
 } from "@pe/agent-contracts";
 
 export const STAGE_ORDER: Stage[] = [

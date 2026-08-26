@@ -47,7 +47,7 @@ import {
 import { type Bound, type Link, type Multi } from "#/targeting/model";
 import { documentTrunk, fileTerminal, folderTrunk, worldTrunk } from "#/targeting/trunks";
 
-export type TakeoffStage = "adopt" | "audit" | "sync";
+type TakeoffStage = "adopt" | "audit" | "sync";
 
 export interface TakeoffSearch {
   readonly source: "live" | "fixture";
@@ -75,11 +75,11 @@ export type SessionEvent =
   | { readonly kind: "docChanged"; readonly sessionId: string }
   | { readonly kind: "sessionsChanged"; readonly sessionId: string };
 
-export interface TakeoffSessionFacts extends SessionFacts {
+interface TakeoffSessionFacts extends SessionFacts {
   readonly year?: string;
 }
 
-export interface ActiveDocument {
+interface ActiveDocument {
   readonly session: TakeoffSessionFacts;
   readonly documentId: string;
   readonly title: string;
@@ -91,18 +91,18 @@ export interface SessionSource {
   subscribe(listener: (event: SessionEvent) => void): () => void;
 }
 
-export interface RhvacFile {
+interface RhvacFile {
   readonly path: string;
   readonly name: string;
 }
 
-export interface AdoptItem {
+interface AdoptItem {
   readonly elementId: number;
   readonly name: string;
   readonly systemTag: string;
 }
 
-export interface PartitionArgs {
+interface PartitionArgs {
   readonly replayPath: string;
   readonly view: string;
   readonly levelFragment: string;
@@ -147,7 +147,7 @@ export interface TakeoffHost {
   ): Promise<{ readonly text: string }>;
 }
 
-export interface AtlasPageState {
+interface AtlasPageState {
   readonly stageFilter: World["zones"][number]["stage"] | null;
   readonly level: string;
   readonly zoneKey: string | null;
@@ -180,7 +180,7 @@ export interface AtlasRow {
   readonly open: readonly string[];
 }
 
-export interface AdoptDraft {
+interface AdoptDraft {
   readonly region: CandidateRegion;
   readonly view: string;
   readonly checked: boolean;
@@ -188,7 +188,7 @@ export interface AdoptDraft {
   readonly systemTag: string;
 }
 
-export interface SyncPlan {
+interface SyncPlan {
   readonly inScope: readonly WorldZone[];
   readonly blockedZones: readonly WorldZone[];
   readonly inserts: readonly { readonly zone: WorldZone; readonly room: WorldRoom }[];
@@ -362,7 +362,6 @@ export function createTakeoffStore(deps: {
     const result = get(takeoffsSlice);
     return AsyncResult.isSuccess(result) ? (result.value.doc?.binding.target ?? "") : "";
   }).pipe(owned("binding/target"));
-  const sourceAtom = Atom.make((get) => get(searchAtom).source).pipe(owned("search/source"));
   const viewsAtom = Atom.make((get) => get(searchAtom).views).pipe(owned("search/views"));
   const zonesAtom = Atom.make((get) => get(searchAtom).zones).pipe(owned("search/zones"));
   const dirAtom = Atom.make((get) => get(searchAtom).dir).pipe(owned("search/dir"));
@@ -387,17 +386,6 @@ export function createTakeoffStore(deps: {
   const targetingLevelAtom = Atom.make<string | null>(null).pipe(owned("page/targeting/level"));
   const targetingQueryAtom = Atom.make("").pipe(owned("page/targeting/query"));
   const cursorAtom = Atom.make<AtlasPageState["cursor"]>(null).pipe(owned("page/atlas/cursor"));
-  const atlasPageAtom = Atom.make(
-    (get): AtlasPageState => ({
-      stageFilter: get(stageFilterAtom),
-      level: get(levelAtom),
-      zoneKey: get(zoneKeyAtom),
-      cursor: get(cursorAtom),
-      fieldsMode: get(fieldsModeAtom),
-      planOpen: get(planOpenAtom),
-      statsOpen: get(statsOpenAtom),
-    }),
-  ).pipe(owned("page/atlas"));
   const atlasTableStateAtom = Atom.make<MasterTableState>({
     filters: {},
     sorts: [],
@@ -1235,14 +1223,12 @@ export function createTakeoffStore(deps: {
       registry,
       search: searchAtom,
       target: targetAtom,
-      source: sourceAtom,
       views: viewsAtom,
       zones: zonesAtom,
       dir: dirAtom,
       r10Path: r10PathAtom,
       stage: stageAtom,
       world: worldAtom,
-      atlasPage: atlasPageAtom,
       zoneKey: zoneKeyAtom,
       stageFilter: stageFilterAtom,
       level: levelAtom,
@@ -1267,7 +1253,6 @@ export function createTakeoffStore(deps: {
       snapshot: snapshotResult,
       candidates: candidatesResult,
       adoptRows: adoptRowsAtom,
-      listing: listingResult,
       r10: r10Result,
       entity: entityAtom,
       busy: busyAtom,
