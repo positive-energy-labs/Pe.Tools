@@ -10,25 +10,12 @@ import {
 import { EmptyState } from "#/components/lang/empty";
 import type { StoredThreadSummary } from "#/workbench/provider";
 
-/** Last path segment of a cwd, for a compact right-aligned hint. */
-function basename(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
-
-/** Status dot shared by the sidebar list + palette. A running prompt is BUSY (neutral ink,
- * pulsing) — never blue; the open thread's dot is full ink; idle threads are hairline-grey. */
-function ThreadDot({ thread, active }: { thread: StoredThreadSummary; active: boolean }) {
+/** Status dot shared by the sidebar list + palette. */
+function ThreadDot({ active }: { active: boolean }) {
   return (
     <span
       aria-hidden
-      className={`size-1.5 shrink-0 rounded-full ${
-        thread.promptActive
-          ? "animate-pulse bg-[var(--r-ink-2)]"
-          : active
-            ? "bg-[var(--r-ink)]"
-            : "bg-[var(--r-line-2)]"
-      }`}
+      className={`size-1.5 shrink-0 rounded-full ${active ? "bg-[var(--r-ink)]" : "bg-[var(--r-line-2)]"}`}
     />
   );
 }
@@ -72,24 +59,12 @@ export function ThreadList({
               }`}
               onClick={() => onSelect(thread.id)}
             >
-              <ThreadDot thread={thread} active={active} />
+              <ThreadDot active={active} />
               <span
                 className={`min-w-0 flex-1 truncate ${active ? "text-[var(--r-ink)]" : "text-[var(--r-ink-2)]"}`}
               >
                 {thread.title}
               </span>
-              {thread.promptActive ? (
-                <span
-                  className="t-caption face-mono shrink-0 text-[var(--r-ink-2)]"
-                  title="A prompt is in flight on this thread"
-                >
-                  running
-                </span>
-              ) : thread.cwd ? (
-                <span className="t-value face-mono hidden shrink-0 truncate text-[var(--r-ink-2)] group-hover/row:hidden sm:inline">
-                  {basename(thread.cwd)}
-                </span>
-              ) : null}
               <button
                 type="button"
                 title="Delete thread"
@@ -126,7 +101,7 @@ export function ThreadList({
         </button>
         <button
           type="button"
-          title="Search every thread by title or folder (⌘K)"
+          title="Search every thread by title (⌘K)"
           className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
           onClick={onSearch}
         >
@@ -170,7 +145,7 @@ export function ThreadPalette({
       description="Search threads"
       className="overflow-hidden rounded-xl sm:max-w-xl"
     >
-      <CommandInput placeholder="Search threads by title or folder…" className="h-12 text-[15px]" />
+      <CommandInput placeholder="Search threads by title…" className="h-12 text-[15px]" />
       <CommandList className="max-h-[60vh] p-1.5">
         <CommandEmpty className="py-10 text-center text-sm text-muted-foreground">
           No threads match.
@@ -199,33 +174,19 @@ export function ThreadPalette({
             return (
               <CommandItem
                 key={thread.id}
-                // cmdk filters on value text — include title + cwd so search matches both.
-                value={`${thread.title} ${thread.cwd ?? ""} ${thread.id}`}
+                value={`${thread.title} ${thread.id}`}
                 onSelect={() => {
                   onSelect(thread.id);
                   onOpenChange(false);
                 }}
                 className="group/row gap-2.5 rounded-sm px-3 py-2.5 data-selected:bg-[var(--r-select)]"
               >
-                <ThreadDot thread={thread} active={active} />
+                <ThreadDot active={active} />
                 <span
                   className={`flex-1 truncate ${active ? "text-[var(--r-ink)]" : "text-[var(--r-ink)]/85"}`}
                 >
                   {thread.title}
                 </span>
-                {thread.promptActive ? (
-                  <span
-                    className="t-caption face-mono shrink-0 text-[var(--r-ink-2)]"
-                    title="A prompt is in flight on this thread"
-                  >
-                    running
-                  </span>
-                ) : null}
-                {thread.cwd ? (
-                  <span className="t-value face-mono hidden max-w-[35%] shrink-0 truncate text-[var(--r-ink-2)] sm:inline">
-                    {basename(thread.cwd)}
-                  </span>
-                ) : null}
                 <button
                   type="button"
                   title="Delete thread"

@@ -20,7 +20,7 @@ import {
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import { toolTitle, type WorkbenchState } from "@pe/agent-contracts";
+import { toolTitle } from "@pe/agent-contracts";
 import { Check, ChevronRight, X } from "lucide-react";
 import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
@@ -47,55 +47,12 @@ export function useThreadMessages(): ThreadMessageLike[] {
   return useContext(ThreadMessagesContext);
 }
 
-// TEMP diagnostic — logs how the runtime message array evolves so we can catch the exact transition
-// that trips assistant-ui's "Index N out of bounds" (a membership SHRINK, a duplicate turn, or an
-// id swap under mounted rows). Remove once the request_access jitter is root-caused.
-let diagPrevIds: string[] = [];
-function diagProjection(
-  messages: ThreadMessageLike[],
-  state: Pick<WorkbenchState, "approvals" | "tools">,
-): void {
-  const ids = messages.map((m) => m.id).filter((id): id is string => typeof id === "string");
-  const prev = diagPrevIds;
-  diagPrevIds = ids;
-  const shrank = ids.length < prev.length;
-  const removed = prev.filter((id) => !ids.includes(id));
-  const seen = new Map<string, number>();
-  for (const message of messages) {
-    const text = Array.isArray(message.content)
-      ? message.content
-          .map((p) => (p.type === "text" ? p.text : ""))
-          .join("")
-          .trim()
-      : "";
-    if (text)
-      seen.set(
-        `${message.role}:${text.slice(0, 24)}`,
-        (seen.get(`${message.role}:${text.slice(0, 24)}`) ?? 0) + 1,
-      );
-  }
-  const dups = [...seen].filter(([, n]) => n > 1).map(([k]) => k);
-  const approvals = state.approvals.requests.map((r) => `${r.status}:${r.toolCall.id}`);
-  // Stash live approval/tool state on window so we can inspect from the console/devtools.
-  (globalThis as unknown as { __wb?: unknown }).__wb = {
-    approvals: state.approvals.requests,
-    toolIds: state.tools.calls.map((c) => `${c.id}:${c.status}`),
-  };
-  const payload = { count: ids.length, shrank, removed, dups, approvals, ids };
-  if (shrank || dups.length > 0) console.warn("[aui-diag] projection", payload);
-  else console.info("[aui-diag] projection", payload);
-}
-
 export function WorkbenchRuntimeProvider({ children }: { children: ReactNode }) {
   const { debug, isRunning, sendPrompt, cancel } = useWorkbench();
   // Runtime gets EVERY turn (stable, append-only membership — see aui-adapter). The Lens bands
   // consume only the renderable ones via context; empty turns render nothing (moment components
   // return null), so there's no blank "you"/"pea" row despite the fuller runtime array.
-  const messages = useMemo(() => {
-    const next = workbenchToThreadMessages(debug.state);
-    diagProjection(next, debug.state); // TEMP diagnostic — remove once the jitter is root-caused
-    return next;
-  }, [debug.state]);
+  const messages = useMemo(() => workbenchToThreadMessages(debug.state), [debug.state]);
   const visible = useMemo(() => messages.filter(isRenderable), [messages]);
 
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({

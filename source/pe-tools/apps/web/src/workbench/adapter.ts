@@ -44,7 +44,6 @@ type AgentControllerTask = Extract<
 export interface PeInspect {
   systemPrompt?: { content?: string; source?: string; updatedAt?: string };
   toolList?: { tools?: unknown[] };
-  availableModels?: unknown[];
   skills?: unknown[];
   observationalMemory?: Record<string, unknown>;
   contextWindow?: number;
@@ -126,7 +125,7 @@ export function hydrateWorkbenchState(inputs: HydrateInputs): WorkbenchState {
     },
     models: {
       currentModelId: display.modelId || undefined,
-      availableModels: modelInfos(inputs.models, inputs.inspect.availableModels),
+      availableModels: modelInfos(inputs.models),
       recentModelIds: [],
     },
     modes: {
@@ -883,22 +882,13 @@ export function accessLevelFromPermissions(
   );
 }
 
-function modelInfos(models: AgentControllerAvailableModel[], fallback: unknown[] | undefined) {
-  if (models.length > 0) {
-    return models.map((model) => ({
-      id: model.id,
-      provider: model.provider,
-      displayName: model.modelName,
-      disabled: model.hasApiKey === false,
-    }));
-  }
-  return (fallback ?? []).flatMap((model) => {
-    const record = asRecord(model);
-    const id = readString(record.id);
-    return id
-      ? [{ id, provider: readString(record.provider), displayName: readString(record.displayName) }]
-      : [];
-  });
+function modelInfos(models: AgentControllerAvailableModel[]) {
+  return models.map((model) => ({
+    id: model.id,
+    provider: model.provider,
+    displayName: model.modelName,
+    disabled: model.hasApiKey === false,
+  }));
 }
 
 function skillCommands(skills: unknown[] | undefined) {

@@ -32,10 +32,6 @@ export interface StoredThreadSummary {
   id: string;
   title: string;
   updatedAt: string;
-  messageCount: number;
-  persisted: boolean;
-  promptActive?: boolean;
-  cwd?: string;
 }
 
 /** Composer attachment: text files carry `text`, binary/image carry base64 `data`. */
@@ -73,7 +69,6 @@ interface WorkbenchContextValue {
   /** Derived from the URL `thread` search param — the single source of truth for "which thread". */
   currentThreadId: string;
   isRunning: boolean;
-  operation?: string;
   operationError?: string;
   sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
   cancel: () => void;
@@ -83,7 +78,6 @@ interface WorkbenchContextValue {
   resolveApproval: (requestId: string, optionId?: string) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
   setAccessLevel: (accessLevel: WorkbenchAccessLevel) => Promise<void>;
-  refreshProjection: () => void;
 }
 
 const WorkbenchContext = createContext<WorkbenchContextValue | undefined>(undefined);
@@ -402,11 +396,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [api],
   );
 
-  const refreshProjection = useCallback(() => {
-    void refreshThreads();
-    if (currentThreadId) void hydrate(currentThreadId);
-  }, [currentThreadId, hydrate, refreshThreads]);
-
   const operationError = error ?? state.uiStatus.errors[0];
   const context = useMemo<WorkbenchContextValue>(
     () => ({
@@ -424,7 +413,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       resolveApproval,
       setModel,
       setAccessLevel,
-      refreshProjection,
     }),
     [
       config,
@@ -443,7 +431,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       resolveApproval,
       setModel,
       setAccessLevel,
-      refreshProjection,
     ],
   );
 
@@ -559,8 +546,6 @@ function toSummaries(threads: AgentControllerThreadInfo[]): StoredThreadSummary[
       // Empty-string titles (not just null) render as blank rows — fall back to a short id.
       title: thread.title?.trim() || shortId(thread.id),
       updatedAt: thread.updatedAt ?? new Date(0).toISOString(),
-      messageCount: 0,
-      persisted: true,
     }))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
