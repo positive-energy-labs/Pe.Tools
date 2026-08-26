@@ -5,6 +5,7 @@ import { mintSelector, sessionLabel, type TargetSelector } from "#/host/target";
 import { CHAT_CONSUMER, readScoped, scopeKey, type TargetScope } from "#/host/target-scope";
 import { chipDescriptor, LaneBadge, LiveDot, resolutionReadout } from "#/host/target-ui";
 import { useTarget, useWorldLog, type WorldEvent } from "#/host/use-target";
+import { useWorkbench } from "#/workbench/provider";
 
 /**
  * Chat-wired target surfaces. The pin is the `target` search param (a selector, retained like
@@ -25,7 +26,8 @@ export function useChatTarget() {
   const scope: TargetScope = { threadId: thread ?? "", consumerId: CHAT_CONSUMER };
   const book = target ? { [scopeKey(scope)]: target } : {};
   const selector: TargetSelector = readScoped(book, scope);
-  const { resolution, sessions } = useTarget(selector);
+  const { revit } = useWorkbench();
+  const { resolution, sessions } = useTarget(selector, revit === true);
   const worldLog = useWorldLog(sessions);
   const pin = (next: TargetSelector) =>
     void navigate({

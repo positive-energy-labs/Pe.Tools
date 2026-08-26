@@ -13,12 +13,11 @@ const NOW = Date.parse("2026-07-16T12:00:00Z");
 
 const zero = { proposals: 0, staged: 0, good: 0, attention: 0 };
 
-test("chat fleet capability gates every Revit fetch", async () => {
+test("chat fleet capability gates fleet fetches", async () => {
   const requests: string[] = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
-    const url =
-      typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     requests.push(`${init?.method ?? "GET"} ${url}`);
     return Response.json(url === "/sessions" ? { result: { sessions: [] } } : { sessions: [] });
   };
