@@ -7,8 +7,9 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import { MastraClient, isKnownAgentControllerEvent } from "@mastra/client-js";
 import { z } from "zod";
 
-import { peInfoSchema, type RouteStateSpec, readRouteState } from "@pe/agent-contracts";
+import { type RouteStateSpec, readRouteState } from "@pe/agent-contracts";
 
+import { fetchPeInfo } from "#/host/info";
 import { type WorkbenchEndpointConfig, peUrl, resolveWorkbenchConfig } from "./config";
 
 export type RouteWorkspaceScope = { kind: "thread"; threadId: string } | { kind: "workspace" };
@@ -68,9 +69,7 @@ function wireStream(
     Effect.acquireRelease(
       Effect.tryPromise({
         try: async () => {
-          const response = await fetch(peUrl(config, "/info"));
-          if (!response.ok) throw new Error(`workbench /info ${response.status}`);
-          const info = peInfoSchema.parse(await response.json());
+          const info = await fetchPeInfo(config);
           // Hydrate before opening either long-lived stream. Chat + iframe roots otherwise
           // exhaust the browser's per-origin connection pool and strand this request. The
           // route SSE sends its current snapshot on connect, so it closes the hydration race.

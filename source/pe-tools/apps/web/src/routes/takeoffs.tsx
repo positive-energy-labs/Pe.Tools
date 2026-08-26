@@ -27,6 +27,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
+import { usePeInfo } from "#/host/info";
 import { mintSelector, resolveTarget } from "#/host/target";
 import { appAtomRegistry } from "#/state/registry";
 import { fmtNum } from "#/components/master-table/model";
@@ -94,7 +95,32 @@ const readDirs = (): string[] => {
 
 function TakeoffsRoute() {
   const { source } = Route.useSearch();
-  return <TakeoffsStoreOwner key={source} source={source} />;
+  return source === "fixture" ? <TakeoffsStoreOwner source="fixture" /> : <LiveTakeoffsRoute />;
+}
+
+export function LiveTakeoffsRoute() {
+  const info = usePeInfo();
+  if (info.data?.capabilities.revit === true) return <TakeoffsStoreOwner source="live" />;
+  return (
+    <div className="flex h-screen items-center justify-center">
+      <EmptyState
+        story="scope"
+        exit={
+          info.error
+            ? "restore the host connection, or take the fixture lane with ?source=fixture"
+            : info.data
+              ? "start Revit with the Pe add-in loaded, or take the fixture lane with ?source=fixture"
+              : "checking host capabilities"
+        }
+      >
+        {info.error
+          ? "host capabilities unavailable"
+          : info.data
+            ? "Revit unavailable"
+            : "checking host capabilities"}
+      </EmptyState>
+    </div>
+  );
 }
 
 function TakeoffsStoreOwner({ source }: { source: Search["source"] }) {

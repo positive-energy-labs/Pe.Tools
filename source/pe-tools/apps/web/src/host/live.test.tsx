@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
+import { LiveTakeoffsRoute } from "#/routes/takeoffs";
+import { usePeInfo } from "./info";
 import { useHostLiveInvalidation } from "./live";
 
 afterEach(() => {
@@ -32,7 +36,7 @@ test("opens host events only after PeInfo confirms Revit", async () => {
     const mounted = render(
       createElement(
         QueryClientProvider,
-        { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
+        { client: new QueryClient() },
         createElement(() => {
           useHostLiveInvalidation();
           return null;
@@ -59,4 +63,58 @@ test("opens host events only after PeInfo confirms Revit", async () => {
   }
 
   expect(sources[0]?.close).toHaveBeenCalledOnce();
+});
+
+test("live Takeoffs does not open Revit wires before literal capability true", async () => {
+  const fetchMock = vi.fn(async () =>
+    Response.json({
+      controllerId: "pea",
+      resourceId: "local",
+      capabilities: { revit: false },
+      world: {
+        id: "local",
+        root: "C:/repo",
+        storage: { kind: "local-unversioned" },
+        isolation: "none",
+      },
+    }),
+  );
+  const eventSource = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("EventSource", eventSource);
+
+  render(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(LiveTakeoffsRoute),
+    ),
+  );
+
+  await waitFor(() => expect(document.body.textContent).toContain("Revit unavailable"));
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(eventSource).not.toHaveBeenCalled();
+});
+
+test("PeInfo has one loader and one-shot query failure", async () => {
+  const fetchMock = vi.fn(async () => new Response(null, { status: 503, statusText: "Down" }));
+  vi.stubGlobal("fetch", fetchMock);
+  let error: Error | null = null;
+
+  render(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(() => {
+        error = usePeInfo().error;
+        return null;
+      }),
+    ),
+  );
+
+  await waitFor(() => expect(error).toBeInstanceOf(Error));
+  expect(fetchMock).toHaveBeenCalledOnce();
+  const routeState = readFileSync(join(process.cwd(), "src/workbench/route-state.tsx"), "utf8");
+  expect(routeState).toContain("await fetchPeInfo(config)");
+  expect(routeState).not.toContain('peUrl(config, "/info")');
 });
