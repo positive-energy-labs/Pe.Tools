@@ -2,7 +2,12 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { OpsRouteDocument, RouteStatePatch } from "@pe/agent-contracts";
+import type {
+  OpsReceipt,
+  OpsRouteDocument,
+  RouteStatePatch,
+  RouteStateWriteResult,
+} from "@pe/agent-contracts";
 
 import { bindOpsVerb, opsRefusal, type HostOperationCatalogEntry } from "#/ops/product";
 import { createOpsStore } from "#/ops/store";
@@ -33,9 +38,9 @@ const oldReceipt = {
     observedAt: "2026-08-25T00:00:00.000Z",
   },
 };
-const document = (target = "observed"): OpsRouteDocument => ({
+const document = (target = "observed", receipt: OpsReceipt = oldReceipt): OpsRouteDocument => ({
   binding: { target },
-  receipt: oldReceipt,
+  receipt,
 });
 const feeds: Feeds = {
   world: {
@@ -49,7 +54,10 @@ const feeds: Feeds = {
 const registries: AtomRegistry.AtomRegistry[] = [];
 afterEach(() => registries.splice(0).forEach((registry) => registry.dispose()));
 
-function make(routeDocument = document()) {
+function make(
+  routeDocument = document(),
+  options: { hydrated?: boolean; applyResult?: RouteStateWriteResult } = {},
+) {
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
   registries.push(registry);
   const calls = vi.fn(async () => ({ title: "project-a" }));
@@ -61,7 +69,7 @@ function make(routeDocument = document()) {
     slice: Atom.make(
       AsyncResult.success({
         doc: routeDocument,
-        hydrated: true,
+        hydrated: options.hydrated ?? true,
         connected: true,
         error: null,
         peaActive: false,
@@ -69,7 +77,7 @@ function make(routeDocument = document()) {
     ),
     apply: async (patches) => {
       writes.push(patches);
-      return { ok: true };
+      return options.applyResult ?? { ok: true };
     },
     call: calls,
     now: () => new Date("2026-08-25T01:02:03.000Z"),
@@ -135,6 +143,44 @@ describe("ops route store", () => {
     expect(registry.get(store.atoms.result)).toBeNull();
   });
 
+  it("projects a matching persisted receipt as bound", async () => {
+    const matching: OpsReceipt = {
+      ...oldReceipt,
+      from: { ...oldReceipt.from, target: "observed", documentId: "projectA.rvt" },
+    };
+    const { registry, store } = make(document("observed", matching));
+
+    await store.actions.syncBindings("observed", matching.opKey, {
+      target: "observed",
+      documentId: "projectA.rvt",
+    });
+
+    expect(registry.get(store.atoms.result)).toEqual(matching);
+  });
+
+  it("keeps a non-document receipt current across documents in the same target", async () => {
+    const nonDocument: OpsReceipt = {
+      ...oldReceipt,
+      from: { target: "observed", observedAt: oldReceipt.from.observedAt },
+    };
+    const { registry, store } = make(document("observed", nonDocument));
+
+    await store.actions.syncBindings("observed", nonDocument.opKey, {
+      target: "observed",
+      documentId: "another.rvt",
+    });
+
+    expect(registry.get(store.atoms.result)).toEqual(nonDocument);
+  });
+
+  it("does not write bindings before the route document hydrates", async () => {
+    const { store, writes } = make(document("persisted"), { hydrated: false });
+
+    await store.actions.syncBindings("", oldReceipt.opKey, null);
+
+    expect(writes).toEqual([]);
+  });
+
   it("binds elsewhere and clears a stale receipt in one write", async () => {
     const { store, writes } = make();
 
@@ -154,5 +200,24 @@ describe("ops route store", () => {
       },
       { path: ["receipt"], value: null },
     ]);
+  });
+
+  it("routes binding write failures to the store failure atom", async () => {
+    const { registry, store } = make(document(), {
+      applyResult: { ok: false, error: "binding write failed" },
+    });
+
+    await expect(
+      store.actions.setBindings(
+        { bound: { world: "session:new", op: oldReceipt.opKey } },
+        { target: "new", documentId: "new.rvt" },
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(registry.get(store.atoms.failure)).toMatchObject({
+      kind: "host",
+      verb: "set-bindings",
+      message: "binding write failed",
+    });
   });
 });

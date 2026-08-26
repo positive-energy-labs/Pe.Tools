@@ -93,6 +93,7 @@ function OpsPage({ store }: { store: OpsStore }) {
   const result = useAtomValue(store.atoms.result);
   const busyState = useAtomValue(store.atoms.busy);
   const failure = useAtomValue(store.atoms.failure);
+  const hydrated = useAtomValue(store.atoms.hydrated);
   const selectedGlance = syntheticOps.find((glance) => glance.key === selectedGlanceKey);
   const currentIdentity = session
     ? {
@@ -102,10 +103,15 @@ function OpsPage({ store }: { store: OpsStore }) {
     : null;
 
   useEffect(() => {
-    void store.actions
-      .syncBindings(search.world, search.op, currentIdentity)
-      .catch(() => undefined);
-  }, [search.world, search.op, currentIdentity?.target, currentIdentity?.documentId, store]);
+    if (hydrated) void store.actions.syncBindings(search.world, search.op, currentIdentity);
+  }, [
+    hydrated,
+    search.world,
+    search.op,
+    currentIdentity?.target,
+    currentIdentity?.documentId,
+    store,
+  ]);
   useEffect(() => {
     const seed = selected?.requestExamples[0]?.json ?? selected?.safeDefaultRequestJson ?? "{}";
     store.actions.select(selected, readFormSeed(seed, requestSchema));

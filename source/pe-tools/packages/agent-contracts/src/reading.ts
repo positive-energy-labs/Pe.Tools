@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const readingFromSchema = z.object({
   target: z.string(),
-  documentId: z.string().optional(),
+  documentId: z.string(),
   documentVersionToken: z.string().optional(),
   observedAt: z.iso.datetime(),
 });

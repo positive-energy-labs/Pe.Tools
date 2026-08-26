@@ -8,7 +8,7 @@ export const opsReceiptSchema = z.object({
   request: z.unknown().optional(),
   value: z.unknown(),
   elapsedMs: z.number().nonnegative(),
-  from: readingFromSchema,
+  from: readingFromSchema.extend({ documentId: z.string().optional() }),
 });
 export type OpsReceipt = z.infer<typeof opsReceiptSchema>;
 

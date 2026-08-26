@@ -14,7 +14,6 @@ import {
   createRouteStoreCore,
   docAtom,
   docWriter,
-  readingIsCurrent,
   type Scope,
   type Slice,
 } from "#/state/route-store";
@@ -32,6 +31,10 @@ interface OpsSearchPort {
   op: string;
   patch(partial: { world?: string; op?: string }): void;
 }
+
+const opsReadingIsCurrent = (from: OpsReceipt["from"], current: Identity) =>
+  from.target === current.target &&
+  (from.documentId === undefined || from.documentId === current.documentId);
 
 export function createOpsStore(deps: {
   registry: AtomRegistry.AtomRegistry;
@@ -53,6 +56,10 @@ export function createOpsStore(deps: {
     const result = get(slice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
+  const hydrated = Atom.make((get) => {
+    const result = get(slice);
+    return AsyncResult.isSuccess(result) && result.value.hydrated;
+  }).pipe(owned("view/hydrated"));
   const identity = Atom.make<Identity | null>(null).pipe(owned("page/identity"));
   const selectedKey = Atom.make("").pipe(owned("page/op"));
   const draftKey = Atom.make("").pipe(owned("page/draft-op"));
@@ -63,7 +70,7 @@ export function createOpsStore(deps: {
     return value &&
       current &&
       value.opKey === get(selectedKey) &&
-      readingIsCurrent(value.from, current)
+      opsReadingIsCurrent(value.from, current)
       ? value
       : null;
   }).pipe(owned("view/result"));
@@ -89,6 +96,8 @@ export function createOpsStore(deps: {
     registry.set(identity, current);
     registry.set(selectedKey, op);
     registry.set(localResult, null);
+    const routeSlice = registry.get(slice);
+    if (!AsyncResult.isSuccess(routeSlice) || !routeSlice.value.hydrated) return;
     const doc = registry.get(document);
     const patches: RouteStatePatch[] = [];
     if (doc?.binding.target !== (world || null))
@@ -98,10 +107,28 @@ export function createOpsStore(deps: {
       });
     if (
       doc?.receipt &&
-      (!current || doc.receipt.opKey !== op || !readingIsCurrent(doc.receipt.from, current))
+      (!current || doc.receipt.opKey !== op || !opsReadingIsCurrent(doc.receipt.from, current))
     )
       patches.push({ path: ["receipt"], value: null });
     if (patches.length) expectOk(await apply(patches));
+  };
+  const persistBinding = async (
+    verb: string,
+    world: string,
+    op: string,
+    current: Identity | null,
+  ) => {
+    try {
+      await clearForBinding(world, op, current);
+    } catch (cause) {
+      write(verb, "failure", () =>
+        registry.set(core.failure, {
+          kind: "host",
+          verb,
+          message: cause instanceof Error ? cause.message : String(cause),
+        }),
+      );
+    }
   };
 
   const actions = {
@@ -127,13 +154,13 @@ export function createOpsStore(deps: {
       });
     },
     async syncBindings(world: string, op: string, current: Identity | null) {
-      await clearForBinding(world, op, current);
+      await persistBinding("sync-bindings", world, op, current);
     },
     setBindings(patch: Partial<BindingState>, current: Identity | null) {
       const world = patch.bound?.world ?? deps.search.world;
       const op = patch.bound?.op ?? deps.search.op;
       deps.search.patch({ world: world || "", op: op || "" });
-      return clearForBinding(world || "", op || "", current);
+      return persistBinding("set-bindings", world || "", op || "", current);
     },
     run(input: { opKey: string; request: () => unknown; from: Identity; bridgeSessionId: string }) {
       return runVerb("run", async () => {
@@ -165,6 +192,7 @@ export function createOpsStore(deps: {
       formValues,
       picker,
       selectedGlance,
+      hydrated,
       result,
       busy: core.busy,
       failure: core.failure,
