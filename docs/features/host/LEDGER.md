@@ -42,6 +42,7 @@ design-system ledger, not restated here.
 
 ### The `/ops` console
 
+- 2026-08-25 — `/ops` is the catalog explorer on the targeting framework: `world` and its catalog-fed duplex `op` terminal are URL bindings; request draft/mode and the last result belong to the route store; completed calls persist one bound Reading. The user-selected live-catalog key is its only dynamic call. Every checked-in literal key is typed. Reads may run on observed custody; mutating ops refuse there before HTTP.
 - 2026-08-16 — `/ops` ran a parallel design vocabulary (`ops/primitives.tsx`: Chip · MonoNote · EmptyState · OpSection · KVGrid · Provenance · CoverageBar); the sweep dissolved it onto the one language. Only the Revit-familiar shapes survive ops-owned — TreeView (project browser), DataTable (schedule grid), KVGrid (properties palette) — plus a new `VizChip` for taxonomy spends. `CatHue`/`catVar` deleted at zero consumers.
 - 2026-08-16 — `EmptyFrame` for sheets outside the 10-sheet detail budget keeps its dashed border as a legal R13(b) seam: a declared sheet with no geometry behind it. (verify — review may rule "not-fetched ≠ seam"; the replacement is a plain `--r-line` frame.)
 - 2026-08-16 — `/ops` gets no `AddressingBar` head rail: it is a two-pane console and its per-op header is op identity, not route addressing.
@@ -49,6 +50,8 @@ design-system ledger, not restated here.
 
 ### The fleet cockpit (`/instances`)
 
+- 2026-08-25 — `/instances` declares and binds the kit's managed `world` trunk. `worldTrunk.verbs` owns `start | converge | restart | stop` over the existing `POST /sessions` relay; observed custody refuses every lifecycle verb before HTTP. This supersedes the route's 2026-08-20 id prediction/pre-emption policy: the browser never mints or guesses SDK ids.
+- 2026-08-25 — Fleet state and lifecycle outcomes are live process truth, not route-document `Reading`s: the page-memory action ledger appends only after the SDK envelope answers and retains its state, diagnostics, and next steps. Never add `ReadingFrom`/`from` provenance to this ledger.
 - 2026-08-16 — Instances state is a **row-level pipeline verdict** (world phase), not a value pseudo-dimension: the fleet is the first real consumer of the `verdict:` column clause (R5), and essentially nothing here maps to the four value axes. That is the census's result, not a gap.
 - 2026-08-16 — A lifecycle cockpit is legitimately blue-dense: every verb here (declare ×3, restart/stop per row, start-again per killed row) boots or kills an OS process, so all wear `commit` per the letter of the scarcity law. The `VerbGroup` radius line carries the blast statement once.
 - 2026-08-16 — Honest empties beat "—": "no open document" (live world, none open) and "nothing observed" (registry-only world) say which silence it is.

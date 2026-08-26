@@ -2,7 +2,8 @@ import { type ComponentType, useCallback, useEffect, useState } from "react";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
-import { callHostDynamic } from "#/host/client";
+import { callHostRpc } from "#/host/client";
+import type { HostSessionScope, OpCallArgs, OpKey } from "@pe/host-contracts/operation-types";
 
 /**
  * Synthetic ops: composed views that fan out several real host ops and render
@@ -13,7 +14,7 @@ import { callHostDynamic } from "#/host/client";
 
 export type SyntheticDep = {
   /** Real host op key to call. */
-  key: string;
+  key: OpKey;
   request?: unknown;
   /** Alias in the results map (defaults to key). Lets one op appear twice. */
   as?: string;
@@ -27,7 +28,7 @@ export type SyntheticViewProps = {
   /** Wall-clock of the fan-out completing — every synthetic claim is "as of" this. */
   observedAtMs: number;
   /** Staged follow-up fetches (same session scope as the fan-out). */
-  call: (key: string, request?: unknown) => Promise<unknown>;
+  call: (key: OpKey, request?: unknown) => Promise<unknown>;
 };
 
 export type SyntheticOp = {
@@ -57,7 +58,11 @@ export function SyntheticRunner({
   const [running, setRunning] = useState(false);
 
   const call = useCallback(
-    (key: string, request?: unknown) => callHostDynamic(key, request, { bridgeSessionId }),
+    (key: OpKey, request?: unknown) =>
+      callHostRpc(
+        key,
+        ...([request, { bridgeSessionId }] as OpCallArgs<typeof key, HostSessionScope>),
+      ),
     [bridgeSessionId],
   );
 

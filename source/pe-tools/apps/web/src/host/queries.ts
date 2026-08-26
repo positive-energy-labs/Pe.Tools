@@ -8,7 +8,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 
-import { callHostDynamic, callHostRpc } from "#/host/client";
+import { callHostRpc } from "#/host/client";
 import type { LoadedFamiliesMatrixRequest } from "#/host/loaded-families-view";
 import type {
   HostOpRequest,
@@ -59,27 +59,6 @@ export function useHostOp<K extends OpKey>(
     // Cast: TS cannot resolve the conditional OpCallArgs tuple while K is open;
     // the public signatures on this hook and callHostRpc enforce it at call sites.
     queryFn: () => callHostRpc(key, ...([request, scope] as OpCallArgs<K, HostSessionScope>)),
-    enabled: enabled ?? true,
-    refetchOnWindowFocus: false,
-    ...tuning,
-  });
-}
-
-/**
- * Untyped escape hatch for runtime-registered ops the checked-in types haven't
- * caught up with. Regenerate (`host-typegen`) and switch to `useHostOp` once
- * the op is stable.
- */
-export function useHostOpDynamic(
-  key: string,
-  request?: unknown,
-  options?: HostQueryOptions & HostOpQueryTuning,
-) {
-  const { enabled, bridgeSessionId, ...tuning } = options ?? {};
-  const scope = bridgeSessionId ? { bridgeSessionId } : undefined;
-  return useQuery({
-    queryKey: [...HOST_QUERY_KEY, bridgeSessionId ?? "", key, stableKey(request)],
-    queryFn: () => callHostDynamic(key, request, scope),
     enabled: enabled ?? true,
     refetchOnWindowFocus: false,
     ...tuning,

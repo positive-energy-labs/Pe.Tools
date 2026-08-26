@@ -166,7 +166,9 @@ export const unbound = <A>(value: A, basis: readonly string[] = []): TimedRead<A
 export const readingIsCurrent = (
   from: ReadingFrom,
   current: Pick<ReadingFrom, "target" | "documentId">,
-) => from.target === current.target && from.documentId === current.documentId;
+) =>
+  from.target === current.target &&
+  (from.documentId === undefined || from.documentId === current.documentId);
 
 type FeedState = "ready" | "loading" | "error";
 export type Lane = "live" | "read" | "fixture";
