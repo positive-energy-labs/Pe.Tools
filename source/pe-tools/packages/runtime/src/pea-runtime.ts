@@ -430,6 +430,7 @@ function createPeaSessionAdmission(
   };
   const sendNotificationSignal = session.sendNotificationSignal.bind(session);
   session.sendNotificationSignal = async (input, options) => {
+    if (scopedThreadId) throw new Error("Pea web sessions do not support notifications.");
     await assertRunAdmitted();
     return sendNotificationSignal(input, options);
   };
