@@ -141,7 +141,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 - 2026-08-15 — Authoring test for any new seam: not "can I name a future user?" (always answerable) but "what makes this obviously wrong if the future never comes?" Code with no tripwire doesn't fail — it accumulates, compiles, and passes.
 - 2026-08-15 — Undiscoverable is the leading indicator of dead: every route deleted in the wave was unreachable from the index `TOOLS` list. Reachability from the front door tracks liveness better than any timestamp.
 - 2026-08-16 — Sweep governance for a route pass: `components/lang/*`, `components/master-table/*`, `design-lang.css` tokens and the state-model axes are NOT changed by a route pass. Where the language cannot say something, leave the code honest and write the gap down here. Gaps become numbered findings, never unilateral language changes.
-- 2026-08-26 — `/targeting-proto` and `targeting-proto/**` left canon after S2–J6′ rewrote the selected targeting kit into `targeting/**`; the triangulation losers remain available in Git history.
+- 2026-08-26 — `/targeting-proto` and `targeting-proto/**` left canon after S2–J6′ rewrote the selected targeting kit into `targeting/**`. `view-sentence.tsx` and `view-board.tsx` were losers; `view-flow.tsx` was NOT — it was queued for promotion as a second projection of the kit and was swept with them. All three are at `76ae024^`.
 - 2026-08-26 — `ChatSentence` is the chat targeting head only; it does not render Pea testimony or inspect a plugin route document. The live plugin registry still owns pane titles and inline route-state cards, while the dead `chatPluginRegistration` testimony bridge is deleted.
 ## Tried & rejected
 
@@ -182,6 +182,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Owed
 
+- 2026-08-26 — Promote the FLOW view as a second projection of `targeting/model.ts` (`terminals()` + trunks), per `MAP.md:274`. Its side rule (reads left, writes·syncs right, context to the head line) was written against the round-5 SUBJECT clause, which round 7 deleted; restate it for trunk-vs-terminal before rebuilding. Code to graft from: `git show 76ae024^:source/pe-tools/apps/web/src/targeting-proto/view-flow.tsx` (346 lines, old `Link` model).
 - Promote the typed manifest to `@pe/agent-contracts` only when Pea reads it; that consumer is the gate for a wire contract and generated projections.
 - 2026-08-25 — Eight design guard gates remain: hard-zero dead shim tokens 14, bare hairlines 29, deleted tele classes 83, hex colour literals 8, sub-10px type 1; `textPx` 99 > 41; `rawButton` 92 > 56; `dashed` 8 > 7. The six docs guards are green.
 - 2026-08-25 — The fixture lane has two spellings: `?source=fixture` (`/takeoffs`, `/settings`) and none on `/family` (lane = whether a document is open). Rule one spelling before a chat pane needs a fixture lane.
