@@ -40,7 +40,6 @@
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
     "gunshi": "^0.29.5",
-    "hono": "4.12.8",
     "mastracode": "0.35.0",
     "zod": "4.3.6"
   },
