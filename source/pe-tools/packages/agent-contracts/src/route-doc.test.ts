@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { applyPatches, commitDoc, guardCommand, type RouteEnvelope } from "./route-doc.ts";
-import { defineRouteState } from "./route-state.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 
 const schema = z
   .object({
@@ -10,7 +10,7 @@ const schema = z
     staged: z.array(z.string()).default([]),
   })
   .prefault({});
-const spec = defineRouteState({
+const spec = {
   route: "test",
   title: "Test",
   description: "Test route document.",
@@ -19,7 +19,7 @@ const spec = defineRouteState({
   commands: {
     save: { description: "Save.", actor: "human", input: z.object({ value: z.string() }) },
   },
-});
+} satisfies RouteStateSpec<typeof schema>;
 const envelope = (): RouteEnvelope<z.infer<typeof schema>> => ({
   version: 1,
   revision: 0,

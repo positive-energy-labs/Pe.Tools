@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
+import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 
 export const opsReceiptSchema = z.object({
   opKey: z.string(),
@@ -12,15 +12,17 @@ export const opsReceiptSchema = z.object({
 });
 export type OpsReceipt = z.infer<typeof opsReceiptSchema>;
 
-export const opsRouteState = defineRouteState({
+const opsDocumentSchema = z.object({
+  bindings: routeBindingsSchema,
+  receipt: opsReceiptSchema.nullable().default(null),
+});
+
+export const opsRouteState = {
   route: "ops",
   title: "Operations",
   description: "Explore the live Host operation catalog and retain the last bound receipt.",
-  schema: z.object({
-    bindings: routeBindingsSchema,
-    receipt: opsReceiptSchema.nullable().default(null),
-  }),
+  schema: opsDocumentSchema,
   agentWriteMask: [],
   commands: {},
-});
+} satisfies RouteStateSpec<typeof opsDocumentSchema>;
 export type OpsRouteDocument = z.infer<typeof opsRouteState.schema>;

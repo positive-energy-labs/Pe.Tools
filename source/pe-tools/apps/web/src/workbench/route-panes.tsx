@@ -65,12 +65,7 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
   }
   const { doc, connected, error } = result.value;
   return (
-    <RouteWorkspaceShell
-      title={spec.title}
-      connected={connected === true}
-      binding={readBinding(doc)}
-      error={error}
-    >
+    <RouteWorkspaceShell title={spec.title} connected={connected === true} error={error}>
       {doc == null ? (
         <EmptyState story="scope" exit="bind or open the route document">no document is open</EmptyState>
       ) : (
@@ -129,14 +124,6 @@ function createRoutePaneStore(chat: ChatStore, spec: RouteStateSpec<z.ZodType>, 
 }
 
 type RoutePaneStore = ReturnType<typeof createRoutePaneStore>;
-
-function readBinding(value: unknown) {
-  if (!value || typeof value !== "object" || !("binding" in value)) return undefined;
-  const binding = (value as { binding?: unknown }).binding;
-  if (!binding || typeof binding !== "object") return null;
-  const target = "target" in binding && typeof binding.target === "string" ? binding.target : null;
-  return { target };
-}
 
 export function topLevelPatches(before: unknown, after: unknown): RouteStatePatch[] {
   if (!isRecord(before) || !isRecord(after)) throw Error("route documents must be JSON objects");

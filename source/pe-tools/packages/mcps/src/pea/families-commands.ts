@@ -23,7 +23,7 @@ export function createFamiliesCommandHandlers(
         scope: { familyNames: string[] };
         target?: string;
       };
-      const rpc = caller(resolveTarget(input, ctx.getDoc()));
+      const rpc = caller(resolveTarget(input));
       const opened = await rpc.call("settings.document.open", {
         documentId: { ...PROFILE_MODULE, relativePath: input.profilePath },
       });
@@ -57,7 +57,7 @@ export function createFamiliesCommandHandlers(
         );
       }
 
-      const rpc = caller(resolveTarget(input, document));
+      const rpc = caller(resolveTarget(input));
       const opened = await rpc.call("settings.document.open", {
         documentId: { ...PROFILE_MODULE, relativePath: document.profilePath },
       });

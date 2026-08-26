@@ -1,16 +1,17 @@
 import { z } from "zod";
 
-import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
+import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 
-export const instancesRouteState = defineRouteState({
+const instancesDocumentSchema = z.object({
+  bindings: routeBindingsSchema,
+});
+
+export const instancesRouteState = {
   route: "instances",
   title: "Instances",
   description: "Manage Revit worlds from a document-scoped route.",
-  schema: z.object({
-    bindings: routeBindingsSchema,
-    stage: z.enum(["declare", "lifecycle"]).optional(),
-  }),
+  schema: instancesDocumentSchema,
   agentWriteMask: [],
   commands: {},
-});
+} satisfies RouteStateSpec<typeof instancesDocumentSchema>;
 export type InstancesRouteDocument = z.infer<typeof instancesRouteState.schema>;

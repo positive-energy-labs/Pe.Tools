@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { address, defineRouteState, routeBindingSchema } from "@pe/agent-contracts";
+import { address, current, routeBindingsSchema } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
@@ -16,7 +16,7 @@ import type {
 
 const documentSchema = z
   .object({
-    binding: routeBindingSchema,
+    bindings: routeBindingsSchema,
     values: z.record(z.string(), z.string()).default({}),
     count: z.number().int().default(0),
   })
@@ -26,7 +26,7 @@ type TestDocument = z.infer<typeof documentSchema>;
 function registration(
   overrides: Partial<RouteStateCommandHandlers<TestDocument>> = {},
 ): RouteWorkspaceRegistration {
-  const spec = defineRouteState({
+  const spec = {
     route: "test-route",
     title: "Test Route",
     description: "A test collaborative route.",
@@ -56,7 +56,7 @@ function registration(
         input: z.object({}),
       },
     },
-  });
+  } satisfies RouteStateSpec<typeof documentSchema>;
   const handlers: RouteStateCommandHandlers<TestDocument> = {
     increment: async (_input, context) => {
       const doc = context.getDoc();
@@ -112,6 +112,18 @@ test("document-scoped route documents are isolated and survive module recreation
   expect((await first.read(documentB, "test-route"))?.doc).toMatchObject({ values: {} });
   const second = workspace(store);
   expect((await second.read(documentA, "test-route"))?.doc).toMatchObject({ values: { a: "A" } });
+
+  expect(
+    await second.apply(documentA, "test-route", "human", [
+      {
+        path: ["bindings", "world"],
+        value: { id: "session:pe.app-25", label: "pe.app-25", at: documentA.documentAddress },
+      },
+    ]),
+  ).toMatchObject({ ok: true });
+  const restarted = workspace(store);
+  const reloaded = (await restarted.read(documentA, "test-route"))?.doc as TestDocument;
+  expect(current(reloaded.bindings.world, documentA.documentAddress)?.id).toBe("session:pe.app-25");
 
   expect(second.list()).toEqual([
     {

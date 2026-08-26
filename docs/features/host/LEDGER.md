@@ -49,7 +49,7 @@ design-system ledger, not restated here.
 
 ### The `/ops` console
 
-- 2026-08-25 — `/ops` is the catalog explorer on the targeting framework: `world` and its catalog-fed duplex `op` terminal are route-document bindings; request draft/mode stay page-local and the last result belongs to the route document as a plain receipt. The user-selected live-catalog key is its only dynamic call. Every checked-in literal key is typed. Reads may run on observed custody; mutating ops refuse there before HTTP.
+- 2026-08-25 — `/ops` is the catalog explorer on the targeting framework: `world` and its catalog-fed duplex `op` terminal are URL bindings; request draft/mode and the last result belong to the route store; completed calls persist one bound Reading. The user-selected live-catalog key is its only dynamic call. Every checked-in literal key is typed. Reads may run on observed custody; mutating ops refuse there before HTTP.
 - 2026-08-16 — `/ops` ran a parallel design vocabulary (`ops/primitives.tsx`: Chip · MonoNote · EmptyState · OpSection · KVGrid · Provenance · CoverageBar); the sweep dissolved it onto the one language. Only the Revit-familiar shapes survive ops-owned — TreeView (project browser), DataTable (schedule grid), KVGrid (properties palette) — plus a new `VizChip` for taxonomy spends. `CatHue`/`catVar` deleted at zero consumers.
 - 2026-08-16 — `EmptyFrame` for sheets outside the 10-sheet detail budget keeps its dashed border as a legal R13(b) seam: a declared sheet with no geometry behind it. (verify — review may rule "not-fetched ≠ seam"; the replacement is a plain `--r-line` frame.)
 - 2026-08-16 — `/ops` gets no `AddressingBar` head rail: it is a two-pane console and its per-op header is op identity, not route addressing.

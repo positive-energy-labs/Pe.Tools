@@ -167,7 +167,7 @@ export function InstancesPage() {
 function AddressedInstancesPage({ documentAddress }: { documentAddress: Address }) {
   const route = useRouteState(instancesRouteState, { documentAddress });
   const target = current(route.slice?.bindings.world, documentAddress)?.id ?? "";
-  const stage = route.slice?.stage ?? "declare";
+  const [stage, setStage] = useState<BindingState["stage"]>("declare");
   const queryClient = useQueryClient();
   const { worlds, sessions, isLoading, error, stale, at, basis } = useFleet(true);
   const worldLog = useWorldLog(sessions);
@@ -267,17 +267,14 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
   };
   const setState = (patch: Partial<BindingState>) => {
     const nextTarget = patch.bound?.world;
-    void route.apply([
-      ...(nextTarget === undefined
-        ? []
-        : [{
-            path: ["bindings", "world"],
-            value: nextTarget
-              ? { id: nextTarget, label: nextTarget, at: documentAddress }
-              : undefined,
-          }]),
-      ...(patch.stage ? [{ path: ["stage"], value: patch.stage }] : []),
-    ]);
+    if (patch.stage) setStage(patch.stage);
+    if (nextTarget !== undefined)
+      void route.apply([{
+        path: ["bindings", "world"],
+        value: nextTarget
+          ? { id: nextTarget, label: nextTarget, at: documentAddress }
+          : undefined,
+      }]);
   };
   const bindings = useBindings(
     product,

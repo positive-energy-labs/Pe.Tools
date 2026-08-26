@@ -11,7 +11,7 @@
  * with the optimistic-concurrency version token captured at open/refresh.
  */
 import { z } from "zod";
-import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
+import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import {
   cellReviewSchema,
   LOW_CONFIDENCE_REFINE_ERROR,
@@ -109,7 +109,7 @@ const settingsRouteDocumentSchema = z
   });
 export type SettingsRouteDocument = z.infer<typeof settingsRouteDocumentSchema>;
 
-export const settingsRouteState = defineRouteState({
+export const settingsRouteState = {
   route: "settings",
   title: "Settings",
   description: "Review, validate, and save proposed changes to a typed settings document.",
@@ -154,7 +154,7 @@ export const settingsRouteState = defineRouteState({
       mutatesExternal: true,
     },
   },
-});
+} satisfies RouteStateSpec<typeof settingsRouteDocumentSchema>;
 
 /** Decode an RFC 6901 JSON Pointer field key into property segments. */
 export function settingsFieldSegments(pointer: string): string[] {

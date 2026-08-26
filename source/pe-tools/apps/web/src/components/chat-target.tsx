@@ -4,7 +4,6 @@ import { EmptyState } from "#/components/lang/empty";
 import { useFleet } from "#/host/fleet";
 import { useBridgeSessionsListQuery } from "#/host/queries";
 import { fromBridgeSessions, resolveTarget, type TargetSelector } from "#/host/target";
-import { CHAT_CONSUMER, readScoped, scopeKey, type TargetScope } from "#/host/target-scope";
 import { chipDescriptor, resolutionReadout } from "#/host/target-ui";
 import { useWorldLog, type WorldEvent } from "#/host/use-target";
 import { worldTrunk } from "#/targeting/trunks";
@@ -14,20 +13,15 @@ import { worldTrunk } from "#/targeting/trunks";
  * `thread`); resolution is live against the broker session list. One hook, three reflections:
  * the composer chip, the world-lane section, and the mapdial rail/ticks in the Lens.
  *
- * The chat is one SCOPE — (thread, _chat) — read through host/target-scope.ts. Today its selector
- * persists in the `?target` URL param: a one-entry TargetBook. When cross-tab sync / multi-plugin
- * tenancy / per-thread persistence land, a synced thread-keyed book replaces this backend and
- * scope callers here don't change. ponytail: single-scope URL backend until a second tab/plugin exists.
+ * The chat target persists in the `?target` URL param.
  */
 
 const chatRoute = getRouteApi("/chat");
 
 export function useChatTarget() {
-  const { thread, target } = chatRoute.useSearch();
+  const { target } = chatRoute.useSearch();
   const navigate = chatRoute.useNavigate();
-  const scope: TargetScope = { threadId: thread ?? "", consumerId: CHAT_CONSUMER };
-  const book = target ? { [scopeKey(scope)]: target } : {};
-  const selector: TargetSelector = readScoped(book, scope);
+  const selector: TargetSelector = target ?? "";
   const query = useBridgeSessionsListQuery();
   const sessions = fromBridgeSessions(query.data?.sessions ?? []);
   const resolution = resolveTarget(sessions, selector);

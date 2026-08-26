@@ -41,12 +41,6 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   commands: Record<string, RouteStateCommandSpec>;
 }
 
-export function defineRouteState<TSchema extends z.ZodType>(
-  spec: RouteStateSpec<TSchema>,
-): RouteStateSpec<TSchema> {
-  return spec;
-}
-
 /** The document type a spec's schema parses to. */
 export type RouteDocOf<TSpec> =
   TSpec extends RouteStateSpec<infer TSchema> ? z.infer<TSchema> : never;
@@ -68,19 +62,9 @@ export interface RouteStateWriteResult {
 /* ── Session binding (substrate-owned doc segment) ─────────────────────────── */
 
 /**
- * Which Revit session this workspace speaks to. Commands resolve
- * `input.target ?? doc.binding.target`. An
- * unresolvable target with multiple sessions connected hard-fails host-side —
- * never a silent fallback.
+ * A route document's named external bindings. Each records the document Address
+ * where it was picked; `current` rejects a binding from any other document.
  */
-export const routeBindingSchema = z
-  .object({
-    target: z.string().nullable().default(null),
-    boundAt: z.string().nullish(),
-  })
-  .prefault({ target: null });
-export type RouteBinding = z.infer<typeof routeBindingSchema>;
-
 export const bindSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -93,13 +77,10 @@ export const routeBindingsSchema = z.record(z.string(), bindSchema).default({});
 export const current = (bind: Bind | null | undefined, at: Address): Bind | null =>
   bind?.at === at ? bind : null;
 
-/** Per-command override wins; otherwise the workspace binding; otherwise undefined. */
-export function resolveTarget(input: unknown, doc: unknown): string | undefined {
+/** Return a command's explicit world target, when present. */
+export function resolveTarget(input: unknown): string | undefined {
   const explicit = (input as { target?: unknown } | null | undefined)?.target;
-  if (typeof explicit === "string" && explicit.length > 0) return explicit;
-  const bound = (doc as { binding?: { target?: string | null } } | null | undefined)?.binding
-    ?.target;
-  return bound ?? undefined;
+  return typeof explicit === "string" && explicit.length > 0 ? explicit : undefined;
 }
 
 /** Parse a raw route document; null when absent or invalid. */

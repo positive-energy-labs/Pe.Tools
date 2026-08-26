@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
+import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import { readingSchema } from "./reading.ts";
 
 const pointSchema = z.tuple([z.number(), z.number()]);
@@ -256,7 +256,7 @@ const selectionSchema = z.object({
   zones: z.array(z.string()),
 });
 
-export const takeoffsRouteState = defineRouteState({
+export const takeoffsRouteState = {
   route: "takeoffs",
   title: "Takeoffs",
   description: "Adopt zoning regions, audit rooms, and sync reviewed takeoff data.",
@@ -280,4 +280,4 @@ export const takeoffsRouteState = defineRouteState({
       mutatesExternal: true,
     },
   },
-});
+} satisfies RouteStateSpec<typeof takeoffsDocumentSchema>;

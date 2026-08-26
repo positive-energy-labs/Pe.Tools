@@ -10,7 +10,7 @@ import { useRouteStore } from "#/state/use-route-store";
 export const Route = createFileRoute("/families")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { thread?: string; source?: string } => ({
+  ): { thread?: string } => ({
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   }),

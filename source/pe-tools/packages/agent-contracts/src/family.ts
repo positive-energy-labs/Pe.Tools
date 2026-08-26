@@ -13,7 +13,7 @@
  * lifecycle already exists.
  */
 import { z } from "zod";
-import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
+import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import { specDocSchema } from "./family-types.ts";
 import { settingsDocumentIdSchema } from "./settings.ts";
 import { readingSchema } from "./reading.ts";
@@ -81,7 +81,7 @@ const familyDocumentSchema = z.object({
 });
 export type FamilyDocument = z.infer<typeof familyDocumentSchema>;
 
-export const familyRouteState = defineRouteState({
+export const familyRouteState = {
   route: "family",
   title: "Family",
   description:
@@ -116,4 +116,4 @@ export const familyRouteState = defineRouteState({
       mutatesExternal: true,
     },
   },
-});
+} satisfies RouteStateSpec<typeof familyDocumentSchema>;

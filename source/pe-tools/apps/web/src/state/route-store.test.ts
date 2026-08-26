@@ -5,7 +5,7 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 
-import { address, defineRouteState } from "@pe/agent-contracts";
+import { address, type RouteStateSpec } from "@pe/agent-contracts";
 
 import { inspectAtomRegistry } from "./atom-inspect";
 import {
@@ -160,14 +160,15 @@ describe("route store kit", () => {
   });
 
   it("returns one document atom for the same route and thread", () => {
-    const spec = defineRouteState({
+    const schema = z.object({ value: z.string() });
+    const spec = {
       route: "test-route",
       title: "Test",
       description: "Test",
-      schema: z.object({ value: z.string() }),
+      schema,
       agentWriteMask: [],
       commands: {},
-    });
+    } satisfies RouteStateSpec<typeof schema>;
 
     expect(docAtom(spec, { documentAddress: address("C:\\Models\\One.rvt") })).toBe(
       docAtom({ ...spec }, { documentAddress: address("C:\\Models\\One.rvt") }),

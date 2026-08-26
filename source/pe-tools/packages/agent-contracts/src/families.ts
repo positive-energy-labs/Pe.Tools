@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { parameterIdentitySchema } from "./family-types.ts";
-import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
+import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import { readingSchema } from "./reading.ts";
 
 const resolvedParameterSchema = z.object({
@@ -94,7 +94,7 @@ const familiesDocumentSchema = z.object({
 });
 export type FamiliesRouteDocument = z.infer<typeof familiesDocumentSchema>;
 
-export const familiesRouteState = defineRouteState({
+export const familiesRouteState = {
   route: "families",
   title: "Families",
   description: "Family Foundry: plan a profile against loaded families, exclude, apply.",
@@ -120,4 +120,4 @@ export const familiesRouteState = defineRouteState({
       mutatesExternal: true,
     },
   },
-});
+} satisfies RouteStateSpec<typeof familiesDocumentSchema>;

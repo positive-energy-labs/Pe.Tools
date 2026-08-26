@@ -201,13 +201,9 @@ function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import(
           <span className="flex items-center gap-2">
             <span
               className="t-value face-mono text-foreground"
-              title={
-                document?.binding.target
-                  ? `bound to ${document.binding.target}`
-                  : "no target document bound"
-              }
+              title="bound Revit document"
             >
-              {document?.binding.target ?? "unbound"}
+              {documentAddress}
             </span>
             {/* The write's safety model lives ON the arming strip below (its one home) — this
                 tip only orients. */}
@@ -324,7 +320,7 @@ function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import(
                 <ArmingStrip
                   className="mb-4"
                   verb="apply"
-                  target={document?.binding.target ?? "unbound"}
+                  target={documentAddress}
                   count={evaluation?.changedWriteCount ?? 0}
                   planHash={profileHash(previewed ?? editing)}
                   reason={writeReason}
@@ -339,7 +335,6 @@ function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import(
               <ProfileEditor
                 profile={editing}
                 disabled={busy != null || route.peaActive}
-                target={document?.binding.target ?? undefined}
                 onChange={onDraftChange}
               />
             </>

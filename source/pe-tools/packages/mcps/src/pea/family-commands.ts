@@ -74,7 +74,7 @@ export function createFamilyCommandHandlers(
     },
 
     capture_evidence: async (input, ctx) => {
-      const target = resolveTarget(input, ctx.getDoc());
+      const target = resolveTarget(input);
       const rpc = caller(target);
       const raw = await rpc.call("revit.detail.family-model", {}).catch((error: unknown) => {
         throw new Error(
@@ -107,7 +107,7 @@ export function createFamilyCommandHandlers(
         outputPath?: string;
         modelDirectory?: string;
       };
-      const target = resolveTarget(input, ctx.getDoc());
+      const target = resolveTarget(input);
       const rpc = caller(target);
 
       // Build the SAVED revision — read it through the same open path every consumer uses.

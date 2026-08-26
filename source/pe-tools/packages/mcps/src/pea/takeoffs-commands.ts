@@ -1,5 +1,4 @@
 import {
-  resolveTarget,
   type RouteStateCommandHandlers,
   type StagedRoomEdit,
   type TakeoffsRouteDocument,
@@ -19,16 +18,15 @@ export function createTakeoffsCommandHandlers(
   options: { hostBaseUrl?: string } = {},
 ): RouteStateCommandHandlers<TakeoffsRouteDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
-  const runtime = (document: TakeoffsRouteDocument) =>
+  const runtime = () =>
     new HostRpcCaller({
       hostBaseUrl,
-      bridgeSessionId: resolveTarget(undefined, document),
     });
 
   return {
     adopt: async (raw, ctx) => {
       const input = raw as Selection;
-      const caller = runtime(ctx.getDoc());
+      const caller = runtime();
       const before = await readSnapshot(caller);
       const candidates = before.zoneFrs.filter(
         (zone) =>
@@ -53,7 +51,7 @@ export function createTakeoffsCommandHandlers(
 
     audit: async (raw, ctx) => {
       const input = raw as Selection;
-      const caller = runtime(ctx.getDoc());
+      const caller = runtime();
       const before = await readSnapshot(caller);
       const prepared = await caller.call("takeoffs.prepare-capture", { view: input.view });
       const capture = await caller.call("takeoffs.detect-capture", { level: prepared.level });
@@ -88,7 +86,7 @@ export function createTakeoffsCommandHandlers(
           .filter((zone) => selected.size === 0 || selected.has(zone.zone.guid))
           .flatMap((zone) => zone.rooms)
           .filter((room) => room.r10 && edits.has(room.guid)) ?? [];
-      const caller = runtime(document);
+      const caller = runtime();
       const opened = await caller.call("rhvac.open", { path });
       const byId = new Map(opened.rooms.map((room) => [room.identifier, room]));
       const updates = rooms.map((room) => {
