@@ -21,9 +21,8 @@ export async function withThread({
   const controller = new MastraClient({ baseUrl: config.origin }).getAgentController(
     info.controllerId,
   );
-  search.set(
-    "thread",
-    await landThread({ session: controller.session(info.resourceId) }),
-  );
+  const thread = await landThread({ session: controller.session(info.resourceId) });
+  if (!thread) return;
+  search.set("thread", thread);
   throw redirect({ href: `${location.pathname}?${search}`, replace: true });
 }

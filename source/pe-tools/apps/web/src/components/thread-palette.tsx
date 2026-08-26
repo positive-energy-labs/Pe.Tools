@@ -107,7 +107,7 @@ export function ThreadList({
         {threads.length === 0 ? (
           <div className="px-2 py-3">
             <EmptyState story="scope" exit="start one below — the first message names it">
-              no threads yet
+              pick or start a thread
             </EmptyState>
           </div>
         ) : null}

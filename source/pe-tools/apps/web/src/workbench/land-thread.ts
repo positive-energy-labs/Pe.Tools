@@ -5,10 +5,10 @@ export interface ThreadLandingApi {
   };
 }
 
-export async function landThread(api: ThreadLandingApi): Promise<string> {
+export async function landThread(api: ThreadLandingApi): Promise<string | undefined> {
   const threads = await api.session.listThreads();
   const latest = [...threads].sort((left, right) =>
     (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""),
   )[0];
-  return latest?.id ?? (await api.session.createThread()).id;
+  return latest?.id;
 }

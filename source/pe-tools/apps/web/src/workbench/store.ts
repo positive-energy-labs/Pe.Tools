@@ -71,7 +71,7 @@ export function createChatStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   api: ChatApi;
   search: ChatSearch;
-  land: (api: ThreadLandingApi) => Promise<string>;
+  land: (api: ThreadLandingApi) => Promise<string | undefined>;
 }) {
   const core = createRouteStoreCore("chat", deps.registry);
   const threadId = deps.search.thread ?? "";
@@ -256,6 +256,7 @@ function workbenchStream(api: ChatApi, threadId: string) {
     return Effect.acquireRelease(
       Effect.tryPromise({
         try: async () => {
+          if (!threadId) return unsubscribe;
           await hydrate();
           unsubscribe = await api.subscribe(
             (event) => {
