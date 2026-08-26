@@ -644,7 +644,11 @@ export function createTakeoffStore(deps: {
       (views) =>
         views
           .filter((view) => view.regions > 0)
-          .map((view) => ({ id: view.name, label: view.name, sub: view.level })),
+          .map((view) => ({
+            id: view.name,
+            label: view.name,
+            sub: `${view.level} · ${view.regions} region${view.regions === 1 ? "" : "s"}`,
+          })),
       "read",
       { needs: TAKEOFF_LINKS[2]!.needs },
     ),

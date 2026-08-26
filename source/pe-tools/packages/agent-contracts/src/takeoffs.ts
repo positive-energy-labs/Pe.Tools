@@ -215,17 +215,6 @@ export const partitionRunSchema = z.object({
 });
 export type PartitionRun = z.infer<typeof partitionRunSchema>;
 
-export const registryStateSchema = z.object({
-  systems: modelStatusSchema.shape.systems,
-  appeared: z.array(z.string()),
-  vanished: modelStatusSchema.shape.systems,
-  renameCandidates: z.array(
-    z.object({ fromGuid: z.string(), fromTag: z.string(), toTag: z.string() }),
-  ),
-  needsHuman: z.boolean(),
-});
-export type RegistryState = z.infer<typeof registryStateSchema>;
-
 export const worldSchema = z.object({
   docName: z.string(),
   r10Path: z.string().nullable(),

@@ -8,7 +8,6 @@ import {
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import {
-  produceTakeoffSnapshot,
   projectTakeoffSnapshot,
   projectTakeoffViews,
   takeoffProjectIndexRequest,
@@ -47,14 +46,10 @@ export function createTakeoffsCommandHandlers(
           systemTag: zoneMeta(zone.blob).systemTag,
         })),
       });
-      await produceTakeoffSnapshot(
-        () => readSnapshot(caller),
-        async (snapshot) => {
-          const document = ctx.getDoc();
-          document.snapshot = snapshot;
-          await ctx.setDoc(document);
-        },
-      );
+      const snapshot = await readSnapshot(caller);
+      const document = ctx.getDoc();
+      document.snapshot = snapshot;
+      await ctx.setDoc(document);
       return { adopted: adopted.adopted.length };
     },
 
@@ -76,14 +71,10 @@ export function createTakeoffsCommandHandlers(
           loops: zone.zone.loops.map((loop) => loop.map(([x, y]) => [x, y])),
         });
       }
-      await produceTakeoffSnapshot(
-        () => readSnapshot(caller),
-        async (snapshot) => {
-          const document = ctx.getDoc();
-          document.snapshot = snapshot;
-          await ctx.setDoc(document);
-        },
-      );
+      const snapshot = await readSnapshot(caller);
+      const document = ctx.getDoc();
+      document.snapshot = snapshot;
+      await ctx.setDoc(document);
       return { captured: prepared.level, partitioned: zones.length };
     },
 

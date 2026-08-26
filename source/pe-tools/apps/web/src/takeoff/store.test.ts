@@ -331,7 +331,7 @@ describe("takeoff route store", () => {
     await store.actions.settle(store.atoms.viewFacts);
 
     expect(store.atoms.registry.get(store.feeds.views).options).toEqual([
-      { id: bound.views[0], label: bound.views[0], sub: "Main" },
+      { id: bound.views[0], label: bound.views[0], sub: "Main · 1 region" },
     ]);
     store.dispose();
   });

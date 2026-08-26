@@ -27,8 +27,6 @@ using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.RevitData.Takeoffs;
-using Serilog;
-using System.Diagnostics;
 using System.Globalization;
 using RevitDocument = Autodesk.Revit.DB.Document;
 
@@ -39,8 +37,6 @@ namespace Pe.Revit.Global.Services.Host;
 /// </summary>
 internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : IRevitDataService {
     private readonly RevitTaskQueue _revitTaskQueue = revitTaskQueue;
-    private readonly string _takeoffTarget =
-        BridgeSessionIdentity.Resolve().SdkSessionId ?? $"pid:{Process.GetCurrentProcess().Id}";
 
     public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(
         LoadedFamiliesCatalogRequest request, CancellationToken cancellationToken
@@ -316,18 +312,18 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
     private TakeoffCapturePrepared PrepareTakeoffCaptureCore(TakeoffPrepareCaptureRequest request) =>
         RunTakeoff(
             RevitBridgeOps.TakeoffPrepareCapture.Definition,
-            document => TakeoffAtlas.PrepareCapture(document, request, LogTakeoffProgress),
+            document => TakeoffAtlas.PrepareCapture(document, request),
             "Pe Prepare Takeoff Capture");
 
     private TakeoffCaptureResult DetectTakeoffCaptureCore(TakeoffDetectCaptureRequest request) =>
         RunTakeoff(
             RevitBridgeOps.TakeoffDetectCapture.Definition,
-            document => TakeoffAtlas.DetectCapture(document, request, LogTakeoffProgress));
+            document => TakeoffAtlas.DetectCapture(document, request));
 
     private TakeoffPartitionResult PartitionTakeoffCore(TakeoffPartitionRequest request) =>
         RunTakeoff(
             RevitBridgeOps.TakeoffPartition.Definition,
-            document => TakeoffAtlas.Partition(document, request, LogTakeoffProgress),
+            document => TakeoffAtlas.Partition(document, request),
             "Pe Partition Takeoff Zone");
 
     private TakeoffWriteResult WriteTakeoffDecisionsCore(TakeoffDecisionsRequest request) =>
@@ -349,6 +345,16 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
             "Pe Write Takeoff Room Type");
 
     private TakeoffReadingFrom CreateTakeoffReadingFrom(RevitDocument document) {
+        var target = BridgeSessionIdentity.Resolve().SdkSessionId;
+        if (string.IsNullOrWhiteSpace(target))
+            throw BridgeOperationExceptions.Conflict(
+                "The Revit session has no SDK session ID.",
+                [BridgeOperationExceptions.Issue(
+                    "$",
+                    "TakeoffTargetRequired",
+                    "The Revit session has no SDK session ID.",
+                    "Start Revit through pe-revit session and retry.")]);
+
         var documentId = document.GetCloudModelGuid();
         if (string.IsNullOrWhiteSpace(documentId)) {
             var path = document.GetDocumentPath();
@@ -364,19 +370,14 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
 
         return new TakeoffReadingFrom(
-            this._takeoffTarget,
+            target,
             documentId,
             GetDocumentVersionToken(document),
             DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
     }
 
-    private static string? GetDocumentVersionToken(RevitDocument document) {
-        try {
-            return RevitDocument.GetDocumentVersion(document).VersionGUID.ToString("D");
-        } catch {
-            return null;
-        }
-    }
+    private static string GetDocumentVersionToken(RevitDocument document) =>
+        RevitDocument.GetDocumentVersion(document).VersionGUID.ToString("D");
 
     private static T RunTakeoff<T>(
         HostOperationDefinition operation,
@@ -410,9 +411,6 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
                 $"Verify the active project and request for '{operation.Key}', then retry.");
         }
     }
-
-    private static void LogTakeoffProgress(string message) =>
-        Log.Information("Takeoff operation: {Message}", message);
 
     private LoadedFamiliesCatalogData GetLoadedFamiliesCatalogCore(LoadedFamiliesCatalogRequest request) {
         var document = GetSupportedActiveDocument(RevitBridgeOps.LoadedFamiliesCatalog.Definition);

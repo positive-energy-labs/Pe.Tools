@@ -127,21 +127,21 @@ public static class TakeoffAtlas
     public static TakeoffCapturePrepared PrepareCapture(
         Document doc,
         TakeoffPrepareCaptureRequest request,
-        Action<string> log)
+        Action<string>? log = null)
     {
         var view = FindView(doc, request.View);
         string level = view.GenLevel?.Name
                        ?? throw new InvalidOperationException($"view '{request.View}' has no level");
-        RoomTakeoff.Prepare(doc, new TakeoffOptions { LevelNameContains = level }, log);
+        RoomTakeoff.Prepare(doc, new TakeoffOptions { LevelNameContains = level }, log ?? (static _ => { }));
         return new TakeoffCapturePrepared(level);
     }
 
     public static TakeoffCaptureResult DetectCapture(
         Document doc,
         TakeoffDetectCaptureRequest request,
-        Action<string> log)
+        Action<string>? log = null)
     {
-        var result = RoomTakeoff.Detect(doc, request.Level, log);
+        var result = RoomTakeoff.Detect(doc, request.Level, log ?? (static _ => { }));
         string token = string.Concat(result.LevelName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '_'));
         string replay = Path.Combine(RoomTakeoff.DefaultArtifactDir, $"replay_{token}.bin");
         if (!File.Exists(replay))
@@ -168,8 +168,9 @@ public static class TakeoffAtlas
     public static TakeoffPartitionResult Partition(
         Document doc,
         TakeoffPartitionRequest request,
-        Action<string> log)
+        Action<string>? log = null)
     {
+        log ??= static _ => { };
         var zone = new ZoneScope { Name = request.ZoneName, Loops = request.Loops };
         var snapshot = DetectSnapshot.Load(Environment.ExpandEnvironmentVariables(request.ReplayPath));
         log($"[partition] replaying zone '{request.ZoneName}'");

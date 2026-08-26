@@ -9,7 +9,6 @@ import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
 import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
-  produceTakeoffSnapshot,
   takeoffProjectIndexRequest,
 } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import type { SessionEvent, SessionSource, TakeoffHost } from "#/takeoff/store";
@@ -181,15 +180,12 @@ export const createHostSessionSource = (): SessionSource => ({
 
 export const createLiveTakeoffHost = (): TakeoffHost => ({
   fixture: false,
-  readSnapshot(session, document, views, write) {
+  async readSnapshot(session, document, views, write) {
     const scope = { bridgeSessionId: session.sessionId };
-    return produceTakeoffSnapshot(
-      () =>
-        callHostRpc("takeoffs.snapshot", undefined, scope).then((response) =>
-          projectTakeoffSnapshot(response, document.title, views),
-        ),
-      write,
-    );
+    const response = await callHostRpc("takeoffs.snapshot", undefined, scope);
+    const snapshot = projectTakeoffSnapshot(response, document.title, views);
+    await write(snapshot);
+    return snapshot;
   },
   async readViews(session) {
     const scope = { bridgeSessionId: session.sessionId };

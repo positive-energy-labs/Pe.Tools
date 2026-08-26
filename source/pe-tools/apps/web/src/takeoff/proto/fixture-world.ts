@@ -7,7 +7,6 @@
  */
 import type { SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { World, WorldRoom, WorldZone } from "#/takeoff/world";
-import { produceTakeoffSnapshot } from "../../../../../packages/mcps/src/shared/takeoff-ops.ts";
 
 import { loadMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
 import { mockWorld, type MockRoom, type MockWorld, type MockZone } from "./mock";
@@ -87,20 +86,20 @@ export const projectFixtureWorld = (fixture: MockWorld): World => ({
 
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
-  readSnapshot(session, document, _views, write) {
-    return produceTakeoffSnapshot(async () => {
-      const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
-      return {
-        from: {
-          target: session.sdkSessionId ?? `pid:${session.processId}`,
-          documentId: document.documentId,
-          observedAt: new Date().toISOString(),
-        },
-        world,
-        zoneFrs: [],
-        regionsByZone: {},
-      };
-    }, write);
+  async readSnapshot(session, document, _views, write) {
+    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
+    const snapshot = {
+      from: {
+        target: session.sdkSessionId ?? `pid:${session.processId}`,
+        documentId: document.documentId,
+        observedAt: new Date().toISOString(),
+      },
+      world,
+      zoneFrs: [],
+      regionsByZone: {},
+    };
+    await write(snapshot);
+    return snapshot;
   },
   async readViews() {
     const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));

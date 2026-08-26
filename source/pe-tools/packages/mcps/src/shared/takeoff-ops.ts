@@ -156,15 +156,6 @@ export function projectTakeoffSnapshot(
   };
 }
 
-export async function produceTakeoffSnapshot(
-  read: () => Promise<TakeoffSnapshot>,
-  write: (snapshot: TakeoffSnapshot) => Promise<unknown>,
-): Promise<TakeoffSnapshot> {
-  const snapshot = await read();
-  await write(snapshot);
-  return snapshot;
-}
-
 const points = (values: number[][]): [number, number][] =>
   values.map(([x, y]) => {
     if (x === undefined || y === undefined) throw Error("Takeoff boundary point requires x and y");

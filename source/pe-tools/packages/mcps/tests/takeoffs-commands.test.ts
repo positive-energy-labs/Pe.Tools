@@ -3,8 +3,7 @@ import type { TakeoffsRouteDocument } from "@pe/agent-contracts";
 import { createTakeoffsCommandHandlers } from "../src/pea/takeoffs-commands.ts";
 
 const rawSnapshot = {
-  status: { doc: "Harness.rvt", systems: [], regions: [] },
-  views: [{ name: "Zoning", level: "Main", regions: 1 }],
+  status: { systems: [] },
   zoneFrs: [
     {
       elementId: 42,
@@ -46,11 +45,26 @@ test("takeoffs audit produces and sets the document snapshot", async () => {
             },
             snapshot: rawSnapshot,
           }
-        : body.key === "takeoffs.prepare-capture"
-          ? { level: "Main" }
-          : body.key === "takeoffs.detect-capture"
-            ? { level: "Main", replayPath: "replay.bin", rooms: 1, totalSqft: 100 }
-            : {};
+        : body.key === "revit.context.document-session"
+          ? { activeDocument: { title: "Harness.rvt" } }
+          : body.key === "revit.catalog.project-index"
+            ? {
+                views: [
+                  {
+                    handle: { elementId: 7 },
+                    name: "Zoning",
+                    viewType: "FloorPlan",
+                    levelName: "Main",
+                  },
+                ],
+              }
+            : body.key === "takeoffs.views"
+              ? { views: [{ elementId: 7, regions: 1 }] }
+              : body.key === "takeoffs.prepare-capture"
+                ? { level: "Main" }
+                : body.key === "takeoffs.detect-capture"
+                  ? { level: "Main", replayPath: "replay.bin", rooms: 1, totalSqft: 100 }
+                  : {};
     return new Response(JSON.stringify(data), {
       status: 200,
       headers: { "content-type": "application/json" },
