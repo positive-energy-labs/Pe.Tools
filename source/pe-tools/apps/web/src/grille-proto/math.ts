@@ -134,3 +134,22 @@ export function frac(x: number): string {
 }
 
 export const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+
+/** Rib width below which the option is not on the table. LORE (no fabricator has ruled). */
+export const MIN_RIB = 1 / 4;
+
+/**
+ * Every (opening width × count) on the 1/16″ grid that fills the middle with a rib ≥ MIN_RIB.
+ * The rib is DERIVED to close the geometry, so each point is buildable as drawn.
+ */
+export function enumerate(base: GrilleInput): Grille[] {
+  const out: Grille[] = [];
+  for (let n = 1; n <= 12; n++)
+    for (let o = 4; o <= 32; o++) {
+      const opening = o / 16;
+      const rib = n === 1 ? 0 : ribToFill({ ...base, opening, openings: n });
+      if (rib < 0 || (n > 1 && rib < MIN_RIB)) continue;
+      out.push(solve({ ...base, opening, openings: n, rib }));
+    }
+  return out;
+}
