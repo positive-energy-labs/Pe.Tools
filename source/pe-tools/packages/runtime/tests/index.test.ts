@@ -151,37 +151,12 @@ test(
 );
 
 test(
-  "Pea persists exact native rules across processes and preserves explicit overrides",
+  "Pea rehydrates exact thread permissions across processes",
   async () => {
-    const probe = await createPermissionProbe("pea-permission-process-");
+    const probe = await createPermissionProbe();
     try {
-      await probe.run("seed-valid");
-      await probe.run("verify-valid");
-    } finally {
-      await probe.dispose();
-    }
-  },
-  runtimeTestTimeout,
-);
-
-test("Pea reopens malformed, partial, and yolo native records as read-only", async () => {
-  const probe = await createPermissionProbe("pea-permission-invalid-");
-  try {
-    for (const recordCase of ["malformed", "partial", "yolo"]) {
-      await probe.run("seed-invalid", recordCase);
-      await probe.run("verify-invalid", recordCase);
-    }
-  } finally {
-    await probe.dispose();
-  }
-}, 120_000);
-
-test(
-  "Pea closes and reopens in one process with readable data",
-  async () => {
-    const probe = await createPermissionProbe("pea-permission-reopen-");
-    try {
-      await probe.run("same-process-reopen");
+      await probe.run("seed");
+      await probe.run("verify");
     } finally {
       await probe.dispose();
     }
@@ -192,23 +167,53 @@ test(
 test(
   "Pea aborts on durable or active native readback mismatch",
   async () => {
-    const probe = await createPermissionProbe("pea-permission-mismatch-");
+    const root = await mkdtemp(path.join(os.tmpdir(), "pea-permission-mismatch-"));
+    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
+    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
+    let prototype: { createSession: (...args: any[]) => Promise<any> } | undefined;
+    let createSession: ((...args: any[]) => Promise<any>) | undefined;
     try {
-      await probe.run("durable-mismatch");
-      await probe.run("native-mismatch");
-    } finally {
-      await probe.dispose();
-    }
-  },
-  runtimeTestTimeout,
-);
+      const bootstrap = await createPeaRuntime({ workspaceRoot: path.join(root, "prototype") });
+      prototype = Object.getPrototypeOf(bootstrap.controller);
+      createSession = prototype!.createSession;
+      await bootstrap.close?.();
 
-test(
-  "Pea state root deletes after its owning child closes and exits",
-  async () => {
-    const probe = await createPermissionProbe("pea-child-close-");
-    await probe.run("close");
-    await probe.dispose();
+      for (const mode of ["durable", "active"] as const) {
+        prototype!.createSession = async function (...args) {
+          prototype!.createSession = createSession!;
+          const session = await createSession!.apply(this, args);
+          if (mode === "durable") {
+            const setSetting = session.thread.setSetting.bind(session.thread);
+            session.thread.setSetting = async (request: { key: string; value: unknown }) => {
+              await setSetting(request);
+              await setSetting({
+                ...request,
+                value: { yolo: false, permissionRules: expectedPermissionRules["read-only"] },
+              });
+            };
+          } else {
+            const setState = session.state.set.bind(session.state);
+            session.state.set = async (updates: Record<string, unknown>) => {
+              await setState(updates);
+              await setState({
+                permissionRules: {
+                  ...expectedPermissionRules.ask,
+                  tools: { script_execute: "deny" },
+                },
+              });
+            };
+          }
+          return session;
+        };
+        await expect(createPeaRuntime({ workspaceRoot: path.join(root, mode) })).rejects.toThrow(
+          "Pea permission state did not persist exactly.",
+        );
+      }
+    } finally {
+      if (prototype && createSession) prototype.createSession = createSession;
+      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
+    }
   },
   runtimeTestTimeout,
 );
@@ -300,18 +305,10 @@ test(
   runtimeTestTimeout,
 );
 
-type PermissionProbeMode =
-  | "seed-valid"
-  | "verify-valid"
-  | "seed-invalid"
-  | "verify-invalid"
-  | "same-process-reopen"
-  | "durable-mismatch"
-  | "native-mismatch"
-  | "close";
+type PermissionProbeMode = "seed" | "verify";
 
-async function createPermissionProbe(prefix: string) {
-  const root = await mkdtemp(path.join(os.tmpdir(), prefix));
+async function createPermissionProbe() {
+  const root = await mkdtemp(path.join(os.tmpdir(), "pea-permissions-"));
   const scriptPath = path.join(root, "probe.ts");
   const runtimeUrl = new URL("../src/pea-runtime.ts", import.meta.url).href;
   const jitiEntry = createRequire(import.meta.url).resolve("jiti");
@@ -319,8 +316,7 @@ async function createPermissionProbe(prefix: string) {
   await writeFile(scriptPath, permissionProbeSource(runtimeUrl), "utf8");
 
   return {
-    run: (mode: PermissionProbeMode, recordCase?: string) =>
-      runPermissionProbe({ jitiCli, mode, recordCase, root, scriptPath }),
+    run: (mode: PermissionProbeMode) => runPermissionProbe({ jitiCli, mode, root, scriptPath }),
     dispose: () => rm(root, { recursive: true }),
   };
 }
@@ -333,113 +329,66 @@ import { createPeaRuntime } from ${JSON.stringify(runtimeUrl)};
 
 const settingKey = ${JSON.stringify(permissionSettingKey)};
 const expected = ${JSON.stringify(expectedPermissionRules)};
-const mode = process.env.PEA_WAVE3A_PROBE_MODE;
-const recordCase = process.env.PEA_WAVE3A_RECORD_CASE;
-const root = process.env.PEA_WAVE3A_PROBE_ROOT;
-assert.ok(mode && root);
-const workspaceRoot = path.join(root, recordCase ?? "workspace");
-const trustedRecord = {
-  yolo: false,
-  permissionRules: { ...expected.trusted, tools: { script_execute: "deny" } },
+const mode = process.env.PEA_WAVE3A_PROBE_MODE; const root = process.env.PEA_WAVE3A_PROBE_ROOT;
+assert.ok(mode && root); const workspace = (name) => path.join(root, name);
+const trustedRecord = { yolo: false, permissionRules: { ...expected.trusted, tools: { script_execute: "deny" } } };
+const readOnlyRecord = { yolo: false, permissionRules: expected["read-only"] }; const invalidRecords = {
+  malformed: { yolo: false, permissionRules: { categories: expected.trusted.categories, tools: { script_execute: "wat" } } },
+  partial: { yolo: false, permissionRules: { categories: { read: "allow" }, tools: {} } },
+  yolo: { yolo: true, permissionRules: expected.trusted },
 };
 
-function sessionOf(runtime) {
-  assert.ok(runtime.session);
-  return runtime.session;
-}
+function sessionOf(runtime) { assert.ok(runtime.session); return runtime.session; }
 
-async function controllerPrototype() {
-  const runtime = await createPeaRuntime({ workspaceRoot: path.join(root, "prototype") });
-  const prototype = Object.getPrototypeOf(runtime.controller);
-  await runtime.close?.();
-  return prototype;
-}
-
-if (mode === "seed-valid") {
-  const runtime = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot });
-  await sessionOf(runtime).thread.setSetting({ key: settingKey, value: trustedRecord });
-  await runtime.close?.();
-} else if (mode === "verify-valid") {
-  const runtime = await createPeaRuntime({ workspaceRoot });
+if (mode === "seed") {
+  const runtime = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot: workspace("threads") });
   const session = sessionOf(runtime);
+  const trustedThreadId = session.thread.requireId(); await session.thread.rename({ title: "trusted" });
+  await session.thread.setSetting({ key: settingKey, value: trustedRecord });
+  await session.state.set({ yolo: false, permissionRules: trustedRecord.permissionRules });
+  const readOnlyThread = await session.thread.create({ title: "read-only" });
+  await session.thread.switch({ threadId: trustedThreadId }); await session.thread.switch({ threadId: readOnlyThread.id });
+  await session.thread.setSetting({ key: settingKey, value: readOnlyRecord });
+  await session.state.set({ yolo: false, permissionRules: readOnlyRecord.permissionRules });
+  await runtime.close?.();
+
+  for (const [name, record] of Object.entries(invalidRecords)) {
+    const invalid = await createPeaRuntime({ workspaceRoot: workspace(name) });
+    await sessionOf(invalid).thread.setSetting({ key: settingKey, value: record });
+    await invalid.close?.();
+  }
+} else if (mode === "verify") {
+  const runtime = await createPeaRuntime({ workspaceRoot: workspace("threads") });
+  const session = sessionOf(runtime);
+  const threads = await session.thread.list();
+  const trusted = threads.find((thread) => thread.title === "trusted");
+  const readOnly = threads.find((thread) => thread.title === "read-only");
+  assert.ok(trusted && readOnly);
+
+  assert.equal(session.thread.getId(), readOnly.id);
+  assert.deepStrictEqual(session.permissions.getRules(), readOnlyRecord.permissionRules);
+  assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), readOnlyRecord);
+  await session.thread.switch({ threadId: trusted.id });
   assert.deepStrictEqual(session.permissions.getRules(), trustedRecord.permissionRules);
   assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), trustedRecord);
-  assert.equal(session.state.get().yolo, false);
-  await runtime.close?.();
-} else if (mode === "same-process-reopen") {
-  const first = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot });
-  await sessionOf(first).thread.setSetting({ key: settingKey, value: trustedRecord });
-  await first.close?.();
-  await first.close?.();
-  const reopened = await createPeaRuntime({ accessLevel: "ask", workspaceRoot });
-  const session = sessionOf(reopened);
-  const expectedRecord = {
-    yolo: false,
-    permissionRules: { ...expected.ask, tools: trustedRecord.permissionRules.tools },
-  };
-  assert.deepStrictEqual(session.permissions.getRules(), expectedRecord.permissionRules);
-  assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), expectedRecord);
-  await reopened.close?.();
-} else if (mode === "seed-invalid") {
-  const records = {
-    malformed: {
-      yolo: false,
-      permissionRules: {
-        categories: expected.trusted.categories,
-        tools: { script_execute: "wat" },
-      },
-    },
-    partial: {
-      yolo: false,
-      permissionRules: { categories: { read: "allow" }, tools: {} },
-    },
-    yolo: { yolo: true, permissionRules: expected.trusted },
-  };
-  assert.ok(recordCase && recordCase in records);
-  const runtime = await createPeaRuntime({ workspaceRoot });
-  await sessionOf(runtime).thread.setSetting({ key: settingKey, value: records[recordCase] });
-  await runtime.close?.();
-} else if (mode === "verify-invalid") {
-  const runtime = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot });
-  const session = sessionOf(runtime);
-  const readOnlyRecord = { yolo: false, permissionRules: expected["read-only"] };
-  assert.deepStrictEqual(session.permissions.getRules(), expected["read-only"]);
+  assert.equal(session.resolveToolApproval("script_execute"), "deny");
+  await session.thread.switch({ threadId: readOnly.id });
+  assert.deepStrictEqual(session.permissions.getRules(), readOnlyRecord.permissionRules);
   assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), readOnlyRecord);
-  assert.equal(session.state.get().yolo, false);
   await runtime.close?.();
-} else if (mode === "durable-mismatch" || mode === "native-mismatch") {
-  const prototype = await controllerPrototype();
-  const createSession = prototype.createSession;
-  prototype.createSession = async function (...args) {
-    prototype.createSession = createSession;
-    const session = await createSession.apply(this, args);
-    if (mode === "durable-mismatch") {
-      const setSetting = session.thread.setSetting.bind(session.thread);
-      session.thread.setSetting = async (request) => {
-        await setSetting(request);
-        await setSetting({ ...request, value: { yolo: false, permissionRules: expected["read-only"] } });
-      };
-    } else {
-      const setState = session.state.set.bind(session.state);
-      session.state.set = async (updates) => {
-        await setState(updates);
-        await setState({ permissionRules: { ...expected.ask, tools: { script_execute: "deny" } } });
-      };
-    }
-    return session;
-  };
-  try {
-    await assert.rejects(
-      () => createPeaRuntime({ workspaceRoot }),
-      /Pea permission state did not persist exactly/,
+  await runtime.close?.();
+
+  for (const name of Object.keys(invalidRecords)) {
+    const invalid = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot: workspace(name) });
+    const invalidSession = sessionOf(invalid);
+    assert.deepStrictEqual(invalidSession.permissions.getRules(), readOnlyRecord.permissionRules);
+    assert.deepStrictEqual(
+      await invalidSession.thread.getSetting({ key: settingKey }),
+      readOnlyRecord,
     );
-  } finally {
-    prototype.createSession = createSession;
+    assert.equal(invalidSession.state.get().yolo, false);
+    await invalid.close?.();
   }
-} else if (mode === "close") {
-  const runtime = await createPeaRuntime({ workspaceRoot });
-  await runtime.close?.();
-  await runtime.close?.();
 } else {
   throw new Error(\`Unknown probe mode '\${mode}'.\`);
 }
@@ -449,7 +398,6 @@ if (mode === "seed-valid") {
 async function runPermissionProbe(options: {
   jitiCli: string;
   mode: PermissionProbeMode;
-  recordCase?: string;
   root: string;
   scriptPath: string;
 }): Promise<void> {
@@ -460,7 +408,6 @@ async function runPermissionProbe(options: {
       PE_TOOLS_STATE_DIR: path.join(options.root, "state"),
       PEA_WAVE3A_PROBE_MODE: options.mode,
       PEA_WAVE3A_PROBE_ROOT: options.root,
-      ...(options.recordCase ? { PEA_WAVE3A_RECORD_CASE: options.recordCase } : {}),
     },
     signal: AbortSignal.timeout(runtimeTestTimeout),
     stdio: ["ignore", "pipe", "pipe"],
