@@ -45,7 +45,6 @@ public class RequestService {
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
-            null,
             "field-options",
             request.ModuleKey,
             request.RootKey,
@@ -69,7 +68,6 @@ public class RequestService {
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
-            null,
             "parameter-catalog",
             request.ModuleKey,
             null,
@@ -92,7 +90,6 @@ public class RequestService {
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
-            null,
             "loaded-families-filter-field-options",
             nameof(LoadedFamiliesFilter),
             null,
@@ -121,7 +118,6 @@ public class RequestService {
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
-            null,
             "value-domain-options",
             request.SourceKey,
             null,
@@ -139,14 +135,15 @@ public class RequestService {
     }
 
     [Op("settings.schema", Does = "Read a settings schema from the connected Revit runtime.", Title = "Get Schema", Finds = ["schema", "settings", "profile", "profiles", "module", "family-foundry"])]
-    public Task<SchemaData> GetSchemaAsync(SchemaRequest request, RevitDocument _, CancellationToken cancellationToken) =>
+    public Task<SchemaData> GetSchemaAsync(SchemaRequest request, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var binding = this._moduleRegistry.ResolveRootBinding(request.ModuleKey, request.RootKey);
                 var schema = RevitJsonSchemaFactory.CreateEditorSchemaData(
                     binding.SettingsType,
                     SettingsRuntimeMode.LiveDocument,
-                    false
+                    false,
+                    document.Value
                 );
 
                 return new SchemaData(schema.SchemaJson, schema.FragmentSchemaJson);
@@ -181,13 +178,14 @@ public class RequestService {
     }
 
     [Op("revit.catalog.loaded-families.filter-schema", Does = "Read the filter schema for loaded-family catalog and matrix queries.", Title = "Get Loaded Families Filter Schema", Finds = ["loaded-families", "families", "filter", "schema"], Tier = OpTier.Expert)]
-    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(NoRequest _, RevitDocument __, CancellationToken cancellationToken) =>
+    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(NoRequest _, RevitDocument document, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var schema = RevitJsonSchemaFactory.CreateEditorSchemaData(
                     typeof(LoadedFamiliesFilter),
                     SettingsRuntimeMode.LiveDocument,
-                    false
+                    false,
+                    document.Value
                 );
 
                 return new SchemaData(schema.SchemaJson, schema.FragmentSchemaJson);
@@ -460,7 +458,6 @@ public class RequestService {
     );
 
     private static string BuildThrottleKey(
-        string? connectionId,
         string endpoint,
         string moduleKey,
         string? rootKey,
@@ -475,8 +472,7 @@ public class RequestService {
                     .OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .Select(pair => $"{pair.Key}={pair.Value}")
             );
-        return
-            $"{connectionId ?? "no-connection"}:{endpoint}:{moduleKey}:{rootKey ?? string.Empty}:{propertyPath ?? string.Empty}:{siblingSignature}";
+        return $"{endpoint}:{moduleKey}:{rootKey ?? string.Empty}:{propertyPath ?? string.Empty}:{siblingSignature}";
     }
 
     private static void LogThrottleDecision(

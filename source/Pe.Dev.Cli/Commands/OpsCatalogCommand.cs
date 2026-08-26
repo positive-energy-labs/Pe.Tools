@@ -85,21 +85,7 @@ internal static class OpsCatalogCommand {
                     continue;
 
                 var attribute = OpRegistry.ReadAttribute(data);
-                var requestType = ResolveRuntimeType(method.GetParameters()[0].ParameterType);
-                var responseMetadataType = method.ReturnType.IsGenericType
-                                           && method.ReturnType.GetGenericTypeDefinition().FullName == typeof(Task<>).FullName
-                    ? method.ReturnType.GetGenericArguments()[0]
-                    : method.ReturnType;
-                var parameters = method.GetParameters();
-                var documentParameter = parameters.Length > 1
-                                        && parameters[1].ParameterType.FullName != typeof(CancellationToken).FullName
-                    ? parameters[1].ParameterType
-                    : null;
-                var definition = OpRegistry.Define(
-                    attribute,
-                    requestType,
-                    ResolveRuntimeType(responseMetadataType),
-                    OpRegistry.GetNeeds(documentParameter));
+                var definition = OpRegistry.Define(attribute, method, ResolveRuntimeType);
                 if (!definitions.TryAdd(definition.Key, definition))
                     throw new InvalidOperationException($"Bridge op '{definition.Key}' is registered twice.");
             }

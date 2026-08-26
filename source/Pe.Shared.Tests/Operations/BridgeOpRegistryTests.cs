@@ -1,3 +1,4 @@
+using Pe.Revit.Operations;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 
@@ -5,8 +6,6 @@ namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class OpRegistryTests {
-    private readonly record struct ProjectDocument(object Value);
-
     [Op(
         "test.registry.probe",
         Does = "Prove attributed handlers are discovered.",
@@ -15,8 +14,14 @@ public sealed class OpRegistryTests {
     )]
     private static SchemaData Handle(NoRequest _) => null!;
 
+    [Op("test.revit-document", Does = "Prove presence-based Revit document needs.", IsPublic = false)]
+    private static SchemaData HandleRevitDocument(NoRequest _, RevitDocument document) => null!;
+
     [Op("test.project-document", Does = "Prove presence-based project document needs.", IsPublic = false)]
-    private static SchemaData HandleProject(NoRequest _, ProjectDocument __) => null!;
+    private static SchemaData HandleProjectDocument(NoRequest _, ProjectDocument document) => null!;
+
+    [Op("test.family-document", Does = "Prove presence-based family document needs.", IsPublic = false)]
+    private static SchemaData HandleFamilyDocument(NoRequest _, FamilyDocument document) => null!;
 
     [Test]
     public void Discovers_attributed_handlers_and_registration_is_idempotent() {
@@ -27,6 +32,16 @@ public sealed class OpRegistryTests {
         Assert.That(OpRegistry.TryGet("test.registry.probe", out var op), Is.True);
         Assert.That(op.Definition.DisplayName, Is.EqualTo("Registry Probe"));
         Assert.That(op.Definition.IsPublic, Is.False);
+        Assert.That(op.Thread, Is.EqualTo(OpThread.Any));
+        Assert.That(OpRegistry.TryGet("test.revit-document", out var revitOp), Is.True);
+        Assert.That(revitOp.Definition.Needs, Is.EqualTo(OpNeeds.Document));
+        Assert.That(revitOp.Thread, Is.EqualTo(OpThread.Revit));
+        Assert.That(OpRegistry.TryGet("test.project-document", out var projectOp), Is.True);
+        Assert.That(projectOp.Definition.Needs, Is.EqualTo(OpNeeds.ProjectDocument));
+        Assert.That(projectOp.Thread, Is.EqualTo(OpThread.Revit));
+        Assert.That(OpRegistry.TryGet("test.family-document", out var familyOp), Is.True);
+        Assert.That(familyOp.Definition.Needs, Is.EqualTo(OpNeeds.FamilyDocument));
+        Assert.That(familyOp.Thread, Is.EqualTo(OpThread.Revit));
     }
 
     [Test]

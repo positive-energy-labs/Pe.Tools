@@ -94,7 +94,7 @@ internal sealed class RevitDataRequestService {
         ? Task.FromCanceled<ParametersServiceCacheData>(cancellationToken)
         : ParametersServiceCache.RefreshAsync();
 
-    [Op("revit.apply.command.execute", Does = "Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post.", Title = "Execute Ribbon Command", Finds = ["command", "execute", "postable", "ribbon", "palette", "post", "trigger"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"searchText\": \"sheet\" }")]
+    [Op("revit.apply.command.execute", Does = "Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post.", Title = "Execute Ribbon Command", Finds = ["command", "execute", "postable", "ribbon", "palette", "post", "trigger"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"searchText\": \"sheet\" }", Thread = OpThread.Revit)]
     private static RibbonCommandExecuteData ExecuteRibbonCommandCore(RibbonCommandExecuteRequest request) {
         var uiApp = RevitUiSession.CurrentUIApplication;
 
@@ -935,7 +935,7 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("revit.context.document-session", Does = "Read open, active, and selected document session context from connected Revit. Use only when the question spans multiple open documents or there is no active document; revit.context.summary covers single-document orientation.", Title = "Get Revit Document Session Context", Finds = ["document", "session", "active-document", "open-documents"])]
+    [Op("revit.context.document-session", Does = "Read open, active, and selected document session context from connected Revit. Use only when the question spans multiple open documents or there is no active document; revit.context.summary covers single-document orientation.", Title = "Get Revit Document Session Context", Finds = ["document", "session", "active-document", "open-documents"], Thread = OpThread.Revit)]
     private RevitDocumentSessionContextData GetRevitDocumentSessionContextCore(NoRequest _) {
         try {
             return CreateDocumentSessionContext();

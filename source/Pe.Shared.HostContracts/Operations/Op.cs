@@ -25,6 +25,11 @@ public enum OpTier {
     Expert
 }
 
+public enum OpThread {
+    Any,
+    Revit
+}
+
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class OpAttribute(string key) : Attribute {
     public string Key { get; } = key;
@@ -36,6 +41,7 @@ public sealed class OpAttribute(string key) : Attribute {
     public OpTier Tier { get; init; } = OpTier.Escalation;
     public string? Example { get; init; }
     public bool IsPublic { get; init; } = true;
+    public OpThread Thread { get; init; } = OpThread.Any;
 }
 
 public sealed class Op {
@@ -53,16 +59,16 @@ public sealed class Op {
     private readonly MethodInfo _method;
     private readonly object? _target;
 
-    internal Op(HostOperationDefinition definition, MethodInfo method, object? target) {
+    internal Op(HostOperationDefinition definition, MethodInfo method, object? target, OpThread thread) {
         this.Definition = definition;
         this._method = method;
         this._target = target;
+        this.Thread = definition.Needs == OpNeeds.Nothing ? thread : OpThread.Revit;
     }
 
     public HostOperationDefinition Definition { get; }
-    public Type HandlerType => this._method.DeclaringType!;
     public string Key => this.Definition.Key;
-    public bool ReturnsTask => typeof(Task).IsAssignableFrom(this._method.ReturnType);
+    public OpThread Thread { get; }
 
     internal bool SameHandler(Op other) => this._method == other._method;
 
@@ -199,35 +205,52 @@ public static class OpRegistry {
             Cost = (OpCost)EnumValue(nameof(OpAttribute.Cost), (int)OpCost.Cheap),
             Tier = (OpTier)EnumValue(nameof(OpAttribute.Tier), (int)OpTier.Escalation),
             Example = Named(nameof(OpAttribute.Example)) as string,
-            IsPublic = Named(nameof(OpAttribute.IsPublic)) as bool? ?? true
+            IsPublic = Named(nameof(OpAttribute.IsPublic)) as bool? ?? true,
+            Thread = (OpThread)EnumValue(nameof(OpAttribute.Thread), (int)OpThread.Any)
         };
     }
 
     private static Op Create(OpAttribute attribute, MethodInfo method, object? target) {
+        return new Op(Define(attribute, method), method, target, attribute.Thread);
+    }
+
+    public static HostOperationDefinition Define(
+        OpAttribute attribute,
+        MethodInfo method,
+        Func<Type, Type>? resolveRuntimeType = null
+    ) {
         var parameters = method.GetParameters();
-        var responseType = method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>)
+        var responseType = method.ReturnType.IsGenericType
+                           && method.ReturnType.GetGenericTypeDefinition().FullName == typeof(Task<>).FullName
             ? method.ReturnType.GetGenericArguments()[0]
             : method.ReturnType;
-        var hasCancellationToken = parameters.Length > 1 && parameters[^1].ParameterType == typeof(CancellationToken);
+        var hasCancellationToken = parameters.Length > 1
+                                   && parameters[^1].ParameterType.FullName == typeof(CancellationToken).FullName;
         var documentParameter = parameters.Length - (hasCancellationToken ? 1 : 0) == 2 ? parameters[1].ParameterType : null;
         var needs = GetNeeds(documentParameter);
         var signatureIsValid = parameters.Length is >= 1 and <= 3
                                && parameters.Length == 1 + (documentParameter == null ? 0 : 1) + (hasCancellationToken ? 1 : 0)
-                               && responseType != typeof(void)
-                               && method.ReturnType != typeof(Task);
+                               && responseType.FullName != typeof(void).FullName
+                               && method.ReturnType.FullName != typeof(Task).FullName;
         if (!signatureIsValid)
             throw new InvalidOperationException(
                 $"[Op(\"{attribute.Key}\")] on '{method.DeclaringType?.FullName}.{method.Name}' must return TResponse or Task<TResponse> and accept a request, optional RevitDocument/ProjectDocument/FamilyDocument, and optional CancellationToken."
             );
 
-        return new Op(Define(attribute, parameters[0].ParameterType, responseType, needs), method, target);
+        resolveRuntimeType ??= type => type;
+        return Define(
+            attribute,
+            resolveRuntimeType(parameters[0].ParameterType),
+            resolveRuntimeType(responseType),
+            needs
+        );
     }
 
-    public static OpNeeds GetNeeds(Type? documentParameter) => documentParameter?.Name switch {
+    private static OpNeeds GetNeeds(Type? documentParameter) => documentParameter?.FullName switch {
         null => OpNeeds.Nothing,
-        "RevitDocument" => OpNeeds.Document,
-        "ProjectDocument" => OpNeeds.ProjectDocument,
-        "FamilyDocument" => OpNeeds.FamilyDocument,
+        "Pe.Revit.Operations.RevitDocument" => OpNeeds.Document,
+        "Pe.Revit.Operations.ProjectDocument" => OpNeeds.ProjectDocument,
+        "Pe.Revit.Operations.FamilyDocument" => OpNeeds.FamilyDocument,
         _ => throw new InvalidOperationException(
             $"Unsupported [Op] document parameter '{documentParameter.FullName}'; use RevitDocument, ProjectDocument, or FamilyDocument.")
     };

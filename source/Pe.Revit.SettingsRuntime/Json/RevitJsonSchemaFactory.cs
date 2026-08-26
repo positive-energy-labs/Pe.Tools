@@ -31,17 +31,19 @@ public static class RevitJsonSchemaFactory {
     public static JsonSchemaData CreateEditorSchemaData(
         Type type,
         SettingsRuntimeMode runtimeMode,
-        bool resolveFieldOptionSamples = false
+        bool resolveFieldOptionSamples = false,
+        Document? document = null
     ) {
         RevitTypeRegistry.Initialize();
         return JsonSchemaFactory.CreateEditorSchemaData(
             type,
-            CreateOptions(runtimeMode, resolveFieldOptionSamples)
+            CreateOptions(runtimeMode, resolveFieldOptionSamples, document)
         );
     }
 
     private static JsonSchemaBuildOptions CreateOptions(
         SettingsRuntimeMode runtimeMode,
-        bool resolveFieldOptionSamples
-    ) => new(runtimeMode) { ResolveValueDomainSamples = resolveFieldOptionSamples };
+        bool resolveFieldOptionSamples,
+        Document? document = null
+    ) => new(runtimeMode, document) { ResolveValueDomainSamples = resolveFieldOptionSamples };
 }

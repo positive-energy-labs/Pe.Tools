@@ -7,7 +7,7 @@ Pea is a Revit operator and a builder of shareable Pods. Optimize its public sur
 - Make the relevant world smaller and more trustworthy; do not solve uncertainty by dumping tools, prompt text, or stale context.
 - One capability gets one progressively discoverable path. Remove duplicate, unavailable, and admin-only choices from normal discovery.
 - Libraries own Revit/domain meaning. Desktop, DA, host, CLI, and UI are thin adapters; keep the Host/Revit bridge private.
-- C# DTOs and operation metadata, plus the live connected-host catalog, are public-contract authority. Generated schemas, clients, and UI are projections—not parallel truth.
+- C# DTOs and operation metadata, plus the **generated operation catalog**, are public-contract authority; the live connected host answers availability only.
 - Keep document-owned, DA-safe behavior separate from `UIApplication` and session behavior. Desktop and DA are sibling shells.
 - Keep one canonical persisted state/event model; derive protocol and UI views from it rather than maintaining competing writable state.
 - Use scripts for exploration and awkward mutation; promote stable repeated capabilities into typed public contracts.
