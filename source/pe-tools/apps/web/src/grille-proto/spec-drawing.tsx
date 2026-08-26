@@ -2,15 +2,25 @@
  * SPEC DRAWING — the one pane that reflects per-slot information, drawn the way a Price
  * submittal draws a grille: line work in ink, no fills, extension lines + witness lines +
  * arrowheads, the dimension text ON the line. With `set` every dimension text is an input;
- * without it the drawing is read-only and serialises cleanly (no foreignObject) for export.
- * Plan (length × width) above, end SECTION below where opening / rib / edge live naturally.
+ * without it the drawing is read-only, every dimension is NAMED and set large (submittal
+ * style), and it serialises cleanly (no foreignObject) for export.
+ * Plan (length × width) above; SECTION A-A below at 2× as a detail, where opening / rib / edge
+ * live naturally and their witness rows have room.
  * Wood is a section hatch (non-hue channel; design-lang grayscale extension), not a brown fill.
  */
 import { InchField } from "./field";
 import type { Grille, GrilleInput } from "./math";
 import { frac } from "./math";
 
-const M = 56; // margin for dimension strings
+const NAMES: Record<keyof GrilleInput, string> = {
+  boardLength: "BOARD LENGTH",
+  endBorder: "END BORDER",
+  boardWidth: "BOARD WIDTH",
+  edgeBorder: "EDGE BORDER",
+  opening: "OPENING WIDTH",
+  rib: "RIB WIDTH",
+  openings: "QTY OPENINGS",
+};
 
 export function SpecDrawing({
   g,
@@ -25,7 +35,10 @@ export function SpecDrawing({
   /** suffix for <defs> ids when several drawings share a document */
   id?: string;
 }) {
+  const ro = !set;
+  const M = ro ? 76 : 56; // margin for dimension strings; named big numbers need more
   const PX = px;
+  const SX = px * 2; // the section is a 2× detail
   const L = g.boardLength * PX;
   const W = g.boardWidth * PX;
   const x0 = g.endBorder * PX;
@@ -34,15 +47,16 @@ export function SpecDrawing({
     { length: g.openings },
     (_, k) => g.edgeBorder + k * (g.opening + g.rib),
   );
-  const secY = W + M + 30;
-  const secH = 0.75 * PX; // nominal board thickness — LORE, not in the sheet
+  const secY = W + M + 34;
+  const secH = 0.75 * SX; // nominal board thickness — LORE, not in the sheet
   const bad = g.slack < -1e-9;
-  const width = L + M * 2 + 40;
-  const height = secY + secH + M;
+  const width = Math.max(L, g.boardWidth * SX) + M * 2 + 40;
+  const height = secY + secH + M + 20;
   const hatch = `hatch${id}`;
   const arr = `arr${id}`;
+  const fs = ro ? 18 : 10;
 
-  /** the dimension text: an input when editable, halo text when not */
+  /** the dimension text: an input when editable; named halo text when not */
   const dim = (key: keyof GrilleInput, int = false) =>
     set
       ? {
@@ -55,15 +69,15 @@ export function SpecDrawing({
             />
           ),
         }
-      : { value: int ? String(g[key]) : `${frac(g[key])}″` };
+      : { value: int ? String(g[key]) : `${frac(g[key])}″`, label: NAMES[key] };
 
   return (
     <svg
       width={width}
       height={height}
       viewBox={`${-M} ${-M} ${width} ${height}`}
-      className="face-mono text-[10px]"
-      style={{ color: "var(--r-ink)", fontFamily: "ui-monospace, monospace" }}
+      className="face-mono"
+      style={{ color: "var(--r-ink)", fontFamily: "ui-monospace, monospace", fontSize: 10 }}
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -115,22 +129,23 @@ export function SpecDrawing({
         strokeWidth="0.5"
         strokeDasharray="12 3 2 3"
       />
-      <Wit arr={arr} x1={0} x2={L} y={-22} ext={[0, W]} {...dim("boardLength")} />
-      <Wit arr={arr} x1={0} x2={x0} y={-8} small {...dim("endBorder")} />
+      <Wit arr={arr} fs={fs} x1={0} x2={L} y={-M + 40} ext={[0, W]} {...dim("boardLength")} />
+      <Wit arr={arr} fs={fs} x1={0} x2={x0} y={-8} small {...dim("endBorder")} />
       <Wit
         arr={arr}
+        fs={10}
         x1={x0}
         x2={x0 + ol}
         y={W + 16}
         ext={[W, W]}
         label={`${frac(g.openingLength)}″ opening length = L − 2·end`}
       />
-      <VWit arr={arr} y1={0} y2={W} x={L + 22} ext={[0, L]} {...dim("boardWidth")} />
+      <VWit arr={arr} fs={fs} y1={0} y2={W} x={L + 22} ext={[0, L]} {...dim("boardWidth")} />
 
-      {/* ── SECTION A-A ── */}
+      {/* ── SECTION A-A, 2× ── */}
       <g transform={`translate(0 ${secY})`}>
-        <text x={0} y={-12} fill="var(--r-ink-2)">
-          SECTION A-A · ACROSS WIDTH
+        <text x={0} y={-30} fill="var(--r-ink-2)">
+          SECTION A-A · ACROSS WIDTH · 2×
         </text>
         {[
           [0, g.edgeBorder],
@@ -141,9 +156,9 @@ export function SpecDrawing({
           .map(([a, b], k) => (
             <rect
               key={k}
-              x={a! * PX}
+              x={a! * SX}
               y={0}
-              width={(b! - a!) * PX}
+              width={(b! - a!) * SX}
               height={secH}
               fill={`url(#${hatch})`}
               stroke="currentColor"
@@ -152,49 +167,59 @@ export function SpecDrawing({
           ))}
         {bad && (
           <rect
-            x={g.middleAvailable * PX + g.edgeBorder * PX}
+            x={(g.edgeBorder + g.middleAvailable) * SX}
             y={0}
-            width={-g.slack * PX}
+            width={-g.slack * SX}
             height={secH}
             fill="none"
             stroke="var(--r-alarm)"
             strokeDasharray="3 2"
           />
         )}
-        <Wit arr={arr} x1={0} x2={g.edgeBorder * PX} y={-4} small {...dim("edgeBorder")} />
-        <Wit
-          arr={arr}
-          x1={g.edgeBorder * PX}
-          x2={(g.edgeBorder + g.opening) * PX}
-          y={secH + 14}
-          small
-          ext={[secH, secH]}
-          {...dim("opening")}
-        />
+        {/* above the section: edge · rib */}
+        <Wit arr={arr} fs={fs} x1={0} x2={g.edgeBorder * SX} y={-8} small {...dim("edgeBorder")} />
         {g.ribs > 0 && (
           <Wit
             arr={arr}
-            x1={(g.edgeBorder + g.opening) * PX}
-            x2={(g.edgeBorder + g.opening + g.rib) * PX}
-            y={-4}
+            fs={fs}
+            x1={(g.edgeBorder + g.opening) * SX}
+            x2={(g.edgeBorder + g.opening + g.rib) * SX}
+            y={-8}
             small
             {...dim("rib")}
           />
         )}
+        {/* below: opening · middle · overall */}
         <Wit
           arr={arr}
-          x1={g.edgeBorder * PX}
-          x2={(g.boardWidth - g.edgeBorder) * PX}
-          y={secH + 34}
+          fs={fs}
+          x1={g.edgeBorder * SX}
+          x2={(g.edgeBorder + g.opening) * SX}
+          y={secH + 16}
+          small
           ext={[secH, secH]}
-          label={`${frac(g.middleAvailable)}″ middle · qty`}
-          {...dim("openings", true)}
+          {...dim("opening")}
         />
         <Wit
           arr={arr}
+          fs={fs}
+          x1={g.edgeBorder * SX}
+          x2={(g.boardWidth - g.edgeBorder) * SX}
+          y={secH + 42}
+          ext={[secH, secH]}
+          {...(ro
+            ? {
+                value: `${frac(g.middleAvailable)}″`,
+                label: `MIDDLE AVAILABLE · ${g.openings} OPENINGS`,
+              }
+            : { label: `${frac(g.middleAvailable)}″ middle · qty`, ...dim("openings", true) })}
+        />
+        <Wit
+          arr={arr}
+          fs={10}
           x1={0}
-          x2={W}
-          y={secH + 54}
+          x2={g.boardWidth * SX}
+          y={secH + 66}
           ext={[secH, secH]}
           label={`${frac(g.boardWidth)}″ · ${bad ? `OVER BY ${frac(-g.slack)}″` : g.slack > 1e-9 ? `${frac(g.slack)}″ slack` : "closes exactly"}`}
         />
@@ -211,15 +236,16 @@ const inp: React.CSSProperties = {
 };
 
 /** Dimension text with a page-coloured halo so it sits ON the line, submittal style. */
-function Halo({ x, y, text }: { x: number; y: number; text: string }) {
+function Halo({ x, y, text, fs }: { x: number; y: number; text: string; fs: number }) {
   return (
     <text
       x={x}
       y={y}
       textAnchor="middle"
       stroke="var(--r-page)"
-      strokeWidth={4}
+      strokeWidth={fs / 3}
       fill="currentColor"
+      fontSize={fs}
       style={{ paintOrder: "stroke" }}
     >
       {text}
@@ -229,6 +255,7 @@ function Halo({ x, y, text }: { x: number; y: number; text: string }) {
 
 type WitProps = {
   arr: string;
+  fs: number;
   x1: number;
   x2: number;
   y: number;
@@ -240,7 +267,7 @@ type WitProps = {
   children?: React.ReactNode;
 };
 
-function Wit({ arr, x1, x2, y, ext, label, small, value, children }: WitProps) {
+function Wit({ arr, fs, x1, x2, y, ext, label, small, value, children }: WitProps) {
   const w = small ? 48 : 52;
   const mid = (x1 + x2) / 2;
   return (
@@ -267,9 +294,16 @@ function Wit({ arr, x1, x2, y, ext, label, small, value, children }: WitProps) {
           {children}
         </foreignObject>
       )}
-      {value && <Halo x={mid} y={y + 3} text={value} />}
+      {value && <Halo x={mid} y={y + fs / 3} text={value} fs={fs} />}
       {label && (
-        <text x={mid} y={y - 3} textAnchor="middle" stroke="none" fill="var(--r-ink-2)">
+        <text
+          x={mid}
+          y={y - (value ? fs / 2 + 4 : 3)}
+          textAnchor="middle"
+          stroke="none"
+          fill="var(--r-ink-2)"
+          fontSize={9}
+        >
           {label}
         </text>
       )}
@@ -279,19 +313,23 @@ function Wit({ arr, x1, x2, y, ext, label, small, value, children }: WitProps) {
 
 function VWit({
   arr,
+  fs,
   y1,
   y2,
   x,
   ext,
   value,
+  label,
   children,
 }: {
   arr: string;
+  fs: number;
   y1: number;
   y2: number;
   x: number;
   ext?: [number, number];
   value?: string;
+  label?: string;
   children?: React.ReactNode;
 }) {
   const mid = (y1 + y2) / 2;
@@ -309,7 +347,23 @@ function VWit({
           {children}
         </foreignObject>
       )}
-      {value && <Halo x={x + 22} y={mid + 3} text={value} />}
+      {value && (
+        <g transform={`rotate(-90 ${x - 4} ${mid})`}>
+          <Halo x={x - 4} y={mid - 2} text={value} fs={fs} />
+          {label && (
+            <text
+              x={x - 4}
+              y={mid - fs - 2}
+              textAnchor="middle"
+              stroke="none"
+              fill="var(--r-ink-2)"
+              fontSize={9}
+            >
+              {label}
+            </text>
+          )}
+        </g>
+      )}
     </g>
   );
 }

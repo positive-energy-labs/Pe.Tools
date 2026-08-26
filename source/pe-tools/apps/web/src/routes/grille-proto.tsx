@@ -21,14 +21,14 @@ import { Verb } from "#/components/lang/verb";
 import { Pane, PaneWorkspace } from "#/components/ui/pane";
 import { CHARTS, Chart, stepField } from "#/grille-proto/charts";
 import { ExportSheet } from "#/grille-proto/export";
-import { type GrilleInput, enumerate, solve } from "#/grille-proto/math";
+import { type GrilleInput, enumerate, ribToFill, solve } from "#/grille-proto/math";
 import { type SheetRow, Sheet, seedRows } from "#/grille-proto/sheet";
 import { SpecDrawing } from "#/grille-proto/spec-drawing";
 import { VariantSwitcher } from "#/param-tables/proto/switcher";
 
 export const Route = createFileRoute("/grille-proto")({
   validateSearch: (search: Record<string, unknown>): { chart: string } => ({
-    chart: typeof search.chart === "string" ? search.chart : "count",
+    chart: typeof search.chart === "string" ? search.chart : "count", // ruled 2026-08-25: count wins
   }),
   component: GrilleProto,
 });
@@ -53,6 +53,16 @@ function GrilleProto() {
       setActiveId(id);
       return [...rs, { ...src, id }];
     });
+  /** The drawing's inputs are the SHARED dimensions: they write to every row (ruled 2026-08-25).
+   *  Rib auto-spaces to close the middle unless rib itself was typed. */
+  const setAll = (p: Partial<GrilleInput>) =>
+    setRows((rs) =>
+      rs.map((r) => {
+        const next = { ...r, ...p };
+        const rib = "rib" in p ? next.rib : Math.max(0, ribToFill(next));
+        return { ...solve({ ...next, rib }), id: r.id };
+      }),
+    );
   const pick = (id: string, on: boolean) =>
     setPicked((s) => {
       const n = new Set(s);
@@ -72,7 +82,7 @@ function GrilleProto() {
         drawingCollapsed
           ? "collapsed — the header strip stays so the drawing is one click away"
           : active
-            ? `plan + section A-A of the active profile · type on any dimension`
+            ? `plan + section A-A of the active profile · type on any dimension to set it for EVERY row; rib auto-spaces`
             : "no profile"
       }
       actions={
@@ -89,7 +99,7 @@ function GrilleProto() {
     >
       {active && !drawingCollapsed && (
         <div className="h-full overflow-auto p-2">
-          <SpecDrawing g={active} set={(p) => set(active.id, p)} px={28} />
+          <SpecDrawing g={active} set={setAll} px={26} />
         </div>
       )}
     </Pane>

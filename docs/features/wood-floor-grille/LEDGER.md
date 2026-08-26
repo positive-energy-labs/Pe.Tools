@@ -7,6 +7,10 @@
 - 2026-08-25, layout mirrors `/family`: `PaneWorkspace` with the drawing as a hideable visual pane, the chart beside it as a non-hideable inspector (min 420 px), the sheet full-width below.
 - 2026-08-25, export is native print → PDF plus .svg per drawing; the read-only `SpecDrawing` has no `foreignObject` so the .svg stands alone.
 
+- 2026-08-25, `count` chart is the winner (presentation and axes); `rib` and `grid` retire with the round.
+- 2026-08-25, the drawing inputs are shared dimensions: one edit writes every row; rib auto-spaces to close the middle unless rib itself is typed (`setAll`, `ribToFill`).
+- 2026-08-25, export drawing names every dimension with the number set large, submittal style; section A-A is a 2× detail.
+
 ## Tried & rejected
 - 2026-08-25, thumbnail drawing per table row; noise, and it forces row height.
 - 2026-08-25, drawing beside a readout rail (drawing-as-form B); a second pane restating per-slot facts.

@@ -21,7 +21,7 @@ export function ExportSheet({
   onProject: (s: string) => void;
   onClose: () => void;
 }) {
-  const px = rows.length > 2 ? 22 : 30;
+  const px = rows.length > 1 ? 20 : 26;
   const downloadSvg = (id: string) => {
     const svg = document.querySelector<SVGSVGElement>(`#export-${id} svg`);
     if (!svg) return;
