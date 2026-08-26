@@ -29,6 +29,7 @@ internal static class FamilyModelBridgeOps {
             model,
             FamilySnapshotExtractor.ExtractFromFamilyDocument(document));
         return new FamilyModelCaptureData(
+            DocumentReading.Here(document),
             model.Family.Name,
             JsonConvert.SerializeObject(model, Formatting.Indented),
             model.Unmodeled.Count,
@@ -67,7 +68,12 @@ internal static class FamilyModelBridgeOps {
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
         var evidence = FamilyModelEvidenceProjector.Project(parsed.Value, result.Snapshot);
-        return new FamilyModelBuildData(parsed.Value.Family.Name, outputPath, result.TemplatePath, evidence);
+        return new FamilyModelBuildData(
+            result.Reading,
+            parsed.Value.Family.Name,
+            outputPath,
+            result.TemplatePath,
+            evidence);
     }
 
     private static string ResolvePath(string? path, string field) {

@@ -317,9 +317,9 @@ function projectEvidence(
   }
   const reported = new Set(evidence.parameters.map((parameter) => parameter.name));
   return {
-    familyName: evidence.from.familyName,
-    worldLabel: evidence.from.rfaPath ?? evidence.from.origin,
-    readAgo: timeAgo(evidence.from.observedAt) || "just now",
+    familyName: evidence.familyName,
+    worldLabel: evidence.rfaPath ?? evidence.origin,
+    readAgo: timeAgo(evidence.reading.observedAt) || "just now",
     values,
     extraParams: [...reported].filter((name) => !authored.has(name)),
     // A parameter the read did not report is UNREAD, not missing — only a read that saw the whole

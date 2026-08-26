@@ -3,6 +3,8 @@ import {
   settingsRouteState,
   type RouteStatePatch,
   type RouteStateWriteResult,
+  type FamilyDocument,
+  type SettingsDocumentId,
   type SettingsFieldState,
   type SettingsSnapshot,
 } from "@pe/agent-contracts";
@@ -14,41 +16,11 @@ import { docWriter, type Scope } from "#/state/route-store";
 export const FAMILY_MODULE = { moduleKey: "FamilyFoundry", rootKey: "models" };
 export type FieldState = SettingsFieldState;
 export type FamilySnapshot = SettingsSnapshot;
-export interface EvidenceSlice {
-  typeNames: string[];
-  parameters: Array<{
-    name: string;
-    isShared?: boolean;
-    propertiesGroup?: string | null;
-    valuesPerType: Record<
-      string,
-      {
-        value?: string | null;
-        source?:
-          | "AuthoredGlobal"
-          | "AuthoredTypeOverride"
-          | "Formula"
-          | "RevitDefault"
-          | "Unresolved";
-        provenance?: "Exact" | "Inferred" | "Unresolved";
-        formula?: string | null;
-      }
-    >;
-  }>;
-  diagnostics: unknown[];
-  from: {
-    origin: string;
-    target: string;
-    documentId: string;
-    observedAt: string;
-    documentVersionToken?: string;
-    familyName: string;
-    rfaPath?: string | null;
-  };
-}
+export type EvidenceSlice = NonNullable<FamilyDocument["evidence"]>;
 export interface FamilyHost {
   sessions(): Promise<SessionFacts[]>;
   profile(target: string): Promise<string[]>;
+  settings(documentId: SettingsDocumentId): Promise<SettingsSnapshot>;
   settingsApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
   settingsCommand(
     name: "open" | "save",
@@ -83,6 +55,29 @@ export function createLiveFamilyHost(scope: Scope): FamilyHost {
       return result.files
         .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
         .map((entry) => entry.relativePath);
+    },
+    async settings(documentId) {
+      const raw = await callHostRpc("settings.document.open", {
+        documentId,
+        includeComposedContent: true,
+      });
+      return {
+        documentId,
+        path:
+          raw.metadata.documentId.stableId ??
+          (() => {
+            throw new Error("settings.document.open returned no absolute document path.");
+          })(),
+        versionToken: raw.metadata.versionToken?.value ?? null,
+        observedAt: new Date().toISOString(),
+        rawContent: raw.rawContent,
+        composedContent: raw.composedContent ?? null,
+        modifiedUtc: raw.metadata.modifiedUtc ?? null,
+        validation: {
+          isValid: raw.validation.isValid,
+          issues: raw.validation.issues.map((issue) => ({ ...issue })),
+        },
+      };
     },
     settingsApply: settings.apply,
     settingsCommand: settings.command,

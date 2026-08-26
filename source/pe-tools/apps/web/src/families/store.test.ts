@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import type { FamiliesRouteDocument, RouteStateWriteResult } from "@pe/agent-contracts";
+import { address, type FamiliesRouteDocument, type RouteStateWriteResult } from "@pe/agent-contracts";
 
 import type { FamiliesHost } from "#/families/host";
 import { createFamiliesStore } from "#/families/store";
@@ -21,9 +21,9 @@ const document = (documentId = "C:\\Models\\Test.rvt"): FamiliesRouteDocument =>
   binding: { target: "session:test" },
   profilePath: "desk.json",
   plan: {
-    from: {
-      target: "test",
-      documentId,
+    reading: {
+      at: address(documentId),
+      version: "v1",
       observedAt: "2026-08-25T00:00:00Z",
     },
     planHash: "hash-1",
@@ -106,9 +106,9 @@ describe("families route store", () => {
     const { registry, store } = make();
     await tick();
 
-    expect(registry.get(store.atoms.plan)?.from).toMatchObject({
-      target: "test",
-      documentId: "C:\\Models\\Test.rvt",
+    expect(registry.get(store.atoms.plan)?.reading).toMatchObject({
+      at: "C:\\Models\\Test.rvt",
+      version: "v1",
     });
   });
 
@@ -166,7 +166,7 @@ describe("families route store", () => {
     expect(calls).toEqual([{ op: "apply", input: [{ path: ["excludedIds"], value: [1] }] }]);
   });
 
-  it("clears the plan in the same write when binding another target", async () => {
+  it("binds another target without clearing the plan", async () => {
     const { calls, registry, store } = make(fixture(), {
       target: "session:new",
       patch() {},
@@ -178,8 +178,6 @@ describe("families route store", () => {
         op: "apply",
         input: [
           { path: ["binding"], value: expect.objectContaining({ target: "session:new" }) },
-          { path: ["plan"], value: null },
-          { path: ["apply"], value: null },
         ],
       },
     ]);

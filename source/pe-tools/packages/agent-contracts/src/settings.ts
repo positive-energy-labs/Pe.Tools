@@ -12,7 +12,6 @@
  */
 import { z } from "zod";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
-import { readingFromSchema } from "./reading.ts";
 import {
   cellReviewSchema,
   LOW_CONFIDENCE_REFINE_ERROR,
@@ -60,7 +59,7 @@ export const settingsFieldStateSchema = z.object({
 });
 export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;
 
-/* ── Open-document snapshot (settings.document.open / refresh) ─────────────── */
+/* ── Ephemeral file read (settings.document.open / refresh) ───────────────── */
 
 export const settingsDocumentIdSchema = z.object({
   moduleKey: z.string(),
@@ -81,8 +80,11 @@ const settingsValidationSchema = z.object({
 });
 export type SettingsValidation = z.infer<typeof settingsValidationSchema>;
 
-const settingsSnapshotSchema = z.object({
-  from: readingFromSchema.extend({ settingsDocumentId: settingsDocumentIdSchema }),
+export const settingsSnapshotSchema = z.object({
+  documentId: settingsDocumentIdSchema,
+  path: z.string(),
+  versionToken: z.string().nullable(),
+  observedAt: z.iso.datetime(),
   /** Raw JSON text as stored on disk — the save target. */
   rawContent: z.string(),
   /** Composed content (directives resolved), display-only. */
@@ -97,7 +99,7 @@ export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 const settingsRouteDocumentSchema = z
   .object({
     binding: routeBindingSchema,
-    snapshot: settingsSnapshotSchema.nullish(),
+    documentId: settingsDocumentIdSchema.nullable().default(null),
     /** field pointer -> trichotomy state. Keys are RFC 6901 JSON Pointers into the parsed raw JSON. */
     fields: z.record(z.string(), settingsFieldStateSchema).default({}),
     savedAt: z.string().nullish(),
@@ -116,39 +118,38 @@ export const settingsRouteState = defineRouteState({
   commands: {
     create: {
       description:
-        "Create a new settings document from raw JSON, then open the exact saved document into the shared snapshot. Fails if the path already exists.",
+        "Create a new settings document from raw JSON, then bind the exact saved document. Fails if the path already exists.",
       input: z.object({
         documentId: settingsDocumentIdSchema,
         rawContent: z.string(),
-        target: z.string().optional(),
       }),
       actor: "any",
       mutatesExternal: true,
     },
     open: {
       description:
-        "Open a settings document (module/root/relative path) into the snapshot: raw + composed content, version token, and validation. Existing proposals are preserved.",
-      input: z.object({ documentId: settingsDocumentIdSchema, target: z.string().optional() }),
+        "Bind a settings document (module/root/relative path). Readers fetch the file on bind; existing proposals are preserved.",
+      input: z.object({ documentId: settingsDocumentIdSchema }),
       actor: "any",
       recoversExternal: true,
     },
     refresh: {
       description:
-        "Re-read the currently open settings document (fresh raw content, version token, validation). Proposals and staged values are preserved.",
-      input: z.object({ target: z.string().optional() }),
+        "Re-read the bound settings document. Proposals and staged values are preserved.",
+      input: z.object({}),
       actor: "any",
       recoversExternal: true,
     },
     validate: {
       description:
         "Validate the document with staged values spliced in (and proposals too when includeProposals is true) without saving. Use this to prove a proposal is schema-valid before the human stages it.",
-      input: z.object({ includeProposals: z.boolean().optional(), target: z.string().optional() }),
+      input: z.object({ includeProposals: z.boolean().optional() }),
       actor: "any",
     },
     save: {
       description:
-        "HUMAN ONLY. Splice every staged field into the raw content and save through settings.document.save with the captured version token. Successful saves fold into the snapshot and clear staged fields; conflicts and validation failures leave them staged.",
-      input: z.object({ target: z.string().optional() }),
+        "HUMAN ONLY. Refetch the file, splice every staged field into its raw content, and save through settings.document.save with that version token. Successful saves clear staged fields; conflicts and validation failures leave them staged.",
+      input: z.object({}),
       actor: "human",
       mutatesExternal: true,
     },

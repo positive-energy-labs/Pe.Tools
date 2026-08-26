@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
-import { readingFromSchema } from "./reading.ts";
+import { readingSchema } from "./reading.ts";
 
 const pointSchema = z.tuple([z.number(), z.number()]);
 const worldLoopsSchema = z
@@ -229,7 +229,7 @@ export type World = z.infer<typeof worldSchema>;
 export type WorldSystem = World["systems"][number];
 
 const takeoffSnapshotSchema = z.object({
-  from: readingFromSchema,
+  reading: readingSchema,
   world: worldSchema,
   zoneFrs: z.array(candidateRegionSchema),
   regionsByZone: z.record(z.string(), z.array(liveRegionSchema)),

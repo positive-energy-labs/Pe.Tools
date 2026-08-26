@@ -15,6 +15,7 @@ using Pe.Revit.DocumentData.Sheets;
 using Pe.Revit.Extensions.FamDocument;
 using Pe.Revit.Extensions.FamParameter;
 using Pe.Revit.Extensions.FamParameter.Formula;
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.Failures;
 using Pe.Revit.Global.Services.Aps;
 using Pe.Revit.Global.Services.ParameterLinks;
@@ -173,7 +174,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
     public Task<TakeoffSnapshotResponse> GetTakeoffSnapshotAsync(CancellationToken cancellationToken) =>
         this.EnqueueAsync(
             () => RunTakeoff(RevitBridgeOps.TakeoffSnapshot.Definition, document =>
-                new TakeoffSnapshotResponse(this.CreateTakeoffReadingFrom(document), TakeoffAtlas.Snapshot(document))),
+                new TakeoffSnapshotResponse(DocumentReading.Here(document), TakeoffAtlas.Snapshot(document))),
             cancellationToken);
 
     public Task<TakeoffViewsData> GetTakeoffViewsAsync(CancellationToken cancellationToken) =>
@@ -323,41 +324,6 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
                 : null
         );
     }
-
-    private TakeoffReadingFrom CreateTakeoffReadingFrom(RevitDocument document) {
-        var target = BridgeSessionIdentity.Resolve().SdkSessionId;
-        if (string.IsNullOrWhiteSpace(target))
-            throw BridgeOperationExceptions.Conflict(
-                "The Revit session has no SDK session ID.",
-                [BridgeOperationExceptions.Issue(
-                    "$",
-                    "TakeoffTargetRequired",
-                    "The Revit session has no SDK session ID.",
-                    "Start Revit through pe-revit session and retry.")]);
-
-        var documentId = document.GetCloudModelGuid();
-        if (string.IsNullOrWhiteSpace(documentId)) {
-            var path = document.GetDocumentPath();
-            if (string.IsNullOrWhiteSpace(path))
-                throw BridgeOperationExceptions.Conflict(
-                    "The active document has no cloud model GUID or absolute path.",
-                    [BridgeOperationExceptions.Issue(
-                        "$",
-                        "TakeoffDocumentIdentityRequired",
-                        "The active document has no cloud model GUID or absolute path.",
-                        "Save the document or open a cloud model and retry.")]);
-            documentId = Path.GetFullPath(path);
-        }
-
-        return new TakeoffReadingFrom(
-            target,
-            documentId,
-            GetDocumentVersionToken(document),
-            DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
-    }
-
-    private static string GetDocumentVersionToken(RevitDocument document) =>
-        RevitDocument.GetDocumentVersion(document).VersionGUID.ToString("D");
 
     private static T RunTakeoff<T>(
         HostOperationDefinition operation,

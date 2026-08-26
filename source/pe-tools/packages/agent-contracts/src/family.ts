@@ -6,7 +6,7 @@
  *   - `doc`: an OCR'd spec sheet (markdown blocks only — geometry stays in the parse
  *     cache, same law as family-types),
  *   - `evidence`: the resolved per-type value/provenance projection Revit returned,
- *     stamped with where it came from so staleness is renderable, never silent.
+ *     stamped with the Revit document Reading so currency is renderable, never silent.
  *
  * Pea acts on this slice through commands only (empty agent write mask). Proposals
  * against the family live in `route:settings` fields, where the human review
@@ -16,7 +16,7 @@ import { z } from "zod";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
 import { specDocSchema } from "./family-types.ts";
 import { settingsDocumentIdSchema } from "./settings.ts";
-import { readingFromSchema } from "./reading.ts";
+import { readingSchema } from "./reading.ts";
 
 /* ── Evidence projection (mirror of C# FamilyModelEvidence, camelCase) ──────── */
 
@@ -52,20 +52,15 @@ const familyEvidenceDiagnosticSchema = z.object({
   confidence: z.number().nullish(),
 });
 
-/** Where the evidence came from — the staleness contract. A UI compares
- * `documentVersionToken` against the open settings snapshot's token: equal means
- * the evidence describes what you're editing; different means dashed/stale. */
-const familyEvidenceOriginSchema = readingFromSchema.extend({
-  origin: z.enum(["capture", "build"]),
-  familyName: z.string(),
-  rfaPath: z.string().nullish(),
-});
-
+/** Revit evidence carries only the Reading for the document it describes. */
 export const familyEvidenceSchema = z.object({
   typeNames: z.array(z.string()),
   parameters: z.array(familyEvidenceParameterSchema),
   diagnostics: z.array(familyEvidenceDiagnosticSchema),
-  from: familyEvidenceOriginSchema,
+  reading: readingSchema,
+  origin: z.enum(["capture", "build"]),
+  familyName: z.string(),
+  rfaPath: z.string().nullish(),
 });
 /* ── The document ──────────────────────────────────────────────────────────── */
 

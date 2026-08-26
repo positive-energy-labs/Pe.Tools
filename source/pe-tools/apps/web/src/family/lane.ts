@@ -15,12 +15,6 @@ interface FamilyLane {
   parseError: string | null;
   seedKey: string;
 }
-export function isEvidenceStale(
-  evidenceToken: string | null | undefined,
-  documentToken: string | null,
-) {
-  return evidenceToken != null && documentToken != null && evidenceToken !== documentToken;
-}
 export function familyLane(
   snapshot: FamilySnapshot | null,
   evidence: EvidenceSlice | null,
@@ -37,8 +31,8 @@ export function familyLane(
       parseError = error instanceof Error ? error.message : String(error);
     }
   }
-  const relativePath = snapshot?.from.settingsDocumentId.relativePath ?? "";
-  const versionToken = snapshot?.from.documentVersionToken ?? null;
+  const relativePath = snapshot?.documentId.relativePath ?? "";
+  const versionToken = snapshot?.versionToken ?? null;
   const world = model
     ? buildPageWorld(projectFamilyModel(model, evidence, { path: relativePath }))
     : FIXTURE_WORLD;
@@ -49,7 +43,7 @@ export function familyLane(
           model,
           relativePath,
           versionToken,
-          evidenceStale: isEvidenceStale(evidence?.from.documentVersionToken, versionToken),
+          evidenceStale: false,
         }
       : null,
     parseError,

@@ -6,6 +6,7 @@ import {
   settingsRouteState,
   settingsFieldSegments,
   type RouteStatePatch,
+  type RouteStateWriteResult,
   type SettingsFieldState,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
@@ -17,16 +18,11 @@ import {
   docWriter,
   feed,
   hostRead,
-  readingIsCurrent,
   unbound,
   type Lane,
   type Scope,
 } from "#/state/route-store";
 import type { SettingsHost } from "#/settings/host";
-
-interface SettingsSearchPort {
-  readonly source?: "fixture";
-}
 
 interface SettingsPicker {
   workspaceKey: string | undefined;
@@ -79,32 +75,43 @@ export function createSettingsStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: SettingsHost;
-  search: SettingsSearchPort;
+  slice?: Atom.Atom<AsyncResult.AsyncResult<import("#/state/route-store").Slice<SettingsRouteDocument>, Error>>;
+  apply?: (patches: RouteStatePatch[]) => Promise<RouteStateWriteResult>;
+  command?: (name: "open" | "refresh" | "validate" | "save", input?: unknown) => Promise<RouteStateWriteResult>;
 }) {
   const core = createRouteStoreCore("settings", deps.registry);
   const { registry, owned, write, runVerb } = core;
   const runtimeFactory = Atom.context({ memoMap: Layer.makeMemoMapUnsafe() });
   const runtime = runtimeFactory(Layer.empty).pipe(Atom.autoDispose);
   Reflect.set(runtime.layer, "keepAlive", false);
-  const lane: Lane = deps.search.source === "fixture" ? "fixture" : "read";
+  const lane: Lane = "read";
 
   const liveWriter = docWriter(settingsRouteState, deps.scope);
-  const apply = deps.host.apply ?? liveWriter.apply;
-  const command = deps.host.command ?? liveWriter.command;
-  const settingsSlice = owned(
-    "slice/settings",
-    deps.host.document ?? docAtom(settingsRouteState, deps.scope),
-  );
+  const apply = deps.apply ?? liveWriter.apply;
+  const command = deps.command ?? liveWriter.command;
+  const settingsSlice = owned("slice/settings", deps.slice ?? docAtom(settingsRouteState, deps.scope));
   const document = Atom.make((get): SettingsRouteDocument | null => {
     const result = get(settingsSlice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
+  const snapshotSource = runtime.atom((get) => {
+    const documentId = get(document)?.documentId;
+    return documentId
+      ? hostRead([documentId.moduleKey, documentId.rootKey, documentId.relativePath], () =>
+          deps.host.open(documentId),
+        )
+      : Effect.succeed(
+          unbound<import("@pe/agent-contracts").SettingsSnapshot | null>(null, ["settings document"]),
+        );
+  });
+  const snapshotResult = runtimeFactory
+    .withReactivity(["settings"])(
+      Atom.swr(snapshotSource, { staleTime: "60 seconds", revalidateOnMount: false }),
+    )
+    .pipe(Atom.autoDispose);
   const snapshot = Atom.make((get) => {
-    const doc = get(document);
-    const value = doc?.snapshot;
-    if (!value) return null;
-    const target = doc.binding.target;
-    return target && readingIsCurrent(value.from, { target, documentId: target }) ? value : null;
+    const result = get(snapshotResult);
+    return AsyncResult.isSuccess(result) && result.value.bound ? result.value.value : null;
   }).pipe(owned("view/snapshot"));
   const fields = Atom.make((get) => get(document)?.fields ?? {}).pipe(owned("view/fields"));
   const validation = Atom.make((get) => get(snapshot)?.validation ?? null).pipe(
@@ -169,7 +176,7 @@ export function createSettingsStore(deps: {
     )
     .pipe(Atom.autoDispose);
   const schemaSource = runtime.atom((get) => {
-    const open = get(snapshot)?.from.settingsDocumentId;
+    const open = get(document)?.documentId;
     const pick = get(picker);
     const moduleKey = open?.moduleKey ?? pick.moduleKey;
     const rootKey = open?.rootKey ?? pick.rootKey;
@@ -299,21 +306,34 @@ export function createSettingsStore(deps: {
     await Promise.all([...pending.keys()].map(flush));
     await lastApply;
   };
-  const bindDocument = async (target: string | null) => {
-    const doc = registry.get(document);
+  const bindDocument = async (
+    target: string | null,
+    documentId: SettingsRouteDocument["documentId"] = null,
+  ) => {
     const patches: RouteStatePatch[] = [
       {
         path: ["binding"],
         value: { target, boundAt: target ? new Date().toISOString() : null },
       },
+      { path: ["documentId"], value: documentId },
     ];
-    if (
-      doc?.snapshot &&
-      (!target || !readingIsCurrent(doc.snapshot.from, { target, documentId: target }))
-    )
-      patches.push({ path: ["snapshot"], value: null });
     expect(await apply(patches), "bind failed");
     return target ? `bound ${target}` : "unbound settings file";
+  };
+  const bindPickedDocument = async (target: string | null) => {
+    if (!target) return bindDocument(null);
+    const { moduleKey, rootKey } = registry.get(picker);
+    if (!moduleKey || !rootKey) return bindDocument(target);
+    const result = registry.get(treeResult);
+    const file =
+      (AsyncResult.isSuccess(result)
+        ? result.value.value.find((item) => item.path === target)
+        : undefined) ??
+      (await deps.host.tree(moduleKey, rootKey)).find((item) => item.path === target);
+    return bindDocument(
+      target,
+      file ? { moduleKey, rootKey, relativePath: file.relativePath } : null,
+    );
   };
 
   const actions = {
@@ -339,7 +359,12 @@ export function createSettingsStore(deps: {
             files.find((item) => item.path === filePath) ??
             (await deps.host.tree(moduleKey, rootKey)).find((item) => item.path === filePath);
           if (!file) throw Error("open needs a file from the current settings tree");
-          if (registry.get(document)?.binding.target !== file.path) await bindDocument(file.path);
+          if (registry.get(document)?.binding.target !== file.path)
+            await bindDocument(file.path, {
+              moduleKey,
+              rootKey,
+              relativePath: file.relativePath,
+            });
           expect(
             await command("open", {
               documentId: { moduleKey, rootKey, relativePath: file.relativePath },
@@ -378,12 +403,12 @@ export function createSettingsStore(deps: {
         },
         ["settings"],
       ),
-    bind: (target: string | null) => runVerb("bind", () => bindDocument(target), ["settings"]),
+    bind: (target: string | null) =>
+      runVerb("bind", () => bindPickedDocument(target), ["settings"]),
   };
 
   return {
     registry,
-    search: deps.search,
     atoms: {
       snapshot,
       fields,

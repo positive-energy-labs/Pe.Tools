@@ -205,10 +205,9 @@ describe("typed snapshot projection", () => {
   it("passes through source identity and derives the world from the typed response", () => {
     const snapshot = projectTakeoffSnapshot(
       {
-        from: {
-          target: "pe.app-25",
-          documentId: "11111111-1111-1111-1111-111111111111",
-          documentVersionToken: "22222222-2222-2222-2222-222222222222",
+        reading: {
+          at: "11111111-1111-1111-1111-111111111111",
+          version: "22222222-2222-2222-2222-222222222222",
           observedAt: "2026-08-25T12:00:00.000Z",
         },
         snapshot: {
@@ -235,10 +234,9 @@ describe("typed snapshot projection", () => {
       [{ name: "Mechanical Zoning Plan", level: "Main" }],
     );
 
-    expect(snapshot.from).toEqual({
-      target: "pe.app-25",
-      documentId: "11111111-1111-1111-1111-111111111111",
-      documentVersionToken: "22222222-2222-2222-2222-222222222222",
+    expect(snapshot.reading).toEqual({
+      at: "11111111-1111-1111-1111-111111111111",
+      version: "22222222-2222-2222-2222-222222222222",
       observedAt: "2026-08-25T12:00:00.000Z",
     });
     expect(snapshot.world).toMatchObject({ docName: "project-a", lanes: [{ label: "Main" }] });

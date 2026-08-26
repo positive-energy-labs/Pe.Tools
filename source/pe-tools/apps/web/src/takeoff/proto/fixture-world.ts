@@ -5,6 +5,8 @@
  * exercisable with dense mid-project state and no Revit attached. Everything here is synthetic
  * or replayed project-a data; elementIds are null, so every write path is inert by construction.
  */
+import { address } from "@pe/agent-contracts";
+
 import type { SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { World, WorldRoom, WorldZone } from "#/takeoff/world";
 
@@ -90,11 +92,11 @@ const fixtureWorld = loadMockWorldGeo()
 
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
-  async readSnapshot(session, document, _views, write) {
+  async readSnapshot(_session, document, _views, write) {
     const snapshot = {
-      from: {
-        target: session.sdkSessionId ?? `pid:${session.processId}`,
-        documentId: document.documentId,
+      reading: {
+        at: address(document.documentId),
+        version: null,
         observedAt: new Date().toISOString(),
       },
       world: await fixtureWorld,

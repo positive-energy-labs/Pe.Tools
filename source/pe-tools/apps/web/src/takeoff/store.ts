@@ -5,6 +5,7 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import {
   takeoffsRouteState,
+  here,
   type RouteStatePatch,
   type RouteStateWriteResult,
   type StagedRoomEdit,
@@ -14,7 +15,7 @@ import {
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
-import { resolveTarget, type SessionFacts } from "#/host/target";
+import { documentAddress, resolveTarget, type SessionFacts } from "#/host/target";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import {
   createRouteStoreCore,
@@ -22,7 +23,6 @@ import {
   docWriter,
   feed,
   hostRead,
-  readingIsCurrent,
   unbound,
   type Scope,
   type Slice,
@@ -515,23 +515,20 @@ export function createTakeoffStore(deps: {
     if (AsyncResult.isSuccess(slice)) {
       if (!slice.value.hydrated) return AsyncResult.initial();
       if (slice.value.error) return AsyncResult.fail(Error(slice.value.error));
-      const snapshot = slice.value.doc?.snapshot;
+      const active = get(activeDocumentResult);
+      const document = AsyncResult.isSuccess(active) ? active.value.value : null;
+      const snapshot = here(
+        slice.value.doc?.snapshot,
+        document ? documentAddress(document.session) : null,
+      );
       if (snapshot) {
-        const active = get(activeDocumentResult);
-        const document = AsyncResult.isSuccess(active) ? active.value.value : null;
-        const target = document
-          ? (document.session.sdkSessionId ?? `pid:${document.session.processId}`)
-          : "";
-        const current = document ? { target, documentId: document.documentId } : null;
         return AsyncResult.success(
-          current && readingIsCurrent(snapshot.from, current)
-            ? {
-                value: snapshot,
-                at: Date.parse(snapshot.from.observedAt),
-                basis: [snapshot.from.target],
-                bound: true,
-              }
-            : unbound<TakeoffSnapshot | null>(null, target ? [target] : []),
+          {
+            value: snapshot,
+            at: Date.parse(snapshot.reading.observedAt),
+            basis: [snapshot.reading.at],
+            bound: true,
+          },
           { waiting: AsyncResult.isSuccess(producer) && producer.waiting },
         );
       }
@@ -926,13 +923,6 @@ export function createTakeoffStore(deps: {
         resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined;
       const nextDocument = patch.bound?.rvt ?? activeDocumentId;
       if (current.source === "live" && patch.bound) {
-        const slice = registry.get(takeoffsSlice);
-        const snapshot = AsyncResult.isSuccess(slice) ? slice.value.doc?.snapshot : null;
-        const target =
-          resolution?.kind === "resolved"
-            ? (resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`)
-            : null;
-        const identity = target && nextDocument ? { target, documentId: nextDocument } : null;
         const patches: RouteStatePatch[] = [];
         if (nextTarget !== currentTarget)
           patches.push({
@@ -942,8 +932,6 @@ export function createTakeoffStore(deps: {
               boundAt: nextTarget ? new Date().toISOString() : null,
             },
           });
-        if (snapshot && (!identity || !readingIsCurrent(snapshot.from, identity)))
-          patches.push({ path: ["snapshot"], value: null });
         if (patches.length) void takeoffsWriter.apply(patches);
       }
       deps.search.patch({

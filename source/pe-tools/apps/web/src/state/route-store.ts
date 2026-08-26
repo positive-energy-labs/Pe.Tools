@@ -8,7 +8,6 @@ import { z } from "zod";
 
 import {
   parseRouteDoc,
-  type ReadingFrom,
   type RouteDocOf,
   type RouteStatePatch,
   type RouteStateSpec,
@@ -162,11 +161,6 @@ export const unbound = <A>(value: A, basis: readonly string[] = []): TimedRead<A
   basis,
   bound: false,
 });
-
-export const readingIsCurrent = (
-  from: ReadingFrom,
-  current: Pick<ReadingFrom, "target" | "documentId">,
-) => from.target === current.target && from.documentId === current.documentId;
 
 type FeedState = "ready" | "loading" | "error";
 export type Lane = "live" | "read" | "fixture";

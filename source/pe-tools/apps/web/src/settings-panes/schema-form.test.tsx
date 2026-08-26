@@ -22,10 +22,10 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
-import { FIXTURE_SCHEMA_JSON, fixtureDocument } from "#/settings-panes/fixture";
+import { FIXTURE_SCHEMA_JSON, fixtureSnapshot } from "#/settings-panes/fixture";
 import { schemaFormModel } from "#/settings-panes/schema-form";
 
-const RAW = fixtureDocument.snapshot?.rawContent ?? "";
+const RAW = fixtureSnapshot.rawContent;
 
 describe("the fixture lane's schema→form derivation", () => {
   it("form-generates the captured ScheduleProfile document with no host", () => {

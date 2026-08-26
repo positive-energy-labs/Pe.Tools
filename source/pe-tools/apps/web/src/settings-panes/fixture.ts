@@ -4,12 +4,14 @@
  * Upgraded 2026-08-17 from an invented VAV profile to the REAL world, captured live:
  * the actual CmdScheduleManager module catalog, the actual schedules tree, the actual
  * MechEquip/TEST.json (fragment $includes intact — fixture-content.ts), and the actual
- * ScheduleProfile schema with its x-options (fixture-schema.ts). Shared by the shipped
- * route's `?source=fixture` lane AND the round `?variant=` forks — one world, comparable
- * verdicts. Declared fixture lane: a chip announces it; nothing here can be written
- * through (null version token) — inert by construction.
+ * ScheduleProfile schema with its x-options (fixture-schema.ts). Test-only: the shipped
+ * route always reads the host file.
  */
-import type { SettingsRouteDocument, SettingsFieldState } from "@pe/agent-contracts";
+import type {
+  SettingsRouteDocument,
+  SettingsFieldState,
+  SettingsSnapshot,
+} from "@pe/agent-contracts";
 import {
   SettingsFileKind,
   type SettingsFileEntry,
@@ -114,35 +116,35 @@ const fixtureFields: Record<string, SettingsFieldState> = {
 
 export const fixtureDocument: SettingsRouteDocument = {
   binding: { target: fixtureFiles[0]!.path },
-  snapshot: {
-    from: {
-      target: fixtureFiles[0]!.path,
-      documentId: fixtureFiles[0]!.path,
-      settingsDocumentId: {
-        moduleKey: "CmdScheduleManager",
-        rootKey: "schedules",
-        relativePath: "MechEquip/TEST.json",
-      },
-      observedAt: "2026-08-17T00:00:00Z",
-    },
-    rawContent: FIXTURE_DOCUMENT_RAW,
-    composedContent: null,
-    modifiedUtc: "2026-06-16T22:50:54Z",
-    validation: {
-      isValid: false,
-      issues: [
-        {
+  documentId: {
+    moduleKey: "CmdScheduleManager",
+    rootKey: "schedules",
+    relativePath: "MechEquip/TEST.json",
+  },
+  fields: fixtureFields,
+  savedAt: "2026-06-16T22:50:54Z",
+};
+
+export const fixtureSnapshot: SettingsSnapshot = {
+  documentId: fixtureDocument.documentId!,
+  path: fixtureFiles[0]!.path,
+  versionToken: null,
+  observedAt: "2026-08-17T00:00:00Z",
+  rawContent: FIXTURE_DOCUMENT_RAW,
+  composedContent: null,
+  modifiedUtc: "2026-06-16T22:50:54Z",
+  validation: {
+    isValid: false,
+    issues: [
+      {
           // Seeded scenario (the real file is valid): exercises issue-to-field joinery.
           message:
             'seeded fixture issue — "REFRIGERANT TYPE (FULL DESIGNATION)" exceeds the column-header budget',
           severity: "error",
           path: "/Fields/1/ColumnHeaderOverride",
-        },
-      ],
-    },
+      },
+    ],
   },
-  fields: fixtureFields,
-  savedAt: "2026-06-16T22:50:54Z",
 };
 
 /** Raw content for the other tree files so tree clicks feel real. Falls back to a

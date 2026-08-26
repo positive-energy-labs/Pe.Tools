@@ -4,6 +4,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
   familiesRouteState,
+  here,
   type AppliedScope,
   type FamiliesRouteDocument,
   type RouteStatePatch,
@@ -12,14 +13,13 @@ import {
 
 import type { MasterTableState } from "#/components/master-table/model";
 import type { FfProjectData } from "#/host/familyfoundry";
-import { resolveTarget } from "#/host/target";
+import { documentAddress, resolveTarget } from "#/host/target";
 import type { FamiliesDraft, FamiliesHost } from "#/families/host";
 import {
   createRouteStoreCore,
   docAtom,
   feed,
   hostRead,
-  readingIsCurrent,
   type Scope,
   type Slice,
 } from "#/state/route-store";
@@ -94,13 +94,8 @@ export function createFamiliesStore(deps: {
     const resolution = AsyncResult.isSuccess(sessions)
       ? resolveTarget(sessions.value.value, doc.binding.target ?? "")
       : null;
-    if (resolution?.kind !== "resolved" || !resolution.session.activeDocumentId) return null;
-    return readingIsCurrent(value.from, {
-      target: resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`,
-      documentId: resolution.session.activeDocumentId,
-    })
-      ? value
-      : null;
+    if (resolution?.kind !== "resolved") return null;
+    return here(value, documentAddress(resolution.session));
   }).pipe(owned("view/plan"));
   const categorySource = runtime.atom(() =>
     hostRead([deps.search.target], () => deps.host.categories(deps.search.target)),
@@ -152,18 +147,6 @@ export function createFamiliesStore(deps: {
   };
   const bindDocument = async (nextTarget: string) => {
     const doc = registry.get(document);
-    const sessions = registry.get(sessionsResult);
-    const sessionItems = AsyncResult.isSuccess(sessions)
-      ? sessions.value.value
-      : await deps.host.sessions();
-    const resolution = resolveTarget(sessionItems, nextTarget);
-    const current =
-      resolution?.kind === "resolved" && resolution.session.activeDocumentId
-        ? {
-            target: resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`,
-            documentId: resolution.session.activeDocumentId,
-          }
-        : null;
     const patches: RouteStatePatch[] = [];
     if (doc?.binding.target !== (nextTarget || null))
       patches.push({
@@ -173,10 +156,6 @@ export function createFamiliesStore(deps: {
           boundAt: nextTarget ? new Date().toISOString() : null,
         },
       });
-    if (doc?.plan && (!current || !readingIsCurrent(doc.plan.from, current))) {
-      patches.push({ path: ["plan"], value: null });
-      patches.push({ path: ["apply"], value: null });
-    }
     return patches.length ? expectOk(await deps.host.apply(patches), "bind failed") : { ok: true };
   };
   if (deps.search.target)

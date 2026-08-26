@@ -2160,7 +2160,7 @@ export function FamilyWorkspace({
             <OutcomeLine
               kind="error"
               label="the open document will not parse"
-              says={`${snapshot?.from.settingsDocumentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
+              says={`${snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
             />
           ) : requestedFamily != null ? (
             <OutcomeLine

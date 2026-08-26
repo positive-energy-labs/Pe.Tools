@@ -164,12 +164,7 @@ function OpsPage({ store }: { store: OpsStore }) {
                 : args.trim()
                   ? JSON.parse(args)
                   : undefined,
-            from: {
-              target: session.sdkSessionId ?? `pid:${session.processId}`,
-              ...(selected.requiresActiveDocument && session.activeDocumentId
-                ? { documentId: session.activeDocumentId }
-                : {}),
-            },
+            target: session.sdkSessionId ?? `pid:${session.processId}`,
             bridgeSessionId: session.sessionId,
           });
         },
@@ -215,7 +210,7 @@ function OpsPage({ store }: { store: OpsStore }) {
             result ? (
               <OutcomeLine
                 kind="receipt"
-                label={`${result.opKey} · ${result.elapsedMs}ms · from.target = ${result.from.target}`}
+                label={`${result.opKey} · ${result.elapsedMs}ms · target = ${result.target}`}
               />
             ) : undefined
           }

@@ -166,9 +166,15 @@ export namespace FamilyfoundryPlan {
     export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
 
     export interface Response {
+      reading: Reading;
       planHash?: null | string;
       families: FamilyFoundryFamilyPlanData[];
       diagnostics: FamilyFoundryDiagnostic[];
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
     }
     export interface FamilyFoundryFamilyPlanData {
       familyId: number;
@@ -351,10 +357,16 @@ export namespace RevitApplyFamilyModel {
     export type FamilyModelEvidenceProvenance = "Exact" | "Inferred" | "Unresolved";
 
     export interface Response {
+      reading: Reading;
       familyName: string;
       outputPath: string;
       templatePath: string;
       evidence: FamilyModelEvidence;
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
     }
     export interface FamilyModelEvidence {
       typeNames: string[];
@@ -3124,10 +3136,16 @@ export namespace RevitDetailFamilyModel {
     export type FamilyModelEvidenceProvenance = "Exact" | "Inferred" | "Unresolved";
 
     export interface Response {
+      reading: Reading;
       familyName: string;
       modelJson: string;
       unmodeledCount: number;
       evidence: FamilyModelEvidence;
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
     }
     export interface FamilyModelEvidence {
       typeNames: string[];
@@ -5120,13 +5138,12 @@ export namespace TakeoffsSnapshot {
   }
   export namespace Res {
     export interface Response {
-      from: TakeoffReadingFrom;
+      reading: Reading;
       snapshot: TakeoffSnapshotData;
     }
-    export interface TakeoffReadingFrom {
-      target: string;
-      documentId: string;
-      documentVersionToken?: null | string;
+    export interface Reading {
+      at: string;
+      version?: null | string;
       observedAt: string;
     }
     export interface TakeoffSnapshotData {

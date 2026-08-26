@@ -12,6 +12,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 - 2026-08-26 — U1 supersedes thread-scoped route documents: a route document is about a Revit document and is keyed by `(route, documentId)`; `?thread` is only the conversation view over it. `/chat` keys its sidebar by document, with threads nested under each document.
 - 2026-08-26 — A GET never mints a thread. With no existing thread, the route renders the designed `pick or start a thread` empty; thread creation is an explicit user action.
+- 2026-08-26 — Address law: `Address` is only the Revit document identity (`cloudModelGuid ?? absolute path`), and `Reading` is `{ at: Address, version, observedAt }`. A world is the call target on a binding, never part of read identity; `here(value, documentAddress(session))` performs the one render-time `===` currency check. Observed and pid-named worlds persist readings normally because the document is the falsifier. Plain operation receipts and file-backed settings reads are not Readings.
 
 - 2026-08-25 — A route that owns a trunk declares `Product.manages`; `TargetingHead` reuses the trunk's existing picker, and panes drawing that managed trunk remain available before a binding because they draw its whole feed. `/instances` is the first consumer with `manages: ["world"]`; ordinary routes still print terminals only.
 - 2026-08-25 — World is a trunk, never a terminal: the sentence names documents and files, while the shared `world` trunk names a fused SDK-registry/bridge world by `sdkSessionId ?? "Revit <pid>"` and discloses custody.

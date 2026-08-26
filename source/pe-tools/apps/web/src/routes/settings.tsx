@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import {
   settingsFieldPointer,
   settingsFieldSegments,
@@ -18,7 +18,6 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { timeAgo } from "#/lib/utils";
-import { createFixtureSettingsHost } from "#/settings-panes/fixture-route";
 import { schemaFormModel } from "#/settings-panes/schema-form";
 import { SETTINGS_PRODUCT } from "#/settings/product";
 import { createLiveSettingsHost } from "#/settings/host";
@@ -31,10 +30,9 @@ import { withThread } from "./-with-thread";
 
 export const Route = createFileRoute("/settings")({
   beforeLoad: withThread,
-  validateSearch: (search: Record<string, unknown>): { thread?: string; source?: "fixture" } => ({
+  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-    source: search.source === "fixture" ? "fixture" : undefined,
   }),
   component: SettingsRoute,
 });
@@ -42,32 +40,22 @@ export const Route = createFileRoute("/settings")({
 function SettingsRoute() {
   const search = Route.useSearch();
   if (!search.thread) return null;
-  return (
-    <SettingsStoreOwner
-      key={`${search.thread}:${search.source ?? "read"}`}
-      thread={search.thread}
-      source={search.source}
-    />
-  );
+  return <SettingsStoreOwner key={search.thread} thread={search.thread} />;
 }
 
-function SettingsStoreOwner({ thread, source }: { thread: string; source?: "fixture" }) {
+function SettingsStoreOwner({ thread }: { thread: string }) {
   const store = useRouteStore(() => {
     const scope = { threadId: thread };
-    const host =
-      source === "fixture" ? createFixtureSettingsHost(appAtomRegistry) : createLiveSettingsHost();
     return createSettingsStore({
       registry: appAtomRegistry,
       scope,
-      host,
-      search: { source },
+      host: createLiveSettingsHost(),
     });
   });
   return <SettingsWorkspace store={store} />;
 }
 
 function SettingsWorkspace({ store }: { store: SettingsStore }) {
-  const navigate = useNavigate({ from: "/settings" });
   const snapshot = useAtomValue(store.atoms.snapshot);
   const fields = useAtomValue(store.atoms.fields);
   const validation = useAtomValue(store.atoms.validation);
@@ -93,30 +81,17 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
     (field) => field.review === "attention" && field.staged != null,
   ).length;
   const proposalRows = rows.filter((row) => row.field?.proposal && row.field.staged == null);
-  const fixture = store.search.source === "fixture";
-  const setSource = (source: "fixture" | undefined) =>
-    void navigate({
-      search: (previous) => ({ ...previous, source }),
-      replace: true,
-    });
   const aside = (
     <>
       <FactChip
-        dashed={fixture}
-        tone={fixture ? "caution" : connected === false ? "caution" : "meta"}
-        title={
-          fixture
-            ? "The explicit fixture capability runs in memory."
-            : "Route-state transport status."
-        }
+        tone={connected === false ? "caution" : "meta"}
+        title="Route-state transport status."
       >
-        {fixture
-          ? "fixture lane"
-          : connected === null
-            ? "bridge unknown"
-            : connected
-              ? "bridge connected"
-              : "bridge disconnected"}
+        {connected === null
+          ? "bridge unknown"
+          : connected
+            ? "bridge connected"
+            : "bridge disconnected"}
       </FactChip>
       <FactChip title="Open Pea proposals." tone={proposals.length ? "pea" : "meta"}>
         {proposals.length} proposed
@@ -132,15 +107,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
           {validation.isValid ? "valid" : `${validation.issues.length} invalid`}
         </FactChip>
       ) : null}
-      <Verb
-        label={fixture ? "leave fixture" : "open fixture"}
-        reason={
-          fixture
-            ? "Return to the host-backed lane."
-            : "Use the declared in-memory settings capability."
-        }
-        onClick={() => setSource(fixture ? undefined : "fixture")}
-      />
     </>
   );
   const picker = useAtomValue(store.atoms.picker);
@@ -214,9 +180,9 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
           {sliceError ? (
             <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
           ) : null}
-          {snapshot?.from.documentVersionToken ? (
+          {snapshot?.versionToken ? (
             <FactChip title="The open document version token.">
-              v{snapshot.from.documentVersionToken}
+              v{snapshot.versionToken}
             </FactChip>
           ) : null}
           {snapshot?.modifiedUtc ? (
@@ -231,8 +197,8 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                 <div className="px-4 py-3">
                   <SchemaToFieldRender
                     schema={formModel.schema}
-                    moduleKey={snapshot.from.settingsDocumentId.moduleKey}
-                    rootKey={snapshot.from.settingsDocumentId.rootKey}
+                    moduleKey={snapshot.documentId.moduleKey}
+                    rootKey={snapshot.documentId.rootKey}
                     baselineValues={formModel.baseline}
                     values={values}
                     onChange={(path, value) =>

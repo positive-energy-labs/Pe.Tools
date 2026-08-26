@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import { readingFromSchema } from "./reading.ts";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
 
 export const opsReceiptSchema = z.object({
@@ -8,7 +7,8 @@ export const opsReceiptSchema = z.object({
   request: z.unknown().optional(),
   value: z.unknown(),
   elapsedMs: z.number().nonnegative(),
-  from: readingFromSchema.extend({ documentId: z.string().optional() }),
+  target: z.string(),
+  observedAt: z.iso.datetime(),
 });
 export type OpsReceipt = z.infer<typeof opsReceiptSchema>;
 

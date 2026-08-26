@@ -32,10 +32,6 @@ interface OpsSearchPort {
   patch(partial: { world?: string; op?: string }): void;
 }
 
-const opsReadingIsCurrent = (from: OpsReceipt["from"], current: Identity) =>
-  from.target === current.target &&
-  (from.documentId === undefined || from.documentId === current.documentId);
-
 export function createOpsStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
@@ -70,7 +66,7 @@ export function createOpsStore(deps: {
     return value &&
       current &&
       value.opKey === get(selectedKey) &&
-      opsReadingIsCurrent(value.from, current)
+      value.target === current.target
       ? value
       : null;
   }).pipe(owned("view/result"));
@@ -111,11 +107,6 @@ export function createOpsStore(deps: {
           path: ["binding"],
           value: { target: world || null, boundAt: world ? now().toISOString() : null },
         });
-      if (
-        doc?.receipt &&
-        (!current || doc.receipt.opKey !== op || !opsReadingIsCurrent(doc.receipt.from, current))
-      )
-        patches.push({ path: ["receipt"], value: null });
       if (patches.length) expectOk(await apply(patches));
     } catch (cause) {
       write(verb, "failure", () =>
@@ -159,7 +150,7 @@ export function createOpsStore(deps: {
       deps.search.patch({ world: world || "", op: op || "" });
       return persistBinding("set-bindings", world || "", op || "", current);
     },
-    run(input: { opKey: string; request: () => unknown; from: Identity; bridgeSessionId: string }) {
+    run(input: { opKey: string; request: () => unknown; target: string; bridgeSessionId: string }) {
       return runVerb("run", async () => {
         registry.set(localResult, null);
         const request = input.request();
@@ -172,7 +163,8 @@ export function createOpsStore(deps: {
           request,
           value,
           elapsedMs: Math.round(performance.now() - started),
-          from: { ...input.from, observedAt: now().toISOString() },
+          target: input.target,
+          observedAt: now().toISOString(),
         };
         expectOk(await apply([{ path: ["receipt"], value: receipt }]));
         registry.set(localResult, receipt);

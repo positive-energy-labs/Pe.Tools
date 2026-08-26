@@ -1,11 +1,5 @@
 namespace Pe.Shared.RevitData.Takeoffs;
 
-public sealed record TakeoffReadingFrom(
-    string Target,
-    string DocumentId,
-    string? DocumentVersionToken,
-    string ObservedAt);
-
 public sealed record TakeoffViewFacts(long ElementId, int Regions);
 public sealed record TakeoffViewsData(IReadOnlyList<TakeoffViewFacts> Views);
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
@@ -33,7 +27,7 @@ public sealed record TakeoffSnapshotData(
     TakeoffModelStatus Status,
     IReadOnlyList<TakeoffRegionFacts> ZoneFrs,
     IReadOnlyDictionary<string, List<TakeoffLiveRegion>> RegionsByZone);
-public sealed record TakeoffSnapshotResponse(TakeoffReadingFrom From, TakeoffSnapshotData Snapshot);
+public sealed record TakeoffSnapshotResponse(Reading Reading, TakeoffSnapshotData Snapshot);
 
 public sealed record TakeoffCandidatesRequest(string View);
 public sealed record TakeoffCandidatesData(IReadOnlyList<TakeoffRegionFacts> Regions);

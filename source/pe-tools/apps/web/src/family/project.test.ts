@@ -13,6 +13,7 @@
  * file that will still parse.
  */
 import { describe, expect, it } from "vite-plus/test";
+import { address } from "@pe/agent-contracts";
 
 import { buildSheet, planeGeos, type FamilyModel } from "./family-model.ts";
 import type { EvidenceSlice } from "./host.ts";
@@ -235,6 +236,7 @@ describe("projectFamilyModel — evidence → the live substrate", () => {
     parameters: [
       {
         name: "Body Height",
+        isShared: false,
         valuesPerType: {
           Compact: { value: "24in", source: "AuthoredTypeOverride", provenance: "Exact" },
           Standard: { value: "30in", source: "AuthoredGlobal", provenance: "Exact" },
@@ -243,21 +245,28 @@ describe("projectFamilyModel — evidence → the live substrate", () => {
       },
       {
         name: "Core Height",
+        isShared: false,
         valuesPerType: {
           Standard: { value: "34in", source: "Formula", provenance: "Exact" },
         },
       },
-      { name: "Keynote", valuesPerType: { Standard: { value: "K-1", source: "RevitDefault" } } },
+      {
+        name: "Keynote",
+        isShared: false,
+        valuesPerType: {
+          Standard: { value: "K-1", source: "RevitDefault", provenance: "Exact" },
+        },
+      },
     ],
     diagnostics: [],
-    from: {
-      origin: "capture",
-      target: "pe.app-25",
-      documentId: "C:\\Models\\office-tower.rvt",
+    reading: {
+      at: address("C:\\Models\\office-tower.rvt"),
+      version: "v1",
       observedAt: new Date().toISOString(),
-      familyName: "PE Family Model Showcase",
-      rfaPath: "office-tower.rvt",
     },
+    origin: "capture",
+    familyName: "PE Family Model Showcase",
+    rfaPath: "office-tower.rvt",
   };
 
   it("reads values per type and marks a FORMULA's number read-only", () => {

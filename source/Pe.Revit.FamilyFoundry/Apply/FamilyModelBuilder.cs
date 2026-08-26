@@ -2,7 +2,9 @@ using Autodesk.Revit.ApplicationServices;
 using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Extensions.FamDocument;
+using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.FamilyFoundry.Resolution;
+using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 
 namespace Pe.Revit.FamilyFoundry.Apply;
@@ -13,7 +15,7 @@ public sealed record FamilyModelBuildResult(
     string TemplatePath
 );
 
-public sealed record FamilyModelSaveResult(string TemplatePath, FamilySnapshotRecord Snapshot);
+public sealed record FamilyModelSaveResult(Reading Reading, string TemplatePath, FamilySnapshotRecord Snapshot);
 
 /// <summary>
 ///     Creates a new family from portable authored truth. This is intentionally a new-document API: applying
@@ -57,7 +59,7 @@ public static class FamilyModelBuilder {
                 Compact = true,
                 MaximumBackups = 1
             });
-            return new FamilyModelSaveResult(result.TemplatePath, snapshot);
+            return new FamilyModelSaveResult(DocumentReading.Here(result.Document), result.TemplatePath, snapshot);
         } finally {
             _ = result.Document.Close(false);
         }

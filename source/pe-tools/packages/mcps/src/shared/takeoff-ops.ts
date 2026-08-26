@@ -1,3 +1,4 @@
+import { readingSchema } from "@pe/agent-contracts";
 import type {
   LiveRegion,
   Resolution,
@@ -128,16 +129,8 @@ export function projectTakeoffSnapshot(
       driftSqft: 0,
     };
   });
-  const from = {
-    target: response.from.target,
-    documentId: response.from.documentId,
-    ...(response.from.documentVersionToken == null
-      ? {}
-      : { documentVersionToken: response.from.documentVersionToken }),
-    observedAt: response.from.observedAt,
-  };
   return {
-    from,
+    reading: readingSchema.parse(response.reading),
     zoneFrs,
     regionsByZone,
     world: {

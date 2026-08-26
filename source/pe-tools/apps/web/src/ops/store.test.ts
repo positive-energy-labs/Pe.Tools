@@ -32,11 +32,8 @@ const oldReceipt = {
   opKey: "revit.context.document-session",
   value: { title: "old" },
   elapsedMs: 1,
-  from: {
-    target: "old",
-    documentId: "old.rvt",
-    observedAt: "2026-08-25T00:00:00.000Z",
-  },
+  target: "old",
+  observedAt: "2026-08-25T00:00:00.000Z",
 };
 const document = (target = "observed", receipt: OpsReceipt = oldReceipt): OpsRouteDocument => ({
   binding: { target },
@@ -88,19 +85,14 @@ function make(
 function gatedRun(
   store: ReturnType<typeof createOpsStore>,
   selected: HostOperationCatalogEntry,
-  activeDocumentId?: string,
+  _activeDocumentId?: string,
 ) {
   const product = bindOpsVerb(
     () =>
       store.actions.run({
         opKey: selected.key,
         request: () => ({}),
-        from: {
-          target: "observed",
-          ...(selected.requiresActiveDocument && activeDocumentId
-            ? { documentId: activeDocumentId }
-            : {}),
-        },
+        target: "observed",
         bridgeSessionId: "bridge-observed",
       }),
     () => opsRefusal(selected, "observed"),
@@ -127,7 +119,7 @@ describe("ops route store", () => {
     expect(calls).not.toHaveBeenCalled();
   });
 
-  it("allows an observed read and persists its Reading", async () => {
+  it("allows an observed read and persists its plain receipt", async () => {
     const { store, calls, writes } = make();
     const gated = gatedRun(store, operation("read"), "projectA.rvt");
 
@@ -137,7 +129,8 @@ describe("ops route store", () => {
     expect(calls).toHaveBeenCalledOnce();
     expect(writes.at(-1)?.[0]?.value).toMatchObject({
       opKey: "revit.context.document-session",
-      from: { target: "observed", observedAt: "2026-08-25T01:02:03.000Z" },
+      target: "observed",
+      observedAt: "2026-08-25T01:02:03.000Z",
     });
   });
 
@@ -150,9 +143,9 @@ describe("ops route store", () => {
     expect(calls).toHaveBeenCalledOnce();
     expect(writes.at(-1)?.[0]?.value).toMatchObject({
       opKey: "revit.context.document-session",
-      from: { target: "observed", observedAt: "2026-08-25T01:02:03.000Z" },
+      target: "observed",
+      observedAt: "2026-08-25T01:02:03.000Z",
     });
-    expect(writes.at(-1)?.[0]?.value).not.toHaveProperty("from.documentId");
   });
 
   it("projects a mismatched persisted receipt as unbound", async () => {
@@ -169,7 +162,7 @@ describe("ops route store", () => {
   it("projects a matching persisted receipt as bound", async () => {
     const matching: OpsReceipt = {
       ...oldReceipt,
-      from: { ...oldReceipt.from, target: "observed", documentId: "projectA.rvt" },
+      target: "observed",
     };
     const { registry, store } = make(document("observed", matching));
 
@@ -181,10 +174,10 @@ describe("ops route store", () => {
     expect(registry.get(store.atoms.result)).toEqual(matching);
   });
 
-  it("keeps a non-document receipt current across documents in the same target", async () => {
+  it("keeps a receipt current across documents in the same target", async () => {
     const nonDocument: OpsReceipt = {
       ...oldReceipt,
-      from: { target: "observed", observedAt: oldReceipt.from.observedAt },
+      target: "observed",
     };
     const { registry, store } = make(document("observed", nonDocument));
 
@@ -204,7 +197,7 @@ describe("ops route store", () => {
     expect(writes).toEqual([]);
   });
 
-  it("binds elsewhere and clears a stale receipt in one write", async () => {
+  it("binds elsewhere without clearing the receipt", async () => {
     const { store, writes } = make();
 
     await store.actions.setBindings(
@@ -221,7 +214,6 @@ describe("ops route store", () => {
           boundAt: "2026-08-25T01:02:03.000Z",
         },
       },
-      { path: ["receipt"], value: null },
     ]);
   });
 

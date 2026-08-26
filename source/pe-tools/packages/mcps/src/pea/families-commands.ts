@@ -1,4 +1,5 @@
 import {
+  readingSchema,
   resolveTarget,
   type FamiliesRouteDocument,
   type RouteStateCommandHandlers,
@@ -6,7 +7,6 @@ import {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
-import { currentReadingIdentity } from "./reading-source.ts";
 
 const PROFILE_MODULE = { moduleKey: "CmdFFDesiredMigrator", rootKey: "profiles" } as const;
 
@@ -34,17 +34,16 @@ export function createFamiliesCommandHandlers(
 
       const allowed = new Set(input.scope.familyNames);
       const document = ctx.getDoc();
-      const observedAt = new Date().toISOString();
       document.profilePath = input.profilePath;
       document.plan = {
-        from: { ...(await currentReadingIdentity(rpc)), observedAt },
+        reading: readingSchema.parse(result.reading),
         planHash: result.planHash,
         entries: result.families.filter((entry) => allowed.has(entry.familyName)),
       };
       document.excludedIds = [];
       document.apply = null;
       await ctx.setDoc(document);
-      return { planHash: result.planHash, families: document.plan.entries.length };
+      return { planHash: result.planHash, families: document.plan?.entries.length ?? 0 };
     },
 
     apply: async (raw, ctx) => {

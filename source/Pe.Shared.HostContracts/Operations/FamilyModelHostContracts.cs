@@ -1,10 +1,12 @@
 using Pe.Shared.RevitData.Families;
+using Pe.Shared.RevitData;
 
 namespace Pe.Shared.HostContracts.Operations;
 
 public sealed record FamilyModelCaptureRequest;
 
 public sealed record FamilyModelCaptureData(
+    Reading Reading,
     string FamilyName,
     string ModelJson,
     int UnmodeledCount,
@@ -19,6 +21,7 @@ public sealed record FamilyModelBuildRequest(
 );
 
 public sealed record FamilyModelBuildData(
+    Reading Reading,
     string FamilyName,
     string OutputPath,
     string TemplatePath,

@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 
 import {
+  readingSchema,
   type FamilyDocument,
   type RouteStateCommandHandlers,
   type SettingsDocumentId,
@@ -9,7 +10,6 @@ import {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
-import { currentReadingIdentity } from "./reading-source.ts";
 
 export function createFamilyCommandHandlers(
   options: { hostBaseUrl?: string } = {},
@@ -85,13 +85,10 @@ export function createFamilyCommandHandlers(
       const document = ctx.getDoc();
       document.evidence = {
         ...raw.evidence,
-        from: {
-          ...(await currentReadingIdentity(rpc)),
-          origin: "capture",
-          observedAt: new Date().toISOString(),
-          familyName: raw.familyName,
-          rfaPath: null,
-        },
+        reading: readingSchema.parse(raw.reading),
+        origin: "capture",
+        familyName: raw.familyName,
+        rfaPath: null,
       };
       await ctx.setDoc(document);
 
@@ -144,17 +141,12 @@ export function createFamilyCommandHandlers(
         throw new Error("The build succeeded but returned no evidence projection.");
 
       const document = ctx.getDoc();
-      const documentVersionToken = opened.metadata?.versionToken?.value;
       document.evidence = {
         ...built.evidence,
-        from: {
-          ...(await currentReadingIdentity(rpc, sourcePath)),
-          origin: "build",
-          ...(documentVersionToken ? { documentVersionToken } : {}),
-          observedAt: new Date().toISOString(),
-          familyName: built.familyName ?? documentId.relativePath,
-          rfaPath: built.outputPath ?? rfaPath,
-        },
+        reading: readingSchema.parse(built.reading),
+        origin: "build",
+        familyName: built.familyName ?? documentId.relativePath,
+        rfaPath: built.outputPath ?? rfaPath,
       };
       await ctx.setDoc(document);
 

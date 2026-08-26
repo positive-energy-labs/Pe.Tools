@@ -1,12 +1,12 @@
-import { Layer } from "effect";
+import { Effect, Layer } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
   familyRouteState,
+  here,
   settingsRouteState,
   type FamilyDocument,
-  type RouteStatePatch,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
 
@@ -28,13 +28,13 @@ import {
 import { familyLane } from "#/family/lane";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
 import { draftToPatches } from "#/family/project";
-import { resolveTarget } from "#/host/target";
+import { documentAddress, resolveTarget } from "#/host/target";
 import {
   createRouteStoreCore,
   docAtom,
   feed,
   hostRead,
-  readingIsCurrent,
+  unbound,
   type Scope,
   type Slice,
 } from "#/state/route-store";
@@ -91,19 +91,28 @@ export function createFamilyStore(deps: {
       Atom.swr(sessionsSource, { staleTime: "5 seconds", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
-  const snapshot = Atom.make((get) => {
-    const doc = get(settingsDoc);
-    const value = doc?.snapshot;
-    if (
-      !value ||
-      value.from.settingsDocumentId.moduleKey !== FAMILY_MODULE.moduleKey ||
-      value.from.settingsDocumentId.rootKey !== FAMILY_MODULE.rootKey ||
-      (deps.search.profile && value.from.settingsDocumentId.relativePath !== deps.search.profile)
+  const snapshotSource = runtime.atom((get) => {
+    const documentId = get(settingsDoc)?.documentId;
+    return documentId
+      ? hostRead(
+          [documentId.moduleKey, documentId.rootKey, documentId.relativePath],
+          () => deps.host.settings(documentId),
+        )
+      : Effect.succeed(unbound<FamilySnapshot | null>(null, ["settings"]));
+  });
+  const snapshotResult = runtimeFactory
+    .withReactivity(["settings"])(
+      Atom.swr(snapshotSource, { staleTime: "30 seconds", revalidateOnMount: false }),
     )
-      return null;
-    const target = doc.binding.target;
-    return target && readingIsCurrent(value.from, { target, documentId: target })
-      ? (value as FamilySnapshot)
+    .pipe(Atom.autoDispose);
+  const snapshot = Atom.make((get) => {
+    const result = get(snapshotResult);
+    if (!AsyncResult.isSuccess(result) || !result.value.bound || !result.value.value) return null;
+    const value = result.value.value;
+    return value.documentId.moduleKey === FAMILY_MODULE.moduleKey &&
+      value.documentId.rootKey === FAMILY_MODULE.rootKey &&
+      (!deps.search.profile || value.documentId.relativePath === deps.search.profile)
+      ? value
       : null;
   }).pipe(owned("view/snapshot"));
   const fields = Atom.make(
@@ -117,20 +126,7 @@ export function createFamilyStore(deps: {
       ? resolveTarget(sessions.value.value, deps.search.target)
       : null;
     if (resolution?.kind !== "resolved") return null;
-    const target = resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`;
-    if (value.from.origin === "build") {
-      const documentId = get(snapshot)?.from.documentId;
-      return documentId && readingIsCurrent(value.from, { target, documentId })
-        ? (value as EvidenceSlice)
-        : null;
-    }
-    if (!resolution.session.activeDocumentId) return null;
-    return readingIsCurrent(value.from, {
-      target,
-      documentId: resolution.session.activeDocumentId,
-    })
-      ? (value as EvidenceSlice)
-      : null;
+    return here(value, documentAddress(resolution.session)) as EvidenceSlice | null;
   }).pipe(owned("view/evidence"));
   const lane = Atom.make((get) => familyLane(get(snapshot), get(evidence))).pipe(
     owned("view/lane"),
@@ -161,7 +157,7 @@ export function createFamilyStore(deps: {
     query: "",
   }).pipe(owned("page/picker"));
   const seededRef = Atom.make(registry.get(lane).seedKey).pipe(Atom.autoDispose);
-  const evidenceRef = Atom.make(registry.get(evidence)?.from.observedAt ?? null).pipe(
+  const evidenceRef = Atom.make(registry.get(evidence)?.reading.observedAt ?? null).pipe(
     Atom.autoDispose,
   );
   const armedBuild = Atom.make<ArmedBuild>(null).pipe(owned("page/armed"));
@@ -203,7 +199,7 @@ export function createFamilyStore(deps: {
     lane,
     (next) => {
       if (registry.get(seededRef) !== next.seedKey) resetFor(next);
-      const stamp = registry.get(evidence)?.from.observedAt ?? null;
+      const stamp = registry.get(evidence)?.reading.observedAt ?? null;
       if (registry.get(evidenceRef) !== stamp)
         write("system", "evidence-refresh", () =>
           Atom.batch(() => {
@@ -309,7 +305,7 @@ export function createFamilyStore(deps: {
   };
   if (
     deps.search.profile &&
-    registry.get(snapshot)?.from.settingsDocumentId.relativePath !== deps.search.profile
+    registry.get(settingsDoc)?.documentId?.relativePath !== deps.search.profile
   )
     void write("system", "open", () =>
       writer.command("open", {
@@ -386,42 +382,18 @@ export function createFamilyStore(deps: {
       return runVerb(
         "bind",
         async () => {
-          const doc = registry.get(familyDoc);
-          const sessions = registry.get(sessionsResult);
-          const sessionItems = AsyncResult.isSuccess(sessions)
-            ? sessions.value.value
-            : await deps.host.sessions();
-          const resolution = resolveTarget(sessionItems, nextTarget);
-          const target =
-            resolution?.kind === "resolved"
-              ? (resolution.session.sdkSessionId ?? `pid:${resolution.session.processId}`)
-              : null;
-          const current =
-            target && resolution?.kind === "resolved" && resolution.session.activeDocumentId
-              ? { target, documentId: resolution.session.activeDocumentId }
-              : null;
-          const patches: RouteStatePatch[] = [
-            {
-              path: ["binding"],
-              value: {
-                target: nextTarget || null,
-                boundAt: nextTarget ? new Date().toISOString() : null,
+          expect(
+            await deps.host.familyApply([
+              {
+                path: ["binding"],
+                value: {
+                  target: nextTarget || null,
+                  boundAt: nextTarget ? new Date().toISOString() : null,
+                },
               },
-            },
-          ];
-          const settingsDocumentId = registry.get(snapshot)?.from.documentId;
-          const evidenceSource =
-            doc?.evidence?.from.origin === "build"
-              ? target && settingsDocumentId
-                ? { target, documentId: settingsDocumentId }
-                : null
-              : current;
-          if (
-            doc?.evidence &&
-            (!evidenceSource || !readingIsCurrent(doc.evidence.from, evidenceSource))
-          )
-            patches.push({ path: ["evidence"], value: null });
-          expect(await deps.host.familyApply(patches), "bind failed");
+            ]),
+            "bind failed",
+          );
           write("bind", "url/target", () => deps.search.patch({ target: nextTarget }));
           return `bound ${nextTarget}`;
         },

@@ -21,8 +21,8 @@ export function SettingsChatPlugin({
 }: RouteChatPluginProps) {
   const document = parseRouteDoc(sessionState, settingsRouteState);
   const isFamilyModel =
-    document?.snapshot?.from.settingsDocumentId.moduleKey === "FamilyFoundry" &&
-    document.snapshot.from.settingsDocumentId.rootKey === "models";
+    document?.documentId?.moduleKey === "FamilyFoundry" &&
+    document.documentId.rootKey === "models";
   const fields = document?.fields ?? {};
   const summary = cellSummary(fields);
   const openProposals = Object.values(fields).filter(

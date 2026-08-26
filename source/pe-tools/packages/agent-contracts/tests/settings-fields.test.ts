@@ -52,14 +52,14 @@ test("family evidence parses the C# projection shape with an origin stamp", () =
       },
     ],
     diagnostics: [],
-    from: {
-      origin: "build",
-      target: "pe.app-25",
-      documentId: "C:\\Settings\\PE VAV.json",
+    reading: {
+      at: "C:\\Families\\PE VAV.rfa",
+      version: "v7",
       observedAt: "2026-07-16T00:00:00Z",
-      familyName: "PE VAV",
-      documentVersionToken: "v7",
     },
+    origin: "build",
+    familyName: "PE VAV",
+    rfaPath: "C:\\Families\\PE VAV.rfa",
   });
   expect(parsed.parameters[0].valuesPerType.Standard.value).toBe("21in");
 });

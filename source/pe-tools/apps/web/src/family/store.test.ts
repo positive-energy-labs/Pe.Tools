@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import type {
-  FamilyDocument,
-  RouteStateWriteResult,
-  SettingsRouteDocument,
+import {
+  address,
+  type FamilyDocument,
+  type RouteStateWriteResult,
+  type SettingsRouteDocument,
 } from "@pe/agent-contracts";
 
 import { FAMILY_MODULE, type FamilyHost } from "#/family/host";
@@ -26,22 +27,12 @@ const MODEL = {
   connectors: {},
 };
 const SETTINGS_PATH = "C:\\Settings\\test.family.json";
-const settings = (versionToken = "v1", documentId = SETTINGS_PATH): SettingsRouteDocument => ({
+const settings = (): SettingsRouteDocument => ({
   binding: { target: SETTINGS_PATH },
-  snapshot: {
-    from: {
-      target: SETTINGS_PATH,
-      documentId,
-      documentVersionToken: versionToken,
-      observedAt: "2026-08-25T00:00:00Z",
-      settingsDocumentId: {
-        moduleKey: "FamilyFoundry",
-        rootKey: "models",
-        relativePath: "test.family.json",
-      },
-    },
-    rawContent: JSON.stringify(MODEL),
-    validation: { isValid: true, issues: [] },
+  documentId: {
+    moduleKey: "FamilyFoundry",
+    rootKey: "models",
+    relativePath: "test.family.json",
   },
   fields: {},
 });
@@ -78,6 +69,14 @@ const fixture = () => {
         openDocumentCount: 1,
       })),
     profile: async () => [],
+    settings: async (documentId) => ({
+      documentId,
+      path: SETTINGS_PATH,
+      versionToken: "v1",
+      observedAt: "2026-08-25T00:00:00Z",
+      rawContent: JSON.stringify(MODEL),
+      validation: { isValid: true, issues: [] },
+    }),
     settingsApply: (patches) => record("settings.apply", patches),
     settingsCommand: (name, input) => record(`settings.${name}`, input ?? {}),
     familyApply: (patches) => record("family.apply", patches),
@@ -112,36 +111,38 @@ const make = (
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("family route store", () => {
-  it("unbinds a persisted settings snapshot from another file", () => {
-    const { registry, store } = make(fixture(), "", settings("v1", "C:\\Settings\\other.json"));
-
-    expect(registry.get(store.atoms.snapshot)).toBeNull();
-  });
-
-  it("keeps a persisted settings snapshot from the bound file", () => {
+  it("projects matching host settings without a world binding", async () => {
     const { registry, store } = make();
+    registry.get(store.atoms.snapshot);
+    await tick();
 
-    expect(registry.get(store.atoms.snapshot)?.from).toMatchObject({
-      target: SETTINGS_PATH,
-      documentId: SETTINGS_PATH,
+    expect(registry.get(store.atoms.snapshot)?.documentId).toEqual({
+      moduleKey: "FamilyFoundry",
+      rootKey: "models",
+      relativePath: "test.family.json",
     });
   });
 
-  it("clears build evidence in the same write when binding another target", async () => {
+  it("projects matching evidence and binds another target without clearing it", async () => {
     const testFixture = fixture();
     const evidence: NonNullable<FamilyDocument["evidence"]> = {
       typeNames: [],
       parameters: [],
       diagnostics: [],
-      from: {
-        origin: "build",
-        target: "test",
-        documentId: SETTINGS_PATH,
+      reading: {
+        at: address("C:\\Models\\Test.rfa"),
+        version: "v1",
         observedAt: "2026-08-25T00:00:00Z",
-        familyName: "Test",
       },
+      origin: "build",
+      familyName: "Test",
+      rfaPath: "C:\\Models\\Test.rfa",
     };
-    const { calls, store } = make(testFixture, "", settings(), family(evidence));
+    const { calls, registry, store } = make(testFixture, "", settings(), family(evidence));
+
+    registry.get(store.atoms.lane);
+    await tick();
+    expect(registry.get(store.atoms.lane).world.live?.worldLabel).toBe("C:\\Models\\Test.rfa");
 
     await store.actions.bind("session:new");
 
@@ -150,7 +151,6 @@ describe("family route store", () => {
         op: "family.apply",
         input: [
           { path: ["binding"], value: expect.objectContaining({ target: "session:new" }) },
-          { path: ["evidence"], value: null },
         ],
       },
     ]);

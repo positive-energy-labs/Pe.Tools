@@ -8,7 +8,6 @@
  */
 import { describe, expect, it } from "vite-plus/test";
 
-import { isEvidenceStale } from "./lane.ts";
 import {
   BUILD_VERB,
   type BuildFacts,
@@ -166,32 +165,6 @@ describe("the arming preview — which family, from which document, to which .rf
 
   it("the verb label is one constant, so the arming verb and the commit cannot drift apart", () => {
     expect(BUILD_VERB).toBe("build .rfa");
-  });
-});
-
-describe("the staleness law — a fresh crossing clears it by replacing the stamp, not by exception", () => {
-  it("a stamp from another revision is stale; the same revision is not", () => {
-    expect(isEvidenceStale("6", "7")).toBe(true);
-    expect(isEvidenceStale("7", "7")).toBe(false);
-  });
-
-  it("an UNSTAMPED read claims nothing either way — capture has no revision to stamp", () => {
-    // `capture_evidence` reads out of Revit, not out of a document, so it stamps null. Null must
-    // never read as stale (it would cry wolf on every capture) or as fresh (it would vouch for a
-    // revision nobody checked).
-    expect(isEvidenceStale(null, "7")).toBe(false);
-    expect(isEvidenceStale(undefined, "7")).toBe(false);
-  });
-
-  it("an untokened document cannot be disagreed with", () => {
-    expect(isEvidenceStale("6", null)).toBe(false);
-  });
-
-  it("a BUILD's own evidence is never stale — it stamps the revision it just read", () => {
-    // This is the no-special-casing claim: build_evidence returns the token it opened the document
-    // at, so the chip goes out because the stamps AGREE, not because build was exempted.
-    const documentToken = "7";
-    expect(isEvidenceStale(documentToken, documentToken)).toBe(false);
   });
 });
 

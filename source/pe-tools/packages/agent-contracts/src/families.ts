@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { parameterIdentitySchema } from "./family-types.ts";
 import { defineRouteState, routeBindingSchema } from "./route-state.ts";
-import { readingFromSchema } from "./reading.ts";
+import { readingSchema } from "./reading.ts";
 
 const resolvedParameterSchema = z.object({
   definition: z.object({
@@ -75,7 +75,7 @@ const familiesDocumentSchema = z.object({
   profilePath: z.string().nullable().default(null),
   plan: z
     .object({
-      from: readingFromSchema,
+      reading: readingSchema,
       planHash: z.string(),
       entries: z.array(ffPlanEntrySchema),
     })

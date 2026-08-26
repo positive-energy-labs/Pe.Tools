@@ -22,6 +22,7 @@ public sealed record FamilyFoundryPlanRequest(
 );
 
 public sealed record FamilyFoundryPlanData(
+    Reading Reading,
     string? PlanHash,
     IReadOnlyList<FamilyFoundryFamilyPlanData> Families,
     IReadOnlyList<FamilyFoundryDiagnostic> Diagnostics

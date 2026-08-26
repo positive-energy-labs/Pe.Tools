@@ -3,6 +3,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
+  address,
   takeoffsRouteState,
   type RouteStatePatch,
   type TakeoffSnapshot,
@@ -141,9 +142,9 @@ function harness() {
   let documentId = "C:\\Models\\Harness.rvt";
   let releaseSnapshot: (() => void) | undefined;
   const snapshot: TakeoffSnapshot = {
-    from: {
-      target: "dev-26",
-      documentId,
+    reading: {
+      at: address(documentId),
+      version: "v1",
       observedAt: "2026-08-25T00:00:00Z",
     },
     world: {
@@ -194,7 +195,11 @@ function harness() {
       if (holdSnapshot) await new Promise<void>((resolve) => (releaseSnapshot = resolve));
       const next = {
         ...snapshot,
-        from: { target: "dev-26", documentId, observedAt: new Date().toISOString() },
+        reading: {
+          at: address(documentId),
+          version: "v2",
+          observedAt: new Date().toISOString(),
+        },
       };
       await write(next);
       return next;
@@ -336,49 +341,7 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("unbinds a persisted snapshot from another document", async () => {
-    const h = harness();
-    h.hold();
-    const slice = Atom.make(
-      AsyncResult.success({
-        doc: {
-          binding: { target: "session:dev-26" },
-          snapshot: {
-            ...h.snapshot,
-            from: {
-              target: "dev-26",
-              documentId: "C:\\Models\\Other.rvt",
-              observedAt: "2026-08-25T01:02:03Z",
-            },
-          },
-          staged: [],
-        },
-        hydrated: true,
-        connected: true,
-        error: null,
-        peaActive: false,
-      }),
-    );
-    const store = createStore({
-      slice,
-      host: h.host,
-      sessions: h.sessions,
-      search: searchPort().port,
-    });
-    await store.actions.settle(store.atoms.activeDocument);
-
-    const read = await store.actions.settle(store.atoms.snapshot);
-
-    expect(read).toMatchObject({ bound: false, value: null });
-    expect(store.atoms.registry.get(store.feeds.zones)).toMatchObject({
-      state: "ready",
-      options: null,
-    });
-    h.release();
-    store.dispose();
-  });
-
-  it("binds a persisted snapshot from the current document with its source freshness", async () => {
+  it("binds a persisted snapshot from the current document", async () => {
     const h = harness();
     h.hold();
     const observedAt = "2026-08-25T01:02:03Z";
@@ -388,9 +351,9 @@ describe("takeoff route store", () => {
           binding: { target: "session:dev-26" },
           snapshot: {
             ...h.snapshot,
-            from: {
-              target: "dev-26",
-              documentId: "C:\\Models\\Harness.rvt",
+            reading: {
+              at: address("C:\\Models\\Harness.rvt"),
+              version: "v1",
               observedAt,
             },
           },
@@ -415,7 +378,7 @@ describe("takeoff route store", () => {
     expect(read).toMatchObject({
       bound: true,
       at: Date.parse(observedAt),
-      basis: ["dev-26"],
+      basis: ["C:\\Models\\Harness.rvt"],
     });
     h.release();
     store.dispose();
@@ -484,7 +447,7 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("drops the snapshot in the same write when binding another document", async () => {
+  it("binds another document without clearing the snapshot", async () => {
     const h = harness();
     h.hold();
     const patches: RouteStatePatch[][] = [];
@@ -536,10 +499,9 @@ describe("takeoff route store", () => {
 
     expect(patches).toContainEqual([
       { path: ["binding"], value: expect.objectContaining({ target: "session:other" }) },
-      { path: ["snapshot"], value: null },
     ]);
     const landed = store.atoms.registry.get(store.slices.takeoffs);
-    expect(AsyncResult.getOrThrow(landed).doc?.snapshot).toBeNull();
+    expect(AsyncResult.getOrThrow(landed).doc?.snapshot).toEqual(h.snapshot);
     h.release();
     store.dispose();
   });

@@ -38,9 +38,9 @@ test("takeoffs audit produces and sets the document snapshot", async () => {
     const data =
       body.key === "takeoffs.snapshot"
         ? {
-            from: {
-              target: "test",
-              documentId: "C:\\Models\\Harness.rvt",
+            reading: {
+              at: "C:\\Models\\Harness.rvt",
+              version: "v1",
               observedAt: "2026-08-25T12:00:00.000Z",
             },
             snapshot: rawSnapshot,
@@ -93,9 +93,9 @@ test("takeoffs audit produces and sets the document snapshot", async () => {
       docName: "Harness.rvt",
       zones: [{ name: "Zone 1" }],
     });
-    expect(document.snapshot?.from).toMatchObject({
-      target: "test",
-      documentId: "C:\\Models\\Harness.rvt",
+    expect(document.snapshot?.reading).toMatchObject({
+      at: "C:\\Models\\Harness.rvt",
+      version: "v1",
     });
   } finally {
     globalThis.fetch = originalFetch;

@@ -18,6 +18,7 @@
  */
 
 import type { Custody, Lane } from "@pe/host-contracts/pe-revit-contract";
+import { address, type Address } from "@pe/agent-contracts";
 
 export type { Custody, Lane };
 
@@ -113,6 +114,11 @@ export function mintSelector(session: SessionFacts, all: readonly SessionFacts[]
   if (session.sdkSessionId) return `session:${session.sdkSessionId}`;
   if (all.filter((s) => s.custody === session.custody).length === 1) return session.custody;
   return String(session.processId);
+}
+
+/** Mint the active Revit document identity. The world remains only the call target. */
+export function documentAddress(session: SessionFacts): Address | null {
+  return session.activeDocumentId ? address(session.activeDocumentId) : null;
 }
 
 /** Wire entry (bridge.sessions.list) → SessionFacts. Disconnected entries are not targets. */

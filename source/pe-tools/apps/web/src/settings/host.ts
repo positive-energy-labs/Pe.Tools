@@ -1,25 +1,15 @@
-import type * as Atom from "effect/unstable/reactivity/Atom";
-import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import {
-  type RouteStatePatch,
-  type RouteStateWriteResult,
-  type SettingsRouteDocument,
-} from "@pe/agent-contracts";
+import type { SettingsDocumentId, SettingsSnapshot } from "@pe/agent-contracts";
 import type {
   SettingsFileEntry,
   SettingsWorkspaceDescriptor,
 } from "@pe/host-contracts/operation-types";
 
 import { callHostRpc } from "#/host/client";
-import type { Slice } from "#/state/route-store";
-
 export interface SettingsHost {
-  readonly document?: Atom.Atom<AsyncResult.AsyncResult<Slice<SettingsRouteDocument>, Error>>;
   workspaces(): Promise<readonly SettingsWorkspaceDescriptor[]>;
   tree(moduleKey: string, rootKey: string): Promise<readonly SettingsFileEntry[]>;
   schema(moduleKey: string, rootKey: string): Promise<string>;
-  apply?(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  command?(name: "open" | "refresh" | "validate" | "save", input?: unknown): Promise<RouteStateWriteResult>;
+  open(documentId: SettingsDocumentId): Promise<SettingsSnapshot>;
 }
 
 export function createLiveSettingsHost(): SettingsHost {
@@ -39,6 +29,27 @@ export function createLiveSettingsHost(): SettingsHost {
     },
     async schema(moduleKey, rootKey) {
       return (await callHostRpc("settings.schema", { moduleKey, rootKey })).schemaJson;
+    },
+    async open(documentId) {
+      const result = await callHostRpc("settings.document.open", {
+        documentId,
+        includeComposedContent: true,
+      });
+      const path = result.metadata.documentId.stableId;
+      if (!path) throw new Error("settings.document.open returned no absolute document path.");
+      return {
+        documentId,
+        path,
+        versionToken: result.metadata.versionToken?.value ?? null,
+        observedAt: new Date().toISOString(),
+        rawContent: result.rawContent,
+        composedContent: result.composedContent ?? null,
+        modifiedUtc: result.metadata.modifiedUtc ?? null,
+        validation: {
+          isValid: result.validation.isValid,
+          issues: result.validation.issues.map((issue) => ({ ...issue })),
+        },
+      };
     },
   };
 }

@@ -32,16 +32,17 @@ internal static class FamilyFoundryBridgeOps {
         static (request, _, ct) => PaletteThreading.RunRevitAsync(() => ProjectFamilies(request), ct));
 
     private static FamilyFoundryPlanData PlanFamilies(FamilyFoundryPlanRequest request) {
+        var document = GetProjectDocument();
+        var reading = DocumentReading.Here(document);
         var parsed = ParseProfile(request.ProfileJson);
         if (parsed.Profile == null)
-            return new FamilyFoundryPlanData(null, [], parsed.Diagnostics);
+            return new FamilyFoundryPlanData(reading, null, [], parsed.Diagnostics);
 
-        var document = GetProjectDocument();
         FamilyFoundryReconciliationPlanData projectedPlan;
         try {
             projectedPlan = ProjectPlan(document.CompileDesiredFamilyMigrationProfile(parsed.Profile));
         } catch (Exception exception) {
-            return new FamilyFoundryPlanData(null, [], [Diagnostic(
+            return new FamilyFoundryPlanData(reading, null, [], [Diagnostic(
                 "PlanCompilationFailed",
                 "$.profileJson",
                 exception.Message,
@@ -50,10 +51,11 @@ internal static class FamilyFoundryBridgeOps {
 
         var families = ResolvePlanFamilies(document, parsed.Profile, request.FamilyId);
         if (families.Families.Count == 0)
-            return new FamilyFoundryPlanData(null, [], families.Diagnostics);
+            return new FamilyFoundryPlanData(reading, null, [], families.Diagnostics);
 
         var planHash = FamilyFoundryPlanHasher.Compute(projectedPlan);
         return new FamilyFoundryPlanData(
+            reading,
             planHash,
             families.Families
                 .Select(family => new FamilyFoundryFamilyPlanData(family.Id.Value(), family.Name, projectedPlan))
