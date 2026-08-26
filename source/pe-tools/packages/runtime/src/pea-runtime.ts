@@ -6,6 +6,7 @@ import type {
   AgentControllerRequestContext,
   AvailableModel,
   PermissionRules,
+  Session,
   ToolCategory,
 } from "@mastra/core/agent-controller";
 import type { MastraModelConfig } from "@mastra/core/llm";
@@ -82,7 +83,9 @@ export type PeaRuntimeHandle = RuntimeHandle<
   PeaRuntimeState,
   PeaRuntimeServices,
   AgentController<PeaRuntimeState>
->;
+> & {
+  isSessionAdmitted(session: Session<PeaRuntimeState>): boolean;
+};
 
 export interface PeaRuntimeOptions {
   workspaceRoot?: string;
@@ -129,13 +132,24 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     cwd: workspaceRoot,
     workspaceRoot,
   };
+  const resourceId = `pea:${Buffer.from(workspaceRoot).toString("base64url")}`;
   let controller: AgentController<PeaRuntimeState> | undefined;
+  let policy: PeaControllerPolicy | undefined;
 
   const handle = await createRuntimeController<PeaRuntimeState, PeaRuntimeServices>({
     request,
+    configureController: (built) => {
+      controller = built;
+      policy = installPeaControllerPolicy(built, {
+        accessLevel: options.accessLevel,
+        resourceId,
+        scopedWeb: request.protocol === "web",
+      });
+      return policy.close;
+    },
     config: {
       id: "pea",
-      resourceId: `pea:${Buffer.from(workspaceRoot).toString("base64url")}`,
+      resourceId,
       workspace: new Workspace({
         id: "pea-workspace",
         name: "Pea Workspace",
@@ -161,6 +175,8 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
         configDir: ".pea",
         bundledSkillCount: bundledPeaSkills.length,
         thinkingLevel: "high",
+        yolo: false,
+        permissionRules: permissionRulesForAccessLevel("read-only"),
       },
     },
     authStorage,
@@ -197,106 +213,284 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     },
   });
   controller = handle.controller;
-
+  if (!policy) throw new Error("Pea controller policy was not installed.");
   try {
-    const session = handle.session!;
-    let permissionThreadId = session.thread.requireId();
-    let permissionGeneration = 0;
-    let permissionQueue = Promise.resolve();
-    let permissionHydration = permissionQueue;
-    let closed = false;
-    const hydratePermissions = (threadId: string, requestedAccessLevel?: RuntimeAccessLevel) => {
-      const generation = ++permissionGeneration;
-      permissionThreadId = threadId;
-      const storedPermission = session.thread.getSetting({ key: permissionSettingKey });
-      void storedPermission.catch(() => {});
-      permissionHydration = permissionQueue.then(() =>
-        configurePermissions(handle, requestedAccessLevel, storedPermission, () => {
-          if (
-            closed ||
-            session.thread.getId() !== threadId ||
-            permissionGeneration !== generation
-          ) {
-            throw new Error("Pea permission thread changed during hydration.");
-          }
-        }),
-      );
-      permissionQueue = permissionHydration.catch(() => {});
-      void permissionHydration.catch(() => {});
-    };
-    const awaitPermissions = async (followCurrent = false) => {
-      while (true) {
-        const threadId = session.thread.requireId();
-        if (permissionThreadId !== threadId) hydratePermissions(threadId);
-        const generation = permissionGeneration;
-        const hydration = permissionHydration;
-        try {
-          await hydration;
-        } catch (error) {
-          if (
-            !followCurrent ||
-            (session.thread.getId() === threadId && permissionGeneration === generation)
-          ) {
-            throw error;
-          }
-          continue;
-        }
-        if (session.thread.getId() === threadId && permissionGeneration === generation) return;
-        if (!followCurrent) {
-          throw new Error("Pea permission thread changed during hydration.");
-        }
-      }
-    };
-    hydratePermissions(permissionThreadId, options.accessLevel);
-    await permissionHydration;
-    const unsubscribePermissions = session.subscribe((event) => {
-      if (event.type === "thread_changed") hydratePermissions(event.threadId);
-      if (event.type === "thread_created") hydratePermissions(event.thread.id);
-    });
-    const switchThread = session.thread.switch.bind(session.thread);
-    session.thread.switch = async (request) => {
-      permissionGeneration++;
-      await switchThread(request);
-      await awaitPermissions(true);
-    };
-    const sendSignal = session.sendSignal.bind(session) as typeof session.sendSignal;
-    session.sendSignal = ((input, options) => {
-      const admission = [session.thread.requireId(), permissionGeneration] as const;
-      const contentOptions = "content" in input ? input : undefined;
-      const signal = createSignal(
-        contentOptions
-          ? {
-              type: "user",
-              tagName: "user",
-              contents: contentOptions.content,
-              providerOptions: contentOptions.providerOptions,
-            }
-          : (input as AgentSignalInput),
-      );
-      return {
-        id: signal.id,
-        type: signal.type,
-        accepted: awaitPermissions().then(() =>
-          closed || session.thread.getId() !== admission[0] || permissionGeneration !== admission[1]
-            ? Promise.reject(new Error("Pea permission thread changed during hydration."))
-            : sendSignal(input, options).accepted,
-        ),
-      };
-    }) as typeof session.sendSignal;
-    const close = handle.close;
-    handle.close = async () => {
-      if (!closed) {
-        closed = true;
-        unsubscribePermissions();
-      }
-      await permissionQueue;
-      return close?.();
-    };
+    if (handle.session) await policy.requireAdmitted(handle.session);
   } catch (error) {
     await handle.close?.();
     throw error;
   }
-  return handle;
+  return Object.assign(handle, { isSessionAdmitted: policy.isAdmitted });
+}
+
+interface PeaControllerPolicy {
+  isAdmitted(session: Session<PeaRuntimeState>): boolean;
+  requireAdmitted(session: Session<PeaRuntimeState>): Promise<void>;
+  close(): Promise<void>;
+}
+
+interface PeaSessionAdmission {
+  ready: Promise<void>;
+  isAdmitted(): boolean;
+  close(): Promise<void>;
+}
+
+function installPeaControllerPolicy(
+  controller: AgentController<PeaRuntimeState>,
+  options: {
+    accessLevel?: RuntimeAccessLevel;
+    resourceId: string;
+    scopedWeb: boolean;
+  },
+): PeaControllerPolicy {
+  const admissions = new Map<Session<PeaRuntimeState>, PeaSessionAdmission>();
+  const scopes = new Map<string, Session<PeaRuntimeState>>();
+  const createSession = controller.createSession.bind(controller);
+  const unsubscribeCreated = controller.onSessionCreated(
+    async (session) => {
+      let admission = admissions.get(session);
+      if (!admission) {
+        admission = createPeaSessionAdmission(
+          session,
+          options.accessLevel,
+          options.scopedWeb ? session.thread.requireId() : undefined,
+        );
+        admissions.set(session, admission);
+      }
+      await admission.ready;
+    },
+    { blocking: true },
+  );
+  const unsubscribeDeleted = controller.onSessionDeleted((session) => {
+    const admission = admissions.get(session);
+    admissions.delete(session);
+    for (const [scope, scoped] of scopes) if (scoped === session) scopes.delete(scope);
+    void admission?.close();
+  });
+
+  if (options.scopedWeb) {
+    controller.createSession = (async (input = {}) => {
+      const resourceId = input.resourceId ?? options.resourceId;
+      const scope = input.scope?.trim();
+      const threadId = input.threadId?.trim();
+      if (resourceId !== options.resourceId) throw new Error("Pea web resourceId is immutable.");
+      if (!scope) throw new Error("Pea web sessions require a scope.");
+      if (threadId !== undefined && threadId !== scope) {
+        throw new Error("Pea web session scope must equal threadId.");
+      }
+
+      const admitted = scopes.get(scope);
+      if (!admitted && threadId !== scope) {
+        throw new Error("First Pea web session materialization requires threadId equal to scope.");
+      }
+      const session = await createSession({ ...input, resourceId, scope, threadId });
+      const admission = admissions.get(session);
+      if (!admission) throw new Error("Pea session was not admitted.");
+      await admission.ready;
+      if (!admission.isAdmitted() || session.thread.getId() !== scope) {
+        throw new Error("Pea scoped session admission failed.");
+      }
+      if (admitted && admitted !== session)
+        throw new Error("Pea web scope resolved another session.");
+      scopes.set(scope, session);
+      return session;
+    }) as typeof controller.createSession;
+  }
+
+  return {
+    isAdmitted: (session) => admissions.get(session)?.isAdmitted() === true,
+    requireAdmitted: async (session) => {
+      const admission = admissions.get(session);
+      if (!admission) throw new Error("Pea session was not admitted.");
+      await admission.ready;
+      if (!admission.isAdmitted()) throw new Error("Pea session admission failed.");
+    },
+    close: async () => {
+      unsubscribeCreated();
+      unsubscribeDeleted();
+      controller.createSession = createSession;
+      await Promise.all([...admissions.values()].map((admission) => admission.close()));
+      admissions.clear();
+      scopes.clear();
+    },
+  };
+}
+
+function createPeaSessionAdmission(
+  session: Session<PeaRuntimeState>,
+  requestedAccessLevel: RuntimeAccessLevel | undefined,
+  scopedThreadId: string | undefined,
+): PeaSessionAdmission {
+  let permissionThreadId = session.thread.requireId();
+  let permissionGeneration = 0;
+  let permissionQueue = Promise.resolve();
+  let permissionHydration = permissionQueue;
+  let unsubscribePermissions: (() => void) | undefined;
+  let admitted = false;
+  let closed = false;
+
+  const assertCurrent = (threadId: string, generation: number) => {
+    if (closed || session.thread.getId() !== threadId || permissionGeneration !== generation) {
+      throw new Error("Pea permission thread changed during hydration.");
+    }
+  };
+  const hydratePermissions = (threadId: string, accessLevel?: RuntimeAccessLevel) => {
+    const generation = ++permissionGeneration;
+    permissionThreadId = threadId;
+    const storedPermission = session.thread.getSetting({ key: permissionSettingKey });
+    void storedPermission.catch(() => {});
+    permissionHydration = permissionQueue.then(() =>
+      configurePermissions(session, accessLevel, storedPermission, () =>
+        assertCurrent(threadId, generation),
+      ),
+    );
+    permissionQueue = permissionHydration.catch(() => {});
+    void permissionHydration.catch(() => {});
+  };
+  const awaitPermissions = async (followCurrent = false) => {
+    while (true) {
+      const threadId = session.thread.requireId();
+      if (permissionThreadId !== threadId) hydratePermissions(threadId);
+      const generation = permissionGeneration;
+      const hydration = permissionHydration;
+      try {
+        await hydration;
+      } catch (error) {
+        if (
+          !followCurrent ||
+          (session.thread.getId() === threadId && generation === permissionGeneration)
+        )
+          throw error;
+        continue;
+      }
+      if (session.thread.getId() === threadId && generation === permissionGeneration) return;
+      if (!followCurrent) throw new Error("Pea permission thread changed during hydration.");
+    }
+  };
+  const assertRunAdmitted = async () => {
+    await awaitPermissions();
+    if (!admitted || closed) throw new Error("Pea session has not completed permission admission.");
+    const threadId = session.thread.requireId();
+    const generation = permissionGeneration;
+    const durable = readPermissionRecord(
+      await session.thread.getSetting({ key: permissionSettingKey }),
+    );
+    if (
+      session.thread.getId() !== threadId ||
+      permissionGeneration !== generation ||
+      !durable ||
+      session.state.get().yolo !== false ||
+      !isDeepStrictEqual(session.permissions.getRules(), durable.permissionRules)
+    ) {
+      throw new Error("Pea permission state did not persist exactly.");
+    }
+  };
+
+  const sendSignal = session.sendSignal.bind(session) as typeof session.sendSignal;
+  session.sendSignal = ((input, options) => {
+    const admission = [session.thread.requireId(), permissionGeneration] as const;
+    const contentOptions = "content" in input ? input : undefined;
+    const signal = createSignal(
+      contentOptions
+        ? {
+            type: "user",
+            tagName: "user",
+            contents: contentOptions.content,
+            providerOptions: contentOptions.providerOptions,
+          }
+        : (input as AgentSignalInput),
+    );
+    return {
+      id: signal.id,
+      type: signal.type,
+      accepted: assertRunAdmitted().then(() =>
+        session.thread.getId() !== admission[0] || permissionGeneration !== admission[1]
+          ? Promise.reject(new Error("Pea permission thread changed during hydration."))
+          : sendSignal(input, options).accepted,
+      ),
+    };
+  }) as typeof session.sendSignal;
+
+  const sendMessage = session.sendMessage.bind(session);
+  session.sendMessage = async (input) => {
+    await assertRunAdmitted();
+    return sendMessage(input);
+  };
+  const steer = session.steer.bind(session);
+  session.steer = async (input) => {
+    await assertRunAdmitted();
+    return steer(input);
+  };
+  const followUp = session.followUp.bind(session);
+  session.followUp = async (input) => {
+    await assertRunAdmitted();
+    return followUp(input);
+  };
+  const sendNotificationSignal = session.sendNotificationSignal.bind(session);
+  session.sendNotificationSignal = async (input, options) => {
+    await assertRunAdmitted();
+    return sendNotificationSignal(input, options);
+  };
+  const respondToToolSuspension = session.respondToToolSuspension.bind(session);
+  session.respondToToolSuspension = async (input) => {
+    await assertRunAdmitted();
+    return respondToToolSuspension(input);
+  };
+  const approveToolCall = session.approveToolCall.bind(session);
+  session.approveToolCall = async (input) => {
+    await assertRunAdmitted();
+    return approveToolCall(input);
+  };
+  const declineToolCall = session.declineToolCall.bind(session);
+  session.declineToolCall = async (input) => {
+    await assertRunAdmitted();
+    return declineToolCall(input);
+  };
+
+  if (scopedThreadId) {
+    const immutable = () => {
+      throw new Error(`Pea web session '${scopedThreadId}' has an immutable thread binding.`);
+    };
+    session.thread.switch = async () => immutable();
+    session.thread.create = async () => immutable();
+    session.thread.clone = async () => immutable();
+    session.thread.cloneToCurrentResource = async () => immutable();
+    const deleteThread = session.thread.delete.bind(session.thread);
+    session.thread.delete = async (input) =>
+      input.threadId === scopedThreadId ? immutable() : deleteThread(input);
+    session.identity.setResourceId = () => immutable();
+  } else {
+    const switchThread = session.thread.switch.bind(session.thread);
+    session.thread.switch = async (input) => {
+      permissionGeneration++;
+      await switchThread(input);
+      await awaitPermissions(true);
+    };
+  }
+
+  const ready = (async () => {
+    hydratePermissions(permissionThreadId, requestedAccessLevel);
+    await permissionHydration;
+    unsubscribePermissions = session.subscribe((event) => {
+      if (event.type === "thread_changed") hydratePermissions(event.threadId);
+      if (event.type === "thread_created") hydratePermissions(event.thread.id);
+    });
+    admitted = true;
+  })();
+
+  return {
+    ready,
+    isAdmitted: () => admitted && !closed,
+    close: async () => {
+      if (!closed) {
+        closed = true;
+        admitted = false;
+        permissionGeneration++;
+        unsubscribePermissions?.();
+      }
+      await permissionQueue;
+    },
+  };
 }
 
 function createPeaAgent(
@@ -357,13 +551,11 @@ function resolvePeaToolCategory(toolName: string): ToolCategory {
 }
 
 async function configurePermissions(
-  handle: PeaRuntimeHandle,
+  session: Session<PeaRuntimeState>,
   requestedAccessLevel: RuntimeAccessLevel | undefined,
   storedPermission: Promise<unknown>,
   assertCurrent: () => void,
 ): Promise<void> {
-  const session = handle.session;
-  if (!session) throw new Error("Expected Pea runtime session.");
   assertCurrent();
   await session.state.set({
     yolo: false,

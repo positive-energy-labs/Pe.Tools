@@ -42,6 +42,10 @@ export interface CreateRuntimeControllerOptions<
   workspace?: RuntimeWorkspaceInfo;
   authStorage?: TServices["authStorage"];
   metadata?: Record<string, unknown>;
+  /** Register controller-wide policy before any eager session is materialized. */
+  configureController?: (
+    controller: AgentController<TState>,
+  ) => void | (() => Promise<void> | void);
 }
 
 export interface CreateInjectedRuntimeControllerOptions<
@@ -89,7 +93,12 @@ export async function createRuntimeController<
   let memory: AgentControllerConfig<TState>["memory"];
   let ownedMemory: SettleableMemory | undefined;
   let mastra: Mastra | undefined;
-  let unsubscribe: (() => void) | undefined;
+  const sessions = new Map<Session<TState>, (() => void) | undefined>();
+  let unsubscribeCreated: (() => void) | undefined;
+  let unsubscribeDeleted: (() => void) | undefined;
+  let controllerCleanup: (() => Promise<void> | void) | undefined;
+  let controllerId: string | undefined;
+  let resourceId: string | undefined;
   if (hasInjectedRuntimeController(options)) {
     config = options.config;
     controller = options.controller;
@@ -102,9 +111,23 @@ export async function createRuntimeController<
     >;
     const resolvedConfig = await resolveRuntimeControllerConfig(createOptions, request);
     config = resolvedConfig;
+    controllerId = resolvedConfig.id;
+    resourceId = resolvedConfig.resourceId ?? resolvedConfig.id;
     memory = resolvedConfig.memory;
     ownedMemory = typeof memory === "function" ? undefined : memory;
     const built = new AgentController<TState>(resolvedConfig);
+    const configured = await options.configureController?.(built);
+    controllerCleanup = typeof configured === "function" ? configured : undefined;
+    unsubscribeCreated = built.onSessionCreated(
+      (created) => {
+        sessions.set(created, instrumentRuntimeSession(created, request.protocol));
+      },
+      { blocking: true },
+    );
+    unsubscribeDeleted = built.onSessionDeleted((deleted) => {
+      sessions.get(deleted)?.();
+      sessions.delete(deleted);
+    });
     // Register on an explicit Mastra (keyed by config.id) BEFORE init so the
     // controller inherits it instead of spinning up an internal one. This is the
     // handle @mastra/server mounts to expose the native agent-controller routes.
@@ -114,14 +137,17 @@ export async function createRuntimeController<
       ...(resolvedConfig.storage ? { storage: resolvedConfig.storage } : {}),
     });
     await built.init();
-    session = await built.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
-    unsubscribe = instrumentRuntimeSession(session, request.protocol);
+    if (request.protocol !== "web") {
+      session = await built.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
+    }
     controller = built;
   }
   let closeTask: Promise<void> | null = null;
 
   return {
     controller,
+    controllerId,
+    resourceId,
     mastra,
     session,
     memory,
@@ -130,9 +156,11 @@ export async function createRuntimeController<
     metadata: options.metadata,
     close: () => {
       closeTask ??= closeRuntimeController(
-        session,
+        sessions,
         ownedMemory,
-        unsubscribe,
+        unsubscribeCreated,
+        unsubscribeDeleted,
+        controllerCleanup,
         hasInjectedRuntimeController(options) ? undefined : mastra,
         hasInjectedRuntimeController(options) ? config.storage : undefined,
       );
@@ -208,16 +236,26 @@ function hasInjectedRuntimeController<
 }
 
 async function closeRuntimeController<TState extends Record<string, unknown>>(
-  session: Session<TState> | undefined,
+  sessions: Map<Session<TState>, (() => void) | undefined>,
   memory: SettleableMemory | undefined,
-  unsubscribe: (() => void) | undefined,
+  unsubscribeCreated: (() => void) | undefined,
+  unsubscribeDeleted: (() => void) | undefined,
+  controllerCleanup: (() => Promise<void> | void) | undefined,
   mastra: Mastra | undefined,
   storage: ClosableStorage | undefined,
 ): Promise<void> {
-  session?.abort();
-  unsubscribe?.();
+  unsubscribeCreated?.();
+  unsubscribeDeleted?.();
+  await controllerCleanup?.();
+  await Promise.all(
+    [...sessions].map(async ([session, unsubscribe]) => {
+      session.abort();
+      unsubscribe?.();
+      await session.thread.clearAndReleaseLock();
+    }),
+  );
+  sessions.clear();
   await memory?.settled();
-  await session?.thread.clearAndReleaseLock();
   if (!mastra) return await storage?.close?.();
   await mastra.shutdown();
 }

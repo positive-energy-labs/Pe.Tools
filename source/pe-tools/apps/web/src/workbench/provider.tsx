@@ -328,7 +328,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       setError(undefined);
       try {
         // Pe send route carries attachments the native `{ message }` route can't.
-        await postPeMessage(config, prompt, toFiles(attachments));
+        await postPeMessage(config, threadId, prompt, toFiles(attachments));
       } catch (caught) {
         setError(errorMessage(caught));
         setState((previous) => applyWireEvent(previous, { type: "agent_end" }));
@@ -636,13 +636,14 @@ async function fetchPeInspect(config: WorkbenchEndpointConfig): Promise<PeInspec
 
 async function postPeMessage(
   config: WorkbenchEndpointConfig,
+  threadId: string,
   message: string,
   files: Array<{ data: string; mediaType: string; filename?: string }> | undefined,
 ): Promise<void> {
   const response = await fetch(peUrl(config, "/messages"), {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(files ? { message, files } : { message }),
+    body: JSON.stringify(files ? { threadId, message, files } : { threadId, message }),
   });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 }

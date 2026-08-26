@@ -4,6 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { Session } from "@mastra/core/agent-controller";
 import { RequestContext } from "@mastra/core/request-context";
 import { LocalSandbox } from "@mastra/core/workspace";
 import { TOOL_CATEGORIES, getToolsForCategory } from "@mastra/code-sdk/permissions";
@@ -53,28 +54,118 @@ test("runtime controller close closes injected storage", async () => {
   expect(storageCloseCount).toBe(1);
 });
 
-test("buildAgentControllerApp mounts the /pe/info handshake for a pea runtime", async () => {
+test("web boot exposes identity without materializing a session or CORS", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-app-"));
   const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
   process.env.PE_TOOLS_STATE_DIR = await mkdtemp(path.join(os.tmpdir(), "pea-app-state-"));
   let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
   try {
-    runtime = await createPeaRuntime({ workspaceRoot });
+    runtime = await createPeaRuntime({ workspaceRoot, protocol: "web" });
+    expect(runtime.session).toBeUndefined();
     const app = await buildAgentControllerApp({ runtime, label: "pea" });
     const response = await app.fetch(new Request("http://local/pe/info"));
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       controllerId: "pea",
-      resourceId: runtime.session?.identity.getResourceId(),
+      resourceId: runtime.resourceId,
     });
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
   } finally {
     await runtime?.close?.();
     if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
     else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
   }
 }, 30_000);
+
+test(
+  "web sessions require exact first binding and remain independently immutable",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pea-scoped-web-"));
+    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
+    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
+    const sendMessage = Session.prototype.sendMessage;
+    const sent: unknown[] = [];
+    Session.prototype.sendMessage = async function (input) {
+      sent.push(input);
+    };
+    try {
+      runtime = await createPeaRuntime({ workspaceRoot: root, protocol: "web" });
+      const resourceId = runtime.resourceId!;
+      await expect(runtime.controller.createSession({ resourceId, scope: "A" })).rejects.toThrow(
+        "requires threadId equal to scope",
+      );
+      await expect(
+        runtime.controller.createSession({ resourceId, scope: "A", threadId: "B" }),
+      ).rejects.toThrow("scope must equal threadId");
+
+      const sessionA = await runtime.controller.createSession({
+        resourceId,
+        scope: "A",
+        threadId: "A",
+      });
+      const sessionB = await runtime.controller.createSession({
+        resourceId,
+        scope: "B",
+        threadId: "B",
+      });
+      expect(sessionA).not.toBe(sessionB);
+      expect(runtime.isSessionAdmitted(sessionA)).toBe(true);
+      expect(runtime.isSessionAdmitted(sessionB)).toBe(true);
+      expect(sessionA.permissions.getRules()).toEqual(expectedPermissionRules.ask);
+      expect(sessionB.permissions.getRules()).toEqual(expectedPermissionRules.ask);
+      expect(await runtime.controller.createSession({ resourceId, scope: "A" })).toBe(sessionA);
+      await expect(sessionA.thread.switch({ threadId: "B" })).rejects.toThrow("immutable");
+      await expect(sessionA.thread.create()).rejects.toThrow("immutable");
+      await expect(sessionA.thread.clone()).rejects.toThrow("immutable");
+      await expect(
+        sessionA.thread.cloneToCurrentResource({
+          threadId: "B",
+          expectedResourceId: resourceId,
+          expectedProjectPath: root,
+        }),
+      ).rejects.toThrow("immutable");
+      await expect(
+        runtime.controller.setResourceId(sessionA, { resourceId: "other" }),
+      ).rejects.toThrow("immutable");
+      expect(sessionA.identity.getResourceId()).toBe(resourceId);
+      expect(await runtime.controller.createSession({ resourceId, scope: "A" })).toBe(sessionA);
+
+      const app = await buildAgentControllerApp({ runtime, label: "pea" });
+      const missing = await app.fetch(
+        new Request("http://local/pe/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "missing scope" }),
+        }),
+      );
+      expect(missing.status).toBe(400);
+      const files = [{ data: "aGVsbG8=", mediaType: "text/plain", filename: "note.txt" }];
+      const sentResponse = await app.fetch(
+        new Request("http://local/pe/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ threadId: "A", message: "hello", files }),
+        }),
+      );
+      expect(sentResponse.status).toBe(200);
+      await vi.waitFor(() => expect(sent).toEqual([{ content: "hello", files }]));
+      await sessionB.state.set({ yolo: true });
+      await expect(sessionB.sendMessage({ content: "must not run" })).rejects.toThrow(
+        "permission state did not persist exactly",
+      );
+      expect(sent).toHaveLength(1);
+    } finally {
+      Session.prototype.sendMessage = sendMessage;
+      await runtime?.close?.();
+      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
+    }
+  },
+  runtimeTestTimeout,
+);
 
 test(
   "Pea uses native category resolution and exact permission matrices",
@@ -208,52 +299,37 @@ test(
 );
 
 test(
-  "Pea aborts on durable or active native readback mismatch",
+  "Pea blocks the next run on durable or active permission readback mismatch",
   async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pea-permission-mismatch-"));
     const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
     process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
-    let prototype: { createSession: (...args: any[]) => Promise<any> } | undefined;
-    let createSession: ((...args: any[]) => Promise<any>) | undefined;
     try {
-      const bootstrap = await createPeaRuntime({ workspaceRoot: path.join(root, "prototype") });
-      prototype = Object.getPrototypeOf(bootstrap.controller);
-      createSession = prototype!.createSession;
-      await bootstrap.close?.();
-
       for (const mode of ["durable", "active"] as const) {
-        prototype!.createSession = async function (...args) {
-          prototype!.createSession = createSession!;
-          const session = await createSession!.apply(this, args);
-          if (mode === "durable") {
-            const setSetting = session.thread.setSetting.bind(session.thread);
-            session.thread.setSetting = async (request: { key: string; value: unknown }) => {
-              await setSetting(request);
-              await setSetting({
-                ...request,
-                value: { yolo: false, permissionRules: expectedPermissionRules["read-only"] },
-              });
-            };
-          } else {
-            const setState = session.state.set.bind(session.state);
-            session.state.set = async (updates: Record<string, unknown>) => {
-              await setState(updates);
-              await setState({
-                permissionRules: {
-                  ...expectedPermissionRules.ask,
-                  tools: { script_execute: "deny" },
-                },
-              });
-            };
-          }
-          return session;
-        };
-        await expect(createPeaRuntime({ workspaceRoot: path.join(root, mode) })).rejects.toThrow(
+        const runtime = await createPeaRuntime({ workspaceRoot: path.join(root, mode) });
+        const session = runtime.session!;
+        if (mode === "durable") {
+          const setSetting = session.thread.setSetting.bind(session.thread);
+          session.thread.setSetting = async (request) => {
+            await setSetting(request);
+            await setSetting({
+              ...request,
+              value: { yolo: false, permissionRules: expectedPermissionRules["read-only"] },
+            });
+          };
+        } else {
+          session.permissions.getRules = () => ({
+            ...expectedPermissionRules.ask,
+            tools: { script_execute: "deny" },
+          });
+        }
+        await session.thread.create({ title: mode });
+        await expect(session.sendSignal({ content: "must not run" }).accepted).rejects.toThrow(
           "Pea permission state did not persist exactly.",
         );
+        await runtime.close?.();
       }
     } finally {
-      if (prototype && createSession) prototype.createSession = createSession;
       if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
       else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
     }
