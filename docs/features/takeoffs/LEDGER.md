@@ -238,7 +238,6 @@
 - `fileIdentity` is weak: the `.r10` schema carries no GUID, so the stamp is file name + a hash of the project/client titles and retitling in RHVAC changes it (`eval/rhvac/template/SYNC-PROOF.md`).
 - Seed-room deletion keys on Identifier 1 — a template convention, not a schema fact; the lane refuses if that row has been edited (`eval/rhvac/template/SYNC-PROOF.md`).
 - Single template, single RHVAC version (`Version` 9.1) is the whole proof base; System column counts already differ across releases (project-a 240 vs template 237), which is why the lanes read column lists at runtime (`eval/rhvac/template/SYNC-PROOF.md`).
-- `Annotate.ExportEvidence` and `Annotate.Cleanup` are caller-less repo-wide since the `RoomTakeoff` wrapper deletion — delete them or re-wire them.
 - `Debug.R23` (net48) solution build is red at base: 11 API-gap errors in `SpaceBoundaryNetwork.cs` (`Array.Fill`, `MinBy`, two-arg `GetValueOrDefault`, zero-arg `Coordinate.Copy`) plus `PartitionFormulation.cs` (`double.IsFinite`).
 - `TakeoffReplayTests.Partition_flags_suspect_regions_without_changing_geometry` is red at base — the synthetic replay yields 0 rooms. A detector-semantics bug the Revit-only test lane was hiding, not a purge casualty.
 - `vp check` formatting is red across 171 files in `source/pe-tools/apps/web`; `--fix` would rewrite all of them into whichever branch runs it.

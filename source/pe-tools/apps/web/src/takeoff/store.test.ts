@@ -763,6 +763,40 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("keeps a failed live read as an error instead of falling back to a fixture snapshot", async () => {
+    const h = harness();
+    const session = (await h.sessions.list())[0]!;
+    const document = await h.sessions.activeDocument(session);
+    const fixtureHost = createFixtureTakeoffHost();
+    const fixture = await fixtureHost.readSnapshot(
+      session,
+      document,
+      await fixtureHost.readViews(session),
+      async () => undefined,
+    );
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: { binding: { target: null }, snapshot: fixture, staged: [] },
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    h.fail();
+    const store = createStore({
+      slice,
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    store.actions.setSearch(bound);
+
+    await vi.waitFor(() => expect(store.atoms.registry.get(store.feeds.zones).state).toBe("error"));
+    await expect(store.actions.settle(store.atoms.snapshot)).rejects.toThrow("snapshot rejected");
+    store.dispose();
+  });
+
   it("projects a snapshot failure into every snapshot-backed feed", async () => {
     const h = harness();
     h.fail();

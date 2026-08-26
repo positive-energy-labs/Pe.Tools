@@ -8,7 +8,9 @@ import { useRouteStore } from "#/state/use-route-store";
 import { withThread } from "./-with-thread";
 
 export const Route = createFileRoute("/families")({
-  validateSearch: (search: Record<string, unknown>): { target?: string; thread?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { target?: string; thread?: string } => ({
     target: typeof search.target === "string" ? search.target.trim() : "",
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,

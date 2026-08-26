@@ -8,7 +8,12 @@
  */
 import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
 import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
-import type { DetectedRoom, LiveRegion, PartitionRun, Resolution } from "@pe/agent-contracts";
+import type {
+  DetectedRoom,
+  LiveRegion,
+  PartitionRun,
+  Resolution,
+} from "@pe/agent-contracts";
 
 export type {
   CandidateRegion,

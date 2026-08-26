@@ -140,6 +140,8 @@ export function createFamilyCommandHandlers(
         .catch((error: unknown) => {
           throw new Error(`revit.apply.family-model failed (${message(error)}).`);
         });
+      if (!built.evidence)
+        throw new Error("The build succeeded but returned no evidence projection.");
 
       const document = ctx.getDoc();
       const documentVersionToken = opened.metadata?.versionToken?.value;
@@ -150,15 +152,15 @@ export function createFamilyCommandHandlers(
           origin: "build",
           ...(documentVersionToken ? { documentVersionToken } : {}),
           observedAt: new Date().toISOString(),
-          familyName: built.familyName,
-          rfaPath: built.outputPath,
+          familyName: built.familyName ?? documentId.relativePath,
+          rfaPath: built.outputPath ?? rfaPath,
         },
       };
       await ctx.setDoc(document);
 
       return {
         familyName: built.familyName,
-        rfaPath: built.outputPath,
+        rfaPath: built.outputPath ?? rfaPath,
         typeNames: built.evidence.typeNames,
         parameterCount: built.evidence.parameters.length,
         documentVersionToken: opened.metadata?.versionToken?.value ?? null,

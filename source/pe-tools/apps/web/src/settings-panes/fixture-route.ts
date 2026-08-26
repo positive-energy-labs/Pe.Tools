@@ -162,7 +162,7 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
         });
         return { ok: true, doc: document };
       }
-      throw new Error("unreachable settings fixture command");
+      return { ok: false, error: `The fixture lane has no "${name}" command.` };
     },
   };
 }

@@ -8,15 +8,12 @@ this file dies when the effort ends).
 Question: do four directional clauses (subject · reads · writes · syncs · world) stay readable
 at head-rail width inside `AddressingBar`?
 
-Drive: `http://localhost:3000/takeoffs?proto=head&source=fixture&variant=a` (fixture lane;
-live lane works too with a bound world). Arrow keys / bottom pill switch variants.
+Canon: `apps/web/src/targeting/head.tsx`; `/takeoffs` mounts `TargetingHead` in
+`apps/web/src/routes/takeoffs.tsx`.
 
 - `variant=a` — one sentence, joiner grammar + mono glyphs (the ruling under proof)
 - `variant=b` — reads:/writes: clauses (the rejected alternate, built to be beaten by eyes)
 - `variant=c` — subject-only sentence + connection chip strip (the scale hedge)
-
-Code: `apps/web/src/takeoff/proto/binding-sentence-proto.tsx` + the `?proto=head` gate in
-`routes/takeoffs.tsx`. Read-only — picks are proto-local, nothing writes.
 
 Real-data notes (what the manifest exposed):
 - `.r10` binding has NO legal option source — canon sync panel is a raw typed path
