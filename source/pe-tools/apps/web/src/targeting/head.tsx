@@ -21,7 +21,7 @@ import {
   type Bindings,
   type Runner,
 } from "#/targeting/kit";
-import { targets, type Link, type Product, type Verb } from "#/targeting/model";
+import { targetMode, targets, type Link, type Product, type Verb } from "#/targeting/model";
 
 const RUN_CSS =
   "@keyframes tb-run{from{transform:translateX(-100%)}to{transform:translateX(400%)}}";
@@ -35,7 +35,7 @@ function Caption({ b, link }: { b: Bindings; link: Link }) {
       className="face-mono t-caption"
       style={{ color: warn ? "var(--r-caution)" : "var(--r-ink-mute)", lineHeight: 1 }}
     >
-      {link.dir ?? "manage"}
+      {targetMode(link)}
       {link.liveness ? ` · ${link.liveness}` : ""}
       {fresh ? ` · ${fresh}` : ""}
       {f?.basis?.length ? ` | basis ${f.basis.join(" / ")}` : ""}

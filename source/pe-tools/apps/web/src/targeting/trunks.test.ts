@@ -140,7 +140,7 @@ describe("targeting trunks", () => {
     });
     await worldTrunk.verbs.converge.run(controlled);
     await worldTrunk.verbs.restart.run(controlled);
-    await worldTrunk.verbs.stop.run(controlled);
+    await worldTrunk.verbs.stop.run({ ...controlled, phase: "unresponsive" });
 
     expect(
       request.mock.calls.map(([, init]) => JSON.parse(init?.body as string) as unknown),
@@ -148,7 +148,7 @@ describe("targeting trunks", () => {
       { action: "start", lane: "installed", year: "25", doc: "Model.rvt" },
       { action: "converge", id: "pe.app-25" },
       { action: "restart", id: "pe.app-25" },
-      { action: "stop", id: "pe.app-25" },
+      { action: "stop", id: "pe.app-25", force: true },
     ]);
   });
 

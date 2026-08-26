@@ -7,7 +7,6 @@ import {
   refusal,
   seams,
   targets,
-  terminals,
   type Feeds,
   type Product,
 } from "#/targeting/model";
@@ -74,8 +73,8 @@ const feeds: Feeds = {
 };
 
 describe("targeting manifest", () => {
-  it("terminals are the sentence; trunks (world, rvt, folder) never print", () => {
-    expect(terminals(P).map((l) => l.key)).toEqual(["view", "zones", "r10"]);
+  it("targets omit unmanaged trunks", () => {
+    expect(targets(P).map((l) => l.key)).toEqual(["view", "zones", "r10"]);
     expect(pathOf(P, "zones").map((l) => l.key)).toEqual(["world", "rvt", "zones"]);
   });
 

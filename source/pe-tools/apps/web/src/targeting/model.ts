@@ -28,6 +28,7 @@
 import type { Feed } from "#/state/route-store";
 
 export type Dir = "read" | "write" | "sync" | "duplex";
+export type TargetMode = Dir | "manage";
 export type Liveness = "attached" | "detached";
 
 export interface Option {
@@ -99,9 +100,7 @@ export interface Product {
 /* ------------------------------------------------------------------ derivations */
 
 export const isTerminal = (l: Link) => l.dir !== undefined;
-
-/** Terminals in declaration order — the sentence, big → small. */
-export const terminals = (p: Product) => p.links.filter(isTerminal);
+export const targetMode = (l: Link): TargetMode => l.dir ?? "manage";
 
 /** Sentence terminals plus the trunks this route exists to manage, in declaration order. */
 export const targets = (p: Product) =>

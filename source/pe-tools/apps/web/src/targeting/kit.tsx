@@ -26,6 +26,7 @@ import {
   progress,
   refusal,
   seams,
+  targetMode,
   type Bound,
   type Dir,
   type Feeds,
@@ -197,7 +198,7 @@ export function useRunner(product: Product, b: Bindings, busyLabel: string | nul
 export function paneState(
   product: Product,
   pane: Pane,
-  b: Bindings,
+  b: Pick<Bindings, "isBound" | "demanded" | "stage">,
 ): { ok: boolean; reason: string } {
   for (const k of pane.draws) {
     const link = product.links.find((l) => l.key === k);
@@ -316,7 +317,7 @@ export function Picker({
   const closedText = p.complete ? (leafLabel ?? link.placeholder) : p.next!.placeholder;
   const title = [
     chain.map((l) => `${l.key}: ${b.labelOf(l) ?? "unbound"}`).join(" › "),
-    `${link.dir ?? "manage"}${link.liveness ? ` · ${link.liveness}` : ""}`,
+    `${targetMode(link)}${link.liveness ? ` · ${link.liveness}` : ""}`,
     freshnessWord(b, link),
     feed?.note ?? null,
     p.complete ? null : `needs ${p.next!.needs}`,

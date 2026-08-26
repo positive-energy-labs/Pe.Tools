@@ -177,7 +177,8 @@ export function InstancesPage() {
   const [pickerLevel, setPickerLevel] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
 
-  const selectedWorld = worldTrunk.resolve(worlds, sessions, search.target);
+  const liveWorlds = worlds.filter((world) => world.phase !== "gone");
+  const selectedWorld = worldTrunk.resolve(liveWorlds, sessions, search.target);
   const runLifecycle = async (key: keyof typeof worldTrunk.verbs) => {
     const verb = worldTrunk.verbs[key];
     setBusy(key);
@@ -228,7 +229,6 @@ export function InstancesPage() {
           {
             ...worldTrunk.verbs.start,
             run: () => runLifecycle("start"),
-            refuse: () => worldTrunk.verbs.start.refuse(selectedWorld),
           },
         ],
       },
@@ -237,6 +237,7 @@ export function InstancesPage() {
         label: "lifecycle",
         verbs: (["converge", "restart", "stop"] as const).map((key) => ({
           ...worldTrunk.verbs[key],
+          label: key === "stop" && selectedWorld?.phase === "unresponsive" ? "force stop" : key,
           run: () => runLifecycle(key),
           refuse: () => worldTrunk.verbs[key].refuse(selectedWorld),
         })),
@@ -248,7 +249,7 @@ export function InstancesPage() {
     ],
   };
   const feeds = {
-    world: worldTrunk.feed({ worlds, sessions, isLoading, stale, error, at, basis }),
+    world: worldTrunk.feed({ worlds: liveWorlds, sessions, isLoading, stale, error, at, basis }),
   };
   const state: BindingState = {
     bound: { world: search.target || null },
@@ -387,9 +388,10 @@ export function InstancesPage() {
             rowKey={(world) => world.id}
             scopeLabel="fleet"
             activeKey={selectedWorld?.id}
-            onRowClick={(world) =>
-              setState({ bound: { world: worldTrunk.option(world, sessions).id } })
-            }
+            onRowClick={(world) => {
+              if (world.phase !== "gone")
+                setState({ bound: { world: worldTrunk.option(world, sessions).id } });
+            }}
             empty={
               isLoading ? (
                 <OutcomeLine kind="busy" label="reading the fleet" />

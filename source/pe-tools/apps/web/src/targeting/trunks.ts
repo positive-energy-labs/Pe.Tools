@@ -48,7 +48,6 @@ export interface WorldLifecycleReceipt {
 }
 
 type WorldLabelFacts = {
-  readonly id: string;
   readonly pid?: number;
   readonly session?: Pick<SessionFacts, "sdkSessionId">;
   readonly row?: { readonly id: string } | null;
@@ -81,7 +80,15 @@ async function runLifecycle(
   const response = await fetch("/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(action === "start" ? { action, ...start } : { action, id: world!.id }),
+    body: JSON.stringify(
+      action === "start"
+        ? { action, ...start }
+        : {
+            action,
+            id: world!.id,
+            ...(action === "stop" && world!.phase === "unresponsive" ? { force: true } : {}),
+          },
+    ),
   });
   const body = (await response.json()) as SdkEnvelope<{ readonly state: string }>;
   const diagnostics = (body.diagnostics ?? []).map((d) => d.detail ?? d.code);
