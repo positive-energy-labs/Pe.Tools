@@ -22,14 +22,17 @@ internal static class FamilyFoundryBridgeOps {
     private static readonly JsonSerializerSettings ProfileOutputSettings =
         RevitJsonFormatting.CreateRevitIndentedSettings();
 
-    public static readonly BridgeOp Plan = FamilyFoundryHostOperations.Plan(
-        static (request, _, ct) => PaletteThreading.RunRevitAsync(() => PlanFamilies(request), ct));
+    [Op("familyfoundry.plan", Does = "Strictly compile inline desired-state Family Foundry profile JSON into per-family reconciliation plans with provenance and a deterministic drift hash.", Title = "Plan Family Foundry Migration", Finds = ["family-foundry", "familyfoundry", "migration", "plan", "provenance", "plan-hash"], Cost = OpCost.Bounded, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static Task<FamilyFoundryPlanData> Plan(FamilyFoundryPlanRequest request, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => PlanFamilies(request), cancellationToken);
 
-    public static readonly BridgeOp Apply = FamilyFoundryHostOperations.Apply(
-        static (request, _, ct) => PaletteThreading.RunRevitAsync(() => ApplyFamilies(request), ct));
+    [Op("familyfoundry.apply", Does = "Recompile inline desired-state Family Foundry profile JSON, refuse plan drift, then migrate each explicit loaded family independently with receipts.", Title = "Apply Family Foundry Migration", Finds = ["family-foundry", "familyfoundry", "migration", "apply", "plan-hash", "receipts"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static Task<FamilyFoundryApplyData> Apply(FamilyFoundryApplyRequest request, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => ApplyFamilies(request), cancellationToken);
 
-    public static readonly BridgeOp Project = FamilyFoundryHostOperations.Project(
-        static (request, _, ct) => PaletteThreading.RunRevitAsync(() => ProjectFamilies(request), ct));
+    [Op("familyfoundry.project", Does = "Open selected loaded families read-only, capture full snapshots, and return dense runnable FFManagerProfile JSON inline.", Title = "Project Family Foundry Profiles", Finds = ["family-foundry", "familyfoundry", "project", "snapshot", "profile", "manager"], Cost = OpCost.Expensive, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static Task<FamilyFoundryProjectData> Project(FamilyFoundryProjectRequest request, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => ProjectFamilies(request), cancellationToken);
 
     private static FamilyFoundryPlanData PlanFamilies(FamilyFoundryPlanRequest request) {
         var parsed = ParseProfile(request.ProfileJson);

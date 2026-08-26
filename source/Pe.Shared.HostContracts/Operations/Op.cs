@@ -1,0 +1,342 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Serialization;
+using System.Collections.Concurrent;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
+
+namespace Pe.Shared.HostContracts.Operations;
+
+public enum OpIntent {
+    Read,
+    Mutate
+}
+
+public enum OpCost {
+    Cheap,
+    Bounded,
+    Expensive,
+    Mutation
+}
+
+public enum OpTier {
+    Default,
+    Escalation,
+    Expert
+}
+
+public enum OpDocumentKind {
+    Any,
+    Project,
+    Family
+}
+
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class OpAttribute(string key) : Attribute {
+    public string Key { get; } = key;
+    public string? Title { get; init; }
+    public required string Does { get; init; }
+    public string[]? Finds { get; init; }
+    public OpIntent Intent { get; init; } = OpIntent.Read;
+    public OpCost Cost { get; init; } = OpCost.Cheap;
+    public OpTier Tier { get; init; } = OpTier.Escalation;
+    public string? Example { get; init; }
+    public bool IsPublic { get; init; } = true;
+
+    // Compile bridge for brief 1. Brief 2 replaces both with the handler's document parameter.
+    public bool RequiresDocument { get; init; }
+    public OpDocumentKind DocumentKind { get; init; } = OpDocumentKind.Any;
+}
+
+public sealed class Op {
+    private static readonly JsonSerializerSettings JsonSettings = new() {
+        NullValueHandling = NullValueHandling.Ignore,
+        ContractResolver = new DefaultContractResolver {
+            NamingStrategy = new CamelCaseNamingStrategy {
+                ProcessDictionaryKeys = false,
+                OverrideSpecifiedNames = false
+            }
+        },
+        Converters = [new StringEnumConverter()]
+    };
+
+    private readonly MethodInfo _method;
+    private readonly object? _target;
+
+    internal Op(HostOperationDefinition definition, MethodInfo method, object? target) {
+        this.Definition = definition;
+        this._method = method;
+        this._target = target;
+    }
+
+    public HostOperationDefinition Definition { get; }
+    public Type HandlerType => this._method.DeclaringType!;
+    public string Key => this.Definition.Key;
+    public bool ReturnsTask => typeof(Task).IsAssignableFrom(this._method.ReturnType);
+
+    internal bool SameHandler(Op other) => this._method == other._method;
+
+    public async Task<object?> ExecuteAsync(string payloadJson, CancellationToken cancellationToken) {
+        object? request;
+        try {
+            request = JsonConvert.DeserializeObject(payloadJson, this.Definition.RequestType, JsonSettings);
+        } catch (JsonException exception) {
+            throw BridgeOperationExceptions.BadRequest(
+                $"Bridge op '{this.Key}': request does not match {this.Definition.RequestType.Name}: {exception.Message}"
+            );
+        }
+
+        if (request is null)
+            throw BridgeOperationExceptions.BadRequest(
+                $"Bridge op '{this.Key}': request payload is null or empty; expected {this.Definition.RequestType.Name}."
+            );
+        if (!this._method.IsStatic && this._target == null)
+            throw new InvalidOperationException($"Bridge op '{this.Key}' has no bound handler instance.");
+
+        var parameters = this._method.GetParameters();
+        object?[] arguments = parameters.Length == 1 ? [request] : [request, cancellationToken];
+        object? result;
+        try {
+            result = this._method.Invoke(this._target, arguments);
+        } catch (TargetInvocationException exception) when (exception.InnerException != null) {
+            ExceptionDispatchInfo.Capture(exception.InnerException).Throw();
+            throw;
+        }
+
+        if (result is not Task task)
+            return result;
+
+        await task.ConfigureAwait(false);
+        return task.GetType().GetProperty(nameof(Task<object>.Result))!.GetValue(task);
+    }
+}
+
+public static class OpRegistry {
+    private static readonly ConcurrentDictionary<string, Op> Registered = new(StringComparer.Ordinal);
+
+    public static IEnumerable<Op> All => Registered.Values.OrderBy(op => op.Key, StringComparer.Ordinal);
+
+    public static bool TryGet(string key, out Op op) => Registered.TryGetValue(key, out op!);
+
+    public static int RegisterFromLoadedPeAssemblies() => RegisterFrom(
+        AppDomain.CurrentDomain.GetAssemblies()
+            .Where(assembly => !assembly.IsDynamic)
+            .Where(assembly => assembly.GetName().Name?.StartsWith("Pe.", StringComparison.Ordinal) == true)
+            .ToArray()
+    );
+
+    public static int RegisterFrom(params Assembly[] assemblies) {
+        var discovered = Discover(assemblies, null);
+        Commit(discovered);
+        return discovered.Count;
+    }
+
+    public static int Bind(params object[] handlers) {
+        var discovered = new Dictionary<string, Op>(StringComparer.Ordinal);
+        foreach (var handler in handlers) {
+            foreach (var method in handler.GetType().GetMethods(
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)) {
+                var attribute = method.GetCustomAttribute<OpAttribute>();
+                if (attribute != null)
+                    Add(discovered, Create(attribute, method, handler));
+            }
+        }
+
+        Commit(discovered);
+        return discovered.Count;
+    }
+
+    private static Dictionary<string, Op> Discover(IEnumerable<Assembly> assemblies, object? target) {
+        var discovered = new Dictionary<string, Op>(StringComparer.Ordinal);
+        foreach (var assembly in assemblies) {
+            foreach (var type in EnumerateTypes(assembly)) {
+                foreach (var method in type.GetMethods(
+                             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)) {
+                    var attribute = method.GetCustomAttribute<OpAttribute>();
+                    if (attribute != null)
+                        Add(discovered, Create(attribute, method, target));
+                }
+            }
+        }
+
+        return discovered;
+    }
+
+    private static void Commit(Dictionary<string, Op> discovered) {
+        foreach (var op in discovered.Values)
+            Validate(op);
+        foreach (var op in discovered.Values)
+            Registered.AddOrUpdate(op.Key, op, (_, current) => current.SameHandler(op) ? op :
+                throw new InvalidOperationException($"Bridge op '{op.Key}' is registered twice with different handlers."));
+    }
+
+    private static void Add(Dictionary<string, Op> discovered, Op op) {
+        if (discovered.TryGetValue(op.Key, out var existing) && !existing.SameHandler(op))
+            throw new InvalidOperationException($"Bridge op '{op.Key}' is registered twice with different handlers.");
+        discovered[op.Key] = op;
+    }
+
+    private static IEnumerable<Type> EnumerateTypes(Assembly assembly) {
+        try {
+            return assembly.GetTypes();
+        } catch (ReflectionTypeLoadException exception) {
+            return exception.Types.Where(type => type != null).Cast<Type>();
+        }
+    }
+
+    private static Op Create(OpAttribute attribute, MethodInfo method, object? target) {
+        var parameters = method.GetParameters();
+        var responseType = method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>)
+            ? method.ReturnType.GetGenericArguments()[0]
+            : method.ReturnType;
+        var signatureIsValid = parameters.Length is 1 or 2
+                               && (parameters.Length == 1 || parameters[1].ParameterType == typeof(CancellationToken))
+                               && responseType != typeof(void)
+                               && method.ReturnType != typeof(Task);
+        if (!signatureIsValid)
+            throw new InvalidOperationException(
+                $"[Op(\"{attribute.Key}\")] on '{method.DeclaringType?.FullName}.{method.Name}' must return TResponse or Task<TResponse> and accept (TRequest) or (TRequest, CancellationToken)."
+            );
+
+        return new Op(Define(attribute, parameters[0].ParameterType, responseType), method, target);
+    }
+
+    public static HostOperationDefinition Define(OpAttribute attribute, Type requestType, Type responseType) {
+        var metadata = HostOperationAgentMetadata.Create(
+            attribute.Does,
+            attribute.Finds,
+            (HostOperationIntent)attribute.Intent,
+            attribute.RequiresDocument,
+            (HostOperationCostTier)attribute.Cost,
+            attribute.Tier switch {
+                OpTier.Default => HostOperationVisibility.DefaultVisible,
+                OpTier.Expert => HostOperationVisibility.ExpertOnly,
+                _ => HostOperationVisibility.EscalationVisible
+            },
+            attribute.Example == null
+                ? null
+                : [new HostOperationRequestExample("example", "Example request.", attribute.Example)],
+            supportedActiveDocumentKind: attribute.DocumentKind switch {
+                OpDocumentKind.Project => HostOperationActiveDocumentKind.ProjectOnly,
+                OpDocumentKind.Family => HostOperationActiveDocumentKind.FamilyOnly,
+                _ => HostOperationActiveDocumentKind.Any
+            }
+        );
+        var definition = new HostOperationDefinition(
+            attribute.Key,
+            requestType,
+            responseType,
+            attribute.IsPublic,
+            attribute.Title,
+            metadata
+        );
+        Validate(definition);
+        return definition;
+    }
+
+    private static readonly JsonSerializerSettings StrictRequestJsonSettings = new() {
+        MissingMemberHandling = MissingMemberHandling.Error,
+        ContractResolver = new DefaultContractResolver {
+            NamingStrategy = new CamelCaseNamingStrategy {
+                ProcessDictionaryKeys = false,
+                OverrideSpecifiedNames = false
+            }
+        },
+        Converters = [new StringEnumConverter()]
+    };
+
+    private static void Validate(Op op) {
+        Validate(op.Definition);
+    }
+
+    private static void Validate(HostOperationDefinition definition) {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(definition.Key))
+            errors.Add("operation key is required.");
+
+        var metadata = definition.AgentMetadata;
+        foreach (var example in metadata.RequestExamples)
+            ValidateRequestJson(definition, $"request example '{example.Name}'", example.Json, errors);
+        if (metadata.SafeDefaultRequestJson is { } safeDefault)
+            ValidateRequestJson(definition, "safe default request", safeDefault, errors);
+
+        if (definition.IsPublic) {
+            var dotIndex = definition.Key.IndexOf(".", StringComparison.Ordinal);
+            var topLevel = dotIndex < 0 ? definition.Key : definition.Key[..dotIndex];
+            if (topLevel is "rvt" or "rfa" or "rvtrfa")
+                errors.Add($"{definition.Key}: document kind must be metadata, not a top-level route family.");
+            if (definition.Key.StartsWith("revit.", StringComparison.Ordinal) && !IsValidPublicRevitKey(definition.Key))
+                errors.Add($"{definition.Key}: Revit public keys must follow revit.<layer>.<noun>[.<variant>].");
+        }
+
+        if (errors.Count != 0)
+            throw new InvalidOperationException(
+                $"Invalid bridge operation:{Environment.NewLine}  {string.Join($"{Environment.NewLine}  ", errors)}"
+            );
+    }
+
+    private static void ValidateRequestJson(
+        HostOperationDefinition definition,
+        string label,
+        string json,
+        List<string> errors
+    ) {
+        try {
+            JsonConvert.DeserializeObject(json, definition.RequestType, StrictRequestJsonSettings);
+        } catch (Exception exception) {
+            errors.Add($"{definition.Key}: {label} does not deserialize to {definition.RequestType.Name}: {exception.Message}");
+        }
+    }
+
+    private static bool IsValidPublicRevitKey(string key) {
+        var parts = key.Split('.');
+        return parts.Length is >= 3 and <= 4
+               && parts[0] == "revit"
+               && parts[1] is "glance" or "context" or "catalog" or "matrix" or "detail" or "resolve" or "apply"
+               && !string.IsNullOrWhiteSpace(parts[2])
+               && (parts.Length == 3 || !string.IsNullOrWhiteSpace(parts[3]));
+    }
+}
+
+public sealed record HostOpsCatalogEntry(
+    string Key,
+    string? DisplayName,
+    string Intent,
+    string CostTier,
+    string Visibility,
+    bool RequiresActiveDocument,
+    string SupportedActiveDocumentKind,
+    string Description,
+    IReadOnlyList<string> SearchTerms,
+    IReadOnlyList<HostOperationRequestExample> RequestExamples,
+    string? SafeDefaultRequestJson,
+    IReadOnlyList<string> CallGuidance,
+    string RequestSchemaJson,
+    string ResponseSchemaJson
+) {
+    public static HostOpsCatalogEntry FromOp(Op op) {
+        return FromDefinition(op.Definition);
+    }
+
+    public static HostOpsCatalogEntry FromDefinition(HostOperationDefinition definition) {
+        var metadata = definition.AgentMetadata;
+        return new HostOpsCatalogEntry(
+            definition.Key,
+            definition.DisplayName,
+            metadata.Intent.ToString(),
+            metadata.CostTier.ToString(),
+            metadata.Visibility.ToString(),
+            metadata.RequiresActiveDocument,
+            metadata.SupportedActiveDocumentKind.ToString(),
+            metadata.Description,
+            metadata.SearchTerms,
+            metadata.RequestExamples,
+            metadata.SafeDefaultRequestJson,
+            metadata.CallGuidance,
+            BridgeOpSchemaGenerator.GetRequestSchemaJson(definition.RequestType),
+            BridgeOpSchemaGenerator.GetResponseSchemaJson(definition.ResponseType)
+        );
+    }
+}
+
+public sealed record HostOpsCatalogData(IReadOnlyList<HostOpsCatalogEntry> Operations);

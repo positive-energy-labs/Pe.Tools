@@ -12,11 +12,13 @@ using System.IO;
 namespace Pe.App.Host;
 
 internal static class FamilyModelBridgeOps {
-    public static readonly BridgeOp Capture = FamilyModelHostOperations.Capture(
-        static (_, _, ct) => PaletteThreading.RunRevitAsync(CaptureActiveFamily, ct));
+    [Op("revit.detail.family-model", Does = "Capture the active Revit family document as portable family.json authored truth, including explicit unmodeled diagnostics.", Title = "Capture Family Model", Finds = ["family-model", "family-json", "capture", "roundtrip", "family-foundry"], Cost = OpCost.Bounded, RequiresDocument = true, DocumentKind = OpDocumentKind.Family)]
+    private static Task<FamilyModelCaptureData> Capture(FamilyModelCaptureRequest _, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(CaptureActiveFamily, cancellationToken);
 
-    public static readonly BridgeOp Build = FamilyModelHostOperations.Build(
-        static (request, _, ct) => PaletteThreading.RunRevitAsync(() => BuildFamily(request), ct));
+    [Op("revit.apply.family-model", Does = "Build a new target-year Revit family from portable family.json and save it to an explicit .rfa output path.", Title = "Build Family Model", Finds = ["family-model", "family-json", "build", "replay", "family-foundry", "manager"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static Task<FamilyModelBuildData> Build(FamilyModelBuildRequest request, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => BuildFamily(request), cancellationToken);
 
     private static FamilyModelCaptureData CaptureActiveFamily() {
         var document = RevitUiSession.CurrentUIApplication.ActiveUIDocument?.Document

@@ -19,7 +19,7 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>
 ///     Revit-aware host operations served through the bridge.
 /// </summary>
-public class RequestService : ISettingsBridgeService {
+public class RequestService {
     private static readonly TimeSpan FieldOptionsThrottleWindow = TimeSpan.FromMilliseconds(350);
     private static readonly TimeSpan ParameterCatalogThrottleWindow = TimeSpan.FromMilliseconds(750);
 
@@ -37,13 +37,13 @@ public class RequestService : ISettingsBridgeService {
         this._throttleGate = throttleGate;
     }
 
+    [Op("settings.field-options", Does = "Read document-specific field option values for a settings module.", Title = "Get Settings Field Options", Finds = ["settings", "field-options", "schema", "document"], Tier = OpTier.Expert, RequiresDocument = true)]
     public async Task<FieldOptionsData> GetFieldOptionsAsync(
         FieldOptionsRequest request,
-        string? connectionId,
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
-            connectionId,
+            null,
             "field-options",
             request.ModuleKey,
             request.RootKey,
@@ -60,13 +60,13 @@ public class RequestService : ISettingsBridgeService {
         return response;
     }
 
+    [Op("settings.parameter-catalog", Does = "Read Revit parameter definitions and available parameter facts from the active document for settings authoring.", Title = "Get Parameter Catalog", Finds = ["parameters", "catalog", "settings", "document"], RequiresDocument = true)]
     public async Task<ParameterCatalogData> GetParameterCatalogAsync(
         ParameterCatalogRequest request,
-        string? connectionId,
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
-            connectionId,
+            null,
             "parameter-catalog",
             request.ModuleKey,
             null,
@@ -82,13 +82,13 @@ public class RequestService : ISettingsBridgeService {
         return response;
     }
 
+    [Op("revit.catalog.loaded-families.filter-field-options", Does = "Read document-specific option values for loaded-family query filters.", Title = "Get Loaded Families Filter Field Options", Finds = ["loaded-families", "families", "filter", "field-options"], Tier = OpTier.Expert, RequiresDocument = true)]
     public async Task<FieldOptionsData> GetLoadedFamiliesFilterFieldOptionsAsync(
         LoadedFamiliesFilterFieldOptionsRequest request,
-        string? connectionId,
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
-            connectionId,
+            null,
             "loaded-families-filter-field-options",
             nameof(LoadedFamiliesFilter),
             null,
@@ -110,13 +110,13 @@ public class RequestService : ISettingsBridgeService {
         return response;
     }
 
+    [Op("revit.catalog.field-options", Does = "Read document-specific option values for a value-domain source key (e.g. category-names, family-names). Request schemas mark option-backed fields with an x-options.key annotation that resolves through this operation.", Title = "Get Field Options", Finds = ["field-options", "value-domain", "options", "categories", "families", "suggestions"], Tier = OpTier.Expert, RequiresDocument = true, Example = "{ \"sourceKey\": \"category-names\" }")]
     public async Task<FieldOptionsData> GetValueDomainOptionsAsync(
         ValueDomainOptionsRequest request,
-        string? connectionId,
         CancellationToken cancellationToken
     ) {
         var key = BuildThrottleKey(
-            connectionId,
+            null,
             "value-domain-options",
             request.SourceKey,
             null,
@@ -133,6 +133,7 @@ public class RequestService : ISettingsBridgeService {
         return response;
     }
 
+    [Op("settings.schema", Does = "Read a settings schema from the connected Revit runtime.", Title = "Get Schema", Finds = ["schema", "settings", "profile", "profiles", "module", "family-foundry"], RequiresDocument = true)]
     public Task<SchemaData> GetSchemaAsync(SchemaRequest request, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
@@ -153,6 +154,7 @@ public class RequestService : ISettingsBridgeService {
             }
         }, cancellationToken);
 
+    [Op("settings.document.semantic-validation", Does = "Run the registered typed feature validator for a settings document after host-owned structural validation.", Title = "Validate Settings Document Semantics", Finds = ["settings", "validation", "semantic", "internal"], IsPublic = false)]
     public Task<SettingsDocumentSemanticValidationData> ValidateSettingsDocumentSemanticsAsync(
         ValidateSettingsDocumentSemanticsRequest request,
         CancellationToken cancellationToken
@@ -173,7 +175,8 @@ public class RequestService : ISettingsBridgeService {
                 issue.Suggestion)).ToList()));
     }
 
-    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(CancellationToken cancellationToken) =>
+    [Op("revit.catalog.loaded-families.filter-schema", Does = "Read the filter schema for loaded-family catalog and matrix queries.", Title = "Get Loaded Families Filter Schema", Finds = ["loaded-families", "families", "filter", "schema"], Tier = OpTier.Expert, RequiresDocument = true)]
+    public Task<SchemaData> GetLoadedFamiliesFilterSchemaAsync(NoRequest _, CancellationToken cancellationToken) =>
         this.EnqueueAsync(() => {
             try {
                 var schema = RevitJsonSchemaFactory.CreateEditorSchemaData(
@@ -192,7 +195,8 @@ public class RequestService : ISettingsBridgeService {
             }
         }, cancellationToken);
 
-    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(CancellationToken cancellationToken) => this.EnqueueAsync(() => {
+    [Op("settings.module-catalog", Does = "Read the settings module catalog from Revit for bridge-side schema work.", Title = "Get Settings Module Catalog", Finds = ["settings", "module", "catalog", "schema"], RequiresDocument = true, IsPublic = false)]
+    public Task<GetSettingsModuleCatalogBridgeResponse> GetSettingsModuleCatalogAsync(NoRequest _, CancellationToken cancellationToken) => this.EnqueueAsync(() => {
         var activeDocument = RevitUiSession.CurrentUIApplication.GetActiveDocument();
         var modules = this._moduleRegistry.GetModules()
             .Where(SettingsModuleAvailability.IsBridgeDiscoverable)

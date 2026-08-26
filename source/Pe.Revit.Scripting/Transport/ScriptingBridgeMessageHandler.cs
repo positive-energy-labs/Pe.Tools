@@ -12,7 +12,7 @@ using System.Diagnostics;
 
 namespace Pe.Revit.Scripting.Transport;
 
-public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IScriptingBridgeService, IDisposable {
+public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisposable {
     private const int AdmissionWaitSeconds = 30;
     private const int DefaultTimeoutSeconds = 600;
     private const int MaxTimeoutSeconds = 3600;
@@ -69,6 +69,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IScri
         pendingRequest.Execute(this);
     }
 
+    [Op("scripting.workspace.bootstrap", Does = "Create or update a C# Revit scripting pod workspace: pod.json, PeScripts.csproj, docs, and a sample entrypoint script.", Title = "Bootstrap Script Workspace", Finds = ["script", "workspace", "pod", "bootstrap", "files"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public Task<ScriptWorkspaceBootstrapData> BootstrapWorkspaceAsync(
         ScriptWorkspaceBootstrapRequest request,
         CancellationToken cancellationToken
@@ -90,6 +91,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IScri
         cancellationToken
     );
 
+    [Op("scripting.execute", Does = "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a pod entrypoint declared in the workspace's pod.json — exactly one of the two. permissionMode defaults to ReadOnly, which discards active-document changes via a rollback guard; pass WriteTransaction to keep document edits, or NoTransaction only for APIs such as Document.SaveAs that reject an open transaction.", Title = "Execute Revit Script", Finds = ["script", "execute", "csharp", "revit", "pod"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert, RequiresDocument = true)]
     public async Task<ExecuteRevitScriptData> ExecuteAsync(
         ExecuteRevitScriptRequest request,
         CancellationToken cancellationToken
@@ -138,6 +140,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IScri
         ).ConfigureAwait(false);
     }
 
+    [Op("scripting.cancel", Does = "Signal cooperative cancellation to the currently running script execution. The script stops at its next ct / ThrowIfCancelled checkpoint; scripts that never check the token cannot be interrupted.", Title = "Cancel Revit Script", Finds = ["script", "cancel", "stop", "timeout", "revit"], Tier = OpTier.Expert)]
     public Task<ScriptCancelData> CancelAsync(
         ScriptCancelRequest request,
         CancellationToken cancellationToken
@@ -165,6 +168,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IScri
         }
     }
 
+    [Op("scripting.pod.import", Does = "Import a pod.json-backed Revit scripting workspace from a .zip archive (any path) into a new workspace slug under Documents/Pe.Tools/workspaces.", Title = "Import Script Pod", Finds = ["script", "pod", "import", "workspace", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public Task<ScriptPodImportData> ImportPodAsync(
         ScriptPodImportRequest request,
         CancellationToken cancellationToken
@@ -185,6 +189,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IScri
         cancellationToken
     );
 
+    [Op("scripting.pod.export", Does = "Export a validated pod.json-backed Revit scripting workspace as a portable source-first .zip archive to any path.", Title = "Export Script Pod", Finds = ["script", "pod", "export", "workspace", "zip", "archive"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public Task<ScriptPodExportData> ExportPodAsync(
         ScriptPodExportRequest request,
         CancellationToken cancellationToken
@@ -199,6 +204,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IScri
         cancellationToken
     );
 
+    [Op("scripting.pod.list", Does = "List all scripting workspaces with their validated pod.json manifests and entrypoints. Workspaces with a missing or invalid pod.json are included with diagnostics explaining what to fix.", Title = "List Script Pods", Finds = ["script", "pod", "list", "workspace", "entrypoints", "catalog"], Tier = OpTier.Expert)]
     public Task<ScriptPodListData> ListPodsAsync(
         ScriptPodListRequest request,
         CancellationToken cancellationToken

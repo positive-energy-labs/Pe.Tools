@@ -35,236 +35,61 @@ namespace Pe.Revit.Global.Services.Host;
 /// <summary>
 ///     Bridge-backed Revit data requests for browser routes.
 /// </summary>
-internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : IRevitDataService {
-    private readonly RevitTaskQueue _revitTaskQueue = revitTaskQueue;
+internal sealed class RevitDataRequestService {
+    [Op("takeoffs.snapshot", Does = "Read Takeoff model status, plan views, zoning regions, materialized rooms, and source identity from the active project.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private TakeoffSnapshotResponse GetTakeoffSnapshotCore(NoRequest _) =>
+        RunTakeoff(document =>
+            new TakeoffSnapshotResponse(this.CreateTakeoffReadingFrom(document), TakeoffAtlas.Snapshot(document)));
 
-    public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(
-        LoadedFamiliesCatalogRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetLoadedFamiliesCatalogCore(request), cancellationToken);
+    [Op("takeoffs.views", Does = "Read non-template plan views with the Filled Region count for each view.", Title = "Get Takeoff Views", Finds = ["takeoffs", "views", "plans", "filled-regions"], RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffViewsData GetTakeoffViewsCore(NoRequest _) =>
+        RunTakeoff(document => new TakeoffViewsData(TakeoffAtlas.Views(document)));
 
-    public Task<ScheduleCatalogData> GetScheduleCatalogAsync(
-        ScheduleCatalogRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetScheduleCatalogCore(request), cancellationToken);
+    [Op("takeoffs.candidates", Does = "Read Filled Regions and their boundary loops from one named plan view.", Title = "Get Takeoff Candidate Regions", Finds = ["takeoffs", "candidates", "filled-regions", "boundaries", "view"], Cost = OpCost.Bounded, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request) =>
+        RunTakeoff(document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request)));
 
-    public Task<ScheduleProfilesQueryData> GetScheduleProfilesQueryAsync(
-        ScheduleProfilesQueryRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetScheduleProfilesQueryCore(request), cancellationToken);
+    [Op("takeoffs.adopt", Does = "Adopt Filled Regions as Zoning Regions and register their System tags in one transaction.", Title = "Adopt Takeoff Regions", Finds = ["takeoffs", "adopt", "zones", "filled-regions", "register"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffAdoptResult AdoptTakeoffRegionsCore(TakeoffAdoptRequest request) =>
+        RunTakeoff(document => TakeoffAtlas.AdoptZones(document, request), "Pe Adopt Takeoff Regions");
 
-    public Task<ProjectBrowserData> GetProjectBrowserAsync(
-        ProjectBrowserRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetProjectBrowserCore(request), cancellationToken);
+    [Op("takeoffs.prepare-capture", Does = "Prepare the capture views for one Takeoff plan view in one transaction.", Title = "Prepare Takeoff Capture", Finds = ["takeoffs", "capture", "prepare", "views"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffCapturePrepared PrepareTakeoffCaptureCore(TakeoffPrepareCaptureRequest request) =>
+        RunTakeoff(document => TakeoffAtlas.PrepareCapture(document, request), "Pe Prepare Takeoff Capture");
 
-    public Task<ProjectIndexData> GetProjectIndexAsync(
-        ProjectIndexRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetProjectIndexCore(request), cancellationToken);
+    [Op("takeoffs.detect-capture", Does = "Capture one level, detect room geometry, and write replay evidence without committing Revit changes.", Title = "Detect Takeoff Capture", Finds = ["takeoffs", "capture", "detect", "replay", "rooms"], Cost = OpCost.Expensive, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffCaptureResult DetectTakeoffCaptureCore(TakeoffDetectCaptureRequest request) =>
+        RunTakeoff(document => TakeoffAtlas.DetectCapture(document, request));
 
-    public Task<SheetDetailData> GetSheetDetailsAsync(
-        SheetDetailRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetSheetDetailsCore(request), cancellationToken);
+    [Op("takeoffs.partition", Does = "Partition one Zoning Region from replay evidence and materialize Room Regions in one transaction.", Title = "Partition Takeoff Zone", Finds = ["takeoffs", "partition", "zones", "rooms", "materialize"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffPartitionResult PartitionTakeoffCore(TakeoffPartitionRequest request) =>
+        RunTakeoff(document => TakeoffAtlas.Partition(document, request), "Pe Partition Takeoff Zone");
 
-    public Task<ScheduleQueryData> GetScheduleQueryAsync(
-        ScheduleQueryRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetScheduleQueryCore(request), cancellationToken);
+    [Op("takeoffs.decisions", Does = "Write review decisions to one Room Region provenance blob in one transaction.", Title = "Write Takeoff Decisions", Finds = ["takeoffs", "decisions", "review", "provenance"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffWriteResult WriteTakeoffDecisionsCore(TakeoffDecisionsRequest request) =>
+        RunTakeoff(document => TakeoffAtlas.WriteDecisions(document, request), "Pe Write Takeoff Decisions");
 
-    public Task<LoadedFamiliesMatrixData> GetLoadedFamiliesMatrixAsync(
-        LoadedFamiliesMatrixRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetLoadedFamiliesMatrixCore(request), cancellationToken);
-
-    public Task<FamilyEditorSnapshotData> GetFamilyEditorSnapshotAsync(
-        FamilyEditorSnapshotRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(this.GetFamilyEditorSnapshotCore, cancellationToken);
-
-    public Task<FamilyEditorOpenData> OpenFamilyEditorAsync(
-        FamilyEditorOpenRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.OpenFamilyEditorCore(request), cancellationToken);
-
-    public Task<FamilyEditorApplyData> ApplyFamilyEditorEditsAsync(
-        FamilyEditorApplyRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.ApplyFamilyEditorEditsCore(request), cancellationToken);
-
-    public Task<ParameterValueApplyData> ApplyParameterValuesAsync(
-        ParameterValueApplyRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.ApplyParameterValuesCore(request), cancellationToken);
-
-    public Task<ScheduleApplyData> ApplyScheduleAsync(
-        ScheduleApplyRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.ApplyScheduleCore(request), cancellationToken);
-
-    public Task<DataTableDetailData> GetDataTablesAsync(
-        DataTableDetailRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetDataTablesCore(request), cancellationToken);
-
-    public Task<ParameterLinksData> GetParameterLinksAsync(
-        ParameterLinksDetailRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetParameterLinksCore(request), cancellationToken);
-
-    public Task<ParameterLinksData> ApplyParameterLinksAsync(
-        ParameterLinksApplyRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.ApplyParameterLinksCore(request), cancellationToken);
-
-    public Task<ScheduleCoverageData> GetScheduleCoverageAsync(
-        ScheduleCoverageRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetScheduleCoverageCore(request), cancellationToken);
-
-    public Task<ParameterCoverageData> GetParameterCoverageAsync(
-        ParameterCoverageRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetParameterCoverageCore(request), cancellationToken);
-
-    public Task<ConceptEvidenceData> GetConceptEvidenceAsync(
-        ConceptEvidenceRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetConceptEvidenceCore(request), cancellationToken);
-
-    public Task<ParameterEvidenceData> GetParameterEvidenceAsync(
-        ParameterEvidenceRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetParameterEvidenceCore(request), cancellationToken);
-
-    public Task<ProjectParameterBindingsData> GetProjectParameterBindingsAsync(
-        ProjectParameterBindingsRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetProjectParameterBindingsCore(request), cancellationToken);
-
-    public Task<ElementContextQueryData> GetElementContextQueryAsync(
-        ElementContextQueryRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetElementContextQueryCore(request), cancellationToken);
-
-    public Task<ElectricalPanelsCatalogData> GetElectricalPanelsCatalogAsync(
-        ElectricalPanelsCatalogRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetElectricalPanelsCatalogCore(request), cancellationToken);
-
-    public Task<ElectricalCircuitsCatalogData> GetElectricalCircuitsCatalogAsync(
-        ElectricalCircuitsCatalogRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetElectricalCircuitsCatalogCore(request), cancellationToken);
-
-    public Task<ElectricalPanelSchedulesQueryData> GetElectricalPanelSchedulesQueryAsync(
-        ElectricalPanelSchedulesQueryRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetElectricalPanelSchedulesQueryCore(request), cancellationToken);
-
-    public Task<ElectricalLoadClassificationsCatalogData> GetElectricalLoadClassificationsCatalogAsync(
-        ElectricalLoadClassificationsCatalogRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetElectricalLoadClassificationsCatalogCore(request), cancellationToken);
-
-    public Task<RevitDocumentSessionContextData> GetRevitDocumentSessionContextAsync(CancellationToken cancellationToken) =>
-        this.EnqueueAsync(this.GetRevitDocumentSessionContextCore, cancellationToken);
-
-    public Task<RevitAgentContextSummaryData> GetRevitAgentContextSummaryAsync(CancellationToken cancellationToken) =>
-        this.EnqueueAsync(this.GetRevitAgentContextSummaryCore, cancellationToken);
-
-    public Task<GlanceModelData> GetGlanceModelAsync(CancellationToken cancellationToken) =>
-        this.EnqueueAsync(GetGlanceModelCore, cancellationToken);
-
-    public Task<GlanceAttentionData> GetGlanceAttentionAsync(CancellationToken cancellationToken) =>
-        this.EnqueueAsync(GetGlanceAttentionCore, cancellationToken);
-
-    public Task<RevitAgentContextResolveData> ResolveRevitAgentContextAsync(
-        RevitAgentContextResolveRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.ResolveRevitAgentContextCore(request), cancellationToken);
-
-    public Task<RevitAgentVisibleContextData> GetRevitAgentVisibleContextAsync(
-        RevitAgentVisibleContextRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetRevitAgentVisibleContextCore(request), cancellationToken);
-
-    public Task<RevitAgentViewRenderingStateData> GetRevitAgentViewRenderingStateAsync(
-        RevitAgentViewRenderingStateRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetRevitAgentViewRenderingStateCore(request), cancellationToken);
-
-    public Task<RevitViewImageData> GetRevitViewImageAsync(
-        RevitViewImageRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(() => this.GetRevitViewImageCore(request), cancellationToken);
-
-    public Task<TakeoffSnapshotResponse> GetTakeoffSnapshotAsync(CancellationToken cancellationToken) =>
-        this.EnqueueAsync(
-            () => RunTakeoff(RevitBridgeOps.TakeoffSnapshot.Definition, document =>
-                new TakeoffSnapshotResponse(this.CreateTakeoffReadingFrom(document), TakeoffAtlas.Snapshot(document))),
-            cancellationToken);
-
-    public Task<TakeoffViewsData> GetTakeoffViewsAsync(CancellationToken cancellationToken) =>
-        this.EnqueueAsync(
-            () => RunTakeoff(
-                RevitBridgeOps.TakeoffViews.Definition,
-                document => new TakeoffViewsData(TakeoffAtlas.Views(document))),
-            cancellationToken);
-
-    public Task<TakeoffCandidatesData> GetTakeoffCandidatesAsync(
-        TakeoffCandidatesRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        () => RunTakeoff(
-            RevitBridgeOps.TakeoffCandidates.Definition,
-            document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request))),
-        cancellationToken);
-
-    public Task<TakeoffAdoptResult> AdoptTakeoffRegionsAsync(
-        TakeoffAdoptRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        () => RunTakeoff(
-            RevitBridgeOps.TakeoffAdopt.Definition,
-            document => TakeoffAtlas.AdoptZones(document, request),
-            "Pe Adopt Takeoff Regions"),
-        cancellationToken,
-        TimeSpan.FromMinutes(5));
-
-    public Task<TakeoffCapturePrepared> PrepareTakeoffCaptureAsync(
-        TakeoffPrepareCaptureRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        () => RunTakeoff(
-            RevitBridgeOps.TakeoffPrepareCapture.Definition,
-            document => TakeoffAtlas.PrepareCapture(document, request),
-            "Pe Prepare Takeoff Capture"),
-        cancellationToken,
-        TimeSpan.FromMinutes(5));
-
-    public Task<TakeoffCaptureResult> DetectTakeoffCaptureAsync(
-        TakeoffDetectCaptureRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        () => RunTakeoff(
-            RevitBridgeOps.TakeoffDetectCapture.Definition,
-            document => TakeoffAtlas.DetectCapture(document, request)),
-        cancellationToken,
-        TimeSpan.FromMinutes(5));
-
-    public Task<TakeoffPartitionResult> PartitionTakeoffAsync(
-        TakeoffPartitionRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        () => RunTakeoff(
-            RevitBridgeOps.TakeoffPartition.Definition,
-            document => TakeoffAtlas.Partition(document, request),
-            "Pe Partition Takeoff Zone"),
-        cancellationToken,
-        TimeSpan.FromMinutes(5));
-
-    public Task<TakeoffWriteResult> WriteTakeoffDecisionsAsync(
-        TakeoffDecisionsRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        () => RunTakeoff(
-            RevitBridgeOps.TakeoffDecisions.Definition,
-            document => TakeoffAtlas.WriteDecisions(document, request),
-            "Pe Write Takeoff Decisions"),
-        cancellationToken);
-
-    public Task<TakeoffRhvacLinksData> LinkTakeoffRhvacAsync(
-        TakeoffRhvacLinksRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        () => RunTakeoff(
-            RevitBridgeOps.TakeoffRhvacLinks.Definition,
+    [Op("takeoffs.rhvac-links", Does = "Write RHVAC file and room links to Room Region provenance in one transaction.", Title = "Link Takeoff Rooms to RHVAC", Finds = ["takeoffs", "rhvac", "links", "rooms", "provenance"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffRhvacLinksData LinkTakeoffRhvacCore(TakeoffRhvacLinksRequest request) =>
+        RunTakeoff(
             document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
-            "Pe Link Takeoff Rooms to RHVAC"),
-        cancellationToken);
+            "Pe Link Takeoff Rooms to RHVAC");
 
-    public Task<TakeoffRoomTypeData> WriteTakeoffRoomTypeAsync(
-        TakeoffRoomTypeRequest request, CancellationToken cancellationToken
-    ) => this.EnqueueAsync(
-        () => RunTakeoff(
-            RevitBridgeOps.TakeoffRoomType.Definition,
+    [Op("takeoffs.room-type", Does = "Write and read back one Room Region room type in one transaction.", Title = "Write Takeoff Room Type", Finds = ["takeoffs", "room-type", "rooms", "parameter"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
+    private static TakeoffRoomTypeData WriteTakeoffRoomTypeCore(TakeoffRoomTypeRequest request) =>
+        RunTakeoff(
             document => new TakeoffRoomTypeData(TakeoffAtlas.WriteRoomType(document, request)),
-            "Pe Write Takeoff Room Type"),
-        cancellationToken);
+            "Pe Write Takeoff Room Type");
 
-    public Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync(CancellationToken cancellationToken) =>
-        cancellationToken.IsCancellationRequested
-            ? Task.FromCanceled<ParametersServiceCacheData>(cancellationToken)
-            : ParametersServiceCache.RefreshAsync();
+    [Op("revit.apply.parameters-service-cache.refresh", Does = "Refresh the global APS Parameters Service cache through the connected Revit runtime.", Title = "Refresh Parameters Service Cache", Finds = ["aps", "parameters", "cache", "refresh", "parameter-service"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
+    private static Task<ParametersServiceCacheData> RefreshParametersServiceCacheCore(
+        NoRequest _,
+        CancellationToken cancellationToken
+    ) => cancellationToken.IsCancellationRequested
+        ? Task.FromCanceled<ParametersServiceCacheData>(cancellationToken)
+        : ParametersServiceCache.RefreshAsync();
 
-    public Task<RibbonCommandExecuteData> ExecuteRibbonCommandAsync(RibbonCommandExecuteRequest request, CancellationToken cancellationToken) =>
-        this.EnqueueAsync(() => ExecuteRibbonCommandCore(request), cancellationToken);
-
+    [Op("revit.apply.command.execute", Does = "Search Revit ribbon/postable commands by name and execute one by command id — the same discovery and PostCommand machinery as the command palette. Call with searchText to list candidates without executing, then commandId to post.", Title = "Execute Ribbon Command", Finds = ["command", "execute", "postable", "ribbon", "palette", "post", "trigger"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, Example = "{ \"searchText\": \"sheet\" }")]
     private static RibbonCommandExecuteData ExecuteRibbonCommandCore(RibbonCommandExecuteRequest request) {
         var uiApp = RevitUiSession.CurrentUIApplication;
 
@@ -359,12 +184,8 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
     private static string GetDocumentVersionToken(RevitDocument document) =>
         RevitDocument.GetDocumentVersion(document).VersionGUID.ToString("D");
 
-    private static T RunTakeoff<T>(
-        HostOperationDefinition operation,
-        Func<RevitDocument, T> run,
-        string? transactionName = null
-    ) {
-        var document = GetSupportedActiveDocument(operation);
+    private static T RunTakeoff<T>(Func<RevitDocument, T> run, string? transactionName = null) {
+        var document = GetSupportedActiveDocument();
         if (transactionName != null && document.IsReadOnly)
             throw BridgeOperationExceptions.Conflict(
                 "The active project document is read-only.",
@@ -388,12 +209,13 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
             throw BridgeOperationExceptions.Unexpected(
                 "TakeoffOperationException",
                 ex,
-                $"Verify the active project and request for '{operation.Key}', then retry.");
+                "Verify the active project and request, then retry.");
         }
     }
 
+    [Op("revit.catalog.loaded-families", Does = "Read loaded family and type facts from the active document.", Title = "Get Loaded Families Catalog", Finds = ["loaded-families", "families", "types", "catalog"], RequiresDocument = true, Example = "{ \"filter\": { \"placementScope\": \"PlacedOnly\" }, \"projection\": { \"view\": \"Summary\" }, \"budget\": { \"maxEntries\": 25 } }")]
     private LoadedFamiliesCatalogData GetLoadedFamiliesCatalogCore(LoadedFamiliesCatalogRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.LoadedFamiliesCatalog.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return LoadedFamiliesCatalogCollector.Collect(document, request.Filter, request.Projection, request.Budget);
@@ -406,8 +228,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.catalog.schedules", Does = "Read compact schedule handles, names, sheet placement, optional field metadata, and factual schedule evidence summaries from the active document. Revit-generated duplicate suffixes like '(2)' and 'Copy 1' are normalized out of name summary weighting. Do not use broad schedule catalog discovery for visible equipment coverage when revit.matrix.schedule-coverage can answer from view or element handles.", Title = "Get Schedule Catalog", Finds = ["schedules", "catalog", "fields", "columns", "parameters", "document", "sheet-placement", "printed-context"], RequiresDocument = true, Example = "{ \"projection\": { \"view\": \"Summary\" }, \"budget\": { \"maxEntries\": 25 } }")]
     private ScheduleCatalogData GetScheduleCatalogCore(ScheduleCatalogRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleCatalog.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ScheduleCatalogCollector.Collect(document, request, DocShadow.For(document));
@@ -420,8 +243,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.catalog.project-browser", Does = "Read bounded Project Browser organization for views, sheets, and schedules as navigation/provenance metadata.", Title = "Get Project Browser", Finds = ["project-browser", "browser", "views", "sheets", "schedules", "folders", "navigation", "provenance"], RequiresDocument = true, Example = "{ \"sections\": [\"Views\", \"Sheets\", \"Schedules\"], \"view\": \"Folders\", \"budget\": { \"maxSamplesPerEntry\": 5 } }")]
     private ProjectBrowserData GetProjectBrowserCore(ProjectBrowserRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ProjectBrowser.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ProjectBrowserCollector.Collect(document, request, DocShadow.For(document));
@@ -434,8 +258,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.catalog.project-index", Does = "Read a compact semantic project index with bounded Project Browser provenance for levels, sheets, views, schedules, categories, and families. Use after revit.context.summary when you need actual names and handles across the project, not just counts.", Title = "Get Project Index", Finds = ["project-index", "project-browser", "browser-provenance", "levels", "sheets", "views", "schedules", "printed-context", "orientation"], RequiresDocument = true, Example = "{ \"includeBrowserProvenance\": true, \"includeModelContext\": true, \"browserSections\": [\"Views\", \"Sheets\", \"Schedules\"], \"projection\": { \"view\": \"Summary\" }, \"budget\": { \"maxEntries\": 25, \"maxSamplesPerEntry\": 5 } }")]
     private ProjectIndexData GetProjectIndexCore(ProjectIndexRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ProjectIndex.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ProjectIndexCollector.Collect(document, request, DocShadow.For(document));
@@ -448,8 +273,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.detail.sheets", Does = "Read minimal native sheet anchors for extractor and scripting workflows: sheet identity, placed views, placed schedules, title blocks, sheet-owned text, and provenance.", Title = "Get Sheet Details", Finds = ["sheets", "sheet-anchors", "printed-context", "viewports", "schedule-placement", "title-blocks", "text-notes", "extractor-boundary"], Cost = OpCost.Bounded, RequiresDocument = true, Example = "{ \"references\": { \"currentActiveSheet\": true }, \"projection\": { \"view\": \"Anchors\", \"includeTextNotes\": true, \"includeBoundingBoxes\": true }, \"budget\": { \"maxEntries\": 1, \"maxSamplesPerEntry\": 80 } }")]
     private SheetDetailData GetSheetDetailsCore(SheetDetailRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.SheetDetails.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return SheetDetailCollector.Collect(document, RevitUiSession.CurrentUIApplication.GetActiveView(), request, DocShadow.For(document));
@@ -462,8 +288,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.matrix.schedule-profiles", Does = "Read schedule profile projections from the active document.", Title = "Get Schedule Profiles Query", Finds = ["schedules", "profiles", "query", "projection", "authored-schedule-shape"], Cost = OpCost.Expensive, Tier = OpTier.Expert, RequiresDocument = true, Example = "{ \"query\": { \"kind\": \"CurrentActiveView\" } }")]
     private ScheduleProfilesQueryData GetScheduleProfilesQueryCore(ScheduleProfilesQueryRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleProfilesQuery.Definition);
+        var document = GetSupportedActiveDocument();
         var uiApp = RevitUiSession.CurrentUIApplication;
         if (request.Query?.Kind == ScheduleProfilesQueryKind.CurrentActiveView &&
             uiApp.GetActiveView() is not ViewSchedule) {
@@ -495,8 +322,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.detail.schedules", Does = "Read schedule rows and field values from the active document.", Title = "Get Schedule Query", Finds = ["schedules", "query", "rows", "values", "detail"], Cost = OpCost.Bounded, RequiresDocument = true, Example = "{ \"query\": { \"kind\": \"ScheduleReferences\", \"scheduleIds\": [12345], \"projection\": { \"view\": \"Handles\" }, \"budget\": { \"maxEntries\": 1, \"maxRowsPerEntry\": 0 } } }")]
     private ScheduleQueryData GetScheduleQueryCore(ScheduleQueryRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleQuery.Definition);
+        var document = GetSupportedActiveDocument();
         var activeScheduleView = RevitUiSession.CurrentUIApplication.GetActiveView() as ViewSchedule;
         if (request.Query?.Kind == ScheduleQueryKind.CurrentActiveView &&
             activeScheduleView == null) {
@@ -541,9 +369,10 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.matrix.loaded-families", Does = "Read a matrix of loaded family snapshots (canonical family records: types, parameters with per-type values/formulas/scope, schedule membership) from the active document.", Title = "Get Loaded Families Matrix", Finds = ["loaded-families", "families", "matrix", "projection", "parameter-scope", "family-snapshot"], Cost = OpCost.Expensive, RequiresDocument = true, Example = "{ \"filter\": { \"categoryNames\": [\"Mechanical Equipment\"], \"familyNameContains\": \"VAV\", \"placementScope\": \"PlacedOnly\" }, \"budget\": { \"maxEntries\": 10, \"maxSamplesPerEntry\": 20 } }")]
     private LoadedFamiliesMatrixData GetLoadedFamiliesMatrixCore(LoadedFamiliesMatrixRequest request) {
         var filter = ValidateMatrixFilter(request);
-        var document = GetSupportedActiveDocument(RevitBridgeOps.LoadedFamiliesMatrix.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return LoadedFamiliesMatrixCollector.Collect(
@@ -561,7 +390,8 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
-    private FamilyEditorSnapshotData GetFamilyEditorSnapshotCore() {
+    [Op("family.editor.snapshot", Does = "Read parameters, types, formulas, and display values from the active family editor document.", Title = "Get Family Editor Snapshot", Finds = ["family-editor", "family", "parameters", "types", "formulas", "snapshot"], RequiresDocument = true, DocumentKind = OpDocumentKind.Family)]
+    private FamilyEditorSnapshotData GetFamilyEditorSnapshotCore(NoRequest _) {
         var document = GetActiveFamilyDocument();
 
         try {
@@ -593,6 +423,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("family.editor.apply", Does = "Apply parameter value and formula edits to the active family editor document in one host-owned transaction.", Title = "Apply Family Editor Edits", Finds = ["family-editor", "family", "parameters", "apply", "formulas", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Family)]
     private FamilyEditorApplyData ApplyFamilyEditorEditsCore(FamilyEditorApplyRequest request) {
         var document = GetActiveFamilyDocument();
         if (!request.DryRun && document.IsReadOnly) {
@@ -645,8 +476,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         return new FamilyEditorApplyData(applied, results);
     }
 
+    [Op("revit.apply.parameter-values", Does = "Apply parameter values to project elements in one host-owned transaction, redeeming binding handles (target element id + parameter id) returned by revit.detail.schedules projection.includeBindings.", Title = "Apply Parameter Values", Finds = ["parameters", "apply", "mutation", "elements", "schedule-bindings", "binding-handles", "cell-edit", "write"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, Example = "{ \"edits\": [{ \"elementId\": 12345, \"parameterId\": -1010106, \"value\": \"AHU-1\" }, { \"elementId\": 67890, \"parameterId\": -1002501, \"value\": \"Roof unit\" }] }")]
     private ParameterValueApplyData ApplyParameterValuesCore(ParameterValueApplyRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ApplyParameterValues.Definition);
+        var document = GetSupportedActiveDocument();
         if (!request.DryRun && document.IsReadOnly) {
             throw BridgeOperationExceptions.Conflict(
                 "Active document is read-only.",
@@ -674,8 +506,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.apply.schedule", Does = "Create or update a schedule in one host-owned transaction. Two lanes: 'table' upserts a synthetic data table (a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes); 'profile' creates a regular element-driven schedule from an authored schedule profile. Either lane can also place the schedule on a sheet.", Title = "Apply Schedule", Finds = ["schedules", "data-table", "key-schedule", "table", "apply", "create", "upsert", "rows", "sheet-placement", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, Example = "{ \"table\": { \"name\": \"ASHRAE Design Conditions\", \"columns\": [{ \"heading\": \"Condition\" }, { \"heading\": \"Value (°F)\", \"kind\": \"Number\" }], \"rows\": [{ \"key\": \"cooling-db\", \"values\": [\"Cooling Design DB\", \"94.1\"] }, { \"key\": \"heating-db\", \"values\": [\"Heating Design DB\", \"12.3\"] }] }, \"placement\": { \"sheet\": \"M-001\" } }")]
     private ScheduleApplyData ApplyScheduleCore(ScheduleApplyRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleApply.Definition);
+        var document = GetSupportedActiveDocument();
         if ((request.Table == null) == (request.Profile == null)) {
             throw BridgeOperationExceptions.BadRequest(
                 "Exactly one of 'table' or 'profile' must be set.");
@@ -736,8 +569,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.detail.data-tables", Does = "Read every synthetic data table (or specific ones by name): columns, current cell values including user edits, stable row element ids/uniqueIds, and sheet placements. Row uniqueIds are the addressing surface for parameter-links and external table UIs.", Title = "Inspect Data Tables", Finds = ["schedules", "data-table", "key-schedule", "rows", "values", "handles", "sheet-placement"], Cost = OpCost.Bounded, RequiresDocument = true, Example = "{ }")]
     private DataTableDetailData GetDataTablesCore(DataTableDetailRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.DataTablesDetail.Definition);
+        var document = GetSupportedActiveDocument();
         try {
             return DataTableEngine.CollectAll(document, request);
         } catch (Exception ex) {
@@ -748,13 +582,15 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.detail.parameter-links", Does = "Read the model-owned parameter-link profile and preview every proposed target write and issue.", Title = "Inspect Parameter Links", Finds = ["parameters", "links", "rules", "preview", "electrical", "circuits", "mocp"], Cost = OpCost.Bounded, RequiresDocument = true, Example = "{ \"includeEvaluation\": true }")]
     private ParameterLinksData GetParameterLinksCore(ParameterLinksDetailRequest request) {
-        var document = GetParameterLinksDocument(RevitBridgeOps.ParameterLinksDetail.Definition);
+        var document = GetParameterLinksDocument();
         return ParameterLinksService.Instance.Detail(document, request.IncludeEvaluation);
     }
 
+    [Op("revit.apply.parameter-links", Does = "Preview or atomically replace the model-owned parameter-link profile and reconcile its changed target values.", Title = "Apply Parameter Links", Finds = ["parameters", "links", "rules", "apply", "reconcile", "electrical", "circuits", "mocp", "mutation"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, Example = "{ \"previewOnly\": true }")]
     private ParameterLinksData ApplyParameterLinksCore(ParameterLinksApplyRequest request) {
-        var document = GetParameterLinksDocument(RevitBridgeOps.ParameterLinksApply.Definition);
+        var document = GetParameterLinksDocument();
         if (!request.PreviewOnly && document.IsReadOnly) {
             throw BridgeOperationExceptions.Conflict(
                 "Active document is read-only.",
@@ -777,8 +613,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.matrix.schedule-coverage", Does = "Read bounded element-to-schedule coverage counts and samples from the active document, including active-view-visible or explicit-handle scopes.", Title = "Get Schedule Coverage Matrix", Finds = ["schedules", "coverage", "matrix", "elements", "handles", "active-view-visible", "explicit-handles", "visible-equipment", "printed-context"], Cost = OpCost.Expensive, RequiresDocument = true, Example = "{ \"scope\": \"ViewReferences\", \"viewIds\": [12345, 67890], \"categoryNames\": [\"Mechanical Equipment\"], \"scheduleRoleScope\": \"IssuedOrWorking\", \"scheduleFilter\": { \"scheduleNameContains\": \"Equipment\", \"placementScope\": \"PlacedOnly\", \"projection\": { \"view\": \"Handles\", \"includeSheetPlacements\": true }, \"budget\": { \"maxEntries\": 25 } }, \"includeMissingElementHandles\": true, \"includeMatchedScheduleNames\": true, \"budget\": { \"maxEntries\": 250, \"maxSamplesPerEntry\": 0 } }")]
     private ScheduleCoverageData GetScheduleCoverageCore(ScheduleCoverageRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ScheduleCoverage.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ScheduleCoverageCollector.Collect(
@@ -796,6 +633,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.matrix.parameter-coverage", Does = "Read bounded parameter presence, blank/default counts, and sample handles from the active document.", Title = "Get Parameter Coverage Matrix", Finds = ["parameters", "coverage", "matrix", "elements", "handles"], Cost = OpCost.Expensive, RequiresDocument = true, Example = "{ \"categoryNames\": [\"Mechanical Equipment\"], \"scope\": \"ActiveViewVisible\", \"parameters\": [{ \"name\": \"Mark\" }, { \"name\": \"Comments\" }], \"defaultValues\": [\"0\", \"-\"], \"budget\": { \"maxEntries\": 25, \"maxSamplesPerEntry\": 5 } }")]
     private ParameterCoverageData GetParameterCoverageCore(ParameterCoverageRequest request) {
         var validationIssues = ValidateParameterCoverageRequest(request);
         if (validationIssues.Count != 0) {
@@ -805,7 +643,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
             );
         }
 
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ParameterCoverage.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ParameterCoverageCollector.Collect(
@@ -822,8 +660,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.catalog.concept-evidence", Does = "Infer project-specific parameter candidates for operator concepts from factual binding and schedule evidence. Category and subject hints are weak context, not expected-shape rules; use returned reasons and facts before detail or coverage calls.", Title = "Get Concept Evidence", Finds = ["concepts", "parameter-evidence", "project-standards", "bindings", "schedule-fields", "discovery"], RequiresDocument = true, Example = "{ \"query\": \"equipment electrical load circuit panel location\", \"subjectHints\": [\"Mechanical Equipment\", \"Plumbing Equipment\"], \"budget\": { \"maxEntries\": 5, \"maxSamplesPerEntry\": 3 } }")]
     private ConceptEvidenceData GetConceptEvidenceCore(ConceptEvidenceRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ConceptEvidence.Definition);
+        var document = GetSupportedActiveDocument();
         try {
             var primitives = DocShadow.For(document).GetParameterEvidencePrimitives(document, useCache: true);
             return ConceptEvidenceCollector.Collect(request, primitives);
@@ -836,6 +675,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.catalog.parameter-evidence", Does = "Return factual parameter evidence from project bindings, schedule fields/filters, and scoped element presence. Use this when project-standard parameter names are uncertain; inspect binding categories, schedule usage, counts, and samples, then pass observed parameter identities or named references into detail or matrix calls.", Title = "Get Parameter Evidence", Finds = ["parameters", "evidence", "project-bindings", "schedule-fields", "categories", "parameter-usage"], RequiresDocument = true, Example = "{ \"categoryNames\": [\"Mechanical Equipment\"], \"scope\": \"ActiveViewVisible\", \"candidateParameters\": [{ \"name\": \"Mark\" }, { \"name\": \"Equipment Tag\" }], \"budget\": { \"maxEntries\": 10, \"maxSamplesPerEntry\": 2 } }")]
     private ParameterEvidenceData GetParameterEvidenceCore(ParameterEvidenceRequest request) {
         var validationIssues = ValidateParameterEvidenceRequest(request);
         if (validationIssues.Count != 0) {
@@ -845,7 +685,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
             );
         }
 
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ParameterEvidence.Definition);
+        var document = GetSupportedActiveDocument();
         try {
             var primitives = DocShadow.For(document).GetParameterEvidencePrimitives(document, request.UseCache);
             return ParameterEvidenceCollector.Collect(
@@ -952,6 +792,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         return issues;
     }
 
+    [Op("revit.catalog.parameter-bindings", Does = "Read project parameter bindings from the active document, using the same canonical parameter identity and shared-GUID string language returned by parameter evidence and coverage operations.", Title = "Get Project Parameter Bindings", Finds = ["parameters", "project-parameters", "bindings", "document", "catalog", "parameter-identity", "shared-guid"], RequiresDocument = true, Example = "{ \"projection\": { \"view\": \"Summary\" }, \"budget\": { \"maxEntries\": 50 } }")]
     private ProjectParameterBindingsData GetProjectParameterBindingsCore(
         ProjectParameterBindingsRequest request
     ) {
@@ -963,7 +804,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
             );
         }
 
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ProjectParameterBindings.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ProjectParameterBindingsCollector.Collect(document, request.Filter, request.BindingFilter, request.Projection, request.Budget);
@@ -976,10 +817,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.detail.elements", Does = "Read exact element context, selected/visible equipment facts, requested parameters, electrical systems, circuits, panels, connectors, panel schedules, load classifications, and nearby document facts from connected Revit.", Title = "Get Element Context Query", Finds = ["elements", "selection", "context", "query", "requested-parameters", "electrical", "circuits", "panel", "load-name", "explicit-handles", "visible-handles", "selected-equipment", "equipment-alignment"], Cost = OpCost.Bounded, RequiresDocument = true, Example = "{ \"query\": { \"kind\": \"ElementReferences\", \"elementIds\": [12345, 67890], \"parameterQuery\": { \"parameters\": [{ \"name\": \"Mark\" }, { \"name\": \"Panel\" }, { \"name\": \"Circuit Number\" }, { \"name\": \"Load Name\" }] } } }")]
     private ElementContextQueryData GetElementContextQueryCore(
         ElementContextQueryRequest request
     ) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ElementContextQuery.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ElementContextCollector.Collect(
@@ -996,10 +838,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.catalog.electrical-panels", Does = "Read electrical panel facts, panel names, marks, panel-schedule counts, connected-load counts, and compact filter diagnostics from the active Revit document.", Title = "Get Electrical Panels Catalog", Finds = ["revit", "panels", "catalog", "distribution", "electrical-equipment", "panel-schedule-references", "panel-names"], RequiresDocument = true, Example = "{ \"filter\": { \"panelNames\": [\"C6P\"] } }")]
     private ElectricalPanelsCatalogData GetElectricalPanelsCatalogCore(
         ElectricalPanelsCatalogRequest request
     ) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ElectricalPanelsCatalog.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ElectricalPanelsCatalogCollector.Collect(document, request.Filter);
@@ -1012,10 +855,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.catalog.electrical-circuits", Does = "Read electrical circuit facts, connected load identity, panel names, circuit numbers, optional nearby proxy context, and compact filter diagnostics from the active Revit document.", Title = "Get Electrical Circuits Catalog", Finds = ["revit", "circuits", "catalog", "loads", "panel", "load-name", "connected-elements", "nearby-proxy", "equipment-alignment"], RequiresDocument = true, Example = "{ \"filter\": { \"panelNames\": [\"C6P\"], \"loadNames\": [\"RV-13, DH-7 - Lower Level\"], \"circuitNumbers\": [\"1\"] }, \"options\": { \"parameterQuery\": { \"parameters\": [{ \"name\": \"Mark\" }, { \"name\": \"Panel\" }, { \"name\": \"Circuit Number\" }, { \"name\": \"Load Name\" }] } } }")]
     private ElectricalCircuitsCatalogData GetElectricalCircuitsCatalogCore(
         ElectricalCircuitsCatalogRequest request
     ) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ElectricalCircuitsCatalog.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ElectricalCircuitsCatalogCollector.Collect(document, request.Filter, request.Options);
@@ -1028,10 +872,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.detail.electrical-panel-schedules", Does = "Read electrical panel schedule row/cell projections from the active Revit document. Use this for known panels/schedules, not as the first-choice element-to-load join.", Title = "Get Electrical Panel Schedules Query", Finds = ["revit", "panel-schedules", "query", "schedules", "rows", "cells", "known-panel", "panel-references", "downstream-detail"], Cost = OpCost.Bounded, RequiresDocument = true, Example = "{ \"query\": { \"kind\": \"PanelReferences\", \"panelNames\": [\"C6P\"], \"projection\": { \"view\": \"RowsOnly\", \"circuitNumbers\": [\"1\"], \"loadNameContains\": [\"RV-13, DH-7\"], \"maxRows\": 10 } } }")]
     private ElectricalPanelSchedulesQueryData GetElectricalPanelSchedulesQueryCore(
         ElectricalPanelSchedulesQueryRequest request
     ) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ElectricalPanelSchedulesQuery.Definition);
+        var document = GetSupportedActiveDocument();
         var activeView = RevitUiSession.CurrentUIApplication.GetActiveView();
         if (request.Query?.Kind == ElectricalPanelSchedulesQueryKind.CurrentActiveView &&
             activeView is not PanelScheduleView) {
@@ -1063,10 +908,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.catalog.electrical-load-classifications", Does = "Read electrical load classification facts from the active Revit document.", Title = "Get Electrical Load Classifications Catalog", Finds = ["revit", "load-classifications", "catalog", "loads"], Tier = OpTier.Expert, RequiresDocument = true)]
     private ElectricalLoadClassificationsCatalogData GetElectricalLoadClassificationsCatalogCore(
         ElectricalLoadClassificationsCatalogRequest request
     ) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ElectricalLoadClassificationsCatalog.Definition);
+        var document = GetSupportedActiveDocument();
 
         try {
             return ElectricalLoadClassificationsCatalogCollector.Collect(document, request.Filter);
@@ -1079,7 +925,8 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
-    private RevitDocumentSessionContextData GetRevitDocumentSessionContextCore() {
+    [Op("revit.context.document-session", Does = "Read open, active, and selected document session context from connected Revit. Use only when the question spans multiple open documents or there is no active document; revit.context.summary covers single-document orientation.", Title = "Get Revit Document Session Context", Finds = ["document", "session", "active-document", "open-documents"])]
+    private RevitDocumentSessionContextData GetRevitDocumentSessionContextCore(NoRequest _) {
         try {
             return CreateDocumentSessionContext();
         } catch (Exception ex) {
@@ -1091,6 +938,7 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("family.editor.open", Does = "Open a loaded family from the active project in the Revit family editor and activate it (saves to a scratch .rfa to make activation possible).", Title = "Open Family In Editor", Finds = ["family-editor", "family", "open", "edit-family", "activate"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation, RequiresDocument = true, DocumentKind = OpDocumentKind.Project)]
     private FamilyEditorOpenData OpenFamilyEditorCore(FamilyEditorOpenRequest request) {
         var uiApp = RevitUiSession.CurrentUIApplication;
         var document = GetActiveDocument();
@@ -1199,8 +1047,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
-    private static GlanceModelData GetGlanceModelCore() {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.GlanceModel.Definition);
+    [Op("revit.glance.model", Does = "One bounded 'what IS this model' packet: document identity, true project totals (views/sheets/schedules/families), levels, sheet-number series, family composition by category, and parameter-binding health. Summaries are complete, never truncated; observedAtUtc stamps freshness. Escalate to project-index for names/handles or loaded-families for rows.", Title = "Model at a Glance", Finds = ["glance", "model", "orientation", "totals", "composition", "discipline", "levels", "sheet-series", "binding-health", "start-here"], Cost = OpCost.Bounded, Tier = OpTier.Default, RequiresDocument = true)]
+    private static GlanceModelData GetGlanceModelCore(NoRequest _) {
+        var document = GetSupportedActiveDocument();
         try {
             var documentSummary = CreateDocumentSessionContext().ActiveDocument
                 ?? throw new InvalidOperationException("Active document summary unavailable.");
@@ -1216,8 +1065,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
-    private static GlanceAttentionData GetGlanceAttentionCore() {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.GlanceAttention.Definition);
+    [Op("revit.glance.attention", Does = "One bounded 'what is on the user's screen' packet: active-view identity, observed view state, visible category composition (counts, generous bounds), and the verbatim trust strip (confidenceWarnings, apiLimitations, notInspected). observedAtUtc stamps freshness. Escalate to visible-summary for element handles or view-rendering-state for multi-view comparison.", Title = "Screen at a Glance", Finds = ["glance", "attention", "screen", "active-view", "visible", "trust", "what-user-sees", "start-here"], Cost = OpCost.Bounded, Tier = OpTier.Default, RequiresDocument = true)]
+    private static GlanceAttentionData GetGlanceAttentionCore(NoRequest _) {
+        var document = GetSupportedActiveDocument();
         try {
             return GlanceAttentionCollector.Collect(
                 document,
@@ -1234,8 +1084,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
-    private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore() {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.RevitAgentContextSummary.Definition);
+    [Op("revit.context.summary", Does = "THE orientation call: compact current document, active view or sheet, selection, browser counts, and visible-category context. Call this first; escalate to project-index for names/handles, visible-summary for element handles, or document-session for multi-document facts.", Title = "Get Revit Agent Context Summary", Finds = ["agent-context", "summary", "active-view", "selection", "visible", "browser", "orientation", "start-here"], Tier = OpTier.Default, RequiresDocument = true)]
+    private RevitAgentContextSummaryData GetRevitAgentContextSummaryCore(NoRequest _) {
+        var document = GetSupportedActiveDocument();
         try {
             var uiApp = RevitUiSession.CurrentUIApplication;
             return RevitAgentContextCollector.CollectSummary(
@@ -1255,10 +1106,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.resolve.references", Does = "Resolve natural references like this view, selected equipment, or printed mech Level 1 plan into stable Revit handles with provenance; narrow by handle kind and printed context when the user already described the scope.", Title = "Resolve Revit Agent Context Reference", Finds = ["agent-context", "resolve", "natural-reference", "handles", "provenance", "printed-context", "view-handles"], Cost = OpCost.Bounded, Tier = OpTier.Default, RequiresDocument = true, Example = "{ \"referenceText\": \"printed lower level mechanical equipment plans M201 M202\", \"handleKinds\": [\"View\", \"Sheet\"], \"requirePrintedContext\": true, \"maxPerHandleKind\": 4, \"maxResults\": 8, \"compact\": true }")]
     private RevitAgentContextResolveData ResolveRevitAgentContextCore(
         RevitAgentContextResolveRequest request
     ) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.RevitAgentContextResolve.Definition);
+        var document = GetSupportedActiveDocument();
         try {
             var uiApp = RevitUiSession.CurrentUIApplication;
             return RevitAgentContextCollector.Resolve(
@@ -1276,10 +1128,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.context.visible-summary", Does = "Read compact category counts and bounded visible element handles for the active view or explicit view references.", Title = "Get Revit Agent Visible Context Summary", Finds = ["agent-context", "visible", "active-view", "view-references", "categories", "handles", "printed-views", "visible-equipment"], RequiresDocument = true, Example = "{ \"scope\": \"ActiveViewVisible\", \"categoryNames\": [\"Mechanical Equipment\"], \"maxCategories\": 5, \"maxElementHandlesPerCategory\": 250 }")]
     private RevitAgentVisibleContextData GetRevitAgentVisibleContextCore(
         RevitAgentVisibleContextRequest request
     ) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.RevitAgentVisibleContext.Definition);
+        var document = GetSupportedActiveDocument();
         try {
             return RevitAgentContextCollector.CollectVisibleContext(
                 document,
@@ -1295,10 +1148,11 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.context.view-rendering-state", Does = "Read a bounded evidence packet for visibility/rendering-affecting state in the active view or explicit views, including explicit limitations and uninspected causes.", Title = "Get Revit Agent View Rendering State", Finds = ["agent-context", "view-rendering", "visibility", "active-view", "view-references", "filters", "links", "worksets", "view-range", "crop", "template"], RequiresDocument = true, Example = "{ \"scope\": \"ActiveView\", \"maxFiltersPerView\": 60, \"maxHiddenCategoriesPerView\": 40, \"maxLinksPerView\": 25 }")]
     private RevitAgentViewRenderingStateData GetRevitAgentViewRenderingStateCore(
         RevitAgentViewRenderingStateRequest request
     ) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.RevitAgentViewRenderingState.Definition);
+        var document = GetSupportedActiveDocument();
         try {
             return RevitAgentContextCollector.CollectViewRenderingState(
                 document,
@@ -1314,8 +1168,9 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         }
     }
 
+    [Op("revit.context.view-image", Does = "Export a view exactly as the user sees it (templates, VG overrides, temporary hide/isolate all apply) to a PNG and return its path. Target the active view (omit target), a view/sheet/viewport by id or name, or a schedule placed on a sheet. Optional focus crops to element ids, the current selection, or a scope box. Whole-view capture needs no transaction; focus capture sets a temporary crop box (clearing any scope box) and restores it afterward (editable document only).", Title = "Export View Image", Finds = ["view", "sheet", "viewport", "schedule", "image", "capture", "screenshot", "png", "export", "visual", "see", "look", "crop", "focus", "zoom"], RequiresDocument = true, Example = "{ \"target\": { \"name\": \"A101\" }, \"pixelSize\": 2000 }")]
     private RevitViewImageData GetRevitViewImageCore(RevitViewImageRequest request) {
-        var document = GetSupportedActiveDocument(RevitBridgeOps.ViewImage.Definition);
+        var document = GetSupportedActiveDocument();
         // Wire deserialization does not honor record ctor defaults (0 arrives when omitted).
         var pixelSize = request.PixelSize > 0 ? request.PixelSize : 1500;
         var marginPercent = request.MarginPercent > 0 ? request.MarginPercent : 8;
@@ -1793,21 +1648,6 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         return (request.Filter ?? new LoadedFamiliesFilter()) with { CategoryNames = categoryNames };
     }
 
-    private Task<T> EnqueueAsync<T>(
-        Func<T> action,
-        CancellationToken cancellationToken,
-        TimeSpan? timeout = null
-    ) =>
-        this._revitTaskQueue.Run(
-            context => {
-                context.Cancellation.ThrowIfCancellationRequested();
-                var value = action();
-                return value;
-            },
-            new RevitRunOptions { Label = typeof(T).Name, Timeout = timeout ?? TimeSpan.FromMinutes(2) },
-            cancellationToken
-        );
-
     private static RevitDocumentSessionContextData CreateDocumentSessionContext() {
         // ponytail: still enumerates on the API thread inside the request queue. The tracker's
         // Open/metadata snapshots (DocumentTrackerAccessor.Current) make session context
@@ -1872,8 +1712,8 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         return document;
     }
 
-    private static RevitDocument GetParameterLinksDocument(HostOperationDefinition operation) {
-        var document = GetSupportedActiveDocument(operation);
+    private static RevitDocument GetParameterLinksDocument() {
+        var document = GetSupportedActiveDocument();
         if (!document.IsFamilyDocument)
             return document;
 
@@ -1886,5 +1726,5 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
                 "Activate a project document and retry.")]);
     }
 
-    private static RevitDocument GetSupportedActiveDocument(HostOperationDefinition _) => GetActiveDocument();
+    private static RevitDocument GetSupportedActiveDocument() => GetActiveDocument();
 }
