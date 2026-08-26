@@ -5131,30 +5131,17 @@ export namespace TakeoffsSnapshot {
     }
     export interface TakeoffSnapshotData {
       status: TakeoffModelStatus;
-      views: TakeoffViewFacts[];
       zoneFrs: TakeoffRegionFacts[];
       regionsByZone: {
         [k: string]: TakeoffLiveRegion[];
       };
     }
     export interface TakeoffModelStatus {
-      doc: string;
       systems: TakeoffRegistrySystem[];
-      regions: TakeoffRegionCount[];
     }
     export interface TakeoffRegistrySystem {
       guid: string;
       tag: string;
-    }
-    export interface TakeoffRegionCount {
-      zoneGuid: string;
-      rooms: number;
-      held: number;
-    }
-    export interface TakeoffViewFacts {
-      name: string;
-      level: string;
-      regions: number;
     }
     export interface TakeoffRegionFacts {
       elementId: number;
@@ -5189,8 +5176,7 @@ export namespace TakeoffsViews {
       views: TakeoffViewFacts[];
     }
     export interface TakeoffViewFacts {
-      name: string;
-      level: string;
+      elementId: number;
       regions: number;
     }
   }

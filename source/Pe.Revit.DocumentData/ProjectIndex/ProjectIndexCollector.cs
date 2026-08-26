@@ -277,7 +277,7 @@ public static class ProjectIndexCollector {
         var sheetHandles = includeHandles ? placementIndex.GetSheetHandlesForView(view.Id).Take(maxSamples).ToList() : [];
         return new ProjectIndexViewEntry(
             CreateHandle(document, view, RevitAgentContextHandleKind.View, view.Title),
-            view.Title,
+            view.Name,
             view.ViewType.ToString(),
             view.GenLevel?.Name,
             view.IsTemplate,

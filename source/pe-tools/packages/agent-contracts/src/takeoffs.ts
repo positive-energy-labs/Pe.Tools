@@ -171,9 +171,7 @@ export const viewFactsSchema = z.object({
 export type ViewFacts = z.infer<typeof viewFactsSchema>;
 
 export const modelStatusSchema = z.object({
-  doc: z.string(),
   systems: z.array(z.object({ guid: z.string(), tag: z.string() })),
-  regions: z.array(z.object({ zoneGuid: z.string(), rooms: z.number(), held: z.number() })),
 });
 export type ModelStatus = z.infer<typeof modelStatusSchema>;
 export type RegistrySystem = ModelStatus["systems"][number];
@@ -246,17 +244,12 @@ export const worldSchema = z.object({
 export type World = z.infer<typeof worldSchema>;
 export type WorldSystem = World["systems"][number];
 
-export const takeoffRawSnapshotSchema = z.object({
-  status: modelStatusSchema,
-  views: z.array(viewFactsSchema),
+export const takeoffSnapshotSchema = z.object({
+  from: readingFromSchema,
+  world: worldSchema,
   zoneFrs: z.array(candidateRegionSchema),
   regionsByZone: z.record(z.string(), z.array(liveRegionSchema)),
 });
-export type TakeoffRawSnapshot = z.infer<typeof takeoffRawSnapshotSchema>;
-
-export const takeoffSnapshotSchema = takeoffRawSnapshotSchema
-  .partial({ status: true })
-  .extend({ from: readingFromSchema, world: worldSchema });
 export type TakeoffSnapshot = z.infer<typeof takeoffSnapshotSchema>;
 
 export const stagedRoomEditSchema = z.object({

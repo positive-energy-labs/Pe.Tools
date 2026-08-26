@@ -7,7 +7,12 @@ import {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
-import { produceTakeoffSnapshot, projectTakeoffSnapshot } from "../shared/takeoff-ops.ts";
+import {
+  produceTakeoffSnapshot,
+  projectTakeoffSnapshot,
+  projectTakeoffViews,
+  takeoffProjectIndexRequest,
+} from "../shared/takeoff-ops.ts";
 
 type Selection = { view: string; zones: string[]; commit?: true };
 
@@ -27,7 +32,7 @@ export function createTakeoffsCommandHandlers(
     adopt: async (raw, ctx) => {
       const input = raw as Selection;
       const caller = runtime(ctx.getDoc());
-      const before = projectTakeoffSnapshot(await caller.call("takeoffs.snapshot"));
+      const before = await readSnapshot(caller);
       const candidates = before.zoneFrs.filter(
         (zone) =>
           zone.view === input.view &&
@@ -43,7 +48,7 @@ export function createTakeoffsCommandHandlers(
         })),
       });
       await produceTakeoffSnapshot(
-        () => caller.call("takeoffs.snapshot").then(projectTakeoffSnapshot),
+        () => readSnapshot(caller),
         async (snapshot) => {
           const document = ctx.getDoc();
           document.snapshot = snapshot;
@@ -56,7 +61,7 @@ export function createTakeoffsCommandHandlers(
     audit: async (raw, ctx) => {
       const input = raw as Selection;
       const caller = runtime(ctx.getDoc());
-      const before = projectTakeoffSnapshot(await caller.call("takeoffs.snapshot"));
+      const before = await readSnapshot(caller);
       const prepared = await caller.call("takeoffs.prepare-capture", { view: input.view });
       const capture = await caller.call("takeoffs.detect-capture", { level: prepared.level });
       const zones = before.world.zones.filter((zone) => input.zones.includes(zone.zone.guid));
@@ -72,7 +77,7 @@ export function createTakeoffsCommandHandlers(
         });
       }
       await produceTakeoffSnapshot(
-        () => caller.call("takeoffs.snapshot").then(projectTakeoffSnapshot),
+        () => readSnapshot(caller),
         async (snapshot) => {
           const document = ctx.getDoc();
           document.snapshot = snapshot;
@@ -114,6 +119,22 @@ export function createTakeoffsCommandHandlers(
       return { updated: result.updated };
     },
   };
+}
+
+async function readSnapshot(caller: HostRpcCaller) {
+  const [snapshot, documents, projectIndex, viewCounts] = await Promise.all([
+    caller.call("takeoffs.snapshot"),
+    caller.call("revit.context.document-session"),
+    caller.call("revit.catalog.project-index", takeoffProjectIndexRequest),
+    caller.call("takeoffs.views"),
+  ]);
+  const document = documents.activeDocument;
+  if (!document) throw Error("The bound Revit session has no active document.");
+  return projectTakeoffSnapshot(
+    snapshot,
+    document.title,
+    projectTakeoffViews(viewCounts, projectIndex),
+  );
 }
 
 function applyStaged<A extends Record<string, unknown>>(room: A, edit: StagedRoomEdit): A {

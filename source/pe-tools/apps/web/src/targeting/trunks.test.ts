@@ -98,7 +98,7 @@ describe("targeting trunks", () => {
       expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
   });
 
-  it("keeps equal document titles distinct by document identity", () => {
+  it("produces distinct documentId bindings for equal document titles", () => {
     const result = documentTrunk.feed(
       AsyncResult.success({ value: null, at: 100, basis: ["active"], bound: true }),
       AsyncResult.success({

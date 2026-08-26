@@ -6,14 +6,11 @@ public sealed record TakeoffReadingFrom(
     string? DocumentVersionToken,
     string ObservedAt);
 
-public sealed record TakeoffViewFacts(string Name, string Level, int Regions);
+public sealed record TakeoffViewFacts(long ElementId, int Regions);
 public sealed record TakeoffViewsData(IReadOnlyList<TakeoffViewFacts> Views);
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
-public sealed record TakeoffRegionCount(Guid ZoneGuid, int Rooms, int Held);
 public sealed record TakeoffModelStatus(
-    string Doc,
-    IReadOnlyList<TakeoffRegistrySystem> Systems,
-    IReadOnlyList<TakeoffRegionCount> Regions);
+    IReadOnlyList<TakeoffRegistrySystem> Systems);
 public sealed record TakeoffRegionFacts(
     long ElementId,
     string TypeName,
@@ -34,7 +31,6 @@ public sealed record TakeoffLiveRegion(
     List<double[]> Outer);
 public sealed record TakeoffSnapshotData(
     TakeoffModelStatus Status,
-    IReadOnlyList<TakeoffViewFacts> Views,
     IReadOnlyList<TakeoffRegionFacts> ZoneFrs,
     IReadOnlyDictionary<string, List<TakeoffLiveRegion>> RegionsByZone);
 public sealed record TakeoffSnapshotResponse(TakeoffReadingFrom From, TakeoffSnapshotData Snapshot);

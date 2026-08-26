@@ -2,6 +2,7 @@
 
 ## Decided
 
+- 2026-08-25 — Generic active-document identity comes from `revit.context.document-session`, and plan-view type/level comes from `revit.catalog.project-index`; `takeoffs.*` keeps only Takeoff systems, regions, roles, provenance, and per-view FilledRegion counts. `documentId` (cloud model GUID or absolute path) is identity and title is label. `feed/views` offers only plan views whose Takeoff count is at least one.
 - 2026-08-25 — `/takeoffs` and Pea call ten typed `takeoffs.*` host operations; their thin handlers pass typed requests into `TakeoffAtlas`, and `takeoffs.snapshot` returns the persisted-read `from` identity. `scripting.execute` remains an exploration surface, never a route transport.
 - 2026-08-25 — Every persisted read names `from { target, documentId, documentVersionToken?, observedAt }`: `target` is the SDK session ID or `pid:<n>`, and `documentId` is the cloud model GUID or absolute path, never a title. A read whose identity differs from the current binding is unbound and renders nothing; binding a different world or document drops that read in the same route-document write. Old route documents without `from` stay unbound; there is no migration.
 - 2026-08-25 — A failed takeoff re-read over a current persisted snapshot surfaces the read failure; the route does not fall back to the persisted snapshot.
@@ -207,7 +208,6 @@
 
 ## Owed
 
-- `feed/views` lists every plan view (Power, Plumbing, Roof…) although the link promises "plan views with filled regions"; filter in `TakeoffAtlas.Views` by filled-region presence, or sort zoning plans first.
 - `doc recents` lists files that no longer exist (`w4a-x.rvt`); the picker shows them and the open fails honestly. Either the SDK prunes on read or the feed marks `sub: "missing"` from a host stat.
 - `doc open <cld://…>` literal paths are treated as local (SDK gap, filed in Pe.Revit.Sdk `docs/context/NEXT.md`); `takeoff/store.ts` carries the `SHIM:` that sends `recent:<title>` for cloud rows — delete it when the CLI resolves the literal path.
 - Wall-rail unification is hypothesis H1 for the tuning loop: the room boundary does not land on the wall rail, so the leftover band becomes thin Excluded residue where it stops short and a protrusion where it reaches in. Tier-1 `doubleLine` is 27.83% of accepted boundary at P2 and rose from 11.14% (P0) through 25.42% (P1) — the one measure that regressed across the tuning wave, and the defect kaitpw flagged on 6 of 10 annotation cards.

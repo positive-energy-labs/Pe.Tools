@@ -6,6 +6,7 @@ design-system ledger, not restated here.
 
 ## Decided
 
+- 2026-08-25 — Generic Revit facts keep one operation owner: `revit.context.document-session` supplies active document identity and labels, while `revit.catalog.project-index` supplies view type and level. Feature operations such as `takeoffs.*` return only their domain facts and join generic facts at the caller.
 - 2026-08-25 — Stable Takeoff Revit work is ten typed `takeoffs.*` bridge operations generated into the checked-in TypeScript catalog; `TakeoffAtlas` owns the library behavior and `scripting.execute` stays available only for exploration.
 - 2026-08-25 — `GET /docs/recents[?year]` and `POST /docs/open {path,id,year?,conflictPolicy?,detach?}` relay `pe-revit doc recents|open` through the generated argv builders, envelope untouched, 600 s open budget; 400/500 bodies are plain host JSON, never envelope-shaped (afa762c).
 - 2026-08-20 — beta.126 final drive (dev lane `slot3-25`, controlled, start → restart → stop → `gc --forget`): the installed product's `Addins5` slot is byte-identical to baseline on all four files after the forget (`slot-backup\` carries the installed original across restart, never a prior generation's rewrite), `install verify` 0 missing / 0 hash-mismatch, `op list` on the forgotten id is `session.no-match`. Closes the year-slot thread opened by the Hello.Addin poison. Residual (SDK NEXT): forget sweeps only the last incarnation's journal, so one orphan journal survives per restart. Pe.Tools main pinned beta.126, doctor 26/26.

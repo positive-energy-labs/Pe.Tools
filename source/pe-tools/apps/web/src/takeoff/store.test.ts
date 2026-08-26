@@ -124,10 +124,18 @@ const createStore = (
 
 function harness() {
   const events = new Set<(event: SessionEvent) => void>();
-  const calls = { sessions: 0, doc: 0, snapshot: 0, candidates: 0, list: 0, open: 0, adopt: 0 };
+  const calls = {
+    sessions: 0,
+    doc: 0,
+    snapshot: 0,
+    views: 0,
+    candidates: 0,
+    list: 0,
+    open: 0,
+    adopt: 0,
+  };
   let failSnapshot = false;
   let failR10 = false;
-  let liveProjection = false;
   let holdSnapshot = false;
   let documentTitle = "Harness.rvt";
   let documentId = "C:\\Models\\Harness.rvt";
@@ -145,7 +153,6 @@ function harness() {
       zones: [],
       systems: [],
     },
-    views: [{ name: bound.views[0]!, level: "Main", regions: 1 }],
     zoneFrs: [],
     regionsByZone: {},
   };
@@ -181,17 +188,23 @@ function harness() {
   };
   const host: TakeoffHost = {
     fixture: false,
-    async readSnapshot(_session, _document, write) {
+    async readSnapshot(_session, _document, _views, write) {
       calls.snapshot += 1;
       if (failSnapshot) throw new Error("snapshot rejected");
       if (holdSnapshot) await new Promise<void>((resolve) => (releaseSnapshot = resolve));
       const next = {
         ...snapshot,
         from: { target: "dev-26", documentId, observedAt: new Date().toISOString() },
-        ...(liveProjection ? { status: { doc: "Harness.rvt", systems: [], regions: [] } } : {}),
       };
       await write(next);
       return next;
+    },
+    async readViews() {
+      calls.views += 1;
+      return [
+        { name: bound.views[0]!, level: "Main", regions: 1 },
+        { name: "Zero Regions", level: "Roof", regions: 0 },
+      ];
     },
     async listRhvac(dir) {
       calls.list += 1;
@@ -239,7 +252,6 @@ function harness() {
     fail: () => (failSnapshot = true),
     failR10: () => (failR10 = true),
     recoverR10: () => (failR10 = false),
-    live: () => (liveProjection = true),
     hold: () => (holdSnapshot = true),
     release: () => releaseSnapshot?.(),
     setDocumentTitle: (title: string) => {
@@ -256,7 +268,9 @@ describe("takeoff route store", () => {
     const document = (await sessions.activeDocument(session))!;
     let snapshot: TakeoffSnapshot | undefined;
 
-    await createFixtureTakeoffHost().readSnapshot(session, document, async (value) => {
+    const host = createFixtureTakeoffHost();
+    const views = await host.readViews(session);
+    await host.readSnapshot(session, document, views, async (value) => {
       snapshot = value;
     });
 
@@ -269,16 +283,14 @@ describe("takeoff route store", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("makes snapshot feeds ready when the route stream has produced a document", async () => {
+  it("makes persisted snapshot and live view feeds ready", async () => {
     const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
     const sessions = createFixtureSessionSource();
     const session = (await sessions.list())[0]!;
     const document = (await sessions.activeDocument(session))!;
-    const snapshot = await createFixtureTakeoffHost().readSnapshot(
-      session,
-      document,
-      async () => undefined,
-    );
+    const host = createFixtureTakeoffHost();
+    const views = await host.readViews(session);
+    const snapshot = await host.readSnapshot(session, document, views, async () => undefined);
     const slice = Atom.make(
       AsyncResult.success(
         {
@@ -294,15 +306,33 @@ describe("takeoff route store", () => {
     const store = createStore({
       registry,
       slice,
-      host: createFixtureTakeoffHost(),
+      host,
       sessions,
       search: searchPort().port,
     });
+    await store.actions.settle(store.atoms.viewFacts);
 
     expect(registry.get(store.feeds.views)).toMatchObject({ state: "ready", stale: false });
     expect(registry.get(store.feeds.zones)).toMatchObject({ state: "ready", stale: false });
     await store.actions.openAdopt();
     expect(registry.get(store.atoms.panel)).toBe("adopt");
+    store.dispose();
+  });
+
+  it("does not offer a view with zero filled regions", async () => {
+    const h = harness();
+    const store = createStore({
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    store.actions.setSearch(bound);
+
+    await store.actions.settle(store.atoms.viewFacts);
+
+    expect(store.atoms.registry.get(store.feeds.views).options).toEqual([
+      { id: bound.views[0], label: bound.views[0], sub: "Main" },
+    ]);
     store.dispose();
   });
 
@@ -340,7 +370,7 @@ describe("takeoff route store", () => {
     const read = await store.actions.settle(store.atoms.snapshot);
 
     expect(read).toMatchObject({ bound: false, value: null });
-    expect(store.atoms.registry.get(store.feeds.views)).toMatchObject({
+    expect(store.atoms.registry.get(store.feeds.zones)).toMatchObject({
       state: "ready",
       options: null,
     });
@@ -384,11 +414,6 @@ describe("takeoff route store", () => {
 
     expect(read).toMatchObject({
       bound: true,
-      at: Date.parse(observedAt),
-      basis: ["dev-26"],
-    });
-    expect(store.atoms.registry.get(store.feeds.views)).toMatchObject({
-      state: "ready",
       at: Date.parse(observedAt),
       basis: ["dev-26"],
     });
@@ -691,10 +716,6 @@ describe("takeoff route store", () => {
 
     await expect(store.actions.settle(store.atoms.snapshot)).rejects.toThrow("snapshot rejected");
 
-    expect(store.atoms.registry.get(store.feeds.views)).toMatchObject({
-      state: "error",
-      note: expect.stringContaining("snapshot rejected"),
-    });
     expect(store.atoms.registry.get(store.feeds.zones).state).toBe("error");
     store.dispose();
   });
@@ -738,7 +759,6 @@ describe("takeoff route store", () => {
 
   it("does not rebox an opened .r10 into the document world", async () => {
     const h = harness();
-    h.live();
     const store = createStore({
       host: h.host,
       sessions: h.sessions,

@@ -65,7 +65,7 @@ export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
           sessionId: id,
           label: `${worldName({ id: s.sdkSessionId ?? s.sessionId, custody: s.custody })} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
         });
-      } else if (old.activeDocumentTitle !== s.activeDocumentTitle) {
+      } else if (old.activeDocumentId !== s.activeDocumentId) {
         events.push({
           atMs,
           kind: "doc-changed",
@@ -85,7 +85,7 @@ export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
     }
     if (events.length) setLog((l) => [...l.slice(-99), ...events]); // ponytail: capped ring, per-tab only
     // Keyed by identity+doc signature so unrelated field churn doesn't re-diff.
-  }, [sessions.map((s) => `${s.sessionId}:${s.activeDocumentTitle ?? ""}`).join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessions.map((s) => `${s.sessionId}:${s.activeDocumentId ?? ""}`).join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return log;
 }

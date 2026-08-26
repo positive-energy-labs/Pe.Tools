@@ -36,10 +36,8 @@ public static class TakeoffAtlas
 {
     public static TakeoffSnapshotData Snapshot(Document doc)
     {
-        var views = Views(doc);
         var zones = ZoneRegions(doc);
         var grouped = new Dictionary<string, List<TakeoffLiveRegion>>(StringComparer.OrdinalIgnoreCase);
-        var counts = new Dictionary<Guid, int[]>();
 
         foreach (var fr in new FilteredElementCollector(doc)
                      .OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
@@ -54,17 +52,12 @@ public static class TakeoffAtlas
             if (!grouped.TryGetValue(key, out var regions))
                 grouped[key] = regions = [];
             regions.Add(ToLiveRegion(doc, fr, role, guid.Value, blob));
-            if (!counts.TryGetValue(provenance.ZoneGuid, out var pair))
-                counts[provenance.ZoneGuid] = pair = [0, 0];
-            pair[role == TakeoffCarriers.RoleRoomRegion ? 0 : 1]++;
         }
 
         var registry = TakeoffCarriers.ReadRegistry(doc);
         var status = new TakeoffModelStatus(
-            doc.Title,
-            registry.Systems.Select(s => new TakeoffRegistrySystem(s.Guid, s.Tag)).ToList(),
-            counts.Select(kv => new TakeoffRegionCount(kv.Key, kv.Value[0], kv.Value[1])).ToList());
-        return new TakeoffSnapshotData(status, views, zones, grouped);
+            registry.Systems.Select(s => new TakeoffRegistrySystem(s.Guid, s.Tag)).ToList());
+        return new TakeoffSnapshotData(status, zones, grouped);
     }
 
     public static List<TakeoffViewFacts> Views(Document doc)
@@ -77,11 +70,10 @@ public static class TakeoffAtlas
             .OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
             .Where(v => !v.IsTemplate)
             .Select(v => new TakeoffViewFacts(
-                v.Name,
-                v.GenLevel?.Name ?? "",
+                v.Id.Value(),
                 counts.GetValueOrDefault(v.Id.Value())))
             .OrderByDescending(v => v.Regions)
-            .ThenBy(v => v.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(v => v.ElementId)
             .ToList();
     }
 

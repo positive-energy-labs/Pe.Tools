@@ -185,34 +185,37 @@ describe("decision queue", () => {
 
 describe("typed snapshot projection", () => {
   it("passes through source identity and derives the world from the typed response", () => {
-    const snapshot = projectTakeoffSnapshot({
-      from: {
-        target: "pe.app-25",
-        documentId: "11111111-1111-1111-1111-111111111111",
-        documentVersionToken: "22222222-2222-2222-2222-222222222222",
-        observedAt: "2026-08-25T12:00:00.000Z",
-      },
-      snapshot: {
-        status: { doc: "project-a", systems: [], regions: [] },
-        views: [{ name: "Mechanical Zoning Plan", level: "Main", regions: 1 }],
-        zoneFrs: [
-          {
-            elementId: 42,
-            typeName: "Zone",
-            view: "Mechanical Zoning Plan",
-            color: "1,2,3",
-            sqft: 100,
-            blob: JSON.stringify({
+    const snapshot = projectTakeoffSnapshot(
+      {
+        from: {
+          target: "pe.app-25",
+          documentId: "11111111-1111-1111-1111-111111111111",
+          documentVersionToken: "22222222-2222-2222-2222-222222222222",
+          observedAt: "2026-08-25T12:00:00.000Z",
+        },
+        snapshot: {
+          status: { systems: [] },
+          zoneFrs: [
+            {
+              elementId: 42,
+              typeName: "Zone",
               view: "Mechanical Zoning Plan",
-              name: "Main#01",
-              systemTag: "FC-8",
-            }),
-            loops: [square(0, 0, 10)],
-          },
-        ],
-        regionsByZone: {},
+              color: "1,2,3",
+              sqft: 100,
+              blob: JSON.stringify({
+                view: "Mechanical Zoning Plan",
+                name: "Main#01",
+                systemTag: "FC-8",
+              }),
+              loops: [square(0, 0, 10)],
+            },
+          ],
+          regionsByZone: {},
+        },
       },
-    });
+      "project-a",
+      [{ name: "Mechanical Zoning Plan", level: "Main" }],
+    );
 
     expect(snapshot.from).toEqual({
       target: "pe.app-25",
@@ -220,7 +223,7 @@ describe("typed snapshot projection", () => {
       documentVersionToken: "22222222-2222-2222-2222-222222222222",
       observedAt: "2026-08-25T12:00:00.000Z",
     });
-    expect(snapshot.views[0]).toMatchObject({ regions: 1 });
+    expect(snapshot.world).toMatchObject({ docName: "project-a", lanes: [{ label: "Main" }] });
     expect(snapshot.world.zones[0]).toMatchObject({ name: "Main#01", tags: ["FC-8"] });
   });
 });

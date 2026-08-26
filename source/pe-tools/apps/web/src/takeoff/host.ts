@@ -8,7 +8,9 @@ import { fromBridgeSessions } from "#/host/target";
 import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
 import {
   projectTakeoffSnapshot,
+  projectTakeoffViews,
   produceTakeoffSnapshot,
+  takeoffProjectIndexRequest,
 } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import type { SessionEvent, SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { WorldRoom, WorldZone } from "#/takeoff/world";
@@ -143,13 +145,17 @@ export const createHostSessionSource = (): SessionSource => ({
     }));
   },
   async activeDocument(session) {
-    if (!session.activeDocumentTitle)
-      throw new Error(`session ${session.sessionId} has no active document`);
-    if (!session.activeDocumentId)
+    const response = await callHostRpc("revit.context.document-session", undefined, {
+      bridgeSessionId: session.sessionId,
+    });
+    const document = response.activeDocument;
+    if (!document) return null;
+    const documentId = document.cloudModelGuid ?? document.path;
+    if (!documentId)
       throw new Error(
         `session ${session.sessionId} active document has no cloud model GUID or absolute path`,
       );
-    return { session, documentId: session.activeDocumentId, title: session.activeDocumentTitle };
+    return { session, documentId, title: document.title };
   },
   subscribe(listener) {
     const source = new EventSource("/events");
@@ -175,12 +181,23 @@ export const createHostSessionSource = (): SessionSource => ({
 
 export const createLiveTakeoffHost = (): TakeoffHost => ({
   fixture: false,
-  readSnapshot(session, _document, write) {
+  readSnapshot(session, document, views, write) {
     const scope = { bridgeSessionId: session.sessionId };
     return produceTakeoffSnapshot(
-      () => callHostRpc("takeoffs.snapshot", undefined, scope).then(projectTakeoffSnapshot),
+      () =>
+        callHostRpc("takeoffs.snapshot", undefined, scope).then((response) =>
+          projectTakeoffSnapshot(response, document.title, views),
+        ),
       write,
     );
+  },
+  async readViews(session) {
+    const scope = { bridgeSessionId: session.sessionId };
+    const [views, projectIndex] = await Promise.all([
+      callHostRpc("takeoffs.views", undefined, scope),
+      callHostRpc("revit.catalog.project-index", takeoffProjectIndexRequest, scope),
+    ]);
+    return projectTakeoffViews(views, projectIndex);
   },
   async listRhvac(dir) {
     const response = await callHostRpc("rhvac.list", { dir });

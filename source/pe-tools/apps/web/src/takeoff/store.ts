@@ -10,6 +10,7 @@ import {
   type StagedRoomEdit,
   type TakeoffSnapshot,
   type TakeoffsRouteDocument,
+  type ViewFacts,
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
@@ -86,7 +87,7 @@ export interface ActiveDocument {
 
 export interface SessionSource {
   list(): Promise<TakeoffSessionFacts[]>;
-  activeDocument(session: TakeoffSessionFacts): Promise<ActiveDocument>;
+  activeDocument(session: TakeoffSessionFacts): Promise<ActiveDocument | null>;
   subscribe(listener: (event: SessionEvent) => void): () => void;
 }
 
@@ -116,8 +117,10 @@ export interface TakeoffHost {
   readSnapshot(
     session: SessionFacts,
     document: ActiveDocument,
+    views: readonly ViewFacts[],
     write: (snapshot: TakeoffSnapshot) => Promise<unknown>,
   ): Promise<TakeoffSnapshot>;
+  readViews(session: SessionFacts): Promise<ViewFacts[]>;
   listRhvac(dir: string): Promise<RhvacFile[]>;
   openRhvac(path: string): Promise<unknown>;
   readCandidates(session: SessionFacts, view: string): Promise<CandidateRegion[]>;
@@ -475,16 +478,39 @@ export function createTakeoffStore(deps: {
       Atom.swr(recentDocumentsSource, { staleTime: "30 seconds", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
+  const viewFactsSource = runtime
+    .atom((get) =>
+      Effect.gen(function* () {
+        const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
+        if (!document.value) return unbound<ViewFacts[]>([], document.basis);
+        return yield* hostRead([document.value.session.sessionId, document.value.documentId], () =>
+          deps.host.readViews(document.value!.session),
+        );
+      }),
+    )
+    .pipe(Atom.autoDispose);
+  const viewFactsResult = runtimeFactory
+    .withReactivity(["takeoff-views"])(
+      Atom.swr(viewFactsSource, { staleTime: "30 seconds", revalidateOnMount: false }),
+    )
+    .pipe(Atom.autoDispose);
   const snapshotProducerSource = runtime
     .atom((get) =>
       Effect.gen(function* () {
         const document = yield* get.result(activeDocumentResult, { suspendOnWaiting: true });
         if (!document.value) return unbound<TakeoffSnapshot | null>(null, document.basis);
+        const views = yield* get.result(viewFactsResult, { suspendOnWaiting: true });
+        if (!views.bound) return unbound<TakeoffSnapshot | null>(null, views.basis);
         return yield* hostRead([document.value.session.sessionId, document.value.documentId], () =>
-          deps.host.readSnapshot(document.value!.session, document.value!, async (snapshot) => {
-            const result = await takeoffsWriter.apply([{ path: ["snapshot"], value: snapshot }]);
-            if (!result.ok) throw Error(result.error ?? "snapshot write failed");
-          }),
+          deps.host.readSnapshot(
+            document.value!.session,
+            document.value!,
+            views.value,
+            async (snapshot) => {
+              const result = await takeoffsWriter.apply([{ path: ["snapshot"], value: snapshot }]);
+              if (!result.ok) throw Error(result.error ?? "snapshot write failed");
+            },
+          ),
         );
       }),
     )
@@ -614,9 +640,11 @@ export function createTakeoffStore(deps: {
 
   const viewsFeed = Atom.make((get) =>
     feed(
-      get(snapshotResult),
-      (snapshot) =>
-        snapshot?.views.map((view) => ({ id: view.name, label: view.name, sub: view.level })) ?? [],
+      get(viewFactsResult),
+      (views) =>
+        views
+          .filter((view) => view.regions > 0)
+          .map((view) => ({ id: view.name, label: view.name, sub: view.level })),
       "read",
       { needs: TAKEOFF_LINKS[2]!.needs },
     ),
@@ -862,7 +890,7 @@ export function createTakeoffStore(deps: {
         const recents = await settle(recentDocumentsResult);
         return { text: await documentTrunk.pick(session, documentId, recents.value) };
       },
-      ["snapshot", "candidates"],
+      ["snapshot", "takeoff-views", "candidates"],
     ).catch(() => undefined);
   const unsubscribe = deps.sessions.subscribe((event) => {
     if (event.kind === "sessionsChanged") {
@@ -890,7 +918,7 @@ export function createTakeoffStore(deps: {
     patchSearch(patch: Partial<TakeoffSearch>) {
       deps.search.patch(patch);
     },
-    setBindings(patch: {
+    async setBindings(patch: {
       readonly stage?: string;
       readonly bound?: Bound;
       readonly multi?: Multi;
@@ -902,9 +930,11 @@ export function createTakeoffStore(deps: {
       const resolution = AsyncResult.isSuccess(sessions)
         ? resolveTarget(sessions.value.value, nextTarget)
         : null;
-      const nextDocument =
-        patch.bound?.rvt ??
-        (resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined);
+      const activeDocument =
+        resolution?.kind === "resolved"
+          ? await deps.sessions.activeDocument(resolution.session)
+          : null;
+      const nextDocument = patch.bound?.rvt ?? activeDocument?.documentId;
       if (current.source === "live" && patch.bound) {
         const slice = registry.get(takeoffsSlice);
         const snapshot = AsyncResult.isSuccess(slice) ? slice.value.doc?.snapshot : null;
@@ -941,9 +971,7 @@ export function createTakeoffStore(deps: {
             }
           : {}),
       });
-      const activeDocumentId =
-        resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined;
-      if (current.source === "live" && nextDocument && nextDocument !== activeDocumentId)
+      if (current.source === "live" && nextDocument && nextDocument !== activeDocument?.documentId)
         return pickDocument(nextDocument);
     },
     settle,
@@ -1117,11 +1145,11 @@ export function createTakeoffStore(deps: {
           const result = await deps.host.partition(session, partitionInput(zone, replayPath));
           return { ...result, text: `partitioned ${zone.zone.key}` };
         },
-        ["snapshot"],
+        ["snapshot", "takeoff-views"],
       );
     },
     refresh() {
-      return runVerb("refresh", async () => "refreshing", ["snapshot"]);
+      return runVerb("refresh", async () => "refreshing", ["snapshot", "takeoff-views"]);
     },
     launchRhvac() {
       return runVerb("launch", async () => {
@@ -1233,6 +1261,7 @@ export function createTakeoffStore(deps: {
       sessions: sessionsResult,
       activeDocument: activeDocumentResult,
       recentDocuments: recentDocumentsResult,
+      viewFacts: viewFactsResult,
       snapshot: snapshotResult,
       candidates: candidatesResult,
       adoptRows: adoptRowsAtom,

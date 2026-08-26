@@ -1,36 +1,63 @@
 import type {
   LiveRegion,
   Resolution,
-  TakeoffRawSnapshot,
   TakeoffSnapshot,
+  ViewFacts,
   World,
   WorldRoom,
   WorldZone,
 } from "@pe/agent-contracts";
-import type { TakeoffsSnapshot } from "@pe/host-contracts/generated";
+import type {
+  RevitCatalogProjectIndex,
+  TakeoffsSnapshot,
+  TakeoffsViews,
+} from "@pe/host-contracts/generated";
 
-export function projectTakeoffSnapshot(response: TakeoffsSnapshot.Res.Response): TakeoffSnapshot {
+export const takeoffProjectIndexRequest = {
+  sections: ["Views"],
+  includeUnplacedViews: true,
+  projection: { view: "Rows" },
+  budget: { maxEntries: 10_000 },
+} satisfies RevitCatalogProjectIndex.Req.Request;
+
+const PLAN_VIEW_TYPES = new Set(["FloorPlan", "CeilingPlan", "EngineeringPlan", "AreaPlan"]);
+
+export function projectTakeoffViews(
+  response: TakeoffsViews.Res.Response,
+  projectIndex: RevitCatalogProjectIndex.Res.Response,
+): ViewFacts[] {
+  const regionsByView = new Map(response.views.map((view) => [view.elementId, view.regions]));
+  return projectIndex.views
+    .filter((view) => PLAN_VIEW_TYPES.has(view.viewType) && view.handle.elementId != null)
+    .map((view) => ({
+      name: view.name,
+      level: view.levelName ?? "",
+      regions: regionsByView.get(view.handle.elementId!) ?? 0,
+    }));
+}
+
+export function projectTakeoffSnapshot(
+  response: TakeoffsSnapshot.Res.Response,
+  documentTitle: string,
+  views: readonly Pick<ViewFacts, "name" | "level">[],
+): TakeoffSnapshot {
   const snapshot = response.snapshot;
-  const raw: TakeoffRawSnapshot = {
-    status: snapshot.status,
-    views: snapshot.views,
-    zoneFrs: snapshot.zoneFrs.map((region) => ({
-      ...region,
-      role: region.role ?? null,
-      guid: region.guid ?? null,
-      loops: region.loops.map(points),
-    })),
-    regionsByZone: Object.fromEntries(
-      Object.entries(snapshot.regionsByZone).map(([key, regions]) => [
-        key,
-        regions.map((region) => ({ ...region, outer: points(region.outer) })),
-      ]),
-    ),
-  };
-  const levelByView = new Map(raw.views.map((view) => [view.name, view.level]));
+  const zoneFrs = snapshot.zoneFrs.map((region) => ({
+    ...region,
+    role: region.role ?? null,
+    guid: region.guid ?? null,
+    loops: region.loops.map(points),
+  }));
+  const regionsByZone = Object.fromEntries(
+    Object.entries(snapshot.regionsByZone).map(([key, regions]) => [
+      key,
+      regions.map((region) => ({ ...region, outer: points(region.outer) })),
+    ]),
+  );
+  const levelByView = new Map(views.map((view) => [view.name, view.level]));
   const lanes: World["lanes"] = [];
   const ordinals = new Map<string, number>();
-  const zones: WorldZone[] = raw.zoneFrs.map((region) => {
+  const zones: WorldZone[] = zoneFrs.map((region) => {
     const meta = JSON.parse(region.blob) as {
       view?: string;
       name?: string;
@@ -46,7 +73,7 @@ export function projectTakeoffSnapshot(response: TakeoffsSnapshot.Res.Response):
     }
     const ordinal = (ordinals.get(view) ?? 0) + 1;
     ordinals.set(view, ordinal);
-    const materialized = raw.regionsByZone[region.guid ?? ""] ?? [];
+    const materialized = regionsByZone[region.guid ?? ""] ?? [];
     const rooms = materialized.filter((item) => item.role !== "held-residue").map(room);
     const residues = materialized
       .filter((item) => item.role === "held-residue")
@@ -109,14 +136,15 @@ export function projectTakeoffSnapshot(response: TakeoffsSnapshot.Res.Response):
     observedAt: response.from.observedAt,
   };
   return {
-    ...raw,
     from,
+    zoneFrs,
+    regionsByZone,
     world: {
-      docName: raw.status.doc,
+      docName: documentTitle,
       r10Path: null,
       lanes,
       zones,
-      systems: raw.status.systems.map((system) => ({
+      systems: snapshot.status.systems.map((system) => ({
         ...system,
         zoneKeys: zones
           .filter((zone) => zone.tags.includes(system.tag))
