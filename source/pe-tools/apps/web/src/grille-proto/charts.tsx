@@ -145,13 +145,18 @@ function ByCount({ field, active, onPick }: Props) {
               strokeWidth={hot ? 1.6 : 0.6}
               opacity={hot ? 1 : 0.5}
             />
-            <text
-              x={X(last.openings) + 4}
-              y={Y(last.freeArea) + 3}
-              fill={hot ? "currentColor" : "var(--r-ink-mute)"}
-            >
-              {frac(w)}″
-            </text>
+            {/* label a line at its right end; lines of one point and odd sixteenths stay
+                unlabelled so the labels do not pile up — the hover title still names them */}
+            {(hot || (pts.length > 1 && Math.round(w * 16) % 2 === 0)) && (
+              <text
+                x={X(last.openings) + 4}
+                y={Y(last.freeArea) + 3}
+                fill={hot ? "currentColor" : "var(--r-ink-mute)"}
+                fontWeight={hot ? 700 : 400}
+              >
+                {frac(w)}″
+              </text>
+            )}
             {pts.map((g, i) => (
               <Dot
                 key={i}
@@ -229,4 +234,31 @@ function Grid({ field, active, onPick }: Props) {
       })()}
     </Frame>
   );
+}
+
+/**
+ * Keyboard stepping over the field: left/right walk qty along the active opening width,
+ * up/down walk opening width at the active qty. Returns the neighbour to pick, or null at an edge.
+ */
+export function stepField(
+  field: Grille[],
+  active: Grille,
+  key: string,
+): Partial<GrilleInput> | null {
+  const near = (g: Grille) => Math.abs(g.opening - active.opening) < 1e-6;
+  let next: Grille | undefined;
+  if (key === "ArrowRight" || key === "ArrowLeft") {
+    const dir = key === "ArrowRight" ? 1 : -1;
+    next = field
+      .filter((g) => near(g) && Math.sign(g.openings - active.openings) === dir)
+      .sort((a, b) => dir * (a.openings - b.openings))[0];
+  } else if (key === "ArrowUp" || key === "ArrowDown") {
+    const dir = key === "ArrowUp" ? 1 : -1;
+    next = field
+      .filter(
+        (g) => g.openings === active.openings && Math.sign(g.opening - active.opening) === dir,
+      )
+      .sort((a, b) => dir * (a.opening - b.opening))[0];
+  }
+  return next ? { opening: next.opening, openings: next.openings, rib: next.rib } : null;
 }

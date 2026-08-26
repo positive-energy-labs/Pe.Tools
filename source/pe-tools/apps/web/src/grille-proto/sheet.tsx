@@ -65,14 +65,38 @@ export function Sheet({
   onActive,
   set,
   add,
+  picked,
+  onPick,
 }: {
   rows: SheetRow[];
   active: string;
   onActive: (id: string) => void;
   set: (id: string, p: Partial<GrilleInput>) => void;
   add: () => void;
+  /** rows chosen for the export sheet */
+  picked: ReadonlySet<string>;
+  onPick: (id: string, on: boolean) => void;
 }) {
   const columns: Column<SheetRow>[] = [
+    {
+      key: "pick",
+      label: "sheet",
+      title: "Put this profile on the export sheet",
+      width: "w-10",
+      facet: (r) => (picked.has(r.id) ? "on" : "off"),
+      options: [
+        { value: "on", label: "on the sheet" },
+        { value: "off", label: "not on the sheet" },
+      ],
+      cell: (r) => (
+        <input
+          type="checkbox"
+          checked={picked.has(r.id)}
+          onChange={(e) => onPick(r.id, e.target.checked)}
+          aria-label="on the export sheet"
+        />
+      ),
+    },
     num("boardLength", "L", "Board length, inches", set),
     num("endBorder", "end", "End border, each end", set),
     num("boardWidth", "W", "Board width, inches", set),

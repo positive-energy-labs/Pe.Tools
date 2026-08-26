@@ -32,9 +32,19 @@ One page shape (sheet → drawing + chart), three CHART forms:
 
 Magnitude without hue: ink area (grid). Alternatives not built: hatch density, stroke weight, ranked position.
 
+## Round 2 (2026-08-25) — ruled
+
+Chart `count` (free % vs qty, one line per opening width) wins on style. Layout re-shaped to mirror `/family`: top pane split into drawing (hideable) | chart (not hideable, min width); sheet full-width below.
+
+## Round 3 — on the table
+
+- Export sheet: tick rows → one printable page (title block, G-1..n drawings read-only, numbers under each); browser print → PDF, or .svg per drawing. Question: is a page the unit the architect wants, or a drawing per grille?
+- Arrow keys over the field when the chart pane is focused: ←→ qty along the active opening width, ↑↓ opening width at the active qty.
+- Axes: free % stays on y (it is the outcome; qty and width are the choices). The target is a horizontal reference line, so "what reaches 45 %" is a read across, not a re-plot.
+
 ## Frontier
 
-- Rule the chart form, or a composition.
+- Rule the export unit (page vs drawing) and what the title block must carry (project, tag, date, revision?).
 - Rule the drawing: plan + section A-A with inputs on the witness lines. Is a section the right home for opening / rib / edge?
 - Is `MIN_RIB` (1/4″) law or lore? What other fabrication limits bound the field (stock widths, kerf)?
 - Is a row a profile option (the sheet) or a grille in a job (a schedule)?
