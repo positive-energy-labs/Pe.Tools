@@ -173,6 +173,14 @@ const TOOLS = [
       "The takeoff atlas — zones on the plan, rooms in the table, Manual J data through to a synced RHVAC .r10.",
   },
   {
+    to: "/grilles",
+    title: "Grilles",
+    label: "Wood floor grille",
+    icon: LayoutGrid,
+    description:
+      "The custom wood floor grille calculator — profiles in a sheet, the active one drawn to submittal scale, the buildable field charted; export a sheet to PDF or .svg.",
+  },
+  {
     to: "/settings",
     title: "Settings",
     label: "Host pipeline",

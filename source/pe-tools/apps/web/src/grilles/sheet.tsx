@@ -1,10 +1,8 @@
 /**
  * THE SHEET — the product, like /family: one MasterTable row per candidate profile, inputs
- * editable in the row, derived columns live, the active row is what the drawing and chart show.
- * No drawing in the row (ruled round 1): per-slot information lives ONLY in the drawing pane.
- *
- * OWED: MasterTable's row height is not compact enough for a sheet like this (user, round 1);
- * this consumer uses it as-is so the gap is measured on canon, not hidden by a rival table.
+ * editable in the row, derived columns live; the active row is what the drawing and chart show.
+ * No drawing in the row: per-slot information lives only in the drawing pane.
+ * Row density is a MasterTable gap owned by the design-system ledger; this consumer uses it as-is.
  */
 import { NumberCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
