@@ -26,7 +26,12 @@ import { useHostOp } from "#/host/queries";
 import { resolveTarget } from "#/host/target";
 import { syntheticOps } from "#/ops/glance";
 import { opViews } from "#/ops/op-views";
-import { bindOpsVerb, opsRefusal, type HostOperationCatalogEntry } from "#/ops/product";
+import {
+  OPS_PRODUCT,
+  opsRefusal,
+  type HostOperationCatalogEntry,
+  type OpsSlot,
+} from "#/ops/product";
 import { createOpsStore, type OpsStore } from "#/ops/store";
 import { SyntheticRunner } from "#/ops/synthetic";
 import { appAtomRegistry } from "#/state/registry";
@@ -34,7 +39,7 @@ import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds } from "#/targeting/model";
-import { worldTrunk } from "#/targeting/trunks";
+import { worldTrunk } from "#/targeting/world";
 
 type HostOperationJsonSchema = Record<string, unknown>;
 const str = (value: unknown) => (typeof value === "string" ? value : "");
@@ -53,7 +58,11 @@ function OpsRoute() {
   return <OpsStoreOwner key={documentAddress} documentAddress={documentAddress} />;
 }
 
-function OpsStoreOwner({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
+function OpsStoreOwner({
+  documentAddress,
+}: {
+  documentAddress: import("@pe/agent-contracts").Address;
+}) {
   const store = useRouteStore(() =>
     createOpsStore({
       registry: appAtomRegistry,
@@ -95,19 +104,13 @@ function OpsPage({ store }: { store: OpsStore }) {
 
   useEffect(() => {
     if (hydrated) void store.actions.syncBindings(world, op, currentIdentity);
-  }, [
-    hydrated,
-    world,
-    op,
-    currentIdentity?.target,
-    store,
-  ]);
+  }, [hydrated, world, op, currentIdentity?.target, store]);
   useEffect(() => {
     const seed = selected?.requestExamples[0]?.json ?? selected?.safeDefaultRequestJson ?? "{}";
     store.actions.select(selected, readFormSeed(seed, requestSchema));
   }, [requestSchema, selected, store]);
 
-  const feeds = useMemo<Feeds>(
+  const feeds = useMemo<Feeds<OpsSlot>>(
     () => ({
       world: worldTrunk.feed(fleet),
       op: {
@@ -134,7 +137,7 @@ function OpsPage({ store }: { store: OpsStore }) {
       operations,
     ],
   );
-  const state = useMemo<BindingState>(
+  const state = useMemo<BindingState<OpsSlot>>(
     () => ({
       bound: { world: world || null, op: op || null },
       multi: {},
@@ -144,8 +147,8 @@ function OpsPage({ store }: { store: OpsStore }) {
   );
   const product = useMemo(
     () =>
-      bindOpsVerb(
-        () => {
+      OPS_PRODUCT(feeds, {
+        run: () => {
           if (!selected || !session) throw Error("bind an operation and world first");
           return store.actions.run({
             opKey: selected.key,
@@ -159,13 +162,12 @@ function OpsPage({ store }: { store: OpsStore }) {
             bridgeSessionId: session.sessionId,
           });
         },
-        () => opsRefusal(selected, session?.custody),
-      ),
-    [args, formValues, mode, requestSchema, selected, session, store],
+        refuse: () => opsRefusal(selected, session?.custody),
+      }),
+    [args, feeds, formValues, mode, requestSchema, selected, session, store],
   );
   const b = useBindings(
     product,
-    feeds,
     state,
     (patch) => {
       const nextWorld = patch.bound?.world ?? world;

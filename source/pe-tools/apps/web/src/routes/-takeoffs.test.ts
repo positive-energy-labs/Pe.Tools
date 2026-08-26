@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
 import { resolveTarget, type SessionFacts } from "#/host/target";
-import { documentTrunk } from "#/targeting/trunks";
+import { documentTrunk } from "#/targeting/world";
 import { resolvedWorldBinding } from "./takeoffs";
 
 describe("takeoffs document scope", () => {

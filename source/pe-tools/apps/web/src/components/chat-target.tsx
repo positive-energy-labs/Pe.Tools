@@ -6,7 +6,7 @@ import { useBridgeSessionsListQuery } from "#/host/queries";
 import { fromBridgeSessions, resolveTarget, type TargetSelector } from "#/host/target";
 import { chipDescriptor, resolutionReadout } from "#/host/target-ui";
 import { useWorldLog, type WorldEvent } from "#/host/use-target";
-import { worldTrunk } from "#/targeting/trunks";
+import { worldTrunk } from "#/targeting/world";
 
 /**
  * Chat-wired target surfaces. The pin is the `target` search param (a selector, retained like

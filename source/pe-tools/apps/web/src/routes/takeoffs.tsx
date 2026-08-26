@@ -20,20 +20,25 @@ import {
   createFixtureSessionSource,
   createFixtureTakeoffHost,
 } from "#/takeoff/proto/fixture-world";
-import { createTakeoffStore, TAKEOFF_LINKS, type TakeoffStore } from "#/takeoff/store";
+import {
+  createTakeoffStore,
+  TAKEOFF_SLOTS,
+  type TakeoffSlot,
+  type TakeoffStore,
+} from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
 import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
-import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
-import type { Feeds, Link, Product } from "#/targeting/model";
-import { documentTrunk, worldTrunk } from "#/targeting/trunks";
+import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
+import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
+import { documentTrunk, worldTrunk } from "#/targeting/world";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 
-const PANES: Product["panes"] = [
+const PANES = [
   { key: "plan", label: "plan image", draws: ["views"] },
   { key: "rooms", label: "room table", draws: ["zones"] },
   { key: "r10", label: ".r10 join", draws: ["r10"] },
-];
+] as const;
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
@@ -71,10 +76,22 @@ export function TakeoffsRoute() {
   const { source } = Route.useSearch();
   const documentAddress = useRouteDocumentAddress();
   if (!documentAddress) return <RouteDocumentEmpty />;
-  return <TakeoffsStoreOwner key={`${source}:${documentAddress}`} source={source} documentAddress={documentAddress} />;
+  return (
+    <TakeoffsStoreOwner
+      key={`${source}:${documentAddress}`}
+      source={source}
+      documentAddress={documentAddress}
+    />
+  );
 }
 
-function TakeoffsStoreOwner({ source, documentAddress }: { source: Search["source"]; documentAddress: import("@pe/agent-contracts").Address }) {
+function TakeoffsStoreOwner({
+  source,
+  documentAddress,
+}: {
+  source: Search["source"];
+  documentAddress: import("@pe/agent-contracts").Address;
+}) {
   const store = useRouteStore(() => {
     const created = createTakeoffStore({
       host: source === "fixture" ? createFixtureTakeoffHost() : createLiveTakeoffHost(),
@@ -146,7 +163,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   };
   const r10Result = useAtomValue(store.atoms.r10);
 
-  const feeds: Feeds = {
+  const feeds: Feeds<TakeoffSlot> = {
     world: worldTrunk.feed(targetingFleet),
     rvt: documentTrunk.feed(
       activeDocumentResult,
@@ -158,11 +175,13 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     folder: useAtomValue(store.feeds.folder),
     r10: useAtomValue(store.feeds.r10),
   };
-  const state: BindingState = useMemo(
+  const state: BindingState<TakeoffSlot> = useMemo(
     () => ({
       bound: {
         world: resolvedWorldBinding(resolution, sessions),
         rvt: activeDocument?.documentId ?? null,
+        views: null,
+        zones: null,
         folder: dir || null,
         r10: r10 || null,
       },
@@ -171,13 +190,15 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     }),
     [resolution, sessions, activeDocument?.documentId, views, dir, r10, zones, stage],
   );
-  const setState = (patch: Partial<BindingState>) => store.actions.setBindings(patch);
+  const setState = (patch: BindingPatch<TakeoffSlot>) => store.actions.setBindings(patch);
   const boundZones = world.zones.filter((z) => zones.includes(z.zone.guid));
 
-  const product: Product = {
-    key: "takeoffs",
-    name: "takeoffs",
-    links: TAKEOFF_LINKS,
+  const product = defineProduct(
+    "takeoffs",
+    "takeoffs",
+    TAKEOFF_SLOTS,
+  )({
+    feeds,
     panes: PANES,
     stages: [
       {
@@ -188,7 +209,9 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "adopt",
             label: "adopt zones",
             demands: ["views"],
+            kind: "act",
             run: () => store.actions.openAdopt(),
+            refuse: () => null,
             needs: "a zoning view with filled regions",
           },
         ],
@@ -201,6 +224,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "capture",
             label: "capture level",
             demands: ["views"],
+            kind: live ? "act" : "seam",
             run: live
               ? async () => {
                   for (const view of views) {
@@ -209,13 +233,17 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
                     await store.actions.capture(lane);
                   }
                 }
-              : null,
+              : async () => {
+                  throw Error("a live document — the fixture is already captured");
+                },
+            refuse: () => null,
             needs: "a live document — the fixture is already captured",
           },
           {
             key: "partition",
             label: `partition ${zones.length || ""} zone${zones.length === 1 ? "" : "s"}`,
             demands: ["zones"],
+            kind: live ? "act" : "seam",
             refuse: () => {
               const uncaptured = boundZones.find((zone) => !zone.zone.lane.replayPath);
               return uncaptured
@@ -226,14 +254,22 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
               ? async () => {
                   for (const zone of boundZones) await store.actions.partition(zone);
                 }
-              : null,
+              : async () => {
+                  throw Error("a live document — the fixture is already partitioned");
+                },
             needs: "a live document — the fixture is already partitioned",
           },
           {
             key: "refresh",
             label: "refresh",
             demands: ["rvt"],
-            run: live ? () => store.actions.refresh() : null,
+            kind: live ? "act" : "seam",
+            run: live
+              ? () => store.actions.refresh()
+              : async () => {
+                  throw Error("a live document — the replay is already the whole world");
+                },
+            refuse: () => null,
             needs: "a live document — the replay is already the whole world",
           },
         ],
@@ -246,35 +282,44 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             key: "sync",
             label: "sync .r10",
             demands: ["r10"],
+            kind: live ? "commit" : "seam",
             refuse: () => (AsyncResult.isFailure(r10Result) ? "the .r10 did not open" : null),
-            run: live ? () => store.actions.openSync() : null,
+            run: live
+              ? () => store.actions.openSync()
+              : async () => {
+                  throw Error("a live document — the fixture has no .r10 to sync into");
+                },
             needs: "a live document — the fixture has no .r10 to sync into",
           },
           {
             key: "launch",
             label: "open in RHVAC",
-            nav: true,
             demands: ["r10"],
+            kind: "nav",
             run: async () => void (await store.actions.launchRhvac()),
+            refuse: () => null,
+            needs: "an .r10 file",
           },
           ...(AsyncResult.isFailure(r10Result)
             ? [
                 {
                   key: "retry-r10",
                   label: "retry .r10",
-                  demands: ["r10"],
+                  demands: ["r10"] as const,
+                  kind: "act" as const,
                   run: () => store.actions.retryRhvac(),
+                  refuse: () => null,
+                  needs: "an .r10 file",
                 },
               ]
             : []),
         ],
       },
     ],
-  };
+  });
 
   const b = useBindings(
     product,
-    feeds,
     state,
     setState,
     targetingOpen,
@@ -354,7 +399,9 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             </EmptyState>
             <Verb
               label="open the project-a fixture instead"
-              onClick={() => void navigate({ search: (previous) => ({ ...previous, source: "fixture" }) })}
+              onClick={() =>
+                void navigate({ search: (previous) => ({ ...previous, source: "fixture" }) })
+              }
               reason="Mounts the project-a fixture adapter — an explicit dev choice, never a fallback. Nothing in it can be written."
             />
           </div>
@@ -379,7 +426,9 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
         <div className="absolute right-2 bottom-2 z-40">
           <Verb
             label="leave fixture → live"
-            onClick={() => void navigate({ search: (previous) => ({ ...previous, source: "live" }) })}
+            onClick={() =>
+              void navigate({ search: (previous) => ({ ...previous, source: "live" }) })
+            }
             reason="Switches this route back to the live lane, where reads and writes address the targeted Revit document"
           />
         </div>

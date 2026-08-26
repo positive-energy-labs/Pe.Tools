@@ -138,7 +138,7 @@ import { AnatomyDrawing } from "#/family/anatomy";
 import { BUILD_VERB, BuildStrip, buildOutputPath } from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
 import { NavStateCell, ProposedCell } from "#/family/marks";
-import { FAMILY_PRODUCT } from "#/family/product";
+import { FAMILY_PRODUCT, type FamilySlot } from "#/family/product";
 import type { FamilyStore } from "#/family/store";
 import { useFleet } from "#/host/fleet";
 import {
@@ -176,8 +176,8 @@ import {
 } from "#/family/world";
 import { cn } from "#/lib/utils";
 import { TargetingHead } from "#/targeting/head";
-import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
-import { worldTrunk } from "#/targeting/trunks";
+import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
+import { worldTrunk } from "#/targeting/world";
 
 export function FamilyWorkspace({
   store,
@@ -2107,34 +2107,31 @@ export function FamilyWorkspace({
     world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),
   };
-  const product = FAMILY_PRODUCT({
+  const product = FAMILY_PRODUCT(feeds, {
     open: store.commandVerb("open", () => ({
       documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: profile },
     })),
     ...store.verbs,
   });
-  const bindingState: BindingState = {
+  const bindingState: BindingState<FamilySlot> = {
     bound: { world: target || null, profile: profile || null },
     multi: {},
     stage,
   };
   const setBindingState = useCallback(
-    (patch: Partial<BindingState>) => {
+    (patch: BindingPatch<FamilySlot>) => {
       const nextWorld = patch.bound?.world ?? null;
       const nextProfile = patch.bound?.profile ?? null;
       if (nextWorld !== null && nextWorld !== target)
         void store.actions.bind(nextWorld).catch(() => undefined);
-      if (nextProfile !== null && nextProfile !== profile)
-        void store.actions.open(nextProfile);
+      if (nextProfile !== null && nextProfile !== profile) void store.actions.open(nextProfile);
       const nextStage = patch.stage === "evidence" ? "evidence" : "author";
-      if (patch.stage && nextStage !== stage)
-        void store.actions.setStage(nextStage);
+      if (patch.stage && nextStage !== stage) void store.actions.setStage(nextStage);
     },
     [profile, stage, store, target],
   );
   const bindings = useBindings(
     product,
-    feeds,
     bindingState,
     setBindingState,
     picker.open,

@@ -13,9 +13,9 @@ import { HOST_QUERY_KEY } from "#/host/queries";
 import { useWorldLog } from "#/host/use-target";
 import { timeAgo } from "#/lib/utils";
 import { TargetingHead } from "#/targeting/head";
-import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
-import type { Product } from "#/targeting/model";
-import { worldTrunk, type WorldLifecycleReceipt, type WorldStart } from "#/targeting/trunks";
+import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
+import { product as defineProduct } from "#/targeting/model";
+import { worldTrunk, type WorldStart } from "#/targeting/world";
 import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
 import { useRouteState } from "#/workbench/route-state";
 
@@ -28,20 +28,6 @@ export const Route = createFileRoute("/instances")({
   }),
   component: InstancesPage,
 });
-
-type WorldVerb = (typeof worldTrunk.verbs)[keyof typeof worldTrunk.verbs];
-
-/** The page-memory ledger boundary: an entry cannot exist before the SDK envelope does. */
-export async function recordSettledLifecycle(
-  verb: WorldVerb,
-  world: WorldFacts | undefined,
-  start: WorldStart | undefined,
-  record: (receipt: WorldLifecycleReceipt) => void,
-) {
-  const receipt = await verb.run(world, start);
-  record(receipt);
-  return receipt;
-}
 
 function parseUtc(iso: string | null | undefined): number | undefined {
   if (!iso) return undefined;
@@ -167,7 +153,7 @@ export function InstancesPage() {
 function AddressedInstancesPage({ documentAddress }: { documentAddress: Address }) {
   const route = useRouteState(instancesRouteState, { documentAddress });
   const target = current(route.slice?.bindings.world, documentAddress)?.id ?? "";
-  const [stage, setStage] = useState<BindingState["stage"]>("declare");
+  const [stage, setStage] = useState("declare");
   const queryClient = useQueryClient();
   const { worlds, sessions, isLoading, error, stale, at, basis } = useFleet(true);
   const worldLog = useWorldLog(sessions);
@@ -188,56 +174,49 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
 
   const liveWorlds = worlds.filter((world) => world.phase !== "gone");
   const selectedWorld = worldTrunk.resolve(liveWorlds, sessions, target);
-  const runLifecycle = async (key: keyof typeof worldTrunk.verbs) => {
-    const verb = worldTrunk.verbs[key];
-    setBusy(key);
-    setOutcome(null);
-    try {
-      const receipt = await recordSettledLifecycle(
-        verb,
-        selectedWorld,
-        key === "start"
-          ? {
-              lane: startLane,
-              year: startYear,
-              ...(startDoc.trim() ? { doc: startDoc.trim() } : {}),
-            }
-          : undefined,
-        (settled) =>
-          setLocalLog((log) => [
-            ...log.slice(-99),
-            { atMs: Date.now(), actor: "you", label: worldTrunk.describe(settled) },
-          ]),
-      );
+  const feeds = {
+    world: worldTrunk.feed({ worlds: liveWorlds, sessions, isLoading, stale, error, at, basis }),
+  };
+  const lifecycleVerbs = worldTrunk.verbs<"world">({
+    start: () => ({
+      lane: startLane,
+      year: startYear,
+      ...(startDoc.trim() ? { doc: startDoc.trim() } : {}),
+    }),
+    started: (action) => {
+      setBusy(action);
+      setOutcome(null);
+    },
+    settled: (receipt) => {
+      setLocalLog((log) => [
+        ...log.slice(-99),
+        { atMs: Date.now(), actor: "you", label: worldTrunk.describe(receipt) },
+      ]);
       setOutcome({
         kind: receipt.ok ? "receipt" : "advisory",
         text: receipt.diagnostics[0] ?? worldTrunk.describe(receipt),
         says: receipt.nextSteps.length ? receipt.nextSteps.join(" · ") : undefined,
       });
-      return worldTrunk.describe(receipt);
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message : `${key} failed`;
-      setOutcome({ kind: "error", text: message });
-      return message;
-    } finally {
+    },
+    failed: (action, caught) =>
+      setOutcome({
+        kind: "error",
+        text: caught instanceof Error ? caught.message : `${action} failed`,
+      }),
+    finished: () => {
       setBusy(null);
       void queryClient.invalidateQueries({ queryKey: HOST_QUERY_KEY });
-    }
-  };
-
-  const product: Product = {
-    key: "instances",
-    name: "instances",
-    links: [worldTrunk.link],
-    manages: ["world"],
+    },
+  });
+  const product = defineProduct("instances", "instances", { world: worldTrunk.link })({
+    feeds,
     stages: [
       {
         key: "declare",
         label: "declare",
         verbs: [
           {
-            ...worldTrunk.verbs.start,
-            run: () => runLifecycle("start"),
+            ...lifecycleVerbs.start,
           },
         ],
       },
@@ -245,10 +224,8 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
         key: "lifecycle",
         label: "lifecycle",
         verbs: (["converge", "restart", "stop"] as const).map((key) => ({
-          ...worldTrunk.verbs[key],
+          ...lifecycleVerbs[key],
           label: key === "stop" && selectedWorld?.phase === "unresponsive" ? "force stop" : key,
-          run: () => runLifecycle(key),
-          refuse: () => worldTrunk.verbs[key].refuse(selectedWorld),
         })),
       },
     ],
@@ -256,29 +233,27 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
       { key: "fleet", label: "fleet", draws: ["world"] },
       { key: "ledger", label: "ledger", draws: ["world"] },
     ],
-  };
-  const feeds = {
-    world: worldTrunk.feed({ worlds: liveWorlds, sessions, isLoading, stale, error, at, basis }),
-  };
-  const state: BindingState = {
+  });
+  const state: BindingState<"world"> = {
     bound: { world: target || null },
     multi: {},
     stage,
   };
-  const setState = (patch: Partial<BindingState>) => {
+  const setState = (patch: BindingPatch<"world">) => {
     const nextTarget = patch.bound?.world;
     if (patch.stage) setStage(patch.stage);
     if (nextTarget !== undefined)
-      void route.apply([{
-        path: ["bindings", "world"],
-        value: nextTarget
-          ? { id: nextTarget, label: nextTarget, at: documentAddress }
-          : undefined,
-      }]);
+      void route.apply([
+        {
+          path: ["bindings", "world"],
+          value: nextTarget
+            ? { id: nextTarget, label: nextTarget, at: documentAddress }
+            : undefined,
+        },
+      ]);
   };
   const bindings = useBindings(
     product,
-    feeds,
     state,
     setState,
     pickerOpen,

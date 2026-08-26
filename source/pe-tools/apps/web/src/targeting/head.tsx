@@ -14,7 +14,6 @@ import { Verb as VerbButton } from "#/components/lang/verb";
 import {
   freshnessWord,
   PaneStrip,
-  peaNote,
   Picker,
   SeamChip,
   StageStrip,
@@ -26,7 +25,7 @@ import { targetMode, targets, type Link, type Product, type Verb } from "#/targe
 const RUN_CSS =
   "@keyframes tb-run{from{transform:translateX(-100%)}to{transform:translateX(400%)}}";
 
-function Caption({ b, link }: { b: Bindings; link: Link }) {
+function Caption<K extends string>({ b, link }: { b: Bindings<K>; link: Link<K> }) {
   const fresh = freshnessWord(b, link);
   const f = b.feeds[link.key];
   const warn = f?.stale || f?.state === "error";
@@ -43,9 +42,16 @@ function Caption({ b, link }: { b: Bindings; link: Link }) {
   );
 }
 
-function Demand({ product, k, b }: { product: Product; k: string; b: Bindings }) {
-  const link = product.links.find((l) => l.key === k);
-  if (!link) return null;
+function Demand<K extends string>({
+  product,
+  k,
+  b,
+}: {
+  product: Product<K>;
+  k: K;
+  b: Bindings<K>;
+}) {
+  const link = product.slots[k];
   const bound = b.isBound(link);
   const seam = b.feeds[k]?.seam;
   return (
@@ -63,7 +69,7 @@ function Demand({ product, k, b }: { product: Product; k: string; b: Bindings })
   );
 }
 
-function verbButton(v: Verb, runner: Runner) {
+function verbButton<K extends string>(v: Verb<K>, runner: Runner<K>) {
   const can = runner.canRun(v);
   const busy = runner.busy === v.key;
   const common = {
@@ -73,38 +79,39 @@ function verbButton(v: Verb, runner: Runner) {
     disabled: !can.ok,
     busy,
   };
-  return v.nav ? (
+  return v.kind === "nav" ? (
     <VerbButton key={v.key} tone="nav" direction="out" {...common} />
   ) : (
-    <VerbButton key={v.key} tone={v.commit ? "commit" : "act"} {...common} />
+    <VerbButton key={v.key} tone={v.kind === "commit" ? "commit" : "act"} {...common} />
   );
 }
 
-export function TargetingHead({
+export function TargetingHead<K extends string>({
   product,
   b,
   runner,
   receipt,
   extra,
   aside,
+  variant = "head",
 }: {
-  product: Product;
-  b: Bindings;
-  runner: Runner;
+  product: Product<K>;
+  b: Bindings<K>;
+  runner: Runner<K>;
   /** Last receipt / busy line for the foot. */
   receipt?: React.ReactNode;
   /** Route-owned control appended inside a level's option list. */
-  extra?: (link: Link) => React.ReactNode;
+  extra?: (link: Link<K>) => React.ReactNode;
   /** Route-owned chips for the head's right edge (fixture lane, etc.). */
   aside?: React.ReactNode;
+  variant?: "head" | "line";
 }) {
   const [expanded, setExpanded] = useState(false);
   const verbs = [...b.stage.verbs].sort(
-    (x, y) => Number(x.commit ?? false) - Number(y.commit ?? false),
+    (x, y) => Number(x.kind === "commit") - Number(y.kind === "commit"),
   );
-  const note = peaNote(product, b, runner);
 
-  const gridRow = (v: Verb, i: number) => {
+  const gridRow = (v: Verb<K>, i: number) => {
     const can = runner.canRun(v);
     const busy = runner.busy === v.key;
     return (
@@ -134,7 +141,7 @@ export function TargetingHead({
             fontStyle: can.ok ? undefined : "italic",
           }}
         >
-          {v.commit && !can.ok ? "" : can.ok ? "ready" : can.reason}
+          {v.kind === "commit" && !can.ok ? "" : can.ok ? "ready" : can.reason}
         </span>
         {busy ? (
           <span
@@ -172,45 +179,48 @@ export function TargetingHead({
     </button>
   );
 
+  const line = (
+    <>
+      <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
+        {product.name}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
+        {targets(product).map((t) => {
+          const dim = t.dir !== null && !b.demanded.has(t.key);
+          return (
+            <span
+              key={t.key}
+              className="inline-flex flex-col items-start"
+              style={{ opacity: dim ? 0.45 : 1, whiteSpace: "nowrap" }}
+              title={dim ? `${t.key} is out of scope at ${b.stage.label}` : undefined}
+            >
+              <Caption b={b} link={t} />
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+                  {t.joiner}
+                </span>
+                <Picker
+                  product={product}
+                  link={t}
+                  b={b}
+                  runner={runner}
+                  extra={extra}
+                  inert={dim}
+                />
+              </span>
+            </span>
+          );
+        })}
+      </span>
+      {aside}
+      <SeamChip product={product} />
+    </>
+  );
+  if (variant === "line") return <div className="flex min-w-0 flex-1 items-end gap-3">{line}</div>;
+
   return (
     <ArtifactFrame
-      head={
-        <>
-          <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
-            {product.name}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
-            {targets(product).map((t) => {
-              const dim = !product.manages?.includes(t.key) && !b.demanded.has(t.key);
-              return (
-                <span
-                  key={t.key}
-                  className="inline-flex flex-col items-start"
-                  style={{ opacity: dim ? 0.45 : 1, whiteSpace: "nowrap" }}
-                  title={dim ? `${t.key} is out of scope at ${b.stage.label}` : undefined}
-                >
-                  <Caption b={b} link={t} />
-                  <span className="inline-flex items-baseline gap-1.5">
-                    <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
-                      {t.joiner}
-                    </span>
-                    <Picker
-                      product={product}
-                      link={t}
-                      b={b}
-                      runner={runner}
-                      extra={extra}
-                      inert={dim}
-                    />
-                  </span>
-                </span>
-              );
-            })}
-          </span>
-          {aside}
-          <SeamChip product={product} feeds={b.feeds} />
-        </>
-      }
+      head={line}
       foot={
         <>
           <PaneStrip product={product} b={b} />
@@ -239,11 +249,6 @@ export function TargetingHead({
       ) : (
         <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2">
           {verbs.map((v) => verbButton(v, runner))}
-          {note ? (
-            <span className="t-caption pl-2" style={{ color: "var(--r-pea-ink)" }}>
-              pea · {note}
-            </span>
-          ) : null}
         </div>
       )}
     </ArtifactFrame>

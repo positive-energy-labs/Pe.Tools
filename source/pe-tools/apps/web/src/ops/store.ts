@@ -18,7 +18,7 @@ import {
   type Scope,
   type Slice,
 } from "#/state/route-store";
-import type { BindingState } from "#/targeting/kit";
+import type { BindingPatch } from "#/targeting/kit";
 import type { HostOperationCatalogEntry } from "#/ops/product";
 
 type Mode = "form" | "raw";
@@ -60,10 +60,7 @@ export function createOpsStore(deps: {
   const result = Atom.make((get) => {
     const value = get(localResult) ?? get(document)?.receipt ?? null;
     const current = get(identity);
-    return value &&
-      current &&
-      value.opKey === get(selectedKey) &&
-      value.target === current.target
+    return value && current && value.opKey === get(selectedKey) && value.target === current.target
       ? value
       : null;
   }).pipe(owned("view/result"));
@@ -102,9 +99,7 @@ export function createOpsStore(deps: {
       if (currentBind(doc?.bindings.world, deps.scope.documentAddress)?.id !== (world || null))
         patches.push({
           path: ["bindings", "world"],
-          value: world
-            ? { id: world, label: world, at: deps.scope.documentAddress }
-            : undefined,
+          value: world ? { id: world, label: world, at: deps.scope.documentAddress } : undefined,
         });
       if (currentBind(doc?.bindings.op, deps.scope.documentAddress)?.id !== (op || null))
         patches.push({
@@ -148,7 +143,7 @@ export function createOpsStore(deps: {
     async syncBindings(world: string, op: string, current: Identity | null) {
       await persistBinding("sync-bindings", world, op, current);
     },
-    setBindings(patch: Partial<BindingState>, current: Identity | null) {
+    setBindings(patch: BindingPatch<"world" | "op">, current: Identity | null) {
       const nextWorld = patch.bound?.world ?? registry.get(world);
       const op = patch.bound?.op ?? registry.get(selectedKey);
       return persistBinding("set-bindings", nextWorld || "", op || "", current);

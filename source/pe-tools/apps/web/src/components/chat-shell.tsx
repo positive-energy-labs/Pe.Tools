@@ -15,7 +15,7 @@ import { Button } from "#/components/ui/button";
 import { SidePane } from "#/components/ui/side-pane";
 import { Verb } from "#/components/lang/verb";
 import { X } from "lucide-react";
-import { chatPluginRegistration, chatPluginTitle } from "#/workbench/route-chat-plugins";
+import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { selectRoutePane } from "#/workbench/route-panes";
 import { ChatSentence } from "#/components/chat-sentence";
 import "#/workbench/lens.css";
@@ -41,13 +41,7 @@ export function ChatShell({
   );
 }
 
-function Surface({
-  initialTurn,
-  plugin,
-}: {
-  initialTurn?: number;
-  plugin?: ChatPluginRoute;
-}) {
+function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatPluginRoute }) {
   const {
     store,
     debug,
@@ -151,7 +145,7 @@ function Surface({
           </div>
           {/* THE sentence — pea's testimony as prefix, the world slot as the chat's one bind control */}
           <div className="flex min-w-0 flex-1 justify-end">
-            <ChatSentence spec={plugin ? chatPluginRegistration(plugin)?.spec : undefined} />
+            <ChatSentence />
           </div>
         </header>
 

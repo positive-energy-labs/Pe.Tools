@@ -10,7 +10,7 @@ import type {
 import type { WorldFacts } from "#/host/fleet";
 import { mintSelector, type SessionFacts } from "#/host/target";
 import { feed, type Feed, type Lane, type TimedRead } from "#/state/route-store";
-import type { Dir, Link, Option } from "#/targeting/model";
+import type { Bound, Feeds, Link, Option, Verb } from "#/targeting/model";
 
 type SdkEnvelope<T> = Omit<Partial<Envelope<T>>, "result"> & {
   readonly result?: Partial<T>;
@@ -46,20 +46,25 @@ export interface WorldLifecycleReceipt {
   readonly nextSteps: readonly string[];
 }
 
-type WorldLabelFacts = {
-  readonly pid?: number;
-  readonly session?: Pick<SessionFacts, "sdkSessionId">;
-  readonly row?: { readonly id: string } | null;
-};
+type WorldOption = Option & { readonly world: WorldFacts };
 
-const worldLabel = (world: WorldLabelFacts) =>
+const worldLabel = (
+  world: Pick<WorldFacts, "pid"> & Partial<Pick<WorldFacts, "session" | "row">>,
+) =>
   world.session?.sdkSessionId ?? world.row?.id ?? `Revit ${world.pid ?? 0}`;
 
-const worldOption = (world: WorldFacts, sessions: readonly SessionFacts[]): Option => ({
+const worldOption = (world: WorldFacts, sessions: readonly SessionFacts[]): WorldOption => ({
   id: world.session ? mintSelector(world.session, sessions) : `session:${world.row!.id}`,
   label: worldLabel(world),
   sub: world.custody,
+  world,
 });
+
+const selectedWorld = <K extends string>(bound: Bound<K>, feeds: Feeds<K>) => {
+  const key = "world" as K;
+  const option = feeds[key].options?.find((candidate) => candidate.id === bound[key]);
+  return (option as WorldOption | undefined)?.world;
+};
 
 const lifecycleRefusal = (action: WorldLifecycleAction, world?: WorldFacts) => {
   if (world?.custody === "observed")
@@ -90,7 +95,9 @@ async function runLifecycle(
     ),
   });
   const body = (await response.json()) as SdkEnvelope<{ readonly state: string }>;
-  const diagnostics = (body.diagnostics ?? []).map((d) => d.detail ?? d.code);
+  const diagnostics = (body.diagnostics ?? []).map((diagnostic) =>
+    diagnostic.detail ?? diagnostic.code,
+  );
   return {
     action,
     ok: response.ok && diagnostics.length === 0,
@@ -100,20 +107,43 @@ async function runLifecycle(
   };
 }
 
-const lifecycleVerb = (action: WorldLifecycleAction, demands: string[]) => ({
+const describe = (receipt: WorldLifecycleReceipt) =>
+  [
+    `${receipt.action} · ${receipt.state}`,
+    ...receipt.diagnostics,
+    ...receipt.nextSteps,
+  ].join(" · ");
+
+const lifecycleVerb = <K extends string>(
+  action: WorldLifecycleAction,
+  start: () => WorldStart,
+  settled: (receipt: WorldLifecycleReceipt) => void,
+): Verb<K> => ({
   key: action,
   label: action,
-  demands,
-  commit: true,
-  refuse: (world?: WorldFacts) => lifecycleRefusal(action, world),
-  run: (world?: WorldFacts, start?: WorldStart) => runLifecycle(action, world, start),
+  demands: action === "start" ? [] : (["world"] as K[]),
+  kind: "commit",
+  needs: action === "start" ? "a payload lane and Revit year" : "a controlled world",
+  refuse: (bound, feeds) => lifecycleRefusal(action, selectedWorld(bound, feeds)),
+  run: async (bound, feeds) => {
+    const receipt = await runLifecycle(
+      action,
+      selectedWorld(bound, feeds),
+      action === "start" ? start() : undefined,
+    );
+    settled(receipt);
+    return describe(receipt);
+  },
 });
 
-const worldLink: Link = {
+const worldLink: Link<"world"> = {
   key: "world",
+  under: null,
   joiner: "in",
   placeholder: "pick a world",
+  multi: false,
   needs: "a live world — start Revit with the Pe add-in, or start one from /instances",
+  dir: null,
   liveness: "attached",
 };
 
@@ -121,21 +151,40 @@ export const worldTrunk = {
   link: worldLink,
   label: worldLabel,
   option: worldOption,
-  describe(receipt: WorldLifecycleReceipt) {
-    return [
-      `${receipt.action} · ${receipt.state}`,
-      ...receipt.diagnostics,
-      ...receipt.nextSteps,
-    ].join(" · ");
-  },
+  describe,
   resolve(worlds: readonly WorldFacts[], sessions: readonly SessionFacts[], target: string) {
     return worlds.find((world) => worldOption(world, sessions).id === target);
   },
-  verbs: {
-    start: lifecycleVerb("start", []),
-    converge: lifecycleVerb("converge", ["world"]),
-    restart: lifecycleVerb("restart", ["world"]),
-    stop: lifecycleVerb("stop", ["world"]),
+  verbs<K extends string>(input: {
+    start: () => WorldStart;
+    started: (action: WorldLifecycleAction) => void;
+    settled: (receipt: WorldLifecycleReceipt) => void;
+    failed: (action: WorldLifecycleAction, error: unknown) => void;
+    finished: () => void;
+  }) {
+    const verb = (action: WorldLifecycleAction) => {
+      const created = lifecycleVerb<K>(action, input.start, input.settled);
+      return {
+        ...created,
+        run: async (bound: Bound<K>, feeds: Feeds<K>) => {
+          input.started(action);
+          try {
+            return await created.run(bound, feeds);
+          } catch (error) {
+            input.failed(action, error);
+            return error instanceof Error ? error.message : `${action} failed`;
+          } finally {
+            input.finished();
+          }
+        },
+      };
+    };
+    return {
+      start: verb("start"),
+      converge: verb("converge"),
+      restart: verb("restart"),
+      stop: verb("stop"),
+    };
   },
   feed(source: FleetFeed): Feed {
     if (source.error)
@@ -166,10 +215,13 @@ type ActiveDocument = {
 
 const documentLink: Link = {
   key: "rvt",
-  parent: "world",
+  under: "world",
   joiner: "",
   placeholder: "no document",
+  multi: false,
   needs: "the document arrives with the bound world",
+  dir: null,
+  liveness: null,
 };
 
 export const documentTrunk = {
@@ -230,8 +282,6 @@ export const documentTrunk = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        // SHIM: Pe.Revit.Sdk NEXT.md cannot resolve cloud identities yet. (dies when: `doc open
-        // <cld://…>` resolves)
         path: recent.isCloud ? `recent:${recent.title}` : recent.path,
         id: session.sdkSessionId,
         ...(recent.isCloud ? { conflictPolicy: "keep" as const } : {}),
@@ -243,37 +293,3 @@ export const documentTrunk = {
     return `opened ${recent.title}`;
   },
 };
-
-export const folderTrunk = {
-  link: {
-    key: "folder",
-    joiner: "beside",
-    placeholder: "pick a folder",
-    needs: "a host-visible folder holding .r10 files — add one below",
-  } satisfies Link,
-};
-
-export const fileTerminal = (key: string, noun: string, dir: Dir) => ({
-  link: {
-    key,
-    joiner: dir === "sync" ? "syncing" : dir === "read" ? "against" : "editing",
-    placeholder: noun,
-    needs: noun,
-    dir,
-    liveness: "detached",
-  } satisfies Link,
-});
-
-export const profileTerminal = (dir: Extract<Dir, "read" | "duplex">) => ({
-  link: {
-    key: "profile",
-    joiner: dir === "read" ? "against" : "editing",
-    placeholder: "a family profile",
-    needs:
-      dir === "read"
-        ? "a readable Family Foundry profile"
-        : "a family document path visible to the bound world",
-    dir,
-    liveness: "detached",
-  } satisfies Link,
-});

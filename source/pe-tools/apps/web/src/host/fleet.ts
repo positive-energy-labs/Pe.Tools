@@ -8,13 +8,7 @@ import type {
 } from "@pe/host-contracts/pe-revit-contract";
 
 import { HOST_QUERY_KEY, useBridgeSessionsListQuery } from "#/host/queries";
-import {
-  fromBridgeSessions,
-  resolveTarget,
-  type Custody,
-  type SessionFacts,
-  type TargetSelector,
-} from "#/host/target";
+import { fromBridgeSessions, type Custody, type SessionFacts } from "#/host/target";
 
 export type { SessionRow };
 
@@ -87,32 +81,6 @@ export function fuseFleet(
     });
   }
   return worlds;
-}
-
-/**
- * The world clause: what the sentence appends after a target. Speaks derivation truth ("still
- * booting", "gone"), never offers a choice — choosing is the plugin sentence's job via its own
- * slots. Total over every resolution state.
- */
-export function worldClause(worlds: readonly WorldFacts[], selector: TargetSelector): string {
-  const sessions = worlds.flatMap((world) => (world.session ? [world.session] : []));
-  const resolution = resolveTarget(sessions, selector);
-  if (resolution.kind === "resolved") {
-    const world = worlds.find((w) => w.session?.sessionId === resolution.session.sessionId);
-    const name = world?.custody === "observed" ? "your Revit" : `a live world (${world?.id})`;
-    return ` in ${name}`;
-  }
-  // A pinned pe-revit session that no bridge answers for: the SDK still knows what became of it,
-  // so say what it says instead of guessing "gone".
-  if (selector.startsWith("session:")) {
-    const world = worlds.find((w) => w.id === selector.slice("session:".length));
-    if (world?.phase === "booting") return " in a world that is still booting";
-    if (world?.phase === "unresponsive") return " — its world is unresponsive";
-    return " — its world is gone";
-  }
-  if (resolution.kind === "ambiguous") return " in … several worlds — pick one";
-  if (resolution.reason === "no-sessions") return " — no world is running";
-  return " — its world is gone"; // dangling pid/session pin: the process died
 }
 
 function useSessionStatusQuery(all: boolean) {

@@ -49,10 +49,11 @@ vi.mock("#/host/fleet", () => fleet);
 vi.mock("#/host/use-target", () => ({ useWorldLog: () => [] }));
 vi.mock("#/host/queries", () => ({ HOST_QUERY_KEY: ["host"] }));
 
-import { InstancesPage, recordSettledLifecycle } from "#/routes/instances";
+import { InstancesPage } from "#/routes/instances";
 import { paneState } from "#/targeting/kit";
-import type { Product } from "#/targeting/model";
-import { worldTrunk } from "#/targeting/trunks";
+import { product as defineProduct } from "#/targeting/model";
+import { worldTrunk } from "#/targeting/world";
+import type { WorldFacts } from "#/host/fleet";
 
 afterEach(() => {
   cleanup();
@@ -70,16 +71,13 @@ describe("instances route", () => {
     expect(screen.getByText("pick a document")).toBeTruthy();
   });
 
-  it("keeps a managed-trunk pane ready while the trunk is unbound", () => {
+  it("prints the leaf world and gates its pane while unbound", () => {
     const stage = { key: "declare", label: "declare", verbs: [] };
-    const product: Product = {
-      key: "instances",
-      name: "instances",
-      links: [worldTrunk.link],
-      manages: ["world"],
+    const product = defineProduct("instances", "instances", { world: worldTrunk.link })({
+      feeds: { world: { options: [], state: "ready", lane: "live", stale: false } },
       stages: [stage],
       panes: [{ key: "fleet", label: "fleet", draws: ["world"] }],
-    };
+    });
 
     expect(
       paneState(product, product.panes[0]!, {
@@ -87,7 +85,7 @@ describe("instances route", () => {
         demanded: new Set(),
         stage,
       }),
-    ).toEqual({ ok: true, reason: "fleet draws from world" });
+    ).toEqual({ ok: false, reason: "fleet draws from world — unbound" });
   });
 
   it("records a failed envelope only after it answers", async () => {
@@ -96,17 +94,29 @@ describe("instances route", () => {
       () => new Promise<Response>((resolve) => (answer = resolve)),
     );
     const record = vi.fn();
-    const pending = recordSettledLifecycle(
-      worldTrunk.verbs.converge,
-      {
-        id: "pe.app-25",
-        custody: "controlled",
-        phase: "ready",
-        openDocumentCount: 0,
-      },
-      undefined,
-      record,
-    );
+    const world: WorldFacts = {
+      id: "pe.app-25",
+      custody: "controlled",
+      phase: "ready",
+      openDocumentCount: 0,
+      row: { id: "pe.app-25" } as WorldFacts["row"],
+    };
+    const verbs = worldTrunk.verbs<"world">({
+      start: () => ({ lane: "dev", year: "25" }),
+      started: () => {},
+      settled: record,
+      failed: () => {},
+      finished: () => {},
+    });
+    const feed = worldTrunk.feed({
+      worlds: [world],
+      sessions: [],
+      isLoading: false,
+      stale: false,
+      error: null,
+      basis: [],
+    });
+    const pending = verbs.converge.run({ world: "session:pe.app-25" }, { world: feed });
 
     expect(record).not.toHaveBeenCalled();
     answer(

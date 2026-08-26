@@ -1,37 +1,54 @@
 import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 
-import type { Product } from "#/targeting/model";
-import { worldTrunk } from "#/targeting/trunks";
+import { product, type Feeds, type Verb } from "#/targeting/model";
+import { worldTrunk } from "#/targeting/world";
 
 export type HostOperationCatalogEntry = HostOpResponse<"host.ops.catalog">["operations"][number];
 
-export const OPS_PRODUCT: Product = {
-  key: "ops",
-  name: "operations",
-  links: [
-    worldTrunk.link,
-    {
-      key: "op",
-      parent: "world",
-      joiner: "through",
-      placeholder: "pick an operation",
-      needs: "an operation from the live catalog",
-      dir: "duplex",
-      liveness: "attached",
-    },
-  ],
-  stages: [
-    {
-      key: "explore",
-      label: "explore",
-      verbs: [{ key: "run", label: "Run", demands: ["world", "op"], run: null }],
-    },
-  ],
-  panes: [
-    { key: "request", label: "request", draws: ["op"] },
-    { key: "result", label: "result", draws: ["op"] },
-  ],
-};
+export const OPS_SLOTS = {
+  world: worldTrunk.link,
+  op: {
+    key: "op",
+    under: "world",
+    joiner: "through",
+    placeholder: "pick an operation",
+    multi: false,
+    needs: "an operation from the live catalog",
+    dir: "duplex",
+    liveness: "attached",
+  },
+} as const;
+
+export type OpsSlot = keyof typeof OPS_SLOTS;
+
+export const OPS_PRODUCT = (feeds: Feeds<OpsSlot>, action: Pick<Verb<OpsSlot>, "run" | "refuse">) =>
+  product(
+    "ops",
+    "operations",
+    OPS_SLOTS,
+  )({
+    feeds,
+    stages: [
+      {
+        key: "explore",
+        label: "explore",
+        verbs: [
+          {
+            key: "run",
+            label: "Run",
+            demands: ["world", "op"],
+            kind: "act",
+            needs: "a bound world and operation",
+            ...action,
+          },
+        ],
+      },
+    ],
+    panes: [
+      { key: "request", label: "request", draws: ["op"] },
+      { key: "result", label: "result", draws: ["op"] },
+    ],
+  });
 
 export const opsRefusal = (
   operation: HostOperationCatalogEntry | undefined,
@@ -40,14 +57,3 @@ export const opsRefusal = (
   custody === "observed" && operation?.intent.toLowerCase() === "mutate"
     ? "mutating operations require a controlled world"
     : null;
-
-export function bindOpsVerb(run: () => Promise<string>, refuse: () => string | null): Product {
-  // SHIM: kit ask, dies when TargetingHead accepts route-local verb handlers beside a static Product.
-  return {
-    ...OPS_PRODUCT,
-    stages: OPS_PRODUCT.stages.map((stage) => ({
-      ...stage,
-      verbs: stage.verbs.map((verb) => (verb.key === "run" ? { ...verb, run, refuse } : verb)),
-    })),
-  };
-}

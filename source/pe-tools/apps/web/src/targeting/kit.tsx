@@ -8,7 +8,6 @@
  *   StageStrip   — stage tabs carrying the readiness meter.
  *   PaneStrip    — a pane whose `draws` are unbound or undemanded is disabled, and says why.
  *   SeamChip     — the page-level derived seam chip ("r10 unsourced · 2 verbs unwired").
- *   peaNote      — pea's line, only when a wired verb is blocked by an unbound demand.
  *
  * GLANCE LAW: first glance = leaf noun · unbound caution · in-flight pulse; second look = the
  * small mute caption (direction · liveness · freshness); hover = full path + needs.
@@ -25,7 +24,6 @@ import {
   pickInto,
   progress,
   refusal,
-  seams,
   targetMode,
   type Bound,
   type Dir,
@@ -43,55 +41,61 @@ const DIR_GLYPH: Record<Dir, string> = { read: "←", write: "→", sync: "⇄",
 
 /* ------------------------------------------------------------------ bindings */
 
-export interface Bindings {
-  bound: Bound;
-  multi: Multi;
-  feeds: Feeds;
-  labelOf: (link: Link) => string | null;
-  optionsOf: (link: Link) => Option[] | null;
-  isPicked: (link: Link, id: string) => boolean;
-  pick: (link: Link, id: string) => void;
-  isBound: (link: Link) => boolean;
+export interface Bindings<K extends string> {
+  bound: Bound<K>;
+  multi: Multi<K>;
+  feeds: Feeds<K>;
+  labelOf: (link: Link<K>) => string | null;
+  optionsOf: (link: Link<K>) => Option[] | null;
+  isPicked: (link: Link<K>, id: string) => boolean;
+  pick: (link: Link<K>, id: string) => void;
+  isBound: (link: Link<K>) => boolean;
   open: string | null;
   setOpen: (key: string | null) => void;
   pickerLevel: string | null;
   setPickerLevel: (key: string) => void;
   pickerQuery: string;
   setPickerQuery: (query: string) => void;
-  stage: Stage;
+  stage: Stage<K>;
   setStage: (key: string) => void;
-  demanded: Set<string>;
+  demanded: Set<K>;
 }
 
-export interface BindingState {
-  bound: Bound;
-  multi: Multi;
+export interface BindingState<K extends string> {
+  bound: Bound<K>;
+  multi: Multi<K>;
   stage: string;
+}
+
+export interface BindingPatch<K extends string> {
+  bound?: Partial<Bound<K>>;
+  multi?: Multi<K>;
+  stage?: string;
 }
 
 /**
  * The caller owns the state and hands in its setters; this hook owns the waterfall and derived
  * reads. Options come from `feeds`, so the hook never invents them.
  */
-export function useBindings(
-  product: Product,
-  feeds: Feeds,
-  state: BindingState,
-  setState: (patch: Partial<BindingState>) => void,
+export function useBindings<K extends string>(
+  product: Product<K>,
+  state: BindingState<K>,
+  setState: (patch: BindingPatch<K>) => void,
   open: string | null,
   setOpen: (key: string | null) => void,
   pickerLevel: string | null,
   setPickerLevel: (key: string) => void,
   pickerQuery: string,
   setPickerQuery: (query: string) => void,
-): Bindings {
+): Bindings<K> {
   const stage = product.stages.find((s) => s.key === state.stage) ?? product.stages[0]!;
   const demanded = useMemo(() => demandedKeys(stage), [stage]);
   const { bound, multi } = state;
+  const { feeds } = product;
 
-  const optionsOf = useCallback((link: Link) => feeds[link.key]?.options ?? null, [feeds]);
+  const optionsOf = useCallback((link: Link<K>) => feeds[link.key].options, [feeds]);
   const labelOf = useCallback(
-    (link: Link) => {
+    (link: Link<K>) => {
       if (link.multi) {
         const picked = multi[link.key];
         const all = optionsOf(link);
@@ -105,14 +109,14 @@ export function useBindings(
     },
     [bound, multi, optionsOf],
   );
-  const isBound = useCallback((link: Link) => isBoundIn(link, bound, multi), [bound, multi]);
+  const isBound = useCallback((link: Link<K>) => isBoundIn(link, bound, multi), [bound, multi]);
   const isPicked = useCallback(
-    (link: Link, id: string) =>
+    (link: Link<K>, id: string) =>
       link.multi ? (multi[link.key]?.has(id) ?? false) : bound[link.key] === id,
     [bound, multi],
   );
   const pick = useCallback(
-    (link: Link, id: string) => setState(pickInto(product, bound, multi, link, id)),
+    (link: Link<K>, id: string) => setState(pickInto(product, bound, multi, link, id)),
     [product, bound, multi, setState],
   );
 
@@ -153,28 +157,32 @@ export function useClickAway(open: boolean, onAway: () => void) {
 
 /* ------------------------------------------------------------------ runner */
 
-export interface Runner {
+export interface Runner<K extends string> {
   /** Verb key in flight, if any (the host runs one transaction at a time). */
   busy: string | null;
   /** Link keys being read/written right now — the pulse source. */
   active: Set<string>;
-  run: (verb: Verb) => void;
-  canRun: (verb: Verb) => { ok: boolean; reason: string };
+  run: (verb: Verb<K>) => void;
+  canRun: (verb: Verb<K>) => { ok: boolean; reason: string };
 }
 
 /**
  * Projects the store's serialized verb bracket so the head knows which verb is in flight and which
  * links it touches. Every `Verb.run` calls a store action that owns the bracket.
  */
-export function useRunner(product: Product, b: Bindings, busyLabel: string | null = null): Runner {
+export function useRunner<K extends string>(
+  product: Product<K>,
+  b: Bindings<K>,
+  busyLabel: string | null = null,
+): Runner<K> {
   const busyVerb = product.stages
     .flatMap((stage) => stage.verbs)
     .find((verb) => verb.key === busyLabel);
   const active = useMemo(() => new Set(busyVerb?.demands ?? []), [busyVerb]);
 
   const canRun = useCallback(
-    (verb: Verb) => {
-      const why = refusal(product, verb, b.bound, b.multi, b.feeds);
+    (verb: Verb<K>) => {
+      const why = refusal(product, verb, b.bound, b.multi);
       if (why) return { ok: false, reason: why };
       if (busyLabel !== null) return { ok: false, reason: `${busyLabel} is in flight` };
       return { ok: true, reason: `${verb.label} on ${verb.demands.join(", ") || "nothing"}` };
@@ -183,11 +191,11 @@ export function useRunner(product: Product, b: Bindings, busyLabel: string | nul
   );
 
   const run = useCallback(
-    (verb: Verb) => {
-      if (!verb.run || !canRun(verb).ok) return;
-      void verb.run();
+    (verb: Verb<K>) => {
+      if (!canRun(verb).ok) return;
+      void verb.run(b.bound, b.feeds);
     },
-    [canRun],
+    [b.bound, b.feeds, canRun],
   );
 
   return { busy: busyVerb?.key ?? null, active, run, canRun };
@@ -195,15 +203,13 @@ export function useRunner(product: Product, b: Bindings, busyLabel: string | nul
 
 /* ------------------------------------------------------------------ panes */
 
-export function paneState(
-  product: Product,
-  pane: Pane,
-  b: Pick<Bindings, "isBound" | "demanded" | "stage">,
+export function paneState<K extends string>(
+  product: Product<K>,
+  pane: Pane<K>,
+  b: Pick<Bindings<K>, "isBound" | "demanded" | "stage">,
 ): { ok: boolean; reason: string } {
   for (const k of pane.draws) {
-    const link = product.links.find((l) => l.key === k);
-    if (!link) continue;
-    if (product.manages?.includes(k)) continue;
+    const link = product.slots[k];
     if (!b.isBound(link)) return { ok: false, reason: `${pane.label} draws from ${k} — unbound` };
     if (!b.demanded.has(k) && link.dir !== undefined)
       return {
@@ -216,8 +222,18 @@ export function paneState(
 
 /* ------------------------------------------------------------------ seam chip */
 
-export function SeamChip({ product, feeds }: { product: Product; feeds: Feeds }) {
-  const list = seams(product, feeds);
+export function SeamChip<K extends string>({ product }: { product: Product<K> }) {
+  const list: { kind: "options" | "fixture" | "verb"; subject: string; needs: string }[] = [];
+  for (const slot of Object.values(product.slots) as Link<K>[]) {
+    const feed = product.feeds[slot.key];
+    if (feed.seam) list.push({ kind: "options", subject: slot.key, needs: feed.seam.needs });
+    if (feed.lane === "fixture")
+      list.push({ kind: "fixture", subject: slot.key, needs: slot.needs });
+  }
+  for (const stage of product.stages)
+    for (const verb of stage.verbs)
+      if (verb.kind === "seam")
+        list.push({ kind: "verb", subject: `${stage.key}/${verb.key}`, needs: verb.needs });
   if (list.length === 0) return null;
   const fixtures = list.filter((s) => s.kind === "fixture");
   const gaps = list.filter((s) => s.kind === "options");
@@ -240,7 +256,7 @@ export function SeamChip({ product, feeds }: { product: Product; feeds: Feeds })
 /* ------------------------------------------------------------------ freshness */
 
 /** Second-look caption for a feed: freshness in one word, mute. */
-export function freshnessWord(b: Bindings, link: Link): string | null {
+export function freshnessWord<K extends string>(b: Bindings<K>, link: Link<K>): string | null {
   const f = b.feeds[link.key];
   if (!f) return null;
   const state = f.stale
@@ -274,7 +290,7 @@ const POP: React.CSSProperties = {
  * Keyed by the terminal; a trunk two terminals share re-picks from either (state is per link).
  * `extra(link)` lets a route append its own control to a level's list (an "add folder" field).
  */
-export function Picker({
+export function Picker<K extends string>({
   product,
   link,
   b,
@@ -282,11 +298,11 @@ export function Picker({
   extra,
   inert,
 }: {
-  product: Product;
-  link: Link;
-  b: Bindings;
-  runner?: Runner;
-  extra?: (link: Link) => React.ReactNode;
+  product: Product<K>;
+  link: Link<K>;
+  b: Bindings<K>;
+  runner?: Runner<K>;
+  extra?: (link: Link<K>) => React.ReactNode;
   /** Out of scope at this stage: renders dim and inert (no picker opens). */
   inert?: boolean;
 }) {
@@ -437,8 +453,8 @@ export function Picker({
               <div className="t-caption px-2 py-1" style={{ color: "var(--r-ink-2)" }}>
                 {curFeed?.state === "loading"
                   ? "reading…"
-                  : cur.parent && b.bound[cur.parent] == null
-                    ? `bind ${cur.parent} first`
+                  : cur.under && b.bound[cur.under] == null
+                    ? `bind ${cur.under} first`
                     : cur.needs}
               </div>
             ) : hits.length === 0 ? (
@@ -524,16 +540,16 @@ export function Picker({
 /* ------------------------------------------------------------------ shared strips */
 
 /** Stage tabs carrying the readiness meter. Brutalist: hard cells, one ink rule, no radius. */
-export function StageStrip({
+export function StageStrip<K extends string>({
   product,
   b,
   runner,
   meter = true,
   trailing,
 }: {
-  product: Product;
-  b: Bindings;
-  runner: Runner;
+  product: Product<K>;
+  b: Bindings<K>;
+  runner: Runner<K>;
   meter?: boolean;
   trailing?: React.ReactNode;
 }) {
@@ -588,7 +604,13 @@ export function StageStrip({
 }
 
 /** Pane strip — demands gate panes, made visible. Disabled panes read as locked text and say why. */
-export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
+export function PaneStrip<K extends string>({
+  product,
+  b,
+}: {
+  product: Product<K>;
+  b: Bindings<K>;
+}) {
   return (
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <span className="face-mono t-caption t-upper" style={{ color: "var(--r-ink-mute)" }}>
@@ -619,19 +641,4 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
       })}
     </span>
   );
-}
-
-/** Pea's line — ONLY when a wired verb is blocked by an unbound demand. Null otherwise. */
-export function peaNote(product: Product, b: Bindings, runner: Runner): string | null {
-  const missing = new Set<string>();
-  for (const v of b.stage.verbs) {
-    if (v.run === null || runner.canRun(v).ok) continue;
-    for (const k of v.demands) {
-      const l = product.links.find((x) => x.key === k);
-      if (l && !b.isBound(l)) missing.add(l.placeholder);
-    }
-  }
-  if (missing.size === 0) return null;
-  const verbs = b.stage.verbs.map((v) => v.label).join(" or ");
-  return `before I can ${verbs} I still need you to ${[...missing].join(" and ")}.`;
 }

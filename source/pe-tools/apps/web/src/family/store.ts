@@ -39,7 +39,6 @@ import {
   type Scope,
   type Slice,
 } from "#/state/route-store";
-import type { Verb } from "#/targeting/model";
 
 type Setter<A> = A | ((previous: A) => A);
 type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
@@ -99,9 +98,8 @@ export function createFamilyStore(deps: {
   const snapshotSource = runtime.atom((get) => {
     const documentId = get(settingsDoc)?.documentId;
     return documentId
-      ? hostRead(
-          [documentId.moduleKey, documentId.rootKey, documentId.relativePath],
-          () => deps.host.settings(documentId),
+      ? hostRead([documentId.moduleKey, documentId.rootKey, documentId.relativePath], () =>
+          deps.host.settings(documentId),
         )
       : Effect.succeed(unbound<FamilySnapshot | null>(null, ["settings"]));
   });
@@ -308,12 +306,9 @@ export function createFamilyStore(deps: {
       return `built ${receipt.rfaPath}`;
     },
   };
-  const commandVerb = (
-    name: CommandName,
-    input: () => unknown = () => undefined,
-  ): Pick<Verb, "run" | "refuse"> => ({
+  const commandVerb = (name: CommandName, input: () => unknown = () => undefined) => ({
     run: () => core.runVerb(name, () => writer.command(name, input()), keys[name]),
-    ...(name === "build" ? { refuse: buildRefusal } : {}),
+    refuse: name === "build" ? buildRefusal : () => null,
   });
   const verbs = {
     save: commandVerb("save"),
@@ -370,18 +365,22 @@ export function createFamilyStore(deps: {
     },
     save: verbs.save.run!,
     open(relativePath: string) {
-      return runVerb("open", async () => {
-        expect(
-          await deps.host.familyApply([
-            {
-              path: ["bindings", "profile"],
-              value: { id: relativePath, label: relativePath, at: deps.scope.documentAddress },
-            },
-          ]),
-          "profile bind failed",
-        );
-        return writer.command("open", { documentId: { ...FAMILY_MODULE, relativePath } });
-      }, keys.open);
+      return runVerb(
+        "open",
+        async () => {
+          expect(
+            await deps.host.familyApply([
+              {
+                path: ["bindings", "profile"],
+                value: { id: relativePath, label: relativePath, at: deps.scope.documentAddress },
+              },
+            ]),
+            "profile bind failed",
+          );
+          return writer.command("open", { documentId: { ...FAMILY_MODULE, relativePath } });
+        },
+        keys.open,
+      );
     },
     capture: verbs.capture.run!,
     build: verbs.build.run!,

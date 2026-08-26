@@ -11,7 +11,12 @@ import {
   type RouteStateWriteResult,
 } from "@pe/agent-contracts";
 
-import { bindOpsVerb, opsRefusal, type HostOperationCatalogEntry } from "#/ops/product";
+import {
+  OPS_PRODUCT,
+  opsRefusal,
+  type HostOperationCatalogEntry,
+  type OpsSlot,
+} from "#/ops/product";
 import { createOpsStore } from "#/ops/store";
 import { refusal, type Feeds } from "#/targeting/model";
 
@@ -42,7 +47,7 @@ const document = (target = "observed", receipt: OpsReceipt = oldReceipt): OpsRou
   },
   receipt,
 });
-const feeds: Feeds = {
+const feeds: Feeds<OpsSlot> = {
   world: {
     options: [{ id: "observed", label: "observed" }],
     state: "ready",
@@ -84,29 +89,25 @@ function make(
   return { registry, store, calls, writes };
 }
 
-function gatedRun(
-  store: ReturnType<typeof createOpsStore>,
-  selected: HostOperationCatalogEntry,
-) {
-  const product = bindOpsVerb(
-    () =>
+function gatedRun(store: ReturnType<typeof createOpsStore>, selected: HostOperationCatalogEntry) {
+  const productFeeds: Feeds<OpsSlot> = {
+    ...feeds,
+    op: { ...feeds.op, options: [{ id: selected.key, label: selected.key }] },
+  };
+  const product = OPS_PRODUCT(productFeeds, {
+    run: () =>
       store.actions.run({
         opKey: selected.key,
         request: () => ({}),
         target: "observed",
         bridgeSessionId: "bridge-observed",
       }),
-    () => opsRefusal(selected, "observed"),
-  );
+    refuse: () => opsRefusal(selected, "observed"),
+  });
   const verb = product.stages[0]!.verbs[0]!;
-  const why = refusal(
-    product,
-    verb,
-    { world: "observed", op: selected.key },
-    {},
-    { ...feeds, op: { ...feeds.op!, options: [{ id: selected.key, label: selected.key }] } },
-  );
-  return { why, run: () => (why ? Promise.resolve() : verb.run!()) };
+  const bound = { world: "observed", op: selected.key };
+  const why = refusal(product, verb, bound, {});
+  return { why, run: () => (why ? Promise.resolve() : verb.run(bound, productFeeds)) };
 }
 
 describe("ops route store", () => {

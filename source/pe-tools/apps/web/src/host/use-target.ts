@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { SessionFacts } from "#/host/target";
-import { worldTrunk } from "#/targeting/trunks";
+import { worldTrunk } from "#/targeting/world";
 
 type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
 

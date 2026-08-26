@@ -45,8 +45,8 @@ import {
   type WorldRoom,
   type WorldZone,
 } from "#/takeoff/world";
-import { type Bound, type Link, type Multi } from "#/targeting/model";
-import { documentTrunk, fileTerminal, folderTrunk, worldTrunk } from "#/targeting/trunks";
+import { type Bound, type Multi } from "#/targeting/model";
+import { documentTrunk, worldTrunk } from "#/targeting/world";
 
 export type SessionEvent =
   | { readonly kind: "docChanged"; readonly sessionId: string }
@@ -191,38 +191,52 @@ interface SyncPlan {
   readonly tags: readonly string[];
 }
 
-const r10Terminal = fileTerminal("r10", "an .r10 file", "sync");
-const r10Link: Link = {
-  ...r10Terminal.link,
-  parent: "folder",
-  placeholder: "pick a .r10",
-  needs: ".r10 files come from the bound folder",
-};
-
-export const TAKEOFF_LINKS: Link[] = [
-  worldTrunk.link,
-  documentTrunk.link,
-  {
+export const TAKEOFF_SLOTS = {
+  world: worldTrunk.link,
+  rvt: documentTrunk.link,
+  views: {
     key: "views",
-    parent: "rvt",
+    under: "rvt",
     joiner: "from",
     placeholder: "pick zoning plans",
     needs: "plan views with filled regions come from the bound model",
     dir: "read",
     multi: true,
+    liveness: "detached",
   },
-  {
+  zones: {
     key: "zones",
-    parent: "rvt",
+    under: "rvt",
     joiner: "into",
     placeholder: "pick zones",
     needs: "zones come from adoption — stamp designer regions first",
     dir: "write",
     multi: true,
+    liveness: "detached",
   },
-  folderTrunk.link,
-  r10Link,
-];
+  folder: {
+    key: "folder",
+    under: null,
+    joiner: "beside",
+    placeholder: "pick a folder",
+    multi: false,
+    needs: "a host-visible folder holding .r10 files — add one below",
+    dir: null,
+    liveness: null,
+  },
+  r10: {
+    key: "r10",
+    under: "folder",
+    joiner: "syncing",
+    placeholder: "pick a .r10",
+    needs: ".r10 files come from the bound folder",
+    multi: false,
+    dir: "sync",
+    liveness: "detached",
+  },
+} as const;
+
+export type TakeoffSlot = keyof typeof TAKEOFF_SLOTS;
 
 const EMPTY_WORLD: World = { docName: "", r10Path: null, lanes: [], zones: [], systems: [] };
 
@@ -366,10 +380,18 @@ export function createTakeoffStore(deps: {
     Object.entries(bindings)
       .filter(([key]) => key.startsWith(`${prefix}:`))
       .map(([, bind]) => bind.id);
-  const viewsAtom = Atom.make((get) => ids(get(bindingsAtom), "views")).pipe(owned("bindings/views"));
-  const zonesAtom = Atom.make((get) => ids(get(bindingsAtom), "zones")).pipe(owned("bindings/zones"));
-  const dirAtom = Atom.make((get) => get(bindingsAtom).folder?.id ?? "").pipe(owned("bindings/folder"));
-  const r10PathAtom = Atom.make((get) => get(bindingsAtom).r10?.id ?? "").pipe(owned("bindings/r10"));
+  const viewsAtom = Atom.make((get) => ids(get(bindingsAtom), "views")).pipe(
+    owned("bindings/views"),
+  );
+  const zonesAtom = Atom.make((get) => ids(get(bindingsAtom), "zones")).pipe(
+    owned("bindings/zones"),
+  );
+  const dirAtom = Atom.make((get) => get(bindingsAtom).folder?.id ?? "").pipe(
+    owned("bindings/folder"),
+  );
+  const r10PathAtom = Atom.make((get) => get(bindingsAtom).r10?.id ?? "").pipe(
+    owned("bindings/r10"),
+  );
   const stageAtom = Atom.make((get) => {
     const result = get(takeoffsSlice);
     return AsyncResult.isSuccess(result) ? (result.value.doc?.stage ?? "adopt") : "adopt";
@@ -643,7 +665,7 @@ export function createTakeoffStore(deps: {
             sub: `${view.level} · ${view.regions} region${view.regions === 1 ? "" : "s"}`,
           })),
       "read",
-      { needs: TAKEOFF_LINKS[2]!.needs },
+      { needs: TAKEOFF_SLOTS.views.needs },
     ),
   ).pipe(owned("feed/views"));
   const zonesFeed = Atom.make((get) =>
@@ -652,12 +674,12 @@ export function createTakeoffStore(deps: {
       (snapshot) =>
         snapshot?.world.zones.map((zone) => ({ id: zone.zone.guid, label: zone.name })) ?? [],
       "read",
-      { needs: TAKEOFF_LINKS[3]!.needs },
+      { needs: TAKEOFF_SLOTS.zones.needs },
     ),
   ).pipe(owned("feed/zones"));
   const folderFeed = Atom.make((get) =>
     feed(get(foldersResult), (dirs) => dirs.map((dir) => ({ id: dir, label: dir })), "read", {
-      needs: folderTrunk.link.needs,
+      needs: TAKEOFF_SLOTS.folder.needs,
     }),
   ).pipe(owned("feed/folder"));
   const r10Feed = Atom.make((get) =>
@@ -665,7 +687,7 @@ export function createTakeoffStore(deps: {
       get(listingResult),
       (files) => files.map((file) => ({ id: file.path, label: file.name })),
       "read",
-      { needs: r10Link.needs },
+      { needs: TAKEOFF_SLOTS.r10.needs },
     ),
   ).pipe(owned("feed/r10"));
   const authorityWorldAtom = Atom.make((get): World => {
@@ -907,8 +929,8 @@ export function createTakeoffStore(deps: {
     },
     setBindings(patch: {
       readonly stage?: string;
-      readonly bound?: Bound;
-      readonly multi?: Multi;
+      readonly bound?: Partial<Bound<TakeoffSlot>>;
+      readonly multi?: Multi<TakeoffSlot>;
     }) {
       const currentTarget = registry.get(targetAtom);
       const nextTarget = patch.bound?.world ?? currentTarget;

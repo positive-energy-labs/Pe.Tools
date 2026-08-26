@@ -3,7 +3,7 @@ import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
 import type { WorldFacts } from "#/host/fleet";
 import { resolveTarget, type SessionFacts } from "#/host/target";
-import { documentTrunk, worldTrunk } from "#/targeting/trunks";
+import { documentTrunk, worldTrunk } from "#/targeting/world";
 
 const session = (overrides: Partial<SessionFacts> = {}): SessionFacts => ({
   sessionId: "bridge-25",
@@ -27,6 +27,25 @@ const recent = (modelGuid: string, path: string): RecentDocument => ({
 });
 
 afterEach(() => vi.restoreAllMocks());
+
+const lifecycleVerbs = () =>
+  worldTrunk.verbs<"world">({
+    start: () => ({ lane: "installed", year: "25", doc: "Model.rvt" }),
+    started: () => {},
+    settled: () => {},
+    failed: () => {},
+    finished: () => {},
+  });
+
+const worldFeed = (worlds: readonly WorldFacts[]) =>
+  worldTrunk.feed({
+    worlds,
+    sessions: worlds.flatMap((world) => (world.session ? [world.session] : [])),
+    isLoading: false,
+    stale: false,
+    error: null,
+    basis: [],
+  });
 
 describe("targeting trunks", () => {
   it("names fused worlds by SDK session id or pid and discloses custody", () => {
@@ -105,13 +124,21 @@ describe("targeting trunks", () => {
       phase: "ready",
       pid: 77,
       openDocumentCount: 1,
+      session: session({
+        sessionId: "bridge-user",
+        sdkSessionId: undefined,
+        processId: 77,
+        custody: "observed",
+      }),
     };
 
-    for (const verb of Object.values(worldTrunk.verbs)) {
-      expect(verb.refuse(observed)).toContain("observed world Revit 77 is read-only");
-      await expect(
-        verb.run(observed, { lane: "installed", year: "25", doc: "Model.rvt" }),
-      ).rejects.toThrow("pe-revit does not control its lifecycle");
+    const feed = worldFeed([observed]);
+    const bound = { world: "observed" };
+    for (const verb of Object.values(lifecycleVerbs())) {
+      expect(verb.refuse(bound, { world: feed })).toContain("observed world Revit 77 is read-only");
+      expect(await verb.run(bound, { world: feed })).toContain(
+        "pe-revit does not control its lifecycle",
+      );
     }
     expect(request).not.toHaveBeenCalled();
   });
@@ -133,14 +160,16 @@ describe("targeting trunks", () => {
       session: session(),
     };
 
-    await worldTrunk.verbs.start.run(undefined, {
-      lane: "installed",
-      year: "25",
-      doc: "Model.rvt",
-    });
-    await worldTrunk.verbs.converge.run(controlled);
-    await worldTrunk.verbs.restart.run(controlled);
-    await worldTrunk.verbs.stop.run({ ...controlled, phase: "unresponsive" });
+    const verbs = lifecycleVerbs();
+    const empty = worldFeed([]);
+    const ready = worldFeed([controlled]);
+    const unresponsive = worldFeed([{ ...controlled, phase: "unresponsive" }]);
+    const bound = { world: "session:pe.app-25" };
+
+    await verbs.start.run({ world: null }, { world: empty });
+    await verbs.converge.run(bound, { world: ready });
+    await verbs.restart.run(bound, { world: ready });
+    await verbs.stop.run(bound, { world: unresponsive });
 
     expect(
       request.mock.calls.map(([, init]) => JSON.parse(init?.body as string) as unknown),

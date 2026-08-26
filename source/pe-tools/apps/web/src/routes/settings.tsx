@@ -19,14 +19,14 @@ import { Verb } from "#/components/lang/verb";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { timeAgo } from "#/lib/utils";
 import { schemaFormModel } from "#/settings-panes/schema-form";
-import { SETTINGS_PRODUCT } from "#/settings/product";
+import { SETTINGS_PRODUCT, type SettingsSlot } from "#/settings/product";
 import { createLiveSettingsHost } from "#/settings/host";
 import { createSettingsStore, type SettingsStore } from "#/settings/store";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
 import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
-import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
+import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 
 export const Route = createFileRoute("/settings")({
   validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
@@ -42,7 +42,11 @@ function SettingsRoute() {
   return <SettingsStoreOwner key={documentAddress} documentAddress={documentAddress} />;
 }
 
-function SettingsStoreOwner({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
+function SettingsStoreOwner({
+  documentAddress,
+}: {
+  documentAddress: import("@pe/agent-contracts").Address;
+}) {
   const store = useRouteStore(() => {
     const scope = { documentAddress };
     return createSettingsStore({
@@ -118,13 +122,13 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
     root: useAtomValue(store.feeds.root),
     file: useAtomValue(store.feeds.file),
   };
-  const product = SETTINGS_PRODUCT({
+  const product = SETTINGS_PRODUCT(feeds, {
     open: store.actions.open,
     refresh: store.actions.refresh,
     validate: store.actions.validate,
     save: store.actions.save,
   });
-  const state: BindingState = {
+  const state: BindingState<SettingsSlot> = {
     bound: {
       workspace: picker.workspaceKey ?? null,
       module: picker.moduleKey ?? null,
@@ -135,7 +139,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
     stage: "document",
   };
   const setState = useCallback(
-    (patch: Partial<BindingState>) => {
+    (patch: BindingPatch<SettingsSlot>) => {
       if (!patch.bound) return;
       store.actions.setPicker({
         workspaceKey: patch.bound.workspace ?? undefined,
@@ -150,7 +154,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   );
   const bindings = useBindings(
     product,
-    feeds,
     state,
     setState,
     targeting.open,
@@ -180,9 +183,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
             <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
           ) : null}
           {snapshot?.versionToken ? (
-            <FactChip title="The open document version token.">
-              v{snapshot.versionToken}
-            </FactChip>
+            <FactChip title="The open document version token.">v{snapshot.versionToken}</FactChip>
           ) : null}
           {snapshot?.modifiedUtc ? (
             <FactChip title="The open file's modification time.">
