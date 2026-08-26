@@ -9,19 +9,14 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { callHostDynamic, callHostRpc } from "#/host/client";
-import type {
-  LoadedFamiliesMatrixRequest,
-  LoadedFamiliesRequest,
-} from "#/host/loaded-families-view";
+import type { LoadedFamiliesMatrixRequest } from "#/host/loaded-families-view";
 import type {
   HostOpRequest,
   HostSessionScope,
   OpCallArgs,
   OpKey,
-  SettingsTreeRequest,
 } from "@pe/host-contracts/operation-types";
 
-type SchemaRequest = HostOpRequest<"settings.schema">;
 type FieldOptionsRequest = HostOpRequest<"settings.field-options">;
 type ParameterCatalogRequest = HostOpRequest<"settings.parameter-catalog">;
 
@@ -97,25 +92,8 @@ export function useHostStatusQuery(options?: HostQueryOptions) {
   return useHostOp("host.status", undefined, { ...options, staleTime: 15_000 });
 }
 
-export function useBridgeSessionSummaryQuery(options?: HostQueryOptions) {
-  return useHostOp("bridge.sessions.summary", undefined, { ...options, staleTime: 15_000 });
-}
-
 export function useBridgeSessionsListQuery(options?: { enabled?: boolean }) {
   return useHostOp("bridge.sessions.list", undefined, { ...options, staleTime: 5_000 });
-}
-
-export function useLoadedFamiliesCatalogQuery(
-  request: LoadedFamiliesRequest,
-  options?: HostQueryOptions,
-) {
-  return useHostOp("revit.catalog.loaded-families", request, {
-    ...options,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-  });
 }
 
 export function useLoadedFamiliesMatrixQuery(
@@ -129,35 +107,6 @@ export function useLoadedFamiliesMatrixQuery(
     gcTime: 15 * 60 * 1000,
     refetchOnMount: false,
     refetchOnReconnect: false,
-  });
-}
-
-// --- settings -----------------------------------------------------------------
-
-export function useWorkspacesQuery(options?: HostQueryOptions) {
-  return useHostOp("settings.workspaces", undefined, { ...options, staleTime: 5 * 60 * 1000 });
-}
-
-export function useTreeQuery(request: SettingsTreeRequest | undefined, options?: HostQueryOptions) {
-  return useHostOp("settings.tree", request, {
-    ...options,
-    enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
-    staleTime: 60_000,
-  });
-}
-
-/* Restored 2026-08-17 (deleted with the settings prototype in 1647344; the ops
-   themselves never left the host catalog). These feed the schema→form pipeline:
-   the module schema shapes the form, field-options populate enums/examples from
-   the connected Revit session. */
-
-export function useSchemaQuery(request: SchemaRequest | undefined, options?: HostQueryOptions) {
-  // The op requires moduleKey/rootKey; while unset the query is disabled and the
-  // placeholder never reaches the wire.
-  return useHostOp("settings.schema", request ?? { moduleKey: "", rootKey: "" }, {
-    ...options,
-    enabled: (options?.enabled ?? true) && Boolean(request?.moduleKey && request?.rootKey),
-    staleTime: 5 * 60 * 1000,
   });
 }
 

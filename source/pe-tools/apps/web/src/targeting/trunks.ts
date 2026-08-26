@@ -20,7 +20,7 @@ type SdkEnvelope<T> = Omit<Partial<Envelope<T>>, "result"> & {
 const sdkError = (body: SdkEnvelope<unknown>, fallback: string) =>
   body.diagnostics?.[0]?.detail ?? body.error ?? fallback;
 
-export interface FleetFeed {
+interface FleetFeed {
   readonly worlds: readonly WorldFacts[];
   readonly sessions: readonly SessionFacts[];
   readonly isLoading: boolean;

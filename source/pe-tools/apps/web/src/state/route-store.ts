@@ -20,7 +20,7 @@ import type { Option } from "#/targeting/model";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 import { parseWireEvent } from "#/workbench/wire";
 
-export type VerbFailure = { kind: "busy" | "host"; verb: string; message: string };
+type VerbFailure = { kind: "busy" | "host"; verb: string; message: string };
 export type VerbReceipt = { verb: string; text: string; at: number };
 export class VerbRefused extends Error {
   readonly name = "VerbRefused";
@@ -168,7 +168,7 @@ export const readingIsCurrent = (
   current: Pick<ReadingFrom, "target" | "documentId">,
 ) => from.target === current.target && from.documentId === current.documentId;
 
-export type FeedState = "ready" | "loading" | "error";
+type FeedState = "ready" | "loading" | "error";
 export type Lane = "live" | "read" | "fixture";
 export interface Feed {
   options: Option[] | null;

@@ -1,37 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
 import { worldName } from "#/host/fleet";
-import { useBridgeSessionsListQuery } from "#/host/queries";
-import {
-  fromBridgeSessions,
-  resolveTarget,
-  type SessionFacts,
-  type TargetResolution,
-  type TargetSelector,
-} from "#/host/target";
-
-/**
- * Resolve a target selector against the live session list. The caller owns WHERE the selector
- * is stored (chat search param, route search param, plugin state); this hook owns resolution.
- * Root-mounted SSE invalidation keeps the underlying query live; no per-surface refresh needed.
- */
-export function useTarget(selector: TargetSelector): {
-  resolution: TargetResolution;
-  sessions: SessionFacts[];
-  isLoading: boolean;
-} {
-  const query = useBridgeSessionsListQuery();
-  const sessions = fromBridgeSessions(query.data?.sessions ?? []);
-  return {
-    resolution: resolveTarget(sessions, selector),
-    sessions,
-    isLoading: query.isLoading,
-  };
-}
+import type { SessionFacts } from "#/host/target";
 
 // ── world log — client-observed world events, for the thread lane ───────────────────────────────
 
-export type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
+type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
 
 export interface WorldEvent {
   atMs: number;

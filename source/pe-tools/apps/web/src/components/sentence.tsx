@@ -29,7 +29,7 @@ export type SentenceTone = "rest" | "active" | "awaiting" | "committed" | "faile
 
 /** Meaning-role spends: pea's loop wears pea's identity; staged-awaiting-you and trouble are
  *  both caution (the words disambiguate — error is NOT the model disagreeing, so no alarm). */
-export const TONE_COLOR: Record<SentenceTone, string> = {
+const TONE_COLOR: Record<SentenceTone, string> = {
   rest: "var(--r-ink-2)",
   active: "var(--r-pea-ink)",
   awaiting: "var(--r-caution)",
@@ -38,7 +38,7 @@ export const TONE_COLOR: Record<SentenceTone, string> = {
 };
 
 /** One option in a generic noun slot's picker. `sub` narrates observed cost/state, never a guess. */
-export interface SlotOption {
+interface SlotOption {
   id: string;
   label: string;
   sub?: string;
@@ -51,7 +51,7 @@ export interface SlotOption {
  * profile, family). Routes declare which slots exist; a slot with `options: null`
  * renders as flat text (known noun, nothing to pick yet).
  */
-export interface SlotSpec {
+interface SlotSpec {
   key: string;
   /** Prose joining this slot to the sentence, e.g. "against" or "from". */
   joiner?: string;
@@ -65,7 +65,7 @@ export interface SlotSpec {
   empty?: string;
 }
 
-export interface SentenceProps {
+interface SentenceProps {
   /** Status prefix — the extension point. Pea's live loop state is the ONE non-noun allowed here. */
   prefix: string;
   prefixTone?: SentenceTone;

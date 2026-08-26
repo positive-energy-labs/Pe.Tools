@@ -1,12 +1,12 @@
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
-export interface InspectCause {
+interface InspectCause {
   verb: string;
   key: string;
 }
 
-export interface InspectNode {
+interface InspectNode {
   id: string;
   label: string;
   source: string | null;
@@ -20,20 +20,20 @@ export interface InspectNode {
   writable: boolean;
 }
 
-export interface InspectChange {
+interface InspectChange {
   id: string;
   label: string;
   at: number;
   cause: InspectCause | null;
 }
 
-export interface InspectSnapshot {
+interface InspectSnapshot {
   census: { nodes: number; edges: number; subscribed: number };
   nodes: InspectNode[];
   changes: InspectChange[];
 }
 
-export interface AtomInspector {
+interface AtomInspector {
   note(cause: InspectCause): void;
   inspect(): InspectSnapshot;
   subscribe(cb: () => void): () => void;

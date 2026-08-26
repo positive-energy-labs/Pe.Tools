@@ -19,7 +19,6 @@ const controlled: SessionFacts = {
   custody: "controlled",
   sdkSessionId: "fam-lab",
   activeDocumentTitle: "Door-Single.rfa",
-  activeDocumentIsFamilyDocument: true,
   openDocumentCount: 1,
 };
 

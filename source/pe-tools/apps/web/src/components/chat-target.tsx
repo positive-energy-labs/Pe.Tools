@@ -2,10 +2,11 @@ import { getRouteApi } from "@tanstack/react-router";
 
 import { EmptyState } from "#/components/lang/empty";
 import { useFleet } from "#/host/fleet";
-import { resolveTarget, type TargetSelector } from "#/host/target";
+import { useBridgeSessionsListQuery } from "#/host/queries";
+import { fromBridgeSessions, resolveTarget, type TargetSelector } from "#/host/target";
 import { CHAT_CONSUMER, readScoped, scopeKey, type TargetScope } from "#/host/target-scope";
 import { chipDescriptor, resolutionReadout } from "#/host/target-ui";
-import { useTarget, useWorldLog, type WorldEvent } from "#/host/use-target";
+import { useWorldLog, type WorldEvent } from "#/host/use-target";
 import { worldTrunk } from "#/targeting/trunks";
 
 /**
@@ -27,7 +28,9 @@ export function useChatTarget() {
   const scope: TargetScope = { threadId: thread ?? "", consumerId: CHAT_CONSUMER };
   const book = target ? { [scopeKey(scope)]: target } : {};
   const selector: TargetSelector = readScoped(book, scope);
-  const { resolution, sessions } = useTarget(selector);
+  const query = useBridgeSessionsListQuery();
+  const sessions = fromBridgeSessions(query.data?.sessions ?? []);
+  const resolution = resolveTarget(sessions, selector);
   const worldLog = useWorldLog(sessions);
   const pin = (next: TargetSelector) =>
     void navigate({

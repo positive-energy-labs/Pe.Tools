@@ -36,7 +36,7 @@ export type { SessionRow };
  * `booting` | `unresponsive` | `gone`. Branch on this, not on the finer `state` — `state` is the
  * word to SHOW (materialized, failed, dead, pid-reused, stopped, running, ready, booting).
  */
-export type WorldPhase = "ready" | "booting" | "unresponsive" | "gone";
+type WorldPhase = "ready" | "booting" | "unresponsive" | "gone";
 
 const PHASES: readonly WorldPhase[] = ["ready", "booting", "unresponsive", "gone"];
 
@@ -147,7 +147,7 @@ export function worldName(world: Pick<WorldFacts, "id" | "custody">): string {
   return world.custody === "observed" ? "your Revit" : world.id;
 }
 
-export function useSessionStatusQuery() {
+function useSessionStatusQuery() {
   // Under HOST_QUERY_KEY so root SSE invalidation refetches it; the interval covers the boot
   // window where no bridge events exist yet.
   // ponytail: 5s poll, always on while mounted; a start-scoped poll if it ever matters.

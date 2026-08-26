@@ -31,9 +31,7 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
  * POST /sessions {action: start|stop|restart|converge, …} → the matching verb.
  */
 
-export type SessionAction = "start" | "stop" | "restart" | "converge";
-
-export type SessionLane = "installed" | "dev";
+type SessionAction = "start" | "stop" | "restart" | "converge";
 
 export type SessionActionRequest = {
   readonly action: SessionAction;
@@ -45,7 +43,7 @@ export type SessionActionRequest = {
    * Explicit, never inferred from the host's lane: the same `{year}` must mean the same thing on
    * the route as on the CLI (BB-1 F-14).
    */
-  readonly lane?: SessionLane;
+  readonly lane?: HostLane;
   readonly doc?: string;
   readonly force?: boolean;
   readonly timeoutSeconds?: number;
@@ -85,7 +83,7 @@ export function parseSessionActionRequest(
       action: action as SessionAction,
       id,
       year,
-      lane: action === "start" ? (lane as SessionLane) : undefined,
+      lane: action === "start" ? (lane as HostLane) : undefined,
       doc: readOptionalString(record.doc),
       force: record.force === true,
       timeoutSeconds:
@@ -148,13 +146,11 @@ export function sessionStatusArgs(id?: string | null): string[] {
   return sessionStatusArgv(id?.trim() ? { id: id.trim() } : {});
 }
 
-export type SessionCliRunner<R = never> = (
-  args: readonly string[],
-) => Effect.Effect<string, unknown, R>;
+type SessionCliRunner<R = never> = (args: readonly string[]) => Effect.Effect<string, unknown, R>;
 
-export type SessionCliOutcome = { readonly status: number; readonly bodyJson: string };
+type SessionCliOutcome = { readonly status: number; readonly bodyJson: string };
 
-export type DocOpenRequest = {
+type DocOpenRequest = {
   readonly path: string;
   readonly id: string;
   readonly year?: string;

@@ -1,4 +1,4 @@
-import { selectorLabel, type Lane, type SessionFacts, type TargetResolution } from "#/host/target";
+import { selectorLabel, type Lane, type TargetResolution } from "#/host/target";
 
 /**
  * The shared visual vocabulary for targets. One tone per resolution state, used identically
@@ -16,7 +16,7 @@ import { selectorLabel, type Lane, type SessionFacts, type TargetResolution } fr
 // Keyed by the SDK's `Lane` union, so a lane the SDK adds is a compile error here rather than an
 // undefined viz rung. A session that reported no lane has no lane badge at all — the honest
 // rendering of "not reported", and the reason there is no "unknown" member to colour.
-export const LANE_VIZ: Record<Lane, string> = {
+const LANE_VIZ: Record<Lane, string> = {
   installed: "3", // slate's viz rung — series identity carried over from cat-slate
   dev: "2",
 };
@@ -25,7 +25,7 @@ export function laneVar(lane: Lane): string {
   return `var(--viz-${LANE_VIZ[lane]})`;
 }
 
-export type ChipTone = "muted" | "implicit" | "pinned" | "ambiguous" | "dangling";
+type ChipTone = "muted" | "implicit" | "pinned" | "ambiguous" | "dangling";
 
 export function chipDescriptor(r: TargetResolution): {
   tone: ChipTone;
@@ -106,5 +106,3 @@ export function resolutionReadout(r: TargetResolution): string {
   if (r.kind === "ambiguous") return `${sel} → ambiguous · ${r.candidates.length} candidates`;
   return `${sel} → unresolved · ${r.reason}`;
 }
-
-export type { SessionFacts };

@@ -38,7 +38,6 @@ export interface SessionFacts {
   custody: Custody;
   activeDocumentId?: string;
   activeDocumentTitle?: string;
-  activeDocumentIsFamilyDocument?: boolean;
   openDocumentCount: number;
   /** activeDocumentObservedAtUnixMs from the bridge snapshot — an observation time, not computed staleness. */
   observedAtUnixMs?: number;
@@ -128,7 +127,6 @@ export function fromBridgeSessions(
     custody?: string | null;
     processId?: number | null;
     activeDocumentTitle?: string | null;
-    activeDocumentIsFamilyDocument?: boolean | null;
     activeDocumentObservedAtUnixMs?: number | null;
     openDocumentCount: number;
   }[],
@@ -146,15 +144,9 @@ export function fromBridgeSessions(
       custody: CUSTODIES.find((c) => c === e.custody) ?? "observed",
       activeDocumentId: e.activeDocumentCloudModelGuid ?? e.activeDocumentPath ?? undefined,
       activeDocumentTitle: e.activeDocumentTitle ?? undefined,
-      activeDocumentIsFamilyDocument: e.activeDocumentIsFamilyDocument ?? undefined,
       observedAtUnixMs: e.activeDocumentObservedAtUnixMs ?? undefined,
       openDocumentCount: e.openDocumentCount,
     }));
-}
-
-/** Human label for a session: document first, process as fallback. */
-export function sessionLabel(session: SessionFacts): string {
-  return session.activeDocumentTitle ?? `Revit ${session.processId}`;
 }
 
 /** Short human phrase for a selector (chip text, tooltips). */
