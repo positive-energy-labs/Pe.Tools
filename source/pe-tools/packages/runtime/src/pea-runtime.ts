@@ -364,8 +364,42 @@ function createPeaSessionAdmission(
       if (!followCurrent) throw new Error("Pea permission thread changed during hydration.");
     }
   };
+  const setForCategory = session.permissions.setForCategory.bind(session.permissions);
+  const setForTool = session.permissions.setForTool.bind(session.permissions);
+  const persistPermissionMutation = (mutation: () => Promise<void>) => {
+    const threadId = session.thread.requireId();
+    const generation = permissionGeneration;
+    const persisted = permissionQueue.then(async () => {
+      assertCurrent(threadId, generation);
+      await mutation();
+      assertCurrent(threadId, generation);
+      const record = permissionRecordSchema.parse({
+        yolo: false,
+        permissionRules: session.permissions.getRules(),
+      });
+      await session.thread.setSetting({ key: permissionSettingKey, value: record });
+      assertCurrent(threadId, generation);
+      await session.state.set({ yolo: false, permissionRules: record.permissionRules });
+      assertCurrent(threadId, generation);
+      const durable = await session.thread.getSetting({ key: permissionSettingKey });
+      assertCurrent(threadId, generation);
+      if (
+        !isDeepStrictEqual(durable, record) ||
+        session.state.get().yolo !== false ||
+        !isDeepStrictEqual(session.permissions.getRules(), record.permissionRules)
+      ) {
+        throw new Error("Pea permission state did not persist exactly.");
+      }
+    });
+    permissionQueue = persisted.catch(() => {});
+    return persisted;
+  };
+  session.permissions.setForCategory = (input) =>
+    persistPermissionMutation(() => setForCategory(input));
+  session.permissions.setForTool = (input) => persistPermissionMutation(() => setForTool(input));
   const assertRunAdmitted = async () => {
     await awaitPermissions();
+    await permissionQueue;
     if (!admitted || closed) throw new Error("Pea session has not completed permission admission.");
     const threadId = session.thread.requireId();
     const generation = permissionGeneration;

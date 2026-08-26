@@ -320,6 +320,67 @@ test(
 );
 
 test(
+  "Pea persists concurrent native permission mutations",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pea-native-permissions-"));
+    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
+    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
+    const sendMessage = vi
+      .spyOn(Session.prototype, "sendMessage")
+      .mockResolvedValue({ stub: true } as never);
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
+    const expected = {
+      yolo: false,
+      permissionRules: {
+        categories: { ...expectedPermissionRules.trusted.categories },
+        tools: { script_execute: "deny" as const },
+      },
+    };
+    try {
+      runtime = await createPeaRuntime({ workspaceRoot: root, protocol: "web" });
+      let session = await runtime.controller.createSession({
+        resourceId: runtime.resourceId,
+        scope: "browser-thread",
+        threadId: "browser-thread",
+      });
+      await Promise.all([
+        ...Object.entries(expected.permissionRules.categories).map(([category, policy]) =>
+          session.permissions.setForCategory({
+            category: category as keyof typeof expected.permissionRules.categories,
+            policy,
+          }),
+        ),
+        session.permissions.setForTool({ toolName: "script_execute", policy: "deny" }),
+      ]);
+      expect(await session.thread.getSetting({ key: "pea.permissions" })).toEqual(expected);
+      await expect(session.sendMessage({ content: "guarded before restart" })).resolves.toEqual({
+        stub: true,
+      });
+
+      await runtime.close?.();
+      runtime = await createPeaRuntime({ workspaceRoot: root, protocol: "web" });
+      session = await runtime.controller.createSession({
+        resourceId: runtime.resourceId,
+        scope: "browser-thread",
+        threadId: "browser-thread",
+      });
+      expect(session.permissions.getRules()).toEqual(expected.permissionRules);
+      expect(await session.thread.getSetting({ key: "pea.permissions" })).toEqual(expected);
+      await expect(session.sendMessage({ content: "guarded after restart" })).resolves.toEqual({
+        stub: true,
+      });
+      expect(sendMessage).toHaveBeenCalledTimes(2);
+    } finally {
+      await runtime?.close?.();
+      sendMessage.mockRestore();
+      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
+    }
+  },
+  runtimeTestTimeout,
+);
+
+test(
   "Pea blocks the next run on durable or active permission readback mismatch",
   async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pea-permission-mismatch-"));
