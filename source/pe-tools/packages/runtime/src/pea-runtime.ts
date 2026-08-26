@@ -248,11 +248,13 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     });
     const switchThread = session.thread.switch.bind(session.thread);
     session.thread.switch = async (request) => {
+      permissionGeneration++;
       await switchThread(request);
       await awaitPermissions(true);
     };
     const sendSignal = session.sendSignal.bind(session) as typeof session.sendSignal;
     session.sendSignal = ((input, options) => {
+      const admission = [session.thread.requireId(), permissionGeneration] as const;
       const contentOptions = "content" in input ? input : undefined;
       const signal = createSignal(
         contentOptions
@@ -267,7 +269,11 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
       return {
         id: signal.id,
         type: signal.type,
-        accepted: awaitPermissions().then(() => sendSignal(input, options).accepted),
+        accepted: awaitPermissions().then(() =>
+          closed || session.thread.getId() !== admission[0] || permissionGeneration !== admission[1]
+            ? Promise.reject(new Error("Pea permission thread changed during hydration."))
+            : sendSignal(input, options).accepted,
+        ),
       };
     }) as typeof session.sendSignal;
     const close = handle.close;

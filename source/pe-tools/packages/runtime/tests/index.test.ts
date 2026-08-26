@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -17,7 +17,6 @@ import {
 import { createPeaRuntime } from "../src/pea-runtime.ts";
 
 const runtimeTestTimeout = 60_000;
-const permissionSettingKey = "pea.permissions";
 const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
 const expectedPermissionRules = {
   "read-only": {
@@ -74,7 +73,6 @@ test("buildAgentControllerApp mounts the /pe/info handshake for a pea runtime", 
     await runtime?.close?.();
     if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
     else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
-    await rm(workspaceRoot, { recursive: true, force: true });
   }
 }, 30_000);
 
@@ -155,12 +153,8 @@ test(
   "Pea rehydrates exact thread permissions across processes",
   async () => {
     const probe = await createPermissionProbe();
-    try {
-      await probe.run("seed");
-      await probe.run("verify");
-    } finally {
-      await probe.dispose();
-    }
+    await probe("seed");
+    await probe("verify");
   },
   runtimeTestTimeout,
 );
@@ -313,26 +307,23 @@ async function createPermissionProbe() {
   const jitiEntry = createRequire(import.meta.url).resolve("jiti");
   const jitiCli = path.resolve(path.dirname(jitiEntry), "../lib/jiti-cli.mjs");
   await writeFile(scriptPath, permissionProbeSource(runtimeUrl), "utf8");
-  return {
-    run: (mode: "seed" | "verify") =>
-      promisify(execFile)(process.execPath, [jitiCli, scriptPath], {
-        cwd: path.resolve(import.meta.dirname, "../../.."),
-        env: {
-          ...process.env,
-          PE_TOOLS_STATE_DIR: path.join(root, "state"),
-          PEA_WAVE3A_PROBE_MODE: mode,
-          PEA_WAVE3A_PROBE_ROOT: root,
-        },
-        signal: AbortSignal.timeout(runtimeTestTimeout),
-      }),
-    dispose: () => rm(root, { recursive: true }),
-  };
+  return (mode: "seed" | "verify") =>
+    promisify(execFile)(process.execPath, [jitiCli, scriptPath], {
+      cwd: path.resolve(import.meta.dirname, "../../.."),
+      env: {
+        ...process.env,
+        PE_TOOLS_STATE_DIR: path.join(root, "state"),
+        PEA_WAVE3A_PROBE_MODE: mode,
+        PEA_WAVE3A_PROBE_ROOT: root,
+      },
+      signal: AbortSignal.timeout(runtimeTestTimeout),
+    });
 }
 
 function permissionProbeSource(runtimeUrl: string): string {
   return `
 import assert from "node:assert/strict"; import path from "node:path"; import { createPeaRuntime } from ${JSON.stringify(runtimeUrl)};
-const settingKey = ${JSON.stringify(permissionSettingKey)}; const expected = ${JSON.stringify(expectedPermissionRules)};
+const settingKey = "pea.permissions"; const expected = ${JSON.stringify(expectedPermissionRules)};
 const mode = process.env.PEA_WAVE3A_PROBE_MODE; const root = process.env.PEA_WAVE3A_PROBE_ROOT; assert.ok(mode && root);
 const workspace = (name) => path.join(root, name); function sessionOf(runtime) { assert.ok(runtime.session); return runtime.session; }
 const trustedRecord = { yolo: false, permissionRules: { ...expected.trusted, tools: { script_execute: "deny" } } }; const readOnlyRecord = { yolo: false, permissionRules: expected["read-only"] }; const invalidRecords = { malformed: { yolo: false, permissionRules: { categories: expected.trusted.categories, tools: { script_execute: "wat" } } }, partial: { yolo: false, permissionRules: { categories: { read: "allow" }, tools: {} } }, yolo: { yolo: true, permissionRules: expected.trusted } }; if (mode === "seed") {
@@ -369,6 +360,7 @@ const trustedRecord = { yolo: false, permissionRules: { ...expected.trusted, too
   assert.deepStrictEqual(await idle.accepted, delegated); assert.deepStrictEqual(await active.accepted, delegated); assert.deepStrictEqual([idle.type, active.type], ["user", "user"]);
   assert.equal(admissions[0].input, idleInput); assert.equal(admissions[0].options, idleOptions); assert.equal(admissions[1].input, activeInput); assert.deepStrictEqual(admissions.slice(0, 2).map(({ input }) => input), [idleInput, activeInput]); admissionSession.run.reset();
   const union = [{ id: "user", type: "user", contents: "u" }, { id: "state", type: "state", cacheKey: "state", contents: "s" }, { id: "reactive", type: "reactive", contents: "r" }, { id: "notification", type: "notification", contents: "n" }, { id: "legacy-user", type: "user-message", contents: "lu" }, { id: "legacy-system", type: "system-reminder", contents: "ls" }]; for (const input of union) { const receipt = admissionSession.sendSignal(input); assert.equal(receipt.id, input.id); assert.equal(receipt.type, input.type === "user-message" ? "user" : input.type === "system-reminder" ? "reactive" : input.type); await receipt.accepted; assert.equal(admissions.at(-1).input, input); } await assert.rejects(admissionSession.sendSignal({ content: "reject" }).accepted, /delegated rejection/); const isActive = admissionSession.stream.isActive.bind(admissionSession.stream); admissionSession.stream.isActive = () => true; const beforeMessage = admissions.length; await admissionSession.sendMessage({ content: "message" }); assert.equal(admissions.length, beforeMessage + 1); admissionSession.stream.isActive = isActive; await admission.close?.();
+  let coreAdmissions = 0, agentAdmissions = 0; sessionPrototype.sendSignal = function (input, options) { coreAdmissions++; return coreSendSignal.call(this, input, options); }; let guarded; try { guarded = await createPeaRuntime({ workspaceRoot: workspace("guarded-signal") }); } finally { sessionPrototype.sendSignal = coreSendSignal; } const guardedSession = sessionOf(guarded); const threadA = guardedSession.thread.requireId(); const threadB = await guardedSession.thread.create({ title: "guarded B" }); await guardedSession.thread.switch({ threadId: threadA }); const admittedThreads = []; const guardedAgent = guarded.controller.getCurrentAgent(guardedSession); guardedAgent.sendSignal = (signal) => { agentAdmissions++; admittedThreads.push(guardedSession.thread.requireId()); return { signal, accepted: Promise.resolve({ action: "deliver", runId: "probe" }), persisted: Promise.resolve() }; }; for (let race = 0; race < 40; race++) { const submitted = guardedSession.thread.requireId(); const target = submitted === threadA ? threadB.id : threadA; const before = agentAdmissions; const receipt = guardedSession.sendSignal({ content: "race " + race }); const switched = guardedSession.thread.switch({ threadId: target }); const [accepted] = await Promise.allSettled([receipt.accepted, switched]); if (accepted.status === "fulfilled") { assert.equal(agentAdmissions, before + 1); assert.equal(admittedThreads.at(-1), submitted); } else assert.equal(agentAdmissions, before); } assert.equal(coreAdmissions, agentAdmissions); coreAdmissions = 0; agentAdmissions = 0; const closingReceipt = guardedSession.sendSignal({ content: "close admission" }); const closing = guarded.close(); await assert.rejects(closingReceipt.accepted, /changed during hydration/); await closing; await guarded.close(); assert.deepStrictEqual([coreAdmissions, agentAdmissions], [0, 0]);
   for (const [name, before, after, expectedAttributes] of [["idle", false, false, { idle: true }], ["active", true, true, { active: true, delivery: "while-active" }], ["idle-active", false, true, { active: true, delivery: "while-active" }], ["active-idle", true, false, { idle: true }]]) { const transition = await createPeaRuntime({ workspaceRoot: workspace(name) }); const transitionSession = sessionOf(transition); const agent = transition.controller.getCurrentAgent(transitionSession); const agentSendSignal = agent.sendSignal.bind(agent); let admitted; agent.sendSignal = (signal, target) => { admitted = { ...signal.attributes, ...(after ? target.ifActive : target.ifIdle)?.attributes }; return { signal, accepted: Promise.resolve({ action: "deliver", runId: "probe" }), persisted: Promise.resolve() }; }; const transitionGetSetting = transitionSession.thread.getSetting.bind(transitionSession.thread); let release, reach; const released = new Promise((resolve) => { release = resolve; }); const reached = new Promise((resolve) => { reach = resolve; }); transitionSession.thread.getSetting = async (request) => { const value = await transitionGetSetting(request); reach(); await released; return value; };
     await transitionSession.thread.create({ title: name }); if (before) transitionSession.run.ensureAbortController(); const receipt = transitionSession.sendSignal({ content: name, ifIdle: { attributes: { idle: true } }, ifActive: { attributes: { active: true } } }); if (after) transitionSession.run.ensureAbortController(); else transitionSession.run.reset(); await reached; release(); await receipt.accepted; assert.deepStrictEqual(admitted, expectedAttributes, name); agent.sendSignal = agentSendSignal; transitionSession.run.reset(); await transition.close?.(); }
   for (const name of Object.keys(invalidRecords)) {
