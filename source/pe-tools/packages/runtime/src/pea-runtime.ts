@@ -28,6 +28,7 @@ import {
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
+import type { PeaWorldDescriptor } from "@pe/agent-contracts";
 import { z } from "zod";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
 import { createRuntimeMemoryOptions, createRuntimeMemoryProfile } from "./memory/profiles.ts";
@@ -84,6 +85,7 @@ export type PeaRuntimeHandle = RuntimeHandle<
   PeaRuntimeServices,
   AgentController<PeaRuntimeState>
 > & {
+  world: PeaWorldDescriptor;
   isSessionAdmitted(session: Session<PeaRuntimeState>): boolean;
 };
 
@@ -133,6 +135,12 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     workspaceRoot,
   };
   const resourceId = `pea:${Buffer.from(workspaceRoot).toString("base64url")}`;
+  const world = {
+    id: resourceId,
+    root: workspaceRoot,
+    storage: { kind: "local-unversioned" },
+    isolation: "none",
+  } as const satisfies PeaWorldDescriptor;
   let controller: AgentController<PeaRuntimeState> | undefined;
   let policy: PeaControllerPolicy | undefined;
 
@@ -220,7 +228,10 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     await handle.close?.();
     throw error;
   }
-  return Object.assign(handle, { isSessionAdmitted: policy.isAdmitted });
+  return Object.assign(handle, {
+    world,
+    isSessionAdmitted: (session: Session<PeaRuntimeState>) => policy!.isAdmitted(session),
+  });
 }
 
 interface PeaControllerPolicy {

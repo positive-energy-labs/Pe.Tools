@@ -70,7 +70,14 @@ test("web boot exposes identity without materializing a session or CORS", async 
     expect(await response.json()).toEqual({
       controllerId: "pea",
       resourceId: runtime.resourceId,
+      world: {
+        id: runtime.resourceId,
+        root: path.resolve(workspaceRoot),
+        storage: { kind: "local-unversioned" },
+        isolation: "none",
+      },
     });
+    expect(runtime.world.root).toBe(path.resolve(workspaceRoot));
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
   } finally {
     await runtime?.close?.();

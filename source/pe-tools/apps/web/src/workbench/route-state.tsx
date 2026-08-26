@@ -7,11 +7,9 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import { MastraClient, isKnownAgentControllerEvent } from "@mastra/client-js";
 import { z } from "zod";
 
-import { type RouteStateSpec, readRouteState } from "@pe/agent-contracts";
+import { peInfoSchema, type RouteStateSpec, readRouteState } from "@pe/agent-contracts";
 
 import { type WorkbenchEndpointConfig, peUrl, resolveWorkbenchConfig } from "./config";
-
-const peInfoSchema = z.object({ controllerId: z.string(), resourceId: z.string() });
 
 export type RouteWorkspaceScope = { kind: "thread"; threadId: string } | { kind: "workspace" };
 

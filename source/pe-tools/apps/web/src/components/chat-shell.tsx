@@ -15,6 +15,7 @@ import { SidePane } from "#/components/ui/side-pane";
 import { X } from "lucide-react";
 import { chatPluginRegistration, chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { ChatSentence } from "#/components/chat-sentence";
+import { WorldBadge } from "#/components/world-badge";
 import "#/workbench/lens.css";
 
 /** Routes hostable as chat workspace plugins; the iframe src is `/${plugin}`.
@@ -67,6 +68,7 @@ function Surface({
     debug,
     threads,
     currentThreadId,
+    world,
     operationError,
     newThread,
     openThread,
@@ -165,7 +167,8 @@ function Surface({
             <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
           </div>
           {/* THE sentence — pea's testimony as prefix, the world slot as the chat's one bind control */}
-          <div className="flex min-w-0 flex-1 justify-end">
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+            <WorldBadge world={world} />
             <ChatSentence spec={plugin ? chatPluginRegistration(plugin)?.spec : undefined} />
           </div>
         </header>

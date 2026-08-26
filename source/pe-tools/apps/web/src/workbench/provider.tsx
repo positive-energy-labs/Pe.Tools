@@ -18,10 +18,12 @@ import {
   type PlanResume,
   type ToolCategory,
 } from "@mastra/client-js";
-import { z } from "zod";
 import {
   createWorkbenchState,
+  peInfoSchema,
   selectPendingApprovals,
+  type PeInfo,
+  type PeaWorldDescriptor,
   type WorkbenchAccessLevel,
   type WorkbenchState,
 } from "@pe/agent-contracts";
@@ -59,15 +61,13 @@ const PERMISSION_LEVELS = {
 type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["session"]>;
 
 /** Connection handshake — which controller/session the native routes drive. */
-const peInfoSchema = z.object({ controllerId: z.string(), resourceId: z.string() });
-type PeInfo = z.infer<typeof peInfoSchema>;
-
 interface WorkbenchContextValue {
   config: WorkbenchEndpointConfig;
   debug: { state: WorkbenchState; loading: boolean; error?: string };
   threads: StoredThreadSummary[];
   /** Derived from the URL `thread` search param — the single source of truth for "which thread". */
   currentThreadId: string;
+  world?: PeaWorldDescriptor;
   isRunning: boolean;
   operationError?: string;
   sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
@@ -403,6 +403,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       debug: { state, loading, error },
       threads,
       currentThreadId,
+      world: info?.world,
       isRunning,
       operationError,
       sendPrompt,
@@ -422,6 +423,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       operationError,
       threads,
       currentThreadId,
+      info?.world,
       isRunning,
       sendPrompt,
       cancel,
