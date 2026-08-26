@@ -53,40 +53,6 @@ export function resolveModel(
 
 An equivalent `createModelResolver()` or `createMastraCodeModelResolver()` public export would also work. The key request is a small public resolver API that does not require constructing a full MastraCode harness just to resolve a model handle.
 
-## Carry `files` (multimodal attachments) on the send-message HTTP route
-
-Status 2026-06-30: open, **load-bearing for apps/web**. The native `Session.sendMessage` already
-supports multimodal input — verified in the installed `@mastra/core@1.47.0`:
-
-```ts
-// dist/agent-controller/session.d.ts
-sendMessage({ content, files, ... }: {
-  content: string;
-  files?: Array<{ data: string; mediaType: string; filename?: string }>;
-  ...
-}): Promise<void>;
-```
-
-But the HTTP boundary drops it. The server route body schema is `z.object({ message: z.string() })`
-and the handler calls `session.sendMessage({ content: message })` — files are stripped:
-
-- `packages/server/src/server/handlers/agent-controller.ts` — `sendMessageBodySchema = z.object({ message: z.string() })`, handler `void session.sendMessage({ content: message })`.
-- `client-sdks/client-js/src/resources/agent-controller.ts` — `sendMessage(message: string)` (string-only wrapper).
-
-So `mastracode`'s TUI reaches multimodal only by calling the in-process `Session` directly
-(`readFileSync` → base64 → `session.sendMessage({ content, files })`), bypassing HTTP. A browser
-client has no such direct path.
-
-Proposed upstream shape: extend `sendMessageBodySchema` to accept the same `files` array
-`Session.sendMessage` already takes, forward it in the handler, and widen the client-js
-`sendMessage` to `sendMessage(message: string | { content: string; files?: ... })`.
-
-**Pe.Tools fallback until then:** `apps/web` sends through a thin Pe-owned route
-`POST /pe/messages` on `agent-controller-web.ts` that delegates to the in-process
-`runtime.session.sendMessage({ content, files })` — same family as `/pe/info` and `/pe/inspect`.
-When the native route carries `files`, delete `/pe/messages` and route sends through
-`@mastra/client-js`.
-
 ## Message-cutoff for clone/fork (`forkThread(messageId)`)
 
 Status 2026-06-30: open, **degraded in apps/web** (acceptable for now per product). Native clone
@@ -102,13 +68,8 @@ logic (the exact custom stack the native migration deleted).
 Proposed upstream shape: add an optional `upToMessageId?: string` (or `beforeMessageId`) to the
 clone route + handler so the cloned thread stops at that message.
 
-**Pe.Tools fallback until then:** `forkThread(messageId)` degrades to native full-thread clone
-(messageId ignored); the per-message fork affordance is hidden in the UI. Restore message-cutoff
-fork once the route supports it.
-
-## session.thread.switch() aborts the active run even when switching to the already-active thread (core 1.50.1)
-
-`AgentControllerSession` `thread.switch({ threadId })` unconditionally calls `session.abort()` (→ `suspensions.clear()` + `approval.cancel()`) before rebinding, with no early-out when `threadId` equals the currently-bound thread. Any UI that re-aligns the session thread on hydrate/reload therefore destroys a live HITL suspension and emits `agent_end(aborted)` — in our workbench this cancelled pending approval buttons and (pre-guard) drove a hydrate/abort event flood. Ask: make `switch()` a no-op (or a non-aborting re-bind) when the target thread is already bound, and/or don't drop parked suspensions/approvals for the thread being switched _to_. Our fallback (apps/web provider.tsx hydrate): only call `switchThread` when `session.state().threadId` differs from the target, plus reducer guards so no `agent_end` cancels a live approval.
+**Pe.Tools fallback until then:** no browser fork affordance. Restore message-cutoff fork once the
+route supports it.
 
 ## Narrowed: model resolver without any controller (mastracode 0.30)
 
@@ -120,11 +81,7 @@ fork once the route supports it.
 
 Related, same eager-init class: `MASTRACODE_PACKAGE_ROOT = findMastraCodePackageRoot(dirname(fileURLToPath(import.meta.url)))` runs at module init and THROWS when mastracode is bundled (no package.json named "mastracode" above the executable). The root is only consumed by the local-plugin symlink machinery. Ask: resolve it lazily at first plugin use. Until then the installed host stages a decoy `package.json` (`{"name":"mastracode"}`) beside the exe (stage-native-sidecars.mjs).
 
-## Widen the `@mastra/client-js` SSE event payload types (client-js 1.31.1)
+## Typed `@mastra/client-js` SSE event payloads (resolved in client-js 1.42.0)
 
-The published event union is lossy: `om_status` is typed `{status: string}`, `om_observation_end` is
-typed `{}`, and everything else collapses into `OtherAgentControllerEvent`. Consumers that render
-these events cannot narrow them from the shipped types, so `apps/web/src/workbench/wire.ts`
-re-declares a discriminated union and re-validates every SSE frame at the boundary. Ask: type the
-event payloads as their real shapes (or export the server-side event schema) so the client union is
-narrowable. Until then `wire.ts` stays, and its `parseWireEvent` drop rate is the drift alarm.
+The installed client exports narrowable event types and `isKnownAgentControllerEvent`, so Pe's
+duplicate event union and runtime validation are deleted.

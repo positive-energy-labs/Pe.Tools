@@ -86,11 +86,6 @@ test(
     const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
     process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
     let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
-    const sendMessage = Session.prototype.sendMessage;
-    const sent: unknown[] = [];
-    Session.prototype.sendMessage = async function (input) {
-      sent.push(input);
-    };
     try {
       runtime = await createPeaRuntime({ workspaceRoot: root, protocol: "web" });
       const resourceId = runtime.resourceId!;
@@ -139,33 +134,12 @@ test(
       expect(sessionA.identity.getResourceId()).toBe(resourceId);
       expect(await runtime.controller.createSession({ resourceId, scope: "A" })).toBe(sessionA);
 
-      const app = await buildAgentControllerApp({ runtime, label: "pea" });
-      const missing = await app.fetch(
-        new Request("http://local/pe/messages", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ message: "missing scope" }),
-        }),
-      );
-      expect(missing.status).toBe(400);
-      const files = [{ data: "aGVsbG8=", mediaType: "text/plain", filename: "note.txt" }];
-      const sentResponse = await app.fetch(
-        new Request("http://local/pe/messages", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ threadId: "A", message: "hello", files }),
-        }),
-      );
-      expect(sentResponse.status).toBe(200);
-      await vi.waitFor(() => expect(sent).toEqual([{ content: "hello", files }]));
       await sessionB.state.set({ yolo: true });
       await expect(sessionB.sendMessage({ content: "must not run" })).rejects.toThrow(
         "permission state did not persist exactly",
       );
-      expect(sent).toHaveLength(1);
       await expect(runtime.close?.()).resolves.toBeUndefined();
     } finally {
-      Session.prototype.sendMessage = sendMessage;
       await runtime?.close?.();
       if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
       else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;

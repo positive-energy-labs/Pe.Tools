@@ -9,7 +9,15 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { MastraClient, type AgentControllerThreadInfo } from "@mastra/client-js";
+import {
+  MastraClient,
+  isKnownAgentControllerEvent,
+  type AgentControllerThreadInfo,
+  type MastraDBMessage,
+  type PermissionPolicy,
+  type PlanResume,
+  type ToolCategory,
+} from "@mastra/client-js";
 import { z } from "zod";
 import {
   createWorkbenchState,
@@ -18,9 +26,7 @@ import {
   type WorkbenchState,
 } from "@pe/agent-contracts";
 import { peUrl, resolveWorkbenchConfig, type WorkbenchEndpointConfig } from "./config";
-import { applyWireEvent, hydrateWorkbenchState, type PeInspect } from "./adapter";
-import { parseWireEvent, parseWireMessages, type WireMessageContent } from "./wire";
-import { useThreadClaim } from "./claims";
+import { applyAgentControllerEvent, hydrateWorkbenchState, type PeInspect } from "./adapter";
 
 export interface StoredThreadSummary {
   id: string;
@@ -40,8 +46,18 @@ export interface WorkbenchAttachment {
   data?: string;
 }
 
-/** Resume payload for an interactive tool suspension (string for ask_user, PlanResume for submit_plan). */
-type ToolResume = string | { action: "approved" | "rejected"; feedback?: string };
+type ToolResume = string | string[] | PlanResume;
+type MessageFile = { data: string; mediaType: string; filename?: string };
+
+const MESSAGE_LIMIT = 200;
+const PERMISSION_LEVELS = {
+  "read-only": { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
+  ask: { read: "allow", edit: "ask", execute: "ask", mcp: "ask", other: "deny" },
+  trusted: { read: "allow", edit: "allow", execute: "allow", mcp: "allow", other: "deny" },
+} as const satisfies Record<
+  WorkbenchAccessLevel,
+  Record<ToolCategory, PermissionPolicy>
+>;
 
 /** The session client type, derived from the SDK (its class type isn't re-exported at the root). */
 type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["session"]>;
@@ -59,18 +75,14 @@ interface WorkbenchContextValue {
   isRunning: boolean;
   operation?: string;
   operationError?: string;
-  /** Another tab owns this thread - composing/sending is disabled here until takeover. */
-  readOnly: boolean;
-  takeOverThread: () => void;
   sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
   cancel: () => void;
   newThread: () => void;
-  switchThread: (threadId: string) => void;
+  openThread: (threadId: string) => void;
   deleteThread: (threadId: string) => Promise<void>;
   resolveApproval: (requestId: string, optionId?: string) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
   setAccessLevel: (accessLevel: WorkbenchAccessLevel) => Promise<void>;
-  forkThread: (messageId?: string) => Promise<void>;
   refreshProjection: () => void;
 }
 
@@ -90,25 +102,20 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
-  const initedRef = useRef(false);
-  const claim = useThreadClaim(currentThreadId || "draft");
+  const [mintedThreadId] = useState(() => crypto.randomUUID());
 
   // The native session + controller clients. `baseUrl` is the workbench origin; the SDK's default
   // apiPrefix (`/api`) matches where Pe mounts the @mastra/server routes.
   const api = useMemo(() => {
-    if (!info) return undefined;
+    if (!info || !currentThreadId) return undefined;
     const controller = new MastraClient({ baseUrl: config.origin }).getAgentController(
       info.controllerId,
     );
-    return { controller, session: controller.session(info.resourceId) };
-  }, [config.origin, info]);
+    return { controller, session: controller.session(info.resourceId, currentThreadId) };
+  }, [config.origin, currentThreadId, info]);
 
   const isRunning =
     state.uiStatus.overall.status === "running" || state.uiStatus.overall.status === "waiting";
-
-  // Refs the persistent stream handler closes over without re-subscribing.
-  const currentThreadIdRef = useRef(currentThreadId);
-  currentThreadIdRef.current = currentThreadId;
 
   /** Replace the URL thread param (no history spam on auto-landing / switching). */
   const gotoThread = useCallback(
@@ -133,24 +140,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       if (!api || !info) return;
       if (!options?.silent) setLoading(true);
       try {
-        // Align the session's active thread to the URL so state + the stream track it. But 1.50's
-        // `session.thread.switch()` ALWAYS calls `session.abort()` first — even when switching to the
-        // thread we're already bound to — which tears down a live HITL suspension (request_access),
-        // drops the parked approval, and emits agent_end(aborted). That vanishes the approve/deny
-        // buttons AND, via the re-hydrate below, floods the stream. So only switch when we're
-        // genuinely on a DIFFERENT thread; a redundant switch to the current thread is pure harm.
-        const bound = await api.session.state().catch(() => undefined);
-        const needsSwitch = bound?.threadId !== threadId;
-        if (needsSwitch) await api.session.switchThread(threadId).catch(() => undefined);
-        const [display, messages, inspect, models, modes] = await Promise.all([
-          needsSwitch ? api.session.state().catch(() => undefined) : Promise.resolve(bound),
-          api.session
-            .listMessages(threadId)
-            .then(parseWireMessages)
-            .catch(() => []),
+        const [display, messages, inspect, models, modes, permissions] = await Promise.all([
+          api.session.state({ threadId }).catch(() => undefined),
+          api.session.listMessages(threadId, MESSAGE_LIMIT).catch(() => []),
           fetchPeInspect(config).catch(() => ({}) as PeInspect),
           api.controller.listModels().catch(() => []),
           api.controller.listModes().catch(() => []),
+          api.session.getPermissions().catch(() => undefined),
         ]);
         setState(
           hydrateWorkbenchState({
@@ -163,6 +159,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
             inspect,
             models,
             modes,
+            permissions,
           }),
         );
         setError(undefined);
@@ -183,14 +180,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const refreshThreadsRef = useRef(refreshThreads);
   refreshThreadsRef.current = refreshThreads;
 
-  /** Create a thread server-side and return its id. URL navigation is the caller's job. */
-  const createThread = useCallback(async (): Promise<string> => {
-    if (!api) throw new Error("Not connected to the workbench yet.");
-    const thread = await api.session.createThread();
-    await refreshThreads();
-    return thread.id;
-  }, [api, refreshThreads]);
-
   // Connection handshake: learn the controller/resource the native routes drive.
   useEffect(() => {
     let cancelled = false;
@@ -210,115 +199,73 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     };
   }, [config]);
 
-  // One persistent SSE subscription per session. It survives thread switches; the handler reduces
-  // every validated event into WorkbenchState and refreshes the thread list on lifecycle events.
-  // agent_end re-hydrates the canonical transcript silently.
+  useEffect(() => {
+    if (!currentThreadId) gotoThread(mintedThreadId, true);
+  }, [currentThreadId, gotoThread, mintedThreadId]);
+
+  // The URL owns this provider's immutable session. Navigation replaces the whole lifecycle.
   useEffect(() => {
     if (!api) return;
     let cancelled = false;
     let unsubscribe = () => {};
-    void api.session
-      .subscribe({
-        onEvent: (raw) => {
-          const event = parseWireEvent(raw);
-          if (!event) return; // unmodeled event type — dropped at the boundary
-          setState((previous) => applyWireEvent(previous, event));
-          if (
-            event.type === "thread_created" ||
-            event.type === "thread_deleted" ||
-            event.type === "thread_changed"
-          ) {
-            void refreshThreadsRef.current();
-          }
-          // Re-hydrate the canonical transcript when a run truly ends — but NOT when it merely
-          // SUSPENDED for a HITL approval (request_access). A suspended run stays active server-side;
-          // hydrate's state()/switchThread would touch it (and 1.50's switch() aborts it outright),
-          // and the resulting agent_end re-enters here → hydrate → … a full-history replay flood
-          // that jitters the UI until it dies. Skip re-hydrate on a bare `suspended` end AND whenever
-          // an approval is still pending — the streamed state already holds it; leave it be.
-          if (
-            event.type === "agent_end" &&
-            event.reason !== "suspended" &&
-            selectPendingApprovals(stateRef.current).length === 0 &&
-            currentThreadIdRef.current
-          ) {
-            void hydrateRef.current(currentThreadIdRef.current, { silent: true });
-          }
-        },
-        // The SDK stream ended/erred; the next hydrate re-syncs state. No manual reconnect.
-        onError: () => {},
-      })
-      .then((subscription) => {
+    const terminalError = (caught: unknown) => {
+      if (cancelled) return;
+      setError(errorMessage(caught));
+      setState((previous) =>
+        applyAgentControllerEvent(previous, { type: "agent_end", reason: "error" }),
+      );
+    };
+    void (async () => {
+      try {
+        setState(createWorkbenchState());
+        setLoading(true);
+        await api.session.create({ threadId: currentThreadId });
+        if (cancelled) return;
+        await Promise.all([refreshThreads(), hydrate(currentThreadId)]);
+        if (cancelled) return;
+        const subscription = await api.session.subscribe({
+          reconnect: true,
+          onReconnect: () => void hydrateRef.current(currentThreadId, { silent: true }),
+          onEvent: (event) => {
+            if (!isKnownAgentControllerEvent(event)) return;
+            setState((previous) => applyAgentControllerEvent(previous, event));
+            if (event.type === "thread_created" || event.type === "thread_deleted") {
+              void refreshThreadsRef.current();
+            }
+            if (
+              event.type === "agent_end" &&
+              event.reason !== "suspended" &&
+              selectPendingApprovals(stateRef.current).length === 0
+            ) {
+              void hydrateRef.current(currentThreadId, { silent: true });
+            }
+          },
+          onError: terminalError,
+        });
         if (cancelled) subscription.unsubscribe();
         else unsubscribe = subscription.unsubscribe;
-      })
-      .catch(() => {});
+      } catch (caught) {
+        terminalError(caught);
+      }
+    })();
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, [api]);
-
-  // Load the thread list once connected — the picker needs it even on a deep link.
-  useEffect(() => {
-    void refreshThreads();
-  }, [refreshThreads]);
-
-  // React to the URL thread param: hydrate whenever it points at a thread.
-  useEffect(() => {
-    if (!api || !currentThreadId) return;
-    setState(createWorkbenchState());
-    void hydrate(currentThreadId);
-  }, [api, currentThreadId, hydrate]);
-
-  // First landing with no ?thread=: pick the latest existing thread or create one, then write it
-  // into the URL (replace) so the hydrate effect above takes over.
-  useEffect(() => {
-    if (!api || currentThreadId || initedRef.current) return;
-    initedRef.current = true;
-    void (async () => {
-      try {
-        const list = toSummaries(await api.session.listThreads());
-        setThreads(list);
-        gotoThread(list[0] ? list[0].id : await createThread(), true);
-      } catch (caught) {
-        initedRef.current = false; // allow a retry on transient failure
-        setLoading(false);
-        setError(errorMessage(caught));
-      }
-    })();
-  }, [api, currentThreadId, gotoThread, createThread]);
+  }, [api, currentThreadId, hydrate, refreshThreads]);
 
   const sendPrompt = useCallback(
     async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
       // An image-only send (empty text) is valid — guard on "nothing to send", not "no text".
       if ((!prompt && !attachments?.length) || !api) return;
-      if (currentThreadId && !claim.isOwner) {
-        setError("This thread is open in another tab - take over to send here.");
-        return;
-      }
-
-      let threadId = currentThreadId;
-      if (!threadId) {
-        threadId = await createThread();
-        gotoThread(threadId, true);
-        await api.session.switchThread(threadId).catch(() => undefined);
-      }
       // Optimistically show the user's turn (text + any attached images) + running state; the
       // stream confirms via agent_start. Images render from the in-hand base64, no server echo needed.
-      const optimisticContent: WireMessageContent[] = [
-        ...(prompt ? [{ type: "text" as const, text: prompt }] : []),
-        ...attachmentsToContent(attachments),
-      ];
+      const files = toFiles(attachments);
       setState((previous) => ({
-        ...applyWireEvent(previous, {
+        ...applyAgentControllerEvent(previous, {
           type: "message_start",
-          message: {
-            id: `local-user-${Date.now()}`,
-            role: "user",
-            content: optimisticContent,
-          },
+          message: optimisticMessage(prompt, files),
         }),
         uiStatus: {
           ...previous.uiStatus,
@@ -327,36 +274,34 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       }));
       setError(undefined);
       try {
-        // Pe send route carries attachments the native `{ message }` route can't.
-        await postPeMessage(config, threadId, prompt, toFiles(attachments));
+        await api.session.sendMessage({ content: prompt, files });
       } catch (caught) {
         setError(errorMessage(caught));
-        setState((previous) => applyWireEvent(previous, { type: "agent_end" }));
+        setState((previous) => applyAgentControllerEvent(previous, { type: "agent_end" }));
       }
     },
-    [config, api, currentThreadId, createThread, gotoThread, claim.isOwner],
+    [api],
   );
 
   const cancel = useCallback(() => {
     if (!api) return;
     for (const approval of selectPendingApprovals(stateRef.current)) {
-      void rejectApproval(api.session, approval.requestId).catch(() => undefined);
+      void rejectApproval(
+        api.session,
+        approval.requestId,
+        approval.toolCall.title,
+        approval.toolCall.rawOutput,
+      ).catch(() => undefined);
     }
     void api.session.abort().catch(() => undefined);
-    setState((previous) => applyWireEvent(previous, { type: "agent_end" }));
+    setState((previous) => applyAgentControllerEvent(previous, { type: "agent_end" }));
   }, [api]);
 
   const newThread = useCallback(() => {
-    setLoading(true);
-    void createThread()
-      .then((id) => gotoThread(id))
-      .catch((caught) => {
-        setLoading(false);
-        setError(errorMessage(caught));
-      });
-  }, [createThread, gotoThread]);
+    gotoThread(crypto.randomUUID());
+  }, [gotoThread]);
 
-  const switchThread = useCallback(
+  const openThread = useCallback(
     (threadId: string) => {
       gotoThread(threadId); // hydrate effect reacts to the URL change
     },
@@ -366,15 +311,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const deleteThread = useCallback(
     async (threadId: string) => {
       if (!api) return;
+      if (threadId === currentThreadId) {
+        setError("Open another thread before deleting the current thread.");
+        return;
+      }
       try {
         await api.session.deleteThread(threadId);
       } catch (caught) {
         setError(errorMessage(caught));
       }
-      if (threadId === currentThreadId) newThread();
       await refreshThreads();
     },
-    [api, currentThreadId, newThread, refreshThreads],
+    [api, currentThreadId, refreshThreads],
   );
 
   const resolveApproval = useCallback(
@@ -435,7 +383,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     async (accessLevel: WorkbenchAccessLevel) => {
       if (!api) return;
       try {
-        await api.session.setState({ yolo: accessLevel === "trusted", accessLevel });
+        await Promise.all(
+          Object.entries(PERMISSION_LEVELS[accessLevel]).map(([category, policy]) =>
+            api.session.setPermissionForCategory(
+              category as ToolCategory,
+              policy as PermissionPolicy,
+            ),
+          ),
+        );
         setState((previous) => ({
           ...previous,
           access: { ...previous.access, currentAccessLevel: accessLevel },
@@ -445,23 +400,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       }
     },
     [api],
-  );
-
-  const forkThread = useCallback(
-    async (messageId?: string) => {
-      if (!api || !currentThreadId) return;
-      // Native clone forks the whole thread — no per-message cutoff. The `messageId` from "fork
-      // from this turn" is accepted but ignored; see MASTRA_UPSTREAM_CANDIDATES.md.
-      void messageId;
-      try {
-        const clone = await api.session.cloneThread({ sourceThreadId: currentThreadId });
-        await refreshThreads();
-        switchThread(clone.id);
-      } catch (caught) {
-        setError(errorMessage(caught));
-      }
-    },
-    [api, currentThreadId, refreshThreads, switchThread],
   );
 
   const refreshProjection = useCallback(() => {
@@ -478,17 +416,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       currentThreadId,
       isRunning,
       operationError,
-      readOnly: Boolean(currentThreadId) && !claim.isOwner,
-      takeOverThread: claim.takeOver,
       sendPrompt,
       cancel,
       newThread,
-      switchThread,
+      openThread,
       deleteThread,
       resolveApproval,
       setModel,
       setAccessLevel,
-      forkThread,
       refreshProjection,
     }),
     [
@@ -500,17 +435,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       threads,
       currentThreadId,
       isRunning,
-      claim.isOwner,
-      claim.takeOver,
       sendPrompt,
       cancel,
       newThread,
-      switchThread,
+      openThread,
       deleteThread,
       resolveApproval,
       setModel,
       setAccessLevel,
-      forkThread,
       refreshProjection,
     ],
   );
@@ -524,26 +456,43 @@ export function useWorkbench(): WorkbenchContextValue {
   return context;
 }
 
-/** submit_plan / ask_user suspensions answer with a tool-specific resume payload. */
-function resumeDataForSuspension(
+/** Preserve the built-in suspension payloads expected by MastraCode tools. */
+export function resumeDataForSuspension(
   toolName: string | undefined,
   suspendPayload: unknown,
   reject: boolean,
 ): ToolResume {
+  const payload = readRecord(suspendPayload);
   if (toolName === "submit_plan") {
-    return reject
-      ? { action: "rejected", feedback: "Rejected from workbench." }
-      : { action: "approved" };
+    return {
+      action: reject ? "rejected" : "approved",
+      ...(reject ? { feedback: "Rejected from workbench." } : {}),
+      ...copyStrings(payload, ["path", "title", "plan"]),
+    };
   }
-  if (reject) return "Rejected";
-  const options = readArray(readRecord(suspendPayload)?.options);
-  const first = options?.map((option) => readString(option)).find(Boolean);
-  return first ?? "Approved";
+  if (toolName === "request_access") return reject ? "No" : "Yes";
+  if (toolName === "ask_user") {
+    if (reject) return "(skipped)";
+    const options = readArray(payload?.options)?.map(optionText).filter(Boolean) as
+      | string[]
+      | undefined;
+    const first = options?.[0] ?? "Approved";
+    return payload?.selectionMode === "multiple" ? [first] : first;
+  }
+  return reject ? "Rejected" : "Approved";
 }
 
-async function rejectApproval(session: SessionClient, requestId: string): Promise<void> {
+async function rejectApproval(
+  session: SessionClient,
+  requestId: string,
+  toolName: string | undefined,
+  suspendPayload: unknown,
+): Promise<void> {
   if (requestId.startsWith("tool-suspended:")) {
-    await session.respondToToolSuspension(requestId.slice("tool-suspended:".length), "Rejected");
+    await session.respondToToolSuspension(
+      requestId.slice("tool-suspended:".length),
+      resumeDataForSuspension(toolName, suspendPayload, true),
+    );
     return;
   }
   await session.approveTool(
@@ -552,28 +501,10 @@ async function rejectApproval(session: SessionClient, requestId: string): Promis
   );
 }
 
-/** Composer attachments → optimistic wire content. Binary (images) carry base64 `data`; everything
- * else shows as a filename chip. Mirrors the `messagePart` image/file branch in adapter.ts. */
-function attachmentsToContent(
-  attachments: WorkbenchAttachment[] | undefined,
-): WireMessageContent[] {
-  if (!attachments?.length) return [];
-  return attachments.map((attachment) =>
-    attachment.data
-      ? {
-          type: "image" as const,
-          data: attachment.data,
-          mimeType: attachment.mimeType,
-          filename: attachment.name,
-        }
-      : { type: "text" as const, text: `📎 ${attachment.name ?? "attachment"}` },
-  );
-}
-
-/** Map composer attachments to the `files` shape `Session.sendMessage` (via /pe/messages) takes. */
+/** Map composer attachments to native `Session.sendMessage({ content, files })`. */
 function toFiles(
   attachments: WorkbenchAttachment[] | undefined,
-): Array<{ data: string; mediaType: string; filename?: string }> | undefined {
+): MessageFile[] | undefined {
   if (!attachments?.length) return undefined;
   const files = attachments.flatMap((attachment) => {
     if (attachment.data) {
@@ -597,6 +528,20 @@ function toFiles(
     return [];
   });
   return files.length ? files : undefined;
+}
+
+function optimisticMessage(content: string, files: MessageFile[] | undefined): MastraDBMessage {
+  const parts: MastraDBMessage["content"]["parts"] = [];
+  if (content) parts.push({ type: "text", text: content });
+  for (const file of files ?? []) {
+    parts.push({ type: "file", mimeType: file.mediaType, data: file.data });
+  }
+  return {
+    id: `local-user-${Date.now()}`,
+    role: "user",
+    createdAt: new Date(),
+    content: { format: 2, parts },
+  };
 }
 
 // ponytail: fine for text attachments; chunk the byte loop if multi-MB text ever needs base64ing.
@@ -634,20 +579,6 @@ async function fetchPeInspect(config: WorkbenchEndpointConfig): Promise<PeInspec
   return (await response.json().catch(() => ({}))) as PeInspect;
 }
 
-async function postPeMessage(
-  config: WorkbenchEndpointConfig,
-  threadId: string,
-  message: string,
-  files: Array<{ data: string; mediaType: string; filename?: string }> | undefined,
-): Promise<void> {
-  const response = await fetch(peUrl(config, "/messages"), {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(files ? { threadId, message, files } : { threadId, message }),
-  });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-}
-
 function readRecord(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -660,6 +591,22 @@ function readArray(value: unknown): unknown[] | undefined {
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function optionText(value: unknown): string {
+  return readString(value) ?? readString(readRecord(value)?.label) ?? "";
+}
+
+function copyStrings(
+  source: Record<string, unknown> | undefined,
+  keys: string[],
+): Partial<Pick<PlanResume, "path" | "title" | "plan">> {
+  return Object.fromEntries(
+    keys.flatMap((key) => {
+      const value = readString(source?.[key]);
+      return value ? [[key, value]] : [];
+    }),
+  );
 }
 
 function shortId(value: string): string {

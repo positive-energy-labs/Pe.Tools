@@ -16,24 +16,29 @@ import {
 
 import type {
   AgentControllerAvailableModel,
+  KnownAgentControllerEvent,
   AgentControllerModeInfo,
   AgentControllerOMProgress,
   AgentControllerSessionState,
   AgentControllerThreadInfo,
+  MastraDBMessage,
+  MastraMessagePart,
+  PermissionRules,
 } from "@mastra/client-js";
-import type { WireEvent, WireMessage, WireMessageContent, WireTaskItem } from "./wire";
 
 /**
  * Client-side projection of mastra's native agent-controller into the `WorkbenchState` the Lens
  * renders. `@mastra/client-js` owns transport + the snapshot types (thread/model/mode/session
- * state, imported above); `./wire` validates the event + message wire at the boundary and supplies
- * the precise types the SDK's browser-lossy event union doesn't. `hydrateWorkbenchState` builds the
- * initial state from REST snapshots; `applyWireEvent` reduces each validated SSE event.
+ * state, event, and message types. `hydrateWorkbenchState` builds the initial state from REST
+ * snapshots; `applyAgentControllerEvent` reduces each known SSE event.
  * Both are pure so the provider can unit-test and replay them.
  */
 
-/** OM windows payload carried by the `om_status` event (the SDK under-types it to `{ status }`). */
-type OmStatusWindows = Extract<WireEvent, { type: "om_status" }>["windows"];
+type OmStatusWindows = Extract<KnownAgentControllerEvent, { type: "om_status" }>["windows"];
+type AgentControllerTask = Extract<
+  KnownAgentControllerEvent,
+  { type: "task_updated" }
+>["tasks"][number];
 
 /** The `/pe/inspect` transparency payload (Pe-owned). */
 export interface PeInspect {
@@ -54,10 +59,11 @@ export interface HydrateInputs {
   threadId?: string;
   displayState?: AgentControllerSessionState;
   threads: AgentControllerThreadInfo[];
-  messages: WireMessage[];
+  messages: MastraDBMessage[];
   inspect: PeInspect;
   models: AgentControllerAvailableModel[];
   modes: AgentControllerModeInfo[];
+  permissions?: PermissionRules;
 }
 
 // --- Hydration --------------------------------------------------------------------------------
@@ -69,7 +75,7 @@ export function hydrateWorkbenchState(inputs: HydrateInputs): WorkbenchState {
 
   const messages = inputs.messages.map((message) => toWorkbenchMessage(message, "complete"));
   const tools = collectTools(inputs.messages);
-  const accessLevel = accessLevelFromSettings(display.settings);
+  const accessLevel = accessLevelFromPermissions(inputs.permissions);
   const breakdown = buildBreakdown(inputs.inspect, messages, display.omProgress);
 
   return {
@@ -138,39 +144,32 @@ export function hydrateWorkbenchState(inputs: HydrateInputs): WorkbenchState {
       contextEntries: [],
       rawMessages: [],
     },
-    uiStatus: { ...base.uiStatus },
+    plans: { entries: planEntries(display.tasks ?? []) },
+    uiStatus: {
+      ...base.uiStatus,
+      overall: { ...base.uiStatus.overall, status: display.running ? "running" : "idle" },
+    },
   };
 }
 
 // --- Reducer ----------------------------------------------------------------------------------
 
-export function applyWireEvent(state: WorkbenchState, event: WireEvent): WorkbenchState {
+export function applyAgentControllerEvent(
+  state: WorkbenchState,
+  event: KnownAgentControllerEvent,
+): WorkbenchState {
   switch (event.type) {
     case "agent_start":
       return withRunStatus(state, "running");
     case "agent_end":
-      // A run with a LIVE pending approval is PAUSED for HITL, not finished — even when the server
-      // labels the end `suspended` OR `aborted`. (@mastra/core 1.50's `session.thread.switch()`
-      // aborts the active run before rebinding, so a redundant hydrate emits agent_end(aborted)
-      // over a run the UI is still gating.) Keep the pending approval + the "waiting" status that
-      // tool_suspended/tool_approval_required set; endRun would cancel the approval — the
-      // approve/deny buttons vanish the instant they appear — and flip to idle, and the provider
-      // would re-hydrate → switch → abort → a full-history replay flood.
-      if (event.reason === "suspended" || hasPendingApproval(state)) return state;
+      // A suspended run is paused for HITL. Every terminal outcome clears projected running state.
+      if (event.reason === "suspended") return state;
       return event.reason === "error" ? endRunWithError(state, "Run failed.") : endRun(state);
     case "message_start":
     case "message_update":
       return applyMessage(state, event.message, "streaming");
-    case "message_end": {
-      const next = applyMessage(
-        state,
-        event.message,
-        event.message.stopReason === "error" ? "error" : "complete",
-      );
-      return event.message.stopReason === "error"
-        ? endRunWithError(next, event.message.errorMessage ?? "Assistant message failed.")
-        : next;
-    }
+    case "message_end":
+      return applyMessage(state, event.message, "complete");
     case "tool_start":
       return mergeTool(state, event.toolCallId, {
         title: event.toolName,
@@ -190,7 +189,7 @@ export function applyWireEvent(state: WorkbenchState, event: WireEvent): Workben
       const prior = typeof existing?.rawInput === "string" ? existing.rawInput : "";
       return mergeTool(state, event.toolCallId, {
         ...(event.toolName ? { title: event.toolName } : {}),
-        rawInput: prior + event.argsTextDelta,
+        rawInput: prior + stringify(event.argsTextDelta),
         status: "in_progress",
       });
     }
@@ -284,7 +283,7 @@ export function applyWireEvent(state: WorkbenchState, event: WireEvent): Workben
       return pushError(state, errorText(event.error));
     // ponytail: thread_changed/created/deleted are handled by the provider (it refreshes the
     // thread list + URL); the reducer leaves WorkbenchState.threads alone here. Every other
-    // WireEvent variant is display chrome we don't surface — drop it.
+    // Native event variants below this projection's surface are ignored.
     default:
       return state;
   }
@@ -294,7 +293,7 @@ export function applyWireEvent(state: WorkbenchState, event: WireEvent): Workben
 
 function applyMessage(
   state: WorkbenchState,
-  message: WireMessage,
+  message: MastraDBMessage,
   status: WorkbenchMessage["status"],
 ): WorkbenchState {
   const messages = upsertMessage(state.transcript.messages, toWorkbenchMessage(message, status));
@@ -316,49 +315,63 @@ function applyMessage(
 }
 
 function toWorkbenchMessage(
-  message: WireMessage,
+  message: MastraDBMessage,
   status: WorkbenchMessage["status"],
 ): WorkbenchMessage {
   return {
     id: message.id,
-    role: message.role === "system" ? "system" : message.role,
-    parts: message.content.flatMap(messagePart),
+    role: message.role === "signal" ? "system" : message.role,
+    parts: message.content.parts.flatMap(messagePart),
     status,
     createdAt: iso(message.createdAt),
     updatedAt: iso(message.createdAt),
   };
 }
 
-function messagePart(content: WireMessageContent): WorkbenchMessagePart[] {
+function messagePart(content: MastraMessagePart): WorkbenchMessagePart[] {
   switch (content.type) {
     case "text":
       return [{ kind: "text", text: content.text }];
-    case "thinking":
-      return [{ kind: "reasoning", text: content.thinking }];
-    case "image":
+    case "reasoning":
+      return [{ kind: "reasoning", text: content.reasoning }];
     case "file": {
-      const mime = content.mimeType ?? content.mediaType;
-      const url = imageSource(content.url ?? content.image, content.data, mime);
+      const mime = content.mimeType;
+      const url = imageSource(undefined, content.data, mime);
       if (!url) return [];
-      // Non-image files have no inline render — show the filename as a small text part instead.
-      if (mime && !mime.startsWith("image/"))
-        return [{ kind: "text", text: `📎 ${content.filename ?? "file"}` }];
-      return [{ kind: "image", url, mimeType: mime, filename: content.filename }];
+      if (mime && !mime.startsWith("image/")) return [{ kind: "text", text: "Attachment" }];
+      return [{ kind: "image", url, mimeType: mime }];
     }
-    case "tool_call":
-      return [{ kind: "tool_call_ref", toolCallId: content.id, label: content.name }];
-    case "tool_result":
-      return [{ kind: "tool_result_ref", toolCallId: content.id, label: content.name }];
-    case "system_reminder":
-    case "state_signal":
-      // Route review/commit signals are deliberate human chronology, not hidden runtime
-      // bookkeeping. Keep task/memory signals on their specialized status projections.
-      if (content.stateId === "route-workspace") return [{ kind: "text", text: content.message }];
-      return [{ kind: "status", text: content.message }];
-    case "reactive_signal":
-    case "notification_summary":
-    case "notification":
-      return [{ kind: "status", text: content.message }];
+    case "tool-invocation": {
+      const invocation = content.toolInvocation;
+      const terminal =
+        invocation.state === "result" ||
+        invocation.state === "output-error" ||
+        invocation.state === "output-denied";
+      return [
+        terminal
+          ? {
+              kind: "tool_result_ref",
+              toolCallId: invocation.toolCallId,
+              label: invocation.toolName,
+            }
+          : {
+              kind: "tool_call_ref",
+              toolCallId: invocation.toolCallId,
+              label: invocation.toolName,
+            },
+      ];
+    }
+    case "data-signal":
+    case "data-user-message": {
+      const data = asRecord(content.data);
+      const text = signalText(data.contents);
+      if (!text) return [];
+      return [
+        data.tagName === "route-workspace"
+          ? { kind: "text", text }
+          : { kind: "status", text },
+      ];
+    }
     default:
       return [];
   }
@@ -407,35 +420,36 @@ function userText(message: WorkbenchMessage): string {
     .trim();
 }
 
-/** Fold a message's tool_call / tool_result content into the id-keyed tool collection. */
-function foldTools(calls: WorkbenchToolCall[], message: WireMessage): WorkbenchToolCall[] {
+/** Fold a native tool invocation part into the id-keyed tool collection. */
+function foldTools(calls: WorkbenchToolCall[], message: MastraDBMessage): WorkbenchToolCall[] {
   let next = calls;
-  for (const part of message.content) {
-    if (part.type !== "tool_call" && part.type !== "tool_result") continue;
+  for (const part of message.content.parts) {
+    if (part.type !== "tool-invocation") continue;
+    const invocation = part.toolInvocation;
     // Persisted parts BACKFILL the call — never clobber live tool_start/tool_end telemetry:
     // the message's createdAt stamps call and result identically (duration reads 0ms), and a
-    // tool_call part folding after tool_end would downgrade a terminal status.
-    const existing = next.find((call) => call.id === part.id);
-    if (part.type === "tool_call") {
-      const terminal = existing?.status === "completed" || existing?.status === "failed";
-      next = upsertTool(next, part.id, {
-        title: part.name,
-        rawInput: part.args,
-        target: toolTargetHint(part.args),
-        ...(terminal ? {} : { status: "in_progress" as const }),
-        parentMessageId: message.id,
-        startedAt: existing?.startedAt ?? iso(message.createdAt),
-      });
-    } else {
-      next = upsertTool(next, part.id, {
-        title: part.name,
-        rawOutput: part.result,
-        status: part.isError ? "failed" : "completed",
-        completedAt: existing?.completedAt ?? iso(message.createdAt),
-        parentMessageId: message.id,
-        ...(part.isError ? { error: stringify(part.result) } : {}),
-      });
-    }
+    // persisted part folding after tool_end must not downgrade live terminal telemetry.
+    const existing = next.find((call) => call.id === invocation.toolCallId);
+    const terminal =
+      invocation.state === "result" ||
+      invocation.state === "output-error" ||
+      invocation.state === "output-denied";
+    const failed = invocation.isError || invocation.state !== "result";
+    next = upsertTool(next, invocation.toolCallId, {
+      title: invocation.toolName,
+      rawInput: invocation.rawInput ?? invocation.args,
+      target: toolTargetHint(invocation.rawInput ?? invocation.args),
+      status: terminal ? (failed ? "failed" : "completed") : "in_progress",
+      parentMessageId: message.id,
+      startedAt: existing?.startedAt ?? iso(message.createdAt),
+      ...(terminal
+        ? {
+            rawOutput: invocation.result,
+            completedAt: existing?.completedAt ?? iso(message.createdAt),
+            ...(failed ? { error: invocation.errorText ?? stringify(invocation.result) } : {}),
+          }
+        : {}),
+    });
   }
   return next;
 }
@@ -471,7 +485,7 @@ function upsertTool(
   );
 }
 
-function collectTools(messages: WireMessage[]): WorkbenchToolCall[] {
+function collectTools(messages: MastraDBMessage[]): WorkbenchToolCall[] {
   let calls: WorkbenchToolCall[] = [];
   for (const message of messages) calls = foldTools(calls, message);
   return calls;
@@ -533,11 +547,6 @@ function requestApproval(state: WorkbenchState, input: PendingApprovalInput): Wo
     approvals: { requests },
     uiStatus: { ...state.uiStatus, overall: { ...state.uiStatus.overall, status: "waiting" } },
   };
-}
-
-/** True while any approval is still awaiting the user — the run is HITL-paused, not finished. */
-function hasPendingApproval(state: WorkbenchState): boolean {
-  return state.approvals.requests.some((request) => request.status === "pending");
 }
 
 /** Once a tool completes, drop any pending approval that was gating it. */
@@ -620,7 +629,7 @@ function pushError(state: WorkbenchState, message: string | undefined): Workbenc
 
 // --- Plan / memory ----------------------------------------------------------------------------
 
-function planEntries(tasks: WireTaskItem[]): WorkbenchPlanEntry[] {
+function planEntries(tasks: AgentControllerTask[]): WorkbenchPlanEntry[] {
   return tasks.map((task) => ({
     id: task.id,
     content: task.content,
@@ -855,10 +864,23 @@ const DEFAULT_APPROVAL_OPTIONS: WorkbenchApprovalOption[] = [
   { optionId: "reject_once", name: "Deny", kind: "reject_once" },
 ];
 
-export function accessLevelFromSettings(
-  settings: AgentControllerSessionState["settings"],
+const PERMISSION_LEVELS = {
+  "read-only": { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
+  ask: { read: "allow", edit: "ask", execute: "ask", mcp: "ask", other: "deny" },
+  trusted: { read: "allow", edit: "allow", execute: "allow", mcp: "allow", other: "deny" },
+} as const;
+
+export function accessLevelFromPermissions(
+  rules: PermissionRules | undefined,
 ): WorkbenchAccessLevel {
-  return settings?.yolo ? "trusted" : "ask";
+  if (!rules) return "ask";
+  const categories = rules.categories ?? {};
+  return (
+    (Object.entries(PERMISSION_LEVELS) as [WorkbenchAccessLevel, Record<string, string>][]).find(
+      ([, expected]) =>
+        Object.entries(expected).every(([category, policy]) => categories[category] === policy),
+    )?.[0] ?? "read-only"
+  );
 }
 
 function modelInfos(models: AgentControllerAvailableModel[], fallback: unknown[] | undefined) {
@@ -960,4 +982,13 @@ function readString(value: unknown): string | undefined {
 
 function readNumber(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
+}
+
+function signalText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((part) => readString(asRecord(part).text) ?? "")
+    .filter(Boolean)
+    .join("\n");
 }

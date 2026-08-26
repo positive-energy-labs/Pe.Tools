@@ -1,24 +1,28 @@
 import { expect, test } from "vite-plus/test";
 import { createWorkbenchState } from "@pe/agent-contracts";
-import { applyWireEvent, hydrateWorkbenchState } from "./adapter.ts";
-import type { WireEvent, WireMessage } from "./wire.ts";
+import type { KnownAgentControllerEvent, MastraDBMessage, MastraMessagePart } from "@mastra/client-js";
+import { applyAgentControllerEvent, hydrateWorkbenchState } from "./adapter.ts";
 
-function reduce(events: WireEvent[]) {
-  return events.reduce(applyWireEvent, createWorkbenchState());
+function reduce(events: KnownAgentControllerEvent[]) {
+  return events.reduce(applyAgentControllerEvent, createWorkbenchState());
+}
+
+function message(
+  id: string,
+  role: MastraDBMessage["role"],
+  parts: MastraMessagePart[],
+): MastraDBMessage {
+  return { id, role, createdAt: new Date(), content: { format: 2, parts } };
 }
 
 test("message_start → update → end yields one complete assistant message", () => {
   const id = "m1";
-  const message = (text: string): WireMessage => ({
-    id,
-    role: "assistant",
-    content: [{ type: "text", text }],
-  });
+  const assistant = (text: string) => message(id, "assistant", [{ type: "text", text }]);
   const state = reduce([
     { type: "agent_start" },
-    { type: "message_start", message: message("He") },
-    { type: "message_update", message: message("Hello") },
-    { type: "message_end", message: message("Hello world") },
+    { type: "message_start", message: assistant("He") },
+    { type: "message_update", message: assistant("Hello") },
+    { type: "message_end", message: assistant("Hello world") },
     { type: "agent_end", reason: "complete" },
   ]);
 
@@ -51,10 +55,17 @@ test("tool_start → tool_end yields a completed tool call carrying raw I/O", ()
 });
 
 test("state_changed replaces the live route-state map", () => {
-  const first = reduce([{ type: "state_changed", state: { "route:family-types": { cells: {} } } }]);
-  const second = applyWireEvent(first, {
+  const first = reduce([
+    {
+      type: "state_changed",
+      state: { "route:family-types": { cells: {} } },
+      changedKeys: ["route:family-types"],
+    },
+  ]);
+  const second = applyAgentControllerEvent(first, {
     type: "state_changed",
     state: { "route:parameter-links": { draftProfile: null } },
+    changedKeys: ["route:parameter-links"],
   });
 
   expect(second.sessionState.values).toEqual({
@@ -83,7 +94,7 @@ test("tool_approval_required gates the run; tool_end clears it", () => {
   expect(pending.approvals.requests[0]?.requestId).toBe("tool-approval:t2");
   expect(pending.approvals.requests[0]?.status).toBe("pending");
 
-  const resolved = applyWireEvent(pending, {
+  const resolved = applyAgentControllerEvent(pending, {
     type: "tool_end",
     toolCallId: "t2",
     result: "ok",
@@ -113,57 +124,6 @@ test("a suspended agent_end keeps the pending approval (does NOT end the run)", 
   expect(state.uiStatus.overall.status).toBe("waiting");
 });
 
-test("a live approval survives a stray agent_end(aborted) from a redundant thread switch", () => {
-  // 1.50's session.thread.switch() aborts the active run before rebinding — even switching to the
-  // thread we're already on — so a redundant hydrate emits agent_end(aborted) over a run the UI is
-  // still gating. The reducer must NOT let that cancel the pending approval (buttons would vanish).
-  const state = reduce([
-    { type: "agent_start" },
-    { type: "tool_approval_required", toolCallId: "t7", toolName: "write_file", args: {} },
-    { type: "agent_end", reason: "aborted" },
-  ]);
-  expect(state.approvals.requests[0]?.status).toBe("pending");
-  expect(state.approvals.requests[0]?.requestId).toBe("tool-approval:t7");
-  expect(state.uiStatus.overall.status).toBe("waiting");
-});
-
-test("approval survives a duplicate replay of the whole suspend sequence, then resolves", () => {
-  // The full lifecycle the owner hits: tool call → suspension → the run gets replayed (a duplicate
-  // agent_start + tool_suspended arrives over a reconnected/rebound stream) → the user finally
-  // approves and the tool completes. Through all of it the approval UI state must stay coherent:
-  // exactly one pending request while suspended, then resolved once tool_end lands.
-  const suspend: WireEvent = {
-    type: "tool_suspended",
-    toolCallId: "t9",
-    toolName: "request_access",
-    args: { path: "/tmp" },
-    suspendPayload: { options: ["Approve"] },
-  };
-  const suspended = reduce([
-    { type: "agent_start" },
-    suspend,
-    { type: "agent_end", reason: "suspended" },
-    // --- duplicate replay of the same run (no markers distinguishing it from live) ---
-    { type: "agent_start" },
-    suspend,
-    { type: "agent_end", reason: "suspended" },
-  ]);
-  // Exactly one pending approval survives — the replay is idempotent, not additive.
-  expect(suspended.approvals.requests.length).toBe(1);
-  expect(suspended.approvals.requests[0]?.status).toBe("pending");
-  expect(suspended.uiStatus.overall.status).toBe("waiting");
-
-  // The user approves; the resumed tool completes.
-  const resolved = applyWireEvent(suspended, {
-    type: "tool_end",
-    toolCallId: "t9",
-    result: "Access granted.",
-    isError: false,
-  });
-  expect(resolved.approvals.requests[0]?.status).toBe("resolved");
-  expect(resolved.uiStatus.overall.status).toBe("running");
-});
-
 test("the optimistic user echo reconciles in place — no duplicate turn", () => {
   // sendPrompt inserts a `local-user-*` turn, then the server streams the same turn back with its
   // own id. The reducer must adopt the server id in place, not append a second "you" bubble.
@@ -171,11 +131,11 @@ test("the optimistic user echo reconciles in place — no duplicate turn", () =>
     { type: "agent_start" },
     {
       type: "message_start",
-      message: { id: "local-user-123", role: "user", content: [{ type: "text", text: "hi" }] },
+      message: message("local-user-123", "user", [{ type: "text", text: "hi" }]),
     },
     {
       type: "message_start",
-      message: { id: "server-abc", role: "user", content: [{ type: "text", text: "hi" }] },
+      message: message("server-abc", "user", [{ type: "text", text: "hi" }]),
     },
   ]);
   const users = state.transcript.messages.filter((m) => m.role === "user");
@@ -183,25 +143,22 @@ test("the optimistic user echo reconciles in place — no duplicate turn", () =>
   expect(users[0]?.id).toBe("server-abc");
 });
 
-test("run errors surface message error text", () => {
+test("a terminal stream error ends projected running state", () => {
   const state = reduce([
     { type: "agent_start" },
     {
-      type: "message_end",
-      message: {
-        id: "a1",
-        role: "assistant",
-        content: [],
-        stopReason: "error",
-        errorMessage: "The model stopped on a content filter.",
-      },
+      type: "tool_suspended",
+      toolCallId: "t-error",
+      toolName: "request_access",
+      args: {},
+      suspendPayload: {},
     },
     { type: "agent_end", reason: "error" },
   ]);
 
-  expect(state.transcript.messages[0]?.status).toBe("error");
   expect(state.uiStatus.overall.status).toBe("error");
-  expect(state.uiStatus.errors).toEqual(["The model stopped on a content filter."]);
+  expect(state.uiStatus.errors).toEqual(["Run failed."]);
+  expect(state.approvals.requests[0]?.status).toBe("canceled");
 });
 
 test("hydrate projects messages, tools, models and inspector from REST snapshots", () => {
@@ -214,20 +171,24 @@ test("hydrate projects messages, tools, models and inspector from REST snapshots
       resourceId: "res",
       modeId: "build",
       modelId: "anthropic/x",
-      settings: { yolo: true, thinkingLevel: "off", notifications: "off", smartEditing: false },
+      settings: { yolo: false, thinkingLevel: "off", notifications: "off", smartEditing: false },
     },
     threads: [{ id: "thread-1", title: "First" }],
     messages: [
-      { id: "u1", role: "user", content: [{ type: "text", text: "hi" }] },
-      {
-        id: "a1",
-        role: "assistant",
-        content: [
+      message("u1", "user", [{ type: "text", text: "hi" }]),
+      message("a1", "assistant", [
           { type: "text", text: "calling" },
-          { type: "tool_call", id: "tc1", name: "grep", args: { query: "foo" } },
-          { type: "tool_result", id: "tc1", name: "grep", result: "match", isError: false },
-        ],
-      },
+          {
+            type: "tool-invocation",
+            toolInvocation: {
+              state: "result",
+              toolCallId: "tc1",
+              toolName: "grep",
+              args: { query: "foo" },
+              result: "match",
+            },
+          },
+        ]),
     ],
     inspect: {
       systemPrompt: { content: "You are Pea.", source: "resolved" },
@@ -238,6 +199,10 @@ test("hydrate projects messages, tools, models and inspector from REST snapshots
       { id: "anthropic/x", provider: "anthropic", modelName: "X", hasApiKey: true, useCount: 0 },
     ],
     modes: [{ id: "build", name: "Build" }],
+    permissions: {
+      categories: { read: "allow", edit: "allow", execute: "allow", mcp: "allow", other: "deny" },
+      tools: {},
+    },
   });
 
   expect(state.transcript.messages.length).toBe(2);
@@ -262,7 +227,7 @@ test("persisted message parts backfill a tool call without clobbering live telem
     { type: "tool_start", toolCallId: "t1", toolName: "script_execute", args: { code: "x" } },
   ]);
   await new Promise((resolve) => setTimeout(resolve, 5));
-  const done = applyWireEvent(live, {
+  const done = applyAgentControllerEvent(live, {
     type: "tool_end",
     toolCallId: "t1",
     result: "ok",
@@ -273,17 +238,20 @@ test("persisted message parts backfill a tool call without clobbering live telem
 
   // The persisted assistant message refolds tool_call + tool_result with ONE createdAt — it must
   // not overwrite the live timestamps (duration would read 0ms) nor downgrade the terminal status.
-  const refolded = applyWireEvent(done, {
+  const refolded = applyAgentControllerEvent(done, {
     type: "message_end",
-    message: {
-      id: "m1",
-      role: "assistant",
-      createdAt: new Date().toISOString(),
-      content: [
-        { type: "tool_call", id: "t1", name: "script_execute", args: { code: "x" } },
-        { type: "tool_result", id: "t1", name: "script_execute", result: "ok", isError: false },
-      ],
-    },
+    message: message("m1", "assistant", [
+      {
+        type: "tool-invocation",
+        toolInvocation: {
+          state: "result",
+          toolCallId: "t1",
+          toolName: "script_execute",
+          args: { code: "x" },
+          result: "ok",
+        },
+      },
+    ]),
   });
   const call = refolded.tools.calls[0]!;
   expect(call.status).toBe("completed");
@@ -298,17 +266,18 @@ test("route workspace signals remain visible human chronology", () => {
     threadId: "thread-1",
     threads: [],
     messages: [
-      {
-        id: "review-1",
-        role: "user",
-        content: [
-          {
-            type: "state_signal",
-            stateId: "route-workspace",
-            message: "Human review edit on family-types succeeded.",
+      message("review-1", "signal", [
+        {
+          type: "data-signal",
+          data: {
+            id: "signal-1",
+            type: "state",
+            tagName: "route-workspace",
+            contents: "Human review edit on family-types succeeded.",
+            createdAt: new Date().toISOString(),
           },
-        ],
-      },
+        },
+      ]),
     ],
     inspect: {},
     models: [],

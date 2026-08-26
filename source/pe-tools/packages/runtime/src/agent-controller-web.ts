@@ -13,21 +13,6 @@ import {
   type RouteWorkspaceThreadEvent,
 } from "./route-workspace.ts";
 
-/** Temporary Pe-owned multimodal send route until Workbench cuts over to the native client. */
-const peSendMessageSchema = z.object({
-  threadId: z.string().trim().min(1),
-  message: z.string(),
-  files: z
-    .array(
-      z.object({
-        data: z.string(),
-        mediaType: z.string(),
-        filename: z.string().optional(),
-      }),
-    )
-    .optional(),
-});
-
 /* ── Route-state dispatcher request bodies ─────────────────────────────────── */
 
 const routeStatePatchSchema = z.object({
@@ -130,21 +115,6 @@ export async function buildAgentControllerApp(
   // config — captured on pea's agent (InputProcessor + model wrap), surfaced here
   // because native display-state doesn't carry them. Composition, not a core fork.
   app.get("/pe/inspect", (c) => c.json((runtime.metadata?.workbench as unknown) ?? {}));
-  // Temporary Workbench send bridge. Exact scope is mandatory; replies use native session SSE.
-  app.post("/pe/messages", async (c) => {
-    const parsed = peSendMessageSchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "Invalid message body." }, 400);
-    const session = await runtime.controller.createSession({
-      resourceId: info.resourceId,
-      scope: parsed.data.threadId,
-      threadId: parsed.data.threadId,
-    });
-    void session
-      .sendMessage({ content: parsed.data.message, files: parsed.data.files })
-      .catch(() => undefined);
-    return c.json({ ok: true });
-  });
-
   const registrations = options.routeRegistrations ?? [];
   const storage = mastra.getStorage();
   const threadState = await storage?.getStore("threadState");

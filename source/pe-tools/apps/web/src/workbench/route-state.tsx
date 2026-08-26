@@ -4,13 +4,12 @@ import { useAtomValue } from "@effect/atom-react";
 import { Cause, Effect, Option, Queue, Stream } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient, isKnownAgentControllerEvent } from "@mastra/client-js";
 import { z } from "zod";
 
 import { type RouteStateSpec, readRouteState } from "@pe/agent-contracts";
 
 import { type WorkbenchEndpointConfig, peUrl, resolveWorkbenchConfig } from "./config";
-import { parseWireEvent } from "./wire";
 
 const peInfoSchema = z.object({ controllerId: z.string(), resourceId: z.string() });
 
@@ -74,10 +73,6 @@ function wireStream(
           const response = await fetch(peUrl(config, "/info"));
           if (!response.ok) throw new Error(`workbench /info ${response.status}`);
           const info = peInfoSchema.parse(await response.json());
-          const session = new MastraClient({ baseUrl: config.origin })
-            .getAgentController(info.controllerId)
-            .session(info.resourceId);
-
           // Hydrate before opening either long-lived stream. Chat + iframe roots otherwise
           // exhaust the browser's per-origin connection pool and strand this request. The
           // route SSE sends its current snapshot on connect, so it closes the hydration race.
@@ -88,16 +83,32 @@ function wireStream(
           const payload = (await initial.json()) as { doc?: unknown };
           if ("doc" in payload) Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
 
-          const unsubscribeSession = await session.subscribe({
-            onEvent: (raw: unknown) => {
-              const event = parseWireEvent(raw);
-              if (event?.type === "agent_start")
-                Queue.offerUnsafe(queue, { kind: "pea", active: true });
-              else if (event?.type === "agent_end")
-                Queue.offerUnsafe(queue, { kind: "pea", active: false });
-            },
-            onError: () => undefined,
-          });
+          let unsubscribeSession = () => {};
+          if (descriptor.scope.kind === "thread") {
+            const threadId = descriptor.scope.threadId;
+            const session = new MastraClient({ baseUrl: config.origin })
+              .getAgentController(info.controllerId)
+              .session(info.resourceId, threadId);
+            await session.create({ threadId });
+            const syncActivity = async () => {
+              const state = await session.state({ threadId });
+              Queue.offerUnsafe(queue, { kind: "pea", active: state.running ?? false });
+            };
+            await syncActivity();
+            const subscription = await session.subscribe({
+              reconnect: true,
+              onReconnect: () => void syncActivity(),
+              onEvent: (event) => {
+                if (!isKnownAgentControllerEvent(event)) return;
+                if (event.type === "agent_start")
+                  Queue.offerUnsafe(queue, { kind: "pea", active: true });
+                else if (event.type === "agent_end")
+                  Queue.offerUnsafe(queue, { kind: "pea", active: false });
+              },
+              onError: () => Queue.offerUnsafe(queue, { kind: "pea", active: false }),
+            });
+            unsubscribeSession = subscription.unsubscribe;
+          }
 
           const events = new EventSource(
             routeWorkspaceUrl(config, descriptor.route, "events", descriptor.scope),
@@ -114,7 +125,7 @@ function wireStream(
 
           return () => {
             events.close();
-            unsubscribeSession.unsubscribe();
+            unsubscribeSession();
           };
         },
         catch: (caught) => (caught instanceof Error ? caught : new Error(String(caught))),

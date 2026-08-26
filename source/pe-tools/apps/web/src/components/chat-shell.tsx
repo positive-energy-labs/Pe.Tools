@@ -12,7 +12,6 @@ import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
 import { Button } from "#/components/ui/button";
 import { SidePane } from "#/components/ui/side-pane";
-import { Verb } from "#/components/lang/verb";
 import { X } from "lucide-react";
 import { chatPluginRegistration, chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { ChatSentence } from "#/components/chat-sentence";
@@ -69,10 +68,8 @@ function Surface({
     threads,
     currentThreadId,
     operationError,
-    readOnly,
-    takeOverThread,
     newThread,
-    switchThread,
+    openThread,
     deleteThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
@@ -142,11 +139,7 @@ function Surface({
     { hotkey: "Mod+3", callback: () => setMode(MODES[2]!) },
   ]);
 
-  const statusLine = readOnly
-    ? null
-    : debug.loading
-      ? "Loading thread state"
-      : (debug.error ?? operationError);
+  const statusLine = debug.loading ? "Loading thread state" : (debug.error ?? operationError);
 
   return (
     <main
@@ -178,17 +171,7 @@ function Surface({
         </header>
 
         <div aria-live="polite" className="min-h-0 px-5">
-          {readOnly ? (
-            <div className="flex items-center gap-3 border-b border-[var(--r-line)] bg-[var(--r-recess)]/50 py-1.5 t-label">
-              <span>This thread is open in another tab — read-only here.</span>
-              {/* page-scoped act (moves the write lock between tabs; nothing leaves the page) */}
-              <Verb
-                label="Take over"
-                reason="Claim the write lock for this tab — the other tab drops to read-only"
-                onClick={takeOverThread}
-              />
-            </div>
-          ) : statusLine ? (
+          {statusLine ? (
             <div
               className={`border-b border-[var(--r-line)] py-1.5 t-label ${
                 debug.error || operationError ? "text-[var(--r-caution)]" : "text-[var(--r-ink-2)]"
@@ -215,7 +198,7 @@ function Surface({
                 <ThreadList
                   threads={threads}
                   currentThreadId={currentThreadId}
-                  onSelect={switchThread}
+                  onSelect={openThread}
                   onNew={newThread}
                   onDelete={(id) => void deleteThread(id)}
                   onSearch={() => setPaletteOpen(true)}
@@ -279,7 +262,7 @@ function Surface({
         currentThreadId={currentThreadId}
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
-        onSelect={switchThread}
+        onSelect={openThread}
         onNew={newThread}
         onDelete={(id) => void deleteThread(id)}
       />

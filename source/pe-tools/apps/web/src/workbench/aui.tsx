@@ -21,7 +21,7 @@ import {
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import { toolTitle, type WorkbenchState } from "@pe/agent-contracts";
-import { Check, ChevronRight, GitFork, X } from "lucide-react";
+import { Check, ChevronRight, X } from "lucide-react";
 import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
 import { isRenderable, workbenchToThreadMessages } from "./aui-adapter";
@@ -207,7 +207,6 @@ function MomentTime() {
 }
 
 function UserMoment() {
-  const { forkThread } = useWorkbench();
   const id = useMessage((message) => message.id);
   const text = useMessage((message) =>
     message.content
@@ -235,15 +234,6 @@ function UserMoment() {
       <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-[var(--r-ink-2)]">
         <TurnTag id={id} />
         <span>you</span>
-        {/* lens-fork kept as CSS: visibility is driven by `.lens-moment:hover` (geometry element) */}
-        <button
-          className="lens-fork"
-          type="button"
-          title="Fork the conversation from this turn into a new thread"
-          onClick={() => void forkThread(id)}
-        >
-          <GitFork size={12} />
-        </button>
         <MomentTime />
       </div>
       <div className="ml-auto flex w-fit max-w-[80%] flex-col items-end gap-1.5">
