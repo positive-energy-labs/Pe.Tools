@@ -24,7 +24,7 @@ import type { HostOperationCatalogEntry } from "#/ops/product";
 type Mode = "form" | "raw";
 type Setter<A> = A | ((previous: A) => A);
 type PickerState = { open: string | null; level: string | null; query: string };
-type Identity = { target: string; documentId?: string };
+type Identity = { target: string };
 type OpsSlice = Atom.Atom<AsyncResult.AsyncResult<Slice<OpsRouteDocument>, Error>>;
 
 export function createOpsStore(deps: {

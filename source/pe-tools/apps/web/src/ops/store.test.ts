@@ -140,7 +140,6 @@ describe("ops route store", () => {
 
     await store.actions.syncBindings("observed", oldReceipt.opKey, {
       target: "new",
-      documentId: "new.rvt",
     });
 
     expect(registry.get(store.atoms.result)).toBeNull();
@@ -155,25 +154,9 @@ describe("ops route store", () => {
 
     await store.actions.syncBindings("observed", matching.opKey, {
       target: "observed",
-      documentId: "projectA.rvt",
     });
 
     expect(registry.get(store.atoms.result)).toEqual(matching);
-  });
-
-  it("keeps a receipt current across documents in the same target", async () => {
-    const nonDocument: OpsReceipt = {
-      ...oldReceipt,
-      target: "observed",
-    };
-    const { registry, store } = make(document("observed", nonDocument));
-
-    await store.actions.syncBindings("observed", nonDocument.opKey, {
-      target: "observed",
-      documentId: "another.rvt",
-    });
-
-    expect(registry.get(store.atoms.result)).toEqual(nonDocument);
   });
 
   it("does not write bindings before the route document hydrates", async () => {
@@ -189,7 +172,7 @@ describe("ops route store", () => {
 
     await store.actions.setBindings(
       { bound: { world: "session:new", op: oldReceipt.opKey } },
-      { target: "new", documentId: "new.rvt" },
+      { target: "new" },
     );
 
     expect(writes).toHaveLength(1);
@@ -221,7 +204,7 @@ describe("ops route store", () => {
     await expect(
       store.actions.setBindings(
         { bound: { world: "session:new", op: oldReceipt.opKey } },
-        { target: "new", documentId: "new.rvt" },
+        { target: "new" },
       ),
     ).resolves.toBeUndefined();
 

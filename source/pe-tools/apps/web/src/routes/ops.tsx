@@ -90,7 +90,6 @@ function OpsPage({ store }: { store: OpsStore }) {
   const currentIdentity = session
     ? {
         target: session.sdkSessionId ?? `pid:${session.processId}`,
-        documentId: session.activeDocumentId,
       }
     : null;
 
@@ -101,7 +100,6 @@ function OpsPage({ store }: { store: OpsStore }) {
     world,
     op,
     currentIdentity?.target,
-    currentIdentity?.documentId,
     store,
   ]);
   useEffect(() => {
@@ -178,7 +176,6 @@ function OpsPage({ store }: { store: OpsStore }) {
         nextSession
           ? {
               target: nextSession.sdkSessionId ?? `pid:${nextSession.processId}`,
-              documentId: nextSession.activeDocumentId,
             }
           : null,
       );
