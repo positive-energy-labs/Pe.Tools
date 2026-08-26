@@ -20,15 +20,14 @@ import {
 } from "@mastra/client-js";
 import {
   createWorkbenchState,
-  peInfoSchema,
   selectPendingApprovals,
-  type PeInfo,
   type PeaWorldDescriptor,
   type WorkbenchAccessLevel,
   type WorkbenchState,
 } from "@pe/agent-contracts";
 import { peUrl, resolveWorkbenchConfig, type WorkbenchEndpointConfig } from "./config";
 import { applyAgentControllerEvent, hydrateWorkbenchState, type PeInspect } from "./adapter";
+import { usePeInfo } from "#/host/info";
 
 export interface StoredThreadSummary {
   id: string;
@@ -52,10 +51,7 @@ const PERMISSION_LEVELS = {
   "read-only": { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
   ask: { read: "allow", edit: "ask", execute: "ask", mcp: "ask", other: "deny" },
   trusted: { read: "allow", edit: "allow", execute: "allow", mcp: "allow", other: "deny" },
-} as const satisfies Record<
-  WorkbenchAccessLevel,
-  Record<ToolCategory, PermissionPolicy>
->;
+} as const satisfies Record<WorkbenchAccessLevel, Record<ToolCategory, PermissionPolicy>>;
 
 /** The session client type, derived from the SDK (its class type isn't re-exported at the root). */
 type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["session"]>;
@@ -90,7 +86,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const { thread } = useSearch({ from: "/chat" });
   const currentThreadId = thread ?? "";
 
-  const [info, setInfo] = useState<PeInfo>();
+  const infoQuery = usePeInfo(config);
+  const info = infoQuery.data;
   const [state, setState] = useState<WorkbenchState>(() => createWorkbenchState());
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -175,24 +172,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const refreshThreadsRef = useRef(refreshThreads);
   refreshThreadsRef.current = refreshThreads;
 
-  // Connection handshake: learn the controller/resource the native routes drive.
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const next = peInfoSchema.parse(await getJson(peUrl(config, "/info")));
-        if (!cancelled) setInfo(next);
-      } catch (caught) {
-        if (!cancelled) {
-          setLoading(false);
-          setError(errorMessage(caught));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [config]);
+    if (!infoQuery.error) return;
+    setLoading(false);
+    setError(errorMessage(infoQuery.error));
+  }, [infoQuery.error]);
 
   useEffect(() => {
     if (!currentThreadId) gotoThread(mintedThreadId, true);
@@ -494,9 +478,7 @@ async function rejectApproval(
 }
 
 /** Map composer attachments to native `Session.sendMessage({ content, files })`. */
-function toFiles(
-  attachments: WorkbenchAttachment[] | undefined,
-): MessageFile[] | undefined {
+function toFiles(attachments: WorkbenchAttachment[] | undefined): MessageFile[] | undefined {
   if (!attachments?.length) return undefined;
   const files = attachments.flatMap((attachment) => {
     if (attachment.data) {
@@ -553,12 +535,6 @@ function toSummaries(threads: AgentControllerThreadInfo[]): StoredThreadSummary[
       updatedAt: thread.updatedAt ?? new Date(0).toISOString(),
     }))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-}
-
-async function getJson(url: string): Promise<unknown> {
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
-  return response.json();
 }
 
 async function fetchPeInspect(config: WorkbenchEndpointConfig): Promise<PeInspect> {
