@@ -345,6 +345,41 @@ test(
 );
 
 test(
+  "Pea rechecks durable permissions before draining a queued follow-up",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pea-follow-up-permission-drift-"));
+    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
+    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
+    const runtime = await createPeaRuntime({ workspaceRoot: root });
+    try {
+      const session = runtime.session!;
+      await session.thread.create({ title: "permission drift" });
+      vi.spyOn(session.run, "isRunning").mockReturnValue(true);
+      vi.spyOn(session.stream, "isOpen").mockReturnValue(false);
+      const sendMessage = vi.spyOn(session, "sendMessage");
+
+      await session.followUp({ content: "queued before permission drift" });
+      expect(session.followUps.count()).toBe(1);
+      await session.thread.setSetting({
+        key: "pea.permissions",
+        value: { yolo: false, permissionRules: expectedPermissionRules["read-only"] },
+      });
+
+      await expect(session.drainFollowUpQueue()).rejects.toThrow(
+        "Pea permission state did not persist exactly.",
+      );
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(session.followUps.count()).toBe(1);
+      await expect(runtime.close?.()).resolves.toBeUndefined();
+    } finally {
+      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
+    }
+  },
+  runtimeTestTimeout,
+);
+
+test(
   "Pea validates native model membership and credentials before public resolution",
   async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pea-models-"));

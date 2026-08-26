@@ -423,6 +423,11 @@ function createPeaSessionAdmission(
     await assertRunAdmitted();
     return followUp(input);
   };
+  const drainFollowUpQueue = session.drainFollowUpQueue.bind(session);
+  session.drainFollowUpQueue = async (options) => {
+    await assertRunAdmitted();
+    return drainFollowUpQueue(options);
+  };
   const sendNotificationSignal = session.sendNotificationSignal.bind(session);
   session.sendNotificationSignal = async (input, options) => {
     await assertRunAdmitted();
