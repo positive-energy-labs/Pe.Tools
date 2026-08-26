@@ -6,6 +6,8 @@ design-system ledger, not restated here.
 
 ## Decided
 
+- 2026-08-26 — Repository guards live in their own `@pe/repo-guards` workspace package; the web route lane runs route code alone, so its result remains route signal.
+
 - 2026-08-25 — Generic view contracts use `View.Name` as raw `name` and `View.Title` as display `title` or handle `label`; project-index and agent-context share that law.
 - 2026-08-25 — Generic Revit facts keep one operation owner: `revit.context.document-session` supplies active document identity and labels, while `revit.catalog.project-index` supplies view type and level. Feature operations such as `takeoffs.*` return only their domain facts and join generic facts at the caller.
 - 2026-08-25 — Stable Takeoff Revit work is ten typed `takeoffs.*` bridge operations generated into the checked-in TypeScript catalog; `TakeoffAtlas` owns the library behavior and `scripting.execute` stays available only for exploration.

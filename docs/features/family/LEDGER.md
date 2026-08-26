@@ -82,6 +82,8 @@ Portable-profile schema: the doc-comments on `FamilyModel` in
 
 ## Owed
 
+- Cross-world and cross-document transfers for Family Foundry portability: a family and the model under it must be able to move between worlds and documents as an explicit exception to one-document mounting.
+
 - 2026-08-25 — `armedBuild` is a page atom; ruled home is the doc (C1). Move it into `familyRouteState` (schema + `build_evidence` handler) so the unknown-outcome latch survives navigation.
 - 2026-08-25 — `page/binding` remains component-written (`family/workspace.tsx:240-254`); move the write behind a store action when the binding flow is next changed.
 
