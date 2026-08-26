@@ -25,6 +25,7 @@ import { createSettingsStore, type SettingsStore } from "#/settings/store";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
+import { ThreadEmpty } from "#/components/thread-palette";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import { withThread } from "./-with-thread";
 
@@ -39,7 +40,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsRoute() {
   const search = Route.useSearch();
-  if (!search.thread) return null;
+  if (!search.thread) return <ThreadEmpty />;
   return <SettingsStoreOwner key={search.thread} thread={search.thread} />;
 }
 

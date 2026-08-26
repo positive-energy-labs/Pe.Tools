@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { createLiveFamilyHost } from "#/family/host";
 import { createFamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
+import { ThreadEmpty } from "#/components/thread-palette";
 import { appAtomRegistry } from "#/state/registry";
 import { withThread } from "./-with-thread";
 import { useRouteStore } from "#/state/use-route-store";
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/family")({
 function FamilyRoute() {
   const search = Route.useSearch();
   const { family, thread, target = "", profile = "" } = search;
-  if (!thread) return null;
+  if (!thread) return <ThreadEmpty />;
   return (
     <FamilyStoreOwner
       key={`${thread}:${target}`}

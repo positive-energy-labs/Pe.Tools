@@ -19,6 +19,7 @@ import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
+import { ThreadEmpty } from "#/components/thread-palette";
 import { ValueDiff } from "#/components/ui/value-diff";
 import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";
@@ -54,7 +55,7 @@ type ScheduleRow = Snapshot["rows"][number];
 
 function ScheduleGridRoute() {
   const { thread } = Route.useSearch();
-  if (!thread) return null;
+  if (!thread) return <ThreadEmpty />;
   return <ScheduleGridWorkspace thread={thread} />;
 }
 

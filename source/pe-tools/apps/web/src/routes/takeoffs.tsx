@@ -23,6 +23,7 @@ import {
 import { createTakeoffStore, TAKEOFF_LINKS, type TakeoffStore } from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
+import { ThreadEmpty } from "#/components/thread-palette";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
 import { documentTrunk, worldTrunk } from "#/targeting/trunks";
@@ -82,9 +83,9 @@ const readDirs = (): string[] => {
   }
 };
 
-function TakeoffsRoute() {
+export function TakeoffsRoute() {
   const { source, thread } = Route.useSearch();
-  if (!thread) return null;
+  if (!thread) return <ThreadEmpty />;
   return <TakeoffsStoreOwner key={`${source}:${thread}`} source={source} thread={thread} />;
 }
 

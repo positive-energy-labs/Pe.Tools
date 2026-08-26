@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vp test",
-    "check": "vp check"
+    "test": "vp test"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

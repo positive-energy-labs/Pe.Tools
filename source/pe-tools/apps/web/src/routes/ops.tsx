@@ -4,6 +4,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { OpsReceipt } from "@pe/agent-contracts";
 
 import { FactChip, type FactTone } from "#/components/lang/chip";
+import { ThreadEmpty } from "#/components/thread-palette";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
@@ -51,7 +52,7 @@ export const Route = createFileRoute("/ops")({
 
 function OpsRoute() {
   const { thread } = Route.useSearch();
-  if (!thread) return null;
+  if (!thread) return <ThreadEmpty />;
   return <OpsStoreOwner key={thread} thread={thread} />;
 }
 

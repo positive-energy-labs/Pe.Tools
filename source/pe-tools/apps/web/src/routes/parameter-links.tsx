@@ -12,6 +12,7 @@ import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { SidePane } from "#/components/ui/side-pane";
+import { ThreadEmpty } from "#/components/thread-palette";
 import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
@@ -52,7 +53,7 @@ function profileHash(profile: ParameterLinkProfile | null): string {
 
 function ParameterLinksRoute() {
   const { thread } = Route.useSearch();
-  if (!thread) return null;
+  if (!thread) return <ThreadEmpty />;
   return <ParameterLinksWorkspace thread={thread} />;
 }
 

@@ -1,7 +1,6 @@
 export interface ThreadLandingApi {
   session: {
     listThreads(): Promise<readonly { id: string; updatedAt?: string | null }[]>;
-    createThread(): Promise<{ id: string }>;
   };
 }
 

@@ -13,8 +13,8 @@ function harness() {
   const api: ChatApi = {
     session: {
       listThreads: async () => [{ id: "thread-1", updatedAt: "2026-01-01" }],
-      createThread: async () => ({ id: "thread-2" }),
     },
+    createThread: async () => ({ id: "thread-2" }),
     hydrate: async () => ({
       ...createWorkbenchState(),
       threads: {

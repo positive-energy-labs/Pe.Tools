@@ -62,9 +62,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../../../apps/web/src");
-const SELF = "design-guard.test.ts";
 const SKIP_DIRS = new Set(["node_modules", "src"]); // src/src is a stray vite artifact
-const SKIP_FILES = new Set(["routeTree.gen.ts", SELF]);
+const SKIP_FILES = new Set(["routeTree.gen.ts"]);
 
 type Entry = { rel: string; text: string };
 

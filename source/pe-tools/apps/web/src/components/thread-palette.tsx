@@ -33,6 +33,18 @@ function ThreadDot({ thread, active }: { thread: StoredThreadSummary; active: bo
   );
 }
 
+export function ThreadEmpty() {
+  return (
+    <main className="grid min-h-screen place-items-center bg-[var(--r-page)] font-pe">
+      <a href="/chat" className="rounded-sm px-3 py-2 hover:bg-[var(--r-veil)]">
+        <EmptyState story="scope" exit="open the thread palette">
+          pick or start a thread
+        </EmptyState>
+      </a>
+    </main>
+  );
+}
+
 /**
  * Always-on sidebar thread list — the `threads` mode body. Shows the 5 most recent by default;
  * everything else lives behind the ⌘K palette (onSearch). New/search live here now, not the header.

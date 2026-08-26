@@ -46,6 +46,7 @@ export interface ChatSearch {
 }
 
 export interface ChatApi extends ThreadLandingApi {
+  createThread(): Promise<{ id: string }>;
   hydrate(threadId: string): Promise<WorkbenchState>;
   subscribe(onEvent: (event: WireEvent) => void, onError: (error: Error) => void): Promise<() => void>;
   deleteThread(threadId: string): Promise<void>;
@@ -186,7 +187,7 @@ export function createChatStore(deps: {
     },
     async newThread() {
       return core.runVerb("new-thread", async () => {
-        const id = (await deps.api.session.createThread()).id;
+        const id = (await deps.api.createThread()).id;
         deps.search.patch({ thread: id });
         return id;
       }, ["workbench"]);
@@ -309,10 +310,10 @@ export function createLiveChatApi(config: WorkbenchEndpointConfig): ChatApi {
     })());
   const session = {
     listThreads: async () => (await client()).session.listThreads(),
-    createThread: async () => (await client()).session.createThread(),
   };
   return {
     session,
+    createThread: async () => (await client()).session.createThread(),
     async hydrate(threadId) {
       const { controller, session: live, info } = await client();
       const bound = await live.state().catch(() => undefined);
