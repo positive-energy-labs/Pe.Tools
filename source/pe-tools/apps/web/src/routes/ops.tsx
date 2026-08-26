@@ -29,10 +29,9 @@ import { bindOpsVerb, opsRefusal, type HostOperationCatalogEntry } from "#/ops/p
 import { createOpsStore, type OpsStore } from "#/ops/store";
 import { SyntheticRunner } from "#/ops/synthetic";
 import { appAtomRegistry } from "#/state/registry";
-import type { Feed } from "#/state/route-store";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
-import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
+import { useBindings, useRunner } from "#/targeting/kit";
 import type { Feeds } from "#/targeting/model";
 import { worldTrunk } from "#/targeting/trunks";
 import { withThread } from "./-with-thread";
@@ -95,12 +94,14 @@ function OpsPage({ store }: { store: OpsStore }) {
   const failure = useAtomValue(store.atoms.failure);
   const hydrated = useAtomValue(store.atoms.hydrated);
   const selectedGlance = syntheticOps.find((glance) => glance.key === selectedGlanceKey);
-  const currentIdentity = session
-    ? {
-        target: session.sdkSessionId ?? `pid:${session.processId}`,
-        documentId: session.activeDocumentId,
-      }
-    : null;
+  const identityOf = (value: typeof session) =>
+    value
+      ? {
+          target: value.sdkSessionId ?? `pid:${value.processId}`,
+          documentId: value.activeDocumentId,
+        }
+      : null;
+  const currentIdentity = identityOf(session);
 
   useEffect(() => {
     if (hydrated) void store.actions.syncBindings(search.world, search.op, currentIdentity);
@@ -117,33 +118,28 @@ function OpsPage({ store }: { store: OpsStore }) {
     store.actions.select(selected, readFormSeed(seed, requestSchema));
   }, [requestSchema, selected, store]);
 
-  const opFeed: Feed = {
-    options: operations.map((operation) => ({
-      id: operation.key,
-      label: operation.displayName ?? operation.key,
-      sub: `${operation.intent} · ${operation.costTier}`,
-    })),
-    state: catalog.isPending ? "loading" : catalog.isError ? "error" : "ready",
-    lane: "live",
-    stale: catalog.isFetching && !catalog.isPending,
-    at: catalog.dataUpdatedAt || undefined,
-    basis: ["host.ops.catalog"],
-    note: catalog.error instanceof Error ? catalog.error.message : undefined,
+  const feeds: Feeds = {
+    world: worldTrunk.feed(fleet),
+    op: {
+      options: operations.map((operation) => ({
+        id: operation.key,
+        label: operation.displayName ?? operation.key,
+        sub: `${operation.intent} · ${operation.costTier}`,
+      })),
+      state: catalog.isPending ? "loading" : catalog.isError ? "error" : "ready",
+      lane: "live",
+      stale: catalog.isFetching && !catalog.isPending,
+      at: catalog.dataUpdatedAt || undefined,
+      basis: ["host.ops.catalog"],
+      note: catalog.error instanceof Error ? catalog.error.message : undefined,
+    },
   };
-  const feeds: Feeds = { world: worldTrunk.feed(fleet), op: opFeed };
-  const state: BindingState = useMemo(
-    () => ({
-      bound: { world: search.world || null, op: search.op || null },
-      multi: {},
-      stage: "explore",
-    }),
-    [search.op, search.world],
-  );
   const product = useMemo(
     () =>
       bindOpsVerb(
         () => {
-          if (!selected || !session) throw Error("bind an operation and world first");
+          if (!selected || !session || !currentIdentity)
+            throw Error("bind an operation and world first");
           return store.actions.run({
             opKey: selected.key,
             request: () =>
@@ -152,12 +148,9 @@ function OpsPage({ store }: { store: OpsStore }) {
                 : args.trim()
                   ? JSON.parse(args)
                   : undefined,
-            from: {
-              target: session.sdkSessionId ?? `pid:${session.processId}`,
-              ...(selected.requiresActiveDocument && session.activeDocumentId
-                ? { documentId: session.activeDocumentId }
-                : {}),
-            },
+            from: selected.requiresActiveDocument
+              ? currentIdentity
+              : { target: currentIdentity.target },
             bridgeSessionId: session.sessionId,
           });
         },
@@ -168,20 +161,16 @@ function OpsPage({ store }: { store: OpsStore }) {
   const b = useBindings(
     product,
     feeds,
-    state,
+    {
+      bound: { world: search.world || null, op: search.op || null },
+      multi: {},
+      stage: "explore",
+    },
     (patch) => {
       const nextWorld = patch.bound?.world ?? search.world;
       const nextResolution = resolveTarget(fleet.sessions, nextWorld || "");
       const nextSession = nextResolution.kind === "resolved" ? nextResolution.session : null;
-      void store.actions.setBindings(
-        patch,
-        nextSession
-          ? {
-              target: nextSession.sdkSessionId ?? `pid:${nextSession.processId}`,
-              documentId: nextSession.activeDocumentId,
-            }
-          : null,
-      );
+      void store.actions.setBindings(patch, identityOf(nextSession));
     },
     picker.open,
     (open) => store.actions.setPicker((previous) => ({ ...previous, open })),

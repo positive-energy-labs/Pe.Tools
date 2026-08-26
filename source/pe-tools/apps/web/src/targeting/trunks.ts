@@ -28,10 +28,9 @@ interface FleetFeed {
   readonly error: Error | null;
   readonly at?: number;
   readonly basis: readonly string[];
-  readonly lane?: Lane;
 }
 
-export type WorldLifecycleAction = "start" | "converge" | "restart" | "stop";
+type WorldLifecycleAction = "start" | "converge" | "restart" | "stop";
 
 export interface WorldStart {
   readonly lane: "installed" | "dev";
@@ -139,21 +138,20 @@ export const worldTrunk = {
     stop: lifecycleVerb("stop", ["world"]),
   },
   feed(source: FleetFeed): Feed {
-    const lane = source.lane ?? "live";
     if (source.error)
       return {
         options: null,
         state: "error",
-        lane,
+        lane: "live",
         stale: false,
         note: source.error.message,
       };
     if (source.isLoading && source.worlds.length === 0)
-      return { options: null, state: "loading", lane, stale: false };
+      return { options: null, state: "loading", lane: "live", stale: false };
     return {
       options: source.worlds.map((world) => worldOption(world, source.sessions)),
       state: "ready",
-      lane,
+      lane: "live",
       stale: source.stale,
       at: source.at,
       basis: source.basis,

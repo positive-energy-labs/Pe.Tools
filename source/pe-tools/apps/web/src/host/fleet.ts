@@ -1,18 +1,4 @@
-/**
- * Fleet — one fusion of every Revit world the client can observe: the SDK's own
- * `pe-revit session status` rows (the authority on what sessions exist, who holds custody of
- * them, and which companion legs are up) plus the bridge's connected sessions (the only source of
- * live document observation). Pure functions so POCs and tests exercise the full state space
- * without a host; `useFleet` binds them to the live queries.
- *
- * The row shape is the SDK's `SessionRow`, imported from the generated contract — not restated.
- * `custody`, `origin`, `lane`, `phase`, `state`, `legs[]` and `documents[]` are read straight off
- * it. The old hand-rolled `kind: "user" | "sandbox"` split is gone: custody says it, the SDK
- * computes it, and the SDK resolver is what enforces it.
- *
- * The sentence grammar's world clause derives from here — the same facts /instances renders,
- * spoken instead of tabled.
- */
+/** Fuses SDK registry custody/lifecycle with bridge-observed documents. */
 import { useQuery } from "@tanstack/react-query";
 import type {
   Envelope,
@@ -31,11 +17,6 @@ import {
 
 export type { SessionRow };
 
-/**
- * The fleet phase, the SDK's own `SessionRow.phase` (SessionResolver.PhaseOf): `ready` |
- * `booting` | `unresponsive` | `gone`. Branch on this, not on the finer `state` — `state` is the
- * word to SHOW (materialized, failed, dead, pid-reused, stopped, running, ready, booting).
- */
 type WorldPhase = "ready" | "booting" | "unresponsive" | "gone";
 
 const PHASES: readonly WorldPhase[] = ["ready", "booting", "unresponsive", "gone"];
@@ -46,8 +27,6 @@ export interface WorldFacts {
   id: string;
   custody: Custody;
   phase: WorldPhase;
-  /** Free-text provenance recorded at start (cli, mcp, pea, web, test). Disclosed, never a gate. */
-  origin?: string;
   /** Payload SOURCE: dev | installed. Null when unknown. */
   lane?: string;
   year?: string;
@@ -64,14 +43,7 @@ function phaseOf(row: SessionRow): WorldPhase {
   return PHASES.find((p) => p === row.phase) ?? "gone";
 }
 
-/**
- * `session status` rows are the fleet; bridge sessions add live document observation to the rows
- * they belong to, and stand alone when the SDK has no row for them (an `observed` Revit the user
- * started themselves, which pe-revit holds no receipt for and this page must never try to drive).
- *
- * The join key is the pe-revit session id the payload reported at registration, with pid as the
- * fallback for a payload that reported none.
- */
+/** Joins by SDK session id, then pid; unmatched bridges are observed worlds. */
 export function fuseFleet(
   rows: readonly SessionRow[],
   sessions: readonly SessionFacts[],
@@ -88,7 +60,6 @@ export function fuseFleet(
       id: row.id,
       custody: row.custody,
       phase: phaseOf(row),
-      origin: row.origin ?? undefined,
       lane: row.lane ?? undefined,
       year: row.year ?? undefined,
       pid: row.pid ?? undefined,
@@ -165,15 +136,7 @@ function useSessionStatusQuery(all: boolean) {
   });
 }
 
-export function useFleet(all = false): {
-  worlds: WorldFacts[];
-  sessions: SessionFacts[];
-  isLoading: boolean;
-  stale: boolean;
-  error: Error | null;
-  at: number | undefined;
-  basis: readonly string[];
-} {
+export function useFleet(all = false) {
   const sessionsQuery = useBridgeSessionsListQuery();
   const status = useSessionStatusQuery(all);
   const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);

@@ -5,7 +5,6 @@ import { views as detailViews } from "#/ops/views-detail";
 import { views as electricalViews } from "#/ops/views-electrical";
 import { views as hostViews } from "#/ops/views-host";
 
-/** All curated views, merged. Last write wins — keep keys unique across files. */
 export const opViews: OpViewRegistry = {
   ...contextViews,
   ...catalogViews,

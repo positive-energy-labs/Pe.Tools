@@ -3,8 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import type { SessionFacts } from "#/host/target";
 import { worldTrunk } from "#/targeting/trunks";
 
-// ── world log — client-observed world events, for the thread lane ───────────────────────────────
-
 type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
 
 export interface WorldEvent {
@@ -14,11 +12,7 @@ export interface WorldEvent {
   label: string;
 }
 
-/**
- * Derives world events by diffing consecutive session-list observations. Client-observed
- * (timestamps are when THIS tab noticed, within the SSE debounce of reality) — good enough to
- * align world changes with conversation time; never presented as broker truth.
- */
+/** Timestamps are when this tab observed the session-list change, not broker truth. */
 export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
   const [log, setLog] = useState<WorldEvent[]>([]);
   const prev = useRef<Map<string, SessionFacts> | null>(null);

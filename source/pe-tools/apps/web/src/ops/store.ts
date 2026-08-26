@@ -92,26 +92,6 @@ export function createOpsStore(deps: {
     if (!value.ok) throw Error(value.hint ?? value.error ?? "route document write failed");
     return value;
   };
-  const clearForBinding = async (world: string, op: string, current: Identity | null) => {
-    registry.set(identity, current);
-    registry.set(selectedKey, op);
-    registry.set(localResult, null);
-    const routeSlice = registry.get(slice);
-    if (!AsyncResult.isSuccess(routeSlice) || !routeSlice.value.hydrated) return;
-    const doc = registry.get(document);
-    const patches: RouteStatePatch[] = [];
-    if (doc?.binding.target !== (world || null))
-      patches.push({
-        path: ["binding"],
-        value: { target: world || null, boundAt: world ? now().toISOString() : null },
-      });
-    if (
-      doc?.receipt &&
-      (!current || doc.receipt.opKey !== op || !opsReadingIsCurrent(doc.receipt.from, current))
-    )
-      patches.push({ path: ["receipt"], value: null });
-    if (patches.length) expectOk(await apply(patches));
-  };
   const persistBinding = async (
     verb: string,
     world: string,
@@ -119,7 +99,24 @@ export function createOpsStore(deps: {
     current: Identity | null,
   ) => {
     try {
-      await clearForBinding(world, op, current);
+      registry.set(identity, current);
+      registry.set(selectedKey, op);
+      registry.set(localResult, null);
+      const routeSlice = registry.get(slice);
+      if (!AsyncResult.isSuccess(routeSlice) || !routeSlice.value.hydrated) return;
+      const doc = registry.get(document);
+      const patches: RouteStatePatch[] = [];
+      if (doc?.binding.target !== (world || null))
+        patches.push({
+          path: ["binding"],
+          value: { target: world || null, boundAt: world ? now().toISOString() : null },
+        });
+      if (
+        doc?.receipt &&
+        (!current || doc.receipt.opKey !== op || !opsReadingIsCurrent(doc.receipt.from, current))
+      )
+        patches.push({ path: ["receipt"], value: null });
+      if (patches.length) expectOk(await apply(patches));
     } catch (cause) {
       write(verb, "failure", () =>
         registry.set(core.failure, {

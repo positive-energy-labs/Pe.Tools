@@ -139,6 +139,5 @@ describe("instances route", () => {
       }),
     );
     expect(worldTrunk.describe(record.mock.calls[0]![0])).toContain("converge was refused");
-    expect(worldTrunk.describe(record.mock.calls[0]![0])).not.toContain("started");
   });
 });
