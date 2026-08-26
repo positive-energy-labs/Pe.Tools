@@ -5,11 +5,9 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 
 /**
- * SEA-safe sidecar shim for drizzle-orm (D8).
+ * SEA-safe sidecar shim for get-stream.
  *
- * Drizzle must NOT be inlined: the SEA bundle's module ordering breaks its circular imports
- * (`TypedQueryBuilder` ReferenceError at Mastra init). Plain `deps.neverBundle` is not enough
- * either: a static ESM `import` of an external bare specifier dies inside the Node SEA
+ * A static ESM `import` of an external bare specifier dies inside the Node SEA
  * (`ERR_UNKNOWN_BUILTIN_MODULE` — the embedded ESM entry can only static-import builtins).
  *
  * The native sidecars already prove the one mechanism that works: a runtime
@@ -20,18 +18,16 @@ import { defineConfig } from "vite-plus";
  * consumers' named imports statically.
  *
  * Copied verbatim from apps/host/vite.config.ts: pea boots the SAME Mastra runtime
- * (createPeaRuntime -> `await import("mastracode")` -> the same drizzle/onnx/get-stream chain),
+ * (createPeaRuntime -> `await import("mastracode")` -> the same onnx/get-stream chain),
  * so it needs the SAME SEA treatment (see docs/features/host/LEDGER.md, the SEA/`pe:sea-require-shim` line).
  *
  * Shimmed packages (store prefixes are version-pinned when the store holds several versions):
- * - drizzle-orm: inlining breaks its circular imports (TypedQueryBuilder ReferenceError).
  * - get-stream (v9, ESM-only — Node 25 require(esm) handles it): rolldown duplicates the module
  *   and mis-renames its export-then-mutate `nodeImports` binding (declared `nodeImports$1`,
  *   mutated as undeclared `nodeImports`) — same inlining bug class, surfaced at Mastra init.
  */
-const seaRequireSpecifiers = /^(?:drizzle-orm(?:\/|$)|get-stream$)/;
+const seaRequireSpecifiers = /^get-stream$/;
 const seaRequirePackages: Record<string, string> = {
-  "drizzle-orm": "drizzle-orm@",
   "get-stream": "get-stream@9.",
 };
 const seaRequireVirtualPrefix = "\0pe-sea-require:";

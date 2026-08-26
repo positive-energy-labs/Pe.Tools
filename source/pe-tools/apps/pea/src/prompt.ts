@@ -14,10 +14,7 @@ import { hostname } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Agent } from "@mastra/core/agent";
-import type {
-  AgentControllerMessage,
-  AgentControllerRequestContext,
-} from "@mastra/core/agent-controller";
+import type { AgentControllerRequestContext, MastraDBMessage } from "@mastra/core/agent-controller";
 import { defaultGateways, type MastraModelConfig } from "@mastra/core/llm";
 import type { RequestContext } from "@mastra/core/request-context";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
@@ -85,7 +82,7 @@ type PeaPromptRuntime = {
   close?: () => Promise<void> | void;
 };
 
-type PeaPromptMessage = Pick<AgentControllerMessage, "id" | "role" | "content">;
+type PeaPromptMessage = Pick<MastraDBMessage, "id" | "role" | "content">;
 
 type PeaPromptSession = {
   thread: {
@@ -464,8 +461,8 @@ function latestAssistantText(messages: readonly PeaPromptMessage[]): string {
   return "";
 }
 
-function textFromMessage(message: { content: readonly unknown[] }): string {
-  return message.content
+function textFromMessage(message: { content: MastraDBMessage["content"] }): string {
+  return message.content.parts
     .map((part) => {
       const typedPart = readRecord(part);
       return typedPart?.type === "text" && typeof typedPart.text === "string" ? typedPart.text : "";

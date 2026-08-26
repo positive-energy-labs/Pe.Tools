@@ -13,6 +13,17 @@
  */
 import { z } from "zod";
 
+export interface RouteStateSchema<T = unknown> {
+  safeParse(input: unknown): { success: true; data: T } | { success: false };
+}
+export type RouteStateOutput<TSchema> = TSchema extends {
+  safeParse(input: unknown): infer TResult;
+}
+  ? TResult extends { success: true; data: infer T }
+    ? T
+    : never
+  : never;
+
 /** A named side-effectful command a route exposes. `actor:"human"` commands reject pea. */
 export interface RouteStateCommandSpec {
   description: string;
@@ -24,7 +35,7 @@ export interface RouteStateCommandSpec {
   recoversExternal?: boolean;
 }
 
-export interface RouteStateSpec<TSchema extends z.ZodType> {
+export interface RouteStateSpec<TSchema extends RouteStateSchema = RouteStateSchema> {
   /** Route name, e.g. `family-types` — the URL segment transport adapters key on. */
   route: string;
   /** Human-facing discovery metadata; adapters should not duplicate this. */
@@ -42,7 +53,7 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   commands: Record<string, RouteStateCommandSpec>;
 }
 
-export function defineRouteState<TSchema extends z.ZodType>(
+export function defineRouteState<TSchema extends RouteStateSchema>(
   spec: RouteStateSpec<TSchema>,
 ): RouteStateSpec<TSchema> {
   // Every route gets the substrate-owned `bind` command; RouteWorkspace implements it
@@ -52,7 +63,7 @@ export function defineRouteState<TSchema extends z.ZodType>(
 
 /** The document type a spec's schema parses to. */
 export type RouteDocOf<TSpec> =
-  TSpec extends RouteStateSpec<infer TSchema> ? z.infer<TSchema> : never;
+  TSpec extends RouteStateSpec<infer TSchema> ? RouteStateOutput<TSchema> : never;
 
 /* ── Session binding (substrate-owned doc segment) ─────────────────────────── */
 
@@ -67,7 +78,7 @@ export const routeBindingSchema = z
     target: z.string().nullable().default(null),
     boundAt: z.string().nullish(),
   })
-  .prefault({ target: null });
+  .default({ target: null });
 export type RouteBinding = z.infer<typeof routeBindingSchema>;
 
 export const BIND_COMMAND = "bind";
@@ -89,14 +100,14 @@ export function resolveTarget(input: unknown, doc: unknown): string | undefined 
 }
 
 /** Parse a route's slice out of a raw session-state map; null when absent or invalid. */
-export function readRouteState<TSchema extends z.ZodType>(
+export function readRouteState<TSchema extends RouteStateSchema>(
   sessionState: Record<string, unknown> | undefined,
   spec: RouteStateSpec<TSchema>,
-): z.infer<TSchema> | null {
+): RouteStateOutput<TSchema> | null {
   const raw = sessionState?.[spec.key];
   if (raw == null) return null;
   const result = spec.schema.safeParse(raw);
-  return result.success ? result.data : null;
+  return result.success ? (result.data as RouteStateOutput<TSchema>) : null;
 }
 
 /** What a command handler receives: read the current document, write the next one. */

@@ -556,7 +556,7 @@ const workbenchSessionInfoSchema = z
   })
   .strip();
 // --- Workbench runtime schemas ------------------------------------------------
-// These mirror the (former) hand-written guards: objects are `.loose()` so extra
+// These mirror the (former) hand-written guards: objects are `.passthrough()` so extra
 // keys pass through untouched, optionals are `.nullish()` because the guards used
 // `== null`, and only the fields the guards actually validated are listed.
 const optString = z.string().nullish();
@@ -582,13 +582,17 @@ const provenanceSchema = z
     updateType: optString,
     metadata: metadataObject,
   })
-  .loose();
+  .passthrough();
 
 const messagePartProvenance = { provenance: provenanceSchema.nullish() };
 const messagePartSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("text"), text: z.string(), ...messagePartProvenance }).loose(),
-  z.object({ kind: z.literal("reasoning"), text: z.string(), ...messagePartProvenance }).loose(),
-  z.object({ kind: z.literal("thought"), text: z.string(), ...messagePartProvenance }).loose(),
+  z.object({ kind: z.literal("text"), text: z.string(), ...messagePartProvenance }).passthrough(),
+  z
+    .object({ kind: z.literal("reasoning"), text: z.string(), ...messagePartProvenance })
+    .passthrough(),
+  z
+    .object({ kind: z.literal("thought"), text: z.string(), ...messagePartProvenance })
+    .passthrough(),
   z
     .object({
       kind: z.literal("image"),
@@ -597,7 +601,7 @@ const messagePartSchema = z.discriminatedUnion("kind", [
       filename: optString,
       ...messagePartProvenance,
     })
-    .loose(),
+    .passthrough(),
   z
     .object({
       kind: z.literal("tool_call_ref"),
@@ -605,7 +609,7 @@ const messagePartSchema = z.discriminatedUnion("kind", [
       label: optString,
       ...messagePartProvenance,
     })
-    .loose(),
+    .passthrough(),
   z
     .object({
       kind: z.literal("tool_result_ref"),
@@ -613,7 +617,7 @@ const messagePartSchema = z.discriminatedUnion("kind", [
       label: optString,
       ...messagePartProvenance,
     })
-    .loose(),
+    .passthrough(),
   z
     .object({
       kind: z.literal("approval_ref"),
@@ -622,7 +626,7 @@ const messagePartSchema = z.discriminatedUnion("kind", [
       label: optString,
       ...messagePartProvenance,
     })
-    .loose(),
+    .passthrough(),
   z
     .object({
       kind: z.literal("status"),
@@ -630,7 +634,7 @@ const messagePartSchema = z.discriminatedUnion("kind", [
       status: z.union([runStatusSchema, commandStatusSchema, messageStatusSchema]).nullish(),
       ...messagePartProvenance,
     })
-    .loose(),
+    .passthrough(),
   z
     .object({
       kind: z.literal("error"),
@@ -638,8 +642,8 @@ const messagePartSchema = z.discriminatedUnion("kind", [
       code: optString,
       ...messagePartProvenance,
     })
-    .loose(),
-  z.object({ kind: z.literal("raw"), label: optString, ...messagePartProvenance }).loose(),
+    .passthrough(),
+  z.object({ kind: z.literal("raw"), label: optString, ...messagePartProvenance }).passthrough(),
 ]);
 
 const workbenchMessageSchema = z
@@ -653,14 +657,14 @@ const workbenchMessageSchema = z
     provenance: provenanceSchema.nullish(),
     metadata: metadataObject,
   })
-  .loose() as z.ZodType<WorkbenchMessage>;
+  .passthrough() as z.ZodType<WorkbenchMessage>;
 
 const toolLocationSchema = z
   .object({ path: optString, line: optNumber, column: optNumber, uri: optString })
-  .loose();
+  .passthrough();
 const toolTimelineEntrySchema = z
   .object({ id: z.string(), label: optString, timestamp: optString, summary: optString })
-  .loose();
+  .passthrough();
 const toolCallSchema = z
   .object({
     id: z.string(),
@@ -676,7 +680,7 @@ const toolCallSchema = z
     provenance: provenanceSchema.nullish(),
     metadata: metadataObject,
   })
-  .loose();
+  .passthrough();
 
 const planEntrySchema = z
   .object({
@@ -685,11 +689,11 @@ const planEntrySchema = z
     priority: z.enum(["high", "medium", "low"]).nullish(),
     status: z.enum(["pending", "in_progress", "completed"]),
   })
-  .loose();
+  .passthrough();
 
 const approvalOptionSchema = z
   .object({ optionId: z.string(), name: z.string(), kind: z.string() })
-  .loose();
+  .passthrough();
 const approvalRequestSchema = z
   .object({
     requestId: z.string(),
@@ -703,7 +707,7 @@ const approvalRequestSchema = z
     resolvedAt: optString,
     metadata: metadataObject,
   })
-  .loose();
+  .passthrough();
 
 const observationMemoryEntrySchema = z
   .object({
@@ -727,7 +731,7 @@ const observationMemoryEntrySchema = z
     error: optString,
     metadata: metadataObject,
   })
-  .loose();
+  .passthrough();
 
 const debugEventSchema = z
   .object({
@@ -737,7 +741,7 @@ const debugEventSchema = z
     label: optString,
     timestamp: optString,
   })
-  .loose();
+  .passthrough();
 
 const agentInfoSchema = z
   .object({
@@ -746,7 +750,7 @@ const agentInfoSchema = z
     capabilities: z.record(z.string(), z.unknown()),
     metadata: metadataObject,
   })
-  .loose();
+  .passthrough();
 const threadInfoSchema = z
   .object({
     threadId: z.string(),
@@ -758,7 +762,7 @@ const threadInfoSchema = z
     lock: workbenchThreadLockInfoSchema.nullish(),
     metadata: metadataObject,
   })
-  .loose();
+  .passthrough();
 const modelInfoSchema = z
   .object({
     id: z.string(),
@@ -768,10 +772,10 @@ const modelInfoSchema = z
     disabled: z.boolean().nullish(),
     metadata: metadataObject,
   })
-  .loose();
+  .passthrough();
 const sessionModeInfoSchema = z
   .object({ id: z.string(), name: z.string(), description: optString, metadata: metadataObject })
-  .loose();
+  .passthrough();
 const accessLevelInfoSchema = z
   .object({
     id: accessLevelSchema,
@@ -779,7 +783,7 @@ const accessLevelInfoSchema = z
     description: optString,
     metadata: metadataObject,
   })
-  .loose();
+  .passthrough();
 const systemPromptSnapshotSchema = z
   .object({
     content: z.string(),
@@ -787,8 +791,8 @@ const systemPromptSnapshotSchema = z
     updatedAt: optString,
     metadata: metadataObject,
   })
-  .loose();
-const inspectorEntrySchema = z.object({ id: z.string(), title: z.string() }).loose();
+  .passthrough();
+const inspectorEntrySchema = z.object({ id: z.string(), title: z.string() }).passthrough();
 const contextItemSchema = z
   .object({
     name: z.string(),
@@ -797,7 +801,7 @@ const contextItemSchema = z
     body: optString,
     state: z.enum(["in", "on-demand", "off"]).nullish(),
   })
-  .loose();
+  .passthrough();
 const contextBreakdownSchema = z
   .object({
     contextWindow: z.number().nullish(),
@@ -810,7 +814,7 @@ const contextBreakdownSchema = z
           tokens: z.number(),
           items: z.array(contextItemSchema).nullish(),
         })
-        .loose(),
+        .passthrough(),
     ),
     memoryWindows: z
       .object({
@@ -822,11 +826,11 @@ const contextBreakdownSchema = z
         observing: z.boolean().nullish(),
         reflecting: z.boolean().nullish(),
       })
-      .loose()
+      .passthrough()
       .nullish(),
     updatedAt: optString,
   })
-  .loose();
+  .passthrough();
 const runStateSchema = z
   .object({
     status: runStatusSchema,
@@ -835,7 +839,7 @@ const runStateSchema = z
     stopReason: stopReasonSchema.nullish(),
     activeToolCallId: optString,
   })
-  .loose();
+  .passthrough();
 const commandStateSchema = z
   .object({
     status: commandStatusSchema,
@@ -843,13 +847,13 @@ const commandStateSchema = z
     completedAt: optString,
     error: optString,
   })
-  .loose();
+  .passthrough();
 
 const workbenchStateSchema = z
   .object({
     agent: z
       .object({ info: agentInfoSchema.nullish(), session: workbenchSessionInfoSchema.nullish() })
-      .loose(),
+      .passthrough(),
     threads: z
       .object({
         items: z.array(threadInfoSchema),
@@ -858,14 +862,14 @@ const workbenchStateSchema = z
         status: loadStatusSchema,
         error: optString,
       })
-      .loose(),
+      .passthrough(),
     transcript: z
       .object({
         messages: z.array(workbenchMessageSchema),
         status: loadStatusSchema,
         error: optString,
       })
-      .loose(),
+      .passthrough(),
     tools: z
       .object({
         calls: z.array(toolCallSchema),
@@ -873,26 +877,26 @@ const workbenchStateSchema = z
         recentToolCallIds: z.array(z.string()),
         rawIoAvailable: z.boolean(),
       })
-      .loose(),
-    approvals: z.object({ requests: z.array(approvalRequestSchema) }).loose(),
-    plans: z.object({ entries: z.array(planEntrySchema) }).loose(),
+      .passthrough(),
+    approvals: z.object({ requests: z.array(approvalRequestSchema) }).passthrough(),
+    plans: z.object({ entries: z.array(planEntrySchema) }).passthrough(),
     models: z
       .object({
         currentModelId: optString,
         availableModels: z.array(modelInfoSchema),
         recentModelIds: z.array(z.string()),
       })
-      .loose(),
+      .passthrough(),
     modes: z
       .object({ currentModeId: optString, availableModes: z.array(sessionModeInfoSchema) })
-      .loose(),
+      .passthrough(),
     access: z
       .object({
         currentAccessLevel: accessLevelSchema.nullish(),
         availableAccessLevels: z.array(accessLevelInfoSchema),
       })
-      .loose(),
-    memory: z.object({ entries: z.array(observationMemoryEntrySchema) }).loose(),
+      .passthrough(),
+    memory: z.object({ entries: z.array(observationMemoryEntrySchema) }).passthrough(),
     inspector: z
       .object({
         systemPrompt: systemPromptSnapshotSchema.nullish(),
@@ -901,8 +905,10 @@ const workbenchStateSchema = z
         rawMessages: z.array(inspectorEntrySchema),
         selectedEntryId: optString,
       })
-      .loose(),
-    debug: z.object({ events: z.array(debugEventSchema), selectedEventId: optString }).loose(),
+      .passthrough(),
+    debug: z
+      .object({ events: z.array(debugEventSchema), selectedEventId: optString })
+      .passthrough(),
     uiPreferences: z
       .object({
         activePanel: z.enum(["threads", "transcript", "tools", "inspector", "memory"]),
@@ -915,7 +921,7 @@ const workbenchStateSchema = z
         compactToolOutput: z.boolean(),
         diffWrap: z.enum(["word", "none"]),
       })
-      .loose(),
+      .passthrough(),
     uiStatus: z
       .object({
         overall: runStateSchema,
@@ -928,9 +934,9 @@ const workbenchStateSchema = z
         mode: commandStateSchema,
         errors: z.array(z.string()),
       })
-      .loose(),
+      .passthrough(),
   })
-  .loose() as unknown as z.ZodType<WorkbenchState>;
+  .passthrough() as unknown as z.ZodType<WorkbenchState>;
 
 export function readWorkbenchJsonObject(value: unknown): WorkbenchJsonObject | undefined {
   const record = workbenchRecordSchema.safeParse(value);

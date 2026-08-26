@@ -35,13 +35,14 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@mastra/core": "1.50.1",
+    "@mastra/core": "1.61.0",
     "@pe/host-contracts": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
     "gunshi": "^0.29.5",
-    "mastracode": "0.30.0",
-    "zod": "^4.4.3"
+    "hono": "4.12.8",
+    "mastracode": "0.35.0",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

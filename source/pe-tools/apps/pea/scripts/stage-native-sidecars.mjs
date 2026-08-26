@@ -20,14 +20,6 @@ const packages = [
     name: "@libsql/win32-x64-msvc",
     storePrefix: "@libsql+win32-x64-msvc@",
   },
-  // JS sidecar, not a native binding: drizzle-orm is kept out of the bundle by the SEA require
-  // shim in vite.config.ts because inlining it breaks its circular imports in the SEA bundle
-  // (TypedQueryBuilder ReferenceError at Mastra init). The shim requires it at runtime from this
-  // staged copy. drizzle-orm@0.45.2 has zero runtime dependencies, so the package dir is complete.
-  {
-    name: "drizzle-orm",
-    storePrefix: "drizzle-orm@",
-  },
   // get-stream v9 (SEA require shim target — rolldown mis-renames its `nodeImports` binding when
   // inlined) plus its two runtime deps, which it imports from the staged node_modules. Prefixes
   // are version-pinned: the store also holds get-stream@5 / is-stream@2 for other consumers.
@@ -73,6 +65,6 @@ for (const { name, storePrefix } of packages) {
 // MASTRACODE_PACKAGE_ROOT lazy so bundled consumers don't need this.
 writeFileSync(
   join(payloadRoot, "package.json"),
-  `${JSON.stringify({ name: "mastracode", version: "0.30.0", private: true }, null, 2)}\n`,
+  `${JSON.stringify({ name: "mastracode", version: "0.35.0", private: true }, null, 2)}\n`,
 );
 console.log(`staged mastracode package-root decoy -> ${join(payloadRoot, "package.json")}`);

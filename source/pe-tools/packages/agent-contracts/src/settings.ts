@@ -47,14 +47,16 @@ export type SettingsProposalSource = z.infer<typeof settingsProposalSourceSchema
 
 export const settingsFieldStateSchema = z.object({
   proposal: settingsFieldEditSchema
-    .extend({
-      by: z.enum(["pea", "human"]).default("pea"),
-      note: z.string().nullish(),
-      confidence: z.enum(["high", "low"]).nullish(),
-      /** Multi-citation: one value may be grounded by several regions (a table
-       * cell AND a figure). Order is presentation order. */
-      sources: z.array(settingsProposalSourceSchema).nullish(),
-    })
+    .and(
+      z.object({
+        by: z.enum(["pea", "human"]).default("pea"),
+        note: z.string().nullish(),
+        confidence: z.enum(["high", "low"]).nullish(),
+        /** Multi-citation: one value may be grounded by several regions (a table
+         * cell AND a figure). Order is presentation order. */
+        sources: z.array(settingsProposalSourceSchema).nullish(),
+      }),
+    )
     .nullish(),
   staged: settingsFieldEditSchema.nullish(),
   review: cellReviewSchema.default("none"),
@@ -70,11 +72,13 @@ export const settingsDocumentIdSchema = z.object({
 });
 export type SettingsDocumentId = z.infer<typeof settingsDocumentIdSchema>;
 
-export const settingsValidationIssueSchema = z.looseObject({
-  message: z.string(),
-  severity: z.string().nullish(),
-  path: z.string().nullish(),
-});
+export const settingsValidationIssueSchema = z
+  .object({
+    message: z.string(),
+    severity: z.string().nullish(),
+    path: z.string().nullish(),
+  })
+  .passthrough();
 
 export const settingsValidationSchema = z.object({
   isValid: z.boolean(),
