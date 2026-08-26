@@ -20,6 +20,7 @@ export type RuntimeControllerConfig<
 > = AgentControllerConfig<TState>;
 
 type ClosableStorage = { close?: () => Promise<void> | void };
+type SettleableMemory = { settled(): Promise<void> };
 
 export interface RuntimeInjectedControllerConfig {
   storage?: ClosableStorage;
@@ -40,8 +41,6 @@ export interface CreateRuntimeControllerOptions<
   memoryProfile?: RuntimeMemoryProfile<TState>;
   workspace?: RuntimeWorkspaceInfo;
   authStorage?: TServices["authStorage"];
-  hookManager?: TServices["hookManager"];
-  mcpManager?: TServices["mcpManager"];
   metadata?: Record<string, unknown>;
 }
 
@@ -88,7 +87,9 @@ export async function createRuntimeController<
   let controller: AgentController<TState> | TController;
   let session: Session<TState> | undefined;
   let memory: AgentControllerConfig<TState>["memory"];
+  let ownedMemory: SettleableMemory | undefined;
   let mastra: Mastra | undefined;
+  let unsubscribe: (() => void) | undefined;
   if (hasInjectedRuntimeController(options)) {
     config = options.config;
     controller = options.controller;
@@ -102,6 +103,7 @@ export async function createRuntimeController<
     const resolvedConfig = await resolveRuntimeControllerConfig(createOptions, request);
     config = resolvedConfig;
     memory = resolvedConfig.memory;
+    ownedMemory = typeof memory === "function" ? undefined : memory;
     const built = new AgentController<TState>(resolvedConfig);
     // Register on an explicit Mastra (keyed by config.id) BEFORE init so the
     // controller inherits it instead of spinning up an internal one. This is the
@@ -113,7 +115,7 @@ export async function createRuntimeController<
     });
     await built.init();
     session = await built.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
-    instrumentRuntimeSession(session, request.protocol);
+    unsubscribe = instrumentRuntimeSession(session, request.protocol);
     controller = built;
   }
   let closeTask: Promise<void> | null = null;
@@ -125,11 +127,15 @@ export async function createRuntimeController<
     memory,
     workspace: options.workspace,
     authStorage: options.authStorage,
-    hookManager: options.hookManager,
-    mcpManager: options.mcpManager,
     metadata: options.metadata,
     close: () => {
-      closeTask ??= closeRuntimeController(controller, session, config.storage);
+      closeTask ??= closeRuntimeController(
+        session,
+        ownedMemory,
+        unsubscribe,
+        hasInjectedRuntimeController(options) ? undefined : mastra,
+        hasInjectedRuntimeController(options) ? config.storage : undefined,
+      );
       return closeTask;
     },
   };
@@ -142,7 +148,10 @@ const defaultRuntimeCreateRequest: RuntimeCreateRequest = { protocol: "tui" };
  * ACP) passes through here, so prompts, tool calls, and turn usage are captured once
  * with a `surface` dimension instead of per-transport.
  */
-function instrumentRuntimeSession(session: object | undefined, surface: string): void {
+function instrumentRuntimeSession(
+  session: object | undefined,
+  surface: string,
+): (() => void) | undefined {
   if (!session || !analyticsEnabled()) return;
   const target = session as unknown as {
     sendMessage?: (request: { content?: string }) => Promise<void>;
@@ -162,7 +171,7 @@ function instrumentRuntimeSession(session: object | undefined, surface: string):
         return originalSend(request);
       };
     }
-    target.subscribe?.((event) => {
+    return target.subscribe?.((event) => {
       const record = (event ?? {}) as Record<string, unknown>;
       const type = typeof record.type === "string" ? record.type : "";
       if (type !== "tool_end" && type !== "agent_end" && type !== "error") return;
@@ -199,23 +208,18 @@ function hasInjectedRuntimeController<
 }
 
 async function closeRuntimeController<TState extends Record<string, unknown>>(
-  controller: AgentController<TState> | object,
   session: Session<TState> | undefined,
+  memory: SettleableMemory | undefined,
+  unsubscribe: (() => void) | undefined,
+  mastra: Mastra | undefined,
   storage: ClosableStorage | undefined,
 ): Promise<void> {
   session?.abort();
+  unsubscribe?.();
+  await memory?.settled();
   await session?.thread.clearAndReleaseLock();
-  let closeError: unknown;
-  try {
-    if (controller instanceof AgentController) {
-      await controller.destroy();
-    } else {
-      await storage?.close?.();
-    }
-  } catch (error) {
-    closeError = error;
-  }
-  if (closeError) throw closeError;
+  if (!mastra) return await storage?.close?.();
+  await mastra.shutdown();
 }
 
 async function resolveRuntimeControllerConfig<

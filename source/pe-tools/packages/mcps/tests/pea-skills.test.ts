@@ -2,29 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
-import { assertRuntimeToolCatalogMatchesTools } from "@pe/agent-contracts";
-import { peaProductToolCatalog, peaProductTools } from "../src/index.ts";
 import {
   peaProductHomeEnvVar,
   peaStandardSkillsRoot,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
 } from "../src/pea/skills.ts";
-
-test("reports exact catalog missing and extra tools", () => {
-  expect(() =>
-    assertRuntimeToolCatalogMatchesTools(peaProductTools, peaProductToolCatalog),
-  ).not.toThrow();
-  expect(() =>
-    assertRuntimeToolCatalogMatchesTools(
-      { ...peaProductTools, extra: peaProductTools.pe_status },
-      new Map([
-        ...[...peaProductToolCatalog].filter(([name]) => name !== "pe_logs"),
-        ["catalog_only", { name: "catalog_only", kind: "other" }] as const,
-      ]),
-    ),
-  ).toThrow("missing=[extra, pe_logs] extra=[catalog_only]");
-});
 
 test("resolves pea product home under the configured documents root", async () => {
   const profile = await withTempProductHomeEnv();

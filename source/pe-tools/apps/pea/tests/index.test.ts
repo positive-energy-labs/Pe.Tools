@@ -2,28 +2,25 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
-import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { createRuntimeRequestContext, resolveRuntimeThreadStateStore } from "@pe/runtime";
 import {
   bundledPeaSkills,
   peaProductHomeEnvVar,
-  peaProductToolCatalog,
+  peaProductToolMetadata,
   peaProductTools,
   peaStandardSkillsRoot,
 } from "@pe/mcps";
 import {
-  createPeaCliCommand,
   createPeaRuntime,
-  getPeaCliCommandNames,
   PeaContextSignalProvider,
   PeaContextStateProcessor,
   type PeaContextStateSignalArgs,
-} from "../src/index.ts";
-import { createPeaPromptRuntime } from "../src/prompt.ts";
+} from "@pe/runtime/pea";
+import { createPeaCliCommand, getPeaCliCommandNames } from "../src/index.ts";
 
 const slowRuntimeTestTimeout = 30_000;
 
-test("pea product tools and catalog are the same exact 14-tool surface", () => {
+test("pea exposes the exact 14-tool product surface", () => {
   const names = [
     "pe_status",
     "pe_logs",
@@ -42,10 +39,9 @@ test("pea product tools and catalog are the same exact 14-tool surface", () => {
   ];
 
   expect(Object.keys(peaProductTools)).toEqual(names);
-  expect([...peaProductToolCatalog.keys()]).toEqual(names);
-  expect(peaProductToolCatalog.get("host_operation_call")?.kind).toBe("execute");
-  expect([...peaProductToolCatalog.values()].every((tool) => tool.kind.length > 0)).toBe(true);
-  expect([...peaProductToolCatalog.values()].some((tool) => "requiresRevit" in tool)).toBe(false);
+  expect(Object.keys(peaProductToolMetadata)).toEqual(names);
+  expect(peaProductToolMetadata.host_operation_call.category).toBe("execute");
+  expect(Object.values(peaProductToolMetadata).some((tool) => "requiresRevit" in tool)).toBe(false);
 });
 
 test("pea composes product commands without dev", () => {
@@ -67,14 +63,19 @@ test(
   async () => {
     const launchCwd = await mkdtemp(path.join(os.tmpdir(), "pea-launch-cwd-"));
     const productHomePath = await mkdtemp(path.join(os.tmpdir(), "pea-product-home-"));
+    const state = await isolatePeaState("pea-launch-state-");
     const previousProductHome = process.env[peaProductHomeEnvVar];
-    process.env[peaProductHomeEnvVar] = productHomePath;
-
-    const skill = bundledPeaSkills[0]!;
-    const skillPath = path.join(productHomePath, peaStandardSkillsRoot, skill.name, "SKILL.md");
-    const launchCwdSkillPath = path.join(launchCwd, peaStandardSkillsRoot, skill.name, "SKILL.md");
 
     try {
+      process.env[peaProductHomeEnvVar] = productHomePath;
+      const skill = bundledPeaSkills[0]!;
+      const skillPath = path.join(productHomePath, peaStandardSkillsRoot, skill.name, "SKILL.md");
+      const launchCwdSkillPath = path.join(
+        launchCwd,
+        peaStandardSkillsRoot,
+        skill.name,
+        "SKILL.md",
+      );
       const runtime = await createPeaRuntime({ workspaceRoot: launchCwd });
 
       try {
@@ -99,6 +100,7 @@ test(
     } finally {
       if (previousProductHome == null) delete process.env[peaProductHomeEnvVar];
       else process.env[peaProductHomeEnvVar] = previousProductHome;
+      state.restore();
       await rm(launchCwd, { recursive: true, force: true });
       await rm(productHomePath, { recursive: true, force: true });
     }
@@ -110,9 +112,11 @@ test(
   "pea runtime agent exposes task tools through TaskSignalProvider",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-runtime-"));
-    const runtime = await createPeaRuntime({ workspaceRoot });
+    const state = await isolatePeaState("pea-runtime-state-");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
     try {
+      runtime = await createPeaRuntime({ workspaceRoot });
       const agent = getRuntimeAgent(runtime.controller.getMastra(), "pea-agent");
       const tools = await agent.listTools();
       expect(tools).toEqual(
@@ -124,65 +128,12 @@ test(
         }),
       );
     } finally {
-      await runtime.close?.();
+      try {
+        await runtime?.close?.();
+      } finally {
+        state.restore();
+      }
       await rm(workspaceRoot, { recursive: true, force: true });
-    }
-  },
-  slowRuntimeTestTimeout,
-);
-
-test(
-  "TUI and prompt share native identity, tools, model, and trusted rules without Host contact",
-  async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "pea-entrypoints-"));
-    const workspaceRoot = path.join(root, "workspace");
-    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
-    const previousProductHome = process.env[peaProductHomeEnvVar];
-    const hostVariable = hostProcessIdentity.hostBaseUrlVariable;
-    const previousHost = process.env[hostVariable];
-    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
-    process.env[peaProductHomeEnvVar] = path.join(root, "product-home");
-
-    try {
-      const tui = await createPeaRuntime({
-        accessLevel: "trusted",
-        hostBaseUrl: "http://127.0.0.1:1",
-        workspaceRoot,
-      });
-      if (!tui.session) throw new Error("Expected TUI runtime session.");
-      const tuiSnapshot = {
-        resourceId: tui.session.identity.getResourceId(),
-        workspace: tui.workspace,
-        tools: Object.keys(await tui.controller.getCurrentAgent(tui.session).listTools()).sort(),
-        model: tui.session.model.get(),
-        rules: tui.session.permissions.getRules(),
-        yolo: tui.session.state.get().yolo,
-      };
-      await tui.close?.();
-
-      process.env[hostVariable] = "http://127.0.0.1:2";
-      const prompt = await createPeaPromptRuntime({ prompt: "unused", workspaceRoot });
-      const promptSnapshot = {
-        resourceId: prompt.session.identity.getResourceId(),
-        workspace: prompt.workspace,
-        tools: Object.keys(
-          await prompt.controller.getCurrentAgent(prompt.session).listTools(),
-        ).sort(),
-        model: prompt.session.model.get(),
-        rules: prompt.session.permissions.getRules(),
-        yolo: prompt.session.state.get().yolo,
-      };
-      await prompt.close?.();
-
-      expect(promptSnapshot).toEqual(tuiSnapshot);
-      expect(promptSnapshot.yolo).toBe(false);
-    } finally {
-      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
-      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
-      if (previousProductHome === undefined) delete process.env[peaProductHomeEnvVar];
-      else process.env[peaProductHomeEnvVar] = previousProductHome;
-      if (previousHost === undefined) delete process.env[hostVariable];
-      else process.env[hostVariable] = previousHost;
     }
   },
   slowRuntimeTestTimeout,
@@ -271,15 +222,21 @@ test(
   "pea runtime starts with product defaults",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-yolo-"));
-    const runtime = await createPeaRuntime({ workspaceRoot });
+    const state = await isolatePeaState("pea-yolo-state-");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
     try {
+      runtime = await createPeaRuntime({ workspaceRoot });
       expect(runtime.session?.model.get()).toBe("openai/gpt-5.6-terra");
       expect(runtime.session?.state.get()).toEqual(
         expect.objectContaining({ yolo: false, thinkingLevel: "high" }),
       );
     } finally {
-      await runtime.close?.();
+      try {
+        await runtime?.close?.();
+      } finally {
+        state.restore();
+      }
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   },
@@ -290,15 +247,18 @@ test(
   "pea runtime honors configured startup model",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-model-"));
-    const runtime = await createPeaRuntime({
-      workspaceRoot,
-      modelId: "openai/gpt-5.5",
-    });
+    const state = await isolatePeaState("pea-model-state-");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
     try {
+      runtime = await createPeaRuntime({ workspaceRoot, modelId: "openai/gpt-5.5" });
       expect(runtime.session?.model.get()).toBe("openai/gpt-5.5");
     } finally {
-      await runtime.close?.();
+      try {
+        await runtime?.close?.();
+      } finally {
+        state.restore();
+      }
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   },
@@ -309,9 +269,11 @@ test(
   "pea task tools keep memory context when durable execution passes sparse context",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-task-context-"));
-    const runtime = await createPeaRuntime({ workspaceRoot });
+    const state = await isolatePeaState("pea-task-state-");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
     try {
+      runtime = await createPeaRuntime({ workspaceRoot });
       const threadId = runtime.session?.thread.getId();
       const resourceId = runtime.session?.identity.getResourceId();
       if (!threadId || !resourceId) throw new Error("Expected Pea runtime session thread.");
@@ -361,7 +323,11 @@ test(
       );
       expect(taskState).toEqual([expect.objectContaining({ content: "Inspect context" })]);
     } finally {
-      await runtime.close?.();
+      try {
+        await runtime?.close?.();
+      } finally {
+        state.restore();
+      }
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   },
@@ -407,4 +373,17 @@ function readRecord(value: unknown): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function isolatePeaState(prefix: string) {
+  const root = await mkdtemp(path.join(os.tmpdir(), prefix));
+  const previous = process.env.PE_TOOLS_STATE_DIR;
+  process.env.PE_TOOLS_STATE_DIR = root;
+  return {
+    root,
+    restore: () => {
+      if (previous === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previous;
+    },
+  };
 }

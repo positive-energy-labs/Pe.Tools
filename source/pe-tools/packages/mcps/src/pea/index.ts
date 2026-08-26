@@ -1,3 +1,4 @@
+import type { ToolCategory } from "@mastra/core/agent-controller";
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
@@ -20,7 +21,6 @@ import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
 import { routeStateTools } from "./route-state.ts";
 export { type RouteRegistration, createRouteRegistrations } from "./routes.ts";
-export { peaProductToolCatalog } from "../tool-metadata.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
 export {
   bundledPeaSkills,
@@ -329,6 +329,23 @@ export const peaProductTools = {
   [scriptExecute.id]: scriptExecute,
   ...routeStateTools,
 };
+
+export const peaProductToolMetadata = {
+  pe_status: { category: "read" },
+  pe_logs: { category: "read" },
+  host_operation_search: { category: "read" },
+  host_operation_call: { category: "execute" },
+  request_access: { category: "edit" },
+  read_image: { category: "read" },
+  capture_view: { category: "read" },
+  revit_api_docs_search: { category: "read" },
+  revit_api_docs_fetch: { category: "read" },
+  script_bootstrap: { category: "edit" },
+  script_execute: { category: "execute" },
+  route_state_read: { category: "read" },
+  route_state_apply: { category: "edit" },
+  route_command: { category: "execute" },
+} satisfies Record<keyof typeof peaProductTools, { category: ToolCategory }>;
 
 function createCurrentHostRpcCaller(bridgeSessionId?: string, timeoutMs?: number) {
   return new HostRpcCaller({

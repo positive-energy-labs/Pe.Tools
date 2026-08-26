@@ -279,9 +279,6 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: ^0.25.0
         version: 0.25.0(zod@4.3.6)
-      '@mastra/core':
-        specifier: 1.61.0
-        version: 1.61.0(@bufbuild/protobuf@2.12.0)(ai@6.0.266(zod@4.3.6))(bufferutil@4.1.0)(express@5.2.1)(rxjs@7.8.1)(zod@4.3.6)
       zod:
         specifier: 4.3.6
         version: 4.3.6

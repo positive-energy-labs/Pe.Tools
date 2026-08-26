@@ -152,7 +152,7 @@ function withTimeout<T>(task: Promise<T> | T, timeoutMs: number): Promise<T> {
   });
 }
 
-export async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPromptRuntime> {
+async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPromptRuntime> {
   const workspaceRoot = path.resolve(request.workspaceRoot ?? resolvePeaProductHomePath());
   const hostBaseUrl = await ensureTsHostRunning();
   const handle = await createPeaRuntime({

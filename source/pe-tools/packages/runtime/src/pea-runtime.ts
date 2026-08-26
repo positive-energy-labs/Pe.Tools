@@ -1,10 +1,10 @@
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { Agent } from "@mastra/core/agent";
 import type {
   AgentController,
   AgentControllerRequestContext,
   AvailableModel,
-  PermissionPolicy,
   PermissionRules,
   ToolCategory,
 } from "@mastra/core/agent-controller";
@@ -16,23 +16,18 @@ import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace
 import { createAuthStorage } from "@mastra/code-sdk";
 import { createMastraCodeGateway, resolveModel } from "@mastra/code-sdk/agents/model";
 import { getToolCategory, getToolsForCategory } from "@mastra/code-sdk/permissions";
-import {
-  accessLevelFromPermissionRules,
-  assertRuntimeToolCatalogMatchesTools,
-  permissionRulesForAccessLevel,
-  type RuntimeAccessLevel,
-  type RuntimeToolKind,
-} from "@pe/agent-contracts";
+import { stateSchema } from "@mastra/code-sdk/schema";
 import {
   bundledPeaSkills,
   configurePeaProductToolContext,
   materializeBundledPeaSkills,
-  peaProductToolCatalog,
+  peaProductToolMetadata,
   peaProductTools,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
+import { z } from "zod";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
 import { createRuntimeMemoryOptions, createRuntimeMemoryProfile } from "./memory/profiles.ts";
 import type { RuntimeCreateRequest, RuntimeHandle, RuntimeHandleServices } from "./runtime.ts";
@@ -45,34 +40,42 @@ import { peaAgentInstructions } from "./pea-instructions.ts";
 export { peaAgentInstructions } from "./pea-instructions.ts";
 export * from "./pea-context-signals.ts";
 
-export const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
+const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
 
 const peaAgentName = "Pea Revit Agent";
 const peaAgentDescription = "High-trust Revit/operator agent for Positive Energy tooling.";
-const toolCategories: ToolCategory[] = ["read", "edit", "execute", "mcp", "other"];
-const permissionPolicies = new Set<PermissionPolicy>(["allow", "ask", "deny"]);
-const toolKindToCategory: Record<RuntimeToolKind, ToolCategory> = {
-  read: "read",
-  search: "read",
-  fetch: "read",
-  think: "read",
-  edit: "edit",
-  delete: "edit",
-  execute: "execute",
-  other: "other",
-};
+const permissionSettingKey = "pea.permissions";
+const permissionCategories: ToolCategory[] = ["read", "edit", "execute", "mcp", "other"];
+const permissionPolicies = {
+  "read-only": { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
+  ask: { read: "allow", edit: "ask", execute: "ask", mcp: "ask", other: "deny" },
+  trusted: { read: "allow", edit: "allow", execute: "allow", mcp: "allow", other: "deny" },
+} as const satisfies Record<RuntimeAccessLevel, Record<ToolCategory, "allow" | "ask" | "deny">>;
+const codePermissionRulesSchema = stateSchema.shape.permissionRules.unwrap();
+const permissionRecordSchema = z
+  .object({
+    yolo: z.literal(false),
+    permissionRules: codePermissionRulesSchema
+      .extend({
+        categories: codePermissionRulesSchema.shape.categories.unwrap(),
+        tools: codePermissionRulesSchema.shape.tools.unwrap(),
+      })
+      .strict(),
+  })
+  .strict();
 
-type PeaAuthStorage = ReturnType<typeof createAuthStorage>;
+type PermissionRecord = z.infer<typeof permissionRecordSchema>;
+type RuntimeAccessLevel = NonNullable<PeaRuntimeOptions["accessLevel"]>;
+
 type PeaRuntimeState = Record<string, unknown> & {
-  currentModelId?: string;
   permissionRules?: unknown;
   yolo?: boolean;
 };
 
-export type PeaRuntimeServices = RuntimeHandleServices & {
+type PeaAuthStorage = ReturnType<typeof createAuthStorage>;
+
+type PeaRuntimeServices = RuntimeHandleServices & {
   authStorage: PeaAuthStorage;
-  hookManager: undefined;
-  mcpManager: undefined;
 };
 
 export type PeaRuntimeHandle = RuntimeHandle<
@@ -81,24 +84,20 @@ export type PeaRuntimeHandle = RuntimeHandle<
   AgentController<PeaRuntimeState>
 >;
 
-export interface PeaTuiRuntimeOptions {
-  cwd?: string;
+export interface PeaRuntimeOptions {
   workspaceRoot?: string;
   hostBaseUrl?: string;
   workspaceKey?: string;
   modelId?: string;
-  accessLevel?: RuntimeAccessLevel;
+  accessLevel?: "read-only" | "ask" | "trusted";
   protocol?: RuntimeCreateRequest["protocol"];
 }
 
-export async function createPeaRuntime(
-  options: PeaTuiRuntimeOptions = {},
-): Promise<PeaRuntimeHandle> {
+export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise<PeaRuntimeHandle> {
   const productHomePath = resolvePeaProductHomePath();
   const workspaceRoot = path.resolve(options.workspaceRoot ?? productHomePath);
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
   configurePeaProductToolContext({ hostBaseUrl: options.hostBaseUrl, workspaceKey });
-  assertRuntimeToolCatalogMatchesTools(peaProductTools, peaProductToolCatalog);
 
   const authStorage = createAuthStorage();
   const gateway = createMastraCodeGateway({
@@ -130,8 +129,14 @@ export async function createPeaRuntime(
     request,
     config: {
       id: "pea",
-      resourceId: createLocalResourceId("pea", workspaceRoot),
-      workspace: createPeaWorkspace({ productHomePath, workspaceRoot }),
+      resourceId: `pea:${Buffer.from(workspaceRoot).toString("base64url")}`,
+      workspace: new Workspace({
+        id: "pea-workspace",
+        name: "Pea Workspace",
+        filesystem: new LocalFilesystem({ basePath: workspaceRoot, contained: true }),
+        sandbox: new LocalSandbox({ workingDirectory: workspaceRoot }),
+        skills: resolvePeaSkillPaths({ productHomePath }),
+      }),
       agent: createPeaAgent(
         promptCapture.processor,
         toolCapture.wrap,
@@ -169,7 +174,7 @@ export async function createPeaRuntime(
         agents: [{ name: peaAgentName, description: peaAgentDescription }],
         skills: bundledPeaSkills.map((skill) => ({
           name: skill.name,
-          description: peaSkillDescription(skill.content),
+          description: /^description:\s*(.+)$/m.exec(skill.content)?.[1]?.trim(),
           content: skill.content,
           approxTokens: Math.ceil(skill.content.length / 4),
         })),
@@ -222,8 +227,7 @@ async function resolveCurrentModel(
   const context = requestContext.get("controller") as
     | AgentControllerRequestContext<PeaRuntimeState>
     | undefined;
-  const modelId =
-    context?.session.modelId || context?.getState().currentModelId || defaultPeaAgentModelId;
+  const modelId = context?.session.modelId || defaultPeaAgentModelId;
   const model = (await listAvailableModels()).find((candidate) => candidate.id === modelId);
   if (!model) throw new Error(`Unknown Pea model '${modelId}'.`);
   if (!model.hasApiKey) throw new Error(`Pea model '${modelId}' has no available credentials.`);
@@ -231,8 +235,9 @@ async function resolveCurrentModel(
 }
 
 function resolvePeaToolCategory(toolName: string): ToolCategory {
-  const kind = peaProductToolCatalog.get(toolName)?.kind;
-  if (kind) return toolKindToCategory[kind];
+  if (Object.hasOwn(peaProductToolMetadata, toolName)) {
+    return peaProductToolMetadata[toolName as keyof typeof peaProductToolMetadata].category;
+  }
 
   const codeCategory = getToolCategory(toolName);
   if (codeCategory === null) return "read";
@@ -245,83 +250,49 @@ async function configurePermissions(
 ): Promise<void> {
   const session = handle.session;
   if (!session) throw new Error("Expected Pea runtime session.");
-  const state = session.state.get();
-  const persisted = readPermissionRules(state.permissionRules);
-  const persistedLevel =
-    persisted && state.yolo === false
-      ? accessLevelFromPermissionRules(persisted, state.yolo)
-      : undefined;
+  const stored = await session.thread.getSetting({ key: permissionSettingKey });
+  const persisted = readPermissionRecord(stored);
+  const persistedLevel = persisted
+    ? accessLevelFromPermissionRules(persisted.permissionRules)
+    : undefined;
   const level =
-    requestedAccessLevel ?? (state.permissionRules === undefined ? "ask" : persistedLevel);
+    stored === undefined
+      ? (requestedAccessLevel ?? "ask")
+      : persistedLevel
+        ? (requestedAccessLevel ?? persistedLevel)
+        : "read-only";
   const effective = permissionRulesForAccessLevel(level ?? "read-only");
-  if (persisted && level) effective.tools = { ...persisted.tools };
+  if (persisted && persistedLevel) effective.tools = { ...persisted.permissionRules.tools };
 
-  await session.state.set({ yolo: false, permissionRules: effective });
+  const record = permissionRecordSchema.parse({ yolo: false, permissionRules: effective });
+  await session.thread.setSetting({ key: permissionSettingKey, value: record });
+  await session.state.set({ yolo: false, permissionRules: record.permissionRules });
   if (
     session.state.get().yolo !== false ||
-    !permissionRulesEqual(session.permissions.getRules(), effective)
+    !isDeepStrictEqual(await session.thread.getSetting({ key: permissionSettingKey }), record) ||
+    !isDeepStrictEqual(session.permissions.getRules(), record.permissionRules)
   ) {
     throw new Error("Pea permission state did not persist exactly.");
   }
 }
 
-function readPermissionRules(value: unknown): PermissionRules | undefined {
-  if (!isRecord(value) || !isRecord(value.categories) || !isRecord(value.tools)) return undefined;
-  const categoryEntries = Object.entries(value.categories);
-  const toolEntries = Object.entries(value.tools);
-  if (
-    categoryEntries.some(
-      ([category, policy]) =>
-        !toolCategories.includes(category as ToolCategory) ||
-        !permissionPolicies.has(policy as PermissionPolicy),
-    ) ||
-    toolEntries.some(([, policy]) => !permissionPolicies.has(policy as PermissionPolicy))
-  ) {
-    return undefined;
-  }
-  return {
-    categories: Object.fromEntries(categoryEntries) as PermissionRules["categories"],
-    tools: Object.fromEntries(toolEntries) as PermissionRules["tools"],
-  };
+function permissionRulesForAccessLevel(level: RuntimeAccessLevel): PermissionRules {
+  return { categories: { ...permissionPolicies[level] }, tools: {} };
 }
 
-function permissionRulesEqual(left: PermissionRules, right: PermissionRules): boolean {
-  return (
-    toolCategories.every((category) => left.categories[category] === right.categories[category]) &&
-    JSON.stringify(
-      Object.entries(left.tools).sort(([leftName], [rightName]) =>
-        leftName.localeCompare(rightName),
-      ),
-    ) ===
-      JSON.stringify(
-        Object.entries(right.tools).sort(([leftName], [rightName]) =>
-          leftName.localeCompare(rightName),
-        ),
-      )
+function accessLevelFromPermissionRules(rules: PermissionRules): RuntimeAccessLevel | undefined {
+  if (Object.keys(rules.categories).length !== permissionCategories.length) return undefined;
+  return (Object.keys(permissionPolicies) as RuntimeAccessLevel[]).find((level) =>
+    permissionCategories.every(
+      (category) => rules.categories[category] === permissionPolicies[level][category],
+    ),
   );
 }
 
-function createPeaWorkspace(options: {
-  productHomePath: string;
-  workspaceRoot: string;
-}): Workspace {
-  return new Workspace({
-    id: "pea-workspace",
-    name: "Pea Workspace",
-    filesystem: new LocalFilesystem({ basePath: options.workspaceRoot, contained: true }),
-    sandbox: new LocalSandbox({ workingDirectory: options.workspaceRoot }),
-    skills: resolvePeaSkillPaths({ productHomePath: options.productHomePath }),
-  });
-}
-
-function peaSkillDescription(content: string): string | undefined {
-  return /^description:\s*(.+)$/m.exec(content)?.[1]?.trim();
-}
-
-function createLocalResourceId(runtimeId: string, cwd: string): string {
-  return `${runtimeId}:${Buffer.from(cwd).toString("base64url")}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function readPermissionRecord(value: unknown): PermissionRecord | undefined {
+  const parsed = permissionRecordSchema.safeParse(value);
+  if (!parsed.success || !accessLevelFromPermissionRules(parsed.data.permissionRules)) {
+    return undefined;
+  }
+  return parsed.data;
 }

@@ -5,6 +5,7 @@ export {
   createRouteRegistrations,
   materializeBundledPeaSkills,
   peaProductHomeEnvVar,
+  peaProductToolMetadata,
   peaProductTools,
   peaSkillPaths,
   peaStandardSkillsRoot,
@@ -20,7 +21,6 @@ export {
   resolveWorkspaceKey,
 } from "./shared/host-config.ts";
 export { HostRpcCaller } from "./shared/host-rpc-caller.ts";
-export { peaProductToolCatalog } from "./tool-metadata.ts";
 export {
   ScriptingTools,
   bootstrapScriptWorkspace,
