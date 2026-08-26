@@ -16,7 +16,6 @@ import { peUrl, type WorkbenchEndpointConfig } from "./config";
 import { hydrateWorkbenchState, type PeInspect } from "./adapter";
 import { reduceWorkbench, runEndedCleanly, type WorkbenchUpdate } from "./reduce";
 import { parseWireEvent, parseWireMessages, type WireEvent, type WireMessageContent } from "./wire";
-import type { ThreadLandingApi } from "./land-thread";
 
 export interface StoredThreadSummary {
   id: string;
@@ -45,7 +44,8 @@ export interface ChatSearch {
   patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): void;
 }
 
-export interface ChatApi extends ThreadLandingApi {
+export interface ChatApi {
+  listThreads(): Promise<AgentControllerThreadInfo[]>;
   createThread(): Promise<{ id: string }>;
   hydrate(threadId: string): Promise<WorkbenchState>;
   subscribe(onEvent: (event: WireEvent) => void, onError: (error: Error) => void): Promise<() => void>;
@@ -72,7 +72,6 @@ export function createChatStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   api: ChatApi;
   search: ChatSearch;
-  land: (api: ThreadLandingApi) => Promise<string | undefined>;
 }) {
   const core = createRouteStoreCore("chat", deps.registry);
   const threadId = deps.search.thread ?? "";
@@ -195,7 +194,7 @@ export function createChatStore(deps: {
     async deleteThread(id: string) {
       return core.runVerb("delete-thread", async () => {
         await deps.api.deleteThread(id);
-        if (id === threadId) deps.search.patch({ thread: await deps.land(deps.api) });
+        if (id === threadId) deps.search.patch({ thread: undefined });
         else await rehydrate();
       }, ["workbench"]);
     },

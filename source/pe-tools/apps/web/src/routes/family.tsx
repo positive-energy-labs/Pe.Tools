@@ -5,7 +5,6 @@ import { createFamilyStore } from "#/family/store";
 import { FamilyWorkspace } from "#/family/workspace";
 import { ThreadEmpty } from "#/components/thread-palette";
 import { appAtomRegistry } from "#/state/registry";
-import { withThread } from "./-with-thread";
 import { useRouteStore } from "#/state/use-route-store";
 
 export const Route = createFileRoute("/family")({
@@ -26,7 +25,6 @@ export const Route = createFileRoute("/family")({
     profile: typeof search.profile === "string" ? search.profile.trim() : "",
     stage: search.stage === "evidence" ? "evidence" : "author",
   }),
-  beforeLoad: withThread,
   component: FamilyRoute,
 });
 

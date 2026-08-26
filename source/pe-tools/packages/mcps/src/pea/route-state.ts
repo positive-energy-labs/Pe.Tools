@@ -11,8 +11,8 @@
  * how the agent learns what it may write and how to correct an invalid proposal.
  */
 import { createTool } from "@mastra/core/tools";
-import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 import z from "zod";
+import { addressSchema } from "@pe/agent-contracts";
 
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
@@ -76,12 +76,12 @@ export const routeStateRead = createTool({
       .string()
       .optional()
       .describe("Route name from the list; omit to list all live routes."),
+    doc: addressSchema.optional().describe("Revit document address; required with route."),
   }),
-  execute: async (input, context) => {
+  execute: async (input) => {
     if (!input.route) return getJson("/pe/route-state");
-    const threadId = activeThreadId(context);
-    if (!threadId) return missingThread("read route-state detail");
-    return getJson(scopedPath(`/pe/route-state/${encodeURIComponent(input.route)}`, threadId));
+    if (!input.doc) return missingDocument("read route-state detail");
+    return getJson(scopedPath(`/pe/route-state/${encodeURIComponent(input.route)}`, input.doc));
   },
 });
 
@@ -91,6 +91,7 @@ export const routeStateApply = createTool({
     "Propose changes to a route-state document by patching specific paths. Trust contract: you PROPOSE, the human stages and pushes — you cannot commit to Revit. Patches are segment-array paths (path is an array of string/number segments, e.g. ['cells','Width::Type A','proposal']); omit `value` to delete that key. Paths outside the route's agent write mask are rejected with a hint naming what you may write. The whole document is re-validated after patching; validation errors come back as hints you should act on (e.g. a low-confidence proposal must be marked for attention).",
   inputSchema: z.object({
     route: z.string(),
+    doc: addressSchema,
     patches: z
       .array(
         z.object({
@@ -100,11 +101,9 @@ export const routeStateApply = createTool({
       )
       .min(1),
   }),
-  execute: async (input, context) => {
-    const threadId = activeThreadId(context);
-    if (!threadId) return missingThread("apply route-state patches");
+  execute: async (input) => {
     return postJson(
-      scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`, threadId),
+      scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`, input.doc),
       {
         patches: input.patches,
       },
@@ -118,14 +117,13 @@ export const routeCommand = createTool({
     "Run a named command on a route-state document (e.g. parse_spec, refresh_snapshot). Commands do the side-effectful work the write mask forbids you from doing by hand. Human-only commands (like push) reject you with a hint — ask the engineer to run those from the UI. Discover command names and their input shapes with route_state_read.",
   inputSchema: z.object({
     route: z.string(),
+    doc: addressSchema,
     command: z.string(),
     input: z.unknown().optional(),
   }),
-  execute: async (input, context) => {
-    const threadId = activeThreadId(context);
-    if (!threadId) return missingThread("run a route-state command");
+  execute: async (input) => {
     return postJson(
-      scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, threadId),
+      scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, input.doc),
       {
         command: input.command,
         input: coerceJsonObject(input.input),
@@ -147,42 +145,15 @@ function hintOf(payload: Record<string, unknown>): string | undefined {
   return typeof hint === "string" ? hint : undefined;
 }
 
-function activeThreadId(toolContext: unknown): string | undefined {
-  const requestContext = record(toolContext).requestContext;
-  const controller = record(requestContextValue(requestContext, "controller"));
-  return (
-    nonEmptyString(controller.threadId) ??
-    nonEmptyString(requestContextValue(requestContext, MASTRA_THREAD_ID_KEY))
-  );
+function scopedPath(path: string, doc: string): string {
+  return `${path}?doc=${encodeURIComponent(doc)}`;
 }
 
-function requestContextValue(requestContext: unknown, key: string): unknown {
-  const context = record(requestContext);
-  if (typeof context.get === "function") {
-    return (context.get as (name: string) => unknown)(key);
-  }
-  return context[key];
-}
-
-function scopedPath(path: string, threadId: string): string {
-  return `${path}?threadId=${encodeURIComponent(threadId)}`;
-}
-
-function missingThread(action: string) {
+function missingDocument(action: string) {
   return {
     isError: true,
-    content: `Cannot ${action} without an active Pea thread. Run this tool from a thread-backed Pea turn.`,
+    content: `Cannot ${action} without a Revit document address.`,
   };
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 function message(error: unknown): string {

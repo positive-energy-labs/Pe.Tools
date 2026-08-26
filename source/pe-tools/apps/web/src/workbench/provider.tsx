@@ -7,7 +7,6 @@ import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import { useThreadClaim } from "./claims";
 import { resolveWorkbenchConfig, type WorkbenchEndpointConfig } from "./config";
-import { landThread } from "./land-thread";
 import {
   createChatStore,
   createLiveChatApi,
@@ -76,7 +75,6 @@ function WorkbenchStoreOwner({
     createChatStore({
       registry: appAtomRegistry,
       api,
-      land: landThread,
       search: {
         ...search,
         patch: (partial, replace = false) =>

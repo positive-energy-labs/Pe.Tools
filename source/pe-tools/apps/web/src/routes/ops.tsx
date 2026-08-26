@@ -35,7 +35,6 @@ import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds } from "#/targeting/model";
 import { worldTrunk } from "#/targeting/trunks";
-import { withThread } from "./-with-thread";
 
 type HostOperationJsonSchema = Record<string, unknown>;
 const str = (value: unknown) => (typeof value === "string" ? value : "");
@@ -46,7 +45,6 @@ export const Route = createFileRoute("/ops")({
     op: str(search.op),
     thread: str(search.thread) || undefined,
   }),
-  beforeLoad: withThread,
   component: OpsRoute,
 });
 

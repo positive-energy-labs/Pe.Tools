@@ -7,6 +7,7 @@ import { MastraClient } from "@mastra/client-js";
 import { z } from "zod";
 
 import {
+  type Address,
   parseRouteDoc,
   type RouteDocOf,
   type RouteStatePatch,
@@ -212,7 +213,7 @@ export function feed<A>(
 }
 
 export interface Scope {
-  readonly threadId: string;
+  readonly documentAddress: Address;
 }
 
 export interface Slice<D> {
@@ -238,11 +239,11 @@ class RouteAtomKey implements Equal.Equal {
     return (
       that instanceof RouteAtomKey &&
       this.spec.route === that.spec.route &&
-      this.scope.threadId === that.scope.threadId
+      this.scope.documentAddress === that.scope.documentAddress
     );
   }
   [Hash.symbol]() {
-    return Hash.string(`${this.spec.route}\0${this.scope.threadId}`);
+    return Hash.string(`${this.spec.route}\0${this.scope.documentAddress}`);
   }
 }
 
@@ -250,7 +251,7 @@ function routeUrl(route: string, operation: "read" | "events" | "apply" | "comma
   const config = resolveWorkbenchConfig();
   const suffix = operation === "read" ? "" : `/${operation}`;
   const url = new URL(peUrl(config, `/route-state/${route}${suffix}`));
-  url.searchParams.set("threadId", scope.threadId);
+  url.searchParams.set("doc", scope.documentAddress);
   return url.toString();
 }
 

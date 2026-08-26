@@ -27,10 +27,8 @@ import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
 import { ThreadEmpty } from "#/components/thread-palette";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
-import { withThread } from "./-with-thread";
 
 export const Route = createFileRoute("/settings")({
-  beforeLoad: withThread,
   validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,

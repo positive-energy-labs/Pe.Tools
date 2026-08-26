@@ -1,17 +1,15 @@
-import { createSignal } from "@mastra/core/agent";
 import { AgentController, type Session } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
-import type { MemoryStorage } from "@mastra/core/storage";
 import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { addressSchema } from "@pe/agent-contracts";
 import {
   RouteWorkspace,
   type RouteWorkspaceRegistration,
   type RouteWorkspaceScope,
-  type RouteWorkspaceThreadEvent,
 } from "./route-workspace.ts";
 
 /**
@@ -149,21 +147,21 @@ export async function buildAgentControllerApp(
   const registrations = options.routeRegistrations ?? [];
   const storage = mastra.getStorage();
   const threadState = await storage?.getStore("threadState");
-  const memoryStore = await storage?.getStore("memory");
   if (registrations.length > 0 && !threadState)
     throw new Error("RouteWorkspace requires the native threadState store.");
-  if (registrations.length > 0 && !memoryStore)
-    throw new Error("RouteWorkspace requires the native memory store for durable chronology.");
 
   const routeWorkspace = new RouteWorkspace({
     registrations,
-    store: threadState!,
-    authorizeThread: async (threadId) => {
-      const thread = await runtime.session!.thread.getById({ threadId });
-      return thread?.resourceId === info.resourceId;
+    store: {
+      getState: ({ documentAddress, route }) =>
+        threadState!.getState({ threadId: documentAddress, type: `route-workspace:${route}` }),
+      setState: ({ documentAddress, route, value }) =>
+        threadState!.setState({
+          threadId: documentAddress,
+          type: `route-workspace:${route}`,
+          value,
+        }),
     },
-    appendThreadEvent: (event) =>
-      appendRouteWorkspaceThreadEvent(runtime, memoryStore!, info.resourceId, event),
   });
 
   // Discovery is deliberately unscoped and shallow. Every document read/write must name
@@ -247,46 +245,8 @@ export async function buildAgentControllerApp(
 }
 
 function parseRouteWorkspaceScope(c: Context): RouteWorkspaceScope | string {
-  const threadId = c.req.query("threadId")?.trim();
-  return threadId && c.req.query("scope") == null ? { threadId } : "threadId required";
-}
-
-async function appendRouteWorkspaceThreadEvent(
-  runtime: ServableRuntime,
-  memoryStore: MemoryStorage,
-  resourceId: string,
-  event: RouteWorkspaceThreadEvent,
-): Promise<void> {
-  const action =
-    event.action === "command" ? `command ${event.command ?? "unknown"}` : "review edit";
-  const outcome = event.ok ? "succeeded" : `failed: ${event.error ?? "unknown error"}`;
-  const signal = createSignal({
-    type: "state",
-    tagName: "route-workspace",
-    contents: `Human ${action} on ${event.route} ${outcome}.`,
-    attributes: {
-      route: event.route,
-      action: event.action,
-      command: event.command,
-      revision: event.revision,
-      patchCount: event.patchCount,
-      ok: event.ok,
-    },
-    metadata: { routeWorkspace: event },
-  });
-  await memoryStore.saveMessages({
-    messages: [signal.toDBMessage({ threadId: event.threadId, resourceId })],
-  });
-
-  // Direct persistence makes the event visible on reload and to the next model turn. Only the
-  // currently displayed thread also needs a live message event; other threads hydrate normally.
-  if (runtime.session!.thread.getId() !== event.threadId) return;
-  const messages = await runtime.session!.thread.listMessages({
-    threadId: event.threadId,
-    limit: 20,
-  });
-  const persisted = messages.find((message) => message.id === signal.id);
-  if (persisted) runtime.session!.emit({ type: "message_end", message: persisted });
+  const parsed = addressSchema.safeParse(c.req.query("doc")?.trim());
+  return parsed.success ? { documentAddress: parsed.data } : "doc required";
 }
 
 function streamRouteWorkspace(
@@ -327,7 +287,7 @@ function streamRouteWorkspace(
 }
 
 function sameRouteWorkspaceScope(left: RouteWorkspaceScope, right: RouteWorkspaceScope): boolean {
-  return left.threadId === right.threadId;
+  return left.documentAddress === right.documentAddress;
 }
 
 function errorMessage(error: unknown): string {

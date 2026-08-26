@@ -3,17 +3,16 @@ import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { defineRouteState, routeBindingSchema } from "@pe/agent-contracts";
+import { address, defineRouteState, routeBindingSchema } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
 import { createPeaRuntime } from "../src/pea-runtime.ts";
 import type {
+  RouteDocumentStore,
   RouteWorkspaceEvent,
   RouteWorkspaceRegistration,
-  RouteWorkspaceThreadEvent,
 } from "../src/route-workspace.ts";
-import type { RuntimeThreadStateStore } from "../src/storage/thread-state.ts";
 
 const documentSchema = z
   .object({
@@ -77,46 +76,42 @@ function registration(
 
 function memoryStore() {
   const state = new Map<string, unknown>();
-  const key = (threadId: string, type: string) => `${threadId}\0${type}`;
-  const store: RuntimeThreadStateStore = {
-    getState: async ({ threadId, type }) => structuredClone(state.get(key(threadId, type))),
-    setState: async ({ threadId, type, value }) => {
-      state.set(key(threadId, type), structuredClone(value));
+  const key = (documentAddress: string, route: string) => `${documentAddress}\0${route}`;
+  const store: RouteDocumentStore = {
+    getState: async ({ documentAddress, route }) =>
+      structuredClone(state.get(key(documentAddress, route))),
+    setState: async ({ documentAddress, route, value }) => {
+      state.set(key(documentAddress, route), structuredClone(value));
     },
   };
   return { store, state };
 }
 
 function workspace(
-  store: RuntimeThreadStateStore,
+  store: RouteDocumentStore,
   options: {
     registration?: RouteWorkspaceRegistration;
-    authorized?: Set<string>;
-    appendThreadEvent?: (event: RouteWorkspaceThreadEvent) => void | Promise<void>;
   } = {},
 ) {
   return new RouteWorkspace({
     registrations: [options.registration ?? registration()],
     store,
-    authorizeThread: (threadId) => options.authorized?.has(threadId) ?? true,
-    appendThreadEvent: options.appendThreadEvent,
   });
 }
 
-const threadA = { threadId: "thread-a" } as const;
-const threadB = { threadId: "thread-b" } as const;
+const documentA = { documentAddress: address("C:\\Models\\A.rvt") } as const;
+const documentB = { documentAddress: address("C:\\Models\\B.rvt") } as const;
 
-test("thread documents are isolated, authorized, and survive module recreation", async () => {
+test("document-scoped route documents are isolated and survive module recreation", async () => {
   const { store } = memoryStore();
-  const first = workspace(store, { authorized: new Set(["thread-a", "thread-b"]) });
+  const first = workspace(store);
   expect(
-    await first.apply(threadA, "test-route", "agent", [{ path: ["values", "a"], value: "A" }]),
+    await first.apply(documentA, "test-route", "agent", [{ path: ["values", "a"], value: "A" }]),
   ).toMatchObject({ ok: true });
 
-  expect((await first.read(threadB, "test-route"))?.doc).toMatchObject({ values: {} });
-  const second = workspace(store, { authorized: new Set(["thread-a"]) });
-  expect((await second.read(threadA, "test-route"))?.doc).toMatchObject({ values: { a: "A" } });
-  await expect(second.read(threadB, "test-route")).rejects.toThrow("not authorized");
+  expect((await first.read(documentB, "test-route"))?.doc).toMatchObject({ values: {} });
+  const second = workspace(store);
+  expect((await second.read(documentA, "test-route"))?.doc).toMatchObject({ values: { a: "A" } });
 
   expect(second.list()).toEqual([
     {
@@ -143,15 +138,15 @@ test("apply and command serialize without losing either update", async () => {
   });
   const module = workspace(store, { registration: route });
 
-  const command = module.command(threadA, "test-route", "agent", "increment", {});
+  const command = module.command(documentA, "test-route", "agent", "increment", {});
   await started.promise;
-  const apply = module.apply(threadA, "test-route", "agent", [
+  const apply = module.apply(documentA, "test-route", "agent", [
     { path: ["values", "name"], value: "kept" },
   ]);
   release.resolve();
   expect(await command).toMatchObject({ ok: true });
   expect(await apply).toMatchObject({ ok: true });
-  expect((await module.read(threadA, "test-route"))?.doc).toMatchObject({
+  expect((await module.read(documentA, "test-route"))?.doc).toMatchObject({
     count: 1,
     values: { name: "kept" },
   });
@@ -168,80 +163,65 @@ test("an abandoned external mutation becomes outcomeUnknown and recovery clears 
     },
   });
   const crashed = workspace(store, { registration: route });
-  void crashed.command(threadA, "test-route", "human", "external", {});
+  void crashed.command(documentA, "test-route", "human", "external", {});
   await started.promise;
 
   const restarted = workspace(store, { registration: route });
-  expect(await restarted.read(threadA, "test-route")).toMatchObject({
+  expect(await restarted.read(documentA, "test-route")).toMatchObject({
     status: "outcomeUnknown",
     outcomeUnknown: { command: "external" },
   });
-  expect(await restarted.command(threadA, "test-route", "human", "external", {})).toMatchObject({
+  expect(await restarted.command(documentA, "test-route", "human", "external", {})).toMatchObject({
     ok: false,
     error: expect.stringContaining("blocked"),
   });
-  expect(await restarted.command(threadA, "test-route", "human", "recover", {})).toMatchObject({
+  expect(await restarted.command(documentA, "test-route", "human", "recover", {})).toMatchObject({
     ok: true,
   });
-  expect(await restarted.read(threadA, "test-route")).toMatchObject({ status: "ready" });
+  expect(await restarted.read(documentA, "test-route")).toMatchObject({ status: "ready" });
 });
 
 test("mask, schema, and human command gate are enforced", async () => {
   const { store } = memoryStore();
   const module = workspace(store);
   expect(
-    await module.apply(threadA, "test-route", "agent", [{ path: ["count"], value: 1 }]),
+    await module.apply(documentA, "test-route", "agent", [{ path: ["count"], value: 1 }]),
   ).toMatchObject({ ok: false, hint: expect.stringContaining("human-only") });
   expect(
-    await module.apply(threadA, "test-route", "agent", [{ path: ["values", "bad"], value: 42 }]),
+    await module.apply(documentA, "test-route", "agent", [{ path: ["values", "bad"], value: 42 }]),
   ).toMatchObject({ ok: false, error: "the patched document is invalid" });
   expect(
-    await module.apply(threadA, "test-route", "human", [{ path: ["count"], value: 1 }]),
+    await module.apply(documentA, "test-route", "human", [{ path: ["count"], value: 1 }]),
   ).toMatchObject({ ok: true });
-  expect(await module.command(threadA, "test-route", "agent", "external", {})).toMatchObject({
+  expect(await module.command(documentA, "test-route", "agent", "external", {})).toMatchObject({
     ok: false,
     error: expect.stringContaining("human-only"),
   });
   expect(
-    await module.command(threadA, "test-route", "human", "bind", { target: "session:x" }),
+    await module.command(documentA, "test-route", "human", "bind", { target: "session:x" }),
   ).toMatchObject({ ok: false, error: "unknown command 'bind'" });
 });
 
-test("publishes all action outcomes but appends only human chronology", async () => {
+test("publishes all action outcomes", async () => {
   const { store } = memoryStore();
-  const appended: RouteWorkspaceThreadEvent[] = [];
   const published: RouteWorkspaceEvent[] = [];
-  const module = workspace(store, {
-    appendThreadEvent: (event) => {
-      appended.push(event);
-    },
-  });
+  const module = workspace(store);
   module.subscribe((event) => published.push(event));
 
-  await module.apply(threadA, "test-route", "agent", [
+  await module.apply(documentA, "test-route", "agent", [
     { path: ["values", "agent"], value: "proposal" },
   ]);
-  await module.apply(threadB, "test-route", "human", [{ path: ["count"], value: 1 }]);
-  await module.apply(threadA, "test-route", "human", [{ path: ["count"], value: 2 }]);
-  expect(await module.command(threadA, "test-route", "human", "fail", {})).toMatchObject({
+  await module.apply(documentB, "test-route", "human", [{ path: ["count"], value: 1 }]);
+  await module.apply(documentA, "test-route", "human", [{ path: ["count"], value: 2 }]);
+  expect(await module.command(documentA, "test-route", "human", "fail", {})).toMatchObject({
     ok: false,
   });
 
   expect(published).toHaveLength(4);
-  expect(appended).toEqual([
-    expect.objectContaining({ action: "apply", threadId: "thread-b", ok: true, patchCount: 1 }),
-    expect.objectContaining({ action: "apply", threadId: "thread-a", ok: true, patchCount: 1 }),
-    expect.objectContaining({
-      action: "command",
-      threadId: "thread-a",
-      command: "fail",
-      ok: false,
-      error: "deliberate failure",
-    }),
-  ]);
+  expect(published[1]?.scope).toEqual(documentB);
 });
 
-test("a request without threadId is refused", async () => {
+test("a request without doc is refused", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-route-state-"));
   const runtime = await createPeaRuntime({ workspaceRoot });
   try {
@@ -252,7 +232,7 @@ test("a request without threadId is refused", async () => {
     });
     const response = await app.fetch(new Request("http://local/pe/route-state/test-route"));
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ hint: "threadId required" });
+    expect(await response.json()).toMatchObject({ hint: "doc required" });
   } finally {
     await runtime.close?.();
     await rm(workspaceRoot, { recursive: true, force: true });

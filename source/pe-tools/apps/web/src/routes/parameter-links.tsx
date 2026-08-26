@@ -18,7 +18,6 @@ import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import { canApply, errorIssueCount, isDraftDirty, sameProfile } from "#/parameter-links/model";
 import { useRouteState } from "#/workbench/route-state";
-import { withThread } from "./-with-thread";
 
 /**
  * /parameter-links — the route-native workspace for cross-element parameter links.
@@ -33,7 +32,6 @@ export const Route = createFileRoute("/parameter-links")({
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   }),
-  beforeLoad: withThread,
   component: ParameterLinksRoute,
 });
 

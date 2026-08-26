@@ -24,7 +24,6 @@ import { ValueDiff } from "#/components/ui/value-diff";
 import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
-import { withThread } from "./-with-thread";
 
 /**
  * /schedule-grid — a web surface for editing any Revit schedule collaboratively. The rail
@@ -45,7 +44,6 @@ export const Route = createFileRoute("/schedule-grid")({
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   }),
-  beforeLoad: withThread,
   component: ScheduleGridRoute,
 });
 

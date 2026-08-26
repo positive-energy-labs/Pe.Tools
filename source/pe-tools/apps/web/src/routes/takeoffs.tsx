@@ -28,7 +28,6 @@ import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
 import { documentTrunk, worldTrunk } from "#/targeting/trunks";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { withThread } from "./-with-thread";
 
 const PANES: Product["panes"] = [
   { key: "plan", label: "plan image", draws: ["views"] },
@@ -65,7 +64,6 @@ export const Route = createFileRoute("/takeoffs")({
     stage: STAGES.find((s) => s === search.stage) ?? "adopt",
     thread: str(search.thread) || undefined,
   }),
-  beforeLoad: withThread,
   component: TakeoffsRoute,
 });
 

@@ -9,9 +9,8 @@ import {
   type RoutePatch,
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
-import type { RuntimeThreadStateStore } from "./storage/thread-state.ts";
 
-export type RouteWorkspaceScope = { threadId: string };
+export type RouteWorkspaceScope = { documentAddress: string };
 export type RouteWorkspaceActor = RouteActor;
 export type RouteWorkspacePatch = RoutePatch;
 
@@ -21,9 +20,10 @@ export interface RouteWorkspaceRegistration {
   handlers: RouteStateCommandHandlers<any>;
 }
 
-export interface RouteWorkspaceThreadEvent {
+export interface RouteWorkspaceEvent {
   type: "route_workspace";
-  threadId: string;
+  scope: RouteWorkspaceScope;
+  actor: RouteWorkspaceActor;
   route: string;
   action: "apply" | "command";
   revision: number;
@@ -33,16 +33,14 @@ export interface RouteWorkspaceThreadEvent {
   error?: string;
 }
 
-export interface RouteWorkspaceEvent extends Omit<RouteWorkspaceThreadEvent, "threadId"> {
-  scope: RouteWorkspaceScope;
-  actor: RouteWorkspaceActor;
+export interface RouteDocumentStore {
+  getState(input: { documentAddress: string; route: string }): Promise<unknown>;
+  setState(input: { documentAddress: string; route: string; value: unknown }): Promise<void>;
 }
 
 export interface RouteWorkspaceOptions {
   registrations: readonly RouteWorkspaceRegistration[];
-  store: RuntimeThreadStateStore;
-  authorizeThread(threadId: string): boolean | Promise<boolean>;
-  appendThreadEvent?(event: RouteWorkspaceThreadEvent): void | Promise<void>;
+  store: RouteDocumentStore;
 }
 
 export interface RouteWorkspaceApplyResult {
@@ -60,8 +58,6 @@ export interface RouteWorkspaceCommandResult {
 }
 
 const ENVELOPE_VERSION = 1;
-const STATE_TYPE_PREFIX = "route-workspace:";
-
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
 export class RouteWorkspace {
   readonly #registry = new Map<string, RouteWorkspaceRegistration>();
@@ -85,7 +81,6 @@ export class RouteWorkspace {
   }
 
   async read(scope: RouteWorkspaceScope, route: string) {
-    await this.#authorize(scope);
     const registration = this.#registry.get(route);
     if (!registration) return null;
     const { spec } = registration;
@@ -110,7 +105,6 @@ export class RouteWorkspace {
     actor: RouteWorkspaceActor,
     patches: RouteWorkspacePatch[],
   ): Promise<RouteWorkspaceApplyResult> {
-    await this.#authorize(scope);
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
 
@@ -154,7 +148,6 @@ export class RouteWorkspace {
     command: string,
     input: unknown,
   ): Promise<RouteWorkspaceCommandResult> {
-    await this.#authorize(scope);
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
     const { spec, handlers } = registration;
@@ -240,18 +233,14 @@ export class RouteWorkspace {
     return () => this.#listeners.delete(listener);
   }
 
-  async #authorize(scope: RouteWorkspaceScope): Promise<void> {
-    if (!(await this.options.authorizeThread(scope.threadId)))
-      throw new Error(`thread '${scope.threadId}' is not authorized`);
-  }
-
   async #load(
     scope: RouteWorkspaceScope,
     spec: RouteStateSpec<z.ZodType>,
   ): Promise<RouteEnvelope<unknown>> {
-    const threadId = scope.threadId;
-    const type = stateType(spec.route);
-    const raw = await this.options.store.getState({ threadId, type });
+    const raw = await this.options.store.getState({
+      documentAddress: scope.documentAddress,
+      route: spec.route,
+    });
     if (raw == null)
       return {
         version: ENVELOPE_VERSION,
@@ -262,7 +251,11 @@ export class RouteWorkspace {
     if (envelope.inFlight) {
       envelope.outcomeUnknown ??= envelope.inFlight;
       delete envelope.inFlight;
-      await this.options.store.setState({ threadId, type, value: envelope });
+      await this.options.store.setState({
+        documentAddress: scope.documentAddress,
+        route: spec.route,
+        value: envelope,
+      });
     }
     return envelope;
   }
@@ -273,30 +266,18 @@ export class RouteWorkspace {
     envelope: RouteEnvelope<unknown>,
   ): Promise<void> {
     await this.options.store.setState({
-      threadId: scope.threadId,
-      type: stateType(route),
+      documentAddress: scope.documentAddress,
+      route,
       value: envelope,
     });
   }
 
   async #publish(event: RouteWorkspaceEvent): Promise<void> {
-    if (event.actor === "human")
-      await this.options.appendThreadEvent?.({
-        type: event.type,
-        threadId: event.scope.threadId,
-        route: event.route,
-        action: event.action,
-        revision: event.revision,
-        command: event.command,
-        patchCount: event.patchCount,
-        ok: event.ok,
-        error: event.error,
-      });
     for (const listener of this.#listeners) listener(event);
   }
 
   #serialized<T>(scope: RouteWorkspaceScope, route: string, work: () => Promise<T>): Promise<T> {
-    const key = `${scope.threadId}\0${route}`;
+    const key = `${scope.documentAddress}\0${route}`;
     const previous = this.#tails.get(key) ?? Promise.resolve();
     const run = previous.catch(() => undefined).then(work);
     const tail = run.then(
@@ -308,10 +289,6 @@ export class RouteWorkspace {
       if (this.#tails.get(key) === tail) this.#tails.delete(key);
     });
   }
-}
-
-function stateType(route: string): string {
-  return `${STATE_TYPE_PREFIX}${route}`;
 }
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {

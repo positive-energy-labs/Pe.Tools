@@ -8,7 +8,6 @@ import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { ChatShell } from "#/components/chat-shell";
 import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
-import { withThread } from "./-with-thread";
 
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
@@ -40,7 +39,6 @@ const chatSearchSchema = z.object({
 });
 
 export const Route = createFileRoute("/chat")({
-  beforeLoad: withThread,
   validateSearch: chatSearchSchema,
   search: {
     middlewares: [retainSearchParams(["thread", "target"]), stripSearchParams(DEFAULTS)],

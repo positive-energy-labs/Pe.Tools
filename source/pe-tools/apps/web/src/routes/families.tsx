@@ -6,7 +6,6 @@ import { FamiliesWorkspace } from "#/families/workspace";
 import { ThreadEmpty } from "#/components/thread-palette";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
-import { withThread } from "./-with-thread";
 
 export const Route = createFileRoute("/families")({
   validateSearch: (
@@ -16,7 +15,6 @@ export const Route = createFileRoute("/families")({
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   }),
-  beforeLoad: withThread,
   component: FamiliesRoute,
 });
 
