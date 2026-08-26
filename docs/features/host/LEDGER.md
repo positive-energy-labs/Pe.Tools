@@ -7,6 +7,7 @@ design-system ledger, not restated here.
 ## Decided
 
 - 2026-08-26 — Repository guards live in their own `@pe/repo-guards` workspace package; the web route lane runs route code alone, so its result remains route signal.
+- 2026-08-26 — `Reading.Here(Document)` mints document addresses in `Pe.Revit.Extensions.ProjDocument`; `Pe.Shared.RevitData` owns only the Revit-free `Reading` record because it may not reference the Revit API.
 
 - 2026-08-25 — Generic view contracts use `View.Name` as raw `name` and `View.Title` as display `title` or handle `label`; project-index and agent-context share that law.
 - 2026-08-25 — Generic Revit facts keep one operation owner: `revit.context.document-session` supplies active document identity and labels, while `revit.catalog.project-index` supplies view type and level. Feature operations such as `takeoffs.*` return only their domain facts and join generic facts at the caller.

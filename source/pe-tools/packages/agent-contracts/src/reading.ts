@@ -1,13 +1,13 @@
 import { z } from "zod";
 
-const documentAddress =
+const documentAddressPattern =
   /^(?:[A-Za-z]:[\\/]|\\\\)|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A Revit document's cloud model GUID or absolute Windows path. */
 export const addressSchema = z
   .string()
   .refine(
-    (value) => documentAddress.test(value),
+    (value) => documentAddressPattern.test(value),
     "an Address must be a cloud model GUID or absolute path",
   )
   .brand<"Address">();

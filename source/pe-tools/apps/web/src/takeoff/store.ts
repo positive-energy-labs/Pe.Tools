@@ -517,18 +517,19 @@ export function createTakeoffStore(deps: {
       if (slice.value.error) return AsyncResult.fail(Error(slice.value.error));
       const active = get(activeDocumentResult);
       const document = AsyncResult.isSuccess(active) ? active.value.value : null;
-      const snapshot = here(
-        slice.value.doc?.snapshot,
-        document ? documentAddress(document.session) : null,
-      );
-      if (snapshot) {
+      const persisted = slice.value.doc?.snapshot;
+      const at = document ? documentAddress(document.session) : null;
+      const snapshot = here(persisted, at);
+      if (persisted) {
         return AsyncResult.success(
-          {
-            value: snapshot,
-            at: Date.parse(snapshot.reading.observedAt),
-            basis: [snapshot.reading.at],
-            bound: true,
-          },
+          snapshot
+            ? {
+                value: snapshot,
+                at: Date.parse(snapshot.reading.observedAt),
+                basis: [snapshot.reading.at],
+                bound: true,
+              }
+            : unbound<TakeoffSnapshot | null>(null, at ? [at] : []),
           { waiting: AsyncResult.isSuccess(producer) && producer.waiting },
         );
       }

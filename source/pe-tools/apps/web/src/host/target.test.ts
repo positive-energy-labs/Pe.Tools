@@ -105,6 +105,13 @@ describe("documentAddress", () => {
     expect(documentAddress(observed)).toBe("C:\\Models\\Tower-A.rvt");
     expect(documentAddress({ ...observed, activeDocumentId: undefined })).toBeNull();
   });
+
+  it("renders unsupported Revit document paths unbound", () => {
+    expect(documentAddress({ ...observed, activeDocumentId: "RSN://server/model.rvt" })).toBeNull();
+    expect(
+      documentAddress({ ...observed, activeDocumentId: "Autodesk Docs://project/model.rvt" }),
+    ).toBeNull();
+  });
 });
 
 describe("selectorLabel", () => {

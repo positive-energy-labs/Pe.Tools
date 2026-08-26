@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { address, here, superseded, type Reading } from "./reading.ts";
 
 const at = address("C:\\Models\\projectA.rvt");
+const elsewhere = address("C:\\Models\\Other.rvt");
 const reading = (version: string | null): Reading => ({
   at,
   version,
@@ -22,6 +23,8 @@ describe("Reading", () => {
     const value = { reading: reading("v1") };
     expect(here(value, at)).toBe(value);
     expect(here(value, null)).toBeNull();
+    expect(here(value, elsewhere)).toBeNull();
     expect(superseded(reading("v1"), reading("v2"))).toBe(true);
+    expect(superseded(reading("v1"), { ...reading("v2"), at: elsewhere })).toBe(false);
   });
 });

@@ -384,6 +384,44 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("unbinds a persisted snapshot from another document", async () => {
+    const h = harness();
+    h.hold();
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: {
+          binding: { target: "session:dev-26" },
+          snapshot: {
+            ...h.snapshot,
+            reading: {
+              at: address("C:\\Models\\Other.rvt"),
+              version: "v1",
+              observedAt: "2026-08-25T01:02:03Z",
+            },
+          },
+          staged: [],
+        },
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    const store = createStore({
+      slice,
+      host: h.host,
+      sessions: h.sessions,
+      search: searchPort().port,
+    });
+    await store.actions.settle(store.atoms.activeDocument);
+
+    const read = await store.actions.settle(store.atoms.snapshot);
+
+    expect(read).toMatchObject({ bound: false, value: null });
+    h.release();
+    store.dispose();
+  });
+
   it("binds equal-titled sessions by distinct document identity without an RPC", async () => {
     const h = harness();
     const patches: RouteStatePatch[][] = [];

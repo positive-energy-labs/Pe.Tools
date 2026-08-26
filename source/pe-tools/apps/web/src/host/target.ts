@@ -18,7 +18,7 @@
  */
 
 import type { Custody, Lane } from "@pe/host-contracts/pe-revit-contract";
-import { address, type Address } from "@pe/agent-contracts";
+import { addressSchema, type Address } from "@pe/agent-contracts";
 
 export type { Custody, Lane };
 
@@ -118,7 +118,7 @@ export function mintSelector(session: SessionFacts, all: readonly SessionFacts[]
 
 /** Mint the active Revit document identity. The world remains only the call target. */
 export function documentAddress(session: SessionFacts): Address | null {
-  return session.activeDocumentId ? address(session.activeDocumentId) : null;
+  return addressSchema.safeParse(session.activeDocumentId).data ?? null;
 }
 
 /** Wire entry (bridge.sessions.list) → SessionFacts. Disconnected entries are not targets. */

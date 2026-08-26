@@ -5,8 +5,7 @@
  * this slice owns everything the family surface needs that is NOT authored truth:
  *   - `doc`: an OCR'd spec sheet (markdown blocks only — geometry stays in the parse
  *     cache, same law as family-types),
- *   - `evidence`: the resolved per-type value/provenance projection Revit returned,
- *     stamped with the Revit document Reading so currency is renderable, never silent.
+ *   - `evidence`: the resolved per-type value/provenance projection Revit returned.
  *
  * Pea acts on this slice through commands only (empty agent write mask). Proposals
  * against the family live in `route:settings` fields, where the human review

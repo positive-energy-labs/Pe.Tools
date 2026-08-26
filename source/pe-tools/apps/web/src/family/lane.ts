@@ -7,7 +7,6 @@ interface OpenFamilyDocument {
   model: FamilyModel;
   relativePath: string;
   versionToken: string | null;
-  evidenceStale: boolean;
 }
 interface FamilyLane {
   world: PageWorld;
@@ -43,7 +42,6 @@ export function familyLane(
           model,
           relativePath,
           versionToken,
-          evidenceStale: false,
         }
       : null,
     parseError,

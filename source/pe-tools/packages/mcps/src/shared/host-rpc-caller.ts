@@ -467,7 +467,7 @@ function toSearchResult(
     displayName: operation.displayName ?? operation.key,
     description: operation.description ?? operation.key,
     safety: [operation.needs === "nothing" ? undefined : operation.needs, operation.costTier]
-      .filter((value): value is string => value != null)
+      .filter((value) => value != null)
       .join(", "),
     costTier: operation.costTier,
     visibility: operation.visibility,
@@ -641,7 +641,7 @@ function toCapabilityRow(operation: HostOperationDefinition): HostCapabilityMapR
     key: operation.key,
     description: operation.description ?? operation.displayName ?? operation.key,
     safety: [operation.needs === "nothing" ? undefined : operation.needs, operation.costTier]
-      .filter((value): value is string => value != null && value.length > 0)
+      .filter((value) => value != null && value.length > 0)
       .join(", "),
     inputKind: formatCapabilityInputKind(operation),
     outputKind: formatCapabilityOutputKind(operation),

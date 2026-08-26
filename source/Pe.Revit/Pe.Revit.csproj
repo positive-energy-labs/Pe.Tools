@@ -24,4 +24,8 @@
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="Pe.Shared.Tests"/>
+    </ItemGroup>
+
 </Project>
