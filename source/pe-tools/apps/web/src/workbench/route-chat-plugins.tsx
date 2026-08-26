@@ -82,11 +82,6 @@ export const CHAT_PLUGIN_ROUTES = [
 ] as const;
 export type ChatPluginRoute = (typeof CHAT_PLUGIN_ROUTES)[number];
 
-/** Registration for a plugin route when it has an inline route-state card. */
-export function chatPluginRegistration(route: string): RouteChatPluginRegistration | undefined {
-  return routeChatPlugins[route];
-}
-
 export function chatPluginTitle(route: string): string {
   return routeChatPlugins[route]?.spec.title ?? (route === "families" ? "Families" : route);
 }

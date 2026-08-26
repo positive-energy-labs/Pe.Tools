@@ -143,7 +143,6 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
             />
             <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
           </div>
-          {/* THE sentence — pea's testimony as prefix, the world slot as the chat's one bind control */}
           <div className="flex min-w-0 flex-1 justify-end">
             <ChatSentence />
           </div>

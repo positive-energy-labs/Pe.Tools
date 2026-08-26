@@ -47,7 +47,7 @@ const worldFeed = (worlds: readonly WorldFacts[]) =>
     basis: [],
   });
 
-describe("targeting trunks", () => {
+describe("targeting world", () => {
   it("names fused worlds by SDK session id or pid and discloses custody", () => {
     const controlled = session();
     const observed = session({
@@ -169,6 +169,7 @@ describe("targeting trunks", () => {
     await verbs.start.run({ world: null }, { world: empty });
     await verbs.converge.run(bound, { world: ready });
     await verbs.restart.run(bound, { world: ready });
+    await verbs.stop.run(bound, { world: ready });
     await verbs.stop.run(bound, { world: unresponsive });
 
     expect(
@@ -177,6 +178,7 @@ describe("targeting trunks", () => {
       { action: "start", lane: "installed", year: "25", doc: "Model.rvt" },
       { action: "converge", id: "pe.app-25" },
       { action: "restart", id: "pe.app-25" },
+      { action: "stop", id: "pe.app-25" },
       { action: "stop", id: "pe.app-25", force: true },
     ]);
   });

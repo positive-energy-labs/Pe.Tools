@@ -50,8 +50,7 @@ type WorldOption = Option & { readonly world: WorldFacts };
 
 const worldLabel = (
   world: Pick<WorldFacts, "pid"> & Partial<Pick<WorldFacts, "session" | "row">>,
-) =>
-  world.session?.sdkSessionId ?? world.row?.id ?? `Revit ${world.pid ?? 0}`;
+) => world.session?.sdkSessionId ?? world.row?.id ?? `Revit ${world.pid ?? 0}`;
 
 const worldOption = (world: WorldFacts, sessions: readonly SessionFacts[]): WorldOption => ({
   id: world.session ? mintSelector(world.session, sessions) : `session:${world.row!.id}`,
@@ -95,8 +94,8 @@ async function runLifecycle(
     ),
   });
   const body = (await response.json()) as SdkEnvelope<{ readonly state: string }>;
-  const diagnostics = (body.diagnostics ?? []).map((diagnostic) =>
-    diagnostic.detail ?? diagnostic.code,
+  const diagnostics = (body.diagnostics ?? []).map(
+    (diagnostic) => diagnostic.detail ?? diagnostic.code,
   );
   return {
     action,
@@ -108,11 +107,9 @@ async function runLifecycle(
 }
 
 const describe = (receipt: WorldLifecycleReceipt) =>
-  [
-    `${receipt.action} · ${receipt.state}`,
-    ...receipt.diagnostics,
-    ...receipt.nextSteps,
-  ].join(" · ");
+  [`${receipt.action} · ${receipt.state}`, ...receipt.diagnostics, ...receipt.nextSteps].join(
+    " · ",
+  );
 
 const lifecycleVerb = <K extends string>(
   action: WorldLifecycleAction,
