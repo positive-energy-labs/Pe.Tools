@@ -51,7 +51,7 @@ export function SpecDrawing({
   const secH = 0.75 * SX; // nominal board thickness — LORE, not in the sheet
   const bad = g.slack < -1e-9;
   const width = Math.max(L, g.boardWidth * SX) + M * 2 + 40;
-  const height = secY + secH + M + 20;
+  const height = secY + secH + 66 + 24 + M; // deepest witness row is at secH + 66
   const hatch = `hatch${id}`;
   const arr = `arr${id}`;
   const fs = ro ? 18 : 10;
