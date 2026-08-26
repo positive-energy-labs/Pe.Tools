@@ -9,7 +9,6 @@ export * from "./context.ts";
 export * from "./system-prompt-capture.ts";
 export * from "./tool-list-capture.ts";
 export * from "./context-breakdown.ts";
-export * from "./transport.ts";
 export * from "./auth/types.ts";
 export * from "./auth/methods.ts";
 export * from "./auth/profiles.ts";

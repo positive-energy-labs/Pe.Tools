@@ -17,13 +17,7 @@ export interface RuntimeThreadInfo extends RuntimeThreadSession {
   cwd?: string;
   createdAt?: string;
   updatedAt?: string;
-  lock?: RuntimeThreadLockInfo;
   metadata?: Record<string, unknown>;
-}
-
-export interface RuntimeThreadLockInfo {
-  status: "unlocked" | "owned" | "locked" | "unknown";
-  ownerPid?: number;
 }
 
 export interface RuntimeThreadMessage {
