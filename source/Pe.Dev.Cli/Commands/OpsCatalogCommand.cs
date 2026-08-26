@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Operations;
+using System.Reflection;
 
 namespace Pe.Dev.Cli;
 
@@ -38,22 +39,8 @@ internal static class OpsCatalogCommand {
             outPath = args[index + 1];
         }
 
-        BridgeOpRegistry.RegisterFrom(typeof(RevitBridgeOps).Assembly);
-        // Handler-bound ops (definitions live in the contracts factories; Revit-side handlers are
-        // bound in Pe.App at runtime). Stub handlers — only Definition feeds the catalog.
-        BridgeOpRegistry.Register(FamilyModelHostOperations.Capture(
-            (_, _, _) => throw new NotSupportedException("catalog projection only")));
-        BridgeOpRegistry.Register(FamilyModelHostOperations.Build(
-            (_, _, _) => throw new NotSupportedException("catalog projection only")));
-        BridgeOpRegistry.Register(FamilyFoundryHostOperations.Plan(
-            (_, _, _) => throw new NotSupportedException("catalog projection only")));
-        BridgeOpRegistry.Register(FamilyFoundryHostOperations.Apply(
-            (_, _, _) => throw new NotSupportedException("catalog projection only")));
-        BridgeOpRegistry.Register(FamilyFoundryHostOperations.Project(
-            (_, _, _) => throw new NotSupportedException("catalog projection only")));
-
-        var operations = BridgeOpRegistry.All
-            .Select(HostOpsCatalogEntry.FromOp)
+        var operations = ReadDefinitions()
+            .Select(HostOpsCatalogEntry.FromDefinition)
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)
             .ToArray();
         var json = JsonConvert.SerializeObject(
@@ -72,5 +59,57 @@ internal static class OpsCatalogCommand {
         }
 
         return 0;
+    }
+
+    private static IReadOnlyList<HostOperationDefinition> ReadDefinitions() {
+        var baseDirectory = AppContext.BaseDirectory;
+        var resolverPaths = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator)
+            .Concat(Directory.EnumerateFiles(baseDirectory, "*.dll"))
+            .Concat(FindRevitReferenceAssemblies())
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        using var context = new MetadataLoadContext(new PathAssemblyResolver(resolverPaths));
+        var definitions = new Dictionary<string, HostOperationDefinition>(StringComparer.Ordinal);
+        foreach (var fileName in new[] {
+                     "Pe.Shared.HostContracts.dll",
+                     "Pe.Revit.Global.dll",
+                     "Pe.Revit.Scripting.dll",
+                     "Pe.App.dll"
+                 }) {
+            var assembly = context.LoadFromAssemblyPath(Path.Combine(baseDirectory, fileName));
+            foreach (var method in assembly.GetTypes().SelectMany(type => type.GetMethods(
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))) {
+                var data = method.GetCustomAttributesData()
+                    .SingleOrDefault(attribute => attribute.AttributeType.FullName == typeof(OpAttribute).FullName);
+                if (data == null)
+                    continue;
+
+                var attribute = OpRegistry.ReadAttribute(data);
+                var definition = OpRegistry.Define(attribute, method, ResolveRuntimeType);
+                if (!definitions.TryAdd(definition.Key, definition))
+                    throw new InvalidOperationException($"Bridge op '{definition.Key}' is registered twice.");
+            }
+        }
+
+        return definitions.Values.ToArray();
+    }
+
+    private static Type ResolveRuntimeType(Type metadataType) {
+        var assembly = Assembly.Load(metadataType.Assembly.GetName());
+        return assembly.GetType(metadataType.FullName!, throwOnError: true)!;
+    }
+
+    private static IEnumerable<string> FindRevitReferenceAssemblies() {
+        var packageRoot = Environment.GetEnvironmentVariable("NUGET_PACKAGES")
+                          ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
+        foreach (var package in new[] { "nice3point.revit.api.revitapi", "nice3point.revit.api.revitapiui" }) {
+            var root = Path.Combine(packageRoot, package);
+            if (!Directory.Exists(root))
+                continue;
+            foreach (var path in Directory.EnumerateFiles(root, "*.dll", SearchOption.AllDirectories)
+                         .Where(path => path.Contains($"{Path.DirectorySeparatorChar}2025.", StringComparison.OrdinalIgnoreCase))
+                         .Where(path => path.Contains("net8.0-windows7.0", StringComparison.OrdinalIgnoreCase)))
+                yield return path;
+        }
     }
 }

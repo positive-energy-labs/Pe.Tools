@@ -9,8 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="8.0.0" />
     <ProjectReference Include="..\Pe.Aps\Pe.Aps.csproj" />
+    <ProjectReference Include="..\Pe.App\Pe.App.csproj" />
     <ProjectReference Include="..\Pe.Dev.RevitAutomation\Pe.Dev.RevitAutomation.csproj" />
+    <ProjectReference Include="..\Pe.Revit.Global\Pe.Revit.Global.csproj" />
+    <ProjectReference Include="..\Pe.Revit.Scripting\Pe.Revit.Scripting.csproj" />
     <ProjectReference Include="..\Pe.Shared.ApsAuth\Pe.Shared.ApsAuth.csproj" />
     <ProjectReference Include="..\Pe.Shared.HostContracts\Pe.Shared.HostContracts.csproj" />
     <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj" />

@@ -19,8 +19,7 @@ const operation = (intent: "read" | "mutate"): HostOperationCatalogEntry => ({
   intent,
   costTier: "cheap",
   visibility: "public",
-  requiresActiveDocument: true,
-  supportedActiveDocumentKind: "Any",
+  needs: "document",
   description: intent,
   searchTerms: [],
   requestExamples: [],
@@ -85,7 +84,6 @@ function make(
 function gatedRun(
   store: ReturnType<typeof createOpsStore>,
   selected: HostOperationCatalogEntry,
-  _activeDocumentId?: string,
 ) {
   const product = bindOpsVerb(
     () =>
@@ -121,25 +119,11 @@ describe("ops route store", () => {
 
   it("allows an observed read and persists its plain receipt", async () => {
     const { store, calls, writes } = make();
-    const gated = gatedRun(store, operation("read"), "projectA.rvt");
-
-    await gated.run();
-
-    expect(gated.why).toBeNull();
-    expect(calls).toHaveBeenCalledOnce();
-    expect(writes.at(-1)?.[0]?.value).toMatchObject({
-      opKey: "revit.context.document-session",
-      target: "observed",
-      observedAt: "2026-08-25T01:02:03.000Z",
-    });
-  });
-
-  it("omits documentId when a document-required operation has no active document", async () => {
-    const { store, calls, writes } = make();
     const gated = gatedRun(store, operation("read"));
 
     await gated.run();
 
+    expect(gated.why).toBeNull();
     expect(calls).toHaveBeenCalledOnce();
     expect(writes.at(-1)?.[0]?.value).toMatchObject({
       opKey: "revit.context.document-session",

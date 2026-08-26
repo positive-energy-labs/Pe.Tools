@@ -4,6 +4,7 @@ import {
   type HostOperationCostTier,
   type HostOperationDefinition,
   type HostOperationIntent,
+  type HostOperationNeeds,
   type HostOperationRequestExample,
   type HostOperationVisibility,
 } from "@pe/host-contracts/contracts";
@@ -130,7 +131,7 @@ type HostOperationSearchOptions = {
   query?: string;
   domain?: string;
   intent?: HostOperationIntent;
-  requiresActiveDocument?: boolean;
+  needs?: HostOperationNeeds;
   limit?: number;
   verbosity?: HostOperationVerbosity;
   visibility?: HostOperationVisibility;
@@ -152,7 +153,7 @@ type HostOperationSearchResult = {
   bestRequestExample?: HostOperationRequestExample;
   usageHint: string;
   searchTerms?: readonly string[];
-  requiresActiveDocument?: boolean;
+  needs?: HostOperationNeeds;
 };
 
 type HostOperationCallResult =
@@ -249,7 +250,7 @@ function searchHostOperations(
     !options.visibility &&
     !options.domain?.trim() &&
     !options.intent &&
-    options.requiresActiveDocument == null;
+    options.needs == null;
   const searchable = browsing
     ? operations.filter((operation) => operation.visibility === "DefaultVisible")
     : operations;
@@ -421,8 +422,7 @@ function matchesFilters(
   return (
     matchesDomain(operation, options.domain) &&
     (!options.intent || operation.intent === options.intent) &&
-    (options.requiresActiveDocument == null ||
-      operation.requiresActiveDocument === options.requiresActiveDocument) &&
+    (!options.needs || operation.needs === options.needs) &&
     (!options.visibility || operation.visibility === options.visibility)
   );
 }
@@ -466,7 +466,7 @@ function toSearchResult(
     key: operation.key,
     displayName: operation.displayName ?? operation.key,
     description: operation.description ?? operation.key,
-    safety: [operation.requiresActiveDocument ? "active-doc" : undefined, operation.costTier]
+    safety: [operation.needs === "nothing" ? undefined : operation.needs, operation.costTier]
       .filter((value): value is string => value != null)
       .join(", "),
     costTier: operation.costTier,
@@ -486,7 +486,7 @@ function toSearchResult(
   return {
     ...result,
     searchTerms: operation.searchTerms ?? [],
-    requiresActiveDocument: operation.requiresActiveDocument ?? false,
+    needs: operation.needs,
   };
 }
 
@@ -640,7 +640,7 @@ function toCapabilityRow(operation: HostOperationDefinition): HostCapabilityMapR
   return {
     key: operation.key,
     description: operation.description ?? operation.displayName ?? operation.key,
-    safety: [operation.requiresActiveDocument ? "active-doc" : undefined, operation.costTier]
+    safety: [operation.needs === "nothing" ? undefined : operation.needs, operation.costTier]
       .filter((value): value is string => value != null && value.length > 0)
       .join(", "),
     inputKind: formatCapabilityInputKind(operation),

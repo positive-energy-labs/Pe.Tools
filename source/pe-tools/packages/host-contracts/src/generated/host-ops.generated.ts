@@ -287,8 +287,7 @@ export namespace HostOpsCatalog {
       intent: string;
       costTier: string;
       visibility: string;
-      requiresActiveDocument: boolean;
-      supportedActiveDocumentKind: string;
+      needs: string;
       description: string;
       searchTerms: string[];
       requestExamples: HostOperationRequestExample[];

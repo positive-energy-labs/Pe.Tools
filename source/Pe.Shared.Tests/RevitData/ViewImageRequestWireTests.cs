@@ -5,7 +5,7 @@ using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Tests;
 
-/// <summary>Wire-shape checks mirroring BridgeOp.JsonSettings for the capture request.</summary>
+/// <summary>Wire-shape checks mirroring Op request serialization for the capture request.</summary>
 [TestFixture]
 public sealed class ViewImageRequestWireTests {
     private static readonly JsonSerializerSettings BridgeSettings = new() {
@@ -21,7 +21,7 @@ public sealed class ViewImageRequestWireTests {
 
     [Test]
     public void Empty_payload_zeroes_ctor_defaults_so_the_service_must_normalize() {
-        // Gotcha: BridgeOp's Newtonsoft settings do NOT honor record ctor defaults — omitted
+        // Gotcha: Op's Newtonsoft settings do NOT honor record ctor defaults — omitted
         // numerics arrive as 0. GetRevitViewImageCore normalizes 0 → 1500px / 8% margin.
         var request = JsonConvert.DeserializeObject<RevitViewImageRequest>("{}", BridgeSettings)!;
         Assert.Multiple(() => {

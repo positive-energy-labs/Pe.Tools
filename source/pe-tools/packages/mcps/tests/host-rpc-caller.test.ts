@@ -12,7 +12,7 @@ const catalog: HostOperationDefinition[] = [
     description: "Read compact current document and selection context.",
     searchTerms: ["agent-context", "summary"],
     intent: "Read",
-    requiresActiveDocument: true,
+    needs: "document",
     costTier: "Cheap",
     requestTypeName: "NoRequest",
     responseTypeName: "RevitAgentContextSummaryData",
@@ -23,7 +23,7 @@ const catalog: HostOperationDefinition[] = [
     description: "Execute an inline or workspace-relative C# script in connected Revit.",
     searchTerms: ["script", "execute", "csharp", "revit"],
     intent: "Mutate",
-    requiresActiveDocument: true,
+    needs: "document",
     costTier: "Mutation",
     requestTypeName: "ExecuteRevitScriptRequest",
     responseTypeName: "ExecuteRevitScriptData",
@@ -34,6 +34,7 @@ const catalog: HostOperationDefinition[] = [
     description: "Create or update the host-owned C# Revit scripting workspace files.",
     searchTerms: ["script", "workspace", "bootstrap"],
     intent: "Mutate",
+    needs: "nothing",
     costTier: "Mutation",
     requestTypeName: "ScriptWorkspaceBootstrapRequest",
     responseTypeName: "ScriptWorkspaceBootstrapData",
@@ -135,6 +136,16 @@ test("derives capability map from the op catalog", async () => {
   expect(result.rendered).toContain("## Context");
 });
 
+test("projects document needs into the safety label", async () => {
+  const results = await new HostRpcCaller({ catalogOverride: catalog }).searchOperations({
+    query: "context summary",
+  });
+
+  expect(Array.isArray(results)).toBe(true);
+  if (!Array.isArray(results)) throw new Error("expected matches projection");
+  expect(results[0].safety).toBe("document, Cheap");
+});
+
 test("hides scripting.* from the catalog projection while keeping it at transport level", async () => {
   const caller = new HostRpcCaller({ catalogOverride: catalog });
 
@@ -180,7 +191,7 @@ test("a bare browse surfaces only the DefaultVisible tier plus a hidden-count hi
       description: "Names/handles index of levels, sheets, views, schedules, families.",
       searchTerms: ["project-index", "levels", "sheets"],
       intent: "Read",
-      requiresActiveDocument: true,
+      needs: "document",
       costTier: "Cheap",
       visibility: "EscalationVisible",
       requestTypeName: "ProjectIndexRequest",
