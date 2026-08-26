@@ -25,6 +25,8 @@ Speak in deep-module words and no others: a **module** is anything with an inter
 6. Feedback early: no shape is selected until each survivor has faced a mock consumer or a spike.
 7. Refine until aligned. Two rounds that add no shape and kill none end the loop.
 
+Score shapes on what they make impossible, never on what past reviews caught. A bar keyed to known findings silently defers every layer nobody has read yet, so the largest correct cut is the one it drops.
+
 If you catch yourself defending one shape before all are on the table, stop; you converged early. The prompt is signal, never the whole picture; `grill` throughout.
 
 Once found, `index` routes. Not every ideal demands implementation; this is an exercise for the user as much as anything. Verdicts persist per `docs`.

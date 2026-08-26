@@ -26,6 +26,8 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 - Alarm at 2× the box. An apostle past twice its time box is surfaced to the user before its report is read. Time on task that felt wrong is a systemic signal, not a nag. Surface it before approving the work. If an apostle's line must be culled, take what it learned that no report carried.
 - Priming is contamination the moment the mission is judgment. The context that makes an apostle fast on more of the same makes it the worst available judge of what it built. Judgment goes down a clean line, always.
 - Cross lines on purpose, and only after the clean readings. Handing one apostle two unrelated bodies is where the new idea comes from. Cross before the clean readings exist and you cannot say what produced it.
+- Convergence means the panel was too wide. When independent readings agree, the agreement is the finding and the extra birds were paid for nothing; widen only where the first readings disagreed.
+- One writing line, one tree. Two lines editing one checkout means every claim must be pinned to a commit to mean anything, and a proof taken while another line was mid-write proves nothing.
 - Leave it better than you found it. Delegation leaves a wake of lost sheep, geriatrics, and rejects. Before a fan-out is reported done, every spent runner, server, watcher, and line is retired; what cannot be retired is one Owed line. A resource no foreseeable future needs is let go. An anti-pattern seen on the way is one Owed line, not a fix.
 
 # Models (Scope: `house`)

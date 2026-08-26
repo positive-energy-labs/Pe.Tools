@@ -55,6 +55,7 @@ Ordinary building is not a stance. It is the primary's own work under whatever l
 | loop | `triangulate` | Lineup and Toile — a product surface is unsettled | yes | no | two dry rounds |
 | slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | - | - | - |
 | slot | `execute` | how anything runs and is proven, this repo | - | - | - |
+| slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | - | - | - |
 | slot | `write` | how anything is written, this house | - | - | - |
 
 Default entry for real work is `ground`. An ungrounded entry is a fresh-perspective move the user may ask for in exploratory phases; it is never the default, and it is named as ungrounded in the reply. Most sessions then enter `triangulate` rounds, a `goal` form, or a `relay`. A pasted failure is `ground` then `diagnose`. Any fan-out passes through `delegate` first, including one you were about to do with the harness Agent tool. `goal` and `relay` are user-only; name their slash command and stop. The vaulted originals and why are in the ledger beside this file.
@@ -89,7 +90,7 @@ A skill changes method, never authorization. Capture, instrumentation, and gloss
 1. Decide with the human. Persist only what code can't say. Split work into provable slices. Verify at an agreed seam.
 2. Object. Before the first edit, say once and in one sentence what you would do differently and why; a repeated direction is a ruling, build it in full. Silence where you disagree is the failure this line exists for.
 3. Quantify every write with a number; divine delta'ed LOC, file topology, dependency tree, complexity, and testability. Restate the plan in your words before building; misalignment is cheapest here.
-4. Recount landmarks and waypoints as they pass. State stance and alignment changes, terminal commands, file paths, wave/round/subagent/mux session name, etc.
+4. Tabulate landmarks and waypoints as they pass. State stance and alignment changes, terminal commands, file paths, wave/round/subagent/mux session name, etc.
 5. A stop is reported with `prove`'s stamp on the claim inside it, or it is not reported as a stop. This is the wall every primary exits through; expect `prove`'s load count to stay near zero while it carries this.
 
 ## Disposition
@@ -97,5 +98,6 @@ A skill changes method, never authorization. Capture, instrumentation, and gloss
 - Talk per `write`, reply register; number anything the user must rule on.
 - Tablute everything. Particularly comparisons, and to emphasize authority or permanence. Clear landmarks are what make a journey feel safe. 
 - A round is over when the reply quotes the ledger `path:line` its verdict landed on. Unquoted is unpersisted.
+- The unit of progress is one rule, with one owner, and one test that fails when the rule is broken. Lines added or deleted are a side effect of that and are never the count reported.
 - Sanctioned autonomous sessions: when the user hands over a session, rule against recorded verdicts in their absence, mark such rulings re-openable.
 - The set checks itself. A check script sits beside this file; the table above is its projection of each skill's directory and frontmatter (`figure`, `stop`, `scope`, `disable-model-invocation`), never hand-edited. It also asserts the kinds, the one-owner-per-trigger rule, that no stance carries anything repo-shaped, and that the set has one home. The `execute` slot names how to run it. A stance edit that does not pass is not landed.

@@ -23,4 +23,5 @@ Mode: the diff must delete at least as much as it adds. If it cannot, say why be
 - Duplicates die to the richer one. Two ways to do a thing is one too many; pick, delete, say which.
 - Docs and comments purge on the same rule: keep the why and the trap, delete the what.
 - Census before any deletion that touches 3+ files or more than one call site: what exists, who calls it, what dies. The census is a deliverable even if nothing else lands.
+- A deletion rides the change that makes the code dead. "Net LOC down" as the only edge invites behavior changes wearing a deletion's label: a graceful return becoming a throw, a guard dropped, an expression rewritten.
 - Stop at the honesty bar. Validation at trust boundaries, data-integrity seams, and proofs stay unless their replacement carries the same proof.
