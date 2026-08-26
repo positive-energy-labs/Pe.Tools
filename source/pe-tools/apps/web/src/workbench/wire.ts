@@ -44,7 +44,7 @@ const imageContent = z
     mediaType: z.string().optional(),
     filename: z.string().optional(),
   })
-  .passthrough();
+  .loose();
 const signalContent = z.object({
   type: z.enum([
     "system_reminder",

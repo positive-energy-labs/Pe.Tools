@@ -7,12 +7,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import { MastraClient } from "@mastra/client-js";
 import { z } from "zod";
 
-import {
-  type RouteStateOutput,
-  type RouteStateSchema,
-  type RouteStateSpec,
-  readRouteState,
-} from "@pe/agent-contracts";
+import { type RouteStateSpec, readRouteState } from "@pe/agent-contracts";
 
 import { type WorkbenchEndpointConfig, peUrl, resolveWorkbenchConfig } from "./config";
 import { parseWireEvent } from "./wire";
@@ -141,10 +136,10 @@ const routeWireAtom = Atom.family((key: string) => {
   return Atom.make(wireStream(resolveWorkbenchConfig(), descriptor));
 });
 
-export function useRouteState<TSchema extends RouteStateSchema>(
+export function useRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
   scope = resolveRouteWorkspaceScope(),
-): RouteStateHandle<RouteStateOutput<TSchema>> {
+): RouteStateHandle<z.infer<TSchema>> {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
   const key = JSON.stringify({
     route: spec.route,

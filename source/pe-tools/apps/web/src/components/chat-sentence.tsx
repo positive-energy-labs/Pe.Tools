@@ -15,6 +15,7 @@ import {
   type RouteStateSpec,
   type SentenceSnapshot,
 } from "@pe/agent-contracts";
+import type { z } from "zod";
 
 import { useChatTarget } from "#/components/chat-target";
 import { Sentence, type SentenceTone } from "#/components/sentence";
@@ -102,7 +103,7 @@ function useStatusLine(staged: CellSummary | null, target: string): SentenceLine
   return sentenceText({ snapshot, clause: "", target: target || undefined, staged, nowMs });
 }
 
-export function ChatSentence({ spec }: { spec?: RouteStateSpec }) {
+export function ChatSentence({ spec }: { spec?: RouteStateSpec<z.ZodType> }) {
   return spec ? <WithRouteDoc spec={spec} /> : <Plain />;
 }
 
@@ -123,7 +124,7 @@ function Plain() {
   return <ChatMount staged={null} />;
 }
 
-function WithRouteDoc({ spec }: { spec: RouteStateSpec }) {
+function WithRouteDoc({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
   const route = useRouteState(spec);
   const staged = useMemo(
     () => (route.slice == null ? null : documentTrichotomySummary(route.slice)),

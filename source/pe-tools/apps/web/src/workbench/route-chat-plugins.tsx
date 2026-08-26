@@ -1,4 +1,5 @@
 import { useState, type ComponentType, type ReactNode } from "react";
+import type { z } from "zod";
 import {
   type FamilyTypesDocument,
   type ParameterLinksDocument,
@@ -39,7 +40,7 @@ export interface RouteChatPluginProps {
 type RouteChatPluginViewProps = Omit<RouteChatPluginProps, "active">;
 
 export interface RouteChatPluginRegistration {
-  spec: RouteStateSpec;
+  spec: RouteStateSpec<z.ZodType>;
   Renderer: ComponentType<RouteChatPluginProps>;
 }
 
