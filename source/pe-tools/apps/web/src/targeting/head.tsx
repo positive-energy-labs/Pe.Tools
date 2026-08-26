@@ -21,7 +21,7 @@ import {
   type Bindings,
   type Runner,
 } from "#/targeting/kit";
-import { terminals, type Link, type Product, type Verb } from "#/targeting/model";
+import { targets, type Link, type Product, type Verb } from "#/targeting/model";
 
 const RUN_CSS =
   "@keyframes tb-run{from{transform:translateX(-100%)}to{transform:translateX(400%)}}";
@@ -35,7 +35,7 @@ function Caption({ b, link }: { b: Bindings; link: Link }) {
       className="face-mono t-caption"
       style={{ color: warn ? "var(--r-caution)" : "var(--r-ink-mute)", lineHeight: 1 }}
     >
-      {link.dir}
+      {link.dir ?? "manage"}
       {link.liveness ? ` · ${link.liveness}` : ""}
       {fresh ? ` · ${fresh}` : ""}
       {f?.basis?.length ? ` | basis ${f.basis.join(" / ")}` : ""}
@@ -180,8 +180,8 @@ export function TargetingHead({
             {product.name}
           </span>
           <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
-            {terminals(product).map((t) => {
-              const dim = !b.demanded.has(t.key);
+            {targets(product).map((t) => {
+              const dim = !product.manages?.includes(t.key) && !b.demanded.has(t.key);
               return (
                 <span
                   key={t.key}

@@ -10,6 +10,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Decided
 
+- 2026-08-25 — A route that owns a trunk declares `Product.manages`; `TargetingHead` reuses the trunk's existing picker, and panes drawing that managed trunk remain available before a binding because they draw its whole feed. `/instances` is the first consumer with `manages: ["world"]`; ordinary routes still print terminals only.
 - 2026-08-25 — World is a trunk, never a terminal: the sentence names documents and files, while the shared `world` trunk names a fused SDK-registry/bridge world by `sdkSessionId ?? "Revit <pid>"` and discloses custody.
 - 2026-08-25 — Workspace scope is deleted. Every route document uses `Scope = { threadId }`. Routes without `?thread` auto-land through `landThread`. No agent read a workspace document, so workspace scope was page memory in a document shape. Consumers: `/family`, `/families`, `/settings`, `/parameter-links`, `/schedule-grid`, and chat panes.
 - 2026-08-25 — `RouteStateSpec.key` and `readRouteState` are deleted. Route documents use `spec.route`; renderers use `parseRouteDoc`.

@@ -100,6 +100,7 @@ test("stop/restart/converge map to --id verbs; stop honors force", () => {
 
 test("status args pass an optional id filter", () => {
   expect(sessionStatusArgs()).toEqual(["session", "status", "--json"]);
+  expect(sessionStatusArgs(undefined, true)).toEqual(["session", "status", "--all", "--json"]);
   expect(sessionStatusArgs("scratch")).toEqual(["session", "status", "--id", "scratch", "--json"]);
 });
 

@@ -6,6 +6,7 @@ import {
   progress,
   refusal,
   seams,
+  targets,
   terminals,
   type Feeds,
   type Product,
@@ -76,6 +77,15 @@ describe("targeting manifest", () => {
   it("terminals are the sentence; trunks (world, rvt, folder) never print", () => {
     expect(terminals(P).map((l) => l.key)).toEqual(["view", "zones", "r10"]);
     expect(pathOf(P, "zones").map((l) => l.key)).toEqual(["world", "rvt", "zones"]);
+  });
+
+  it("adds an explicitly managed trunk to the route targets", () => {
+    expect(targets({ ...P, manages: ["world"] }).map((l) => l.key)).toEqual([
+      "world",
+      "view",
+      "zones",
+      "r10",
+    ]);
   });
 
   it("re-picking a shared trunk clears every descendant, single and multi", () => {

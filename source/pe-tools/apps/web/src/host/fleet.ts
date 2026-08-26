@@ -142,19 +142,14 @@ export function worldClause(worlds: readonly WorldFacts[], selector: TargetSelec
   return " — its world is gone"; // dangling pid/session pin: the process died
 }
 
-/** The one human name for a world: the pe-revit session id, or "your Revit" when observed. */
-export function worldName(world: Pick<WorldFacts, "id" | "custody">): string {
-  return world.custody === "observed" ? "your Revit" : world.id;
-}
-
-function useSessionStatusQuery() {
+function useSessionStatusQuery(all: boolean) {
   // Under HOST_QUERY_KEY so root SSE invalidation refetches it; the interval covers the boot
   // window where no bridge events exist yet.
   // ponytail: 5s poll, always on while mounted; a start-scoped poll if it ever matters.
   return useQuery({
-    queryKey: [...HOST_QUERY_KEY, "", "sessions.status", ""],
+    queryKey: [...HOST_QUERY_KEY, "", "sessions.status", all ? "all" : ""],
     queryFn: async (): Promise<SessionRow[]> => {
-      const response = await fetch("/sessions");
+      const response = await fetch(all ? "/sessions?all=true" : "/sessions");
       if (!response.ok) throw new Error(`session status ${response.status}`);
       // The route relays the CLI envelope untouched, so this is the SDK's own result shape. No
       // `?? []` fallback: an envelope without `sessions` means the contract moved underneath us,
@@ -170,7 +165,7 @@ function useSessionStatusQuery() {
   });
 }
 
-export function useFleet(): {
+export function useFleet(all = false): {
   worlds: WorldFacts[];
   sessions: SessionFacts[];
   isLoading: boolean;
@@ -180,7 +175,7 @@ export function useFleet(): {
   basis: readonly string[];
 } {
   const sessionsQuery = useBridgeSessionsListQuery();
-  const status = useSessionStatusQuery();
+  const status = useSessionStatusQuery(all);
   const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
   return {
     worlds: fuseFleet(status.data ?? [], sessions),

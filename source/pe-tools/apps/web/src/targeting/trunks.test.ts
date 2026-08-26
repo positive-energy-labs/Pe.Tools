@@ -97,6 +97,61 @@ describe("targeting trunks", () => {
       expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
   });
 
+  it("refuses every lifecycle verb for an observed world before HTTP", async () => {
+    const request = vi.spyOn(globalThis, "fetch");
+    const observed: WorldFacts = {
+      id: "bridge-user",
+      custody: "observed",
+      phase: "ready",
+      pid: 77,
+      openDocumentCount: 1,
+    };
+
+    for (const verb of Object.values(worldTrunk.verbs)) {
+      expect(verb.refuse(observed)).toContain("observed world Revit 77 is read-only");
+      await expect(
+        verb.run(observed, { lane: "installed", year: "25", doc: "Model.rvt" }),
+      ).rejects.toThrow("pe-revit does not control its lifecycle");
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("posts the SDK session body for every controlled lifecycle verb", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ result: { state: "ok" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const controlled: WorldFacts = {
+      id: "pe.app-25",
+      custody: "controlled",
+      phase: "ready",
+      pid: 25,
+      openDocumentCount: 1,
+      session: session(),
+    };
+
+    await worldTrunk.verbs.start.run(undefined, {
+      lane: "installed",
+      year: "25",
+      doc: "Model.rvt",
+    });
+    await worldTrunk.verbs.converge.run(controlled);
+    await worldTrunk.verbs.restart.run(controlled);
+    await worldTrunk.verbs.stop.run(controlled);
+
+    expect(
+      request.mock.calls.map(([, init]) => JSON.parse(init?.body as string) as unknown),
+    ).toEqual([
+      { action: "start", lane: "installed", year: "25", doc: "Model.rvt" },
+      { action: "converge", id: "pe.app-25" },
+      { action: "restart", id: "pe.app-25" },
+      { action: "stop", id: "pe.app-25" },
+    ]);
+  });
+
   it("refuses observed document picks before HTTP", async () => {
     const request = vi.spyOn(globalThis, "fetch");
 
@@ -127,12 +182,12 @@ describe("targeting trunks", () => {
     await documentTrunk.pick(session(), "model-a", [cloud]);
     await documentTrunk.pick(session(), local.path, [local]);
 
-    expect(request.mock.calls.map(([, init]) => JSON.parse(String(init?.body)) as unknown)).toEqual(
-      [
-        { path: "recent:Equal title.rvt", id: "pe.app-25", conflictPolicy: "keep" },
-        { path: "C:\\Models\\Local.rvt", id: "pe.app-25" },
-      ],
-    );
+    expect(
+      request.mock.calls.map(([, init]) => JSON.parse(init?.body as string) as unknown),
+    ).toEqual([
+      { path: "recent:Equal title.rvt", id: "pe.app-25", conflictPolicy: "keep" },
+      { path: "C:\\Models\\Local.rvt", id: "pe.app-25" },
+    ]);
   });
 
   it("surfaces an SDK diagnostic when document open has no success receipt", async () => {

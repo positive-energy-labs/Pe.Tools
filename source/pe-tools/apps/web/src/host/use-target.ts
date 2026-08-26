@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import { worldName } from "#/host/fleet";
 import type { SessionFacts } from "#/host/target";
+import { worldTrunk } from "#/targeting/trunks";
 
 // ── world log — client-observed world events, for the thread lane ───────────────────────────────
 
@@ -37,7 +37,7 @@ export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
           atMs,
           kind: "session-appeared",
           sessionId: id,
-          label: `${worldName({ id: s.sdkSessionId ?? s.sessionId, custody: s.custody })} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
+          label: `${worldTrunk.label({ id: s.sdkSessionId ?? s.sessionId, pid: s.processId, session: s })} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
         });
       } else if (old.activeDocumentId !== s.activeDocumentId) {
         events.push({

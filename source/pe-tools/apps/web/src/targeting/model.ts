@@ -90,6 +90,8 @@ export interface Product {
   key: string;
   name: string;
   links: Link[];
+  /** Trunks this route owns: render their picker even though they are not sentence terminals. */
+  manages?: string[];
   stages: Stage[];
   panes: Pane[];
 }
@@ -100,6 +102,10 @@ export const isTerminal = (l: Link) => l.dir !== undefined;
 
 /** Terminals in declaration order — the sentence, big → small. */
 export const terminals = (p: Product) => p.links.filter(isTerminal);
+
+/** Sentence terminals plus the trunks this route exists to manage, in declaration order. */
+export const targets = (p: Product) =>
+  p.links.filter((link) => isTerminal(link) || p.manages?.includes(link.key));
 
 /** Root → leaf chain for a link (the picker's crumbs). */
 export function pathOf(product: Product, key: string): Link[] {
@@ -173,8 +179,7 @@ export function seams(p: Product, feeds: Feeds): Seam[] {
   for (const l of p.links) {
     const f = feeds[l.key];
     if (f?.seam) out.push({ kind: "options", subject: l.key, needs: f.seam.needs });
-    if (f?.lane === "fixture")
-      out.push({ kind: "fixture", subject: l.key, needs: l.needs });
+    if (f?.lane === "fixture") out.push({ kind: "fixture", subject: l.key, needs: l.needs });
   }
   for (const s of p.stages)
     for (const v of s.verbs)

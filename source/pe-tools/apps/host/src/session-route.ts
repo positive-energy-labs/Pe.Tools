@@ -141,9 +141,9 @@ export function sessionCliArgs(
   }
 }
 
-/** GET (status/list) CLI args; `id` narrows to one session. */
-export function sessionStatusArgs(id?: string | null): string[] {
-  return sessionStatusArgv(id?.trim() ? { id: id.trim() } : {});
+/** GET (status/list) CLI args; `id` narrows to one session, `all` includes the graveyard. */
+export function sessionStatusArgs(id?: string | null, all = false): string[] {
+  return sessionStatusArgv(id?.trim() ? { id: id.trim() } : all ? { all: true } : {});
 }
 
 type SessionCliRunner<R = never> = (args: readonly string[]) => Effect.Effect<string, unknown, R>;
@@ -265,9 +265,10 @@ function jsonResponse(outcome: SessionCliOutcome) {
 
 const sessionsStatusRoute = HttpRouter.add("GET", "/sessions", (req) =>
   Effect.gen(function* () {
-    const id = new URL(req.url, "http://localhost").searchParams.get("id");
+    const search = new URL(req.url, "http://localhost").searchParams;
+    const id = search.get("id");
     const outcome = yield* executeSessionCli(
-      sessionStatusArgs(id),
+      sessionStatusArgs(id, search.get("all") === "true"),
       runPeRevitCli,
       STATUS_TIMEOUT_MS,
       { action: "status", id: id ?? undefined },

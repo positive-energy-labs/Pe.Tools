@@ -165,11 +165,7 @@ export interface Runner {
  * Projects the store's serialized verb bracket so the head knows which verb is in flight and which
  * links it touches. Every `Verb.run` calls a store action that owns the bracket.
  */
-export function useRunner(
-  product: Product,
-  b: Bindings,
-  busyLabel: string | null = null,
-): Runner {
+export function useRunner(product: Product, b: Bindings, busyLabel: string | null = null): Runner {
   const busyVerb = product.stages
     .flatMap((stage) => stage.verbs)
     .find((verb) => verb.key === busyLabel);
@@ -206,6 +202,7 @@ export function paneState(
   for (const k of pane.draws) {
     const link = product.links.find((l) => l.key === k);
     if (!link) continue;
+    if (product.manages?.includes(k)) continue;
     if (!b.isBound(link)) return { ok: false, reason: `${pane.label} draws from ${k} — unbound` };
     if (!b.demanded.has(k) && link.dir !== undefined)
       return {
@@ -270,7 +267,7 @@ const POP: React.CSSProperties = {
 };
 
 /**
- * ONE PICKER PER TERMINAL. Closed: the leaf label when the chain is picked through, else
+ * ONE PICKER PER TARGET. Closed: the leaf label when the chain is picked through, else
  * `<deepest bound> › <next placeholder>` in caution (where the pick stopped). Open: the whole
  * chain as crumbs, a search field, and the current level's list; picking a level auto-advances.
  * Keyed by the terminal; a trunk two terminals share re-picks from either (state is per link).
@@ -319,7 +316,7 @@ export function Picker({
   const closedText = p.complete ? (leafLabel ?? link.placeholder) : p.next!.placeholder;
   const title = [
     chain.map((l) => `${l.key}: ${b.labelOf(l) ?? "unbound"}`).join(" › "),
-    `${link.dir}${link.liveness ? ` · ${link.liveness}` : ""}`,
+    `${link.dir ?? "manage"}${link.liveness ? ` · ${link.liveness}` : ""}`,
     freshnessWord(b, link),
     feed?.note ?? null,
     p.complete ? null : `needs ${p.next!.needs}`,
