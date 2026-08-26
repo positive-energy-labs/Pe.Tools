@@ -2,65 +2,57 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
+import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { createRuntimeRequestContext, resolveRuntimeThreadStateStore } from "@pe/runtime";
-import { bundledPeaSkills, peaProductHomeEnvVar, peaStandardSkillsRoot } from "@pe/mcps";
+import {
+  bundledPeaSkills,
+  peaProductHomeEnvVar,
+  peaProductToolCatalog,
+  peaProductTools,
+  peaStandardSkillsRoot,
+} from "@pe/mcps";
 import {
   createPeaCliCommand,
   createPeaRuntime,
-  defaultPeaRuntimeToolCatalog,
-  defaultPeaRuntimeToolProfile,
   getPeaCliCommandNames,
   PeaContextSignalProvider,
   PeaContextStateProcessor,
   type PeaContextStateSignalArgs,
 } from "../src/index.ts";
-import { createPeaRuntimeAuthProfile } from "../src/runtime.ts";
+import { createPeaPromptRuntime } from "../src/prompt.ts";
 
 const slowRuntimeTestTimeout = 30_000;
+
+test("pea product tools and catalog are the same exact 14-tool surface", () => {
+  const names = [
+    "pe_status",
+    "pe_logs",
+    "host_operation_search",
+    "host_operation_call",
+    "request_access",
+    "read_image",
+    "capture_view",
+    "revit_api_docs_search",
+    "revit_api_docs_fetch",
+    "script_bootstrap",
+    "script_execute",
+    "route_state_read",
+    "route_state_apply",
+    "route_command",
+  ];
+
+  expect(Object.keys(peaProductTools)).toEqual(names);
+  expect([...peaProductToolCatalog.keys()]).toEqual(names);
+  expect(peaProductToolCatalog.get("host_operation_call")?.kind).toBe("execute");
+  expect([...peaProductToolCatalog.values()].every((tool) => tool.kind.length > 0)).toBe(true);
+  expect([...peaProductToolCatalog.values()].some((tool) => "requiresRevit" in tool)).toBe(false);
+});
 
 test("pea composes product commands without dev", () => {
   expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["host", "script"]));
   expect(getPeaCliCommandNames()).not.toContain("dev");
   // The standalone `web` subcommand was removed when the host absorbed the web-server path.
   expect(getPeaCliCommandNames()).not.toContain("web");
-});
-
-test("pea defaults to Pea Cloud Gateway auth", () => {
-  const auth = createPeaRuntimeAuthProfile();
-
-  expect(auth.descriptor.source).toBe("gateway");
-  expect(auth.descriptor.methods.map((method) => method.id)).toEqual(["pea-cloud-gateway"]);
-  expect(auth.descriptor.metadata).toEqual({ gateway: "mastra", gatewayAuthority: "pea-cloud" });
-});
-
-test("pea can opt out of cloud auth for local provider-key use", () => {
-  const auth = createPeaRuntimeAuthProfile({ noCloudAuth: true });
-
-  expect(auth.descriptor.source).toBe("api-key");
-  expect(auth.descriptor.methods.map((method) => method.id)).toEqual(["openai-api-key"]);
-  expect(auth.descriptor.metadata).toBeUndefined();
-});
-
-test("pea exports the product tool profile used by the default runtime", () => {
-  expect(defaultPeaRuntimeToolProfile.id).toBe("pea-product");
-  expect(
-    [...defaultPeaRuntimeToolCatalog.keys()].sort((left, right) => left.localeCompare(right)),
-  ).toEqual([
-    "capture_view",
-    "host_operation_call",
-    "host_operation_search",
-    "pe_logs",
-    "pe_status",
-    "read_image",
-    "request_access",
-    "revit_api_docs_fetch",
-    "revit_api_docs_search",
-    "route_command",
-    "route_state_apply",
-    "route_state_read",
-    "script_bootstrap",
-    "script_execute",
-  ]);
 });
 
 test("pea root command exposes ACP stdio mode without the old protocol stack", () => {
@@ -134,6 +126,63 @@ test(
     } finally {
       await runtime.close?.();
       await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  },
+  slowRuntimeTestTimeout,
+);
+
+test(
+  "TUI and prompt share native identity, tools, model, and trusted rules without Host contact",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pea-entrypoints-"));
+    const workspaceRoot = path.join(root, "workspace");
+    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
+    const previousProductHome = process.env[peaProductHomeEnvVar];
+    const hostVariable = hostProcessIdentity.hostBaseUrlVariable;
+    const previousHost = process.env[hostVariable];
+    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
+    process.env[peaProductHomeEnvVar] = path.join(root, "product-home");
+
+    try {
+      const tui = await createPeaRuntime({
+        accessLevel: "trusted",
+        hostBaseUrl: "http://127.0.0.1:1",
+        workspaceRoot,
+      });
+      if (!tui.session) throw new Error("Expected TUI runtime session.");
+      const tuiSnapshot = {
+        resourceId: tui.session.identity.getResourceId(),
+        workspace: tui.workspace,
+        tools: Object.keys(await tui.controller.getCurrentAgent(tui.session).listTools()).sort(),
+        model: tui.session.model.get(),
+        rules: tui.session.permissions.getRules(),
+        yolo: tui.session.state.get().yolo,
+      };
+      await tui.close?.();
+
+      process.env[hostVariable] = "http://127.0.0.1:2";
+      const prompt = await createPeaPromptRuntime({ prompt: "unused", workspaceRoot });
+      const promptSnapshot = {
+        resourceId: prompt.session.identity.getResourceId(),
+        workspace: prompt.workspace,
+        tools: Object.keys(
+          await prompt.controller.getCurrentAgent(prompt.session).listTools(),
+        ).sort(),
+        model: prompt.session.model.get(),
+        rules: prompt.session.permissions.getRules(),
+        yolo: prompt.session.state.get().yolo,
+      };
+      await prompt.close?.();
+
+      expect(promptSnapshot).toEqual(tuiSnapshot);
+      expect(promptSnapshot.yolo).toBe(false);
+    } finally {
+      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
+      if (previousProductHome === undefined) delete process.env[peaProductHomeEnvVar];
+      else process.env[peaProductHomeEnvVar] = previousProductHome;
+      if (previousHost === undefined) delete process.env[hostVariable];
+      else process.env[hostVariable] = previousHost;
     }
   },
   slowRuntimeTestTimeout,
@@ -227,7 +276,7 @@ test(
     try {
       expect(runtime.session?.model.get()).toBe("openai/gpt-5.6-terra");
       expect(runtime.session?.state.get()).toEqual(
-        expect.objectContaining({ yolo: true, thinkingLevel: "high" }),
+        expect.objectContaining({ yolo: false, thinkingLevel: "high" }),
       );
     } finally {
       await runtime.close?.();

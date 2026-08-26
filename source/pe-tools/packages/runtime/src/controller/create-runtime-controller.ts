@@ -6,7 +6,6 @@ import {
 import { Mastra } from "@mastra/core/mastra";
 import { analyticsEnabled, boundedPayload, capture } from "../analytics.ts";
 import { createRuntimeThreadLock } from "../thread-lock.ts";
-import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
 import type {
   RuntimeCreateRequest,
@@ -15,8 +14,6 @@ import type {
   RuntimeWorkspaceInfo,
 } from "../runtime.ts";
 import type { RuntimeStorageProfile } from "../storage/profiles.ts";
-import type { RuntimeToolProfile, RuntimeToolSource } from "@pe/agent-contracts";
-import { guardRuntimeToolsForAccessPolicy } from "@pe/agent-contracts";
 
 export type RuntimeControllerConfig<
   TState extends Record<string, unknown> = Record<string, unknown>,
@@ -41,10 +38,7 @@ export interface CreateRuntimeControllerOptions<
   controller?: TController;
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
-  toolProfile?: RuntimeToolProfile;
-  toolCatalog?: RuntimeToolSource;
   workspace?: RuntimeWorkspaceInfo;
-  auth?: RuntimeAuthProfile;
   authStorage?: TServices["authStorage"];
   hookManager?: TServices["hookManager"];
   mcpManager?: TServices["mcpManager"];
@@ -130,7 +124,6 @@ export async function createRuntimeController<
     session,
     memory,
     workspace: options.workspace,
-    auth: options.auth,
     authStorage: options.authStorage,
     hookManager: options.hookManager,
     mcpManager: options.mcpManager,
@@ -247,14 +240,6 @@ async function resolveRuntimeControllerConfig<
       ? await options.memoryProfile.createMemory({ storage, request, config: options.config })
       : undefined);
 
-  const tools = options.config.tools ?? options.toolProfile?.tools;
-  const toolCatalog = options.toolCatalog ?? options.toolProfile?.catalog;
-  const guardedTools =
-    typeof tools === "function"
-      ? tools
-      : tools
-        ? guardRuntimeToolsForAccessPolicy(tools, toolCatalog)
-        : undefined;
   const threadLock =
     options.config.threadLock ??
     createRuntimeThreadLock({ storageProfileKind: options.storageProfile?.kind });
@@ -263,7 +248,6 @@ async function resolveRuntimeControllerConfig<
     ...options.config,
     ...(storage ? { storage } : {}),
     ...(memory ? { memory } : {}),
-    ...(guardedTools ? { tools: guardedTools } : {}),
     threadLock,
   };
 }

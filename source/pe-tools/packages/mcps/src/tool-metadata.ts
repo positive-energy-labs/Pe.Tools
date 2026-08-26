@@ -1,74 +1,22 @@
-import { createRuntimeToolCatalog, type RuntimeToolCatalog } from "@pe/agent-contracts";
+import type { RuntimeToolCatalog, RuntimeToolKind } from "@pe/agent-contracts";
 
-export const peaProductToolCatalog: RuntimeToolCatalog = createRuntimeToolCatalog({
-  pe_status: {
-    title: "Pe Status",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  pe_logs: {
-    title: "Pe Logs",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  host_operation_search: {
-    title: "Host Operation Search",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  host_operation_call: {
-    title: "Host Operation Call",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  request_access: {
-    title: "Request Access",
-    kind: "edit",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  read_image: {
-    title: "Read Image",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  capture_view: {
-    title: "Capture View",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  revit_api_docs_search: {
-    title: "Revit API Docs Search",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  revit_api_docs_fetch: {
-    title: "Revit API Docs Fetch",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  script_bootstrap: {
-    title: "Script Bootstrap",
-    kind: "edit",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  script_execute: {
-    title: "Script Execute",
-    kind: "execute",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  route_state_read: {
-    title: "Route State Read",
-    kind: "read",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  route_state_apply: {
-    title: "Route State Apply",
-    kind: "edit",
-    provenance: { source: "app", label: "Pea product" },
-  },
-  route_command: {
-    title: "Route Command",
-    kind: "execute",
-    provenance: { source: "app", label: "Pea product" },
-  },
-});
+const kinds = {
+  pe_status: "read",
+  pe_logs: "read",
+  host_operation_search: "read",
+  host_operation_call: "execute",
+  request_access: "edit",
+  read_image: "read",
+  capture_view: "read",
+  revit_api_docs_search: "read",
+  revit_api_docs_fetch: "read",
+  script_bootstrap: "edit",
+  script_execute: "execute",
+  route_state_read: "read",
+  route_state_apply: "edit",
+  route_command: "execute",
+} as const satisfies Record<string, RuntimeToolKind>;
+
+export const peaProductToolCatalog: RuntimeToolCatalog = new Map(
+  Object.entries(kinds).map(([name, kind]) => [name, { name, kind }]),
+);

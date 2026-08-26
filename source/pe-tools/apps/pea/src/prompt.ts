@@ -7,42 +7,18 @@
  * JSON on stdout. Relocated from the old peco `talk_to_pea` worker; the MCP toolset stays
  * agent-free and harnesses talk to Pea through this CLI mode instead.
  */
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { hostname } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Agent } from "@mastra/core/agent";
-import type { AgentControllerRequestContext, MastraDBMessage } from "@mastra/core/agent-controller";
-import { defaultGateways, type MastraModelConfig } from "@mastra/core/llm";
-import type { RequestContext } from "@mastra/core/request-context";
-import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
-import {
-  createMastraCodeAuthStorage,
-  createPeaProductStateStorageProfile,
-  createRuntimeController,
-  createRuntimeMemoryProfile,
-  loadStoredMastraCodeApiKeysIntoEnv,
-  resolveRuntimeModel,
-} from "@pe/runtime";
-import {
-  HostRpcCaller,
-  configurePeaProductToolContext,
-  defaultPeaAgentModelId,
-  materializeBundledPeaSkills,
-  peaProductToolProfile,
-  peaProductTools,
-  resolvePeaProductHomePath,
-  resolvePeaSkillPaths,
-  resolveWorkspaceKey,
-} from "@pe/mcps";
+import type { MastraDBMessage } from "@mastra/core/agent-controller";
+import { resolvePeaProductHomePath } from "@pe/mcps";
+import { createPeaRuntime, type PeaRuntimeHandle } from "@pe/runtime/pea";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import { sourceHostServiceName } from "@pe/host-contracts/service-identity";
 import { ensureRunning } from "@pe/host-contracts/pe-service";
 
-const peaConfigDir = ".pea";
 const runtimeCloseTimeoutMs = 5000;
 const sourceHostStartupTimeoutMs = 45_000;
 export const defaultPeaPromptTimeoutSeconds = 900;
@@ -77,9 +53,8 @@ function traceSessionEvents(session: PeaPromptSession): void {
   });
 }
 
-type PeaPromptRuntime = {
+type PeaPromptRuntime = PeaRuntimeHandle & {
   session: PeaPromptSession;
-  close?: () => Promise<void> | void;
 };
 
 type PeaPromptMessage = Pick<MastraDBMessage, "id" | "role" | "content">;
@@ -177,105 +152,17 @@ function withTimeout<T>(task: Promise<T> | T, timeoutMs: number): Promise<T> {
   });
 }
 
-async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPromptRuntime> {
+export async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPromptRuntime> {
+  const workspaceRoot = path.resolve(request.workspaceRoot ?? resolvePeaProductHomePath());
   const hostBaseUrl = await ensureTsHostRunning();
-  const workspaceKey = resolveWorkspaceKey();
-  configurePeaProductToolContext({ hostBaseUrl, workspaceKey });
-
-  const cwd = request.workspaceRoot
-    ? path.resolve(request.workspaceRoot)
-    : await resolvePeaPromptCwd(hostBaseUrl, workspaceKey);
-  // Bootstrap (or the explicit headless workspace root) resolves the real product home. Skills
-  // must live under the contained workspace filesystem's basePath (= cwd) or discovery silently
-  // rejects the skills root and the skill list comes up empty.
-  const productHomePath = resolvePeaProductHomePath({ productHomePath: cwd });
-  process.chdir(cwd);
-
-  await materializeBundledPeaSkills({ productHomePath });
-
-  const authStorage = await createMastraCodeAuthStorage();
-  loadStoredMastraCodeApiKeysIntoEnv(authStorage);
-  const agent = new Agent({
-    id: "pea-agent",
-    name: "Pea Revit Agent",
-    description: "High-trust Revit/operator agent for Positive Energy tooling.",
-    instructions: peaPromptInstructions,
-    model: ({ requestContext }) => resolveCurrentModel(requestContext, defaultPeaAgentModelId),
-    tools: peaProductTools,
+  const handle = await createPeaRuntime({
+    workspaceRoot,
+    hostBaseUrl,
+    protocol: "test",
+    accessLevel: "trusted",
   });
-  const workspace = new Workspace({
-    id: "pea-workspace",
-    name: "Pea Workspace",
-    filesystem: new LocalFilesystem({ basePath: cwd, contained: true }),
-    sandbox: new LocalSandbox({ workingDirectory: cwd, env: process.env }),
-    skills: resolvePeaSkillPaths({ productHomePath }),
-  });
-  const handle = await createRuntimeController({
-    request: { protocol: "test", cwd, workspaceRoot: cwd },
-    config: {
-      id: "pea",
-      resourceId: createLocalResourceId(cwd),
-      workspace,
-      modes: [
-        {
-          id: "agent",
-          name: "Agent",
-          default: true,
-          defaultModelId: defaultPeaAgentModelId,
-          agent,
-        },
-      ],
-      gateways: defaultGateways,
-      tools: peaProductTools,
-      initialState: {
-        currentModelId: defaultPeaAgentModelId,
-        productHomePath,
-        configDir: peaConfigDir,
-        // Match the interactive pea runtime (apps/pea/src/runtime.ts): without yolo the
-        // agent-controller runs with requireToolApproval=true and every tool call parks on
-        // an interactive approval gate that this headless mode can never answer.
-        yolo: true,
-        thinkingLevel: "high",
-      },
-    },
-    storageProfile: createPeaProductStateStorageProfile(),
-    memoryProfile: createRuntimeMemoryProfile({ id: "pea-memory" }),
-    toolProfile: peaProductToolProfile,
-    workspace: { cwd, root: cwd },
-    authStorage,
-    metadata: {
-      runtimeId: "pea",
-      hostBaseUrl,
-      workspaceKey,
-      protocol: "pea_prompt",
-    },
-  });
-
   if (!handle.session) throw new Error("Expected Pea prompt runtime session.");
-  return { session: handle.session, close: handle.close };
-}
-
-const peaPromptInstructions = `You are Positive Energy Agent, Pea: the deployed Revit/operator workbench for MEP, BIM, and architecture practitioners.
-Use Pea product tools to inspect host/Revit state, run approved scripts, and produce operator-facing answers. Stay inside the deployed product posture: do not inspect repo source or present build/dev-lane internals as user-facing facts. Prefer small observable steps, say what you verified, and be explicit when live Revit evidence is unavailable.`;
-
-async function resolvePeaPromptCwd(hostBaseUrl: string, workspaceKey: string): Promise<string> {
-  // Untargeted: the broker resolves the single connected session (observed OR controlled — a
-  // pe-revit-started Revit is as much the product home as the user's own) and refuses with the
-  // session listing when several are connected. Pinning `observed` here made a controlled-only
-  // machine unable to start a turn at all (BB-1 F-3/F-12, 2026-08-20).
-  const client = new HostRpcCaller({ hostBaseUrl: hostBaseUrl });
-  try {
-    const bootstrap = await client.call("scripting.workspace.bootstrap", {
-      workspaceKey,
-    });
-    if (!bootstrap.productHomePath) throw new Error("bootstrap returned no productHomePath");
-    return path.resolve(bootstrap.productHomePath);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `Unable to resolve Pe.Tools product home through the TS host at ${hostBaseUrl}: ${detail}`,
-    );
-  }
+  return handle as PeaPromptRuntime;
 }
 
 async function ensureTsHostRunning(): Promise<string> {
@@ -366,26 +253,6 @@ async function resolveInstalledHostLaunch(): Promise<{
     const parent = path.dirname(directory);
     if (parent === directory) return null;
   }
-}
-
-function resolveCurrentModel(
-  requestContext: RequestContext,
-  fallbackModelId: string,
-): Promise<MastraModelConfig> {
-  const controller = requestContext.get("controller") as
-    | AgentControllerRequestContext<{ currentModelId?: string }>
-    | undefined;
-  const modelId =
-    controller?.session.modelId || controller?.getState().currentModelId || fallbackModelId;
-  return resolveRuntimeModel(modelId, requestContext);
-}
-
-function createLocalResourceId(cwd: string): string {
-  const digest = createHash("sha256")
-    .update(`${hostname()}\n${path.resolve(cwd)}`)
-    .digest("hex")
-    .slice(0, 16);
-  return `pea:${digest}`;
 }
 
 async function sendPeaMessageWithTimeout(

@@ -112,8 +112,7 @@ const recordMastraDegrade = (error: unknown) =>
  * Builds the pea runtime AFTER the server has bound (this layer depends on `HttpServer`), so the
  * bound loopback address is the runtime's `hostBaseUrl` — pea's product tools call our own port,
  * no cross-process hop. Depending on `HttpServer` also sequences this layer after bind; a brief
- * routes-404 window during startup is acceptable. `LocalSandbox` captures `process.env` at acquire
- * time, so constructing here (layer build, after any lane-env mutation is settled) is correct.
+ * routes-404 window during startup is acceptable.
  */
 export const MastraRuntimeLive = Layer.effect(
   MastraRuntime,

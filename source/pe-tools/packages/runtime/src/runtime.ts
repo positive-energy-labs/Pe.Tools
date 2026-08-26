@@ -4,7 +4,6 @@ import type {
   Session,
 } from "@mastra/core/agent-controller";
 import type { Mastra } from "@mastra/core/mastra";
-import type { RuntimeAuthProfile } from "./auth/types.ts";
 import type { RuntimeProtocol } from "./events.ts";
 
 export interface RuntimeThreadSession {
@@ -72,7 +71,6 @@ export interface RuntimeHandle<
    *  clones (forking) that still remap observational memory. */
   memory?: AgentControllerConfig<TState>["memory"];
   workspace?: RuntimeWorkspaceInfo;
-  auth?: RuntimeAuthProfile;
   authStorage?: TServices["authStorage"];
   hookManager?: TServices["hookManager"];
   mcpManager?: TServices["mcpManager"];

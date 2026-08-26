@@ -1,60 +1,85 @@
 import path from "node:path";
 import { Agent } from "@mastra/core/agent";
-import type { AgentController, AgentControllerRequestContext } from "@mastra/core/agent-controller";
-import { defaultGateways, type MastraModelConfig } from "@mastra/core/llm";
+import type {
+  AgentController,
+  AgentControllerRequestContext,
+  AvailableModel,
+  PermissionPolicy,
+  PermissionRules,
+  ToolCategory,
+} from "@mastra/core/agent-controller";
+import type { MastraModelConfig } from "@mastra/core/llm";
 import type { InputProcessor } from "@mastra/core/processors";
 import type { RequestContext } from "@mastra/core/request-context";
 import { TaskSignalProvider } from "@mastra/core/signals";
 import { LocalFilesystem, LocalSandbox, Workspace } from "@mastra/core/workspace";
+import { createAuthStorage } from "@mastra/code-sdk";
+import { createMastraCodeGateway, resolveModel } from "@mastra/code-sdk/agents/model";
+import { getToolCategory, getToolsForCategory } from "@mastra/code-sdk/permissions";
+import {
+  accessLevelFromPermissionRules,
+  assertRuntimeToolCatalogMatchesTools,
+  permissionRulesForAccessLevel,
+  type RuntimeAccessLevel,
+  type RuntimeToolKind,
+} from "@pe/agent-contracts";
 import {
   bundledPeaSkills,
   configurePeaProductToolContext,
-  defaultPeaAgentModelId,
   materializeBundledPeaSkills,
-  peaProductToolProfile,
+  peaProductToolCatalog,
   peaProductTools,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
-import {
-  createMastraCodeAuthStorageContext,
-  type MastraCodeAuthStorage,
-} from "./auth/mastracode-auth-storage.ts";
-import { createPeaCloudGatewayRuntimeAuthProfile } from "./auth/profiles.ts";
-import type { RuntimeAuthProfile } from "./auth/types.ts";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
-import { createRuntimeToolCategoryResolver } from "@pe/agent-contracts";
 import { createRuntimeMemoryOptions, createRuntimeMemoryProfile } from "./memory/profiles.ts";
-import { resolveRuntimeModel } from "./models/resolve.ts";
 import type { RuntimeCreateRequest, RuntimeHandle, RuntimeHandleServices } from "./runtime.ts";
 import { createPeaProductStateStorageProfile } from "./storage/profiles.ts";
 import { createSystemPromptCapture } from "./system-prompt-capture.ts";
 import { createToolListCapture } from "./tool-list-capture.ts";
-import type { RuntimeToolProfile } from "@pe/agent-contracts";
 import { PeaContextSignalProvider } from "./pea-context-signals.ts";
 import { peaAgentInstructions } from "./pea-instructions.ts";
 
 export { peaAgentInstructions } from "./pea-instructions.ts";
 export * from "./pea-context-signals.ts";
 
-export const peaRuntimeToolProfile = peaProductToolProfile;
-export const defaultPeaRuntimeToolProfile: RuntimeToolProfile = peaRuntimeToolProfile;
-export const defaultPeaRuntimeToolCatalog = peaRuntimeToolProfile.catalog;
+export const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
 
 const peaAgentName = "Pea Revit Agent";
 const peaAgentDescription = "High-trust Revit/operator agent for Positive Energy tooling.";
+const toolCategories: ToolCategory[] = ["read", "edit", "execute", "mcp", "other"];
+const permissionPolicies = new Set<PermissionPolicy>(["allow", "ask", "deny"]);
+const toolKindToCategory: Record<RuntimeToolKind, ToolCategory> = {
+  read: "read",
+  search: "read",
+  fetch: "read",
+  think: "read",
+  edit: "edit",
+  delete: "edit",
+  execute: "execute",
+  other: "other",
+};
+
+type PeaAuthStorage = ReturnType<typeof createAuthStorage>;
+type PeaRuntimeState = Record<string, unknown> & {
+  currentModelId?: string;
+  permissionRules?: unknown;
+  yolo?: boolean;
+};
 
 export type PeaRuntimeServices = RuntimeHandleServices & {
-  authStorage: MastraCodeAuthStorage;
+  authStorage: PeaAuthStorage;
   hookManager: undefined;
   mcpManager: undefined;
 };
 
-export type PeaRuntimeHandle<TState extends Record<string, unknown> = Record<string, unknown>> =
-  RuntimeHandle<TState, PeaRuntimeServices, AgentController<TState>>;
-
-export type PeaRuntimeAuthSource = "gateway" | "auto" | "api-key" | "oauth" | "mastra-gateway";
+export type PeaRuntimeHandle = RuntimeHandle<
+  PeaRuntimeState,
+  PeaRuntimeServices,
+  AgentController<PeaRuntimeState>
+>;
 
 export interface PeaTuiRuntimeOptions {
   cwd?: string;
@@ -62,8 +87,7 @@ export interface PeaTuiRuntimeOptions {
   hostBaseUrl?: string;
   workspaceKey?: string;
   modelId?: string;
-  authSource?: PeaRuntimeAuthSource;
-  noCloudAuth?: boolean;
+  accessLevel?: RuntimeAccessLevel;
   protocol?: RuntimeCreateRequest["protocol"];
 }
 
@@ -72,110 +96,80 @@ export async function createPeaRuntime(
 ): Promise<PeaRuntimeHandle> {
   const productHomePath = resolvePeaProductHomePath();
   const workspaceRoot = path.resolve(options.workspaceRoot ?? productHomePath);
-  // Seed only the EXPLICIT host override; the product tools resolve the live URL per call, so a
-  // host restart on a new port (or a host started after pea) is picked up without reconstruction.
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
   configurePeaProductToolContext({ hostBaseUrl: options.hostBaseUrl, workspaceKey });
+  assertRuntimeToolCatalogMatchesTools(peaProductTools, peaProductToolCatalog);
 
-  const authStorageContext = await createMastraCodeAuthStorageContext();
-  const authStorage = authStorageContext.storage;
+  const authStorage = createAuthStorage();
+  const gateway = createMastraCodeGateway({
+    mastraGatewayBaseUrl: (process.env.MASTRA_GATEWAY_URL ?? "https://gateway-api.mastra.ai")
+      .replace(/\/+$/, "")
+      .replace(/\/v1$/, ""),
+    mastraGatewayApiKey: process.env.MASTRA_GATEWAY_API_KEY,
+    routeThroughMastraGateway: false,
+    credentialStore: authStorage,
+  });
   await materializeBundledPeaSkills({ productHomePath });
 
   const promptCapture = createSystemPromptCapture({
     content: peaAgentInstructions,
     source: "Pea agent instructions",
   });
-  // Captures the exact tool list at the model boundary so the workbench can show
-  // position 0 of the request (the most cache-volatile slice). MCP tools, when a
-  // runtime has them, ride along automatically — they're in the resolved list.
   const toolCapture = createToolListCapture();
-  const auth = createPeaRuntimeAuthProfile({
-    source: options.authSource,
-    noCloudAuth: options.noCloudAuth,
-  });
   const storageProfile = createPeaProductStateStorageProfile();
-  const memoryProfile = createRuntimeMemoryProfile<Record<string, unknown>>({ id: "pea-memory" });
+  const memoryProfile = createRuntimeMemoryProfile<PeaRuntimeState>({ id: "pea-memory" });
   const memoryOptions = createRuntimeMemoryOptions(undefined);
   const request = {
     protocol: options.protocol ?? "tui",
     cwd: workspaceRoot,
     workspaceRoot,
   };
+  let controller: AgentController<PeaRuntimeState> | undefined;
 
-  return createRuntimeController<Record<string, unknown>, PeaRuntimeServices>({
+  const handle = await createRuntimeController<PeaRuntimeState, PeaRuntimeServices>({
     request,
     config: {
       id: "pea",
       resourceId: createLocalResourceId("pea", workspaceRoot),
       workspace: createPeaWorkspace({ productHomePath, workspaceRoot }),
-      modes: [
-        {
-          id: "agent",
-          name: "Agent",
-          default: true,
-          defaultModelId: defaultPeaAgentModelId,
-          agent: createPeaAgent(promptCapture.processor, toolCapture.wrap),
-        },
-      ],
-      gateways: defaultGateways,
+      agent: createPeaAgent(
+        promptCapture.processor,
+        toolCapture.wrap,
+        () => controller?.listAvailableModels() ?? Promise.resolve([]),
+      ),
+      modes: [{ id: "agent", name: "Agent", defaultModelId: defaultPeaAgentModelId }],
+      defaultModeId: "agent",
+      gateways: [gateway],
       tools: peaProductTools,
-      // Read-only tools (kind read/search/fetch/think + workspace read builtins) resolve to the
-      // "read" category; seeding it "allow" makes the "ask" access level gate only state-changing
-      // tools. Without this, mastra's approval gate falls back to "ask" for EVERY tool under yolo:false.
-      toolCategoryResolver: createRuntimeToolCategoryResolver(peaRuntimeToolProfile.catalog),
+      toolCategoryResolver: resolvePeaToolCategory,
       initialState: {
         currentModelId: options.modelId ?? defaultPeaAgentModelId,
         projectPath: workspaceRoot,
         productHomePath,
         configDir: ".pea",
         bundledSkillCount: bundledPeaSkills.length,
-        yolo: true,
         thinkingLevel: "high",
-        permissionRules: { categories: { read: "allow" }, tools: {} },
       },
     },
-    auth,
     authStorage,
     storageProfile,
     memoryProfile,
-    toolProfile: peaRuntimeToolProfile,
     workspace: { cwd: workspaceRoot, root: workspaceRoot },
     metadata: {
       runtimeId: "pea",
       storageProfileId: storageProfile.id,
       memoryProfileId: memoryProfile.id,
-      toolProfileId: peaRuntimeToolProfile.id,
       protocol: request.protocol,
       cwd: workspaceRoot,
       workspaceRoot,
-      authSource: auth.descriptor.source,
-      noCloudAuth: auth.descriptor.source === "api-key",
-      authStorageSource: authStorageContext.source,
-      authStorageApiKeyProviders: Object.keys(authStorageContext.apiKeyEnvVars),
       workbench: {
         systemPrompt: promptCapture.snapshot,
         toolList: toolCapture.snapshot,
         contextWindow: 200_000,
         agents: [{ name: peaAgentName, description: peaAgentDescription }],
-        availableModels: [
-          { id: defaultPeaAgentModelId, displayName: "GPT-5.6 Terra", provider: "openai" },
-          {
-            id: "anthropic/claude-opus-4-8",
-            displayName: "Claude Opus 4.8",
-            provider: "anthropic",
-          },
-          {
-            id: "anthropic/claude-sonnet-4-6",
-            displayName: "Claude Sonnet 4.6",
-            provider: "anthropic",
-          },
-        ],
         skills: bundledPeaSkills.map((skill) => ({
           name: skill.name,
           description: peaSkillDescription(skill.content),
-          // Full markdown so the World inspector can expand the skill card.
-          // ponytail: re-serialized on every state emit; move to a one-time payload if
-          // the SSE state size ever bites.
           content: skill.content,
           approxTokens: Math.ceil(skill.content.length / 4),
         })),
@@ -190,17 +184,21 @@ export async function createPeaRuntime(
       },
     },
   });
-}
+  controller = handle.controller;
 
-/** Pull the one-line `description:` from a bundled skill's frontmatter for the command menu. */
-function peaSkillDescription(content: string): string | undefined {
-  const match = /^description:\s*(.+)$/m.exec(content);
-  return match?.[1]?.trim();
+  try {
+    await configurePermissions(handle, options.accessLevel);
+  } catch (error) {
+    await handle.close?.();
+    throw error;
+  }
+  return handle;
 }
 
 function createPeaAgent(
-  captureProcessor?: InputProcessor,
-  wrapModel?: (model: MastraModelConfig) => MastraModelConfig,
+  captureProcessor: InputProcessor | undefined,
+  wrapModel: ((model: MastraModelConfig) => MastraModelConfig) | undefined,
+  listAvailableModels: () => Promise<AvailableModel[]>,
 ): Agent {
   return new Agent({
     id: "pea-agent",
@@ -208,13 +206,99 @@ function createPeaAgent(
     description: peaAgentDescription,
     instructions: peaAgentInstructions,
     model: async ({ requestContext }) => {
-      const model = await resolveCurrentModel(requestContext, defaultPeaAgentModelId);
+      const model = await resolveCurrentModel(requestContext, listAvailableModels);
       return wrapModel ? wrapModel(model) : model;
     },
     signals: [new TaskSignalProvider(), new PeaContextSignalProvider()],
     tools: peaProductTools,
     inputProcessors: captureProcessor ? [captureProcessor] : undefined,
   });
+}
+
+async function resolveCurrentModel(
+  requestContext: RequestContext,
+  listAvailableModels: () => Promise<AvailableModel[]>,
+): Promise<MastraModelConfig> {
+  const context = requestContext.get("controller") as
+    | AgentControllerRequestContext<PeaRuntimeState>
+    | undefined;
+  const modelId =
+    context?.session.modelId || context?.getState().currentModelId || defaultPeaAgentModelId;
+  const model = (await listAvailableModels()).find((candidate) => candidate.id === modelId);
+  if (!model) throw new Error(`Unknown Pea model '${modelId}'.`);
+  if (!model.hasApiKey) throw new Error(`Pea model '${modelId}' has no available credentials.`);
+  return resolveModel(modelId, { requestContext });
+}
+
+function resolvePeaToolCategory(toolName: string): ToolCategory {
+  const kind = peaProductToolCatalog.get(toolName)?.kind;
+  if (kind) return toolKindToCategory[kind];
+
+  const codeCategory = getToolCategory(toolName);
+  if (codeCategory === null) return "read";
+  return getToolsForCategory(codeCategory).includes(toolName) ? codeCategory : "other";
+}
+
+async function configurePermissions(
+  handle: PeaRuntimeHandle,
+  requestedAccessLevel: RuntimeAccessLevel | undefined,
+): Promise<void> {
+  const session = handle.session;
+  if (!session) throw new Error("Expected Pea runtime session.");
+  const state = session.state.get();
+  const persisted = readPermissionRules(state.permissionRules);
+  const persistedLevel =
+    persisted && state.yolo === false
+      ? accessLevelFromPermissionRules(persisted, state.yolo)
+      : undefined;
+  const level =
+    requestedAccessLevel ?? (state.permissionRules === undefined ? "ask" : persistedLevel);
+  const effective = permissionRulesForAccessLevel(level ?? "read-only");
+  if (persisted && level) effective.tools = { ...persisted.tools };
+
+  await session.state.set({ yolo: false, permissionRules: effective });
+  if (
+    session.state.get().yolo !== false ||
+    !permissionRulesEqual(session.permissions.getRules(), effective)
+  ) {
+    throw new Error("Pea permission state did not persist exactly.");
+  }
+}
+
+function readPermissionRules(value: unknown): PermissionRules | undefined {
+  if (!isRecord(value) || !isRecord(value.categories) || !isRecord(value.tools)) return undefined;
+  const categoryEntries = Object.entries(value.categories);
+  const toolEntries = Object.entries(value.tools);
+  if (
+    categoryEntries.some(
+      ([category, policy]) =>
+        !toolCategories.includes(category as ToolCategory) ||
+        !permissionPolicies.has(policy as PermissionPolicy),
+    ) ||
+    toolEntries.some(([, policy]) => !permissionPolicies.has(policy as PermissionPolicy))
+  ) {
+    return undefined;
+  }
+  return {
+    categories: Object.fromEntries(categoryEntries) as PermissionRules["categories"],
+    tools: Object.fromEntries(toolEntries) as PermissionRules["tools"],
+  };
+}
+
+function permissionRulesEqual(left: PermissionRules, right: PermissionRules): boolean {
+  return (
+    toolCategories.every((category) => left.categories[category] === right.categories[category]) &&
+    JSON.stringify(
+      Object.entries(left.tools).sort(([leftName], [rightName]) =>
+        leftName.localeCompare(rightName),
+      ),
+    ) ===
+      JSON.stringify(
+        Object.entries(right.tools).sort(([leftName], [rightName]) =>
+          leftName.localeCompare(rightName),
+        ),
+      )
+  );
 }
 
 function createPeaWorkspace(options: {
@@ -224,58 +308,20 @@ function createPeaWorkspace(options: {
   return new Workspace({
     id: "pea-workspace",
     name: "Pea Workspace",
-    filesystem: new LocalFilesystem({
-      basePath: options.workspaceRoot,
-      contained: true,
-    }),
-    sandbox: new LocalSandbox({
-      workingDirectory: options.workspaceRoot,
-      env: process.env,
-    }),
+    filesystem: new LocalFilesystem({ basePath: options.workspaceRoot, contained: true }),
+    sandbox: new LocalSandbox({ workingDirectory: options.workspaceRoot }),
     skills: resolvePeaSkillPaths({ productHomePath: options.productHomePath }),
   });
 }
 
-export async function createPeaTuiRuntime(
-  options: PeaTuiRuntimeOptions = {},
-): Promise<PeaRuntimeHandle> {
-  return createPeaRuntime(options);
-}
-
-export function createPeaRuntimeAuthProfile(
-  options: {
-    source?: PeaRuntimeAuthSource;
-    noCloudAuth?: boolean;
-    allowOauthBetaAuth?: boolean;
-    logout?: () => Promise<void>;
-  } = {},
-): RuntimeAuthProfile {
-  const { noCloudAuth, ...profileOptions } = options;
-  const source = noCloudAuth === true ? "api-key" : profileOptions.source;
-  return createPeaCloudGatewayRuntimeAuthProfile({
-    ...profileOptions,
-    source,
-    apiKeyDescription:
-      source === "api-key"
-        ? "Use local OPENAI_API_KEY or stored API-key credentials for Pea model access."
-        : "Use OPENAI_API_KEY only as a local Pea model-access escape hatch.",
-  });
-}
-
-function resolveCurrentModel(
-  requestContext: RequestContext,
-  fallbackModelId: string,
-): Promise<MastraModelConfig> {
-  const controller = requestContext.get("controller") as
-    | AgentControllerRequestContext<{ currentModelId?: string }>
-    | undefined;
-  // session.modelId is the live selection ('' when none); getState().currentModelId is the
-  // initial/stored value. Prefer the selection, then stored, then the hard default.
-  const modelId =
-    controller?.session.modelId || controller?.getState().currentModelId || fallbackModelId;
-  return resolveRuntimeModel(modelId, requestContext);
+function peaSkillDescription(content: string): string | undefined {
+  return /^description:\s*(.+)$/m.exec(content)?.[1]?.trim();
 }
 
 function createLocalResourceId(runtimeId: string, cwd: string): string {
   return `${runtimeId}:${Buffer.from(cwd).toString("base64url")}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
