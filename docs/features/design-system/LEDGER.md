@@ -141,6 +141,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 - 2026-08-15 — Authoring test for any new seam: not "can I name a future user?" (always answerable) but "what makes this obviously wrong if the future never comes?" Code with no tripwire doesn't fail — it accumulates, compiles, and passes.
 - 2026-08-15 — Undiscoverable is the leading indicator of dead: every route deleted in the wave was unreachable from the index `TOOLS` list. Reachability from the front door tracks liveness better than any timestamp.
 - 2026-08-16 — Sweep governance for a route pass: `components/lang/*`, `components/master-table/*`, `design-lang.css` tokens and the state-model axes are NOT changed by a route pass. Where the language cannot say something, leave the code honest and write the gap down here. Gaps become numbered findings, never unilateral language changes.
+- 2026-08-26 — `/targeting-proto` and `targeting-proto/**` left canon after S2–J6′ rewrote the selected targeting kit into `targeting/**`; the triangulation losers remain available in Git history.
 ## Tried & rejected
 
 - 2026-08-25 — A shared targeting-controller hook across `/takeoffs`, `/family`, `/settings` (W3-B fix): the three controllers differ in picker state and navigation, not only in product/store args; `state/use-route-store.ts` (owner ceremony) is the shared part, the controller stays per route.

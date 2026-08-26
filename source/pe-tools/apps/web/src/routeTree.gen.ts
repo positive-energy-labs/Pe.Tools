@@ -26,7 +26,6 @@ import { Route as RunsRouteImport } from "./routes/runs";
 import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
 import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
-import { Route as TargetingProtoRouteImport } from "./routes/targeting-proto";
 import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
 import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
@@ -121,11 +120,6 @@ const TakeoffsRoute = TakeoffsRouteImport.update({
   path: "/takeoffs",
   getParentRoute: () => rootRouteImport,
 } as any);
-const TargetingProtoRoute = TargetingProtoRouteImport.update({
-  id: "/targeting-proto",
-  path: "/targeting-proto",
-  getParentRoute: () => rootRouteImport,
-} as any);
 const ApiRunsExportRoute = ApiRunsExportRouteImport.update({
   id: "/api/runs-export",
   path: "/api/runs-export",
@@ -186,7 +180,6 @@ export interface FileRoutesByFullPath {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/targeting-proto": typeof TargetingProtoRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
@@ -214,7 +207,6 @@ export interface FileRoutesByTo {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/targeting-proto": typeof TargetingProtoRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
@@ -243,7 +235,6 @@ export interface FileRoutesById {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/targeting-proto": typeof TargetingProtoRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
@@ -273,7 +264,6 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
-    | "/targeting-proto"
     | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/popovers"
@@ -301,7 +291,6 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
-    | "/targeting-proto"
     | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/popovers"
@@ -329,7 +318,6 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
-    | "/targeting-proto"
     | "/api/runs-export"
     | "/design-system_/arming"
     | "/design-system_/popovers"
@@ -358,7 +346,6 @@ export interface RootRouteChildren {
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
-  TargetingProtoRoute: typeof TargetingProtoRoute;
   ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
@@ -489,13 +476,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof TakeoffsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/targeting-proto": {
-      id: "/targeting-proto";
-      path: "/targeting-proto";
-      fullPath: "/targeting-proto";
-      preLoaderRoute: typeof TargetingProtoRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
     "/api/runs-export": {
       id: "/api/runs-export";
       path: "/api/runs-export";
@@ -584,7 +564,6 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
   TakeoffsRoute: TakeoffsRoute,
-  TargetingProtoRoute: TargetingProtoRoute,
   ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,

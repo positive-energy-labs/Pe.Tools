@@ -142,7 +142,7 @@ export function useBindings<K extends string>(
 }
 
 /** Close-on-outside-click for a popover root. Stabilise `onAway` with useCallback. */
-export function useClickAway(open: boolean, onAway: () => void) {
+function useClickAway(open: boolean, onAway: () => void) {
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -274,7 +274,7 @@ export function freshnessWord<K extends string>(b: Bindings<K>, link: Link<K>): 
 /* ------------------------------------------------------------------ picker */
 
 /** The ONE in-flight mark. Opacity only — dashed stays the seam slot. */
-export const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
+const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
 
 const POP: React.CSSProperties = {
   border: "1px solid var(--r-line-2)",
