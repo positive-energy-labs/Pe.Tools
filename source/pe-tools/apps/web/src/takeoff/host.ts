@@ -148,7 +148,7 @@ export const createHostSessionSource = (): SessionSource => ({
       bridgeSessionId: session.sessionId,
     });
     const document = response.activeDocument;
-    if (!document) return null;
+    if (!document) throw new Error(`session ${session.sessionId} has no active document`);
     const documentId = document.cloudModelGuid ?? document.path;
     if (!documentId)
       throw new Error(

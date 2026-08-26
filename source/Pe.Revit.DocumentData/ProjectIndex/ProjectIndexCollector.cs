@@ -275,8 +275,9 @@ public static class ProjectIndexCollector {
 
     private static ProjectIndexViewEntry CreateViewEntry(Document document, View view, bool includeHandles, bool includeBrowserPaths, int maxSamples, ProjectBrowserCollectedIndex browserIndex, ProjectIndexPlacementIndex placementIndex) {
         var sheetHandles = includeHandles ? placementIndex.GetSheetHandlesForView(view.Id).Take(maxSamples).ToList() : [];
+        var title = view.Title;
         return new ProjectIndexViewEntry(
-            CreateHandle(document, view, RevitAgentContextHandleKind.View, view.Title),
+            CreateHandle(document, view, RevitAgentContextHandleKind.View, title),
             view.Name,
             view.ViewType.ToString(),
             view.GenLevel?.Name,

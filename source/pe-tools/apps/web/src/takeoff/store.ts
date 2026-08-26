@@ -87,7 +87,7 @@ export interface ActiveDocument {
 
 export interface SessionSource {
   list(): Promise<TakeoffSessionFacts[]>;
-  activeDocument(session: TakeoffSessionFacts): Promise<ActiveDocument | null>;
+  activeDocument(session: TakeoffSessionFacts): Promise<ActiveDocument>;
   subscribe(listener: (event: SessionEvent) => void): () => void;
 }
 
@@ -922,7 +922,7 @@ export function createTakeoffStore(deps: {
     patchSearch(patch: Partial<TakeoffSearch>) {
       deps.search.patch(patch);
     },
-    async setBindings(patch: {
+    setBindings(patch: {
       readonly stage?: string;
       readonly bound?: Bound;
       readonly multi?: Multi;
@@ -934,11 +934,9 @@ export function createTakeoffStore(deps: {
       const resolution = AsyncResult.isSuccess(sessions)
         ? resolveTarget(sessions.value.value, nextTarget)
         : null;
-      const activeDocument =
-        resolution?.kind === "resolved"
-          ? await deps.sessions.activeDocument(resolution.session)
-          : null;
-      const nextDocument = patch.bound?.rvt ?? activeDocument?.documentId;
+      const activeDocumentId =
+        resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined;
+      const nextDocument = patch.bound?.rvt ?? activeDocumentId;
       if (current.source === "live" && patch.bound) {
         const slice = registry.get(takeoffsSlice);
         const snapshot = AsyncResult.isSuccess(slice) ? slice.value.doc?.snapshot : null;
@@ -975,8 +973,8 @@ export function createTakeoffStore(deps: {
             }
           : {}),
       });
-      if (current.source === "live" && nextDocument && nextDocument !== activeDocument?.documentId)
-        return pickDocument(nextDocument);
+      if (current.source === "live" && nextDocument && nextDocument !== activeDocumentId)
+        void pickDocument(nextDocument);
     },
     settle,
     invalidate: (keys: readonly string[]) =>

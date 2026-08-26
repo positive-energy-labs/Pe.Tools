@@ -27,13 +27,14 @@ export function projectTakeoffViews(
   projectIndex: RevitCatalogProjectIndex.Res.Response,
 ): ViewFacts[] {
   const regionsByView = new Map(response.views.map((view) => [view.elementId, view.regions]));
-  return projectIndex.views
-    .filter((view) => PLAN_VIEW_TYPES.has(view.viewType) && view.handle.elementId != null)
-    .map((view) => ({
-      name: view.name,
-      level: view.levelName ?? "",
-      regions: regionsByView.get(view.handle.elementId!) ?? 0,
-    }));
+  const views = projectIndex.views.flatMap((view) => {
+    if (!PLAN_VIEW_TYPES.has(view.viewType) || view.handle.elementId == null) return [];
+    const regions = regionsByView.get(view.handle.elementId);
+    return regions === undefined ? [] : [{ name: view.name, level: view.levelName ?? "", regions }];
+  });
+  if (response.views.length > 0 && views.length === 0)
+    throw Error("takeoffs.views did not match any project-index view elementId");
+  return views;
 }
 
 export function projectTakeoffSnapshot(

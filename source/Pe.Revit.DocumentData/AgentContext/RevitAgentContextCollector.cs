@@ -180,10 +180,11 @@ public static class RevitAgentContextCollector {
         List<RevitDataIssue> issues
     ) {
         var view = visibleView.View;
+        var title = view.Title;
         return new RevitAgentObservedViewState(
-            CreateHandle(document, view, RevitAgentContextHandleKind.View, view.Title),
+            CreateHandle(document, view, RevitAgentContextHandleKind.View, title),
             view.ViewType.ToString(),
-            view.Title,
+            title,
             view.Scale,
             view.GenLevel?.Name,
             TryRead(() => view.Discipline.ToString()),

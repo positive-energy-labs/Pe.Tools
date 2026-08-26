@@ -72,8 +72,6 @@ public static class TakeoffAtlas
             .Select(v => new TakeoffViewFacts(
                 v.Id.Value(),
                 counts.GetValueOrDefault(v.Id.Value())))
-            .OrderByDescending(v => v.Regions)
-            .ThenBy(v => v.ElementId)
             .ToList();
     }
 

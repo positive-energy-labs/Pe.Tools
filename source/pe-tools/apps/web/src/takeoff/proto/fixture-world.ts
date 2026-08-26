@@ -84,17 +84,20 @@ export const projectFixtureWorld = (fixture: MockWorld): World => ({
   })),
 });
 
+const fixtureWorld = loadMockWorldGeo()
+  .catch(() => mockWorld())
+  .then(projectFixtureWorld);
+
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
   async readSnapshot(session, document, _views, write) {
-    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
     const snapshot = {
       from: {
         target: session.sdkSessionId ?? `pid:${session.processId}`,
         documentId: document.documentId,
         observedAt: new Date().toISOString(),
       },
-      world,
+      world: await fixtureWorld,
       zoneFrs: [],
       regionsByZone: {},
     };
@@ -102,7 +105,7 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
     return snapshot;
   },
   async readViews() {
-    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
+    const world = await fixtureWorld;
     return world.lanes.map((lane) => ({
       name: lane.view,
       level: lane.label,
@@ -116,8 +119,7 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
     return { path };
   },
   async readCandidates(_session, view) {
-    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
-    return world.zones
+    return (await fixtureWorld).zones
       .filter((zone) => zone.zone.lane.view === view)
       .map((zone, index) => ({
         elementId: index + 1,

@@ -13,7 +13,10 @@ import {
   type LiveRegion,
   type PartitionRun,
 } from "#/takeoff/model";
-import { projectTakeoffSnapshot } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
+import {
+  projectTakeoffSnapshot,
+  projectTakeoffViews,
+} from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 
 const square = (x: number, y: number, size: number): [number, number][] => [
   [x, y],
@@ -184,6 +187,21 @@ describe("decision queue", () => {
 });
 
 describe("typed snapshot projection", () => {
+  it("rejects a total view elementId join miss", () => {
+    expect(() =>
+      projectTakeoffViews({ views: [{ elementId: 1, regions: 3 }] }, {
+        views: [
+          {
+            handle: { elementId: 2 },
+            name: "Mechanical Zoning Plan",
+            viewType: "FloorPlan",
+            levelName: "Main",
+          },
+        ],
+      } as Parameters<typeof projectTakeoffViews>[1]),
+    ).toThrow("takeoffs.views did not match any project-index view elementId");
+  });
+
   it("passes through source identity and derives the world from the typed response", () => {
     const snapshot = projectTakeoffSnapshot(
       {

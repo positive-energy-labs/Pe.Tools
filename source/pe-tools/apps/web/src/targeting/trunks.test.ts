@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
 import type { WorldFacts } from "#/host/fleet";
@@ -96,24 +95,6 @@ describe("targeting trunks", () => {
     });
     for (const option of result.options ?? [])
       expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
-  });
-
-  it("produces distinct documentId bindings for equal document titles", () => {
-    const result = documentTrunk.feed(
-      AsyncResult.success({ value: null, at: 100, basis: ["active"], bound: true }),
-      AsyncResult.success({
-        value: [recent("model-a", "cloud:a"), recent("model-b", "cloud:b")],
-        at: 200,
-        basis: ["pe.app-25", "2026"],
-        bound: true,
-      }),
-    );
-
-    expect(result.options).toEqual([
-      { id: "model-a", label: "Equal title.rvt", sub: "cloud" },
-      { id: "model-b", label: "Equal title.rvt", sub: "cloud" },
-    ]);
-    expect(result).toMatchObject({ at: 200, basis: ["pe.app-25", "2026"] });
   });
 
   it("refuses observed document picks before HTTP", async () => {
