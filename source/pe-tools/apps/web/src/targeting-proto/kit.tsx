@@ -14,9 +14,10 @@
  * second look = the small mute caption (direction · liveness); hover = full path + needs.
  * The in-flight mark is an OPACITY pulse — dashed stays the seam slot (R13b).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
+import { PULSE_CSS, useClickAway } from "#/targeting/kit";
 
 import {
   demandedKeys,
@@ -100,7 +101,8 @@ export function useBindings(product: Product): Bindings {
       if (link.multi) {
         setMulti((prev) => {
           const next = new Set(prev[link.key] ?? []);
-          next.has(id) ? next.delete(id) : next.add(id);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
           return { ...prev, [link.key]: next };
         });
         return;
@@ -136,7 +138,8 @@ export function useBindings(product: Product): Bindings {
         for (const p of picks)
           if (p.link.multi) {
             const set = new Set(next[p.link.key] ?? []);
-            set.has(p.id) ? set.delete(p.id) : set.add(p.id);
+            if (set.has(p.id)) set.delete(p.id);
+            else set.add(p.id);
             next[p.link.key] = set;
           }
         return next;
@@ -161,20 +164,6 @@ export function useBindings(product: Product): Bindings {
     setStage,
     demanded,
   };
-}
-
-/** Close-on-outside-click for a popover root. Stabilise `onAway` with useCallback. */
-export function useClickAway(open: boolean, onAway: () => void) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onAway();
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open, onAway]);
-  return ref;
 }
 
 /* ------------------------------------------------------------------ runner */
@@ -280,9 +269,6 @@ export function SeamChip({ product }: { product: Product }) {
 /* ------------------------------------------------------------------ path input */
 
 export type InputMode = "segmented" | "columns" | "search";
-
-/** The ONE in-flight mark. Opacity only — dashed stays the seam slot (R13b). */
-export const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
 
 const POP: React.CSSProperties = {
   border: "1px solid var(--r-line-2)",

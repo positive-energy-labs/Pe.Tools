@@ -1,4 +1,5 @@
 /** Fuses SDK registry custody/lifecycle with bridge-observed documents. */
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   Envelope,
@@ -17,6 +18,7 @@ import {
 
 export type { SessionRow };
 
+/** Branch on phase; SHOW row.state. */
 type WorldPhase = "ready" | "booting" | "unresponsive" | "gone";
 
 const PHASES: readonly WorldPhase[] = ["ready", "booting", "unresponsive", "gone"];
@@ -139,14 +141,27 @@ function useSessionStatusQuery(all: boolean) {
 export function useFleet(all = false) {
   const sessionsQuery = useBridgeSessionsListQuery();
   const status = useSessionStatusQuery(all);
-  const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
-  return {
-    worlds: fuseFleet(status.data ?? [], sessions),
-    sessions,
-    isLoading: sessionsQuery.isLoading || status.isLoading,
-    stale: sessionsQuery.isFetching || status.isFetching,
-    error: sessionsQuery.error ?? status.error,
-    at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
-    basis: ["sessions.status", "bridge.sessions.list"],
-  };
+  return useMemo(() => {
+    const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
+    return {
+      worlds: fuseFleet(status.data ?? [], sessions),
+      sessions,
+      isLoading: sessionsQuery.isLoading || status.isLoading,
+      stale: sessionsQuery.isFetching || status.isFetching,
+      error: sessionsQuery.error ?? status.error,
+      at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
+      basis: ["sessions.status", "bridge.sessions.list"],
+    };
+  }, [
+    sessionsQuery.data?.sessions,
+    sessionsQuery.dataUpdatedAt,
+    sessionsQuery.error,
+    sessionsQuery.isFetching,
+    sessionsQuery.isLoading,
+    status.data,
+    status.dataUpdatedAt,
+    status.error,
+    status.isFetching,
+    status.isLoading,
+  ]);
 }

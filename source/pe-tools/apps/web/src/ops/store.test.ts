@@ -85,13 +85,22 @@ function make(
   return { registry, store, calls, writes };
 }
 
-function gatedRun(store: ReturnType<typeof createOpsStore>, selected: HostOperationCatalogEntry) {
+function gatedRun(
+  store: ReturnType<typeof createOpsStore>,
+  selected: HostOperationCatalogEntry,
+  activeDocumentId?: string,
+) {
   const product = bindOpsVerb(
     () =>
       store.actions.run({
         opKey: selected.key,
         request: () => ({}),
-        from: { target: "observed", documentId: "projectA.rvt" },
+        from: {
+          target: "observed",
+          ...(selected.requiresActiveDocument && activeDocumentId
+            ? { documentId: activeDocumentId }
+            : {}),
+        },
         bridgeSessionId: "bridge-observed",
       }),
     () => opsRefusal(selected, "observed"),
@@ -120,7 +129,7 @@ describe("ops route store", () => {
 
   it("allows an observed read and persists its Reading", async () => {
     const { store, calls, writes } = make();
-    const gated = gatedRun(store, operation("read"));
+    const gated = gatedRun(store, operation("read"), "projectA.rvt");
 
     await gated.run();
 
@@ -130,6 +139,20 @@ describe("ops route store", () => {
       opKey: "revit.context.document-session",
       from: { target: "observed", observedAt: "2026-08-25T01:02:03.000Z" },
     });
+  });
+
+  it("omits documentId when a document-required operation has no active document", async () => {
+    const { store, calls, writes } = make();
+    const gated = gatedRun(store, operation("read"));
+
+    await gated.run();
+
+    expect(calls).toHaveBeenCalledOnce();
+    expect(writes.at(-1)?.[0]?.value).toMatchObject({
+      opKey: "revit.context.document-session",
+      from: { target: "observed", observedAt: "2026-08-25T01:02:03.000Z" },
+    });
+    expect(writes.at(-1)?.[0]?.value).not.toHaveProperty("from.documentId");
   });
 
   it("projects a mismatched persisted receipt as unbound", async () => {
