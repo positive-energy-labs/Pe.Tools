@@ -4,6 +4,7 @@ import { peInfoSchema } from "../src/index.ts";
 const info = {
   controllerId: "pea",
   resourceId: "pea:root",
+  capabilities: { revit: false },
   world: {
     id: "pea:root",
     root: "C:\\work",
@@ -15,6 +16,8 @@ const info = {
 test("/pe/info round-trips exactly and rejects malformed wire data", () => {
   expect(peInfoSchema.parse(JSON.parse(JSON.stringify(info)))).toEqual(info);
   expect(() => peInfoSchema.parse({ ...info, extra: true })).toThrow();
+  expect(() => peInfoSchema.parse({ ...info, capabilities: {} })).toThrow();
+  expect(() => peInfoSchema.parse({ ...info, capabilities: { revit: "no" } })).toThrow();
   expect(() =>
     peInfoSchema.parse({ ...info, world: { ...info.world, isolation: "bwrap" } }),
   ).toThrow();

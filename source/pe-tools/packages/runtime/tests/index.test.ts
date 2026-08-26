@@ -61,7 +61,11 @@ test("web boot exposes identity without materializing a session or CORS", async 
   let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
   try {
-    runtime = await createPeaRuntime({ workspaceRoot, protocol: "web" });
+    runtime = await createPeaRuntime({
+      workspaceRoot,
+      protocol: "web",
+      capabilities: { revit: false },
+    });
     expect(runtime.session).toBeUndefined();
     const app = await buildAgentControllerApp({ runtime, label: "pea" });
     const response = await app.fetch(new Request("http://local/pe/info"));
@@ -70,6 +74,7 @@ test("web boot exposes identity without materializing a session or CORS", async 
     expect(await response.json()).toEqual({
       controllerId: "pea",
       resourceId: runtime.resourceId,
+      capabilities: { revit: false },
       world: {
         id: runtime.resourceId,
         root: path.resolve(workspaceRoot),
@@ -78,6 +83,7 @@ test("web boot exposes identity without materializing a session or CORS", async 
       },
     });
     expect(runtime.world.root).toBe(path.resolve(workspaceRoot));
+    expect(Object.isFrozen(runtime.capabilities)).toBe(true);
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
   } finally {
     await runtime?.close?.();

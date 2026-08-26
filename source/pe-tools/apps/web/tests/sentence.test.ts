@@ -1,12 +1,56 @@
+// @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
+import { createElement } from "react";
+import { cleanup, render, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { sentenceText } from "../src/components/chat-sentence";
+import { Sentence } from "../src/components/sentence";
 import { fuseFleet, worldClause, type SessionRow } from "../src/host/fleet";
 import type { SessionFacts } from "../src/host/target";
 
 const NOW = Date.parse("2026-07-16T12:00:00Z");
 
 const zero = { proposals: 0, staged: 0, good: 0, attention: 0 };
+
+test("chat fleet capability gates every Revit fetch", async () => {
+  const requests: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    requests.push(`${init?.method ?? "GET"} ${url}`);
+    return Response.json(url === "/sessions" ? { result: { sessions: [] } } : { sessions: [] });
+  };
+  const mount = (enabled: boolean) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(Sentence, {
+          prefix: "Pea is ready",
+          target: "observed",
+          onBind: () => undefined,
+          fleetEnabled: enabled,
+        }),
+      ),
+    );
+  };
+
+  try {
+    const disabled = mount(false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(requests).toEqual([]);
+    disabled.unmount();
+
+    mount(true);
+    await waitFor(() => expect(requests.sort()).toEqual(["GET /sessions", "POST /call"]));
+  } finally {
+    cleanup();
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("sentence grammar over the run lifecycle: idle → working → awaiting → committed → failed", () => {
   expect(

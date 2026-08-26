@@ -68,6 +68,8 @@ export interface SentenceProps {
   /** Status prefix — the extension point. Pea's live loop state is the ONE non-noun allowed here. */
   prefix: string;
   prefixTone?: SentenceTone;
+  /** Chat delays Revit queries until its Pea handshake grants the capability. */
+  fleetEnabled?: boolean;
   /** Document slot renders only when `documents` is provided (plugin surfaces). */
   documentLabel?: string | null;
   documents?: string[];
@@ -144,6 +146,7 @@ function Popover({ children }: { children: React.ReactNode }) {
 export function Sentence({
   prefix,
   prefixTone = "rest",
+  fleetEnabled = true,
   documentLabel,
   documents,
   onPickDocument,
@@ -157,7 +160,7 @@ export function Sentence({
   const [openSlot, setOpenSlot] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
-  const { worlds, sessions } = useFleet();
+  const { worlds, sessions } = useFleet(fleetEnabled);
 
   // Receipt relax: tick once past the window so the sentence returns to its nouns.
   const receiptFresh = receipt != null && Date.now() - receipt.atMs < RECEIPT_RELAX_MS;

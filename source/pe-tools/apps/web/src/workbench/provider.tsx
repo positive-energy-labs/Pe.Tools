@@ -67,6 +67,7 @@ interface WorkbenchContextValue {
   threads: StoredThreadSummary[];
   /** Derived from the URL `thread` search param — the single source of truth for "which thread". */
   currentThreadId: string;
+  revit?: boolean;
   world?: PeaWorldDescriptor;
   isRunning: boolean;
   operationError?: string;
@@ -403,6 +404,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       debug: { state, loading, error },
       threads,
       currentThreadId,
+      revit: info?.capabilities.revit,
       world: info?.world,
       isRunning,
       operationError,
@@ -423,6 +425,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       operationError,
       threads,
       currentThreadId,
+      info?.capabilities.revit,
       info?.world,
       isRunning,
       sendPrompt,

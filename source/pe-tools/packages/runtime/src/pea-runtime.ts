@@ -85,6 +85,7 @@ export type PeaRuntimeHandle = RuntimeHandle<
   PeaRuntimeServices,
   AgentController<PeaRuntimeState>
 > & {
+  capabilities: Readonly<PeaRuntimeCapabilities>;
   world: PeaWorldDescriptor;
   isSessionAdmitted(session: Session<PeaRuntimeState>): boolean;
 };
@@ -107,7 +108,8 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
   const productHomePath = resolvePeaProductHomePath();
   const workspaceRoot = path.resolve(options.workspaceRoot ?? productHomePath);
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
-  const productTools = selectPeaProductTools(options.capabilities);
+  const capabilities = Object.freeze({ revit: options.capabilities?.revit ?? true });
+  const productTools = selectPeaProductTools(capabilities);
   configurePeaProductToolContext({ hostBaseUrl: options.hostBaseUrl, workspaceKey });
 
   const authStorage = createAuthStorage();
@@ -229,6 +231,7 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     throw error;
   }
   return Object.assign(handle, {
+    capabilities,
     world,
     isSessionAdmitted: (session: Session<PeaRuntimeState>) => policy!.isAdmitted(session),
   });

@@ -6,7 +6,7 @@ import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { peInfoSchema, type PeaWorldDescriptor } from "@pe/agent-contracts";
+import { peInfoSchema, type PeInfo, type PeaWorldDescriptor } from "@pe/agent-contracts";
 import {
   RouteWorkspace,
   type RouteWorkspaceRegistration,
@@ -32,6 +32,7 @@ const routeStateCommandBodySchema = z.object({
 export interface ServableRuntime {
   controller: AgentController;
   resourceId?: string;
+  capabilities: PeInfo["capabilities"];
   world: PeaWorldDescriptor;
   session?: Session;
   mastra?: Mastra;
@@ -50,6 +51,7 @@ function requireServableRuntime(value: unknown): ServableRuntime {
     throw new Error("Runtime agent-controller web requires an AgentController.");
   }
   if (!runtime.resourceId) throw new Error("Runtime agent-controller web requires resourceId.");
+  if (!runtime.capabilities) throw new Error("Runtime agent-controller web requires capabilities.");
   if (!runtime.world) throw new Error("Runtime agent-controller web requires world.");
   return runtime as ServableRuntime;
 }
@@ -103,6 +105,7 @@ export async function buildAgentControllerApp(
   const info = peInfoSchema.parse({
     controllerId,
     resourceId: runtime.resourceId!,
+    capabilities: runtime.capabilities,
     world: runtime.world,
   });
 
