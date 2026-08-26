@@ -331,21 +331,24 @@ export const peaProductTools = {
 };
 
 export const peaProductToolMetadata = {
-  pe_status: { category: "read" },
-  pe_logs: { category: "read" },
-  host_operation_search: { category: "read" },
-  host_operation_call: { category: "execute" },
-  request_access: { category: "edit" },
-  read_image: { category: "read" },
-  capture_view: { category: "read" },
-  revit_api_docs_search: { category: "read" },
-  revit_api_docs_fetch: { category: "read" },
-  script_bootstrap: { category: "edit" },
-  script_execute: { category: "execute" },
-  route_state_read: { category: "read" },
-  route_state_apply: { category: "edit" },
-  route_command: { category: "execute" },
-} satisfies Record<keyof typeof peaProductTools, { category: ToolCategory }>;
+  pe_status: { category: "read", requiresRevit: true },
+  pe_logs: { category: "read", requiresRevit: true },
+  host_operation_search: { category: "read", requiresRevit: true },
+  host_operation_call: { category: "execute", requiresRevit: true },
+  request_access: { category: "edit", requiresRevit: false },
+  read_image: { category: "read", requiresRevit: false },
+  capture_view: { category: "read", requiresRevit: true },
+  revit_api_docs_search: { category: "read", requiresRevit: false },
+  revit_api_docs_fetch: { category: "read", requiresRevit: false },
+  script_bootstrap: { category: "edit", requiresRevit: true },
+  script_execute: { category: "execute", requiresRevit: true },
+  route_state_read: { category: "read", requiresRevit: false },
+  route_state_apply: { category: "edit", requiresRevit: false },
+  route_command: { category: "execute", requiresRevit: false },
+} satisfies Record<
+  keyof typeof peaProductTools,
+  { category: ToolCategory; requiresRevit: boolean }
+>;
 
 function createCurrentHostRpcCaller(bridgeSessionId?: string, timeoutMs?: number) {
   return new HostRpcCaller({

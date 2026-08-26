@@ -52,6 +52,7 @@ test("mastra init defect degrades to 503 without taking the host down", async ()
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
+        capabilities: { revit: true },
         port: 0,
         mastraLayer: DyingMastraLive,
         lifecycle: { latch, handle },

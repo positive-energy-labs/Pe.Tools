@@ -67,6 +67,7 @@ test("dev serves Vite and Effect from one Node server", async () => {
       yield* Effect.raceFirst(
         Layer.launch(
           makeHttpLive({
+            capabilities: { revit: true },
             includeInstallGc: false,
             lifecycle: { handle, latch },
             mastraLayer: StubMastraLive,

@@ -5,7 +5,7 @@ import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { createRouteRegistrations } from "@pe/mcps";
 import { buildAgentControllerApp } from "@pe/runtime";
-import { createPeaRuntime } from "@pe/runtime/pea";
+import { createPeaRuntime, type PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { productRoot } from "./host-ownership.ts";
 import { setAgentRuntimeStatus } from "./local-ops.ts";
 
@@ -114,72 +114,78 @@ const recordMastraDegrade = (error: unknown) =>
  * no cross-process hop. Depending on `HttpServer` also sequences this layer after bind; a brief
  * routes-404 window during startup is acceptable.
  */
-export const MastraRuntimeLive = Layer.effect(
-  MastraRuntime,
-  Effect.gen(function* () {
-    const server = yield* HttpServer.HttpServer;
-    const address = server.address;
-    const port = address._tag === "TcpAddress" ? address.port : 0;
-    const hostBaseUrl = `http://127.0.0.1:${port}`;
+export function makeMastraRuntimeLive(
+  capabilities: PeaRuntimeCapabilities,
+  contactFactory: typeof createRouteRegistrations = createRouteRegistrations,
+) {
+  const routeRegistrations = capabilities.revit ? contactFactory : () => [];
+  return Layer.effect(
+    MastraRuntime,
+    Effect.gen(function* () {
+      const server = yield* HttpServer.HttpServer;
+      const address = server.address;
+      const port = address._tag === "TcpAddress" ? address.port : 0;
+      const hostBaseUrl = `http://127.0.0.1:${port}`;
 
-    const handle = yield* Effect.acquireRelease(
-      Effect.tryPromise(async () => {
-        // Host takeover races the pea thread lock: the dying incumbent can hold it for a
-        // few seconds after conceding the port. Retry instead of degrading to 503.
-        const runtime = await (async () => {
-          for (let attempt = 1; ; attempt += 1) {
-            try {
-              return await createPeaRuntime({ hostBaseUrl, protocol: "web" });
-            } catch (error) {
-              if (attempt >= 10 || !isThreadLockShaped(error)) throw error;
-              await new Promise((resolve) => setTimeout(resolve, 2000));
+      const handle = yield* Effect.acquireRelease(
+        Effect.tryPromise(async () => {
+          // Host takeover races the pea thread lock: the dying incumbent can hold it for a
+          // few seconds after conceding the port. Retry instead of degrading to 503.
+          const runtime = await (async () => {
+            for (let attempt = 1; ; attempt += 1) {
+              try {
+                return await createPeaRuntime({ hostBaseUrl, protocol: "web", capabilities });
+              } catch (error) {
+                if (attempt >= 10 || !isThreadLockShaped(error)) throw error;
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+              }
             }
-          }
-        })();
-        const app = await buildAgentControllerApp({
-          runtime,
-          label: "pea",
-          routeRegistrations: createRouteRegistrations({ hostBaseUrl }),
-        });
-        setAgentRuntimeStatus({ available: true, error: null });
-        // A stale error log from a previous degraded boot would misreport this healthy one.
-        await rm(mastraInitErrorLogPath(), { force: true }).catch(() => undefined);
-        // hono's `fetch` may return `Response | Promise<Response>`; normalize to a Promise so the
-        // seam matches `HttpEffect.fromWebHandler`'s `(req) => Promise<Response>` contract.
-        return {
-          runtime: runtime as { close?: () => Promise<void> } | null,
-          fetch: (request: Request) => Promise.resolve(app.fetch(request)),
-        };
-      }).pipe(
-        // A broken agent runtime (bad auth profile, storage failure) must NOT take the Revit
-        // bridge down with it — Revit respawns the host, so a boot defect here becomes a crash
-        // loop. Degrade the agent surface to 503 and keep serving — but observably (D4): persist
-        // the failure and surface it on /host/status. `Effect.catch` recovers the FAILURE channel
-        // only (a clean init rejection); a defect that escapes it is contained one level up by the
-        // composition-boundary net {@link withMastraDegrade}, so the merged layer never collapses.
-        Effect.catch((error) =>
-          recordMastraDegrade(error).pipe(
-            Effect.as({
-              runtime: null as { close?: () => Promise<void> } | null,
-              fetch: agentUnavailableResponse,
-            }),
+          })();
+          const app = await buildAgentControllerApp({
+            runtime,
+            label: "pea",
+            routeRegistrations: routeRegistrations({ hostBaseUrl }),
+          });
+          setAgentRuntimeStatus({ available: true, error: null });
+          // A stale error log from a previous degraded boot would misreport this healthy one.
+          await rm(mastraInitErrorLogPath(), { force: true }).catch(() => undefined);
+          // hono's `fetch` may return `Response | Promise<Response>`; normalize to a Promise so the
+          // seam matches `HttpEffect.fromWebHandler`'s `(req) => Promise<Response>` contract.
+          return {
+            runtime: runtime as { close?: () => Promise<void> } | null,
+            fetch: (request: Request) => Promise.resolve(app.fetch(request)),
+          };
+        }).pipe(
+          // A broken agent runtime (bad auth profile, storage failure) must NOT take the Revit
+          // bridge down with it — Revit respawns the host, so a boot defect here becomes a crash
+          // loop. Degrade the agent surface to 503 and keep serving — but observably (D4): persist
+          // the failure and surface it on /host/status. `Effect.catch` recovers the FAILURE channel
+          // only (a clean init rejection); a defect that escapes it is contained one level up by the
+          // composition-boundary net {@link withMastraDegrade}, so the merged layer never collapses.
+          Effect.catch((error) =>
+            recordMastraDegrade(error).pipe(
+              Effect.as({
+                runtime: null as { close?: () => Promise<void> } | null,
+                fetch: agentUnavailableResponse,
+              }),
+            ),
           ),
         ),
-      ),
-      // Release must never throw: swallow a rejecting close so scope teardown continues.
-      (built) =>
-        Effect.promise(async () => {
-          try {
-            await built.runtime?.close?.();
-          } catch {
-            /* best-effort: a failed close must not abort the rest of shutdown */
-          }
-        }),
-    );
+        // Release must never throw: swallow a rejecting close so scope teardown continues.
+        (built) =>
+          Effect.promise(async () => {
+            try {
+              await built.runtime?.close?.();
+            } catch {
+              /* best-effort: a failed close must not abort the rest of shutdown */
+            }
+          }),
+      );
 
-    return { fetch: handle.fetch };
-  }),
-);
+      return { fetch: handle.fetch };
+    }),
+  );
+}
 
 /**
  * Composition-boundary containment for the agent tenant (the invariant the host lives or dies by):

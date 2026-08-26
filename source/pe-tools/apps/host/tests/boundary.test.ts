@@ -64,6 +64,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
+        capabilities: { revit: true },
         port: 0,
         mastraLayer: StubMastraLive,
         lifecycle: { latch, handle },

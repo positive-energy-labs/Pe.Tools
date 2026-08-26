@@ -90,13 +90,19 @@ export interface PeaRuntimeOptions {
   workspaceKey?: string;
   modelId?: string;
   accessLevel?: "read-only" | "ask" | "trusted";
+  capabilities?: PeaRuntimeCapabilities;
   protocol?: RuntimeCreateRequest["protocol"];
+}
+
+export interface PeaRuntimeCapabilities {
+  readonly revit: boolean;
 }
 
 export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise<PeaRuntimeHandle> {
   const productHomePath = resolvePeaProductHomePath();
   const workspaceRoot = path.resolve(options.workspaceRoot ?? productHomePath);
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
+  const productTools = selectPeaProductTools(options.capabilities);
   configurePeaProductToolContext({ hostBaseUrl: options.hostBaseUrl, workspaceKey });
 
   const authStorage = createAuthStorage();
@@ -141,11 +147,12 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
         promptCapture.processor,
         toolCapture.wrap,
         () => controller?.listAvailableModels() ?? Promise.resolve([]),
+        productTools,
       ),
       modes: [{ id: "agent", name: "Agent", defaultModelId: defaultPeaAgentModelId }],
       defaultModeId: "agent",
       gateways: [gateway],
-      tools: peaProductTools,
+      tools: productTools,
       toolCategoryResolver: resolvePeaToolCategory,
       initialState: {
         currentModelId: options.modelId ?? defaultPeaAgentModelId,
@@ -296,6 +303,7 @@ function createPeaAgent(
   captureProcessor: InputProcessor | undefined,
   wrapModel: ((model: MastraModelConfig) => MastraModelConfig) | undefined,
   listAvailableModels: () => Promise<AvailableModel[]>,
+  tools: Partial<typeof peaProductTools>,
 ): Agent {
   return new Agent({
     id: "pea-agent",
@@ -307,9 +315,21 @@ function createPeaAgent(
       return wrapModel ? wrapModel(model) : model;
     },
     signals: [new TaskSignalProvider(), new PeaContextSignalProvider()],
-    tools: peaProductTools,
+    tools,
     inputProcessors: captureProcessor ? [captureProcessor] : undefined,
   });
+}
+
+function selectPeaProductTools(
+  capabilities: PeaRuntimeCapabilities | undefined,
+): Partial<typeof peaProductTools> {
+  if (capabilities?.revit !== false) return peaProductTools;
+  return Object.fromEntries(
+    Object.entries(peaProductTools).filter(
+      ([name]) =>
+        !peaProductToolMetadata[name as keyof typeof peaProductToolMetadata].requiresRevit,
+    ),
+  );
 }
 
 async function resolveCurrentModel(

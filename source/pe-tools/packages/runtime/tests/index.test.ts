@@ -150,6 +150,54 @@ test(
 );
 
 test(
+  "Pea runtime offers 14 default product tools and the exact seven without Revit",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pea-capabilities-"));
+    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
+    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
+    const productToolNames = Object.keys(peaProductToolMetadata);
+    const noRevitToolNames = [
+      "request_access",
+      "read_image",
+      "revit_api_docs_search",
+      "revit_api_docs_fetch",
+      "route_state_read",
+      "route_state_apply",
+      "route_command",
+    ];
+
+    try {
+      for (const [name, capabilities, expected] of [
+        ["default", undefined, productToolNames],
+        ["no-revit", { revit: false } as const, noRevitToolNames],
+      ] as const) {
+        const runtime = await createPeaRuntime({
+          capabilities,
+          workspaceRoot: path.join(root, name),
+        });
+        try {
+          const agent = runtime.controller.getMastra()?.getAgentById("pea-agent");
+          if (typeof (agent as { listTools?: unknown } | undefined)?.listTools !== "function")
+            throw new Error("Expected Pea runtime agent tool surface.");
+          const tools = await (
+            agent as { listTools: () => Promise<Record<string, unknown>> }
+          ).listTools();
+          expect(
+            Object.keys(tools).filter((toolName) => productToolNames.includes(toolName)),
+          ).toEqual(expected);
+        } finally {
+          await runtime.close?.();
+        }
+      }
+    } finally {
+      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
+    }
+  },
+  runtimeTestTimeout,
+);
+
+test(
   "Pea rehydrates exact thread permissions across processes",
   async () => {
     const probe = await createPermissionProbe();

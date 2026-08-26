@@ -7,6 +7,7 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
+import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
 import { getHostStatus } from "./local-ops.ts";
 import {
@@ -29,7 +30,6 @@ import { staticSpaLayer } from "./static-spa.ts";
 import { viteWebLayer } from "./vite-web.ts";
 import type { ViteDevServer } from "vite-plus";
 
-export { MastraRuntimeLive } from "./mastra-runtime.ts";
 export { resolveWebRoot } from "./static-spa.ts";
 
 const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
@@ -139,6 +139,23 @@ const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, ()
     const snapshot = yield* bridge.snapshot(undefined);
     return yield* Response.json(yield* getHostStatus(snapshot));
   }),
+);
+
+const noRevitHostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
+  Effect.flatMap(getHostStatus({ connected: false }), Response.json),
+);
+
+const emptyNotFound = Effect.succeed(Response.empty({ status: 404 }));
+
+export const NoRevitBoundaryLive = Layer.mergeAll(
+  HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
+  HttpRouter.add("*", "/call", emptyNotFound),
+  HttpRouter.add("*", "/ops", emptyNotFound),
+  HttpRouter.add("*", "/sessions", emptyNotFound),
+  HttpRouter.add("*", "/events", emptyNotFound),
+  HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
+  HttpRouter.add("*", "/host/install", emptyNotFound),
+  HttpRouter.add("*", "/host/update", emptyNotFound),
 );
 
 // One-click update starts the installed kernel without awaiting it: the add-in is staged for the
@@ -331,9 +348,30 @@ const InstallGcLive = Layer.effectDiscard(
   }),
 );
 
+function makeRevitComposition(includeInstallGc: boolean) {
+  return {
+    provider: RevitBridgeLive,
+    routes: Layer.mergeAll(
+      bridgeWsRoute,
+      bridgeEventsRoute,
+      opsCatalogRoute,
+      settingsSchemaRoute,
+      hostStatusRoute,
+      hostUpdateRoute,
+      hostUpdateStatusRoute,
+      hostInstallRoute,
+      sessionsRoute,
+      callRoute,
+      ServedSessionLive,
+      ...(includeInstallGc ? [InstallGcLive] : []),
+    ),
+  };
+}
+
 export interface HttpLiveOptions {
   /** Preferred listen port (0 = ephemeral, used by the boundary test). */
   readonly port: number;
+  readonly capabilities: PeaRuntimeCapabilities;
   /** Optional shared Node listener; dev gives the same object to Vite middleware/HMR. */
   readonly nodeServer?: Server;
   /** Programmatic Vite server in dev; installed mode leaves this absent and serves static files. */
@@ -352,6 +390,8 @@ export interface HttpLiveOptions {
    * spawn the install kernel; defaults on for production.
    */
   readonly includeInstallGc?: boolean;
+  /** Test sentinel for the complete Revit/SDK/proxy composition. */
+  readonly revitCompositionFactory?: typeof makeRevitComposition;
 }
 
 /**
@@ -370,31 +410,34 @@ export function makeHttpLive(options: HttpLiveOptions) {
     ServiceFileLive.pipe(Layer.provide(ServerLive)),
   );
 
-  const AppLive = Layer.mergeAll(
-    bridgeWsRoute,
-    bridgeEventsRoute,
-    opsCatalogRoute,
-    settingsSchemaRoute,
-    hostStatusRoute,
-    hostUpdateRoute,
-    hostUpdateStatusRoute,
-    hostInstallRoute,
+  const CommonAppLive = Layer.mergeAll(
     adminShutdownRoute,
-    sessionsRoute,
-    callRoute,
     MastraMountLive,
-    ServedSessionLive,
     options.viteServer ? viteWebLayer(options.viteServer) : staticSpaLayer(options.webRoot),
-    ...(options.includeInstallGc === false ? [] : [InstallGcLive]),
   );
 
-  return HttpRouter.serve(AppLive).pipe(
+  if (options.capabilities.revit) {
+    const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(
+      options.includeInstallGc !== false,
+    );
+    return HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
+      Layer.provide(withMastraDegrade(options.mastraLayer)),
+      Layer.provide(ClaimedServerLive),
+      Layer.provide(NodeHttpClient.layerUndici),
+      Layer.provide(revitComposition.provider),
+      Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
+      Layer.provide(NodeServices.layer),
+    );
+  }
+
+  return HttpRouter.serve(
+    Layer.mergeAll(NoRevitBoundaryLive, noRevitHostStatusRoute, CommonAppLive),
+  ).pipe(
     // ClaimedServerLive binds and completes takeover before the tenant opens shared product state.
     // The tenant still receives that same HttpServer, and any runtime failure degrades only /pe/*.
     Layer.provide(withMastraDegrade(options.mastraLayer)),
     Layer.provide(ClaimedServerLive),
     Layer.provide(NodeHttpClient.layerUndici),
-    Layer.provide(RevitBridgeLive),
     Layer.provide(Layer.succeed(HostLifecycle, options.lifecycle)),
     Layer.provide(NodeServices.layer),
   );

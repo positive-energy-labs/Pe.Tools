@@ -7,8 +7,9 @@ import { chooseServicePort } from "@pe/host-contracts/pe-service-host";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { productRoot } from "@pe/host-contracts/service-identity";
 import { DEV_TAKEOVER_ARGUMENT, evictLiveHost, resolveHostVersion } from "./host-lifecycle.ts";
-import { makeHttpLive, MastraRuntimeLive, resolveWebRoot } from "./app.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { makeHttpLive, resolveWebRoot } from "./app.ts";
+import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
+import { makeMastraRuntimeLive } from "./mastra-runtime.ts";
 
 const preferredPort = Number(new URL(hostProcessIdentity.defaultHostBaseUrl).port);
 
@@ -47,7 +48,8 @@ export const hostProgram = <A, E, R>(options: {
         port,
         nodeServer: options.nodeServer,
         viteServer: options.viteServer,
-        mastraLayer: MastraRuntimeLive,
+        capabilities: hostCapabilities,
+        mastraLayer: makeMastraRuntimeLive(hostCapabilities),
         lifecycle: { latch, handle },
         webRoot: resolveWebRoot(),
       });
