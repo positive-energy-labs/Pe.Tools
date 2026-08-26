@@ -1,11 +1,3 @@
-/**
- * /family command handlers — parse a spec sheet, capture Revit evidence, and build
- * the saved authored document into an .rfa with evidence returned.
- *
- * Authored truth and its proposal/staging lifecycle live in `route:settings`; these
- * commands only feed the sibling `route:family` slice (spec doc blocks + evidence
- * with origin stamps). Evidence is never build input — it is proof beside the model.
- */
 import { resolve } from "node:path";
 
 import {
@@ -19,31 +11,11 @@ import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 import { currentReadingIdentity } from "./reading-source.ts";
 
-export { familyRouteState } from "@pe/agent-contracts";
-
-interface EvidencePayload {
-  typeNames: string[];
-  parameters: {
-    name: string;
-    isShared: boolean;
-    propertiesGroup?: string | null;
-    valuesPerType: Record<
-      string,
-      { value?: string | null; source: string; provenance: string; formula?: string | null }
-    >;
-  }[];
-  diagnostics: { code: string; path: string; message: string; provenance: string }[];
-}
-
 export function createFamilyCommandHandlers(
   options: { hostBaseUrl?: string } = {},
 ): RouteStateCommandHandlers<FamilyDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
   const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
-  const untyped = (target?: string) => {
-    const rpc = caller(target);
-    return rpc.call.bind(rpc) as (key: string, request?: unknown) => Promise<unknown>;
-  };
 
   return {
     parse_spec: async (input, ctx) => {
@@ -104,19 +76,11 @@ export function createFamilyCommandHandlers(
     capture_evidence: async (input, ctx) => {
       const target = resolveTarget(input, ctx.getDoc());
       const rpc = caller(target);
-      let raw: {
-        familyName: string;
-        modelJson: string;
-        unmodeledCount: number;
-        evidence: EvidencePayload;
-      };
-      try {
-        raw = (await untyped(target)("revit.detail.family-model", {})) as typeof raw;
-      } catch (error) {
+      const raw = await rpc.call("revit.detail.family-model", {}).catch((error: unknown) => {
         throw new Error(
           `revit.detail.family-model failed (${message(error)}). Is a family document active in the bound session?`,
         );
-      }
+      });
 
       const document = ctx.getDoc();
       document.evidence = {
@@ -128,7 +92,7 @@ export function createFamilyCommandHandlers(
           familyName: raw.familyName,
           rfaPath: null,
         },
-      } as FamilyDocument["evidence"];
+      };
       await ctx.setDoc(document);
 
       return {
@@ -150,21 +114,11 @@ export function createFamilyCommandHandlers(
       const rpc = caller(target);
 
       // Build the SAVED revision — read it through the same open path every consumer uses.
-      const opened = (await untyped(target)("settings.document.open", {
-        documentId: {
-          moduleKey: documentId.moduleKey,
-          rootKey: documentId.rootKey,
-          relativePath: documentId.relativePath,
-        },
+      const opened = await rpc.call("settings.document.open", {
+        documentId,
         includeComposedContent: false,
-      })) as {
-        rawContent: string;
-        metadata?: {
-          documentId?: { stableId?: string };
-          versionToken?: { value?: string } | null;
-        };
-      };
-      const sourcePath = opened.metadata?.documentId?.stableId;
+      });
+      const sourcePath = opened.metadata.documentId.stableId;
       if (!sourcePath)
         throw new Error("settings.document.open returned no absolute document path.");
 
@@ -177,18 +131,15 @@ export function createFamilyCommandHandlers(
           `.artifacts/tmp/family/${documentId.relativePath.replace(/\//g, "-")}-${stamp()}.rfa`,
         );
 
-      let built: { familyName?: string; outputPath?: string; evidence?: EvidencePayload };
-      try {
-        built = (await untyped(target)("revit.apply.family-model", {
+      const built = await rpc
+        .call("revit.apply.family-model", {
           modelJson: opened.rawContent,
           outputPath: rfaPath,
           ...(modelDirectory ? { modelDirectory } : {}),
-        })) as typeof built;
-      } catch (error) {
-        throw new Error(`revit.apply.family-model failed (${message(error)}).`);
-      }
-      if (!built.evidence)
-        throw new Error("The build succeeded but returned no evidence projection.");
+        })
+        .catch((error: unknown) => {
+          throw new Error(`revit.apply.family-model failed (${message(error)}).`);
+        });
 
       const document = ctx.getDoc();
       const documentVersionToken = opened.metadata?.versionToken?.value;
@@ -199,15 +150,15 @@ export function createFamilyCommandHandlers(
           origin: "build",
           ...(documentVersionToken ? { documentVersionToken } : {}),
           observedAt: new Date().toISOString(),
-          familyName: built.familyName ?? documentId.relativePath,
-          rfaPath: built.outputPath ?? rfaPath,
+          familyName: built.familyName,
+          rfaPath: built.outputPath,
         },
-      } as FamilyDocument["evidence"];
+      };
       await ctx.setDoc(document);
 
       return {
         familyName: built.familyName,
-        rfaPath: built.outputPath ?? rfaPath,
+        rfaPath: built.outputPath,
         typeNames: built.evidence.typeNames,
         parameterCount: built.evidence.parameters.length,
         documentVersionToken: opened.metadata?.versionToken?.value ?? null,

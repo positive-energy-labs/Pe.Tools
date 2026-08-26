@@ -1,26 +1,3 @@
-/**
- * /family — the route shell. Everything the surface IS lives in `#/family/workspace`.
- *
- * PROMOTED 2026-08-16. This route used to carry a two-lane workspace (an authored `family.json`
- * bound through route:settings, and the family open in Revit's family editor through
- * family.editor.snapshot/apply) plus the `?variant=` gate that mounted the clean-room rebuilds
- * beside it. The clean room ruled: variant e IS the product, so it stopped being a variant and
- * became the route. The rivals are on snapshot branch `proto/family-variants-2026-08`; the
- * superseded two-lane surface and its twelve modules are in git at `0af4260`.
- *
- * WHAT THE ROUTE STILL OWNS, and why each survived the promotion:
- *   `thread` — the chat side pane iframes this route with a thread id, and `#/workbench/route-state`
- *     passes it to the family store to address both route-state slices to that conversation.
- *     Declared here because an undeclared param is dropped on the first navigation.
- *   `family` — `/families` row navigation passes an ELEMENT id. Phase B gave the surface a real
- *     document lane, but a placed element is still not a document: nothing maps an element id to a
- *     `family.json` path. So it is handed to the workspace and SAID rather than swallowed — the
- *     header renders an advisory pointing at the sentence's document slot, which is where you pick.
- *
- * WHAT WENT: `?mock`, because the lane is decided by whether a family document is OPEN — a flag
- * that chose the lane would be able to contradict the page's own state; `?variant`, because there
- * is nothing to switch to.
- */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { createLiveFamilyHost } from "#/family/host";
@@ -31,7 +8,6 @@ import { withThread } from "./-with-thread";
 import { useRouteStore } from "#/state/use-route-store";
 
 export const Route = createFileRoute("/family")({
-  /** Every param is optional, so every `<Link to="/family">` stays search-free. */
   validateSearch: (
     search: Record<string, unknown>,
   ): {

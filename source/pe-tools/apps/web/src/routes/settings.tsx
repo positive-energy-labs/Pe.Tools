@@ -6,7 +6,6 @@ import {
   settingsFieldSegments,
   type RouteStatePatch,
   type SettingsFieldState,
-  type SettingsRouteDocument,
   type SettingsValidation,
 } from "@pe/agent-contracts";
 import type { SettingsValidationResult } from "@pe/host-contracts/operation-types";
@@ -82,10 +81,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const failure = useAtomValue(store.atoms.failure);
   const busy = useAtomValue(store.atoms.busy);
   const rows = useMemo(
-    () =>
-      snapshot
-        ? buildFieldRows({ binding: { target: null }, snapshot, fields, savedAt: null })
-        : [],
+    () => (snapshot ? buildFieldRows(snapshot.rawContent, fields) : []),
     [fields, snapshot],
   );
   const formModel = useMemo(
@@ -290,20 +286,23 @@ interface FieldRowModel {
   field?: SettingsFieldState;
 }
 
-function buildFieldRows(document: SettingsRouteDocument): FieldRowModel[] {
+function buildFieldRows(
+  rawContent: string,
+  fields: Record<string, SettingsFieldState>,
+): FieldRowModel[] {
   let parsed: Record<string, unknown> = {};
   try {
-    const value: unknown = JSON.parse(document.snapshot?.rawContent ?? "{}");
+    const value: unknown = JSON.parse(rawContent);
     if (value && typeof value === "object" && !Array.isArray(value))
       parsed = value as Record<string, unknown>;
   } catch {
     // The route stream owns the parse error; staged fields remain reviewable.
   }
-  const paths = new Set([...flattenLeafPaths(parsed), ...Object.keys(document.fields)]);
+  const paths = new Set([...flattenLeafPaths(parsed), ...Object.keys(fields)]);
   return [...paths].sort().map((path) => ({
     path,
     current: valueAtPath(parsed, settingsFieldSegments(path)),
-    field: document.fields[path],
+    field: fields[path],
   }));
 }
 

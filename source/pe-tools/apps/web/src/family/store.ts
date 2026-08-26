@@ -40,7 +40,7 @@ import {
 } from "#/state/route-store";
 import type { Verb } from "#/targeting/model";
 
-export interface SearchPort {
+interface SearchPort {
   readonly target: string;
   readonly profile: string;
   patch(partial: { target?: string }): void;
@@ -432,11 +432,9 @@ export function createFamilyStore(deps: {
   return {
     registry,
     search: deps.search,
-    slices: { settings: settingsSlice, family: familySlice },
     atoms: {
       lane,
       snapshot,
-      fields,
       saved,
       draft,
       overlay,

@@ -86,8 +86,6 @@ export const fixtureFiles: SettingsFileEntry[] = [
 
 /* ── the open document — the real MechEquip/TEST.json ──────────────────────── */
 
-export const fixtureRawContent = FIXTURE_DOCUMENT_RAW;
-
 /** Seeded trichotomy states on REAL pointers in the real document — one of each thing
  * a reviewer must be able to see: an open pea proposal (note + confidence), a staged
  * value, and a staged value flagged `attention` (the save gate's one hard refusal). */

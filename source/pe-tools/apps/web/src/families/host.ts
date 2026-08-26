@@ -22,7 +22,7 @@ export interface FamiliesHost {
   families(target: string, draft: FamiliesDraft): Promise<string[]>;
   profiles(): Promise<string[]>;
   apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  command(name: "bind" | "plan" | "apply", input?: Record<string, unknown>): Promise<RouteStateWriteResult>;
+  command(name: "plan" | "apply", input?: Record<string, unknown>): Promise<RouteStateWriteResult>;
   project(target: string, familyIds: number[]): Promise<FfProjectData>;
   openPath(target: string, path: string): Promise<unknown>;
 }
@@ -83,11 +83,7 @@ export function createLiveFamiliesHost(scope: Scope): FamiliesHost {
     apply: writer.apply,
     command: writer.command,
     project: (target, familyIds) =>
-      callHostRpc(
-        "familyfoundry.project",
-        { familyIds },
-        { bridgeSessionId: target || undefined },
-      ),
+      callHostRpc("familyfoundry.project", { familyIds }, { bridgeSessionId: target || undefined }),
     openPath: (target, path) =>
       callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
   };

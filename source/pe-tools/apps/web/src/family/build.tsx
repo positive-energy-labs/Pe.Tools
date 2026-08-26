@@ -45,7 +45,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 /** The commit label, shared by the verb that arms and the strip that commits. */
 export const BUILD_VERB = "build .rfa";
 
-export type BuildRefusalCode =
+type BuildRefusalCode =
   | "no-document"
   | "unbound"
   | "unsaved"
@@ -182,7 +182,7 @@ function describeUnsaved(facts: BuildFacts): string {
 }
 
 /** The receipt `build_evidence` returns, read defensively — the wire type is `unknown`. */
-export interface BuildReceipt {
+interface BuildReceipt {
   familyName: string;
   rfaPath: string;
   documentVersionToken: string | null;
@@ -213,7 +213,7 @@ export const BUILD_OUTCOME_UNKNOWN =
   "the .rfa was written. It writes a NEW timestamped file rather than overwriting, so a second build " +
   "cannot undo a first one: look in .artifacts/tmp/family before pressing again.";
 
-export interface BuildStripProps {
+interface BuildStripProps {
   /** null → unarmed; the strip is not on the page at all. */
   armed: { token: string | null; reason: string } | null;
   /** The command is out. Nothing about the .rfa is known yet. */

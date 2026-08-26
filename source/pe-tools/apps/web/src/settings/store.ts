@@ -9,7 +9,7 @@ import {
   type SettingsFieldState,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
-import { SettingsFileKind, type SettingsFileEntry } from "@pe/host-contracts/operation-types";
+import type { SettingsFileEntry } from "@pe/host-contracts/operation-types";
 
 import {
   createRouteStoreCore,
@@ -228,14 +228,7 @@ export function createSettingsStore(deps: {
       get(treeResult),
       (items) =>
         items
-          .filter(
-            (entry) =>
-              entry.kind !== SettingsFileKind.Fragment &&
-              entry.kind !== SettingsFileKind.Schema &&
-              !entry.isFragment &&
-              !entry.isSchema &&
-              entry.relativePath.toLowerCase().endsWith(".json"),
-          )
+          .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
           .map((item) => ({ id: item.path, label: item.relativePath })),
       lane,
       { needs: "a module and root" },
@@ -391,7 +384,6 @@ export function createSettingsStore(deps: {
   return {
     registry,
     search: deps.search,
-    slices: { settings: settingsSlice },
     atoms: {
       snapshot,
       fields,

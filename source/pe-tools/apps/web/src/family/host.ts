@@ -3,7 +3,8 @@ import {
   settingsRouteState,
   type RouteStatePatch,
   type RouteStateWriteResult,
-  type SettingsProposalSource,
+  type SettingsFieldState,
+  type SettingsSnapshot,
 } from "@pe/agent-contracts";
 
 import { callHostRpc } from "#/host/client";
@@ -11,28 +12,8 @@ import { fromBridgeSessions, type SessionFacts } from "#/host/target";
 import { docWriter, type Scope } from "#/state/route-store";
 
 export const FAMILY_MODULE = { moduleKey: "FamilyFoundry", rootKey: "models" };
-export type FieldState = {
-  proposal?: {
-    value?: unknown;
-    delete?: true;
-    note?: string | null;
-    confidence?: "high" | "low" | null;
-    sources?: SettingsProposalSource[] | null;
-  } | null;
-  staged?: { value?: unknown; delete?: true } | null;
-  review?: string;
-};
-export interface FamilySnapshot {
-  from: {
-    target: string;
-    documentId: string;
-    documentVersionToken?: string;
-    observedAt: string;
-    settingsDocumentId: { moduleKey: string; rootKey: string; relativePath: string };
-  };
-  rawContent: string;
-  validation?: { isValid: boolean; issues: unknown[] } | null;
-}
+export type FieldState = SettingsFieldState;
+export type FamilySnapshot = SettingsSnapshot;
 export interface EvidenceSlice {
   typeNames: string[];
   parameters: Array<{

@@ -38,14 +38,12 @@ const settingsFieldEditSchema = z
 /** One document citation for a proposed value, in markdown coordinates — pea never
  * sees a bbox. `blockId` may reference a parsed block OR a parser-extracted image;
  * the UI resolves geometry (measured/estimated) and refuses to draw what it can't. */
-export const settingsProposalSourceSchema = z.object({
+const settingsProposalSourceSchema = z.object({
   blockId: z.string(),
   rowIdx: z.number().int().nonnegative().optional(),
   colIdx: z.number().int().nonnegative().optional(),
   note: z.string().nullish(),
 });
-export type SettingsProposalSource = z.infer<typeof settingsProposalSourceSchema>;
-
 export const settingsFieldStateSchema = z.object({
   proposal: settingsFieldEditSchema
     .extend({
@@ -77,13 +75,13 @@ export const settingsValidationIssueSchema = z.looseObject({
   path: z.string().nullish(),
 });
 
-export const settingsValidationSchema = z.object({
+const settingsValidationSchema = z.object({
   isValid: z.boolean(),
   issues: z.array(settingsValidationIssueSchema).default([]),
 });
 export type SettingsValidation = z.infer<typeof settingsValidationSchema>;
 
-export const settingsSnapshotSchema = z.object({
+const settingsSnapshotSchema = z.object({
   from: readingFromSchema.extend({ settingsDocumentId: settingsDocumentIdSchema }),
   /** Raw JSON text as stored on disk — the save target. */
   rawContent: z.string(),
@@ -96,7 +94,7 @@ export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 
 /* ── The document ──────────────────────────────────────────────────────────── */
 
-export const settingsRouteDocumentSchema = z
+const settingsRouteDocumentSchema = z
   .object({
     binding: routeBindingSchema,
     snapshot: settingsSnapshotSchema.nullish(),

@@ -3,7 +3,7 @@ import { profileTerminal, worldTrunk } from "#/targeting/trunks";
 
 const profile = profileTerminal("read");
 
-export type FamiliesProductActions = {
+type FamiliesProductActions = {
   applyScope: () => Promise<string | void>;
   plan: () => Promise<string | void>;
   apply: () => Promise<string | void>;

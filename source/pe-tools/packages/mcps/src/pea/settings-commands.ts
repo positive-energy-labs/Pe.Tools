@@ -1,12 +1,3 @@
-/**
- * /settings command handlers — open/refresh/validate/save over the host settings.* ops.
- * See route-state-commands.ts for the handler idiom (getDoc/setDoc, hint-rich errors).
- *
- * These are the side-effectful work the agent write mask forbids doing by hand: open a
- * schema-backed settings document, re-read it, validate a candidate splice, and save
- * (human-only). They run where the pea runtime is composed (in-process with the host),
- * reaching the TS host through `HostRpcCaller` — no Revit session required.
- */
 import {
   type SettingsDocumentId,
   type SettingsRouteDocument,
@@ -24,8 +15,6 @@ import type {
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
-export { settingsRouteState } from "@pe/agent-contracts";
-
 /** Build the settings command handlers, bound to a resolved host base URL. */
 export function createSettingsCommandHandlers(
   options: { hostBaseUrl?: string } = {},
@@ -41,7 +30,7 @@ export function createSettingsCommandHandlers(
       };
       const rpc = caller(resolveTarget(input, ctx.getDoc()));
       const result = await rpc.call("settings.document.save", {
-        documentId: toHostDocumentId(documentId),
+        documentId,
         rawContent,
         createOnly: true,
       });
@@ -101,7 +90,7 @@ export function createSettingsCommandHandlers(
         validation = await caller(resolveTarget(input, document)).call(
           "settings.document.validate",
           {
-            documentId: toHostDocumentId(snapshot.from.settingsDocumentId),
+            documentId: snapshot.from.settingsDocumentId,
             rawContent,
           },
         );
@@ -142,7 +131,7 @@ export function createSettingsCommandHandlers(
       let result;
       try {
         result = await rpc.call("settings.document.save", {
-          documentId: toHostDocumentId(snapshot.from.settingsDocumentId),
+          documentId: snapshot.from.settingsDocumentId,
           rawContent,
           expectedVersionToken:
             snapshot.from.documentVersionToken != null
@@ -193,7 +182,7 @@ async function openSnapshot(
   let raw: SettingsDocumentSnapshot;
   try {
     raw = await caller.call("settings.document.open", {
-      documentId: toHostDocumentId(documentId),
+      documentId,
       includeComposedContent: true,
     });
   } catch (error) {
@@ -216,15 +205,6 @@ async function openSnapshot(
     composedContent: raw.composedContent ?? null,
     modifiedUtc: raw.metadata.modifiedUtc ?? null,
     validation: toRouteValidation(raw.validation),
-  };
-}
-
-/** The route-doc documentId carries only the three addressing keys; the host op accepts them. */
-function toHostDocumentId(documentId: SettingsDocumentId) {
-  return {
-    moduleKey: documentId.moduleKey,
-    rootKey: documentId.rootKey,
-    relativePath: documentId.relativePath,
   };
 }
 

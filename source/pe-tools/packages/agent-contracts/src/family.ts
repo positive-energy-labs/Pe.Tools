@@ -20,7 +20,7 @@ import { readingFromSchema } from "./reading.ts";
 
 /* ── Evidence projection (mirror of C# FamilyModelEvidence, camelCase) ──────── */
 
-export const familyEvidenceValueSourceSchema = z.enum([
+const familyEvidenceValueSourceSchema = z.enum([
   "AuthoredGlobal",
   "AuthoredTypeOverride",
   "Formula",
@@ -28,23 +28,23 @@ export const familyEvidenceValueSourceSchema = z.enum([
   "Unresolved",
 ]);
 
-export const familyEvidenceProvenanceSchema = z.enum(["Exact", "Inferred", "Unresolved"]);
+const familyEvidenceProvenanceSchema = z.enum(["Exact", "Inferred", "Unresolved"]);
 
-export const familyEvidenceResolvedValueSchema = z.object({
+const familyEvidenceResolvedValueSchema = z.object({
   value: z.string().nullish(),
   source: familyEvidenceValueSourceSchema,
   provenance: familyEvidenceProvenanceSchema,
   formula: z.string().nullish(),
 });
 
-export const familyEvidenceParameterSchema = z.object({
+const familyEvidenceParameterSchema = z.object({
   name: z.string(),
   isShared: z.boolean(),
   propertiesGroup: z.string().nullish(),
   valuesPerType: z.record(z.string(), familyEvidenceResolvedValueSchema),
 });
 
-export const familyEvidenceDiagnosticSchema = z.object({
+const familyEvidenceDiagnosticSchema = z.object({
   code: z.string(),
   path: z.string(),
   message: z.string(),
@@ -55,7 +55,7 @@ export const familyEvidenceDiagnosticSchema = z.object({
 /** Where the evidence came from — the staleness contract. A UI compares
  * `documentVersionToken` against the open settings snapshot's token: equal means
  * the evidence describes what you're editing; different means dashed/stale. */
-export const familyEvidenceOriginSchema = readingFromSchema.extend({
+const familyEvidenceOriginSchema = readingFromSchema.extend({
   origin: z.enum(["capture", "build"]),
   familyName: z.string(),
   rfaPath: z.string().nullish(),
@@ -67,20 +67,18 @@ export const familyEvidenceSchema = z.object({
   diagnostics: z.array(familyEvidenceDiagnosticSchema),
   from: familyEvidenceOriginSchema,
 });
-export type FamilyEvidence = z.infer<typeof familyEvidenceSchema>;
-
 /* ── The document ──────────────────────────────────────────────────────────── */
 
 /** Parser-extracted figures/diagram crops — ids only; geometry stays in the parse
  * cache. Pea may cite an image id as a proposal source; the parser measured its
  * region, so image citations ground exactly (never estimated). */
-export const familyDocImageSchema = z.object({
+const familyDocImageSchema = z.object({
   id: z.string(),
   page: z.number(),
   category: z.string(),
 });
 
-export const familyDocumentSchema = z.object({
+const familyDocumentSchema = z.object({
   binding: routeBindingSchema,
   doc: specDocSchema.extend({ images: z.array(familyDocImageSchema).default([]) }).nullish(),
   evidence: familyEvidenceSchema.nullish(),

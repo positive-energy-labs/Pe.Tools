@@ -32,7 +32,7 @@ const resolvedParameterSchema = z.object({
   }),
 });
 
-export const ffPlanEntrySchema = z.object({
+const ffPlanEntrySchema = z.object({
   familyId: z.number(),
   familyName: z.string(),
   plan: z.object({
@@ -51,7 +51,7 @@ export const ffPlanEntrySchema = z.object({
 });
 export type FfPlanEntry = z.infer<typeof ffPlanEntrySchema>;
 
-export const ffReceiptSchema = z.object({
+const ffReceiptSchema = z.object({
   familyId: z.number(),
   familyName: z.string().nullish(),
   success: z.boolean(),
@@ -63,14 +63,14 @@ export const ffReceiptSchema = z.object({
 });
 export type FfReceipt = z.infer<typeof ffReceiptSchema>;
 
-export const appliedScopeSchema = z.object({
+const appliedScopeSchema = z.object({
   categoryNames: z.array(z.string()),
   familyNames: z.array(z.string()),
   placementScope: z.enum(["AllLoaded", "PlacedOnly", "UnplacedOnly"]),
 });
 export type AppliedScope = z.infer<typeof appliedScopeSchema>;
 
-export const familiesDocumentSchema = z.object({
+const familiesDocumentSchema = z.object({
   binding: routeBindingSchema,
   profilePath: z.string().nullable().default(null),
   plan: z

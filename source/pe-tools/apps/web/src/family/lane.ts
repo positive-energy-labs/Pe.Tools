@@ -3,13 +3,13 @@ import type { EvidenceSlice, FamilySnapshot } from "#/family/host";
 import { FIXTURE_WORLD, type PageWorld, buildPageWorld } from "#/family/model";
 import { projectFamilyModel } from "#/family/project";
 
-export interface OpenFamilyDocument {
+interface OpenFamilyDocument {
   model: FamilyModel;
   relativePath: string;
   versionToken: string | null;
   evidenceStale: boolean;
 }
-export interface FamilyLane {
+interface FamilyLane {
   world: PageWorld;
   document: OpenFamilyDocument | null;
   parseError: string | null;

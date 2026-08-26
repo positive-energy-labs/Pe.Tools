@@ -72,11 +72,6 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
       return { ok: true, doc: document };
     },
     async command(name, input): Promise<RouteStateWriteResult> {
-      if (name === "bind") {
-        const target = (input as { target?: string | null } | undefined)?.target ?? null;
-        publish({ ...document, binding: { target, boundAt: new Date().toISOString() } });
-        return { ok: true, doc: document };
-      }
       if (name === "open") {
         const documentId = (
           input as
@@ -167,7 +162,7 @@ export function createFixtureSettingsHost(registry: AtomRegistry.AtomRegistry): 
         });
         return { ok: true, doc: document };
       }
-      return { ok: false, error: `The fixture lane has no "${name}" command.` };
+      throw new Error("unreachable settings fixture command");
     },
   };
 }

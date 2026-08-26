@@ -1,16 +1,14 @@
-import { useEffect } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { createLiveFamiliesHost } from "#/families/host";
-import { createFamiliesStore, type FamiliesStore } from "#/families/store";
+import { createFamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
 import { appAtomRegistry } from "#/state/registry";
+import { useRouteStore } from "#/state/use-route-store";
 import { withThread } from "./-with-thread";
 
 export const Route = createFileRoute("/families")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { target?: string; thread?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { target?: string; thread?: string } => ({
     target: typeof search.target === "string" ? search.target.trim() : "",
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
@@ -18,11 +16,6 @@ export const Route = createFileRoute("/families")({
   beforeLoad: withThread,
   component: FamiliesRoute,
 });
-
-const owners = new Map<
-  string,
-  { store: FamiliesStore; disposeTimer: ReturnType<typeof setTimeout> | null }
->();
 
 function FamiliesRoute() {
   const { target = "", thread } = Route.useSearch();
@@ -32,33 +25,17 @@ function FamiliesRoute() {
 
 function FamiliesStoreOwner({ thread, target }: { thread: string; target: string }) {
   const navigate = useNavigate({ from: "/families" });
-  const key = `${thread}:${target}`;
-  let owner = owners.get(key);
-  if (!owner) {
+  const store = useRouteStore(() => {
     const scope = { threadId: thread };
-    owner = {
-      store: createFamiliesStore({
-        registry: appAtomRegistry,
-        scope,
-        host: createLiveFamiliesHost(scope),
-        search: {
-          target,
-          patch: (patch) => void navigate({ search: (previous) => ({ ...previous, ...patch }) }),
-        },
-      }),
-      disposeTimer: null,
-    };
-    owners.set(key, owner);
-  }
-  const store = owner.store;
-  useEffect(() => {
-    if (owner.disposeTimer) clearTimeout(owner.disposeTimer);
-    return () => {
-      owner.disposeTimer = setTimeout(() => {
-        store.dispose();
-        owners.delete(key);
-      }, 0);
-    };
-  }, [key, owner, store, target]);
+    return createFamiliesStore({
+      registry: appAtomRegistry,
+      scope,
+      host: createLiveFamiliesHost(scope),
+      search: {
+        target,
+        patch: (patch) => void navigate({ search: (previous) => ({ ...previous, ...patch }) }),
+      },
+    });
+  });
   return <FamiliesWorkspace store={store} />;
 }

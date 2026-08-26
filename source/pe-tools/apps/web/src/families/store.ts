@@ -24,7 +24,7 @@ import {
   type Slice,
 } from "#/state/route-store";
 
-export interface FamiliesSearchPort {
+interface FamiliesSearchPort {
   readonly target: string;
   patch(partial: { target?: string }): void;
 }
@@ -317,7 +317,6 @@ export function createFamiliesStore(deps: {
   return {
     registry,
     search: deps.search,
-    slices: { families: slice },
     atoms: {
       profilePath,
       plan,
@@ -328,7 +327,6 @@ export function createFamiliesStore(deps: {
       pickedIds,
       projection,
       showUncommon,
-      seenFamilies,
       table,
       picker,
       busy: core.busy,

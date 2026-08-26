@@ -19,7 +19,10 @@ export interface SettingsHost {
   tree(moduleKey: string, rootKey: string): Promise<readonly SettingsFileEntry[]>;
   schema(moduleKey: string, rootKey: string): Promise<string>;
   apply?(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  command?(name: "bind" | "open" | "refresh" | "validate" | "save", input?: unknown): Promise<RouteStateWriteResult>;
+  command?(
+    name: "open" | "refresh" | "validate" | "save",
+    input?: unknown,
+  ): Promise<RouteStateWriteResult>;
 }
 
 export function createLiveSettingsHost(): SettingsHost {
@@ -28,14 +31,16 @@ export function createLiveSettingsHost(): SettingsHost {
       return (await callHostRpc("settings.workspaces", undefined)).workspaces;
     },
     async tree(moduleKey, rootKey) {
-      return (await callHostRpc("settings.tree", {
-        moduleKey,
-        rootKey,
-        subDirectory: "",
-        recursive: true,
-        includeFragments: false,
-        includeSchemas: false,
-      })).files;
+      return (
+        await callHostRpc("settings.tree", {
+          moduleKey,
+          rootKey,
+          subDirectory: "",
+          recursive: true,
+          includeFragments: false,
+          includeSchemas: false,
+        })
+      ).files;
     },
     async schema(moduleKey, rootKey) {
       return (await callHostRpc("settings.schema", { moduleKey, rootKey })).schemaJson;
