@@ -13,7 +13,7 @@
  *
  * The manifest is STATIC data — what the sentence, the census, and a chat-plugin registration
  * all project. Everything live comes in beside it as a `Feed` per link: the legal options, and
- * how fresh they are. Bindings are the CALLER's state (URL search on a route).
+ * how fresh they are. Bindings are the CALLER's route-document state.
  *
  * Seams are declared facts:
  *   feed.seam               → legal-options seam

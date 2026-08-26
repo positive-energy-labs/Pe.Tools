@@ -11,7 +11,7 @@
  * with the optimistic-concurrency version token captured at open/refresh.
  */
 import { z } from "zod";
-import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
 import {
   cellReviewSchema,
   LOW_CONFIDENCE_REFINE_ERROR,
@@ -98,7 +98,7 @@ export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 
 const settingsRouteDocumentSchema = z
   .object({
-    binding: routeBindingSchema,
+    bindings: routeBindingsSchema,
     documentId: settingsDocumentIdSchema.nullable().default(null),
     /** field pointer -> trichotomy state. Keys are RFC 6901 JSON Pointers into the parsed raw JSON. */
     fields: z.record(z.string(), settingsFieldStateSchema).default({}),

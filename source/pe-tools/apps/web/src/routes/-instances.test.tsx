@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 const fleet = vi.hoisted(() => ({
@@ -60,24 +60,14 @@ afterEach(() => {
 });
 
 describe("instances route", () => {
-  it("mounts the route with graveyard rows outside the live-world picker", () => {
+  it("asks for a document before mounting the route document", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
         <InstancesPage />
       </QueryClientProvider>,
     );
 
-    expect(screen.getByTestId("instances-workspace")).toBeTruthy();
-    expect(screen.getAllByText("pe.app-25").length).toBeGreaterThan(0);
-    expect(screen.getByText("installed-25")).toBeTruthy();
-    expect(fleet.useFleet).toHaveBeenCalledWith(true);
-
-    const picker = screen.getByRole("button", { name: "pick a world" });
-    expect((picker.closest("span.inline-flex.flex-col") as HTMLElement).style.opacity).toBe("1");
-    fireEvent.click(picker);
-    const popover = picker.closest("span.relative") as HTMLElement;
-    expect(within(popover).getByText("pe.app-25")).toBeTruthy();
-    expect(within(popover).queryByText("installed-25")).toBeNull();
+    expect(screen.getByText("pick a document")).toBeTruthy();
   });
 
   it("keeps a managed-trunk pane ready while the trunk is unbound", () => {

@@ -1,5 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import {
+  address,
   type ScheduleGridDocument,
   scheduleCellKey,
   scheduleGridRouteState,
@@ -37,7 +38,11 @@ function emptyDoc(): ScheduleGridDocument {
 }
 
 function ctxFor(document: ScheduleGridDocument) {
-  return { getDoc: () => document, setDoc: async () => undefined };
+  return {
+    documentAddress: address("C:\\Models\\A.rvt"),
+    getDoc: () => document,
+    setDoc: async () => undefined,
+  };
 }
 
 /** A single-schedule detail response with one bound, editable, type-parameter cell (row 1, column 2). */

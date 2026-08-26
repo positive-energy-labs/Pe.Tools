@@ -3,15 +3,9 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
 import { resolveTarget, type SessionFacts } from "#/host/target";
 import { documentTrunk } from "#/targeting/trunks";
-import { csv, resolvedWorldBinding } from "./takeoffs";
+import { resolvedWorldBinding } from "./takeoffs";
 
-describe("takeoffs route search", () => {
-  it("keeps a scalar view name with a comma as one value", () => {
-    const view = "Mechanical Zoning Plan - Main Level, Controls";
-
-    expect(csv(view)).toEqual([view]);
-  });
-
+describe("takeoffs document scope", () => {
   it("binds an implicit sole world and offers its active document", () => {
     const sessions: SessionFacts[] = [
       {

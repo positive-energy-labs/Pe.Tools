@@ -24,6 +24,7 @@ import { CellTrichotomyReviewer } from "./trichotomy-reviewer";
 import { FamilyChatPlugin } from "./plugins/family-chat-plugin";
 import { ScheduleGridChatPlugin } from "./plugins/schedule-grid-chat-plugin";
 import { SettingsChatPlugin } from "./plugins/settings-chat-plugin";
+import { useRouteDocumentAddress } from "./route-document";
 
 const ROUTE_TOOL_NAMES = new Set(["route_state_read", "route_state_apply", "route_command"]);
 
@@ -147,27 +148,27 @@ function ConnectedRouteChatPlugin({
   registration,
   ...props
 }: RouteChatPluginViewProps & { active: boolean; registration: RouteChatPluginRegistration }) {
-  const { currentThreadId } = useWorkbench();
-  if (!currentThreadId) return null;
+  const documentAddress = useRouteDocumentAddress();
+  if (!documentAddress) return null;
   return (
     <AddressedRouteChatPlugin
       registration={registration}
       {...props}
-      currentThreadId={currentThreadId}
+      documentAddress={documentAddress}
     />
   );
 }
 
 function AddressedRouteChatPlugin({
   registration,
-  currentThreadId,
+  documentAddress,
   ...props
 }: RouteChatPluginViewProps & {
   active: boolean;
   registration: RouteChatPluginRegistration;
-  currentThreadId: string;
+  documentAddress: import("@pe/agent-contracts").Address;
 }) {
-  const route = useRouteState(registration.spec, { threadId: currentThreadId });
+  const route = useRouteState(registration.spec, { documentAddress });
   if (!route.hydrated || route.slice == null) return null;
   const Renderer = registration.Renderer;
   return <Renderer {...props} sessionState={route.slice} routeState={route} />;

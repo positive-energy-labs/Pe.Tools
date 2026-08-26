@@ -2,11 +2,13 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type {
-  OpsReceipt,
-  OpsRouteDocument,
-  RouteStatePatch,
-  RouteStateWriteResult,
+import {
+  address,
+  type Bind,
+  type OpsReceipt,
+  type OpsRouteDocument,
+  type RouteStatePatch,
+  type RouteStateWriteResult,
 } from "@pe/agent-contracts";
 
 import { bindOpsVerb, opsRefusal, type HostOperationCatalogEntry } from "#/ops/product";
@@ -35,7 +37,9 @@ const oldReceipt = {
   observedAt: "2026-08-25T00:00:00.000Z",
 };
 const document = (target = "observed", receipt: OpsReceipt = oldReceipt): OpsRouteDocument => ({
-  binding: { target },
+  bindings: {
+    world: { id: target, label: target, at: address("C:\\Models\\Test.rvt") } satisfies Bind,
+  },
   receipt,
 });
 const feeds: Feeds = {
@@ -60,8 +64,7 @@ function make(
   const writes: RouteStatePatch[][] = [];
   const store = createOpsStore({
     registry,
-    scope: { threadId: "ops-test" },
-    search: { world: "observed", op: "revit.context.document-session", patch() {} },
+    scope: { documentAddress: address("C:\\Models\\Test.rvt") },
     slice: Atom.make(
       AsyncResult.success({
         doc: routeDocument,
@@ -192,10 +195,19 @@ describe("ops route store", () => {
     expect(writes).toHaveLength(1);
     expect(writes[0]).toEqual([
       {
-        path: ["binding"],
+        path: ["bindings", "world"],
         value: {
-          target: "session:new",
-          boundAt: "2026-08-25T01:02:03.000Z",
+          id: "session:new",
+          label: "session:new",
+          at: address("C:\\Models\\Test.rvt"),
+        },
+      },
+      {
+        path: ["bindings", "op"],
+        value: {
+          id: oldReceipt.opKey,
+          label: oldReceipt.opKey,
+          at: address("C:\\Models\\Test.rvt"),
         },
       },
     ]);

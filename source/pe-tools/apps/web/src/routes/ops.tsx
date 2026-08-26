@@ -1,10 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import type { OpsReceipt } from "@pe/agent-contracts";
 
 import { FactChip, type FactTone } from "#/components/lang/chip";
-import { ThreadEmpty } from "#/components/thread-palette";
+import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
@@ -41,39 +41,33 @@ const str = (value: unknown) => (typeof value === "string" ? value : "");
 
 export const Route = createFileRoute("/ops")({
   validateSearch: (search: Record<string, unknown>) => ({
-    world: str(search.world),
-    op: str(search.op),
     thread: str(search.thread) || undefined,
+    source: str(search.source) || undefined,
   }),
   component: OpsRoute,
 });
 
 function OpsRoute() {
-  const { thread } = Route.useSearch();
-  if (!thread) return <ThreadEmpty />;
-  return <OpsStoreOwner key={thread} thread={thread} />;
+  const documentAddress = useRouteDocumentAddress();
+  if (!documentAddress) return <RouteDocumentEmpty />;
+  return <OpsStoreOwner key={documentAddress} documentAddress={documentAddress} />;
 }
 
-function OpsStoreOwner({ thread }: { thread: string }) {
-  const search = Route.useSearch();
-  const navigate = useNavigate({ from: "/ops" });
+function OpsStoreOwner({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
   const store = useRouteStore(() =>
     createOpsStore({
       registry: appAtomRegistry,
-      scope: { threadId: thread },
-      search: {
-        ...search,
-        patch: (patch) => void navigate({ search: (previous) => ({ ...previous, ...patch }) }),
-      },
+      scope: { documentAddress },
     }),
   );
   return <OpsPage store={store} />;
 }
 
 function OpsPage({ store }: { store: OpsStore }) {
-  const search = Route.useSearch();
+  const world = useAtomValue(store.atoms.world);
+  const op = useAtomValue(store.atoms.op);
   const fleet = useFleet();
-  const resolution = resolveTarget(fleet.sessions, search.world);
+  const resolution = resolveTarget(fleet.sessions, world);
   const session = resolution.kind === "resolved" ? resolution.session : null;
   const catalog = useHostOp("host.ops.catalog", undefined, {
     bridgeSessionId: session?.sessionId,
@@ -81,7 +75,7 @@ function OpsPage({ store }: { store: OpsStore }) {
     staleTime: 60_000,
   });
   const operations = useMemo(() => catalog.data?.operations ?? [], [catalog.data?.operations]);
-  const selected = operations.find((operation) => operation.key === search.op);
+  const selected = operations.find((operation) => operation.key === op);
   const requestSchema = selected ? parseSchema(selected.requestSchemaJson) : undefined;
   const args = useAtomValue(store.atoms.args);
   const mode = useAtomValue(store.atoms.mode);
@@ -101,11 +95,11 @@ function OpsPage({ store }: { store: OpsStore }) {
     : null;
 
   useEffect(() => {
-    if (hydrated) void store.actions.syncBindings(search.world, search.op, currentIdentity);
+    if (hydrated) void store.actions.syncBindings(world, op, currentIdentity);
   }, [
     hydrated,
-    search.world,
-    search.op,
+    world,
+    op,
     currentIdentity?.target,
     currentIdentity?.documentId,
     store,
@@ -144,11 +138,11 @@ function OpsPage({ store }: { store: OpsStore }) {
   );
   const state = useMemo<BindingState>(
     () => ({
-      bound: { world: search.world || null, op: search.op || null },
+      bound: { world: world || null, op: op || null },
       multi: {},
       stage: "explore",
     }),
-    [search.world, search.op],
+    [world, op],
   );
   const product = useMemo(
     () =>
@@ -176,7 +170,7 @@ function OpsPage({ store }: { store: OpsStore }) {
     feeds,
     state,
     (patch) => {
-      const nextWorld = patch.bound?.world ?? search.world;
+      const nextWorld = patch.bound?.world ?? world;
       const nextResolution = resolveTarget(fleet.sessions, nextWorld || "");
       const nextSession = nextResolution.kind === "resolved" ? nextResolution.session : null;
       void store.actions.setBindings(

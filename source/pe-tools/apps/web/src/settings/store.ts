@@ -3,6 +3,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
+  current,
   settingsRouteState,
   settingsFieldSegments,
   type RouteStatePatch,
@@ -117,7 +118,9 @@ export function createSettingsStore(deps: {
   const validation = Atom.make((get) => get(snapshot)?.validation ?? null).pipe(
     owned("view/validation"),
   );
-  const binding = Atom.make((get) => get(document)?.binding ?? { target: null }).pipe(
+  const binding = Atom.make((get) => ({
+    target: current(get(document)?.bindings.file, deps.scope.documentAddress)?.id ?? null,
+  })).pipe(
     owned("view/binding"),
   );
   const proposals = Atom.make((get) =>
@@ -312,8 +315,10 @@ export function createSettingsStore(deps: {
   ) => {
     const patches: RouteStatePatch[] = [
       {
-        path: ["binding"],
-        value: { target, boundAt: target ? new Date().toISOString() : null },
+        path: ["bindings", "file"],
+        value: target
+          ? { id: target, label: target, at: deps.scope.documentAddress }
+          : undefined,
       },
       { path: ["documentId"], value: documentId },
     ];
@@ -359,7 +364,10 @@ export function createSettingsStore(deps: {
             files.find((item) => item.path === filePath) ??
             (await deps.host.tree(moduleKey, rootKey)).find((item) => item.path === filePath);
           if (!file) throw Error("open needs a file from the current settings tree");
-          if (registry.get(document)?.binding.target !== file.path)
+          if (
+            current(registry.get(document)?.bindings.file, deps.scope.documentAddress)?.id !==
+            file.path
+          )
             await bindDocument(file.path, {
               moduleKey,
               rootKey,

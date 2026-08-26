@@ -14,6 +14,7 @@ import {
   type StoredThreadSummary,
   type WorkbenchAttachment,
 } from "./store";
+import { useRouteDocumentAddress } from "./route-document";
 
 export type { StoredThreadSummary, WorkbenchAttachment } from "./store";
 
@@ -70,6 +71,7 @@ function WorkbenchStoreOwner({
   const api = useMemo(() => createLiveChatApi(config), [config]);
   const navigate = useNavigate({ from: "/chat" });
   const currentThreadId = search.thread ?? "";
+  const documentAddress = useRouteDocumentAddress();
   const claim = useThreadClaim(currentThreadId || "draft");
   const store = useRouteStore(() =>
     createChatStore({
@@ -92,6 +94,7 @@ function WorkbenchStoreOwner({
     messageCount: 0,
     persisted: true,
     cwd: thread.cwd,
+    documentAddress: documentAddress ?? undefined,
   }));
   const loading = useAtomValue(store.atoms.loading);
   const sliceError = useAtomValue(store.atoms.sliceError);

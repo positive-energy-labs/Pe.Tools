@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
@@ -23,7 +23,7 @@ import {
 import { createTakeoffStore, TAKEOFF_LINKS, type TakeoffStore } from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
-import { ThreadEmpty } from "#/components/thread-palette";
+import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
 import { documentTrunk, worldTrunk } from "#/targeting/trunks";
@@ -35,15 +35,6 @@ const PANES: Product["panes"] = [
   { key: "r10", label: ".r10 join", draws: ["r10"] },
 ];
 
-const STAGES = ["adopt", "audit", "sync"] as const;
-
-// The router round-trips arrays as JSON; a scalar stays one legal name, including commas.
-export const csv = (v: unknown): string[] =>
-  Array.isArray(v)
-    ? v.filter((x): x is string => typeof x === "string")
-    : typeof v === "string" && v
-      ? [v]
-      : [];
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 export const resolvedWorldBinding = (
@@ -57,11 +48,6 @@ export const resolvedWorldBinding = (
 export const Route = createFileRoute("/takeoffs")({
   validateSearch: (search: Record<string, unknown>) => ({
     source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
-    views: csv(search.views),
-    zones: csv(search.zones),
-    dir: str(search.dir),
-    r10: str(search.r10),
-    stage: STAGES.find((s) => s === search.stage) ?? "adopt",
     thread: str(search.thread) || undefined,
   }),
   component: TakeoffsRoute,
@@ -82,42 +68,35 @@ const readDirs = (): string[] => {
 };
 
 export function TakeoffsRoute() {
-  const { source, thread } = Route.useSearch();
-  if (!thread) return <ThreadEmpty />;
-  return <TakeoffsStoreOwner key={`${source}:${thread}`} source={source} thread={thread} />;
+  const { source } = Route.useSearch();
+  const documentAddress = useRouteDocumentAddress();
+  if (!documentAddress) return <RouteDocumentEmpty />;
+  return <TakeoffsStoreOwner key={`${source}:${documentAddress}`} source={source} documentAddress={documentAddress} />;
 }
 
-function TakeoffsStoreOwner({ source, thread }: { source: Search["source"]; thread: string }) {
-  const search = Route.useSearch();
-  const navigate = useNavigate({ from: "/takeoffs" });
+function TakeoffsStoreOwner({ source, documentAddress }: { source: Search["source"]; documentAddress: import("@pe/agent-contracts").Address }) {
   const store = useRouteStore(() => {
     const created = createTakeoffStore({
       host: source === "fixture" ? createFixtureTakeoffHost() : createLiveTakeoffHost(),
       sessions: source === "fixture" ? createFixtureSessionSource() : createHostSessionSource(),
-      search: {
-        patch: (patch) =>
-          void navigate({
-            search: (previous) => ({
-              ...previous,
-              ...patch,
-              views: patch.views ? [...patch.views] : previous.views,
-              zones: patch.zones ? [...patch.zones] : previous.zones,
-            }),
-          }),
-      },
+      source,
       registry: appAtomRegistry,
-      scope: { threadId: thread },
+      scope: { documentAddress },
     });
     for (const dir of readDirs().reverse()) created.actions.rememberDir(dir);
     return created;
   });
-  useEffect(() => store.actions.setSearch(search), [search, store]);
   return <TakeoffsPage store={store} />;
 }
 
 function TakeoffsPage({ store }: { store: TakeoffStore }) {
-  const search = Route.useSearch();
-  const { source, views, zones, dir, r10, stage } = search;
+  const navigate = useNavigate({ from: "/takeoffs" });
+  const { source } = Route.useSearch();
+  const views = useAtomValue(store.atoms.views);
+  const zones = useAtomValue(store.atoms.zones);
+  const dir = useAtomValue(store.atoms.dir);
+  const r10 = useAtomValue(store.atoms.r10Path);
+  const stage = useAtomValue(store.atoms.stage);
   const target = useAtomValue(store.atoms.target);
   const sessionsResult = useAtomValue(store.atoms.sessions);
   const activeDocumentResult = useAtomValue(store.atoms.activeDocument);
@@ -163,7 +142,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
     const next = [d, ...dirs.filter((x) => x !== d)].slice(0, 8);
     localStorage.setItem(DIRS_KEY, JSON.stringify(next));
     store.actions.rememberDir(d);
-    store.actions.patchSearch({ dir: d, r10: "" });
+    store.actions.setBindings({ bound: { folder: d, r10: null }, multi: {} });
   };
   const r10Result = useAtomValue(store.atoms.r10);
 
@@ -375,7 +354,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             </EmptyState>
             <Verb
               label="open the project-a fixture instead"
-              onClick={() => store.actions.patchSearch({ source: "fixture" })}
+              onClick={() => void navigate({ search: (previous) => ({ ...previous, source: "fixture" }) })}
               reason="Mounts the project-a fixture adapter — an explicit dev choice, never a fallback. Nothing in it can be written."
             />
           </div>
@@ -400,7 +379,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
         <div className="absolute right-2 bottom-2 z-40">
           <Verb
             label="leave fixture → live"
-            onClick={() => store.actions.patchSearch({ source: "live" })}
+            onClick={() => void navigate({ search: (previous) => ({ ...previous, source: "live" }) })}
             reason="Switches this route back to the live lane, where reads and writes address the targeted Revit document"
           />
         </div>
@@ -543,7 +522,7 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
 }
 
 function SyncPanel({ store }: { store: TakeoffStore }) {
-  const { zones: zoneGuids, r10: r10Path } = useAtomValue(store.atoms.search);
+  const { zones: zoneGuids, r10: r10Path } = useAtomValue(store.atoms.selection);
   const { inScope, blockedZones, inserts, untagged, tags } = useAtomValue(store.atoms.syncPlan);
   const busy = useAtomValue(store.atoms.busy)?.id ?? null;
   const sync = () => void store.actions.syncRhvac().catch(() => undefined);

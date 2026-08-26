@@ -38,7 +38,6 @@ function harness() {
   const store = createChatStore({
     registry,
     api,
-    land: async () => "thread-2",
     search: {
       thread: "thread-1",
       mode: "threads",

@@ -3,6 +3,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
+  current,
   familyRouteState,
   here,
   settingsRouteState,
@@ -40,11 +41,6 @@ import {
 } from "#/state/route-store";
 import type { Verb } from "#/targeting/model";
 
-interface SearchPort {
-  readonly target: string;
-  readonly profile: string;
-  patch(partial: { target?: string }): void;
-}
 type Setter<A> = A | ((previous: A) => A);
 type Inspect = { kind: "part"; slug: string } | { kind: "param"; name: string } | null;
 type Binding = { slug: string; property: string } | null;
@@ -60,7 +56,6 @@ export function createFamilyStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: FamilyHost;
-  search: SearchPort;
   slices?: FamilySlices;
 }) {
   const core = createRouteStoreCore("family", deps.registry);
@@ -85,6 +80,16 @@ export function createFamilyStore(deps: {
     const result = get(familySlice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
+  const target = Atom.make(
+    (get) => current(get(familyDoc)?.bindings.world, deps.scope.documentAddress)?.id ?? "",
+  ).pipe(owned("binding/world"));
+  const profile = Atom.make(
+    (get) =>
+      current(get(familyDoc)?.bindings.profile, deps.scope.documentAddress)?.id ??
+      get(settingsDoc)?.documentId?.relativePath ??
+      "",
+  ).pipe(owned("binding/profile"));
+  const routeStage = Atom.make((get) => get(familyDoc)?.stage ?? "author").pipe(owned("stage"));
   const sessionsSource = runtime.atom(() => hostRead(["sessions"], deps.host.sessions));
   const sessionsResult = runtimeFactory
     .withReactivity(["sessions"])(
@@ -111,7 +116,7 @@ export function createFamilyStore(deps: {
     const value = result.value.value;
     return value.documentId.moduleKey === FAMILY_MODULE.moduleKey &&
       value.documentId.rootKey === FAMILY_MODULE.rootKey &&
-      (!deps.search.profile || value.documentId.relativePath === deps.search.profile)
+      (!get(profile) || value.documentId.relativePath === get(profile))
       ? value
       : null;
   }).pipe(owned("view/snapshot"));
@@ -123,7 +128,7 @@ export function createFamilyStore(deps: {
     if (!value) return null;
     const sessions = get(sessionsResult);
     const resolution = AsyncResult.isSuccess(sessions)
-      ? resolveTarget(sessions.value.value, deps.search.target)
+      ? resolveTarget(sessions.value.value, get(target))
       : null;
     if (resolution?.kind !== "resolved") return null;
     return here(value, documentAddress(resolution.session)) as EvidenceSlice | null;
@@ -163,7 +168,7 @@ export function createFamilyStore(deps: {
   const armedBuild = Atom.make<ArmedBuild>(null).pipe(owned("page/armed"));
 
   const profileSource = runtime.atom(() =>
-    hostRead([deps.search.target], () => deps.host.profile(deps.search.target)),
+    hostRead([registry.get(target)], () => deps.host.profile(registry.get(target))),
   );
   const profileResult = runtimeFactory
     .withReactivity(["profile"])(
@@ -231,7 +236,7 @@ export function createFamilyStore(deps: {
         ? draftToPatches(current.document.model, get(draft), initialDraft(current.world)).length
         : 0,
       stagedCount: Object.values(get(fields)).filter((field) => field.staged != null).length,
-      boundTarget: deps.search.target,
+      boundTarget: get(target),
       armedToken: get(armedBuild)?.token ?? null,
     };
   }).pipe(owned("view/build-facts"));
@@ -303,15 +308,6 @@ export function createFamilyStore(deps: {
       return `built ${receipt.rfaPath}`;
     },
   };
-  if (
-    deps.search.profile &&
-    registry.get(settingsDoc)?.documentId?.relativePath !== deps.search.profile
-  )
-    void write("system", "open", () =>
-      writer.command("open", {
-        documentId: { ...FAMILY_MODULE, relativePath: deps.search.profile },
-      }),
-    ).catch(() => undefined);
   const commandVerb = (
     name: CommandName,
     input: () => unknown = () => undefined,
@@ -374,7 +370,18 @@ export function createFamilyStore(deps: {
     },
     save: verbs.save.run!,
     open(relativePath: string) {
-      return commandVerb("open", () => ({ documentId: { ...FAMILY_MODULE, relativePath } })).run!();
+      return runVerb("open", async () => {
+        expect(
+          await deps.host.familyApply([
+            {
+              path: ["bindings", "profile"],
+              value: { id: relativePath, label: relativePath, at: deps.scope.documentAddress },
+            },
+          ]),
+          "profile bind failed",
+        );
+        return writer.command("open", { documentId: { ...FAMILY_MODULE, relativePath } });
+      }, keys.open);
     },
     capture: verbs.capture.run!,
     build: verbs.build.run!,
@@ -385,26 +392,29 @@ export function createFamilyStore(deps: {
           expect(
             await deps.host.familyApply([
               {
-                path: ["binding"],
-                value: {
-                  target: nextTarget || null,
-                  boundAt: nextTarget ? new Date().toISOString() : null,
-                },
+                path: ["bindings", "world"],
+                value: nextTarget
+                  ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
+                  : undefined,
               },
             ]),
             "bind failed",
           );
-          write("bind", "url/target", () => deps.search.patch({ target: nextTarget }));
           return `bound ${nextTarget}`;
         },
         ["family", "profile"],
       );
     },
+    setStage(stage: "author" | "evidence") {
+      return deps.host.familyApply([{ path: ["stage"], value: stage }]);
+    },
   };
   return {
     registry,
-    search: deps.search,
     atoms: {
+      target,
+      profile,
+      routeStage,
       lane,
       snapshot,
       saved,

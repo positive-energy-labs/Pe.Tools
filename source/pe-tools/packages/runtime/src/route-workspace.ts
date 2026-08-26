@@ -4,13 +4,14 @@ import {
   commitDoc,
   guardCommand,
   type ExternalOperation,
+  type Address,
   type RouteActor,
   type RouteEnvelope,
   type RoutePatch,
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 
-export type RouteWorkspaceScope = { documentAddress: string };
+export type RouteWorkspaceScope = { documentAddress: Address };
 export type RouteWorkspaceActor = RouteActor;
 export type RouteWorkspacePatch = RoutePatch;
 
@@ -186,6 +187,7 @@ export class RouteWorkspace {
       let committed: RouteEnvelope<unknown> | null = null;
       try {
         const result = await handler(guarded.input, {
+          documentAddress: scope.documentAddress,
           getDoc: () => structuredClone(committed?.doc ?? envelope.doc),
           setDoc: async (candidate) => {
             const landed = commitDoc(spec, envelope, candidate);

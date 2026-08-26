@@ -68,12 +68,24 @@ export function ThreadList({
 }) {
   const shown = threads.slice(0, limit);
   const rest = threads.length - shown.length;
+  const groups = shown.reduce<Array<[string, StoredThreadSummary[]]>>((all, thread) => {
+    const document = thread.documentAddress ?? "No document";
+    const group = all.find(([key]) => key === document);
+    if (group) group[1].push(thread);
+    else all.push([document, [thread]]);
+    return all;
+  }, []);
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-col gap-1 p-2">
-        {shown.map((thread) => {
-          const active = thread.id === currentThreadId;
-          return (
+        {groups.map(([document, documentThreads]) => (
+          <div key={document}>
+            <div className="px-2 pb-1 pt-2 t-caption face-mono text-[var(--r-ink-2)]">
+              {document === "No document" ? document : basename(document)}
+            </div>
+            {documentThreads.map((thread) => {
+              const active = thread.id === currentThreadId;
+              return (
             <div
               key={thread.id}
               // The open thread is a SELECTION — the selection fill, never a hue or a frame.
@@ -114,8 +126,10 @@ export function ThreadList({
                 <X className="size-3.5" />
               </button>
             </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        ))}
         {threads.length === 0 ? (
           <div className="px-2 py-3">
             <EmptyState story="scope" exit="start one below — the first message names it">

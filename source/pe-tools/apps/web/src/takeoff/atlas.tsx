@@ -410,7 +410,7 @@ const PLAN_CHROME_PX = 34;
 export function Atlas({ store }: AtlasProps) {
   const world = useAtomValue(store.atoms.world);
   const views = useAtomValue(store.atoms.views);
-  const live = useAtomValue(store.atoms.search).source === "live";
+  const live = store.source === "live";
   const busyState = useAtomValue(store.atoms.busy);
   const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
   const snapshot = useAtomValue(store.atoms.snapshot);

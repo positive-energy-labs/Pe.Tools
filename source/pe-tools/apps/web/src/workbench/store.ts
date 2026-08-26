@@ -25,6 +25,7 @@ export interface StoredThreadSummary {
   persisted: boolean;
   promptActive?: boolean;
   cwd?: string;
+  documentAddress?: string;
 }
 
 export interface WorkbenchAttachment {
@@ -45,7 +46,9 @@ export interface ChatSearch {
 }
 
 export interface ChatApi {
-  listThreads(): Promise<AgentControllerThreadInfo[]>;
+  session: {
+    listThreads(): Promise<readonly { id: string; updatedAt?: string | null }[]>;
+  };
   createThread(): Promise<{ id: string }>;
   hydrate(threadId: string): Promise<WorkbenchState>;
   subscribe(onEvent: (event: WireEvent) => void, onError: (error: Error) => void): Promise<() => void>;

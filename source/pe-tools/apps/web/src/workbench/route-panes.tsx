@@ -8,6 +8,7 @@ import {
   parameterLinksRouteState,
   scheduleGridRouteState,
   settingsRouteState,
+  type Address,
   type RouteStatePatch,
   type RouteStateSpec,
 } from "@pe/agent-contracts";
@@ -20,6 +21,7 @@ import { useRouteStore } from "#/state/use-route-store";
 import type { ChatStore } from "./store";
 import type { ChatPluginRoute } from "./route-chat-plugins";
 import { RouteWorkspaceShell } from "./route-workspace-shell";
+import { RouteDocumentEmpty, useRouteDocumentAddress } from "./route-document";
 
 type PaneProps = { store: ChatStore };
 type Pane = (props: PaneProps) => ReactNode;
@@ -45,7 +47,13 @@ export function selectRoutePane(route: ChatPluginRoute): Pane {
 }
 
 function RoutePaneOwner({ chat, spec }: { chat: ChatStore; spec: RouteStateSpec<z.ZodType> }) {
-  const store = useRouteStore(() => createRoutePaneStore(chat, spec));
+  const documentAddress = useRouteDocumentAddress();
+  if (!documentAddress) return <RouteDocumentEmpty />;
+  return <AddressedRoutePaneOwner chat={chat} spec={spec} documentAddress={documentAddress} />;
+}
+
+function AddressedRoutePaneOwner({ chat, spec, documentAddress }: { chat: ChatStore; spec: RouteStateSpec<z.ZodType>; documentAddress: Address }) {
+  const store = useRouteStore(() => createRoutePaneStore(chat, spec, documentAddress));
   return <RoutePane store={store} />;
 }
 
@@ -67,7 +75,7 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
         <EmptyState story="scope" exit="bind or open the route document">no document is open</EmptyState>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          <OutcomeLine kind="receipt" label="thread-owned route document" />
+          <OutcomeLine kind="receipt" label="document-scoped route document" />
           <textarea
             key={JSON.stringify(doc)}
             aria-label={`${spec.title} document`}
@@ -89,9 +97,9 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
   );
 }
 
-function createRoutePaneStore(chat: ChatStore, spec: RouteStateSpec<z.ZodType>) {
+function createRoutePaneStore(chat: ChatStore, spec: RouteStateSpec<z.ZodType>, documentAddress: Address) {
   const core = createRouteStoreCore(`pane/${spec.route}`, chat.registry);
-  const scope = { threadId: chat.search.thread ?? "" };
+  const scope = { documentAddress };
   const slice = core.owned("slice/document", docAtom(spec, scope));
   const searchState = core.owned("page/search", Atom.make({ target: chat.search.target ?? "" }));
   const search = {

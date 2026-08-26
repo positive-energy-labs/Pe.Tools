@@ -1,7 +1,7 @@
 /**
  * TARGETING kit — the mechanics every rendering shares.
  *
- *   useBindings  — bound ids per link over CALLER-OWNED state (a route's URL search);
+ *   useBindings  — bound ids per link over CALLER-OWNED route-document state;
  *                  picking a trunk clears its descendants (waterfall).
  *   Picker       — ONE control per terminal. Closed: the leaf, or where the pick stopped.
  *                  Open: crumbs (the trunk) · search · the current level's list.

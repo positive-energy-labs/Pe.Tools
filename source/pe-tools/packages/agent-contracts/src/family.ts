@@ -12,7 +12,7 @@
  * lifecycle already exists.
  */
 import { z } from "zod";
-import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
 import { specDocSchema } from "./family-types.ts";
 import { settingsDocumentIdSchema } from "./settings.ts";
 import { readingSchema } from "./reading.ts";
@@ -73,7 +73,8 @@ const familyDocImageSchema = z.object({
 });
 
 const familyDocumentSchema = z.object({
-  binding: routeBindingSchema,
+  bindings: routeBindingsSchema,
+  stage: z.enum(["author", "evidence"]).optional(),
   doc: specDocSchema.extend({ images: z.array(familyDocImageSchema).default([]) }).nullish(),
   evidence: familyEvidenceSchema.nullish(),
 });

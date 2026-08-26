@@ -1,9 +1,10 @@
 import { expect, test } from "vite-plus/test";
-import type { SettingsRouteDocument } from "@pe/agent-contracts";
+import { address, type SettingsRouteDocument } from "@pe/agent-contracts";
 import { createSettingsCommandHandlers } from "../src/pea/settings-commands.ts";
 
 const DOCUMENT_ID = { moduleKey: "m", rootKey: "r", relativePath: "settings.json" };
 const DOCUMENT_PATH = "C:\\Settings\\settings.json";
+const DOCUMENT_ADDRESS = address("C:\\Models\\A.rvt");
 
 function openResponse(rawContent: string, version = "v1") {
   return {
@@ -50,6 +51,7 @@ async function withHost(
 
 function context(document: SettingsRouteDocument) {
   return {
+    documentAddress: DOCUMENT_ADDRESS,
     getDoc: () => document,
     setDoc: async (next: SettingsRouteDocument) => void Object.assign(document, next),
   };
@@ -63,7 +65,7 @@ test("settings opens with no world bound and persists no file snapshot", async (
     },
     async (calls) => {
       const document: SettingsRouteDocument = {
-        binding: { target: null },
+        bindings: {},
         documentId: null,
         fields: {},
         savedAt: null,
@@ -76,7 +78,9 @@ test("settings opens with no world bound and persists no file snapshot", async (
       expect(calls).toHaveLength(1);
       expect(calls[0]?.target).toBeNull();
       expect(document).toMatchObject({
-        binding: { target: DOCUMENT_PATH },
+        bindings: {
+          file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH, at: DOCUMENT_ADDRESS },
+        },
         documentId: DOCUMENT_ID,
       });
       expect(document).not.toHaveProperty("snapshot");
@@ -104,7 +108,9 @@ test("settings save refetches and uses the file version without persisting it", 
     },
     async (calls) => {
       const document: SettingsRouteDocument = {
-        binding: { target: DOCUMENT_PATH },
+        bindings: {
+          file: { id: DOCUMENT_PATH, label: DOCUMENT_PATH, at: DOCUMENT_ADDRESS },
+        },
         documentId: DOCUMENT_ID,
         fields: {
           "/x": { proposal: null, staged: { value: 2 }, review: "good" },

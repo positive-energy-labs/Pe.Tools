@@ -21,6 +21,7 @@ import { useChatTarget } from "#/components/chat-target";
 import { Sentence, type SentenceTone } from "#/components/sentence";
 import { useWorkbench } from "#/workbench/provider";
 import { useRouteState } from "#/workbench/route-state";
+import { useRouteDocumentAddress } from "#/workbench/route-document";
 
 const COMMIT_RELAX_MS = 4_000;
 const FAIL_RELAX_MS = 8_000;
@@ -125,18 +126,18 @@ function Plain() {
 }
 
 function WithRouteDoc({ spec }: { spec: RouteStateSpec<z.ZodType> }) {
-  const { currentThreadId } = useWorkbench();
-  return currentThreadId ? <AddressedRouteDoc spec={spec} threadId={currentThreadId} /> : <Plain />;
+  const documentAddress = useRouteDocumentAddress();
+  return documentAddress ? <AddressedRouteDoc spec={spec} documentAddress={documentAddress} /> : <Plain />;
 }
 
 function AddressedRouteDoc({
   spec,
-  threadId,
+  documentAddress,
 }: {
   spec: RouteStateSpec<z.ZodType>;
-  threadId: string;
+  documentAddress: import("@pe/agent-contracts").Address;
 }) {
-  const route = useRouteState(spec, { threadId });
+  const route = useRouteState(spec, { documentAddress });
   const staged = useMemo(
     () => (route.slice == null ? null : documentTrichotomySummary(route.slice)),
     [route.slice],

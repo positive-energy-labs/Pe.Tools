@@ -4,8 +4,8 @@ import { takeoffsRouteState } from "./takeoffs.ts";
 
 describe("takeoffsRouteState", () => {
   it("defaults a new route document to no world", () => {
-    expect(takeoffsRouteState.schema.parse({ binding: { target: null } })).toEqual({
-      binding: { target: null },
+    expect(takeoffsRouteState.schema.parse({})).toEqual({
+      bindings: {},
       snapshot: null,
       staged: [],
     });

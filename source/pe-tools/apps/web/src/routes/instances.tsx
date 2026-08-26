@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { current, instancesRouteState, type Address } from "@pe/agent-contracts";
 
 import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
@@ -15,14 +16,15 @@ import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Product } from "#/targeting/model";
 import { worldTrunk, type WorldLifecycleReceipt, type WorldStart } from "#/targeting/trunks";
+import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
+import { useRouteState } from "#/workbench/route-state";
 
 const YEARS = ["24", "25", "26"];
-const STAGES = ["declare", "lifecycle"] as const;
 
 export const Route = createFileRoute("/instances")({
   validateSearch: (search: Record<string, unknown>) => ({
-    target: typeof search.target === "string" ? search.target.trim() : "",
-    stage: STAGES.find((stage) => stage === search.stage) ?? "declare",
+    thread: typeof search.thread === "string" ? search.thread.trim() : undefined,
+    source: typeof search.source === "string" ? search.source : undefined,
   }),
   component: InstancesPage,
 });
@@ -157,8 +159,15 @@ function StartFields({
 }
 
 export function InstancesPage() {
-  const search = Route.useSearch();
-  const navigate = useNavigate({ from: "/instances" });
+  const documentAddress = useRouteDocumentAddress();
+  if (!documentAddress) return <RouteDocumentEmpty />;
+  return <AddressedInstancesPage documentAddress={documentAddress} />;
+}
+
+function AddressedInstancesPage({ documentAddress }: { documentAddress: Address }) {
+  const route = useRouteState(instancesRouteState, { documentAddress });
+  const target = current(route.slice?.bindings.world, documentAddress)?.id ?? "";
+  const stage = route.slice?.stage ?? "declare";
   const queryClient = useQueryClient();
   const { worlds, sessions, isLoading, error, stale, at, basis } = useFleet(true);
   const worldLog = useWorldLog(sessions);
@@ -178,7 +187,7 @@ export function InstancesPage() {
   const [pickerQuery, setPickerQuery] = useState("");
 
   const liveWorlds = worlds.filter((world) => world.phase !== "gone");
-  const selectedWorld = worldTrunk.resolve(liveWorlds, sessions, search.target);
+  const selectedWorld = worldTrunk.resolve(liveWorlds, sessions, target);
   const runLifecycle = async (key: keyof typeof worldTrunk.verbs) => {
     const verb = worldTrunk.verbs[key];
     setBusy(key);
@@ -252,18 +261,24 @@ export function InstancesPage() {
     world: worldTrunk.feed({ worlds: liveWorlds, sessions, isLoading, stale, error, at, basis }),
   };
   const state: BindingState = {
-    bound: { world: search.target || null },
+    bound: { world: target || null },
     multi: {},
-    stage: search.stage,
+    stage,
   };
-  const setState = (patch: Partial<BindingState>) =>
-    void navigate({
-      search: (previous) => ({
-        ...previous,
-        target: patch.bound?.world ?? previous.target,
-        stage: (patch.stage as (typeof STAGES)[number] | undefined) ?? previous.stage,
-      }),
-    });
+  const setState = (patch: Partial<BindingState>) => {
+    const nextTarget = patch.bound?.world;
+    void route.apply([
+      ...(nextTarget === undefined
+        ? []
+        : [{
+            path: ["bindings", "world"],
+            value: nextTarget
+              ? { id: nextTarget, label: nextTarget, at: documentAddress }
+              : undefined,
+          }]),
+      ...(patch.stage ? [{ path: ["stage"], value: patch.stage }] : []),
+    ]);
+  };
   const bindings = useBindings(
     product,
     feeds,
@@ -366,7 +381,7 @@ export function InstancesPage() {
             ) : undefined
           }
           aside={
-            search.stage === "declare" ? (
+            stage === "declare" ? (
               <StartFields
                 year={startYear}
                 lane={startLane}

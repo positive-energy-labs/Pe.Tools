@@ -6,12 +6,13 @@
  * pea may propose to — everything else is human-only), and a set of named commands
  * (the side-effectful work the mask forbids doing by hand). No per-route server code
  * beyond the schema + mask + command handlers: RouteWorkspace (packages/runtime)
- * owns thread persistence, ordering, recovery, validation, and commands; the
+ * owns document persistence, ordering, recovery, validation, and commands; the
  * three universal pea tools (route_state_read/route_state_apply/route_command) are thin
  * HTTP clients to its endpoints; the browser writes the same scoped document as `actor:"human"`
  * (unmasked) and receives document snapshots through its route-specific event stream.
  */
 import { z } from "zod";
+import { addressSchema, type Address } from "./reading.ts";
 
 /** A named side-effectful command a route exposes. `actor:"human"` commands reject pea. */
 export interface RouteStateCommandSpec {
@@ -80,6 +81,18 @@ export const routeBindingSchema = z
   .prefault({ target: null });
 export type RouteBinding = z.infer<typeof routeBindingSchema>;
 
+export const bindSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  at: addressSchema,
+});
+export type Bind = z.infer<typeof bindSchema>;
+export const routeBindingsSchema = z.record(z.string(), bindSchema).default({});
+
+/** A binding is meaningful only against the document where it was picked. */
+export const current = (bind: Bind | null | undefined, at: Address): Bind | null =>
+  bind?.at === at ? bind : null;
+
 /** Per-command override wins; otherwise the workspace binding; otherwise undefined. */
 export function resolveTarget(input: unknown, doc: unknown): string | undefined {
   const explicit = (input as { target?: unknown } | null | undefined)?.target;
@@ -101,6 +114,8 @@ export function parseRouteDoc<TSchema extends z.ZodType>(
 
 /** What a command handler receives: read the current document, write the next one. */
 export interface RouteStateCommandContext<TDoc = unknown> {
+  /** The Revit document this route document belongs to. */
+  documentAddress: Address;
   /** The current document (schema-parsed; a fresh empty document when absent). */
   getDoc(): TDoc;
   /** Replace the document (schema-validated before it lands). */

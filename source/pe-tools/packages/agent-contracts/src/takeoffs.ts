@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
 import { readingSchema } from "./reading.ts";
 
 const pointSchema = z.tuple([z.number(), z.number()]);
@@ -244,7 +244,8 @@ const stagedRoomEditSchema = z.object({
 export type StagedRoomEdit = z.infer<typeof stagedRoomEditSchema>;
 
 const takeoffsDocumentSchema = z.object({
-  binding: routeBindingSchema,
+  bindings: routeBindingsSchema,
+  stage: z.enum(["adopt", "audit", "sync"]).optional(),
   snapshot: takeoffSnapshotSchema.nullable().default(null),
   staged: z.array(stagedRoomEditSchema).default([]),
 });

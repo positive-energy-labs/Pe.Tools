@@ -18,7 +18,7 @@ const emptyEntry = {
   },
 };
 const document = (documentId = "C:\\Models\\Test.rvt"): FamiliesRouteDocument => ({
-  binding: { target: "session:test" },
+  bindings: { world: { id: "session:test", label: "test", at: address("C:\\Models\\Test.rvt") } },
   profilePath: "desk.json",
   plan: {
     reading: {
@@ -71,7 +71,7 @@ const fixture = () => {
 };
 const make = (
   testFixture = fixture(),
-  search: { target: string; patch(partial: { target?: string }): void } = {
+  _search: { target: string; patch(partial: { target?: string }): void } = {
     target: "session:test",
     patch() {},
   },
@@ -86,9 +86,8 @@ const make = (
     docSlice,
     store: createFamiliesStore({
       registry,
-      scope: { threadId: "thread-1" },
+      scope: { documentAddress: address("C:\\Models\\Test.rvt") },
       host: testFixture.host,
-      search,
       slice: docSlice,
     }),
   };
@@ -167,28 +166,31 @@ describe("families route store", () => {
   });
 
   it("binds another target without clearing the plan", async () => {
-    const { calls, registry, store } = make(fixture(), {
-      target: "session:new",
-      patch() {},
-    });
-    await tick();
+    const { calls, registry, store } = make();
+    await store.actions.bind("session:new");
     expect(registry.get(store.atoms.failure)).toBeNull();
     expect(calls.filter(({ op }) => op === "apply")).toEqual([
       {
         op: "apply",
         input: [
-          { path: ["binding"], value: expect.objectContaining({ target: "session:new" }) },
+          {
+            path: ["bindings", "world"],
+            value: expect.objectContaining({ id: "session:new" }),
+          },
         ],
       },
     ]);
   });
 
-  it("rebinds a direct URL target before plan", async () => {
-    const { calls, store } = make(fixture(), {
-      target: "session:new",
-      patch() {},
-    });
-    await tick();
+  it("reloads a persisted document binding before plan", async () => {
+    const persisted = document();
+    persisted.bindings.world = {
+      id: "session:new",
+      label: "new",
+      at: address("C:\\Models\\Test.rvt"),
+    };
+    const { calls, registry, store } = make(fixture(), undefined, persisted);
+    expect(registry.get(store.atoms.target)).toBe("session:new");
     store.actions.setDraft({
       placement: "AllLoaded",
       categories: ["Furniture"],
@@ -197,8 +199,6 @@ describe("families route store", () => {
     await store.actions.applyScope();
     await store.actions.plan();
     expect(calls.filter(({ op }) => op === "apply" || op === "plan")).toEqual([
-      { op: "apply", input: expect.any(Array) },
-      { op: "apply", input: expect.any(Array) },
       { op: "plan", input: expect.any(Object) },
     ]);
   });

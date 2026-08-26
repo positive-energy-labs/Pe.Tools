@@ -3,6 +3,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
+  current,
   familiesRouteState,
   here,
   type AppliedScope,
@@ -24,10 +25,6 @@ import {
   type Slice,
 } from "#/state/route-store";
 
-interface FamiliesSearchPort {
-  readonly target: string;
-  patch(partial: { target?: string }): void;
-}
 type Setter<A> = A | ((previous: A) => A);
 type PickerState = { open: string | null; level: string | null; query: string; stage: string };
 type FamiliesSlice = Atom.Atom<AsyncResult.AsyncResult<Slice<FamiliesRouteDocument>, Error>>;
@@ -36,7 +33,6 @@ export function createFamiliesStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: FamiliesHost;
-  search: FamiliesSearchPort;
   slice?: FamiliesSlice;
 }) {
   const core = createRouteStoreCore("families", deps.registry);
@@ -50,6 +46,9 @@ export function createFamiliesStore(deps: {
     const result = get(slice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
   }).pipe(Atom.autoDispose);
+  const target = Atom.make(
+    (get) => current(get(document)?.bindings.world, deps.scope.documentAddress)?.id ?? "",
+  ).pipe(owned("binding/world"));
   const profilePath = Atom.make((get) => get(document)?.profilePath ?? null).pipe(
     owned("view/profile-path"),
   );
@@ -92,13 +91,16 @@ export function createFamiliesStore(deps: {
     if (!value || !doc) return null;
     const sessions = get(sessionsResult);
     const resolution = AsyncResult.isSuccess(sessions)
-      ? resolveTarget(sessions.value.value, doc.binding.target ?? "")
+      ? resolveTarget(
+          sessions.value.value,
+          current(doc.bindings.world, deps.scope.documentAddress)?.id ?? "",
+        )
       : null;
     if (resolution?.kind !== "resolved") return null;
     return here(value, documentAddress(resolution.session));
   }).pipe(owned("view/plan"));
   const categorySource = runtime.atom(() =>
-    hostRead([deps.search.target], () => deps.host.categories(deps.search.target)),
+    hostRead([registry.get(target)], () => deps.host.categories(registry.get(target))),
   );
   const categoryResult = runtimeFactory
     .withReactivity(["category"])(
@@ -107,8 +109,9 @@ export function createFamiliesStore(deps: {
     .pipe(Atom.autoDispose);
   const familySource = runtime.atom((get) => {
     const next = get(draft);
-    return hostRead([deps.search.target, ...next.categories, next.placement], () =>
-      next.categories.length ? deps.host.families(deps.search.target, next) : Promise.resolve([]),
+    const world = get(target);
+    return hostRead([world, ...next.categories, next.placement], () =>
+      next.categories.length ? deps.host.families(world, next) : Promise.resolve([]),
     );
   });
   const familyResult = runtimeFactory
@@ -148,19 +151,15 @@ export function createFamiliesStore(deps: {
   const bindDocument = async (nextTarget: string) => {
     const doc = registry.get(document);
     const patches: RouteStatePatch[] = [];
-    if (doc?.binding.target !== (nextTarget || null))
+    if (current(doc?.bindings.world, deps.scope.documentAddress)?.id !== (nextTarget || null))
       patches.push({
-        path: ["binding"],
-        value: {
-          target: nextTarget || null,
-          boundAt: nextTarget ? new Date().toISOString() : null,
-        },
+          path: ["bindings", "world"],
+          value: nextTarget
+            ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
+            : undefined,
       });
     return patches.length ? expectOk(await deps.host.apply(patches), "bind failed") : { ok: true };
   };
-  if (deps.search.target)
-    void write("system", "bind", () => bindDocument(deps.search.target)).catch(() => undefined);
-
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,
     (nextFeed) => {
@@ -241,7 +240,7 @@ export function createFamiliesStore(deps: {
           const path = registry.get(profilePath);
           const scope = registry.get(applied);
           if (!path || !scope) throw Error("plan needs a profile and applied scope");
-          await bindDocument(deps.search.target);
+          await bindDocument(registry.get(target));
           return expectOk(
             await deps.host.command("plan", { profilePath: path, scope }),
             "plan failed",
@@ -256,7 +255,7 @@ export function createFamiliesStore(deps: {
         async () => {
           const current = registry.get(plan);
           if (!current) throw Error("apply needs a plan");
-          await bindDocument(deps.search.target);
+          await bindDocument(registry.get(target));
           return expectOk(
             await deps.host.command("apply", { expectedPlanHash: current.planHash }),
             "apply failed",
@@ -270,7 +269,6 @@ export function createFamiliesStore(deps: {
         "bind",
         async () => {
           const result = await bindDocument(nextTarget);
-          deps.search.patch({ target: nextTarget });
           return result;
         },
         ["session", "category", "family", "profile"],
@@ -280,14 +278,14 @@ export function createFamiliesStore(deps: {
       return runVerb("project", async () => {
         const ids = [...registry.get(pickedIds)];
         if (!ids.length) throw Error("project needs picked families");
-        const result = await deps.host.project(deps.search.target, ids);
+        const result = await deps.host.project(registry.get(target), ids);
         registry.set(projection, result);
         return `projected ${result.projections.length} families`;
       });
     },
     openPath(path: string) {
       return runVerb("open-path", async () => {
-        await deps.host.openPath(deps.search.target, path);
+        await deps.host.openPath(registry.get(target), path);
         return `opened ${path}`;
       });
     },
@@ -295,8 +293,8 @@ export function createFamiliesStore(deps: {
 
   return {
     registry,
-    search: deps.search,
     atoms: {
+      target,
       profilePath,
       plan,
       excludedIds,

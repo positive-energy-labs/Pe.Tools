@@ -19,7 +19,7 @@ import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
-import { ThreadEmpty } from "#/components/thread-palette";
+import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
 import { ValueDiff } from "#/components/ui/value-diff";
 import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";
@@ -52,14 +52,14 @@ type Snapshot = NonNullable<ScheduleGridDocument["snapshot"]>;
 type ScheduleRow = Snapshot["rows"][number];
 
 function ScheduleGridRoute() {
-  const { thread } = Route.useSearch();
-  if (!thread) return <ThreadEmpty />;
-  return <ScheduleGridWorkspace thread={thread} />;
+  const documentAddress = useRouteDocumentAddress();
+  if (!documentAddress) return <RouteDocumentEmpty />;
+  return <ScheduleGridWorkspace documentAddress={documentAddress} />;
 }
 
-function ScheduleGridWorkspace({ thread }: { thread: string }) {
+function ScheduleGridWorkspace({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
   const { slice, hydrated, apply, command, peaActive, connected } =
-    useRouteState(scheduleGridRouteState, { threadId: thread });
+    useRouteState(scheduleGridRouteState, { documentAddress });
   const document = slice;
   const snapshot = document?.snapshot ?? null;
   const catalog = document?.catalog ?? null;

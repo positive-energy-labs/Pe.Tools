@@ -5,7 +5,7 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 
-import { defineRouteState } from "@pe/agent-contracts";
+import { address, defineRouteState } from "@pe/agent-contracts";
 
 import { inspectAtomRegistry } from "./atom-inspect";
 import {
@@ -169,11 +169,11 @@ describe("route store kit", () => {
       commands: {},
     });
 
-    expect(docAtom(spec, { threadId: "thread-1" })).toBe(
-      docAtom({ ...spec }, { threadId: "thread-1" }),
+    expect(docAtom(spec, { documentAddress: address("C:\\Models\\One.rvt") })).toBe(
+      docAtom({ ...spec }, { documentAddress: address("C:\\Models\\One.rvt") }),
     );
-    expect(docAtom(spec, { threadId: "thread-2" })).not.toBe(
-      docAtom(spec, { threadId: "thread-1" }),
+    expect(docAtom(spec, { documentAddress: address("C:\\Models\\Two.rvt") })).not.toBe(
+      docAtom(spec, { documentAddress: address("C:\\Models\\One.rvt") }),
     );
   });
 });

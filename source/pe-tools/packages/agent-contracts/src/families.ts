@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { parameterIdentitySchema } from "./family-types.ts";
-import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import { defineRouteState, routeBindingsSchema } from "./route-state.ts";
 import { readingSchema } from "./reading.ts";
 
 const resolvedParameterSchema = z.object({
@@ -71,7 +71,7 @@ const appliedScopeSchema = z.object({
 export type AppliedScope = z.infer<typeof appliedScopeSchema>;
 
 const familiesDocumentSchema = z.object({
-  binding: routeBindingSchema,
+  bindings: routeBindingsSchema,
   profilePath: z.string().nullable().default(null),
   plan: z
     .object({

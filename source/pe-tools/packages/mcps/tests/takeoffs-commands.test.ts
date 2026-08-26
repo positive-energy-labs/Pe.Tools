@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import type { TakeoffsRouteDocument } from "@pe/agent-contracts";
+import { address, type TakeoffsRouteDocument } from "@pe/agent-contracts";
 import { createTakeoffsCommandHandlers } from "../src/pea/takeoffs-commands.ts";
 
 const rawSnapshot = {
@@ -72,7 +72,7 @@ test("takeoffs audit produces and sets the document snapshot", async () => {
   };
   try {
     const document: TakeoffsRouteDocument = {
-      binding: { target: null },
+      bindings: {},
       snapshot: null,
       staged: [],
     };
@@ -80,6 +80,7 @@ test("takeoffs audit produces and sets the document snapshot", async () => {
     await createTakeoffsCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).audit(
       { view: "Zoning", zones: ["zone-1"] },
       {
+        documentAddress: address("C:\\Models\\Harness.rvt"),
         getDoc: () => document,
         setDoc: async (next) => {
           Object.assign(document, next);

@@ -4,6 +4,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import {
+  current,
   takeoffsRouteState,
   here,
   type RouteStatePatch,
@@ -47,30 +48,6 @@ import {
 import { type Bound, type Link, type Multi } from "#/targeting/model";
 import { documentTrunk, fileTerminal, folderTrunk, worldTrunk } from "#/targeting/trunks";
 
-type TakeoffStage = "adopt" | "audit" | "sync";
-
-export interface TakeoffSearch {
-  readonly source: "live" | "fixture";
-  readonly views: readonly string[];
-  readonly zones: readonly string[];
-  readonly dir: string;
-  readonly r10: string;
-  readonly stage: TakeoffStage;
-}
-
-export const EMPTY_TAKEOFF_SEARCH: TakeoffSearch = {
-  source: "live",
-  views: [],
-  zones: [],
-  dir: "",
-  r10: "",
-  stage: "adopt",
-};
-
-export interface SearchPort {
-  patch(partial: Partial<TakeoffSearch>): void;
-}
-
 export type SessionEvent =
   | { readonly kind: "docChanged"; readonly sessionId: string }
   | { readonly kind: "sessionsChanged"; readonly sessionId: string };
@@ -90,6 +67,24 @@ export interface SessionSource {
   activeDocument(session: TakeoffSessionFacts): Promise<ActiveDocument>;
   subscribe(listener: (event: SessionEvent) => void): () => void;
 }
+
+export interface TakeoffSelection {
+  readonly source: "live" | "fixture";
+  readonly views: readonly string[];
+  readonly zones: readonly string[];
+  readonly dir: string;
+  readonly r10: string;
+  readonly stage: "adopt" | "audit" | "sync";
+}
+
+export const EMPTY_TAKEOFF_SELECTION: TakeoffSelection = {
+  source: "live",
+  views: [],
+  zones: [],
+  dir: "",
+  r10: "",
+  stage: "adopt",
+};
 
 interface RhvacFile {
   readonly path: string;
@@ -337,7 +332,7 @@ const compare = (a: string | number | undefined, b: string | number | undefined)
 export function createTakeoffStore(deps: {
   host: TakeoffHost;
   sessions: SessionSource;
-  search: SearchPort;
+  source?: "live" | "fixture";
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   slice?: Atom.Atom<AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>>;
@@ -357,16 +352,28 @@ export function createTakeoffStore(deps: {
     deps.slice ?? docAtom(takeoffsRouteState, deps.scope),
   );
   const takeoffsWriter = deps.writer ?? docWriter(takeoffsRouteState, deps.scope);
-  const searchAtom = Atom.make<TakeoffSearch>(EMPTY_TAKEOFF_SEARCH).pipe(owned("search"));
+  const bindingsAtom = Atom.make((get) => {
+    const result = get(takeoffsSlice);
+    return AsyncResult.isSuccess(result) ? (result.value.doc?.bindings ?? {}) : {};
+  }).pipe(owned("bindings"));
   const targetAtom = Atom.make((get) => {
     const result = get(takeoffsSlice);
-    return AsyncResult.isSuccess(result) ? (result.value.doc?.binding.target ?? "") : "";
+    return AsyncResult.isSuccess(result)
+      ? (current(result.value.doc?.bindings.world, deps.scope.documentAddress)?.id ?? "")
+      : "";
   }).pipe(owned("binding/target"));
-  const viewsAtom = Atom.make((get) => get(searchAtom).views).pipe(owned("search/views"));
-  const zonesAtom = Atom.make((get) => get(searchAtom).zones).pipe(owned("search/zones"));
-  const dirAtom = Atom.make((get) => get(searchAtom).dir).pipe(owned("search/dir"));
-  const r10PathAtom = Atom.make((get) => get(searchAtom).r10).pipe(owned("search/r10"));
-  const stageAtom = Atom.make((get) => get(searchAtom).stage).pipe(owned("search/stage"));
+  const ids = (bindings: TakeoffsRouteDocument["bindings"], prefix: string) =>
+    Object.entries(bindings)
+      .filter(([key]) => key.startsWith(`${prefix}:`))
+      .map(([, bind]) => bind.id);
+  const viewsAtom = Atom.make((get) => ids(get(bindingsAtom), "views")).pipe(owned("bindings/views"));
+  const zonesAtom = Atom.make((get) => ids(get(bindingsAtom), "zones")).pipe(owned("bindings/zones"));
+  const dirAtom = Atom.make((get) => get(bindingsAtom).folder?.id ?? "").pipe(owned("bindings/folder"));
+  const r10PathAtom = Atom.make((get) => get(bindingsAtom).r10?.id ?? "").pipe(owned("bindings/r10"));
+  const stageAtom = Atom.make((get) => {
+    const result = get(takeoffsSlice);
+    return AsyncResult.isSuccess(result) ? (result.value.doc?.stage ?? "adopt") : "adopt";
+  }).pipe(owned("stage"));
   const recentDirsAtom = Atom.make<readonly string[]>([]).pipe(Atom.autoDispose);
   const currentHoverAtom = Atom.make("").pipe(owned("page/hover"));
   const busyAtom = core.busy;
@@ -856,19 +863,6 @@ export function createTakeoffStore(deps: {
     if (!document.value) throw Error("no document bound");
     return document.value.session;
   };
-  const setSearch = (next: TakeoffSearch) => {
-    const previous = registry.get(searchAtom);
-    const before = new Set(previous.zones);
-    const after = new Set(next.zones);
-    Atom.batch(() => {
-      write("set-search", "search", () => registry.set(searchAtom, next));
-      for (const id of new Set([...before, ...after]))
-        if (before.has(id) !== after.has(id))
-          write("set-search", `entity/${id}/url-bound`, () =>
-            registry.set(boundAtom(id), after.has(id)),
-          );
-    });
-  };
   const pickDocument = (documentId: string) =>
     runVerb(
       "open-document",
@@ -904,16 +898,18 @@ export function createTakeoffStore(deps: {
     r10: r10Feed,
   };
   const actions = {
-    setSearch,
-    patchSearch(patch: Partial<TakeoffSearch>) {
-      deps.search.patch(patch);
+    setSelection(next: TakeoffSelection) {
+      actions.setBindings({
+        stage: next.stage,
+        bound: { folder: next.dir || null, r10: next.r10 || null },
+        multi: { views: new Set(next.views), zones: new Set(next.zones) },
+      });
     },
     setBindings(patch: {
       readonly stage?: string;
       readonly bound?: Bound;
       readonly multi?: Multi;
     }) {
-      const current = registry.get(searchAtom);
       const currentTarget = registry.get(targetAtom);
       const nextTarget = patch.bound?.world ?? currentTarget;
       const sessions = registry.get(sessionsResult);
@@ -923,34 +919,43 @@ export function createTakeoffStore(deps: {
       const activeDocumentId =
         resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined;
       const nextDocument = patch.bound?.rvt ?? activeDocumentId;
-      if (current.source === "live" && patch.bound) {
+      if (patch.bound || patch.multi || patch.stage) {
         const patches: RouteStatePatch[] = [];
         if (nextTarget !== currentTarget)
           patches.push({
-            path: ["binding"],
-            value: {
-              target: nextTarget || null,
-              boundAt: nextTarget ? new Date().toISOString() : null,
-            },
+            path: ["bindings", "world"],
+            value: nextTarget
+              ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
+              : undefined,
           });
+        for (const key of ["folder", "r10"] as const) {
+          const id = patch.bound?.[key];
+          if (id !== undefined)
+            patches.push({
+              path: ["bindings", key],
+              value: id ? { id, label: id, at: deps.scope.documentAddress } : undefined,
+            });
+        }
+        for (const key of ["views", "zones"] as const) {
+          const next = patch.multi?.[key];
+          if (!next) continue;
+          const prefix = `${key}:`;
+          for (const slot of Object.keys(registry.get(bindingsAtom)))
+            if (slot.startsWith(prefix)) patches.push({ path: ["bindings", slot] });
+          for (const id of next)
+            patches.push({
+              path: ["bindings", `${prefix}${id}`],
+              value: { id, label: id, at: deps.scope.documentAddress },
+            });
+        }
+        if (patch.stage) patches.push({ path: ["stage"], value: patch.stage });
         if (patches.length) void takeoffsWriter.apply(patches);
       }
-      deps.search.patch({
-        ...(patch.stage ? { stage: patch.stage as TakeoffStage } : {}),
-        ...(patch.bound
-          ? {
-              dir: patch.bound.folder ?? "",
-              r10: patch.bound.r10 ?? "",
-            }
-          : {}),
-        ...(patch.multi
-          ? {
-              views: [...(patch.multi.views ?? [])],
-              zones: [...(patch.multi.zones ?? [])],
-            }
-          : {}),
-      });
-      if (current.source === "live" && nextDocument && nextDocument !== activeDocumentId)
+      if (
+        (deps.source ?? (deps.host.fixture ? "fixture" : "live")) === "live" &&
+        nextDocument &&
+        nextDocument !== activeDocumentId
+      )
         void pickDocument(nextDocument);
     },
     settle,
@@ -1206,11 +1211,15 @@ export function createTakeoffStore(deps: {
   };
 
   const store = {
+    source: deps.source ?? (deps.host.fixture ? "fixture" : "live"),
     registry,
     slices: { takeoffs: takeoffsSlice },
     atoms: {
       registry,
-      search: searchAtom,
+      selection: Atom.make((get) => ({
+        zones: get(zonesAtom),
+        r10: get(r10PathAtom),
+      })).pipe(Atom.autoDispose),
       target: targetAtom,
       views: viewsAtom,
       zones: zonesAtom,

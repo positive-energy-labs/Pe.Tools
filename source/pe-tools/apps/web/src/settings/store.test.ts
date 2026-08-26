@@ -2,10 +2,11 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import type {
-  RouteStatePatch,
-  SettingsDocumentId,
-  SettingsRouteDocument,
+import {
+  address,
+  type RouteStatePatch,
+  type SettingsDocumentId,
+  type SettingsRouteDocument,
 } from "@pe/agent-contracts";
 
 import {
@@ -42,8 +43,11 @@ function make() {
   const apply = async (patches: RouteStatePatch[]) => {
     applied.push(patches);
     for (const patch of patches) {
-      if (patch.path[0] === "binding")
-        document = { ...document, binding: patch.value as SettingsRouteDocument["binding"] };
+      if (patch.path[0] === "bindings")
+        document = {
+          ...document,
+          bindings: { ...document.bindings, [String(patch.path[1])]: patch.value as never },
+        };
       if (patch.path[0] === "documentId")
         document = {
           ...document,
@@ -55,7 +59,7 @@ function make() {
   };
   const store = createSettingsStore({
     registry,
-    scope: { threadId: `settings-${registries.length}` },
+    scope: { documentAddress: address(`C:\\Models\\settings-${registries.length}.rvt`) },
     slice,
     apply,
     command: async () => ({ ok: true }),
@@ -90,7 +94,7 @@ describe("settings route store", () => {
     registry.get(store.atoms.snapshot);
     await new Promise<void>((resolve) => setTimeout(resolve, 10));
 
-    expect(opened).toEqual([fixtureSnapshot.documentId]);
+    expect(opened).toEqual([fixtureSnapshot.documentId, fixtureSnapshot.documentId]);
   });
 
   it("binds a picked file for refetch without clearing fields", async () => {
@@ -106,8 +110,8 @@ describe("settings route store", () => {
 
     expect(applied[0]).toEqual([
       {
-        path: ["binding"],
-        value: expect.objectContaining({ target: fixtureFiles[1]!.path }),
+        path: ["bindings", "file"],
+        value: expect.objectContaining({ id: fixtureFiles[1]!.path }),
       },
       {
         path: ["documentId"],

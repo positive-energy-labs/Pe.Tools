@@ -1,10 +1,13 @@
 import { expect, test } from "vite-plus/test";
 import {
+  address,
   type FamilyTypesDocument,
   type ParameterLinkProfile,
   type ParameterLinksDocument,
   parameterLinksRouteState,
 } from "@pe/agent-contracts";
+
+const DOCUMENT_ADDRESS = address("C:\\Models\\A.rvt");
 import {
   createFamilyTypesCommandHandlers,
   createParameterLinksCommandHandlers,
@@ -22,9 +25,16 @@ test("family types push rejects staged cells that still need review before calli
   };
   const push = createFamilyTypesCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).push;
 
-  await expect(push({}, { getDoc: () => document, setDoc: async () => undefined })).rejects.toThrow(
-    "Commit blocked: 1 staged cell need review.",
-  );
+  await expect(
+    push(
+      {},
+      {
+        documentAddress: DOCUMENT_ADDRESS,
+        getDoc: () => document,
+        setDoc: async () => undefined,
+      },
+    ),
+  ).rejects.toThrow("Commit blocked: 1 staged cell need review.");
 });
 
 // The dispatcher hands handlers `input.safeParse(payload).data`, and zod strips undeclared keys —
@@ -85,6 +95,13 @@ test("parameter links apply rejects a reviewed profile after the draft changes",
   const apply = createParameterLinksCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).apply;
 
   await expect(
-    apply({ profile: reviewed }, { getDoc: () => document, setDoc: async () => undefined }),
+    apply(
+      { profile: reviewed },
+      {
+        documentAddress: DOCUMENT_ADDRESS,
+        getDoc: () => document,
+        setDoc: async () => undefined,
+      },
+    ),
   ).rejects.toThrow("Draft changed; preview again.");
 });

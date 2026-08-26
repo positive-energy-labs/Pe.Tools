@@ -28,7 +28,7 @@ const MODEL = {
 };
 const SETTINGS_PATH = "C:\\Settings\\test.family.json";
 const settings = (): SettingsRouteDocument => ({
-  binding: { target: SETTINGS_PATH },
+  bindings: { file: { id: SETTINGS_PATH, label: SETTINGS_PATH, at: address("C:\\Models\\Test.rfa") } },
   documentId: {
     moduleKey: "FamilyFoundry",
     rootKey: "models",
@@ -37,7 +37,13 @@ const settings = (): SettingsRouteDocument => ({
   fields: {},
 });
 const family = (evidence: FamilyDocument["evidence"] = null): FamilyDocument => ({
-  binding: { target: "" },
+  bindings: {
+    world: {
+      id: "session:test",
+      label: "test",
+      at: address("C:\\Models\\Test.rfa"),
+    },
+  },
   doc: null,
   evidence,
 });
@@ -86,7 +92,7 @@ const fixture = () => {
 };
 const make = (
   testFixture = fixture(),
-  profile = "",
+  _profile = "",
   settingsDocument = settings(),
   familyDocument = family(),
 ) => {
@@ -101,9 +107,8 @@ const make = (
     calls: testFixture.calls,
     store: createFamilyStore({
       registry,
-      scope: { threadId: "thread-1" },
+      scope: { documentAddress: address("C:\\Models\\Test.rfa") },
       host: testFixture.host,
-      search: { target: "session:test", profile, patch() {} },
       slices: { settings: settingsSlice, family: familySlice },
     }),
   };
@@ -150,15 +155,18 @@ describe("family route store", () => {
       {
         op: "family.apply",
         input: [
-          { path: ["binding"], value: expect.objectContaining({ target: "session:new" }) },
+          {
+            path: ["bindings", "world"],
+            value: expect.objectContaining({ id: "session:new" }),
+          },
         ],
       },
     ]);
   });
 
-  it("opens a direct URL profile once on mount without a verb failure", async () => {
-    const { registry, store, calls } = make(fixture(), "pe-vav-test.json");
-    await tick();
+  it("persists a picked profile before opening it", async () => {
+    const { registry, store, calls } = make();
+    await store.actions.open("pe-vav-test.json");
     expect(registry.get(store.atoms.failure)).toBeNull();
     expect(calls.filter(({ op }) => op === "settings.open")).toEqual([
       {

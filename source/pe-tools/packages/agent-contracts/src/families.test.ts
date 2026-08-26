@@ -5,7 +5,7 @@ import { familiesRouteState } from "./families.ts";
 describe("familiesRouteState", () => {
   it("supplies the empty plan-hash chain defaults", () => {
     expect(familiesRouteState.schema.parse({})).toEqual({
-      binding: { target: null },
+      bindings: {},
       profilePath: null,
       plan: null,
       excludedIds: [],

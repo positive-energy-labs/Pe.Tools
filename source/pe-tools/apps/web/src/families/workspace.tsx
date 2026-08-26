@@ -272,7 +272,7 @@ function NamePicker({
 
 export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   const navigate = useNavigate();
-  const target = store.search.target;
+  const target = useAtomValue(store.atoms.target);
   const scope = useMemo(() => (target ? { bridgeSessionId: target } : undefined), [target]);
   const draft = useAtomValue(store.atoms.draft);
   const { placement, categories: draftCategories, families: pickedFamilies } = draft;
@@ -1130,8 +1130,8 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         /* Fleet → one family. The URL is the whole handoff: /family opens the requested
            family in the bound session's family editor and lands in its live lane. No
            cross-route store, nothing to keep in sync. */
-        onRowClick={(row) =>
-          void navigate({ to: "/family", search: { family: String(row.familyId) } })
+        onRowClick={() =>
+          void navigate({ to: "/family", search: {} })
         }
       />
     </main>

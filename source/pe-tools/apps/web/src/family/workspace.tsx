@@ -118,7 +118,6 @@
  */
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -187,8 +186,8 @@ export function FamilyWorkspace({
   store: FamilyStore;
   requestedFamily?: string;
 }) {
-  const { profile = "", stage = "author" } = useSearch({ from: "/family" });
-  const navigate = useNavigate({ from: "/family" });
+  const profile = useAtomValue(store.atoms.profile);
+  const stage = useAtomValue(store.atoms.routeStage);
   /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
   const lane = useAtomValue(store.atoms.lane);
   const world = lane.world;
@@ -231,7 +230,7 @@ export function FamilyWorkspace({
   const setPinnedParam = store.actions.setPinnedParam;
   const anatomyCollapsed = useAtomValue(store.atoms.anatomyCollapsed);
   const setAnatomyCollapsed = store.actions.setAnatomyCollapsed;
-  const target = store.search.target;
+  const target = useAtomValue(store.atoms.target);
   /**
    * What the doc pane's LOWER HALF is showing. One slot, two subjects: a constituent's
    * non-bindable metadata, or a parameter's family-level value. They share the slot because they
@@ -2126,12 +2125,12 @@ export function FamilyWorkspace({
       if (nextWorld !== null && nextWorld !== target)
         void store.actions.bind(nextWorld).catch(() => undefined);
       if (nextProfile !== null && nextProfile !== profile)
-        void navigate({ search: (previous) => ({ ...previous, profile: nextProfile }) });
+        void store.actions.open(nextProfile);
       const nextStage = patch.stage === "evidence" ? "evidence" : "author";
       if (patch.stage && nextStage !== stage)
-        void navigate({ search: (previous) => ({ ...previous, stage: nextStage }) });
+        void store.actions.setStage(nextStage);
     },
-    [navigate, profile, stage, store, target],
+    [profile, stage, store, target],
   );
   const bindings = useBindings(
     product,

@@ -17,29 +17,20 @@ import {
 } from "#/takeoff/proto/fixture-world";
 import {
   createTakeoffStore,
-  EMPTY_TAKEOFF_SEARCH,
-  type SearchPort,
+  EMPTY_TAKEOFF_SELECTION,
   type SessionEvent,
   type SessionSource,
   type TakeoffHost,
-  type TakeoffSearch,
+  type TakeoffSelection,
 } from "#/takeoff/store";
 
-const bound: TakeoffSearch = {
-  ...EMPTY_TAKEOFF_SEARCH,
+const bound: TakeoffSelection = {
+  ...EMPTY_TAKEOFF_SELECTION,
   views: ["Mechanical Zoning Plan - Main Level"],
   zones: ["zone-1"],
   dir: "C:\\Takeoffs",
   r10: "C:\\Takeoffs\\projectA.r10",
   stage: "audit",
-};
-
-const searchPort = () => {
-  const patches: Partial<TakeoffSearch>[] = [];
-  return {
-    patches,
-    port: { patch: (patch) => patches.push(patch) } satisfies SearchPort,
-  };
 };
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -59,7 +50,7 @@ const createStore = (
   const registry = deps.registry ?? AtomRegistry.make({ defaultIdleTTL: 400 });
   registries.push(registry);
   const initial: TakeoffsRouteDocument = {
-    binding: { target: null },
+    bindings: {},
     snapshot: null,
     staged: [],
   };
@@ -93,8 +84,8 @@ const createStore = (
       if (!AsyncResult.isSuccess(current) || !current.value.doc) return { ok: false as const };
       const document = structuredClone(current.value.doc);
       for (const patch of patches) {
-        if (patch.path[0] === "binding")
-          document.binding = patch.value as TakeoffsRouteDocument["binding"];
+        if (patch.path[0] === "bindings")
+          document.bindings[String(patch.path[1])] = patch.value as never;
         if (patch.path[0] === "snapshot")
           document.snapshot = (patch.value ?? null) as TakeoffsRouteDocument["snapshot"];
         if (patch.path[0] === "staged")
@@ -103,19 +94,14 @@ const createStore = (
       publish(document);
       return { ok: true as const };
     },
-    async command(name: string, input?: unknown) {
-      const current = registry.get(publishedSlice);
-      if (name === "bind" && AsyncResult.isSuccess(current) && current.value.doc) {
-        const target = (input as { target?: string | null } | undefined)?.target ?? null;
-        publish({ ...current.value.doc, binding: { target } });
-      }
+    async command() {
       return { ok: true as const };
     },
   };
   const store = createTakeoffStore({
     ...deps,
     registry,
-    scope: deps.scope ?? { threadId: "thread-1" },
+    scope: deps.scope ?? { documentAddress: address("C:\\Models\\Test.rvt") },
     slice,
     writer,
   });
@@ -280,7 +266,7 @@ describe("takeoff route store", () => {
     });
 
     const parsed = takeoffsRouteState.schema.safeParse({
-      binding: { target: null },
+      bindings: {},
       snapshot,
       staged: [],
     });
@@ -299,7 +285,7 @@ describe("takeoff route store", () => {
     const slice = Atom.make(
       AsyncResult.success(
         {
-          doc: { binding: { target: null }, snapshot, staged: [] },
+          doc: { bindings: {}, snapshot, staged: [] },
           hydrated: true,
           connected: true,
           error: null,
@@ -313,7 +299,6 @@ describe("takeoff route store", () => {
       slice,
       host,
       sessions,
-      search: searchPort().port,
     });
     await store.actions.settle(store.atoms.viewFacts);
 
@@ -329,9 +314,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
 
     await store.actions.settle(store.atoms.viewFacts);
 
@@ -348,7 +332,13 @@ describe("takeoff route store", () => {
     const slice = Atom.make(
       AsyncResult.success({
         doc: {
-          binding: { target: "session:dev-26" },
+          bindings: {
+            world: {
+              id: "session:dev-26",
+              label: "dev-26",
+              at: address("C:\\Models\\Test.rvt"),
+            },
+          },
           snapshot: {
             ...h.snapshot,
             reading: {
@@ -369,7 +359,6 @@ describe("takeoff route store", () => {
       slice,
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
     await store.actions.settle(store.atoms.activeDocument);
 
@@ -390,7 +379,13 @@ describe("takeoff route store", () => {
     const slice = Atom.make(
       AsyncResult.success({
         doc: {
-          binding: { target: "session:dev-26" },
+          bindings: {
+            world: {
+              id: "session:dev-26",
+              label: "dev-26",
+              at: address("C:\\Models\\Test.rvt"),
+            },
+          },
           snapshot: {
             ...h.snapshot,
             reading: {
@@ -411,7 +406,6 @@ describe("takeoff route store", () => {
       slice,
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
     await store.actions.settle(store.atoms.activeDocument);
 
@@ -453,7 +447,7 @@ describe("takeoff route store", () => {
         ];
       },
     };
-    const store = createStore({ host: h.host, sessions, search: searchPort().port }, (next) =>
+    const store = createStore({ host: h.host, sessions }, (next) =>
       patches.push(next),
     );
     await store.actions.settle(store.atoms.sessions);
@@ -476,8 +470,8 @@ describe("takeoff route store", () => {
     expect(
       patches.flatMap((batch) =>
         batch.flatMap((patch) =>
-          patch.path[0] === "binding"
-            ? [(patch.value as TakeoffsRouteDocument["binding"]).target]
+          patch.path[0] === "bindings" && patch.path[1] === "world"
+            ? [(patch.value as { id: string }).id]
             : [],
         ),
       ),
@@ -511,7 +505,13 @@ describe("takeoff route store", () => {
     const slice = Atom.make(
       AsyncResult.success({
         doc: {
-          binding: { target: "session:dev-26" },
+          bindings: {
+            world: {
+              id: "session:dev-26",
+              label: "dev-26",
+              at: address("C:\\Models\\Test.rvt"),
+            },
+          },
           snapshot: h.snapshot,
           staged: [],
         },
@@ -526,7 +526,6 @@ describe("takeoff route store", () => {
         slice,
         host: h.host,
         sessions,
-        search: searchPort().port,
       },
       (next) => patches.push(next),
     );
@@ -536,7 +535,10 @@ describe("takeoff route store", () => {
     await tick();
 
     expect(patches).toContainEqual([
-      { path: ["binding"], value: expect.objectContaining({ target: "session:other" }) },
+      {
+        path: ["bindings", "world"],
+        value: expect.objectContaining({ id: "session:other" }),
+      },
     ]);
     const landed = store.atoms.registry.get(store.slices.takeoffs);
     expect(AsyncResult.getOrThrow(landed).doc?.snapshot).toEqual(h.snapshot);
@@ -550,7 +552,6 @@ describe("takeoff route store", () => {
       {
         host: createFixtureTakeoffHost(),
         sessions: createFixtureSessionSource(),
-        search: searchPort().port,
       },
       (next) => patches.push(next),
     );
@@ -567,7 +568,6 @@ describe("takeoff route store", () => {
       {
         host: createFixtureTakeoffHost(),
         sessions: createFixtureSessionSource(),
-        search: searchPort().port,
       },
       (next) => patches.push(next),
     );
@@ -588,13 +588,11 @@ describe("takeoff route store", () => {
   });
 
   it("swaps the whole capability root for the project-a fixture", async () => {
-    const search = searchPort();
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: search.port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
 
     const snapshot = await store.actions.settle(store.atoms.snapshot);
 
@@ -606,9 +604,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
     const room = store.atoms.registry
       .get(store.atoms.world)
@@ -661,9 +658,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
 
     store.actions.setSort([{ key: "name", dir: "desc" }]);
@@ -703,9 +699,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
     const rows = store.atoms.registry.get(store.atoms.atlasRows);
     const visibleRows = store.atoms.registry.get(store.atoms.visibleRows);
@@ -722,9 +717,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
     const room = store.atoms.registry
       .get(store.atoms.world)
@@ -745,9 +739,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
     await store.actions.settle(store.atoms.snapshot);
 
     await store.actions.capture({ view: bound.views[0]!, label: "Main" });
@@ -776,7 +769,7 @@ describe("takeoff route store", () => {
     );
     const slice = Atom.make(
       AsyncResult.success({
-        doc: { binding: { target: null }, snapshot: fixture, staged: [] },
+        doc: { bindings: {}, snapshot: fixture, staged: [] },
         hydrated: true,
         connected: true,
         error: null,
@@ -788,9 +781,8 @@ describe("takeoff route store", () => {
       slice,
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
 
     await vi.waitFor(() => expect(store.atoms.registry.get(store.feeds.zones).state).toBe("error"));
     await expect(store.actions.settle(store.atoms.snapshot)).rejects.toThrow("snapshot rejected");
@@ -803,9 +795,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
 
     await expect(store.actions.settle(store.atoms.snapshot)).rejects.toThrow("snapshot rejected");
 
@@ -818,9 +809,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
     await Promise.all([
       store.actions.settle(store.atoms.snapshot),
       store.actions.settle(store.atoms.r10),
@@ -855,9 +845,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
     await Promise.all([
       store.actions.settle(store.atoms.snapshot),
       store.actions.settle(store.atoms.r10),
@@ -874,9 +863,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
     await expect(store.actions.settle(store.atoms.r10)).rejects.toThrow("r10 rejected");
     const before = { ...h.calls };
 
@@ -915,8 +903,8 @@ describe("takeoff route store", () => {
         return { text: "host receipt" };
       },
     };
-    const store = createStore({ host, sessions: h.sessions, search: searchPort().port });
-    store.actions.setSearch({ ...bound, views: ["North", "South"] });
+    const store = createStore({ host, sessions: h.sessions });
+    store.actions.setSelection({ ...bound, views: ["North", "South"] });
 
     const candidates = await store.actions.settle(store.atoms.candidates);
     expect(candidates.value.map((candidate) => candidate.view)).toEqual(["North", "South"]);
@@ -943,10 +931,9 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({
-      ...EMPTY_TAKEOFF_SEARCH,
+    store.actions.setSelection({
+      ...EMPTY_TAKEOFF_SELECTION,
       source: "fixture",
       views: ["Mechanical Zoning Plan - Lower Level"],
     });
