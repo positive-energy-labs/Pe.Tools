@@ -186,7 +186,7 @@ test("an abandoned external mutation becomes outcomeUnknown and recovery clears 
   expect(await restarted.read(threadA, "test-route")).toMatchObject({ status: "ready" });
 });
 
-test("mask, schema, human command gate, and substrate bind are enforced", async () => {
+test("mask, schema, and human command gate are enforced", async () => {
   const { store } = memoryStore();
   const module = workspace(store);
   expect(
@@ -204,10 +204,7 @@ test("mask, schema, human command gate, and substrate bind are enforced", async 
   });
   expect(
     await module.command(threadA, "test-route", "human", "bind", { target: "session:x" }),
-  ).toMatchObject({ ok: true, result: { target: "session:x" } });
-  expect((await module.read(threadA, "test-route"))?.doc).toMatchObject({
-    binding: { target: "session:x" },
-  });
+  ).toMatchObject({ ok: false, error: "unknown command 'bind'" });
 });
 
 test("publishes all action outcomes but appends only human chronology", async () => {

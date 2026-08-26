@@ -43,9 +43,7 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
 export function defineRouteState<TSchema extends z.ZodType>(
   spec: RouteStateSpec<TSchema>,
 ): RouteStateSpec<TSchema> {
-  // Every route gets the substrate-owned `bind` command; RouteWorkspace implements it
-  // generically (writes doc.binding) — routes never supply a handler for it.
-  return { ...spec, commands: { [BIND_COMMAND]: bindCommandSpec, ...spec.commands } };
+  return spec;
 }
 
 /** The document type a spec's schema parses to. */
@@ -69,8 +67,8 @@ export interface RouteStateWriteResult {
 /* ── Session binding (substrate-owned doc segment) ─────────────────────────── */
 
 /**
- * Which Revit session this workspace speaks to. Human-writable via the built-in
- * `bind` command; commands resolve `input.target ?? doc.binding.target`. An
+ * Which Revit session this workspace speaks to. Commands resolve
+ * `input.target ?? doc.binding.target`. An
  * unresolvable target with multiple sessions connected hard-fails host-side —
  * never a silent fallback.
  */
@@ -81,15 +79,6 @@ export const routeBindingSchema = z
   })
   .prefault({ target: null });
 export type RouteBinding = z.infer<typeof routeBindingSchema>;
-
-export const BIND_COMMAND = "bind";
-
-export const bindCommandSpec: RouteStateCommandSpec = {
-  description:
-    "HUMAN ONLY. Bind this workspace to one Revit session (e.g. 'session:<id>' for a pe-revit session, or 'observed' for the user's own Revit); commands inherit it unless they pass their own target. target: null unbinds.",
-  input: z.object({ target: z.string().nullable() }),
-  actor: "human",
-};
 
 /** Per-command override wins; otherwise the workspace binding; otherwise undefined. */
 export function resolveTarget(input: unknown, doc: unknown): string | undefined {
