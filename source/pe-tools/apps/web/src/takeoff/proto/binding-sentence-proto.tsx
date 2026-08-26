@@ -20,9 +20,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { VariantSwitcher } from "#/param-tables/proto/switcher";
-import { sessionLabel, type SessionFacts, type TargetResolution } from "#/host/target";
+import { fuseFleet } from "#/host/fleet";
+import { resolveTarget, type SessionFacts, type TargetResolution } from "#/host/target";
 import type { ViewFacts } from "#/takeoff/model";
 import type { World } from "#/takeoff/world";
+import { worldTrunk } from "#/targeting/trunks";
 
 // ── The manifest — what the canon Binding[] type would carry ────────────────
 
@@ -72,6 +74,25 @@ function buildManifest(args: {
 }): ProtoBinding[] {
   const { world, views, r10Path, resolution, sessions, picked } = args;
   const zoningViews = views.filter((v) => v.regions > 0);
+  const worldOptions =
+    worldTrunk.feed({
+      worlds: fuseFleet([], sessions),
+      sessions,
+      isLoading: false,
+      stale: false,
+      error: null,
+      basis: ["prototype"],
+    }).options ?? [];
+  const selectedWorld =
+    resolution.kind === "resolved"
+      ? worldOptions.find((option) => {
+          const candidate = resolveTarget(sessions, option.id);
+          return (
+            candidate.kind === "resolved" &&
+            candidate.session.sessionId === resolution.session.sessionId
+          );
+        })?.label
+      : picked.world;
   return [
     {
       key: "doc",
@@ -123,14 +144,9 @@ function buildManifest(args: {
       key: "world",
       direction: "context",
       joiner: "in",
-      noun:
-        resolution.kind === "resolved" ? sessionLabel(resolution.session) : (picked.world ?? null),
+      noun: selectedWorld ?? null,
       placeholder: sessions.length === 0 ? "no live world" : "pick a world",
-      options: sessions.map((s) => ({
-        id: s.sessionId,
-        label: sessionLabel(s),
-        sub: `pid ${s.processId}`,
-      })),
+      options: worldOptions,
       empty: "no live worlds — start one from /instances",
     },
   ];

@@ -28,8 +28,8 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
-import { useFleet } from "#/host/fleet";
-import { resolveTarget } from "#/host/target";
+import { fuseFleet, useFleet } from "#/host/fleet";
+import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
 import { appAtomRegistry } from "#/state/registry";
 import { fmtNum } from "#/components/master-table/model";
 import { Atlas } from "#/takeoff/atlas";
@@ -68,6 +68,14 @@ export const csv = (v: unknown): string[] =>
       ? [v]
       : [];
 const str = (v: unknown) => (typeof v === "string" ? v : "");
+
+export const resolvedWorldBinding = (
+  resolution: ReturnType<typeof resolveTarget>,
+  sessions: readonly SessionFacts[],
+) =>
+  resolution.kind === "resolved"
+    ? mintSelector(resolution.session, sessions)
+    : resolution.selector || null;
 
 export const Route = createFileRoute("/takeoffs")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -140,7 +148,22 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const activeDocumentResult = useAtomValue(store.atoms.activeDocument);
   const recentDocumentsResult = useAtomValue(store.atoms.recentDocuments);
   const fleet = useFleet();
-  const sessions = AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.value : [];
+  const live = source === "live";
+  const storedSessions = AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.value : [];
+  const fixtureFleet = {
+    worlds: fuseFleet([], storedSessions),
+    sessions: storedSessions,
+    isLoading: AsyncResult.isInitial(sessionsResult),
+    stale: AsyncResult.isSuccess(sessionsResult) ? sessionsResult.waiting : false,
+    error: AsyncResult.isFailure(sessionsResult)
+      ? Error(String(Cause.squash(sessionsResult.cause)))
+      : null,
+    at: AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.at : undefined,
+    basis: AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.basis : ["fixture"],
+    lane: "fixture" as const,
+  };
+  const targetingFleet = live ? fleet : fixtureFleet;
+  const sessions = targetingFleet.sessions;
   const resolution = resolveTarget(sessions, target);
   const session = resolution.kind === "resolved" ? resolution.session : null;
   const scope: HostSessionScope | null = session ? { bridgeSessionId: session.sessionId } : null;
@@ -149,7 +172,6 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
       ? activeDocumentResult.value.value
       : null;
 
-  const live = source === "live";
   const world = useAtomValue(store.atoms.world);
   const busyState = useAtomValue(store.atoms.busy);
   const failure = useAtomValue(store.atoms.failure);
@@ -172,7 +194,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
 
   // ── feeds: one per link, each a projection of a query's state ──
   const projectedFeeds: Feeds = {
-    world: live ? worldTrunk.feed(fleet) : worldTrunk.fromSessions(sessionsResult, "fixture"),
+    world: worldTrunk.feed(targetingFleet),
     rvt: documentTrunk.feed(
       activeDocumentResult,
       live ? recentDocumentsResult : undefined,
@@ -189,7 +211,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const state: BindingState = useMemo(
     () => ({
       bound: {
-        world: live ? target || null : target || "observed",
+        world: resolvedWorldBinding(resolution, sessions),
         rvt: activeDocument?.documentId ?? null,
         folder: dir || null,
         r10: r10 || null,
@@ -197,7 +219,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
       multi: { views: new Set(views), zones: new Set(zones) },
       stage,
     }),
-    [live, target, activeDocument?.documentId, views, dir, r10, zones, stage],
+    [resolution, sessions, activeDocument?.documentId, views, dir, r10, zones, stage],
   );
   const setState = (patch: Partial<BindingState>) => store.actions.setBindings(patch);
 

@@ -3,7 +3,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 
 import type { WorldFacts } from "#/host/fleet";
-import type { SessionFacts } from "#/host/target";
+import { resolveTarget, type SessionFacts } from "#/host/target";
 import { documentTrunk, worldTrunk } from "#/targeting/trunks";
 
 const session = (overrides: Partial<SessionFacts> = {}): SessionFacts => ({
@@ -39,6 +39,12 @@ describe("targeting trunks", () => {
       lane: null,
       custody: "observed",
     });
+    const installed = session({
+      sessionId: "bridge-installed",
+      sdkSessionId: undefined,
+      processId: 88,
+      lane: "installed",
+    });
     const worlds: WorldFacts[] = [
       {
         id: "pe.app-25",
@@ -62,30 +68,34 @@ describe("targeting trunks", () => {
         phase: "ready",
         pid: 88,
         openDocumentCount: 0,
+        session: installed,
         row: { id: "installed-25" } as WorldFacts["row"],
       },
     ];
 
-    expect(
-      worldTrunk.feed({
-        worlds,
-        sessions: [controlled, observed],
-        isLoading: false,
-        stale: false,
-        error: null,
-        at: 123,
-        basis: ["sessions.status", "bridge.sessions.list"],
-      }),
-    ).toMatchObject({
+    const sessions = [controlled, observed, installed];
+    const result = worldTrunk.feed({
+      worlds,
+      sessions,
+      isLoading: false,
+      stale: false,
+      error: null,
+      at: 123,
+      basis: ["sessions.status", "bridge.sessions.list"],
+    });
+
+    expect(result).toMatchObject({
       options: [
         { id: "session:pe.app-25", label: "pe.app-25", sub: "controlled" },
         { id: "observed", label: "Revit 77", sub: "observed" },
-        { id: "session:installed-25", label: "installed-25", sub: "controlled" },
+        { id: "88", label: "installed-25", sub: "controlled" },
       ],
       lane: "live",
       at: 123,
       basis: ["sessions.status", "bridge.sessions.list"],
     });
+    for (const option of result.options ?? [])
+      expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
   });
 
   it("keeps equal document titles distinct by document identity", () => {
@@ -117,18 +127,46 @@ describe("targeting trunks", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it("invalidates the current read after a successful document pick", async () => {
-    const invalidate = vi.fn();
+  it("opens cloud recents by title with keep and local recents by path", async () => {
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ result: { state: "ok" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const cloud = recent("model-a", "cloud:a");
+    const local: RecentDocument = {
+      ...recent("ignored", "C:\\Models\\Local.rvt"),
+      isCloud: false,
+      modelGuid: null,
+      title: "Local.rvt",
+    };
+
+    await documentTrunk.pick(session(), "model-a", [cloud]);
+    await documentTrunk.pick(session(), local.path, [local]);
+
+    expect(request.mock.calls.map(([, init]) => JSON.parse(String(init?.body)) as unknown)).toEqual(
+      [
+        { path: "recent:Equal title.rvt", id: "pe.app-25", conflictPolicy: "keep" },
+        { path: "C:\\Models\\Local.rvt", id: "pe.app-25" },
+      ],
+    );
+  });
+
+  it("surfaces an SDK diagnostic when document open has no success receipt", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ result: { state: "ok" } }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({
+          result: {},
+          diagnostics: [{ code: "doc.no-match", detail: "no file at recent:Equal title.rvt" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
     );
 
     await expect(
-      documentTrunk.pick(session(), "model-a", [recent("model-a", "cloud:a")], invalidate),
-    ).resolves.toBe("opened Equal title.rvt");
-    expect(invalidate).toHaveBeenCalledOnce();
+      documentTrunk.pick(session(), "model-a", [recent("model-a", "cloud:a")]),
+    ).rejects.toThrow("no file at recent:Equal title.rvt");
   });
 });

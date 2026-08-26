@@ -1,6 +1,7 @@
 import type { Product } from "#/targeting/model";
-import { PROFILE_TERMINAL } from "#/family/product";
-import { worldTrunk } from "#/targeting/trunks";
+import { profileTerminal, worldTrunk } from "#/targeting/trunks";
+
+const profile = profileTerminal("read");
 
 export type FamiliesProductActions = {
   applyScope: () => Promise<string | void>;
@@ -15,7 +16,7 @@ export const FAMILIES_PRODUCT = (actions: FamiliesProductActions): Product => ({
   name: "families",
   links: [
     worldTrunk.link,
-    PROFILE_TERMINAL.link,
+    profile.link,
     {
       key: "scope",
       joiner: "",

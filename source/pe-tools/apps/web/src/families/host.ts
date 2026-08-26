@@ -20,7 +20,7 @@ export interface FamiliesHost {
   sessions(): Promise<SessionFacts[]>;
   categories(target: string): Promise<string[]>;
   families(target: string, draft: FamiliesDraft): Promise<string[]>;
-  profiles(target: string): Promise<string[]>;
+  profiles(): Promise<string[]>;
   apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
   command(name: "bind" | "plan" | "apply", input?: Record<string, unknown>): Promise<RouteStateWriteResult>;
   project(target: string, familyIds: number[]): Promise<FfProjectData>;
@@ -67,18 +67,14 @@ export function createLiveFamiliesHost(scope: Scope): FamiliesHost {
         ),
       ].sort((a, b) => a.localeCompare(b));
     },
-    async profiles(target) {
-      const result = await callHostRpc(
-        "settings.tree",
-        {
-          ...FF_PROFILE_MODULE,
-          subDirectory: "",
-          recursive: true,
-          includeFragments: false,
-          includeSchemas: false,
-        },
-        { bridgeSessionId: target || undefined },
-      );
+    async profiles() {
+      const result = await callHostRpc("settings.tree", {
+        ...FF_PROFILE_MODULE,
+        subDirectory: "",
+        recursive: true,
+        includeFragments: false,
+        includeSchemas: false,
+      });
       return result.files
         .filter((entry) => entry.relativePath.toLowerCase().endsWith(".json"))
         .map((entry) => entry.relativePath)

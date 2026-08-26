@@ -17,6 +17,8 @@ describe("FAMILIES_PRODUCT", () => {
       "category",
       "family",
     ]);
+    expect(product.links[1]).toMatchObject({ key: "profile", dir: "read" });
+    expect(product.links[1]!.parent).toBeUndefined();
     expect(product.stages.map((stage) => stage.key)).toEqual(["scope", "foundry"]);
     expect(product.stages[1]!.verbs[1]!.commit).toBe(true);
   });

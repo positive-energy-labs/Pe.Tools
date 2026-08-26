@@ -27,12 +27,12 @@ import {
 } from "#/family/host";
 import { familyLane } from "#/family/lane";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
-import { PROFILE_TERMINAL } from "#/family/product";
 import { draftToPatches } from "#/family/project";
 import { resolveTarget } from "#/host/target";
 import {
   createRouteStoreCore,
   docAtom,
+  feed,
   hostRead,
   readingIsCurrent,
   type Scope,
@@ -175,11 +175,7 @@ export function createFamilyStore(deps: {
     )
     .pipe(Atom.autoDispose);
   const profileFeed = Atom.make((get) =>
-    PROFILE_TERMINAL.feed(
-      get(profileResult),
-      (paths) => paths.map((path) => ({ id: path, label: path })),
-      "read",
-    ),
+    feed(get(profileResult), (paths) => paths.map((path) => ({ id: path, label: path })), "read"),
   ).pipe(owned("feed/profile"));
 
   const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) =>

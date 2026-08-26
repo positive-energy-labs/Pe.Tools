@@ -1,7 +1,7 @@
 import type { Product } from "#/targeting/model";
 import { fileTerminal } from "#/targeting/trunks";
 
-export const SETTINGS_FILE_TERMINAL = fileTerminal("file", "duplex");
+const settingsFile = fileTerminal("file", "a settings file", "duplex");
 
 export const SETTINGS_PRODUCT = (actions: {
   open(): Promise<string | void>;
@@ -21,7 +21,7 @@ export const SETTINGS_PRODUCT = (actions: {
       needs: "a settings module",
     },
     { key: "root", parent: "module", joiner: "", placeholder: "a root", needs: "a settings root" },
-    { ...SETTINGS_FILE_TERMINAL.link, parent: "root" },
+    { ...settingsFile.link, parent: "root", needs: "an authoring file" },
   ],
   stages: [
     {

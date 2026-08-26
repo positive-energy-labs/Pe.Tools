@@ -1,18 +1,14 @@
 import type { Product, Verb } from "#/targeting/model";
-import { fileTerminal, worldTrunk } from "#/targeting/trunks";
+import { profileTerminal, worldTrunk } from "#/targeting/trunks";
 
-const profileTerminal = fileTerminal("profile", "duplex");
-export const PROFILE_TERMINAL = {
-  ...profileTerminal,
-  link: { ...profileTerminal.link, parent: "world" },
-};
+const profile = profileTerminal("duplex");
 
 export const FAMILY_PRODUCT = (
   verbs: Record<"open" | "save" | "capture" | "build", Pick<Verb, "run" | "refuse">>,
 ): Product => ({
   key: "family",
   name: "family",
-  links: [worldTrunk.link, PROFILE_TERMINAL.link],
+  links: [worldTrunk.link, { ...profile.link, parent: "world" }],
   stages: [
     {
       key: "author",

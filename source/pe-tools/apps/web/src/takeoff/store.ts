@@ -178,7 +178,13 @@ export interface SyncPlan {
   readonly tags: readonly string[];
 }
 
-const r10Terminal = fileTerminal(".r10", "sync");
+const r10Terminal = fileTerminal("r10", "an .r10 file", "sync");
+const r10Link: Link = {
+  ...r10Terminal.link,
+  parent: "folder",
+  placeholder: "pick a .r10",
+  needs: ".r10 files come from the bound folder",
+};
 
 export const TAKEOFF_LINKS: Link[] = [
   worldTrunk.link,
@@ -202,7 +208,7 @@ export const TAKEOFF_LINKS: Link[] = [
     multi: true,
   },
   folderTrunk.link,
-  { ...r10Terminal.link, parent: "folder" },
+  r10Link,
 ];
 
 const EMPTY_WORLD: World = { docName: "", r10Path: null, lanes: [], zones: [], systems: [] };
@@ -610,19 +616,16 @@ export function createTakeoffStore(deps: {
     ),
   ).pipe(owned("feed/zones"));
   const folderFeed = Atom.make((get) =>
-    folderTrunk.feed(
-      get(foldersResult),
-      (dirs) => dirs.map((dir) => ({ id: dir, label: dir })),
-      "read",
-      { needs: folderTrunk.link.needs },
-    ),
+    feed(get(foldersResult), (dirs) => dirs.map((dir) => ({ id: dir, label: dir })), "read", {
+      needs: folderTrunk.link.needs,
+    }),
   ).pipe(owned("feed/folder"));
   const r10Feed = Atom.make((get) =>
-    r10Terminal.feed(
+    feed(
       get(listingResult),
       (files) => files.map((file) => ({ id: file.path, label: file.name })),
       "read",
-      { needs: r10Terminal.link.needs },
+      { needs: r10Link.needs },
     ),
   ).pipe(owned("feed/r10"));
   const authorityWorldAtom = Atom.make((get): World => {

@@ -1,10 +1,12 @@
 import { getRouteApi } from "@tanstack/react-router";
 
 import { EmptyState } from "#/components/lang/empty";
-import { mintSelector, sessionLabel, type TargetSelector } from "#/host/target";
+import { useFleet } from "#/host/fleet";
+import { resolveTarget, type TargetSelector } from "#/host/target";
 import { CHAT_CONSUMER, readScoped, scopeKey, type TargetScope } from "#/host/target-scope";
-import { chipDescriptor, LaneBadge, LiveDot, resolutionReadout } from "#/host/target-ui";
+import { chipDescriptor, resolutionReadout } from "#/host/target-ui";
 import { useTarget, useWorldLog, type WorldEvent } from "#/host/use-target";
+import { worldTrunk } from "#/targeting/trunks";
 
 /**
  * Chat-wired target surfaces. The pin is the `target` search param (a selector, retained like
@@ -41,8 +43,10 @@ export function useChatTarget() {
  * "against what world" precedes "with what context".
  */
 export function TargetWorld() {
-  const { selector, resolution, sessions, worldLog, pin } = useChatTarget();
+  const { resolution, sessions, worldLog, pin } = useChatTarget();
+  const fleet = useFleet();
   const chip = chipDescriptor(resolution);
+  const options = worldTrunk.feed(fleet).options ?? [];
   return (
     <div className="border-b-[0.5px] border-[var(--r-line)] px-3 py-3">
       <div className="mb-1.5 flex items-baseline justify-between">
@@ -55,36 +59,31 @@ export function TargetWorld() {
         {resolutionReadout(resolution)}
       </div>
 
-      {sessions.map((s) => {
+      {options.map((option) => {
+        const optionResolution = resolveTarget(sessions, option.id);
         const isResolved =
-          resolution.kind === "resolved" && resolution.session.sessionId === s.sessionId;
+          resolution.kind === "resolved" &&
+          optionResolution.kind === "resolved" &&
+          resolution.session.sessionId === optionResolution.session.sessionId;
         return (
           <button
-            key={s.sessionId}
+            key={option.id}
             type="button"
-            onClick={() => pin(mintSelector(s, sessions))}
+            onClick={() => pin(option.id)}
             // The resolved session is a SELECTION — the selection fill, never a hue.
             className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${
               isResolved ? "bg-[var(--r-select)] [--r-on:var(--r-select)]" : ""
             }`}
             title="pin the chat here"
           >
-            <span className="inline-flex min-w-0 items-center gap-2">
-              <LiveDot
-                tone={isResolved ? (selector === "" ? "implicit" : "pinned") : "muted"}
-                lane={s.lane}
-              />
-              <span className="truncate t-value text-[var(--r-ink)]">{sessionLabel(s)}</span>
-              {/* A session that reported no lane gets no badge — "not reported" rendered honestly. */}
-              {s.lane ? <LaneBadge lane={s.lane} /> : null}
-            </span>
+            <span className="truncate t-value text-[var(--r-ink)]">{option.label}</span>
             <span className="whitespace-nowrap t-caption face-mono text-[var(--r-ink-2)]">
-              pid {s.processId}
+              {option.sub}
             </span>
           </button>
         );
       })}
-      {sessions.length === 0 ? (
+      {options.length === 0 ? (
         <EmptyState
           story="scope"
           exit="start Revit with the Pe add-in, or start a session from /instances"

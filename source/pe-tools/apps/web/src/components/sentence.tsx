@@ -21,8 +21,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DocRow, extOf } from "#/components/doc-picker";
-import { useFleet, worldClause, worldName } from "#/host/fleet";
-import { mintSelector, resolveTarget, sessionLabel } from "#/host/target";
+import { useFleet, worldClause } from "#/host/fleet";
+import { resolveTarget } from "#/host/target";
+import { worldTrunk } from "#/targeting/trunks";
 
 export type SentenceTone = "rest" | "active" | "awaiting" | "committed" | "failed";
 
@@ -157,7 +158,10 @@ export function Sentence({
   const [openSlot, setOpenSlot] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
-  const { worlds, sessions } = useFleet();
+  const fleet = useFleet();
+  const { worlds, sessions } = fleet;
+  const worldFeed = worldTrunk.feed(fleet);
+  const worldOptions = worldFeed.options ?? [];
 
   // Receipt relax: tick once past the window so the sentence returns to its nouns.
   const receiptFresh = receipt != null && Date.now() - receipt.atMs < RECEIPT_RELAX_MS;
@@ -181,7 +185,6 @@ export function Sentence({
   const hasDocSlot = documents !== undefined;
   const resolution = resolveTarget(sessions, target);
   const clauseText = worldClause(worlds, target);
-  const bootingWorlds = worlds.filter((world) => world.phase === "booting");
 
   // Sentence-as-receipt: a fresh commit replaces the nouns entirely, then relaxes back.
   if (receiptFresh && receipt) {
@@ -380,39 +383,21 @@ export function Sentence({
           <div className="t-caption t-upper pb-0.5" style={{ color: "var(--r-ink-2)" }}>
             bind — which world this surface speaks to
           </div>
-          {sessions.map((session) => (
-            <div
-              key={session.sessionId}
-              className="py-1"
-              style={{ cursor: "pointer", borderTop: "0.5px solid var(--r-line)" }}
-              onClick={() => {
-                onBind(mintSelector(session, sessions));
+          {worldOptions.map((option) => (
+            <DocRow
+              key={option.id}
+              label={option.label}
+              sub={option.sub}
+              selected={target === option.id}
+              onPick={() => {
+                onBind(option.id);
                 setOpenSlot(null);
               }}
-            >
-              <span className="face-mono t-caption" style={{ color: "var(--r-ink)" }}>
-                {worldName({
-                  id: session.sdkSessionId ?? session.sessionId,
-                  custody: session.custody,
-                })}
-              </span>{" "}
-              <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
-                {sessionLabel(session)} · pid {session.processId}
-              </span>
-            </div>
+            />
           ))}
-          {bootingWorlds.map((world) => (
-            <div key={world.id} className="py-1" style={{ borderTop: "0.5px solid var(--r-line)" }}>
-              {/* Booting is registry testimony in flight — neutral ink, not caution
-                  (the /instances phase verdict set the precedent). */}
-              <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
-                {world.id} — still booting
-              </span>
-            </div>
-          ))}
-          {sessions.length === 0 && bootingWorlds.length === 0 ? (
+          {worldOptions.length === 0 ? (
             <div className="face-mono t-caption py-1" style={{ color: "var(--r-ink-2)" }}>
-              no live worlds — start one from /instances
+              {worldFeed.note ?? "no live worlds — start one from /instances"}
             </div>
           ) : null}
           {target ? (

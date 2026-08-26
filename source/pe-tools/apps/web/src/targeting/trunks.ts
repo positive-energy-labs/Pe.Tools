@@ -28,17 +28,14 @@ export interface FleetFeed {
   readonly error: Error | null;
   readonly at?: number;
   readonly basis: readonly string[];
+  readonly lane?: Lane;
 }
 
 const worldOptions = (worlds: readonly WorldFacts[], sessions: readonly SessionFacts[]): Option[] =>
   worlds.map((world) => {
     const sdkSessionId = world.session?.sdkSessionId ?? world.row?.id;
     return {
-      id: sdkSessionId
-        ? `session:${sdkSessionId}`
-        : world.session
-          ? mintSelector(world.session, sessions)
-          : `pid:${world.pid ?? 0}`,
+      id: world.session ? mintSelector(world.session, sessions) : `session:${world.row!.id}`,
       label: sdkSessionId ?? `Revit ${world.pid ?? 0}`,
       sub: world.custody,
     };
@@ -55,47 +52,25 @@ const worldLink: Link = {
 export const worldTrunk = {
   link: worldLink,
   feed(source: FleetFeed): Feed {
+    const lane = source.lane ?? "live";
     if (source.error)
       return {
         options: null,
         state: "error",
-        lane: "live",
+        lane,
         stale: false,
         note: source.error.message,
       };
     if (source.isLoading && source.worlds.length === 0)
-      return { options: null, state: "loading", lane: "live", stale: false };
+      return { options: null, state: "loading", lane, stale: false };
     return {
       options: worldOptions(source.worlds, source.sessions),
       state: "ready",
-      lane: "live",
+      lane,
       stale: source.stale,
       at: source.at,
       basis: source.basis,
     };
-  },
-  fromSessions(
-    result: AsyncResult.AsyncResult<TimedRead<readonly SessionFacts[]>, Error>,
-    lane: Lane,
-  ): Feed {
-    return feed(
-      result,
-      (sessions) =>
-        worldOptions(
-          sessions.map((session) => ({
-            id: session.sdkSessionId ?? session.sessionId,
-            custody: session.custody,
-            phase: "ready",
-            lane: session.lane ?? undefined,
-            pid: session.processId,
-            activeDocumentTitle: session.activeDocumentTitle,
-            openDocumentCount: session.openDocumentCount,
-            session,
-          })),
-          sessions,
-        ),
-      lane,
-    );
   },
 };
 
@@ -162,7 +137,6 @@ export const documentTrunk = {
     session: SessionFacts,
     documentId: string,
     recents: readonly RecentDocument[],
-    invalidate?: () => void,
   ): Promise<string> {
     if (!session.sdkSessionId) throw Error("open the document in Revit; this session is observed");
     const recent = recents.find((item) => (item.modelGuid ?? item.path) === documentId);
@@ -171,6 +145,8 @@ export const documentTrunk = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        // SHIM: Pe.Revit.Sdk NEXT.md cannot resolve cloud identities yet. (dies when: `doc open
+        // <cld://…>` resolves)
         path: recent.isCloud ? `recent:${recent.title}` : recent.path,
         id: session.sdkSessionId,
         ...(recent.isCloud ? { conflictPolicy: "keep" as const } : {}),
@@ -179,39 +155,40 @@ export const documentTrunk = {
     const body = (await response.json()) as SdkEnvelope<DocOpenResult>;
     if (!response.ok || body.result?.state !== "ok")
       throw Error(sdkError(body, `document open failed (${response.status})`));
-    invalidate?.();
     return `opened ${recent.title}`;
   },
 };
 
-type FeedBuilder = {
-  readonly link: Link;
-  feed<A>(
-    result: AsyncResult.AsyncResult<TimedRead<A>, Error>,
-    options: (value: A) => Option[],
-    lane: Lane,
-    seam?: { needs: string },
-  ): Feed;
-};
-
-export const folderTrunk: FeedBuilder = {
+export const folderTrunk = {
   link: {
     key: "folder",
     joiner: "beside",
     placeholder: "pick a folder",
-    needs: "a host-visible folder",
-  },
-  feed,
+    needs: "a host-visible folder holding .r10 files — add one below",
+  } satisfies Link,
 };
 
-export const fileTerminal = (ext: string, dir: Dir): FeedBuilder => ({
+export const fileTerminal = (key: string, noun: string, dir: Dir) => ({
   link: {
-    key: ext.replace(/^\./, ""),
+    key,
     joiner: dir === "sync" ? "syncing" : dir === "read" ? "against" : "editing",
-    placeholder: `pick a ${ext}`,
-    needs: `a readable ${ext} file`,
+    placeholder: noun,
+    needs: noun,
     dir,
     liveness: "detached",
-  },
-  feed,
+  } satisfies Link,
+});
+
+export const profileTerminal = (dir: Extract<Dir, "read" | "duplex">) => ({
+  link: {
+    key: "profile",
+    joiner: dir === "read" ? "against" : "editing",
+    placeholder: "a family profile",
+    needs:
+      dir === "read"
+        ? "a readable Family Foundry profile"
+        : "a family document path visible to the bound world",
+    dir,
+    liveness: "detached",
+  } satisfies Link,
 });

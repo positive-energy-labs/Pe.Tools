@@ -14,7 +14,6 @@ import type { MasterTableState } from "#/components/master-table/model";
 import type { FfProjectData } from "#/host/familyfoundry";
 import { resolveTarget } from "#/host/target";
 import type { FamiliesDraft, FamiliesHost } from "#/families/host";
-import { PROFILE_TERMINAL } from "#/family/product";
 import {
   createRouteStoreCore,
   docAtom,
@@ -123,7 +122,7 @@ export function createFamiliesStore(deps: {
     )
     .pipe(Atom.autoDispose);
   const profileSource = runtime.atom(() =>
-    hostRead([deps.search.target], () => deps.host.profiles(deps.search.target)),
+    hostRead(["family-foundry"], () => deps.host.profiles()),
   );
   const profileResult = runtimeFactory
     .withReactivity(["profile"])(
@@ -138,11 +137,7 @@ export function createFamiliesStore(deps: {
     feed(get(familyResult), (names) => names.map((name) => ({ id: name, label: name })), "read"),
   ).pipe(owned("feed/family"));
   const profileFeed = Atom.make((get) =>
-    PROFILE_TERMINAL.feed(
-      get(profileResult),
-      (paths) => paths.map((path) => ({ id: path, label: path })),
-      "read",
-    ),
+    feed(get(profileResult), (paths) => paths.map((path) => ({ id: path, label: path })), "read"),
   ).pipe(owned("feed/profile"));
 
   const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) =>
