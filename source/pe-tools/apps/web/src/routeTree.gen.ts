@@ -18,6 +18,7 @@ import { Route as FamiliesRouteImport } from "./routes/families";
 import { Route as FamilyRouteImport } from "./routes/family";
 import { Route as FamilyEditorProtoRouteImport } from "./routes/family-editor-proto";
 import { Route as FamilyReviewProtoRouteImport } from "./routes/family-review-proto";
+import { Route as GrillesRouteImport } from "./routes/grilles";
 import { Route as InstancesRouteImport } from "./routes/instances";
 import { Route as OpsRouteImport } from "./routes/ops";
 import { Route as ParamTablesRouteImport } from "./routes/param-tables";
@@ -79,6 +80,11 @@ const FamilyEditorProtoRoute = FamilyEditorProtoRouteImport.update({
 const FamilyReviewProtoRoute = FamilyReviewProtoRouteImport.update({
   id: "/family-review-proto",
   path: "/family-review-proto",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const GrillesRoute = GrillesRouteImport.update({
+  id: "/grilles",
+  path: "/grilles",
   getParentRoute: () => rootRouteImport,
 } as any);
 const InstancesRoute = InstancesRouteImport.update({
@@ -178,6 +184,7 @@ export interface FileRoutesByFullPath {
   "/family": typeof FamilyRoute;
   "/family-editor-proto": typeof FamilyEditorProtoRoute;
   "/family-review-proto": typeof FamilyReviewProtoRoute;
+  "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -206,6 +213,7 @@ export interface FileRoutesByTo {
   "/family": typeof FamilyRoute;
   "/family-editor-proto": typeof FamilyEditorProtoRoute;
   "/family-review-proto": typeof FamilyReviewProtoRoute;
+  "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -235,6 +243,7 @@ export interface FileRoutesById {
   "/family": typeof FamilyRoute;
   "/family-editor-proto": typeof FamilyEditorProtoRoute;
   "/family-review-proto": typeof FamilyReviewProtoRoute;
+  "/grilles": typeof GrillesRoute;
   "/instances": typeof InstancesRoute;
   "/ops": typeof OpsRoute;
   "/param-tables": typeof ParamTablesRoute;
@@ -265,6 +274,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/family-editor-proto"
     | "/family-review-proto"
+    | "/grilles"
     | "/instances"
     | "/ops"
     | "/param-tables"
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/family-editor-proto"
     | "/family-review-proto"
+    | "/grilles"
     | "/instances"
     | "/ops"
     | "/param-tables"
@@ -321,6 +332,7 @@ export interface FileRouteTypes {
     | "/family"
     | "/family-editor-proto"
     | "/family-review-proto"
+    | "/grilles"
     | "/instances"
     | "/ops"
     | "/param-tables"
@@ -350,6 +362,7 @@ export interface RootRouteChildren {
   FamilyRoute: typeof FamilyRoute;
   FamilyEditorProtoRoute: typeof FamilyEditorProtoRoute;
   FamilyReviewProtoRoute: typeof FamilyReviewProtoRoute;
+  GrillesRoute: typeof GrillesRoute;
   InstancesRoute: typeof InstancesRoute;
   OpsRoute: typeof OpsRoute;
   ParamTablesRoute: typeof ParamTablesRoute;
@@ -431,6 +444,13 @@ declare module "@tanstack/react-router" {
       path: "/family-review-proto";
       fullPath: "/family-review-proto";
       preLoaderRoute: typeof FamilyReviewProtoRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/grilles": {
+      id: "/grilles";
+      path: "/grilles";
+      fullPath: "/grilles";
+      preLoaderRoute: typeof GrillesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/instances": {
@@ -576,6 +596,7 @@ const rootRouteChildren: RootRouteChildren = {
   FamilyRoute: FamilyRoute,
   FamilyEditorProtoRoute: FamilyEditorProtoRoute,
   FamilyReviewProtoRoute: FamilyReviewProtoRoute,
+  GrillesRoute: GrillesRoute,
   InstancesRoute: InstancesRoute,
   OpsRoute: OpsRoute,
   ParamTablesRoute: ParamTablesRoute,
