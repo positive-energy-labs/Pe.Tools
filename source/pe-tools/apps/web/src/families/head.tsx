@@ -5,8 +5,10 @@ import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { FAMILIES_PRODUCT } from "#/families/product";
 import type { FamiliesStore } from "#/families/store";
+import { useFleet } from "#/host/fleet";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
+import { worldTrunk } from "#/targeting/trunks";
 
 const same = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
@@ -21,8 +23,9 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
   const busy = useAtomValue(store.atoms.busy);
   const failure = useAtomValue(store.atoms.failure);
   const receipt = useAtomValue(store.atoms.receipt);
+  const fleet = useFleet();
   const feeds = {
-    session: useAtomValue(store.feeds.session),
+    world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),
     category: useAtomValue(store.feeds.category),
     family: useAtomValue(store.feeds.family),
@@ -45,7 +48,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
     refuseApply: () => (plan ? null : "plan first"),
   });
   const state: BindingState = {
-    bound: { session: target || null, profile: profilePath, scope: "scope" },
+    bound: { world: target || null, profile: profilePath, scope: "scope" },
     multi: {
       category: new Set(draft.categories),
       family: new Set(draft.families),
@@ -54,9 +57,9 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
   };
   const setState = useCallback(
     (patch: Partial<BindingState>) => {
-      const session = patch.bound?.session;
+      const world = patch.bound?.world;
       const profile = patch.bound?.profile;
-      if (session != null && session !== target) void store.actions.bind(session);
+      if (world != null && world !== target) void store.actions.bind(world);
       if (profile != null && profile !== profilePath) void store.actions.setProfile(profile);
       if (patch.multi)
         store.actions.setDraft((previous) => ({

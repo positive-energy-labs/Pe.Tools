@@ -7,7 +7,7 @@ describe("FAMILIES_PRODUCT", () => {
     const run = vi.fn();
     const product = FAMILIES_PRODUCT({ applyScope: run, plan: run, apply: run });
     expect(product.links.map((link) => link.key)).toEqual([
-      "session",
+      "world",
       "profile",
       "scope",
       "category",

@@ -257,24 +257,15 @@ describe("family route store", () => {
     expect(registry.get(store.atoms.armedBuild)).not.toBeNull();
   });
 
-  it("projects feed initial, success, and failure states", async () => {
-    let releaseSessions!: (value: []) => void;
+  it("projects profile feed failures", async () => {
     const testFixture = fixture();
     const host: FamilyHost = {
       ...testFixture.host,
-      sessions: () =>
-        new Promise<[]>((resolve) => {
-          releaseSessions = resolve;
-        }),
       profile: async () => {
         throw Error("tree refused");
       },
     };
     const { registry, store } = make({ ...testFixture, host });
-    expect(registry.get(store.feeds.session).state).toBe("loading");
-    releaseSessions([]);
-    await tick();
-    expect(registry.get(store.feeds.session).state).toBe("ready");
     await tick();
     expect(registry.get(store.feeds.profile).state).toBe("error");
   });

@@ -10,6 +10,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Decided
 
+- 2026-08-25 — World is a trunk, never a terminal: the sentence names documents and files, while the shared `world` trunk names a fused SDK-registry/bridge world by `sdkSessionId ?? "Revit <pid>"` and discloses custody.
 - 2026-08-25 — Workspace scope is deleted. Every route document uses `Scope = { threadId }`. Routes without `?thread` auto-land through `landThread`. No agent read a workspace document, so workspace scope was page memory in a document shape. Consumers: `/family`, `/families`, `/settings`, `/parameter-links`, `/schedule-grid`, and chat panes.
 - 2026-08-25 — `RouteStateSpec.key` and `readRouteState` are deleted. Route documents use `spec.route`; renderers use `parseRouteDoc`.
 - 2026-08-25 — `__PE_INSPECT__.inspect()` is the one dev observation surface: it reads only valid cached Registry nodes, exposes labels, values, graph, hover, and consumed verb causes from app boot; the 187-line `AtomDevtools` panel is deleted.

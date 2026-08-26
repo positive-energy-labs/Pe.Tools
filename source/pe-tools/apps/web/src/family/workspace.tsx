@@ -141,6 +141,7 @@ import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
 import { NavStateCell, ProposedCell } from "#/family/marks";
 import { FAMILY_PRODUCT } from "#/family/product";
 import type { FamilyStore } from "#/family/store";
+import { useFleet } from "#/host/fleet";
 import {
   AGREEMENT_TONE,
   MARK,
@@ -177,6 +178,7 @@ import {
 import { cn } from "#/lib/utils";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
+import { worldTrunk } from "#/targeting/trunks";
 
 export function FamilyWorkspace({
   store,
@@ -2101,8 +2103,9 @@ export function FamilyWorkspace({
 
   const picker = useAtomValue(store.atoms.picker);
   const receipt = useAtomValue(store.atoms.receipt);
+  const fleet = useFleet();
   const feeds = {
-    session: useAtomValue(store.feeds.session),
+    world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),
   };
   const product = FAMILY_PRODUCT({
@@ -2112,16 +2115,16 @@ export function FamilyWorkspace({
     ...store.verbs,
   });
   const bindingState: BindingState = {
-    bound: { session: target || null, profile: profile || null },
+    bound: { world: target || null, profile: profile || null },
     multi: {},
     stage,
   };
   const setBindingState = useCallback(
     (patch: Partial<BindingState>) => {
-      const nextSession = patch.bound?.session ?? null;
+      const nextWorld = patch.bound?.world ?? null;
       const nextProfile = patch.bound?.profile ?? null;
-      if (nextSession !== null && nextSession !== target)
-        void store.actions.bind(nextSession).catch(() => undefined);
+      if (nextWorld !== null && nextWorld !== target)
+        void store.actions.bind(nextWorld).catch(() => undefined);
       if (nextProfile !== null && nextProfile !== profile)
         void navigate({ search: (previous) => ({ ...previous, profile: nextProfile }) });
       const nextStage = patch.stage === "evidence" ? "evidence" : "author";

@@ -6,9 +6,9 @@
  * link. Bindings live in the URL search, so a reload or a shared link addresses the same thing.
  *
  * MULTI-SOURCE SYNC — every source is a query whose key carries its BASIS:
- *   world  · bridge.sessions.list — pushed (SSE invalidation at the root), always live
- *   rvt    · the bound session's active document — live with the world
- *   views · zones · rooms — one `readSnapshot` keyed [session, docTitle]; a doc change re-reads,
+ *   world  · SDK registry + bridge sessions — one fused fleet, always live
+ *   rvt    · active document + SDK recents, keyed by document id/path — live with the world
+ *   views · zones · rooms — one `readSnapshot` keyed [world, documentId]; a doc change re-reads,
  *            a write verb invalidates (adopt, partition, decide, sync-link)
  *   folder · a per-browser recents list (the legal-options source for a disk root)
  *   r10    · `rhvac.list` keyed [dir]; the join is `rhvac.open` keyed [path], invalidated by sync
@@ -28,7 +28,8 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
-import { mintSelector, resolveTarget } from "#/host/target";
+import { useFleet } from "#/host/fleet";
+import { resolveTarget } from "#/host/target";
 import { appAtomRegistry } from "#/state/registry";
 import { fmtNum } from "#/components/master-table/model";
 import { Atlas } from "#/takeoff/atlas";
@@ -43,6 +44,7 @@ import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";
 import type { Feeds, Link, Product } from "#/targeting/model";
+import { documentTrunk, worldTrunk } from "#/targeting/trunks";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { withThread } from "./-with-thread";
 
@@ -135,11 +137,17 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const target = useAtomValue(store.atoms.target);
   // ── sources ──
   const sessionsResult = useAtomValue(store.atoms.sessions);
+  const activeDocumentResult = useAtomValue(store.atoms.activeDocument);
+  const recentDocumentsResult = useAtomValue(store.atoms.recentDocuments);
+  const fleet = useFleet();
   const sessions = AsyncResult.isSuccess(sessionsResult) ? sessionsResult.value.value : [];
   const resolution = resolveTarget(sessions, target);
   const session = resolution.kind === "resolved" ? resolution.session : null;
   const scope: HostSessionScope | null = session ? { bridgeSessionId: session.sessionId } : null;
-  const docTitle = session?.activeDocumentTitle ?? null;
+  const activeDocument =
+    AsyncResult.isSuccess(activeDocumentResult) && activeDocumentResult.value.bound
+      ? activeDocumentResult.value.value
+      : null;
 
   const live = source === "live";
   const world = useAtomValue(store.atoms.world);
@@ -164,8 +172,12 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
 
   // ── feeds: one per link, each a projection of a query's state ──
   const projectedFeeds: Feeds = {
-    world: useAtomValue(store.feeds.world),
-    rvt: useAtomValue(store.feeds.rvt),
+    world: live ? worldTrunk.feed(fleet) : worldTrunk.fromSessions(sessionsResult, "fixture"),
+    rvt: documentTrunk.feed(
+      activeDocumentResult,
+      live ? recentDocumentsResult : undefined,
+      live ? "live" : "fixture",
+    ),
     views: useAtomValue(store.feeds.views),
     zones: useAtomValue(store.feeds.zones),
     folder: useAtomValue(store.feeds.folder),
@@ -177,15 +189,15 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const state: BindingState = useMemo(
     () => ({
       bound: {
-        world: live ? (session ? mintSelector(session, sessions) : null) : "fixture",
-        rvt: live ? docTitle : "fixture",
+        world: live ? target || null : target || "observed",
+        rvt: activeDocument?.documentId ?? null,
         folder: dir || null,
         r10: r10 || null,
       },
       multi: { views: new Set(views), zones: new Set(zones) },
       stage,
     }),
-    [live, session, sessions, docTitle, views, dir, r10, zones, stage],
+    [live, target, activeDocument?.documentId, views, dir, r10, zones, stage],
   );
   const setState = (patch: Partial<BindingState>) => store.actions.setBindings(patch);
 

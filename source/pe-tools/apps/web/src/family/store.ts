@@ -27,12 +27,12 @@ import {
 } from "#/family/host";
 import { familyLane } from "#/family/lane";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "#/family/model";
+import { PROFILE_TERMINAL } from "#/family/product";
 import { draftToPatches } from "#/family/project";
-import { mintSelector, resolveTarget, sessionLabel } from "#/host/target";
+import { resolveTarget } from "#/host/target";
 import {
   createRouteStoreCore,
   docAtom,
-  feed,
   hostRead,
   readingIsCurrent,
   type Scope,
@@ -174,19 +174,12 @@ export function createFamilyStore(deps: {
       Atom.swr(profileSource, { staleTime: "60 seconds", revalidateOnMount: false }),
     )
     .pipe(Atom.autoDispose);
-  const sessionFeed = Atom.make((get) =>
-    feed(
-      get(sessionsResult),
-      (items) =>
-        items.map((session) => ({
-          id: mintSelector(session, items),
-          label: sessionLabel(session),
-        })),
-      "live",
-    ),
-  ).pipe(owned("feed/session"));
   const profileFeed = Atom.make((get) =>
-    feed(get(profileResult), (paths) => paths.map((path) => ({ id: path, label: path })), "read"),
+    PROFILE_TERMINAL.feed(
+      get(profileResult),
+      (paths) => paths.map((path) => ({ id: path, label: path })),
+      "read",
+    ),
   ).pipe(owned("feed/profile"));
 
   const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) =>
@@ -471,7 +464,7 @@ export function createFamilyStore(deps: {
       failure: core.failure,
       receipt: core.receipt,
     },
-    feeds: { session: sessionFeed, profile: profileFeed },
+    feeds: { profile: profileFeed },
     verbs,
     commandVerb,
     actions,

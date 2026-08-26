@@ -13,7 +13,7 @@ import {
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
-import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
+import { resolveTarget, type SessionFacts } from "#/host/target";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import {
   createRouteStoreCore,
@@ -45,6 +45,7 @@ import {
   type WorldZone,
 } from "#/takeoff/world";
 import { type Bound, type Link, type Multi } from "#/targeting/model";
+import { documentTrunk, fileTerminal, folderTrunk, worldTrunk } from "#/targeting/trunks";
 
 export type TakeoffStage = "adopt" | "audit" | "sync";
 
@@ -97,12 +98,6 @@ export interface RhvacFile {
 
 export interface TakeoffHost {
   readonly fixture: boolean;
-  listRecentDocuments?(year?: string): Promise<readonly RecentDocument[]>;
-  openDocument?(input: {
-    readonly path: string;
-    readonly id: string;
-    readonly conflictPolicy?: "keep";
-  }): Promise<void>;
   readSnapshot(
     session: SessionFacts,
     document: ActiveDocument,
@@ -183,21 +178,11 @@ export interface SyncPlan {
   readonly tags: readonly string[];
 }
 
+const r10Terminal = fileTerminal(".r10", "sync");
+
 export const TAKEOFF_LINKS: Link[] = [
-  {
-    key: "world",
-    joiner: "in",
-    placeholder: "pick a world",
-    needs: "a live world — start Revit with the Pe add-in, or start one from /instances",
-    liveness: "attached",
-  },
-  {
-    key: "rvt",
-    parent: "world",
-    joiner: "",
-    placeholder: "no document",
-    needs: "the document arrives with the bound world",
-  },
+  worldTrunk.link,
+  documentTrunk.link,
   {
     key: "views",
     parent: "rvt",
@@ -216,21 +201,8 @@ export const TAKEOFF_LINKS: Link[] = [
     dir: "write",
     multi: true,
   },
-  {
-    key: "folder",
-    joiner: "beside",
-    placeholder: "pick a folder",
-    needs: "a host-visible folder holding .r10 files — add one below",
-  },
-  {
-    key: "r10",
-    parent: "folder",
-    joiner: "syncing",
-    placeholder: "pick a .r10",
-    needs: ".r10 files come from the bound folder",
-    dir: "sync",
-    liveness: "detached",
-  },
+  folderTrunk.link,
+  { ...r10Terminal.link, parent: "folder" },
 ];
 
 const EMPTY_WORLD: World = { docName: "", r10Path: null, lanes: [], zones: [], systems: [] };
@@ -466,13 +438,13 @@ export function createTakeoffStore(deps: {
         const target = get(targetAtom);
         const read = yield* get.result(sessionsResult, { suspendOnWaiting: true });
         const resolution = resolveTarget(read.value, target);
-        if (resolution.kind !== "resolved" || !deps.host.listRecentDocuments)
+        if (resolution.kind !== "resolved" || deps.host.fixture)
           return unbound<readonly RecentDocument[]>([], [target]);
         const session = read.value.find(
           (candidate) => candidate.sessionId === resolution.session.sessionId,
         )!;
         return yield* hostRead([session.sessionId, session.year ?? "all"], () =>
-          deps.host.listRecentDocuments!(session.year),
+          documentTrunk.recents(session.year),
         );
       }),
     )
@@ -619,46 +591,6 @@ export function createTakeoffStore(deps: {
     )
     .pipe(Atom.autoDispose);
 
-  const sessionsFeed = Atom.make((get) =>
-    feed(
-      get(sessionsResult),
-      (items) =>
-        items.map((session) => ({
-          id: mintSelector(session, items),
-          label: session.activeDocumentTitle ?? `Revit ${session.processId}`,
-        })),
-      deps.host.fixture ? "fixture" : "live",
-      { needs: TAKEOFF_LINKS[0]!.needs },
-    ),
-  ).pipe(owned("feed/world"));
-  const documentFeed = Atom.make((get) => {
-    const document = get(activeDocumentResult);
-    if (deps.host.fixture || !deps.host.listRecentDocuments)
-      return feed(
-        document,
-        (active) => (active ? [{ id: active.documentId, label: active.title }] : []),
-        deps.host.fixture ? "fixture" : "live",
-        { needs: TAKEOFF_LINKS[1]!.needs },
-      );
-    return feed(
-      get(recentDocumentsResult),
-      (recents) => {
-        const active = AsyncResult.isSuccess(document) ? document.value.value : null;
-        return [
-          ...(active ? [{ id: active.documentId, label: active.title }] : []),
-          ...recents
-            .filter((recent) => (recent.modelGuid ?? recent.path) !== active?.documentId)
-            .map((recent) => ({
-              id: recent.modelGuid ?? recent.path,
-              label: recent.title,
-              sub: recent.isCloud ? "cloud" : recent.path,
-            })),
-        ];
-      },
-      "live",
-      { needs: TAKEOFF_LINKS[1]!.needs },
-    );
-  }).pipe(owned("feed/rvt"));
   const viewsFeed = Atom.make((get) =>
     feed(
       get(snapshotResult),
@@ -678,16 +610,19 @@ export function createTakeoffStore(deps: {
     ),
   ).pipe(owned("feed/zones"));
   const folderFeed = Atom.make((get) =>
-    feed(get(foldersResult), (dirs) => dirs.map((dir) => ({ id: dir, label: dir })), "read", {
-      needs: TAKEOFF_LINKS[4]!.needs,
-    }),
+    folderTrunk.feed(
+      get(foldersResult),
+      (dirs) => dirs.map((dir) => ({ id: dir, label: dir })),
+      "read",
+      { needs: folderTrunk.link.needs },
+    ),
   ).pipe(owned("feed/folder"));
   const r10Feed = Atom.make((get) =>
-    feed(
+    r10Terminal.feed(
       get(listingResult),
       (files) => files.map((file) => ({ id: file.path, label: file.name })),
       "read",
-      { needs: TAKEOFF_LINKS[5]!.needs },
+      { needs: r10Terminal.link.needs },
     ),
   ).pipe(owned("feed/r10"));
   const authorityWorldAtom = Atom.make((get): World => {
@@ -898,7 +833,7 @@ export function createTakeoffStore(deps: {
           );
     });
   };
-  const openSelectedDocument = (documentId: string) =>
+  const pickDocument = (documentId: string) =>
     runVerb(
       "open-document",
       async () => {
@@ -906,22 +841,8 @@ export function createTakeoffStore(deps: {
         const resolution = resolveTarget(sessions.value, registry.get(targetAtom));
         if (resolution.kind !== "resolved") throw Error("no world bound");
         const { session } = resolution;
-        if (!session.sdkSessionId)
-          throw Error("open the document in Revit; this session is observed");
         const recents = await settle(recentDocumentsResult);
-        const recent = recents.value.find(
-          (candidate) => (candidate.modelGuid ?? candidate.path) === documentId,
-        );
-        if (!recent) throw Error(`unknown recent document ${documentId}`);
-        if (!deps.host.openDocument) throw Error("document opening is unavailable");
-        // SHIM: the CLI resolves cloud models only through `recent:<title>`; a literal `cld://`
-        // path is read as a local file (Pe.Revit.Sdk NEXT.md gap). Dies when `doc open <cld://…>` resolves.
-        await deps.host.openDocument({
-          path: recent.isCloud ? `recent:${recent.title}` : recent.path,
-          id: session.sdkSessionId,
-          ...(recent.isCloud ? { conflictPolicy: "keep" as const } : {}),
-        });
-        return { text: `opened ${recent.title}` };
+        return { text: await documentTrunk.pick(session, documentId, recents.value) };
       },
       ["snapshot", "candidates"],
     ).catch(() => undefined);
@@ -941,8 +862,6 @@ export function createTakeoffStore(deps: {
   });
 
   const feeds = {
-    world: sessionsFeed,
-    rvt: documentFeed,
     views: viewsFeed,
     zones: zonesFeed,
     folder: folderFeed,
@@ -1007,7 +926,7 @@ export function createTakeoffStore(deps: {
       const activeDocumentId =
         resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined;
       if (current.source === "live" && nextDocument && nextDocument !== activeDocumentId)
-        return openSelectedDocument(nextDocument);
+        return pickDocument(nextDocument);
     },
     settle,
     invalidate: (keys: readonly string[]) =>

@@ -174,7 +174,10 @@ export function useFleet(): {
   worlds: WorldFacts[];
   sessions: SessionFacts[];
   isLoading: boolean;
+  stale: boolean;
   error: Error | null;
+  at: number | undefined;
+  basis: readonly string[];
 } {
   const sessionsQuery = useBridgeSessionsListQuery();
   const status = useSessionStatusQuery();
@@ -183,6 +186,9 @@ export function useFleet(): {
     worlds: fuseFleet(status.data ?? [], sessions),
     sessions,
     isLoading: sessionsQuery.isLoading || status.isLoading,
-    error: status.error,
+    stale: sessionsQuery.isFetching || status.isFetching,
+    error: sessionsQuery.error ?? status.error,
+    at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
+    basis: ["sessions.status", "bridge.sessions.list"],
   };
 }

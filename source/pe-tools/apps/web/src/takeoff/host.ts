@@ -14,19 +14,6 @@ import {
 } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import type { SessionEvent, SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { WorldRoom, WorldZone } from "#/takeoff/world";
-import type {
-  DocOpenResult,
-  DocRecentsResult,
-  Envelope,
-} from "@pe/host-contracts/pe-revit-contract";
-
-type SdkEnvelope<T> = Omit<Partial<Envelope<T>>, "result"> & {
-  readonly result?: Partial<T>;
-  readonly error?: string;
-};
-
-const sdkError = (body: SdkEnvelope<unknown>, fallback: string) =>
-  body.diagnostics?.[0]?.detail ?? body.error ?? fallback;
 
 const takeoffOperations = (scope: HostSessionScope) =>
   createTakeoffOperations(
@@ -200,23 +187,6 @@ export const createHostSessionSource = (): SessionSource => ({
 
 export const createLiveTakeoffHost = (): TakeoffHost => ({
   fixture: false,
-  async listRecentDocuments(year) {
-    const response = await fetch(`/docs/recents${year ? `?year=${encodeURIComponent(year)}` : ""}`);
-    const body = (await response.json()) as SdkEnvelope<DocRecentsResult>;
-    if (!response.ok || !body.result)
-      throw Error(sdkError(body, `document recents failed (${response.status})`));
-    return body.result.recents ?? [];
-  },
-  async openDocument(input) {
-    const response = await fetch("/docs/open", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    const body = (await response.json()) as SdkEnvelope<DocOpenResult>;
-    if (!response.ok || body.result?.state !== "ok")
-      throw Error(sdkError(body, `document open failed (${response.status})`));
-  },
   readSnapshot(session, _document, write) {
     const operations = takeoffOperations({ bridgeSessionId: session.sessionId });
     return produceTakeoffSnapshot(

@@ -1,4 +1,6 @@
 import type { Product } from "#/targeting/model";
+import { PROFILE_TERMINAL } from "#/family/product";
+import { worldTrunk } from "#/targeting/trunks";
 
 export type FamiliesProductActions = {
   applyScope: () => Promise<string | void>;
@@ -12,22 +14,8 @@ export const FAMILIES_PRODUCT = (actions: FamiliesProductActions): Product => ({
   key: "families",
   name: "families",
   links: [
-    {
-      key: "session",
-      joiner: "auditing",
-      placeholder: "a Revit session",
-      needs: "a bound Revit project session",
-      dir: "duplex",
-      liveness: "attached",
-    },
-    {
-      key: "profile",
-      joiner: "against",
-      placeholder: "a family profile",
-      needs: "a readable Family Foundry profile",
-      dir: "read",
-      liveness: "detached",
-    },
+    worldTrunk.link,
+    PROFILE_TERMINAL.link,
     {
       key: "scope",
       joiner: "",
@@ -75,14 +63,14 @@ export const FAMILIES_PRODUCT = (actions: FamiliesProductActions): Product => ({
         {
           key: "plan",
           label: "plan",
-          demands: ["session", "profile", "category", "family"],
+          demands: ["world", "profile", "category", "family"],
           run: actions.plan,
           refuse: actions.refusePlan,
         },
         {
           key: "apply",
           label: "apply",
-          demands: ["session", "profile", "category", "family"],
+          demands: ["world", "profile", "category", "family"],
           commit: true,
           run: actions.apply,
           refuse: actions.refuseApply,

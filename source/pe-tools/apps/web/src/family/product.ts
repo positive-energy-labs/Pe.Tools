@@ -1,26 +1,18 @@
 import type { Product, Verb } from "#/targeting/model";
+import { fileTerminal, worldTrunk } from "#/targeting/trunks";
 
-export const FAMILY_PRODUCT = (verbs: Record<"open" | "save" | "capture" | "build", Pick<Verb, "run" | "refuse">>): Product => ({
+const profileTerminal = fileTerminal("profile", "duplex");
+export const PROFILE_TERMINAL = {
+  ...profileTerminal,
+  link: { ...profileTerminal.link, parent: "world" },
+};
+
+export const FAMILY_PRODUCT = (
+  verbs: Record<"open" | "save" | "capture" | "build", Pick<Verb, "run" | "refuse">>,
+): Product => ({
   key: "family",
   name: "family",
-  links: [
-    {
-      key: "session",
-      joiner: "editing",
-      placeholder: "a Revit session",
-      needs: "a bound Revit family editor session",
-      dir: "duplex",
-      liveness: "attached",
-    },
-    {
-      key: "profile",
-      joiner: "on",
-      placeholder: "a family profile",
-      needs: "a family document path visible to the bound session",
-      dir: "duplex",
-      liveness: "detached",
-    },
-  ],
+  links: [worldTrunk.link, PROFILE_TERMINAL.link],
   stages: [
     {
       key: "author",
@@ -40,11 +32,11 @@ export const FAMILY_PRODUCT = (verbs: Record<"open" | "save" | "capture" | "buil
       key: "evidence",
       label: "evidence",
       verbs: [
-        { key: "capture", label: "capture evidence", demands: ["session"], ...verbs.capture },
+        { key: "capture", label: "capture evidence", demands: ["world"], ...verbs.capture },
         {
           key: "build",
           label: "build .rfa",
-          demands: ["session", "profile"],
+          demands: ["world", "profile"],
           commit: true,
           ...verbs.build,
         },
@@ -54,7 +46,7 @@ export const FAMILY_PRODUCT = (verbs: Record<"open" | "save" | "capture" | "buil
   panes: [
     { key: "sheet", label: "sheet", draws: ["profile"] },
     { key: "anatomy", label: "anatomy", draws: ["profile"] },
-    { key: "drill", label: "drill", draws: ["session", "profile"] },
+    { key: "drill", label: "drill", draws: ["world", "profile"] },
     { key: "inspector", label: "inspector", draws: ["profile"] },
   ],
 });

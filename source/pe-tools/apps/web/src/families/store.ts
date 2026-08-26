@@ -12,8 +12,9 @@ import {
 
 import type { MasterTableState } from "#/components/master-table/model";
 import type { FfProjectData } from "#/host/familyfoundry";
-import { mintSelector, resolveTarget, sessionLabel } from "#/host/target";
+import { resolveTarget } from "#/host/target";
 import type { FamiliesDraft, FamiliesHost } from "#/families/host";
+import { PROFILE_TERMINAL } from "#/family/product";
 import {
   createRouteStoreCore,
   docAtom,
@@ -130,17 +131,6 @@ export function createFamiliesStore(deps: {
     )
     .pipe(Atom.autoDispose);
 
-  const sessionFeed = Atom.make((get) =>
-    feed(
-      get(sessionsResult),
-      (sessions) =>
-        sessions.map((session) => ({
-          id: mintSelector(session, sessions),
-          label: sessionLabel(session),
-        })),
-      "live",
-    ),
-  ).pipe(owned("feed/session"));
   const categoryFeed = Atom.make((get) =>
     feed(get(categoryResult), (names) => names.map((name) => ({ id: name, label: name })), "read"),
   ).pipe(owned("feed/category"));
@@ -148,7 +138,11 @@ export function createFamiliesStore(deps: {
     feed(get(familyResult), (names) => names.map((name) => ({ id: name, label: name })), "read"),
   ).pipe(owned("feed/family"));
   const profileFeed = Atom.make((get) =>
-    feed(get(profileResult), (paths) => paths.map((path) => ({ id: path, label: path })), "read"),
+    PROFILE_TERMINAL.feed(
+      get(profileResult),
+      (paths) => paths.map((path) => ({ id: path, label: path })),
+      "read",
+    ),
   ).pipe(owned("feed/profile"));
 
   const set = <A>(verb: string, atom: Atom.Writable<A>, next: Setter<A>) =>
@@ -347,7 +341,6 @@ export function createFamiliesStore(deps: {
       receipt: core.receipt,
     },
     feeds: {
-      session: sessionFeed,
       category: categoryFeed,
       family: familyFeed,
       profile: profileFeed,

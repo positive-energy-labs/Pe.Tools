@@ -22,6 +22,7 @@ import {
   type Lane,
   type Scope,
 } from "#/state/route-store";
+import { SETTINGS_FILE_TERMINAL } from "#/settings/product";
 import type { SettingsHost } from "#/settings/host";
 
 interface SettingsSearchPort {
@@ -224,7 +225,7 @@ export function createSettingsStore(deps: {
     ),
   ).pipe(owned("feed/root"));
   const fileFeed = Atom.make((get) =>
-    feed(
+    SETTINGS_FILE_TERMINAL.feed(
       get(treeResult),
       (items) =>
         items
