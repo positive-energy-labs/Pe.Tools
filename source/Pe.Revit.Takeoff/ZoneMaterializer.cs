@@ -15,10 +15,10 @@ public sealed record RegionProvenance(
     double SourceSqft)
 {
     [JsonProperty("resolutions")]
-    public List<RegionResolution> Resolutions { get; init; } = [];
+    public List<TakeoffResolution> Resolutions { get; init; } = [];
 
     [JsonProperty("r10")]
-    public RegionRhvacLink? Rhvac { get; init; }
+    public TakeoffRhvacLink? Rhvac { get; init; }
 
     [JsonProperty("flags")]
     public List<string> Flags { get; init; } = [];
@@ -43,19 +43,6 @@ public sealed record RegionProvenance(
             : throw new InvalidOperationException($"provenance blob is v{provenance.Version}; this build reads v1");
     }
 }
-
-public sealed record RegionResolution(
-    string Subject,
-    string Flag,
-    string Verb,
-    string At,
-    string RunId);
-
-public sealed record RegionRhvacLink(
-    int Identifier,
-    string FileIdentity,
-    string SyncedAt,
-    double LastSyncedSqft);
 
 public sealed record ExistingRegion(long ElementId, Guid Guid, List<double[]> Polygon, double Sqft);
 

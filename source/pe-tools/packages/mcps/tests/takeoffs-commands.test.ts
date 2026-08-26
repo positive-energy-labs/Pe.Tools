@@ -34,26 +34,24 @@ test("takeoffs audit produces and sets the document snapshot", async () => {
     if (typeof init?.body !== "string") throw new Error("expected JSON request body");
     const body = JSON.parse(init.body) as {
       key: string;
-      request: { sourceName: string };
+      request?: unknown;
     };
-    if (body.key === "bridge.sessions.summary")
-      return new Response(
-        JSON.stringify({
-          sdkSessionId: "test",
-          processId: 42,
-          activeDocument: { path: "C:\\Models\\Harness.rvt" },
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
     const data =
-      body.request.sourceName === "takeoff-snapshot.cs"
-        ? rawSnapshot
-        : body.request.sourceName === "takeoff-prepare.cs"
+      body.key === "takeoffs.snapshot"
+        ? {
+            from: {
+              target: "test",
+              documentId: "C:\\Models\\Harness.rvt",
+              observedAt: "2026-08-25T12:00:00.000Z",
+            },
+            snapshot: rawSnapshot,
+          }
+        : body.key === "takeoffs.prepare-capture"
           ? { level: "Main" }
-          : body.request.sourceName === "takeoff-detect.cs"
+          : body.key === "takeoffs.detect-capture"
             ? { level: "Main", replayPath: "replay.bin", rooms: 1, totalSqft: 100 }
             : {};
-    return new Response(JSON.stringify({ status: "Succeeded", data: JSON.stringify(data) }), {
+    return new Response(JSON.stringify(data), {
       status: 200,
       headers: { "content-type": "application/json" },
     });

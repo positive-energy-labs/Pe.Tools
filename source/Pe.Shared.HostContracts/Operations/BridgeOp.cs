@@ -6,6 +6,7 @@ using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.RevitData.Takeoffs;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -76,6 +77,40 @@ public interface IRevitDataService {
         CancellationToken cancellationToken
     );
     Task<RevitViewImageData> GetRevitViewImageAsync(RevitViewImageRequest request, CancellationToken cancellationToken);
+    Task<TakeoffSnapshotResponse> GetTakeoffSnapshotAsync(CancellationToken cancellationToken);
+    Task<TakeoffViewsData> GetTakeoffViewsAsync(CancellationToken cancellationToken);
+    Task<TakeoffCandidatesData> GetTakeoffCandidatesAsync(
+        TakeoffCandidatesRequest request,
+        CancellationToken cancellationToken
+    );
+    Task<TakeoffAdoptResult> AdoptTakeoffRegionsAsync(
+        TakeoffAdoptRequest request,
+        CancellationToken cancellationToken
+    );
+    Task<TakeoffCapturePrepared> PrepareTakeoffCaptureAsync(
+        TakeoffPrepareCaptureRequest request,
+        CancellationToken cancellationToken
+    );
+    Task<TakeoffCaptureResult> DetectTakeoffCaptureAsync(
+        TakeoffDetectCaptureRequest request,
+        CancellationToken cancellationToken
+    );
+    Task<TakeoffPartitionResult> PartitionTakeoffAsync(
+        TakeoffPartitionRequest request,
+        CancellationToken cancellationToken
+    );
+    Task<TakeoffWriteResult> WriteTakeoffDecisionsAsync(
+        TakeoffDecisionsRequest request,
+        CancellationToken cancellationToken
+    );
+    Task<TakeoffRhvacLinksData> LinkTakeoffRhvacAsync(
+        TakeoffRhvacLinksRequest request,
+        CancellationToken cancellationToken
+    );
+    Task<TakeoffRoomTypeData> WriteTakeoffRoomTypeAsync(
+        TakeoffRoomTypeRequest request,
+        CancellationToken cancellationToken
+    );
     Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync(CancellationToken cancellationToken);
     Task<RibbonCommandExecuteData> ExecuteRibbonCommandAsync(RibbonCommandExecuteRequest request, CancellationToken cancellationToken);
 }

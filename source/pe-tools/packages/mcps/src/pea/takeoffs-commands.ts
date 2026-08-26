@@ -7,9 +7,7 @@ import {
 
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
-import { ScriptingTools } from "../shared/scripting.ts";
-import { currentReadingIdentity } from "./reading-source.ts";
-import { createTakeoffOperations, produceTakeoffSnapshot } from "../shared/takeoff-ops.ts";
+import { produceTakeoffSnapshot, projectTakeoffSnapshot } from "../shared/takeoff-ops.ts";
 
 type Selection = { view: string; zones: string[]; commit?: true };
 
@@ -22,62 +20,59 @@ export function createTakeoffsCommandHandlers(
       hostBaseUrl,
       bridgeSessionId: resolveTarget(undefined, document),
     });
-    const scripting = new ScriptingTools(caller, { workspaceKey: "takeoffs" });
-    return { caller, takeoff: createTakeoffOperations((input) => scripting.execute(input)) };
+    return caller;
   };
 
   return {
     adopt: async (raw, ctx) => {
       const input = raw as Selection;
-      const { caller, takeoff } = runtime(ctx.getDoc());
-      const before = await takeoff.snapshot();
+      const caller = runtime(ctx.getDoc());
+      const before = projectTakeoffSnapshot(await caller.call("takeoffs.snapshot"));
       const candidates = before.zoneFrs.filter(
         (zone) =>
           zone.view === input.view &&
           (input.zones.includes(zone.guid ?? "") || input.zones.includes(String(zone.elementId))),
       );
       if (!candidates.length) throw Error("No selected zoning regions exist in the snapshot.");
-      const adopted = await takeoff.adopt(
-        input.view,
-        candidates.map((zone) => ({
+      const adopted = await caller.call("takeoffs.adopt", {
+        view: input.view,
+        items: candidates.map((zone) => ({
           elementId: zone.elementId,
           name: zoneMeta(zone.blob).name || zone.typeName,
           systemTag: zoneMeta(zone.blob).systemTag,
         })),
-      );
+      });
       await produceTakeoffSnapshot(
-        takeoff.snapshot,
-        await currentReadingIdentity(caller),
+        () => caller.call("takeoffs.snapshot").then(projectTakeoffSnapshot),
         async (snapshot) => {
           const document = ctx.getDoc();
           document.snapshot = snapshot;
           await ctx.setDoc(document);
         },
       );
-      return { adopted: adopted.length };
+      return { adopted: adopted.adopted.length };
     },
 
     audit: async (raw, ctx) => {
       const input = raw as Selection;
-      const { caller, takeoff } = runtime(ctx.getDoc());
-      const before = await takeoff.snapshot();
-      const prepared = await takeoff.prepare(input.view);
-      const capture = await takeoff.detect(prepared.level);
+      const caller = runtime(ctx.getDoc());
+      const before = projectTakeoffSnapshot(await caller.call("takeoffs.snapshot"));
+      const prepared = await caller.call("takeoffs.prepare-capture", { view: input.view });
+      const capture = await caller.call("takeoffs.detect-capture", { level: prepared.level });
       const zones = before.world.zones.filter((zone) => input.zones.includes(zone.zone.guid));
       for (const zone of zones) {
-        await takeoff.partition({
+        await caller.call("takeoffs.partition", {
           replayPath: capture.replayPath,
           view: zone.zone.lane.view,
           levelFragment: zone.zone.lane.label,
           zoneName: zone.name,
           zoneGuid: zone.zone.guid,
           runId: `run-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}`,
-          loops: zone.zone.loops,
+          loops: zone.zone.loops.map((loop) => loop.map(([x, y]) => [x, y])),
         });
       }
       await produceTakeoffSnapshot(
-        takeoff.snapshot,
-        await currentReadingIdentity(caller),
+        () => caller.call("takeoffs.snapshot").then(projectTakeoffSnapshot),
         async (snapshot) => {
           const document = ctx.getDoc();
           document.snapshot = snapshot;
@@ -99,7 +94,7 @@ export function createTakeoffsCommandHandlers(
           .filter((zone) => selected.size === 0 || selected.has(zone.zone.guid))
           .flatMap((zone) => zone.rooms)
           .filter((room) => room.r10 && edits.has(room.guid)) ?? [];
-      const { caller } = runtime(document);
+      const caller = runtime(document);
       const opened = await caller.call("rhvac.open", { path });
       const byId = new Map(opened.rooms.map((room) => [room.identifier, room]));
       const updates = rooms.map((room) => {

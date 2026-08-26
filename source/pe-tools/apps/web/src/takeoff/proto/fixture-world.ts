@@ -87,20 +87,21 @@ export const projectFixtureWorld = (fixture: MockWorld): World => ({
 
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
-  readSnapshot(_session, _document, write) {
-    return produceTakeoffSnapshot(
-      async () => {
-        const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
-        return {
-          world,
-          views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
-          zoneFrs: [],
-          regionsByZone: {},
-        };
-      },
-      { target: "pid:0", documentId: "C:\\Fixtures\\project-a Residence.rvt" },
-      write,
-    );
+  readSnapshot(session, document, write) {
+    return produceTakeoffSnapshot(async () => {
+      const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
+      return {
+        from: {
+          target: session.sdkSessionId ?? `pid:${session.processId}`,
+          documentId: document.documentId,
+          observedAt: new Date().toISOString(),
+        },
+        world,
+        views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
+        zoneFrs: [],
+        regionsByZone: {},
+      };
+    }, write);
   },
   async listRhvac(dir) {
     return [{ path: `${dir}\\projectA.r10`, name: "projectA.r10" }];

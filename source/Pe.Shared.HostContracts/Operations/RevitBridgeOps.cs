@@ -3,6 +3,7 @@ using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.RevitData.Takeoffs;
 
 namespace Pe.Shared.HostContracts.Operations;
 
@@ -1035,6 +1036,145 @@ public static class RevitBridgeOps {
                 ]
             ),
             static (request, context, ct) => context.RevitData.GetRevitViewImageAsync(request, ct)
+        );
+
+    public static readonly BridgeOp TakeoffSnapshot =
+        BridgeOp.Create<NoRequest, TakeoffSnapshotResponse>(
+            "takeoffs.snapshot",
+            "Get Takeoff Snapshot",
+            HostOperationAgentMetadata.Create(
+                "Read Takeoff model status, plan views, zoning regions, materialized rooms, and source identity from the active project.",
+                new[] { "takeoffs", "snapshot", "zones", "rooms", "filled-regions" },
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Bounded,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.GetTakeoffSnapshotAsync(ct)
+        );
+
+    public static readonly BridgeOp TakeoffViews =
+        BridgeOp.Create<NoRequest, TakeoffViewsData>(
+            "takeoffs.views",
+            "Get Takeoff Views",
+            HostOperationAgentMetadata.Create(
+                "Read non-template plan views with the Filled Region count for each view.",
+                new[] { "takeoffs", "views", "plans", "filled-regions" },
+                requiresActiveDocument: true,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.GetTakeoffViewsAsync(ct)
+        );
+
+    public static readonly BridgeOp TakeoffCandidates =
+        BridgeOp.Create<TakeoffCandidatesRequest, TakeoffCandidatesData>(
+            "takeoffs.candidates",
+            "Get Takeoff Candidate Regions",
+            HostOperationAgentMetadata.Create(
+                "Read Filled Regions and their boundary loops from one named plan view.",
+                new[] { "takeoffs", "candidates", "filled-regions", "boundaries", "view" },
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Bounded,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.GetTakeoffCandidatesAsync(request, ct)
+        );
+
+    public static readonly BridgeOp TakeoffAdopt =
+        BridgeOp.Create<TakeoffAdoptRequest, TakeoffAdoptResult>(
+            "takeoffs.adopt",
+            "Adopt Takeoff Regions",
+            HostOperationAgentMetadata.Create(
+                "Adopt Filled Regions as Zoning Regions and register their System tags in one transaction.",
+                new[] { "takeoffs", "adopt", "zones", "filled-regions", "register" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.AdoptTakeoffRegionsAsync(request, ct)
+        );
+
+    public static readonly BridgeOp TakeoffPrepareCapture =
+        BridgeOp.Create<TakeoffPrepareCaptureRequest, TakeoffCapturePrepared>(
+            "takeoffs.prepare-capture",
+            "Prepare Takeoff Capture",
+            HostOperationAgentMetadata.Create(
+                "Prepare the capture views for one Takeoff plan view in one transaction.",
+                new[] { "takeoffs", "capture", "prepare", "views" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.PrepareTakeoffCaptureAsync(request, ct)
+        );
+
+    public static readonly BridgeOp TakeoffDetectCapture =
+        BridgeOp.Create<TakeoffDetectCaptureRequest, TakeoffCaptureResult>(
+            "takeoffs.detect-capture",
+            "Detect Takeoff Capture",
+            HostOperationAgentMetadata.Create(
+                "Capture one level, detect room geometry, and write replay evidence without committing Revit changes.",
+                new[] { "takeoffs", "capture", "detect", "replay", "rooms" },
+                requiresActiveDocument: true,
+                costTier: HostOperationCostTier.Expensive,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.DetectTakeoffCaptureAsync(request, ct)
+        );
+
+    public static readonly BridgeOp TakeoffPartition =
+        BridgeOp.Create<TakeoffPartitionRequest, TakeoffPartitionResult>(
+            "takeoffs.partition",
+            "Partition Takeoff Zone",
+            HostOperationAgentMetadata.Create(
+                "Partition one Zoning Region from replay evidence and materialize Room Regions in one transaction.",
+                new[] { "takeoffs", "partition", "zones", "rooms", "materialize" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.PartitionTakeoffAsync(request, ct)
+        );
+
+    public static readonly BridgeOp TakeoffDecisions =
+        BridgeOp.Create<TakeoffDecisionsRequest, TakeoffWriteResult>(
+            "takeoffs.decisions",
+            "Write Takeoff Decisions",
+            HostOperationAgentMetadata.Create(
+                "Write review decisions to one Room Region provenance blob in one transaction.",
+                new[] { "takeoffs", "decisions", "review", "provenance" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.WriteTakeoffDecisionsAsync(request, ct)
+        );
+
+    public static readonly BridgeOp TakeoffRhvacLinks =
+        BridgeOp.Create<TakeoffRhvacLinksRequest, TakeoffRhvacLinksData>(
+            "takeoffs.rhvac-links",
+            "Link Takeoff Rooms to RHVAC",
+            HostOperationAgentMetadata.Create(
+                "Write RHVAC file and room links to Room Region provenance in one transaction.",
+                new[] { "takeoffs", "rhvac", "links", "rooms", "provenance" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.LinkTakeoffRhvacAsync(request, ct)
+        );
+
+    public static readonly BridgeOp TakeoffRoomType =
+        BridgeOp.Create<TakeoffRoomTypeRequest, TakeoffRoomTypeData>(
+            "takeoffs.room-type",
+            "Write Takeoff Room Type",
+            HostOperationAgentMetadata.Create(
+                "Write and read back one Room Region room type in one transaction.",
+                new[] { "takeoffs", "room-type", "rooms", "parameter" },
+                intent: HostOperationIntent.Mutate,
+                requiresActiveDocument: true,
+                supportedActiveDocumentKind: HostOperationActiveDocumentKind.ProjectOnly
+            ),
+            static (request, context, ct) => context.RevitData.WriteTakeoffRoomTypeAsync(request, ct)
         );
 
     public static readonly BridgeOp ExecuteRibbonCommand =

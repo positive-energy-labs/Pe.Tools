@@ -1,29 +1,17 @@
 /**
  * The /takeoffs route's live wire into Revit.
  *
- * Every call is `scripting.execute` against the connected host. The shared takeoff operations own
- * the scripts and structured results; this file owns transport, session scope, and RHVAC orchestration.
+ * Typed Takeoff operations own Revit work; this file owns session scope and RHVAC orchestration.
  */
-import { callHostDynamic, callHostRpc } from "#/host/client";
+import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions } from "#/host/target";
-import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
 import {
-  createTakeoffOperations,
+  projectTakeoffSnapshot,
   produceTakeoffSnapshot,
 } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import type { SessionEvent, SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { WorldRoom, WorldZone } from "#/takeoff/world";
-
-const takeoffOperations = (scope: HostSessionScope) =>
-  createTakeoffOperations(
-    (input) =>
-      callHostDynamic("scripting.execute", input, scope) as Promise<{
-        status: string;
-        data?: unknown;
-        diagnostics?: { severity?: string; message?: string }[];
-      }>,
-  );
 
 const WALL_ASSEMBLY =
   "R-3 insulated sheathing, R-13 closed cell sprayfoam in a 2x6 wood stud cavity, R-15 Fiberglass batt";
@@ -134,7 +122,7 @@ async function syncRhvacRooms(
   });
   if (byNumber.size !== links.length)
     throw Error(`.r10 sync returned ${byNumber.size} receipts for ${links.length} rooms`);
-  await takeoffOperations(scope).linkRhvac(links);
+  await callHostRpc("takeoffs.rhvac-links", { writes: links }, scope);
   return {
     text:
       `synced ${result.insertedRooms.length}/${inserts.length} rooms into ${path}` +
@@ -188,50 +176,84 @@ export const createHostSessionSource = (): SessionSource => ({
 export const createLiveTakeoffHost = (): TakeoffHost => ({
   fixture: false,
   readSnapshot(session, _document, write) {
-    const operations = takeoffOperations({ bridgeSessionId: session.sessionId });
+    const scope = { bridgeSessionId: session.sessionId };
     return produceTakeoffSnapshot(
-      operations.snapshot,
-      {
-        target: session.sdkSessionId ?? `pid:${session.processId}`,
-        documentId: _document.documentId,
-      },
+      () => callHostRpc("takeoffs.snapshot", undefined, scope).then(projectTakeoffSnapshot),
       write,
     );
   },
   async listRhvac(dir) {
-    const response = (await callHostDynamic("rhvac.list", { dir })) as {
-      readonly exists?: boolean;
-      readonly files?: readonly { readonly path: string; readonly name: string }[];
-    };
+    const response = await callHostRpc("rhvac.list", { dir });
     return response.exists ? [...(response.files ?? [])] : [];
   },
   openRhvac: (path) => callHostRpc("rhvac.open", { path }),
-  readCandidates: (session, view) =>
-    takeoffOperations({ bridgeSessionId: session.sessionId }).candidates(view),
-  async adopt(session, input) {
-    const adopted = await takeoffOperations({ bridgeSessionId: session.sessionId }).adopt(
-      input.view,
-      [...input.items],
+  readCandidates: async (session, view) => {
+    const response = await callHostRpc(
+      "takeoffs.candidates",
+      { view },
+      { bridgeSessionId: session.sessionId },
     );
-    return { text: `adopted ${adopted.length} zoning regions` };
+    return response.regions.map((region) => ({
+      ...region,
+      role: region.role ?? null,
+      guid: region.guid ?? null,
+      loops: region.loops.map(toPoints),
+    }));
+  },
+  async adopt(session, input) {
+    const adopted = await callHostRpc(
+      "takeoffs.adopt",
+      { view: input.view, items: [...input.items] },
+      { bridgeSessionId: session.sessionId },
+    );
+    return { text: `adopted ${adopted.adopted.length} zoning regions` };
   },
   async capture(session, lane) {
     const scope = { bridgeSessionId: session.sessionId };
-    const operations = takeoffOperations(scope);
-    const prepared = await operations.prepare(lane.view);
-    return operations.detect(prepared.level);
+    const prepared = await callHostRpc("takeoffs.prepare-capture", { view: lane.view }, scope);
+    return callHostRpc("takeoffs.detect-capture", { level: prepared.level }, scope);
   },
-  partition: (session, input) =>
-    takeoffOperations({ bridgeSessionId: session.sessionId }).partition(input),
+  async partition(session, input) {
+    const response = await callHostRpc(
+      "takeoffs.partition",
+      {
+        ...input,
+        loops: input.loops.map((loop) => loop.map(([x, y]) => [x, y])),
+      },
+      { bridgeSessionId: session.sessionId },
+    );
+    return {
+      ...response,
+      rooms: response.rooms.map((room) => ({
+        ...room,
+        label: toPoint(room.label),
+        outer: toPoints(room.outer),
+      })),
+      residues: response.residues.map((residue) => ({
+        ...residue,
+        label: toPoint(residue.label),
+        outer: toPoints(residue.outer),
+      })),
+      regions: response.regions.map((region) => ({
+        ...region,
+        outer: toPoints(region.outer),
+      })),
+    };
+  },
   async writeDecisions(session, elementId, resolutions) {
-    const result = await takeoffOperations({ bridgeSessionId: session.sessionId }).decisions(
-      elementId,
-      [...resolutions],
+    const result = await callHostRpc(
+      "takeoffs.decisions",
+      { elementId, resolutions: [...resolutions] },
+      { bridgeSessionId: session.sessionId },
     );
     return { blob: result.blob };
   },
   writeRoomType: async (session, elementId, roomType) => {
-    await takeoffOperations({ bridgeSessionId: session.sessionId }).roomType(elementId, roomType);
+    await callHostRpc(
+      "takeoffs.room-type",
+      { elementId, roomType },
+      { bridgeSessionId: session.sessionId },
+    );
   },
   async launchRhvac(session, path) {
     await callHostRpc(
@@ -242,3 +264,10 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
   },
   syncRhvac: (session, path, inserts) => syncRhvacRooms(session.sessionId, path, inserts),
 });
+
+const toPoint = ([x, y]: number[]): [number, number] => {
+  if (x === undefined || y === undefined) throw Error("Takeoff boundary point requires x and y");
+  return [x, y];
+};
+
+const toPoints = (values: number[][]): [number, number][] => values.map(toPoint);

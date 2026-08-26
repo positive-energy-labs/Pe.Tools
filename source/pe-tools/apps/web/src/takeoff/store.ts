@@ -27,7 +27,6 @@ import {
   type Slice,
   type TimedRead,
 } from "#/state/route-store";
-import type { AdoptItem, PartitionArgs } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import {
   upsertResolution,
   type CandidateRegion,
@@ -94,6 +93,22 @@ export interface SessionSource {
 export interface RhvacFile {
   readonly path: string;
   readonly name: string;
+}
+
+export interface AdoptItem {
+  readonly elementId: number;
+  readonly name: string;
+  readonly systemTag: string;
+}
+
+export interface PartitionArgs {
+  readonly replayPath: string;
+  readonly view: string;
+  readonly levelFragment: string;
+  readonly zoneName: string;
+  readonly zoneGuid: string;
+  readonly runId: string;
+  readonly loops: readonly (readonly (readonly [number, number])[])[];
 }
 
 export interface TakeoffHost {

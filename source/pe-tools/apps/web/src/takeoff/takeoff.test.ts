@@ -13,12 +13,7 @@ import {
   type LiveRegion,
   type PartitionRun,
 } from "#/takeoff/model";
-import {
-  decisionScript,
-  partitionScript,
-  registryScript,
-  snapshotScript,
-} from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
+import { projectTakeoffSnapshot } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 
 const square = (x: number, y: number, size: number): [number, number][] => [
   [x, y],
@@ -188,69 +183,44 @@ describe("decision queue", () => {
   });
 });
 
-// ── The scripts ──────────────────────────────────────────────────────────────
+describe("typed snapshot projection", () => {
+  it("passes through source identity and derives the world from the typed response", () => {
+    const snapshot = projectTakeoffSnapshot({
+      from: {
+        target: "pe.app-25",
+        documentId: "11111111-1111-1111-1111-111111111111",
+        documentVersionToken: "22222222-2222-2222-2222-222222222222",
+        observedAt: "2026-08-25T12:00:00.000Z",
+      },
+      snapshot: {
+        status: { doc: "project-a", systems: [], regions: [] },
+        views: [{ name: "Mechanical Zoning Plan", level: "Main", regions: 1 }],
+        zoneFrs: [
+          {
+            elementId: 42,
+            typeName: "Zone",
+            view: "Mechanical Zoning Plan",
+            color: "1,2,3",
+            sqft: 100,
+            blob: JSON.stringify({
+              view: "Mechanical Zoning Plan",
+              name: "Main#01",
+              systemTag: "FC-8",
+            }),
+            loops: [square(0, 0, 10)],
+          },
+        ],
+        regionsByZone: {},
+      },
+    });
 
-const embeddedArgument = (script: string, method: string): string => {
-  const match = script.match(
-    new RegExp(`TakeoffAtlas\\.${method}\\(doc, "((?:\\\\.|[^"])*)"(?:, Notify)?\\)`),
-  );
-  expect(match).not.toBeNull();
-  return JSON.parse(`"${match![1]}"`) as string;
-};
-
-describe("generated C#", () => {
-  it("delegates product behavior to TakeoffAtlas and output shaping to TakeoffJson", () => {
-    const scripts = [
-      registryScript({ observed: ["FC-8"], register: ["FC-8"], renames: [] }),
-      partitionScript({
-        replayPath: "C:\\a\\replay.bin",
-        view: "V",
-        levelFragment: "Main",
-        zoneName: "Main#06",
-        zoneGuid: "7a4e0000-0000-4000-8000-000000010006",
-        runId: "r",
-        loops: [square(0, 0, 10)],
-      }),
-      decisionScript({ elementId: 42, resolutionsJson: "[]" }),
-    ];
-    for (const script of scripts) {
-      expect(script).toContain("Pe.Revit.Takeoff.TakeoffAtlas.");
-      expect(script).toContain("Pe.Revit.Takeoff.TakeoffJson.Serialize(");
-      expect(script).toContain("Result(");
-      expect(script).not.toContain("PE_JSON");
-      expect(script).not.toMatch(/new Transaction\(|FilteredElementCollector|ZoneMaterializer/);
-    }
-  });
-
-  it("snapshotScript is the whole-model thin call", () => {
-    expect(snapshotScript()).toBe(
-      "Result(Pe.Revit.Takeoff.TakeoffJson.Serialize(Pe.Revit.Takeoff.TakeoffAtlas.Snapshot(doc)));",
-    );
-  });
-
-  it("preserves partition JSON, including loops and C#-sensitive characters", () => {
-    const args = {
-      replayPath: 'C:\\a\\"quoted"\\replay.bin',
-      view: 'V "north"',
-      levelFragment: "Main",
-      zoneName: "Z\nline 2",
-      zoneGuid: "7a4e0000-0000-4000-8000-000000010006",
-      runId: "r",
-      loops: [square(1, 2, 3)],
-    };
-    const script = partitionScript(args);
-    expect(JSON.parse(embeddedArgument(script, "Partition"))).toEqual(args);
-    expect(script).not.toContain("\nline 2");
-  });
-
-  it("transports registry JSON as data; typed C# deserialization owns GUID validation", () => {
-    const args = {
-      observed: ['FC"8', "line\n2"],
-      register: ["C:\\FC"],
-      renames: [{ guid: "'; DROP", toTag: 'FC"9' }],
-    };
-    const script = registryScript(args);
-    expect(JSON.parse(embeddedArgument(script, "ApplyRegistry"))).toEqual(args);
-    expect(script).not.toContain("line\n2");
+    expect(snapshot.from).toEqual({
+      target: "pe.app-25",
+      documentId: "11111111-1111-1111-1111-111111111111",
+      documentVersionToken: "22222222-2222-2222-2222-222222222222",
+      observedAt: "2026-08-25T12:00:00.000Z",
+    });
+    expect(snapshot.views[0]).toMatchObject({ regions: 1 });
+    expect(snapshot.world.zones[0]).toMatchObject({ name: "Main#01", tags: ["FC-8"] });
   });
 });

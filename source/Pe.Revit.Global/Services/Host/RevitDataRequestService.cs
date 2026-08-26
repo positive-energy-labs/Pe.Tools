@@ -19,22 +19,28 @@ using Pe.Revit.Failures;
 using Pe.Revit.Global.Services.Aps;
 using Pe.Revit.Global.Services.ParameterLinks;
 using Pe.Revit.Parameters;
+using Pe.Revit.Takeoff;
 using Pe.Revit.Tasks;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Families;
 using Pe.Shared.RevitData.Schedules;
+using Pe.Shared.RevitData.Takeoffs;
+using Serilog;
+using System.Diagnostics;
 using System.Globalization;
 using RevitDocument = Autodesk.Revit.DB.Document;
 
 namespace Pe.Revit.Global.Services.Host;
 
 /// <summary>
-///     Bridge-backed read-only Revit data requests for browser routes.
+///     Bridge-backed Revit data requests for browser routes.
 /// </summary>
 internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : IRevitDataService {
     private readonly RevitTaskQueue _revitTaskQueue = revitTaskQueue;
+    private readonly string _takeoffTarget =
+        BridgeSessionIdentity.Resolve().SdkSessionId ?? $"pid:{Process.GetCurrentProcess().Id}";
 
     public Task<LoadedFamiliesCatalogData> GetLoadedFamiliesCatalogAsync(
         LoadedFamiliesCatalogRequest request, CancellationToken cancellationToken
@@ -168,6 +174,56 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         RevitViewImageRequest request, CancellationToken cancellationToken
     ) => this.EnqueueAsync(() => this.GetRevitViewImageCore(request), cancellationToken);
 
+    public Task<TakeoffSnapshotResponse> GetTakeoffSnapshotAsync(CancellationToken cancellationToken) =>
+        this.EnqueueAsync(this.GetTakeoffSnapshotCore, cancellationToken);
+
+    public Task<TakeoffViewsData> GetTakeoffViewsAsync(CancellationToken cancellationToken) =>
+        this.EnqueueAsync(this.GetTakeoffViewsCore, cancellationToken);
+
+    public Task<TakeoffCandidatesData> GetTakeoffCandidatesAsync(
+        TakeoffCandidatesRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.GetTakeoffCandidatesCore(request), cancellationToken);
+
+    public Task<TakeoffAdoptResult> AdoptTakeoffRegionsAsync(
+        TakeoffAdoptRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(
+        () => this.AdoptTakeoffRegionsCore(request),
+        cancellationToken,
+        TimeSpan.FromMinutes(5));
+
+    public Task<TakeoffCapturePrepared> PrepareTakeoffCaptureAsync(
+        TakeoffPrepareCaptureRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(
+        () => this.PrepareTakeoffCaptureCore(request),
+        cancellationToken,
+        TimeSpan.FromMinutes(5));
+
+    public Task<TakeoffCaptureResult> DetectTakeoffCaptureAsync(
+        TakeoffDetectCaptureRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(
+        () => this.DetectTakeoffCaptureCore(request),
+        cancellationToken,
+        TimeSpan.FromMinutes(5));
+
+    public Task<TakeoffPartitionResult> PartitionTakeoffAsync(
+        TakeoffPartitionRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(
+        () => this.PartitionTakeoffCore(request),
+        cancellationToken,
+        TimeSpan.FromMinutes(5));
+
+    public Task<TakeoffWriteResult> WriteTakeoffDecisionsAsync(
+        TakeoffDecisionsRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.WriteTakeoffDecisionsCore(request), cancellationToken);
+
+    public Task<TakeoffRhvacLinksData> LinkTakeoffRhvacAsync(
+        TakeoffRhvacLinksRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.LinkTakeoffRhvacCore(request), cancellationToken);
+
+    public Task<TakeoffRoomTypeData> WriteTakeoffRoomTypeAsync(
+        TakeoffRoomTypeRequest request, CancellationToken cancellationToken
+    ) => this.EnqueueAsync(() => this.WriteTakeoffRoomTypeCore(request), cancellationToken);
+
     public Task<ParametersServiceCacheData> RefreshParametersServiceCacheAsync(CancellationToken cancellationToken) =>
         cancellationToken.IsCancellationRequested
             ? Task.FromCanceled<ParametersServiceCacheData>(cancellationToken)
@@ -234,6 +290,129 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
                 : null
         );
     }
+
+    private TakeoffSnapshotResponse GetTakeoffSnapshotCore() =>
+        RunTakeoff(RevitBridgeOps.TakeoffSnapshot.Definition, document => {
+            var snapshot = TakeoffAtlas.Snapshot(document);
+            return new TakeoffSnapshotResponse(this.CreateTakeoffReadingFrom(document), snapshot);
+        });
+
+    private TakeoffViewsData GetTakeoffViewsCore() =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffViews.Definition,
+            document => new TakeoffViewsData(TakeoffAtlas.Views(document)));
+
+    private TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request) =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffCandidates.Definition,
+            document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request)));
+
+    private TakeoffAdoptResult AdoptTakeoffRegionsCore(TakeoffAdoptRequest request) =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffAdopt.Definition,
+            document => TakeoffAtlas.AdoptZones(document, request),
+            "Pe Adopt Takeoff Regions");
+
+    private TakeoffCapturePrepared PrepareTakeoffCaptureCore(TakeoffPrepareCaptureRequest request) =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffPrepareCapture.Definition,
+            document => TakeoffAtlas.PrepareCapture(document, request, LogTakeoffProgress),
+            "Pe Prepare Takeoff Capture");
+
+    private TakeoffCaptureResult DetectTakeoffCaptureCore(TakeoffDetectCaptureRequest request) =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffDetectCapture.Definition,
+            document => TakeoffAtlas.DetectCapture(document, request, LogTakeoffProgress));
+
+    private TakeoffPartitionResult PartitionTakeoffCore(TakeoffPartitionRequest request) =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffPartition.Definition,
+            document => TakeoffAtlas.Partition(document, request, LogTakeoffProgress),
+            "Pe Partition Takeoff Zone");
+
+    private TakeoffWriteResult WriteTakeoffDecisionsCore(TakeoffDecisionsRequest request) =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffDecisions.Definition,
+            document => TakeoffAtlas.WriteDecisions(document, request),
+            "Pe Write Takeoff Decisions");
+
+    private TakeoffRhvacLinksData LinkTakeoffRhvacCore(TakeoffRhvacLinksRequest request) =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffRhvacLinks.Definition,
+            document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
+            "Pe Link Takeoff Rooms to RHVAC");
+
+    private TakeoffRoomTypeData WriteTakeoffRoomTypeCore(TakeoffRoomTypeRequest request) =>
+        RunTakeoff(
+            RevitBridgeOps.TakeoffRoomType.Definition,
+            document => new TakeoffRoomTypeData(TakeoffAtlas.WriteRoomType(document, request)),
+            "Pe Write Takeoff Room Type");
+
+    private TakeoffReadingFrom CreateTakeoffReadingFrom(RevitDocument document) {
+        var documentId = document.GetCloudModelGuid();
+        if (string.IsNullOrWhiteSpace(documentId)) {
+            var path = document.GetDocumentPath();
+            if (string.IsNullOrWhiteSpace(path))
+                throw BridgeOperationExceptions.Conflict(
+                    "The active document has no cloud model GUID or absolute path.",
+                    [BridgeOperationExceptions.Issue(
+                        "$",
+                        "TakeoffDocumentIdentityRequired",
+                        "The active document has no cloud model GUID or absolute path.",
+                        "Save the document or open a cloud model and retry.")]);
+            documentId = Path.GetFullPath(path);
+        }
+
+        return new TakeoffReadingFrom(
+            this._takeoffTarget,
+            documentId,
+            GetDocumentVersionToken(document),
+            DateTimeOffset.UtcNow.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+    }
+
+    private static string? GetDocumentVersionToken(RevitDocument document) {
+        try {
+            return RevitDocument.GetDocumentVersion(document).VersionGUID.ToString("D");
+        } catch {
+            return null;
+        }
+    }
+
+    private static T RunTakeoff<T>(
+        HostOperationDefinition operation,
+        Func<RevitDocument, T> run,
+        string? transactionName = null
+    ) {
+        var document = GetSupportedActiveDocument(operation);
+        if (transactionName != null && document.IsReadOnly)
+            throw BridgeOperationExceptions.Conflict(
+                "The active project document is read-only.",
+                [BridgeOperationExceptions.Issue(
+                    "$",
+                    "TakeoffDocumentReadOnly",
+                    "The active project document is read-only.",
+                    "Open a writable project document and retry.")]);
+
+        try {
+            if (transactionName == null)
+                return run(document);
+
+            using var sandbox = DocumentSandbox.BeginCommit(document, transactionName);
+            var result = run(document);
+            sandbox.Complete();
+            return result;
+        } catch (BridgeOperationException) {
+            throw;
+        } catch (Exception ex) {
+            throw BridgeOperationExceptions.Unexpected(
+                "TakeoffOperationException",
+                ex,
+                $"Verify the active project and request for '{operation.Key}', then retry.");
+        }
+    }
+
+    private static void LogTakeoffProgress(string message) =>
+        Log.Information("Takeoff operation: {Message}", message);
 
     private LoadedFamiliesCatalogData GetLoadedFamiliesCatalogCore(LoadedFamiliesCatalogRequest request) {
         var document = GetSupportedActiveDocument(RevitBridgeOps.LoadedFamiliesCatalog.Definition);
@@ -1636,14 +1815,18 @@ internal sealed class RevitDataRequestService(RevitTaskQueue revitTaskQueue) : I
         return (request.Filter ?? new LoadedFamiliesFilter()) with { CategoryNames = categoryNames };
     }
 
-    private Task<T> EnqueueAsync<T>(Func<T> action, CancellationToken cancellationToken) =>
+    private Task<T> EnqueueAsync<T>(
+        Func<T> action,
+        CancellationToken cancellationToken,
+        TimeSpan? timeout = null
+    ) =>
         this._revitTaskQueue.Run(
             context => {
                 context.Cancellation.ThrowIfCancellationRequested();
                 var value = action();
                 return value;
             },
-            new RevitRunOptions { Label = typeof(T).Name, Timeout = TimeSpan.FromMinutes(2) },
+            new RevitRunOptions { Label = typeof(T).Name, Timeout = timeout ?? TimeSpan.FromMinutes(2) },
             cancellationToken
         );
 

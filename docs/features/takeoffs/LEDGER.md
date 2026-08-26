@@ -2,6 +2,7 @@
 
 ## Decided
 
+- 2026-08-25 — `/takeoffs` and Pea call ten typed `takeoffs.*` host operations; their thin handlers pass typed requests into `TakeoffAtlas`, and `takeoffs.snapshot` returns the persisted-read `from` identity. `scripting.execute` remains an exploration surface, never a route transport.
 - 2026-08-25 — Every persisted read names `from { target, documentId, documentVersionToken?, observedAt }`: `target` is the SDK session ID or `pid:<n>`, and `documentId` is the cloud model GUID or absolute path, never a title. A read whose identity differs from the current binding is unbound and renders nothing; binding a different world or document drops that read in the same route-document write. Old route documents without `from` stay unbound; there is no migration.
 - 2026-08-25 — A failed takeoff re-read over a current persisted snapshot surfaces the read failure; the route does not fall back to the persisted snapshot.
 - 2026-08-25 — `rvt` is a real trunk picker: `feed/rvt` lists the active document then `GET /docs/recents` (year-filtered); a pick of another title runs `POST /docs/open` with `id: sdkSessionId` and `conflictPolicy: "keep"` for cloud rows; observed custody refuses before the call; the URL never stores the document. PROVEN[browser, worktree host 5180, `pe.app-25`, afa762c]: pick `…R25_staging` → `doc current` = that title; pick `w4a-x` (file gone) → honest `doc.no-match` failure, no receipt.
@@ -229,7 +230,7 @@
 - Re-measure attic ink ratios (0.26–0.34, framing-noise-inflated) after the F/F0 recapture before designing any per-zone adaptive rule off them.
 - Stale `ink_*.bin` lane — repair it or delete it; `review-takeoff.py` still reads the ink bins.
 - Knob census: ~70 solver knob fields exist with no inventory of which are load-bearing.
-- Promote the `scripting.execute` takeoff pipeline to installed `takeoffs.*` host ops; that also owns replacing the dev-only 32-bit script spawn.
+- Replace or package the dev-only 32-bit RHVAC Jet adapter for installed use; this is independent of the typed `takeoffs.*` Revit operations.
 - Pre-sync Manual J drafts have no persistent home — they are session-ephemeral today.
 - Exposures are not evidence-backed: glass/doors come out empty and roof/wall direction is coarse.
 - Per-project custom assemblies need a design: the preset catalog is a shim of 16 assemblies mined from one project (projectA), and an unseen firm assembly falls back to a zero row (`eval/rhvac/template/SYNC-PROOF.md`).
