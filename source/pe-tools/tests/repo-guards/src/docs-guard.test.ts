@@ -4,7 +4,7 @@
  * =============================================================================================
  *
  * Sibling in spirit to design-guard.test.ts: the convention held by review in
- * .agents/skills/docs/SKILL.md now holds by assertion. Same runner (`vp test`), same posture —
+ * .agents/skills/my.docs/SKILL.md now holds by assertion. Same runner (`vp test`), same posture —
  * no dependencies, plain regexes, no AST, no markdown parser.
  *
  * The corpus is `git ls-files` (shelled once, cached), so untracked scratch — worktree spikes,
@@ -38,7 +38,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 // ── the corpus ───────────────────────────────────────────────────────────────────────────────
 
-const HERE = dirname(fileURLToPath(import.meta.url)); // …/apps/web/src
+const HERE = dirname(fileURLToPath(import.meta.url)); // …/tests/repo-guards/src
 const REPO = execFileSync("git", ["rev-parse", "--show-toplevel"], {
   cwd: HERE,
   encoding: "utf8",
@@ -138,7 +138,7 @@ describe("docs guard — no archive banners", () => {
 
 // ── 4. authority registry ────────────────────────────────────────────────────────────────────
 
-const SKILL_REL = ".agents/skills/docs/SKILL.md";
+const SKILL_REL = ".agents/skills/my.docs/SKILL.md";
 
 /** Parse the bullet list under "Current registry:" — additions are picked up automatically. */
 const registryPaths = (): string[] => {

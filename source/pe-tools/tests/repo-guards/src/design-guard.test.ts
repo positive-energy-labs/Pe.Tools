@@ -3,7 +3,7 @@
  * THE DESIGN GUARD — the enforcement lever of the one-system design sweep.
  * =============================================================================================
  *
- * This test IS the lint. The web app has no CI; `vp test` runs in the `ready` lane, so the
+ * This test IS the lint. `@pe/repo-guards#test` runs in the `ready` lane, so the
  * token discipline that held by review during the sweep now holds by assertion. It encodes the
  * census gates driven to zero in the one-system design sweep (closed 2026-08-16; see the
  * Enforcement lines in docs/features/design-system/LEDGER.md). It walks src/**\/*.{ts,tsx,css} once with plain
@@ -54,13 +54,14 @@
  * =============================================================================================
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vite-plus/test";
 
 // ── the walk ─────────────────────────────────────────────────────────────────────────────────
 
-const ROOT = dirname(fileURLToPath(import.meta.url)); // …/apps/web/src
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, "../../../apps/web/src");
 const SELF = "design-guard.test.ts";
 const SKIP_DIRS = new Set(["node_modules", "src"]); // src/src is a stray vite artifact
 const SKIP_FILES = new Set(["routeTree.gen.ts", SELF]);
@@ -173,7 +174,7 @@ describe("design guard — hard zeros", () => {
 
 type Baseline = Record<string, number>;
 const BASELINE: Baseline = JSON.parse(
-  readFileSync(join(ROOT, "design-guard.baseline.json"), "utf8"),
+  readFileSync(join(HERE, "design-guard.baseline.json"), "utf8"),
 );
 
 const isTsx = (f: Entry) => f.rel.endsWith(".tsx");
