@@ -244,7 +244,6 @@ function installPeaControllerPolicy(
   },
 ): PeaControllerPolicy {
   const admissions = new Map<Session<PeaRuntimeState>, PeaSessionAdmission>();
-  const scopes = new Map<string, Session<PeaRuntimeState>>();
   const createSession = controller.createSession.bind(controller);
   const unsubscribeCreated = controller.onSessionCreated(
     async (session) => {
@@ -264,7 +263,6 @@ function installPeaControllerPolicy(
   const unsubscribeDeleted = controller.onSessionDeleted((session) => {
     const admission = admissions.get(session);
     admissions.delete(session);
-    for (const [scope, scoped] of scopes) if (scoped === session) scopes.delete(scope);
     void admission?.close();
   });
 
@@ -279,7 +277,7 @@ function installPeaControllerPolicy(
         throw new Error("Pea web session scope must equal threadId.");
       }
 
-      const admitted = scopes.get(scope);
+      const admitted = await controller.getSessionByResource(resourceId, scope);
       if (!admitted && threadId !== scope) {
         throw new Error("First Pea web session materialization requires threadId equal to scope.");
       }
@@ -292,7 +290,6 @@ function installPeaControllerPolicy(
       }
       if (admitted && admitted !== session)
         throw new Error("Pea web scope resolved another session.");
-      scopes.set(scope, session);
       return session;
     }) as typeof controller.createSession;
   }
@@ -311,7 +308,6 @@ function installPeaControllerPolicy(
       controller.createSession = createSession;
       await Promise.all([...admissions.values()].map((admission) => admission.close()));
       admissions.clear();
-      scopes.clear();
     },
   };
 }
@@ -326,6 +322,7 @@ function createPeaSessionAdmission(
   let permissionQueue = Promise.resolve();
   let permissionHydration = permissionQueue;
   let unsubscribePermissions: (() => void) | undefined;
+  let restoreScopedThreadLifecycle: (() => void) | undefined;
   let admitted = false;
   let closed = false;
 
@@ -451,6 +448,17 @@ function createPeaSessionAdmission(
     const immutable = () => {
       throw new Error(`Pea web session '${scopedThreadId}' has an immutable thread binding.`);
     };
+    const setThread = session.thread.set.bind(session.thread);
+    const clearThread = session.thread.clear.bind(session.thread);
+    const clearAndReleaseLock = session.thread.clearAndReleaseLock.bind(session.thread);
+    session.thread.set = () => immutable();
+    session.thread.clear = () => immutable();
+    session.thread.clearAndReleaseLock = async () => immutable();
+    restoreScopedThreadLifecycle = () => {
+      session.thread.set = setThread;
+      session.thread.clear = clearThread;
+      session.thread.clearAndReleaseLock = clearAndReleaseLock;
+    };
     session.thread.switch = async () => immutable();
     session.thread.create = async () => immutable();
     session.thread.clone = async () => immutable();
@@ -487,6 +495,7 @@ function createPeaSessionAdmission(
         admitted = false;
         permissionGeneration++;
         unsubscribePermissions?.();
+        restoreScopedThreadLifecycle?.();
       }
       await permissionQueue;
     },

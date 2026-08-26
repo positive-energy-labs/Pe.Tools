@@ -45,7 +45,6 @@ const routeStateCommandBodySchema = z.object({
 /** The minimal shape we serve: an AgentController + its session, on a Mastra. */
 export interface ServableRuntime {
   controller: AgentController;
-  controllerId?: string;
   resourceId?: string;
   session?: Session;
   mastra?: Mastra;
@@ -68,8 +67,7 @@ function requireServableRuntime(value: unknown): ServableRuntime {
   if (!(runtime?.controller instanceof AgentController)) {
     throw new Error("Runtime agent-controller web requires an AgentController.");
   }
-  if (!runtime.controllerId || !runtime.resourceId)
-    throw new Error("Runtime agent-controller web requires controllerId and resourceId.");
+  if (!runtime.resourceId) throw new Error("Runtime agent-controller web requires resourceId.");
   return runtime as ServableRuntime;
 }
 

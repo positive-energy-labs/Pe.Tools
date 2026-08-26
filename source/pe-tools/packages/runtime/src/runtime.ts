@@ -63,8 +63,6 @@ export interface RuntimeHandle<
   TController extends RuntimeHandleController<TState> = AgentController<TState>,
 > {
   controller: TController;
-  /** Stable native controller/resource identity, available even when no session is eager-created. */
-  controllerId?: string;
   resourceId?: string;
   /** The Mastra the controller is registered on (keyed by config.id), for serving
    *  the native agent-controller HTTP routes via @mastra/server. */

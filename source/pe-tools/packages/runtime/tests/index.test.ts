@@ -117,6 +117,12 @@ test(
       expect(sessionA.permissions.getRules()).toEqual(expectedPermissionRules.ask);
       expect(sessionB.permissions.getRules()).toEqual(expectedPermissionRules.ask);
       expect(await runtime.controller.createSession({ resourceId, scope: "A" })).toBe(sessionA);
+      expect(() => sessionA.thread.set({ threadId: "B" })).toThrow("immutable");
+      expect(sessionA.thread.getId()).toBe("A");
+      expect(() => sessionA.thread.clear()).toThrow("immutable");
+      expect(sessionA.thread.getId()).toBe("A");
+      await expect(sessionA.thread.clearAndReleaseLock()).rejects.toThrow("immutable");
+      expect(sessionA.thread.getId()).toBe("A");
       await expect(sessionA.thread.switch({ threadId: "B" })).rejects.toThrow("immutable");
       await expect(sessionA.thread.create()).rejects.toThrow("immutable");
       await expect(sessionA.thread.clone()).rejects.toThrow("immutable");
@@ -157,6 +163,7 @@ test(
         "permission state did not persist exactly",
       );
       expect(sent).toHaveLength(1);
+      await expect(runtime.close?.()).resolves.toBeUndefined();
     } finally {
       Session.prototype.sendMessage = sendMessage;
       await runtime?.close?.();

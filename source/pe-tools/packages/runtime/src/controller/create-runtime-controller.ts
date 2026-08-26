@@ -97,7 +97,6 @@ export async function createRuntimeController<
   let unsubscribeCreated: (() => void) | undefined;
   let unsubscribeDeleted: (() => void) | undefined;
   let controllerCleanup: (() => Promise<void> | void) | undefined;
-  let controllerId: string | undefined;
   let resourceId: string | undefined;
   if (hasInjectedRuntimeController(options)) {
     config = options.config;
@@ -111,7 +110,6 @@ export async function createRuntimeController<
     >;
     const resolvedConfig = await resolveRuntimeControllerConfig(createOptions, request);
     config = resolvedConfig;
-    controllerId = resolvedConfig.id;
     resourceId = resolvedConfig.resourceId ?? resolvedConfig.id;
     memory = resolvedConfig.memory;
     ownedMemory = typeof memory === "function" ? undefined : memory;
@@ -146,7 +144,6 @@ export async function createRuntimeController<
 
   return {
     controller,
-    controllerId,
     resourceId,
     mastra,
     session,
