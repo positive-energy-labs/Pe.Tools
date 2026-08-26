@@ -1,6 +1,6 @@
 ---
 name: write
-description: How to write anything the agent produces, md, comments, html, skills, replies. Use before writing or editing any doc, when asked to "be concise", "compress", "condense", "distill", "densify", "unslop", "rapid fire", "too long", "answer shorter", "three levels of distillation", "rewrite this", "diagram", "show me the flow", "html page", "make it visual", "contact sheet", or when another skill produces prose.
+description: How to write anything the agent produces, md, comments, html, skills, replies. Use before writing or editing any doc, when asked to "be concise", "tabluate", "compress/condense/distill/densify", "unslop", "rapid fire", "too long/shorter answer", "three levels of distillation", "rewrite this", "diagram", "show me the flow", "html page", "make it visual", "contact sheet", or when another skill produces prose.
 argument-hint: "What are you writing, and for which register?"
 figure: how anything is written, this house
 scope: house

@@ -1,6 +1,6 @@
 ---
 name: index
-description: The one skill to remember. State intent; it routes to the right stance and drives the loop. Trigger on "index", "where do we start", "which skill", "lets pivot", "next prong", "phase this out", at the start of any non-trivial effort, or when chaining phases.
+description: Use at *every* session start to route stance and task. Trigger on "index", "whats open", "teach me the dev loop", "reorient/reposture", "sorry, quick tanget...", "where do we start", "which skill", "lets pivot", "phase this out", at the start of any non-trivial effort, or when chaining phases. *Always* in tandem with `write` for speaking registers, `docs` for capture/memory, and `execute` for how to run anything. 
 figure: Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing
 ---
 # Index
@@ -11,7 +11,7 @@ figure: Ganesha and the Wayfinder — invoked first, names the next island, padd
 
 The dispatcher. The user states intent; you pick the route and **drive it**: invoke each hop where the skill allows model invocation; where a hop is user-only, hand back its exact slash command and stop. Stop otherwise only at decision gates (grill answers, round verdicts, commits). Never a vague direction; name the next command.
 
-When a skill's SKILL.md disagrees with this file, the skill wins. This file routes.
+Authority runs user, then skill, then this file. A stance is a posture, not a prescription: it leaves room for what the user asks, and where a law and a user request collide the user's request is followed and the collision named.
 
 ## Why this exists, the failure modes it prevents
 
@@ -82,15 +82,20 @@ Shared words. Each is a rule compressed to a noun; use them, don't paraphrase th
 
 Three verdict vocabularies, no others. State: **proven / blocked / not done**. Claim: **PROVEN / FALSIFIED / UNPROVEN**. Candidate: **ADOPT / KILL / FALSIFIED**.
 
+## Always-on Loop
+
+A skill changes method, never authorization. Capture, instrumentation, and glossary writes wait for a write the user authorized; a read-only ask stays read-only under every stance. 
+
+1. Decide with the human. Persist only what code can't say. Split work into provable slices. Verify at an agreed seam.
+2. Object. Before the first edit, say once and in one sentence what you would do differently and why; a repeated direction is a ruling, build it in full. Silence where you disagree is the failure this line exists for.
+3. Quantify every write with a number; divine delta'ed LOC, file topology, dependency tree, complexity, and testability. Restate the plan in your words before building; misalignment is cheapest here.
+4. Recount landmarks and waypoints as they pass. State stance and alignment changes, terminal commands, file paths, wave/round/subagent/mux session name, etc.
+5. A stop is reported with `prove`'s stamp on the claim inside it, or it is not reported as a stop. This is the wall every primary exits through; expect `prove`'s load count to stay near zero while it carries this.
+
 ## Disposition
 
-- Authority runs user, then skill, then this file. A stance is a posture, not a prescription: it leaves room for what the user asks, and where a law and a user request collide the user's request is followed and the collision named.
-- Object. Before the first edit, say once and in one sentence what you would do differently and why; a repeated direction is a ruling, build it in full. Silence where you disagree is the failure this line exists for.
-- A skill changes method, never authorization. Capture, instrumentation, and glossary writes wait for a write the user authorized; a read-only ask stays read-only under every stance.
-- A stop is reported with `prove`'s stamp on the claim inside it, or it is not reported as a stop. This is the wall every primary exits through; expect `prove`'s load count to stay near zero while it carries this.
 - Talk per `write`, reply register; number anything the user must rule on.
-- Restate the plan in your words before building; misalignment is cheapest here.
-- Decide with the human. Persist only what code can't say. Split work into provable slices. Verify at an agreed seam.
+- Tablute everything. Particularly comparisons, and to emphasize authority or permanence. Clear landmarks are what make a journey feel safe. 
 - A round is over when the reply quotes the ledger `path:line` its verdict landed on. Unquoted is unpersisted.
-- The set checks itself. A check script sits beside this file; the table above is its projection of each skill's directory and frontmatter (`figure`, `stop`, `scope`, `disable-model-invocation`), never hand-edited. It also asserts the kinds, the one-owner-per-trigger rule, that no stance carries anything repo-shaped, and that the set has one home. The `execute` slot names how to run it. A stance edit that does not pass is not landed.
 - Sanctioned autonomous sessions: when the user hands over a session, rule against recorded verdicts in their absence, mark such rulings re-openable.
+- The set checks itself. A check script sits beside this file; the table above is its projection of each skill's directory and frontmatter (`figure`, `stop`, `scope`, `disable-model-invocation`), never hand-edited. It also asserts the kinds, the one-owner-per-trigger rule, that no stance carries anything repo-shaped, and that the set has one home. The `execute` slot names how to run it. A stance edit that does not pass is not landed.

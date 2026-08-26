@@ -1,6 +1,6 @@
 ---
 name: ground
-description: Survey before touching. Trigger on "no changes yet", "ground in", "reground", "just tell me", "restate", "where are we", "what's the state of", "report back", "outsider perspective", "review and report back", "audit", "I'm lost", "catch me up", or whenever the user pastes a failure, a diff, or another agent's output without an instruction. Not for building; it ends by naming the next stance. A pasted failure routes on to `diagnose`.
+description: Survey before touching. Trigger on "survey", "census", "no changes yet", "ground in", "reground", "just tell me", "restate", "where are we", "I'm lost" "what's the state of", "report back", "outsider perspective", "review and report back", "audit", "I'm lost", "catch me up", or whenever the user pastes a failure, a diff, or another agent's output without an instruction. Not for building; it ends by naming the next stance. A pasted failure routes on to `diagnose`.
 argument-hint: "What terrain, and what claim or confusion prompted the survey?"
 stop: map, restatement, next stance named
 figure: Witness with the Chain-bearer — writes off; map and restate first
