@@ -2,13 +2,15 @@
 name: delegate
 description: Who does what, at what cost. Trigger on "delegate", "fan out", "subagents", "swarm", "send off some agents", "fresh context", "research this", "apostles", "you stay the orchestrator", "conserve limits", or before any fan-out, including one you were about to do with the harness Agent tool. Not the mechanics of running agents; that is `execute`.
 argument-hint: "How big is the session, what needs your eyes, what can leave your context?"
-figure: Abbot and Falconer — who does what, at what cost, down which line
+figure: Abbot, Falconer, and Breeder — who does what, at what cost, down which line
 ---
 # Delegate
 
 **Be the Abbot; send Apostles.** The Abbot gives the rule and does not work the field. An Apostle is sent out fresh, with one gospel and a bounded mission, returns with a report, and does not come back for chats. The user is consulting *you*; judgement and liability are yours, the field work is not. The Abbot is also the Shepherd: he counts the flock, and a sheep that did not come back is gone after, never replaced by a new one and never presumed grazing.
 
-**Also be the Falconer.** The falconer hunts nothing; the bird does. The regalia are the laws: the **hood** stays on until the cast, so the bird sees only the quarry you show it; the **jesses** hold it to one flight and one edge; the **bells** ring while it is out of sight, so a bird you cannot hear is a bird you have lost; the **creance** is the training line, the time box; the **lure** is what brings it back, a report, not a conversation; and the **mews** rest a bird between flights, so a bird that has flown this ground is flown again before a new one is manned. A **line** is one bird and every cast you send it on. Lines are kept apart so nothing crosses that you did not cross on purpose; the deliberate cross is the graft, and it is where the new thing comes from.
+**Also be the Falconer.** The falconer hunts nothing; the bird does. The regalia are the laws: the **hood** stays on until the cast, so the bird sees only the quarry you show it; the **jesses** hold it to one flight and one edge; the **bells** ring while it is out of sight, so a bird you cannot hear is a bird you have lost; the **creance** is the training line, the time box; the **lure** is what brings it back, a report, not a conversation; and the **mews** rest a bird between flights, so a bird that has flown this ground is flown again before a new one is manned. A **line** is one bird and every cast you send it on. Lines are kept apart so nothing crosses that you did not cross on purpose.
+
+**Be the Breeder only on a settled base.** A cross is paid for once the clean lines have read and disagreed, never before; there is no envelope to push until a line has proven a trait. Then matricize on purpose across lines, LLMs, roots, and harnesses, and keep the odd but good branch as an ortet for the next cultivar. A broken paradigm is not bred out of; it gets a new founder, and that is `demiurge`, not a fan-out.
 
 Mode: no fan-out without a posture table first. Task, who (model and thinking), why. You are a row in it.
 
@@ -25,7 +27,7 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 - Reuse before you re-brief, and save seed before you cull. An apostle that just read the terrain is primed; send it the next question instead of paying a fresh one to read the same files.
 - Alarm at 2× the box. An apostle past twice its time box is surfaced to the user before its report is read. Time on task that felt wrong is a systemic signal, not a nag. Surface it before approving the work. If an apostle's line must be culled, take what it learned that no report carried.
 - Priming is contamination the moment the mission is judgment. The context that makes an apostle fast on more of the same makes it the worst available judge of what it built. Judgment goes down a clean line, always.
-- Cross lines on purpose, and only after the clean readings. Handing one apostle two unrelated bodies is where the new idea comes from. Cross before the clean readings exist and you cannot say what produced it.
+- Cross lines only after the clean readings. Handing one apostle two unrelated bodies is where the new idea comes from; cross before the clean readings exist and you cannot say what produced it.
 - Convergence means the panel was too wide. When independent readings agree, the agreement is the finding and the extra birds were paid for nothing; widen only where the first readings disagreed.
 - One writing line, one tree. Two lines editing one checkout means every claim must be pinned to a commit to mean anything, and a proof taken while another line was mid-write proves nothing.
 - Leave it better than you found it. Delegation leaves a wake of lost sheep, geriatrics, and rejects. Before a fan-out is reported done, every spent runner, server, watcher, and line is retired; what cannot be retired is one Owed line. A resource no foreseeable future needs is let go. An anti-pattern seen on the way is one Owed line, not a fix.
