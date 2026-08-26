@@ -1,8 +1,9 @@
-import { spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { RequestContext } from "@mastra/core/request-context";
 import { LocalSandbox } from "@mastra/core/workspace";
 import { TOOL_CATEGORIES, getToolsForCategory } from "@mastra/code-sdk/permissions";
@@ -305,8 +306,6 @@ test(
   runtimeTestTimeout,
 );
 
-type PermissionProbeMode = "seed" | "verify";
-
 async function createPermissionProbe() {
   const root = await mkdtemp(path.join(os.tmpdir(), "pea-permissions-"));
   const scriptPath = path.join(root, "probe.ts");
@@ -314,117 +313,68 @@ async function createPermissionProbe() {
   const jitiEntry = createRequire(import.meta.url).resolve("jiti");
   const jitiCli = path.resolve(path.dirname(jitiEntry), "../lib/jiti-cli.mjs");
   await writeFile(scriptPath, permissionProbeSource(runtimeUrl), "utf8");
-
   return {
-    run: (mode: PermissionProbeMode) => runPermissionProbe({ jitiCli, mode, root, scriptPath }),
+    run: (mode: "seed" | "verify") =>
+      promisify(execFile)(process.execPath, [jitiCli, scriptPath], {
+        cwd: path.resolve(import.meta.dirname, "../../.."),
+        env: {
+          ...process.env,
+          PE_TOOLS_STATE_DIR: path.join(root, "state"),
+          PEA_WAVE3A_PROBE_MODE: mode,
+          PEA_WAVE3A_PROBE_ROOT: root,
+        },
+        signal: AbortSignal.timeout(runtimeTestTimeout),
+      }),
     dispose: () => rm(root, { recursive: true }),
   };
 }
 
 function permissionProbeSource(runtimeUrl: string): string {
   return `
-import assert from "node:assert/strict";
-import path from "node:path";
-import { createPeaRuntime } from ${JSON.stringify(runtimeUrl)};
-
-const settingKey = ${JSON.stringify(permissionSettingKey)};
-const expected = ${JSON.stringify(expectedPermissionRules)};
-const mode = process.env.PEA_WAVE3A_PROBE_MODE; const root = process.env.PEA_WAVE3A_PROBE_ROOT;
-assert.ok(mode && root); const workspace = (name) => path.join(root, name);
-const trustedRecord = { yolo: false, permissionRules: { ...expected.trusted, tools: { script_execute: "deny" } } };
-const readOnlyRecord = { yolo: false, permissionRules: expected["read-only"] }; const invalidRecords = {
-  malformed: { yolo: false, permissionRules: { categories: expected.trusted.categories, tools: { script_execute: "wat" } } },
-  partial: { yolo: false, permissionRules: { categories: { read: "allow" }, tools: {} } },
-  yolo: { yolo: true, permissionRules: expected.trusted },
-};
-
-function sessionOf(runtime) { assert.ok(runtime.session); return runtime.session; }
-
-if (mode === "seed") {
-  const runtime = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot: workspace("threads") });
-  const session = sessionOf(runtime);
-  const trustedThreadId = session.thread.requireId(); await session.thread.rename({ title: "trusted" });
-  await session.thread.setSetting({ key: settingKey, value: trustedRecord });
-  await session.state.set({ yolo: false, permissionRules: trustedRecord.permissionRules });
-  const readOnlyThread = await session.thread.create({ title: "read-only" });
+import assert from "node:assert/strict"; import path from "node:path"; import { createPeaRuntime } from ${JSON.stringify(runtimeUrl)};
+const settingKey = ${JSON.stringify(permissionSettingKey)}; const expected = ${JSON.stringify(expectedPermissionRules)};
+const mode = process.env.PEA_WAVE3A_PROBE_MODE; const root = process.env.PEA_WAVE3A_PROBE_ROOT; assert.ok(mode && root);
+const workspace = (name) => path.join(root, name); function sessionOf(runtime) { assert.ok(runtime.session); return runtime.session; }
+const trustedRecord = { yolo: false, permissionRules: { ...expected.trusted, tools: { script_execute: "deny" } } }; const readOnlyRecord = { yolo: false, permissionRules: expected["read-only"] }; const invalidRecords = { malformed: { yolo: false, permissionRules: { categories: expected.trusted.categories, tools: { script_execute: "wat" } } }, partial: { yolo: false, permissionRules: { categories: { read: "allow" }, tools: {} } }, yolo: { yolo: true, permissionRules: expected.trusted } }; if (mode === "seed") {
+  const runtime = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot: workspace("threads") }); const session = sessionOf(runtime);
+  const trustedThreadId = session.thread.requireId(); await session.thread.rename({ title: "trusted" }); await session.thread.setSetting({ key: settingKey, value: trustedRecord });
+  await session.state.set({ yolo: false, permissionRules: trustedRecord.permissionRules }); const readOnlyThread = await session.thread.create({ title: "read-only" });
   await session.thread.switch({ threadId: trustedThreadId }); await session.thread.switch({ threadId: readOnlyThread.id });
-  await session.thread.setSetting({ key: settingKey, value: readOnlyRecord });
-  await session.state.set({ yolo: false, permissionRules: readOnlyRecord.permissionRules });
-  await runtime.close?.();
-
-  for (const [name, record] of Object.entries(invalidRecords)) {
-    const invalid = await createPeaRuntime({ workspaceRoot: workspace(name) });
-    await sessionOf(invalid).thread.setSetting({ key: settingKey, value: record });
-    await invalid.close?.();
-  }
+  await session.thread.setSetting({ key: settingKey, value: readOnlyRecord }); await session.state.set({ yolo: false, permissionRules: readOnlyRecord.permissionRules }); await runtime.close?.();
+  for (const [name, record] of Object.entries(invalidRecords)) { const invalid = await createPeaRuntime({ workspaceRoot: workspace(name) }); await sessionOf(invalid).thread.setSetting({ key: settingKey, value: record }); await invalid.close?.(); }
 } else if (mode === "verify") {
-  const runtime = await createPeaRuntime({ workspaceRoot: workspace("threads") });
-  const session = sessionOf(runtime);
-  const threads = await session.thread.list();
-  const trusted = threads.find((thread) => thread.title === "trusted");
-  const readOnly = threads.find((thread) => thread.title === "read-only");
-  assert.ok(trusted && readOnly);
-
-  assert.equal(session.thread.getId(), readOnly.id);
-  assert.deepStrictEqual(session.permissions.getRules(), readOnlyRecord.permissionRules);
-  assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), readOnlyRecord);
-  await session.thread.switch({ threadId: trusted.id });
-  assert.deepStrictEqual(session.permissions.getRules(), trustedRecord.permissionRules);
-  assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), trustedRecord);
-  assert.equal(session.resolveToolApproval("script_execute"), "deny");
-  await session.thread.switch({ threadId: readOnly.id });
-  assert.deepStrictEqual(session.permissions.getRules(), readOnlyRecord.permissionRules);
-  assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), readOnlyRecord);
-  await runtime.close?.();
-  await runtime.close?.();
-
+  const runtime = await createPeaRuntime({ workspaceRoot: workspace("threads") }); const session = sessionOf(runtime);
+  const threads = await session.thread.list(); const trusted = threads.find((thread) => thread.title === "trusted"); const readOnly = threads.find((thread) => thread.title === "read-only"); assert.ok(trusted && readOnly);
+  assert.equal(session.thread.getId(), readOnly.id); assert.deepStrictEqual(session.permissions.getRules(), readOnlyRecord.permissionRules); assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), readOnlyRecord);
+  await session.thread.switch({ threadId: trusted.id }); assert.deepStrictEqual(session.permissions.getRules(), trustedRecord.permissionRules); assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), trustedRecord); assert.equal(session.resolveToolApproval("script_execute"), "deny");
+  await session.thread.switch({ threadId: readOnly.id }); assert.deepStrictEqual(session.permissions.getRules(), readOnlyRecord.permissionRules); assert.deepStrictEqual(await session.thread.getSetting({ key: settingKey }), readOnlyRecord);
+  const askRecord = { yolo: false, permissionRules: { ...expected.ask, tools: { script_execute: "deny" } } };
+  const getSetting = session.thread.getSetting.bind(session.thread); const setSetting = session.thread.setSetting.bind(session.thread); const setState = session.state.set.bind(session.state);
+  let delayOldA = true, durableWrites = 0, activeWrites = 0, releaseOldA, reachOldA; const oldAReleased = new Promise((resolve) => { releaseOldA = resolve; }); const oldAReached = new Promise((resolve) => { reachOldA = resolve; });
+  session.thread.getSetting = async (request) => { const threadId = session.thread.requireId(); const value = await getSetting(request); if (delayOldA && threadId === trusted.id) { delayOldA = false; reachOldA(); await oldAReleased; } return value; };
+  session.thread.setSetting = async (request) => { durableWrites++; await setSetting(request); }; session.state.set = async (updates) => { activeWrites++; await setState(updates); };
+  const oldA = session.thread.switch({ threadId: trusted.id }); await oldAReached; await session.thread.switch({ threadId: readOnly.id });
+  await session.thread.setSettingOn({ threadId: trusted.id, key: settingKey, value: askRecord }); await session.thread.switch({ threadId: trusted.id });
+  assert.deepStrictEqual(session.permissions.getRules(), askRecord.permissionRules); assert.deepStrictEqual(await getSetting({ key: settingKey }), askRecord);
+  const writesBeforeRelease = [durableWrites, activeWrites]; releaseOldA(); await assert.rejects(oldA, /changed during hydration/); assert.deepStrictEqual([durableWrites, activeWrites], writesBeforeRelease);
+  assert.deepStrictEqual(session.permissions.getRules(), askRecord.permissionRules); assert.deepStrictEqual(await getSetting({ key: settingKey }), askRecord);
+  await runtime.close?.(); await runtime.close?.();
+  const bootstrap = await createPeaRuntime({ workspaceRoot: workspace("signal-bootstrap") }); const sessionPrototype = Object.getPrototypeOf(sessionOf(bootstrap)); const coreSendSignal = sessionPrototype.sendSignal; await bootstrap.close?.();
+  const admissions = []; sessionPrototype.sendSignal = function (input) { admissions.push(input); return { id: input.id, type: input.type, accepted: Promise.resolve({ accepted: true, action: "wake" }) }; };
+  let admission; try { admission = await createPeaRuntime({ workspaceRoot: workspace("signal") }); } finally { sessionPrototype.sendSignal = coreSendSignal; }
+  const admissionSession = sessionOf(admission); const admissionGetSetting = admissionSession.thread.getSetting.bind(admissionSession.thread);
+  let releaseAdmission, reachAdmission; const admissionReleased = new Promise((resolve) => { releaseAdmission = resolve; }); const admissionReached = new Promise((resolve) => { reachAdmission = resolve; });
+  admissionSession.thread.getSetting = async (request) => { const value = await admissionGetSetting(request); reachAdmission(); await admissionReleased; return value; };
+  await admissionSession.thread.create({ title: "TUI new thread" }); const idle = admissionSession.sendSignal({ content: "ordinary", ifIdle: { attributes: { path: "idle" } } });
+  admissionSession.run.ensureAbortController(); const active = admissionSession.sendSignal({ content: "interjection", ifActive: { attributes: { path: "active" } } });
+  await admissionReached; assert.equal(admissions.length, 0); releaseAdmission();
+  assert.deepStrictEqual(await idle.accepted, { accepted: true, action: "wake" }); assert.deepStrictEqual(await active.accepted, { accepted: true, action: "wake" });
+  assert.equal(idle.id, admissions[0].id); assert.equal(active.id, admissions[1].id);
+  assert.deepStrictEqual(admissions.map(({ attributes }) => attributes), [{ path: "idle" }, { path: "active", delivery: "while-active" }]); admissionSession.run.reset(); await admission.close?.();
   for (const name of Object.keys(invalidRecords)) {
-    const invalid = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot: workspace(name) });
-    const invalidSession = sessionOf(invalid);
-    assert.deepStrictEqual(invalidSession.permissions.getRules(), readOnlyRecord.permissionRules);
-    assert.deepStrictEqual(
-      await invalidSession.thread.getSetting({ key: settingKey }),
-      readOnlyRecord,
-    );
-    assert.equal(invalidSession.state.get().yolo, false);
-    await invalid.close?.();
+    const invalid = await createPeaRuntime({ accessLevel: "trusted", workspaceRoot: workspace(name) }); const invalidSession = sessionOf(invalid); assert.deepStrictEqual(invalidSession.permissions.getRules(), readOnlyRecord.permissionRules); assert.deepStrictEqual(await invalidSession.thread.getSetting({ key: settingKey }), readOnlyRecord);
+    assert.equal(invalidSession.state.get().yolo, false); await invalid.close?.();
   }
-} else {
-  throw new Error(\`Unknown probe mode '\${mode}'.\`);
-}
+} else throw new Error(\`Unknown probe mode '\${mode}'.\`);
 `;
-}
-
-async function runPermissionProbe(options: {
-  jitiCli: string;
-  mode: PermissionProbeMode;
-  root: string;
-  scriptPath: string;
-}): Promise<void> {
-  const child = spawn(process.execPath, [options.jitiCli, options.scriptPath], {
-    cwd: path.resolve(import.meta.dirname, "../../.."),
-    env: {
-      ...process.env,
-      PE_TOOLS_STATE_DIR: path.join(options.root, "state"),
-      PEA_WAVE3A_PROBE_MODE: options.mode,
-      PEA_WAVE3A_PROBE_ROOT: options.root,
-    },
-    signal: AbortSignal.timeout(runtimeTestTimeout),
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let stdout = "";
-  let stderr = "";
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk) => (stdout += chunk));
-  child.stderr.on("data", (chunk) => (stderr += chunk));
-  const code = await new Promise<number | null>((resolve, reject) => {
-    child.on("error", reject);
-    child.on("close", resolve);
-  });
-  if (code !== 0) {
-    throw new Error(
-      `Permission probe '${options.mode}' exited ${code}.\nstdout:\n${stdout}\nstderr:\n${stderr}`,
-    );
-  }
 }

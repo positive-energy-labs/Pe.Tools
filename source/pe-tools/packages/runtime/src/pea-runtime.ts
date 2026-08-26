@@ -1,6 +1,11 @@
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { Agent } from "@mastra/core/agent";
+import {
+  Agent,
+  createSignal,
+  resolveDeliveryAttributes,
+  type AgentSignalInput,
+} from "@mastra/core/agent";
 import type {
   AgentController,
   AgentControllerRequestContext,
@@ -192,24 +197,32 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
   controller = handle.controller;
 
   try {
-    await configurePermissions(handle, options.accessLevel);
     const session = handle.session!;
     let permissionThreadId = session.thread.requireId();
+    let permissionGeneration = 0;
     let permissionHydration = Promise.resolve();
-    const hydratePermissions = (threadId: string) => {
+    const hydratePermissions = (threadId: string, requestedAccessLevel?: RuntimeAccessLevel) => {
+      const generation = ++permissionGeneration;
       permissionThreadId = threadId;
-      permissionHydration = configurePermissions(handle, undefined, threadId);
+      permissionHydration = configurePermissions(handle, requestedAccessLevel, () => {
+        if (session.thread.getId() !== threadId || permissionGeneration !== generation) {
+          throw new Error("Pea permission thread changed during hydration.");
+        }
+      });
       void permissionHydration.catch(() => {});
     };
     const awaitPermissions = async () => {
       const threadId = session.thread.requireId();
       if (permissionThreadId !== threadId) hydratePermissions(threadId);
+      const generation = permissionGeneration;
       const hydration = permissionHydration;
       await hydration;
-      if (session.thread.getId() !== threadId || permissionHydration !== hydration) {
+      if (session.thread.getId() !== threadId || permissionGeneration !== generation) {
         throw new Error("Pea permission thread changed during hydration.");
       }
     };
+    hydratePermissions(permissionThreadId, options.accessLevel);
+    await permissionHydration;
     const unsubscribePermissions = session.subscribe((event) => {
       if (event.type === "thread_changed") hydratePermissions(event.threadId);
       if (event.type === "thread_created") hydratePermissions(event.thread.id);
@@ -219,11 +232,48 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
       await switchThread(request);
       await awaitPermissions();
     };
-    const sendMessage = session.sendMessage.bind(session);
-    session.sendMessage = async (request) => {
-      await awaitPermissions();
-      await sendMessage(request);
-    };
+    const sendSignal = session.sendSignal.bind(session) as typeof session.sendSignal;
+    session.sendSignal = ((input, options) => {
+      const contentOptions = "content" in input ? input : undefined;
+      const submittedWhileWorking =
+        session.run.isRunning() ||
+        (session.run.isAbortRequested() &&
+          Boolean(session.run.getRunId() || session.stream.activeRunId()));
+      let signal: ReturnType<typeof createSignal> = createSignal(
+        contentOptions
+          ? {
+              type: "user",
+              tagName: "user",
+              contents: contentOptions.content,
+              providerOptions: contentOptions.providerOptions,
+            }
+          : (input as AgentSignalInput),
+      );
+      signal = resolveDeliveryAttributes(
+        signal,
+        (submittedWhileWorking ? contentOptions?.ifActive : contentOptions?.ifIdle)?.attributes,
+      );
+      if (
+        submittedWhileWorking &&
+        signal.type === "user" &&
+        signal.attributes?.delivery === undefined
+      ) {
+        signal = resolveDeliveryAttributes(signal, { delivery: "while-active" });
+      }
+      return {
+        id: signal.id,
+        type: signal.type,
+        accepted: awaitPermissions().then(
+          () =>
+            sendSignal(signal, {
+              ...options,
+              tracingContext: options?.tracingContext ?? contentOptions?.tracingContext,
+              tracingOptions: options?.tracingOptions ?? contentOptions?.tracingOptions,
+              requestContext: options?.requestContext ?? contentOptions?.requestContext,
+            }).accepted,
+        ),
+      };
+    }) as typeof session.sendSignal;
     const close = handle.close;
     handle.close = () => {
       unsubscribePermissions();
@@ -283,23 +333,18 @@ function resolvePeaToolCategory(toolName: string): ToolCategory {
 async function configurePermissions(
   handle: PeaRuntimeHandle,
   requestedAccessLevel: RuntimeAccessLevel | undefined,
-  expectedThreadId?: string,
+  assertCurrent: () => void,
 ): Promise<void> {
   const session = handle.session;
   if (!session) throw new Error("Expected Pea runtime session.");
-  const threadId = expectedThreadId ?? session.thread.requireId();
-  const assertCurrentThread = () => {
-    if (session.thread.getId() !== threadId) {
-      throw new Error("Pea permission thread changed during hydration.");
-    }
-  };
+  assertCurrent();
   await session.state.set({
     yolo: false,
     permissionRules: permissionRulesForAccessLevel("read-only"),
   });
-  assertCurrentThread();
+  assertCurrent();
   const stored = await session.thread.getSetting({ key: permissionSettingKey });
-  assertCurrentThread();
+  assertCurrent();
   const persisted = readPermissionRecord(stored);
   const persistedLevel = persisted
     ? accessLevelFromPermissionRules(persisted.permissionRules)
@@ -314,19 +359,24 @@ async function configurePermissions(
   if (persisted && persistedLevel) effective.tools = { ...persisted.permissionRules.tools };
 
   const record = permissionRecordSchema.parse({ yolo: false, permissionRules: effective });
-  assertCurrentThread();
+  assertCurrent();
   await session.thread.setSetting({ key: permissionSettingKey, value: record });
-  assertCurrentThread();
+  assertCurrent();
   await session.state.set({ yolo: false, permissionRules: record.permissionRules });
-  assertCurrentThread();
+  assertCurrent();
+  const activeState = session.state.get();
+  assertCurrent();
+  const durableRecord = await session.thread.getSetting({ key: permissionSettingKey });
+  assertCurrent();
+  const activeRules = session.permissions.getRules();
   if (
-    session.state.get().yolo !== false ||
-    !isDeepStrictEqual(await session.thread.getSetting({ key: permissionSettingKey }), record) ||
-    !isDeepStrictEqual(session.permissions.getRules(), record.permissionRules)
+    activeState.yolo !== false ||
+    !isDeepStrictEqual(durableRecord, record) ||
+    !isDeepStrictEqual(activeRules, record.permissionRules)
   ) {
     throw new Error("Pea permission state did not persist exactly.");
   }
-  assertCurrentThread();
+  assertCurrent();
 }
 
 function permissionRulesForAccessLevel(level: RuntimeAccessLevel): PermissionRules {
