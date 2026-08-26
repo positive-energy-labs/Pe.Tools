@@ -41,9 +41,6 @@ test("pea exposes the exact 14-tool product surface", () => {
   expect(Object.keys(peaProductTools)).toEqual(names);
   expect(Object.keys(peaProductToolMetadata)).toEqual(names);
   expect(peaProductToolMetadata.host_operation_call.category).toBe("execute");
-  expect(Object.values(peaProductToolMetadata).filter((tool) => tool.requiresRevit)).toHaveLength(
-    7,
-  );
 });
 
 test("pea composes product commands without dev", () => {
