@@ -3,10 +3,10 @@
  * at every corner of a real viewport.**
  *
  * Standing directive (CLEANROOM, ruled 2026-08-16): every popover-bearing component is tested
- * across viewport positions, because combobox, targeting dropdown and search boxes are
- * inconsistent in both style and popover behaviour everywhere in the app, and nobody has ever
- * seen that inconsistency as ONE fact. A harness that puts nine instances of the same specimen at
- * the corners, edges and centre of the viewport turns "it sometimes opens wrong" into a picture.
+ * across viewport positions, because combobox, targeting dropdown and search boxes have multiple
+ * composition paths in the app. A harness that puts nine instances of the same specimen at the
+ * corners, edges and centre of the viewport asks the browser the same placement questions at each
+ * position.
  *
  * THIS PAGE DOES NOT CLAIM BROWSER PROOF. Each specimen is mounted EXACTLY as its real consumer
  * mounts it — the same composition and the same meaningful alignment/anchor props. The shared
@@ -66,7 +66,7 @@ interface Specimen {
   consumers: string;
   /** What this composition does that the others do not. */
   shape: string;
-  /** Observed vs expected. Written down, not fixed. */
+  /** Source facts and browser questions. */
   defects: readonly string[];
   render: () => React.ReactNode;
 }
@@ -220,9 +220,9 @@ const SPECIMENS: readonly Specimen[] = [
     shape: "explicit anchor on the trigger · in-popup search · wrapper default side/align",
     defects: [
       "FIXED IN SOURCE — caller intent is now `[--popup-min-width:11rem]`; shared CSS computes `min(available, max(anchor, caller))`, grows to content, and clamps to the available viewport. Browser sizing remains pending.",
-      "REMAINS FOR BROWSER — flip works (bottom edge opens upward) but the in-popup search input stays at the popup's top, so after a flip the search box is the FURTHEST thing from the trigger you just clicked.",
+      "BROWSER CHECK — at the bottom edge, does Base UI flip the popup upward, and does the in-popup search stay at the popup top or move with the trigger? Compare its distance from the clicked trigger.",
       "no component to import: `ColFilter` is a private function inside master-table.tsx, so this composition is duplicated wherever a facet filter is wanted.",
-      "the anchor is an extra `div` that exists only to stop the in-popup search input from becoming the positioner anchor (a jitter loop). Every consumer has to know that.",
+      "the anchor is an extra `div` that keeps the in-popup search input out of the positioner anchor. BROWSER CHECK — does this composition keep popup positioning stable while the search input changes?",
     ],
     render: () => <FacetFilterSpecimen />,
   },
@@ -233,7 +233,7 @@ const SPECIMENS: readonly Specimen[] = [
     shape: "ghost Button trigger · align=end · explicit anchor · searchable",
     defects: [
       "FIXED IN SOURCE — caller intent is now `[--popup-min-width:14rem]`; shared CSS composes it with the anchor floor and viewport ceiling while permitting content growth. Browser readability remains pending.",
-      'REMAINS FOR BROWSER — `align="end"` is a meaningful caller choice, so the popup stays right-aligned for this chip rather than forcing a global alignment.',
+      'BROWSER CHECK — with `align="end"`, does the popup remain right-aligned for this chip at each viewport position? Keep this caller alignment rather than forcing a global alignment.',
       "same private-function problem: `Picker` is internal to control-chips.tsx.",
       "the trigger is a shadcn ghost Button on `--muted-foreground` while the facet filter is a bare `ComboboxTrigger` on `--r-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
     ],
@@ -247,7 +247,7 @@ const SPECIMENS: readonly Specimen[] = [
     shape: "Base UI Select — positions against the SELECTED ITEM, not the trigger",
     defects: [
       "FIXED IN SOURCE — Select and Combobox now share the same artifact ground, radius, ring, ink, and `--r-on` contract; both retain their Base UI width behavior and caller alignment/overflow choices.",
-      "REMAINS FOR BROWSER — the popup aligns the SELECTED item over the trigger, so at the bottom-left corner it lands up and to the right, on top of whatever it overlaps. Correct Base UI behaviour; this wave preserves it.",
+      "BROWSER CHECK — at the bottom-left corner, where does the selected-item positioner place the popup, and does it remain within the available viewport without unintended overlap? This wave preserves the Base UI positioning contract.",
       "FIXED IN SOURCE — Select no longer uses the old `--popover`/`--border` vocabulary; visual retint and contrast still require the browser gate.",
     ],
     render: () => <SelectSpecimen />,
@@ -260,7 +260,7 @@ const SPECIMENS: readonly Specimen[] = [
     defects: [
       "FIXED IN SOURCE — the shared `w-max` plus anchor-floor law lets this option list grow past the input to readable content width, bounded by available viewport width. Browser sizing remains pending.",
       "no explicit anchor is passed, unlike BOTH other combobox consumers, which each wrote an anchor `div` with a comment explaining that the in-popup input must not be the positioner anchor. Nothing in the API says which shape needs it — the knowledge lives in two ponytail comments.",
-      "OBSERVED — flips at the bottom edge (correct), but the description sub-line is `text-[10px] text-muted-foreground` here and `text-xs text-muted-foreground` in the picker chip: the same option list, rendered at two sizes by two consumers.",
+      "BROWSER CHECK — at the bottom edge, does the popup flip as intended? Separately compare the description styles: this consumer uses `text-[10px] text-muted-foreground` while the picker chip uses `text-xs text-muted-foreground`.",
     ],
     render: () => <FieldSelectSpecimen />,
   },
@@ -270,8 +270,8 @@ const SPECIMENS: readonly Specimen[] = [
     consumers: "routes/ops.tsx, ops/views-catalog.tsx, parameter-links/ProfileEditor.tsx",
     shape: "chips container is the anchor · the anchor GROWS as chips are added",
     defects: [
-      "the anchor is the chips container, which GROWS every time a chip is added, so an open popup re-positions mid-selection — worst at the bottom edge, where each new chip can force a flip.",
-      "FIXED IN SOURCE — chips and unanchored inputs now use the same width law; chip anchoring still means adding a chip can reposition an open popup.",
+      "BROWSER CHECK — while the popup is open, what happens to its position when adding chips changes the anchor width, especially at the bottom edge?",
+      "FIXED IN SOURCE — chips and unanchored inputs now use the same width law. BROWSER CHECK — does the chip anchor reposition the open popup as chip count changes?",
       "FIXED — the trailing count line spent `--lichen`, a raw palette hue from the old vocabulary; it now sits on `--r-ink-2` (and the old cat-lichen identity lives on only as `--viz-4`).",
     ],
     render: () => <FieldMultiSpecimen />,
@@ -297,9 +297,8 @@ function PopoverHarness() {
   const specimen = SPECIMENS.find((s) => s.id === id) ?? SPECIMENS[0]!;
 
   return (
-    /* The grid IS the viewport — no page header, because a header would push the top row down and
-       the top row is the whole point. The control panel lives in the centre cell, which is the one
-       position with nothing to clamp against. */
+    /* The grid represents the viewport positions. The control panel lives in the centre cell so
+       the browser can compare it with the edge positions. */
     <div className="fixed inset-0 grid grid-cols-3 grid-rows-3 gap-2 bg-[var(--r-page)] p-2 text-[13px] text-[var(--r-ink)]">
       {POSITIONS.map((p) => (
         <div key={p.id} className={cn("relative flex min-h-0 min-w-0", p.cls)}>
