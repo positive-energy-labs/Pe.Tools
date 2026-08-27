@@ -56,14 +56,14 @@ function make() {
         };
     }
     registry.update(changed, (value) => value + 1);
-    return { ok: true as const, doc: document };
+    return { ok: true as const, revision: 1, doc: document };
   };
   const store = createSettingsStore({
     registry,
     scope: { documentAddress: address(`C:\\Models\\settings-${registries.length}.rvt`) },
     slice,
     apply,
-    command: async () => ({ ok: true }),
+    command: async () => ({ ok: true, revision: 1 }),
     host: {
       workspaces: async () => fixtureWorkspaces,
       tree: async () => fixtureFiles,

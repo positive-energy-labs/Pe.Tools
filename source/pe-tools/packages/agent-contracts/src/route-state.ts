@@ -53,16 +53,16 @@ export interface RouteStatePatch {
 
 export type RouteWriteKind = "error" | "refused" | "advisory" | "partial";
 
-export interface RouteStateWriteResult {
-  ok: boolean;
-  kind?: RouteWriteKind;
-  code?: import("./route-doc.ts").RouteRefusalCode;
-  revision?: number;
-  error?: string;
-  hint?: string;
-  doc?: unknown;
-  result?: unknown;
-}
+export type RouteStateWriteResult =
+  | { ok: true; revision: number; doc?: unknown; result?: unknown }
+  | {
+      ok: false;
+      kind: RouteWriteKind;
+      error: string;
+      hint: string;
+      code?: import("./route-doc.ts").RouteRefusalCode;
+      revision?: number;
+    };
 
 /* ── Session binding (substrate-owned doc segment) ─────────────────────────── */
 

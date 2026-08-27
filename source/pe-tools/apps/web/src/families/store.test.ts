@@ -51,7 +51,7 @@ const fixture = () => {
   const calls: Array<{ op: string; input: unknown }> = [];
   const ok = async (op: string, input: unknown): Promise<RouteStateWriteResult> => {
     calls.push({ op, input });
-    return { ok: true };
+    return { ok: true, revision: 1 };
   };
   const host: FamiliesHost = {
     sessions: async () =>
@@ -153,7 +153,7 @@ describe("families route store", () => {
         ? new Promise<RouteStateWriteResult>((resolve) => {
             release = resolve;
           })
-        : Promise.resolve({ ok: true, result: input });
+        : Promise.resolve({ ok: true, revision: 1, result: input });
     const { store } = make(testFixture);
     store.actions.setDraft({
       placement: "AllLoaded",
@@ -164,7 +164,7 @@ describe("families route store", () => {
     const planning = store.actions.plan();
     await tick();
     await expect(store.actions.applyFoundry()).rejects.toThrow("another verb is running");
-    release({ ok: true });
+    release({ ok: true, revision: 1 });
     await planning;
   });
 

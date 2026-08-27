@@ -96,7 +96,7 @@ function ScheduleGridWorkspace({
       setPartial(null);
       const result = await command(kind, input);
       if (!result.ok) {
-        verb.fail(result.kind ?? "error", result.error ?? result.hint ?? `${label} failed.`);
+        verb.fail(result.kind, result.error);
         return;
       }
       const failureNote = pushFailureNote(result.result);

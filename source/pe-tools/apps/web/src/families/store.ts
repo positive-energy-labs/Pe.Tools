@@ -161,9 +161,7 @@ export function createFamiliesStore(deps: {
           ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
           : undefined,
       });
-    return patches.length
-      ? expectRouteWrite(await writer.apply(patches), "bind failed")
-      : { ok: true };
+    return patches.length ? expectRouteWrite(await writer.apply(patches)) : { ok: true };
   };
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,
@@ -219,7 +217,6 @@ export function createFamiliesStore(deps: {
               { path: ["excludedIds"], value: [] },
               { path: ["apply"], value: null },
             ]),
-            "profile binding failed",
           ),
         ["families"],
       );
@@ -232,7 +229,6 @@ export function createFamiliesStore(deps: {
           if (!next.delete(id)) next.add(id);
           return expectRouteWrite(
             await writer.apply([{ path: ["excludedIds"], value: [...next] }]),
-            "exclude failed",
           );
         },
         ["families"],
@@ -246,10 +242,7 @@ export function createFamiliesStore(deps: {
           const scope = registry.get(applied);
           if (!path || !scope) throw Error("plan needs a profile and applied scope");
           await bindDocument(registry.get(target));
-          return expectRouteWrite(
-            await writer.command("plan", { profilePath: path, scope }),
-            "plan failed",
-          );
+          return expectRouteWrite(await writer.command("plan", { profilePath: path, scope }));
         },
         ["families"],
       );
@@ -263,7 +256,6 @@ export function createFamiliesStore(deps: {
           await bindDocument(registry.get(target));
           return expectRouteWrite(
             await writer.command("apply", { expectedPlanHash: current.planHash }),
-            "apply failed",
           );
         },
         ["families", "matrix"],

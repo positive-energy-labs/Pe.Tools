@@ -82,7 +82,7 @@ function make(
     ),
     apply: async (patches) => {
       writes.push(patches);
-      return options.applyResult ?? { ok: true };
+      return options.applyResult ?? { ok: true, revision: 1 };
     },
     call: calls,
     now: () => new Date("2026-08-25T01:02:03.000Z"),
@@ -200,7 +200,7 @@ describe("ops route store", () => {
 
   it("routes binding write failures to the store failure atom", async () => {
     const { registry, store } = make(document(), {
-      applyResult: { ok: false, error: "binding write failed" },
+      applyResult: { ok: false, kind: "error", error: "binding write failed", hint: "" },
     });
 
     await expect(

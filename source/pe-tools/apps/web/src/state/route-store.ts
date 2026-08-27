@@ -30,22 +30,19 @@ export class VerbRefused extends Error {
   }
 }
 
+export type RouteWriteRefusal = Extract<RouteStateWriteResult, { ok: false }>;
+type RouteWriteOk = Extract<RouteStateWriteResult, { ok: true }>;
+
 export class RouteWriteFailure extends Error {
   readonly name = "RouteWriteFailure";
 
-  constructor(
-    readonly result: RouteStateWriteResult,
-    fallback: string,
-  ) {
-    super([result.error, result.hint].filter(Boolean).join(": ") || fallback);
+  constructor(readonly result: RouteWriteRefusal) {
+    super([result.error, result.hint].filter(Boolean).join(": "));
   }
 }
 
-export function expectRouteWrite(
-  result: RouteStateWriteResult,
-  fallback: string,
-): RouteStateWriteResult {
-  if (!result.ok) throw new RouteWriteFailure(result, fallback);
+export function expectRouteWrite(result: RouteStateWriteResult): RouteWriteOk {
+  if (!result.ok) throw new RouteWriteFailure(result);
   return result;
 }
 
@@ -112,10 +109,8 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     );
     try {
       const value = await work();
-      if (typeof value === "object" && value !== null && "ok" in value && value.ok === false) {
-        const result = value as RouteStateWriteResult;
-        throw new RouteWriteFailure(result, `${id} failed`);
-      }
+      if (typeof value === "object" && value !== null && "ok" in value && value.ok === false)
+        throw new RouteWriteFailure(value as unknown as RouteWriteRefusal);
       const text =
         typeof value === "string"
           ? value
@@ -131,7 +126,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
       return value;
     } catch (cause) {
       const hostFailure = {
-        kind: cause instanceof RouteWriteFailure ? (cause.result.kind ?? "error") : "error",
+        kind: cause instanceof RouteWriteFailure ? cause.result.kind : "error",
         verb: id,
         message: cause instanceof Error ? cause.message : String(cause),
       } as const;
@@ -378,6 +373,16 @@ export function docAtom<S extends RouteStateSpec<any>>(
   return routeAtom(new RouteAtomKey(spec, scope));
 }
 
+/** A refusal the browser itself produces; the server's refusals arrive typed already. */
+export const fail = (error: string, kind: RouteWriteKind, hint = ""): RouteWriteRefusal => ({
+  ok: false,
+  kind,
+  error,
+  hint,
+});
+
+const notHydrated = fail("route document is not hydrated", "refused");
+
 export function docWriter<S extends RouteStateSpec<any>>(
   spec: S,
   scope: Scope,
@@ -395,24 +400,14 @@ export function docWriter<S extends RouteStateSpec<any>>(
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      const result = ((await response
-        .json()
-        .catch(() => null)) as RouteStateWriteResult | null) ?? {
-        ok: false,
-        kind: "error",
-        error: `${operation} failed (${response.status})`,
-      };
-      if (result.ok && Number.isInteger(result.revision))
-        lastWrittenRevision = Math.max(lastWrittenRevision ?? -1, result.revision!);
-      else if (result.kind === "refused" && result.code === "stale_revision")
-        registry.set(routeConflictAtom, true);
+      const result =
+        ((await response.json().catch(() => null)) as RouteStateWriteResult | null) ??
+        fail(`${operation} failed (${response.status})`, "error");
+      if (result.ok) lastWrittenRevision = Math.max(lastWrittenRevision ?? -1, result.revision);
+      else if (result.code === "stale_revision") registry.set(routeConflictAtom, true);
       return result;
     } catch (cause) {
-      return {
-        ok: false,
-        kind: "error",
-        error: cause instanceof Error ? cause.message : String(cause),
-      };
+      return fail(cause instanceof Error ? cause.message : String(cause), "error");
     }
   };
   const writeRevision = (explicit?: number): number | null => {
@@ -423,22 +418,12 @@ export function docWriter<S extends RouteStateSpec<any>>(
   return {
     apply: (patches: RouteStatePatch[], expectedRevision?: number) => {
       const revision = writeRevision(expectedRevision);
-      if (revision === null)
-        return Promise.resolve<RouteStateWriteResult>({
-          ok: false,
-          kind: "refused",
-          error: "route document is not hydrated",
-        });
+      if (revision === null) return Promise.resolve(notHydrated);
       return write("apply", { patches, expectedRevision: revision });
     },
     command: (name: keyof S["commands"] & string, input?: unknown) => {
       const revision = writeRevision();
-      if (revision === null)
-        return Promise.resolve<RouteStateWriteResult>({
-          ok: false,
-          kind: "refused",
-          error: "route document is not hydrated",
-        });
+      if (revision === null) return Promise.resolve(notHydrated);
       return write("command", {
         command: name,
         input: input ?? {},

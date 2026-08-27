@@ -270,10 +270,7 @@ export function createFamilyStore(deps: {
   const writer = {
     async command(name: CommandName, input: unknown) {
       if (name === "open") {
-        expectRouteWrite(
-          await writers.settingsCommand("open", input as Record<string, unknown>),
-          "open failed",
-        );
+        expectRouteWrite(await writers.settingsCommand("open", input as Record<string, unknown>));
         return "opened";
       }
       if (name === "capture") {
@@ -282,7 +279,6 @@ export function createFamilyStore(deps: {
             "capture_evidence",
             input as Record<string, unknown> | undefined,
           ),
-          "capture failed",
         );
         return "capture";
       }
@@ -301,8 +297,8 @@ export function createFamilyStore(deps: {
         );
         if (!patches.length)
           return `Nothing to write - every value already matches ${current.document.relativePath}.`;
-        expectRouteWrite(await writers.settingsApply(patches), "the document rejected it");
-        expectRouteWrite(await writers.settingsCommand("save"), "save failed");
+        expectRouteWrite(await writers.settingsApply(patches));
+        expectRouteWrite(await writers.settingsCommand("save"));
         return `saved ${current.document.relativePath} - ${patches.length} field${patches.length === 1 ? "" : "s"} written`;
       }
       const refusal = buildRefusal();
@@ -312,7 +308,6 @@ export function createFamilyStore(deps: {
         await writers.familyCommand("build_evidence", {
           documentId: { ...FAMILY_MODULE, relativePath: current.relativePath },
         }),
-        "build failed",
       );
       const receipt = readBuildReceipt(result.result);
       if (receipt == null) return BUILD_OUTCOME_UNKNOWN;
@@ -388,7 +383,6 @@ export function createFamilyStore(deps: {
                 value: { id: relativePath, label: relativePath, at: deps.scope.documentAddress },
               },
             ]),
-            "profile bind failed",
           );
           return writer.command("open", { documentId: { ...FAMILY_MODULE, relativePath } });
         },
@@ -410,7 +404,6 @@ export function createFamilyStore(deps: {
                   : undefined,
               },
             ]),
-            "bind failed",
           );
           return `bound ${nextTarget}`;
         },

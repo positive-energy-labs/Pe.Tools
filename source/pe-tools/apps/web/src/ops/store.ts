@@ -79,7 +79,7 @@ export function createOpsStore(deps: {
       ),
     );
   const expectOk = (value: RouteStateWriteResult) => {
-    if (!value.ok) throw Error(value.hint ?? value.error ?? "route document write failed");
+    if (!value.ok) throw Error(value.error);
     return value;
   };
   const persistBinding = async (

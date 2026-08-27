@@ -116,7 +116,7 @@ function createRouteStateStore<TSchema extends z.ZodType>(
 }
 
 function routeWriteFailure(result: RouteStateWriteResult): string | null {
-  if (!result.ok) return result.error ?? result.hint ?? "Route update failed.";
+  if (!result.ok) return result.error;
   const failures =
     result.result && typeof result.result === "object"
       ? (result.result as { failures?: unknown }).failures

@@ -83,7 +83,8 @@ const createStore = (
     async apply(patches: RouteStatePatch[]) {
       observe?.(patches);
       const current = registry.get(publishedSlice);
-      if (!AsyncResult.isSuccess(current) || !current.value.doc) return { ok: false as const };
+      if (!AsyncResult.isSuccess(current) || !current.value.doc)
+        return { ok: false as const, kind: "error" as const, error: "not hydrated", hint: "" };
       const document = structuredClone(current.value.doc);
       for (const patch of patches) {
         if (patch.path[0] === "bindings")
@@ -94,10 +95,10 @@ const createStore = (
           document.staged = patch.value as TakeoffsRouteDocument["staged"];
       }
       publish(document);
-      return { ok: true as const };
+      return { ok: true as const, revision: 1 };
     },
     async command() {
-      return { ok: true as const };
+      return { ok: true as const, revision: 1 };
     },
   };
   const store = createTakeoffStore({

@@ -134,14 +134,11 @@ function ParameterLinksWorkspace({
         draftBasisRef.current ?? undefined,
       );
       if (!result.ok) {
-        setOutcome({
-          kind: result.kind ?? "error",
-          text: result.error ?? result.hint ?? "saving the draft failed",
-        });
+        setOutcome({ kind: result.kind, text: result.error });
         return false;
       }
       syncedRef.current = JSON.stringify(profile);
-      if (Number.isInteger(result.revision)) draftBasisRef.current = result.revision!;
+      draftBasisRef.current = result.revision;
       return true;
     },
     [route.apply],
@@ -154,11 +151,7 @@ function ParameterLinksWorkspace({
       try {
         if (name === "refresh") {
           const result = await route.command("refresh", {});
-          if (!result.ok)
-            setOutcome({
-              kind: result.kind ?? "error",
-              text: result.error ?? result.hint ?? "refresh failed",
-            });
+          if (!result.ok) setOutcome({ kind: result.kind, text: result.error });
           return;
         }
         // preview/apply need the reviewed profile persisted first (the command guard
@@ -168,10 +161,7 @@ function ParameterLinksWorkspace({
         if (name === "preview" && hasUnsavedEdits && !(await saveDraft(profile))) return;
         const result = await route.command(name, { profile });
         if (!result.ok) {
-          setOutcome({
-            kind: result.kind ?? "error",
-            text: result.error ?? result.hint ?? `${name} refused`,
-          });
+          setOutcome({ kind: result.kind, text: result.error });
           return;
         }
         if (name === "preview") {

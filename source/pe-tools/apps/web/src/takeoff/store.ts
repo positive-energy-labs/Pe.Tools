@@ -527,7 +527,7 @@ export function createTakeoffStore(deps: {
             views.value,
             async (snapshot) => {
               const result = await takeoffsWriter.apply([{ path: ["snapshot"], value: snapshot }]);
-              expectRouteWrite(result, "snapshot write failed");
+              expectRouteWrite(result);
             },
           ),
         );
