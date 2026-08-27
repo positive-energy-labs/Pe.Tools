@@ -272,6 +272,24 @@ describe("family route store", () => {
     expect(registry.get(store.atoms.armedBuild)).not.toBeNull();
   });
 
+  it("keeps a refused build in the build strip outcome", async () => {
+    const testFixture = fixture();
+    const writers = {
+      ...testFixture.writers,
+      familyCommand: async () =>
+        ({ ok: false, kind: "refused", error: "build moved", hint: "re-read" }) satisfies RouteStateWriteResult,
+    };
+    const { registry, store } = make({ ...testFixture, writers });
+    await tick();
+    store.actions.armBuild();
+
+    await expect(store.actions.build()).rejects.toThrow("build moved: re-read");
+    expect(registry.get(store.atoms.buildOutcome)).toEqual({
+      code: "host",
+      says: "build moved: re-read",
+    });
+  });
+
   it("projects profile feed failures", async () => {
     const testFixture = fixture();
     const host: FamilyHost = {
