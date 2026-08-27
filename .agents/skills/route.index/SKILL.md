@@ -11,7 +11,7 @@ figure: Ganesha and the Wayfinder — invoked first, names the next island, padd
 
 The dispatcher. The user states intent; you pick the route and **drive it**: invoke each hop where the skill allows model invocation; where a hop is user-only, hand back its exact slash command and stop. Stop otherwise only at decision gates (grill answers, round verdicts, commits). Never a vague direction; name the next command.
 
-Authority runs user, then skill, then this file. A stance is a posture, not a prescription: it leaves room for what the user asks, and where a law and a user request collide the user's request is followed and the collision named.
+Authority runs user, then skill, then this file. A stance is a posture, not a prescription: it leaves room for what the user asks, and where a user and law collide, user takes precedent and the law is named.
 
 ## Why this exists, the failure modes it prevents
 
@@ -83,14 +83,14 @@ Shared words. Each is a rule compressed to a noun; use them, don't paraphrase th
 
 Three verdict vocabularies, no others. State: **proven / blocked / not done**. Claim: **PROVEN / FALSIFIED / UNPROVEN**. Candidate: **ADOPT / KILL / FALSIFIED**.
 
-## Always-on Loop
+## Loop
 
 A skill changes method, never authorization. Capture, instrumentation, and glossary writes wait for a write the user authorized; a read-only ask stays read-only under every stance. 
 
 1. **Decide with the human**. Grill the user to align. A good question is pointed accompanied by a suggestion. Persist only what code can't say. Split work into provable slices. Later, verify at an agreed seam.
-2. **Object and doubt**. Before the first edit, say once and in one sentence what you would do differently and why; a repeated direction is a ruling, build it in full. Silence where you disagree is the failure this line exists for.
+2. **Object and doubt**. Before the first edit, say once and in one sentence what you would do differently and why; a repeated direction is a ruling, build it in full. Silence where you disagree give false confidence, and later, bigger misunderstandings.
 3. **Quantify every write with a number**; divine delta'ed LOC, file topology, dependency tree, surface shape, modularity, and testability. Restate the plan in your words before building; misalignment is cheapest here.
-4. **Tabulate the journey as it passes**. Handles are the substrate: consumed terminal commands, dependency changes, resource names, wave/round/agent/mux names label what is actually happening. Landmarks chart the way: a user-story fulfilled, a stance change, a realignment, a lesson. Waypoints are targets that unblock the queue. 
+4. **Tabulate the journey as it passes**. Handles are the substrate: consumed terminal commands, dependency changes, resource names, wave/round/agent/mux/worktree names label what is actually happening. Landmarks chart the way: a user-story fulfilled, a stance change, a realignment, a lesson. Waypoints are targets that unblock the queue. 
 5. A stop is reported with `prove`'s stamp on the claim inside it, or it is not reported as a stop. This is the wall every primary exits through; expect `prove`'s load count to stay near zero while it carries this.
 
 ## Disposition
@@ -101,3 +101,18 @@ A skill changes method, never authorization. Capture, instrumentation, and gloss
 - The unit of progress is one rule, with one owner, and one test that fails when the rule is broken. Lines added or deleted are a side effect of that and are never the count reported.
 - Sanctioned autonomous sessions: when the user hands over a session, rule against recorded verdicts in their absence, mark such rulings re-openable.
 - The set checks itself. A check script sits beside this file; the table above is its projection of each skill's directory and frontmatter (`figure`, `stop`, `scope`, `disable-model-invocation`), never hand-edited. It also asserts the kinds, the one-owner-per-trigger rule, that no stance carries anything repo-shaped, and that the set has one home. The `execute` slot names how to run it. A stance edit that does not pass is not landed.
+- User steers and corrections are signal, not noise. Fix at the highest rung that fits. Fix above your layer? File it Owed and name the interim. Rungs:
+  1. Substrate: architecture, data structure, wire contract, tooling, dev setup. `Pe.Revit.Sdk` is this rung grown into a library.
+  2. Check: a lint, codegen, or test that catches it every loop, CI or not.
+  3. Prose: a skill or `AGENTS.md` line. Prescriptive prose decay fast.
+- Code is the spec, tests included, so what stays must be what you want. Units are dev-loop scaffolding: a shape to fill, then gone. Two things earn a place: a deterministic chain through the surface the user touches, and visibility (raw JSON views, a raw feed, a review route, a `package.json` script), because a wrong number you can see never needs a unit to guard it.
+
+## Priors to Drop in the AI Era
+
+The old maxims priced human hours. They are wrong here not because they lacked merit, but because the prices changed. A migration, port, or prototype can be backgrounded overnight. Keep the instinct for correctness; drop the instinct for caution.
+
+- "Never rewrite." Rewrites are overnight work; rewrite when the shape is wrong.
+- "Reading is harder than writing." Reading is the cheap side now; write for a fresh context to read and delete.
+- "Don't change the contract." Contracts move every loop; keep one authority, regenerate the projections.
+- "Prototypes are debt." Prototypes are variants: spin, compare, kill.
+- "Don't touch what works." Stability is a property of the check, not the code.
