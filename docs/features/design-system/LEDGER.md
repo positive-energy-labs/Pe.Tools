@@ -10,6 +10,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Decided
 
+- 2026-08-27 — [Tailwind normalization final report](./NORMALIZATION-2026-08-27.html) is complete at `d352829`: foundation, guard repairs, 285 route + 610 shared renames, 18 spacing projections; route arbitrary debt is 57 and the raw semantic frontier is 0.
 - 2026-08-27 — Tailwind is the authoring language; the app stays unprefixed; only independently compiled portable CSS uses `pe:`; `[data-pe]` owns semantic HTML defaults; no second layout DSL.
 
 - 2026-08-24 — The targeting manifest is canon (`apps/web/src/targeting/`): a route declares a static `Product` (links forest · stages of demanding verbs · panes), supplies one `Feed` per link from its queries, and keeps bindings in URL search; `TargetingHead` renders it as a sentence of TERMINALS only (links with `dir`); trunks (world › rvt, folder) never print — they are the picker's crumbs, and terminals under one trunk share its binding. The verb rail expands in place (`▾`) into verb · needs · state. Seams derive (`feed.options === null`, `run === null`), refusals derive (unwired → unbound → stale → gate). `/takeoffs` is the reference adoption; the round-5 proto stays on main until every route converges.
