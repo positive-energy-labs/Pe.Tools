@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { toolTitle } from "@pe/agent-contracts";
 import { ThreadPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
@@ -101,7 +101,9 @@ export function Lens({
   const messages = useThreadMessages();
   const moments = toMoments(messages);
   const traceCells = buildTraceCells(state);
-  const breakdown = selectBreakdown(state);
+  // Memoized on `state`: `useCacheView` keys an effect on this object's identity, so a fresh
+  // breakdown per render (the Lens re-renders on every moment mount) is an infinite setState loop.
+  const breakdown = useMemo(() => selectBreakdown(state), [state]);
   const userTurns = moments.reduce(
     (count, moment) => (moment.role === "user" ? count + 1 : count),
     0,
@@ -727,7 +729,6 @@ function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "tra
           ) : null}
         </ArtifactFrame>
       ) : null}
-
     </div>
   );
 }
@@ -893,4 +894,3 @@ const TARGET_RAIL_COLOR: Record<string, string> = {
   dangling: "var(--r-alarm)",
   muted: "var(--r-ink-mute)",
 };
-

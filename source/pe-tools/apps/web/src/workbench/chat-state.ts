@@ -60,8 +60,11 @@ export interface ChatState {
   access: AccessLevel;
   /**
    * Raw AgentController session-state map — route slices live under `route:*` keys.
-   * ponytail: shim. `session.state()` returns thread/mode/model/tasks and NOT this map, so
-   * `state_changed` is the only read that exists. Drop when native grows a state read.
+   * ponytail: shim, and currently a shim with no reader. `session.state()` returns
+   * thread/mode/model/tasks and NOT this map, so `state_changed` is the only read that exists —
+   * but the route panes take their slice from the route-store kit instead
+   * (`route-chat-plugins.tsx` overrides the `sessionState` prop with `route.slice`). Kept per the
+   * wave ruling; delete it with the `state_changed` arm once that stays true.
    */
   sessionValues: Record<string, unknown>;
   errors: string[];
@@ -243,7 +246,11 @@ export function selectApprovals(display: ChatDisplay): Approval[] {
   const approvals: Approval[] = [];
   const pending = display.pendingApproval;
   if (pending)
-    approvals.push({ toolCallId: pending.toolCallId, toolName: pending.toolName, suspended: false });
+    approvals.push({
+      toolCallId: pending.toolCallId,
+      toolName: pending.toolName,
+      suspended: false,
+    });
   for (const suspension of Object.values(display.pendingSuspensions ?? {})) {
     approvals.push({
       toolCallId: suspension.toolCallId,
@@ -488,7 +495,9 @@ function breakdownSkills(skills: unknown[] | undefined): ContextItem[] {
         src: ".claude/skills",
         tokens: typeof approx === "number" ? approx : undefined,
         body:
-          readString(record?.body) ?? readString(record?.content) ?? readString(record?.description),
+          readString(record?.body) ??
+          readString(record?.content) ??
+          readString(record?.description),
         state: "on-demand",
       },
     ];

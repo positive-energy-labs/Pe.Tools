@@ -236,7 +236,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         await api.session.sendMessage({ content: prompt, files });
       } catch (caught) {
         setError(errorMessage(caught));
-        setChat((previous) => ({ ...previous, display: { ...previous.display, isRunning: false } }));
+        setChat((previous) => ({
+          ...previous,
+          display: { ...previous.display, isRunning: false },
+        }));
       }
     },
     [api],
@@ -347,29 +350,46 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const operationError = error ?? chat.errors[0];
-  // No memo: `chat` changes on every event anyway, so a dep array over it buys nothing.
-  const context: WorkbenchContextValue = {
-    store,
-    config,
-    chat,
-    loading,
-    error,
-    threads,
-    currentThreadId,
-    revit: info?.capabilities.revit,
-    world: info?.world,
-    isRunning,
-    operationError,
-    sendPrompt,
-    cancel,
-    newThread,
-    forkThread,
-    openThread,
-    deleteThread,
-    resolveApproval,
-    setModel,
-    setAccessLevel,
-  };
+  // Memoized on `chat` (which changes per event anyway): a fresh context object per render
+  // re-renders every consumer, and the Lens re-renders itself on each moment mount — the two
+  // together are an infinite loop, not just churn.
+  const context = useMemo<WorkbenchContextValue>(
+    () => ({
+      store,
+      config,
+      chat,
+      loading,
+      error,
+      threads,
+      currentThreadId,
+      revit: info?.capabilities.revit,
+      world: info?.world,
+      isRunning,
+      operationError,
+      sendPrompt,
+      cancel,
+      newThread,
+      forkThread,
+      openThread,
+      deleteThread,
+      resolveApproval,
+      setModel,
+      setAccessLevel,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      chat,
+      loading,
+      error,
+      threads,
+      currentThreadId,
+      info,
+      isRunning,
+      operationError,
+      store,
+      config,
+    ],
+  );
 
   return <WorkbenchContext.Provider value={context}>{children}</WorkbenchContext.Provider>;
 }
