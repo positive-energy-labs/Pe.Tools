@@ -154,7 +154,7 @@ function Surface({
       data-mode={mode}
       data-plugin={plugin}
       style={{ "--side": `${sideSize}px` } as React.CSSProperties}
-      className="fixed inset-0 bg-background font-pe text-foreground"
+      className="fixed inset-0 bg-page font-pe text-ink"
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}

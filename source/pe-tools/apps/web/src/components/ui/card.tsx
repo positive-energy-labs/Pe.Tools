@@ -16,7 +16,7 @@ function Card({
     defaultTagName: "div",
     props: {
       "data-slot": "card",
-      className: cn("rounded-lg border border-border bg-card text-card-foreground", className),
+      className: cn("rounded-lg border border-line bg-artifact text-ink", className),
       ...props,
     },
   });
@@ -39,7 +39,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"h3">) {
   return (
     <h3
       data-slot="card-title"
-      className={cn("text-sm font-semibold text-foreground", className)}
+      className={cn("text-sm font-semibold text-ink", className)}
       {...props}
     />
   );
@@ -49,7 +49,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"p">) {
   return (
     <p
       data-slot="card-description"
-      className={cn("text-xs text-muted-foreground", className)}
+      className={cn("text-xs text-ink-2", className)}
       {...props}
     />
   );

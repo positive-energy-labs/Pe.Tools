@@ -91,7 +91,7 @@ export function PickList({
   let index = -1;
   return (
     <div className={cn("flex min-h-0 flex-col", className)} onKeyDown={onKeyDown}>
-      <div className="shrink-0 border-b border-border p-2">
+      <div className="shrink-0 border-b border-line p-2">
         <Input
           value={query}
           onChange={(event) => {
@@ -105,16 +105,16 @@ export function PickList({
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1" role="listbox">
         {items.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-muted-foreground">{emptyNote}</div>
+          <div className="px-3 py-2 text-xs text-ink-2">{emptyNote}</div>
         ) : flat.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-muted-foreground">
+          <div className="px-3 py-2 text-xs text-ink-2">
             Nothing matches “{query.trim()}”.
           </div>
         ) : (
           [...groups.entries()].map(([group, groupItems]) => (
             <div key={group} className="mb-1">
               {group && (
-                <p className="t-label t-upper px-3 pb-0.5 pt-2 text-muted-foreground">{group}</p>
+                <p className="t-label t-upper px-3 pb-0.5 pt-2 text-ink-2">{group}</p>
               )}
               {groupItems.map((item) => {
                 index += 1;
@@ -137,15 +137,15 @@ export function PickList({
                       // Selection is a FILL, never a hue: the select rung plus a neutral
                       // ink locate mark. No weight — chrome never buys weight.
                       active
-                        ? "border-ink bg-select text-foreground"
-                        : "border-transparent text-foreground",
-                      cursored && !active && "bg-muted",
+                        ? "border-ink bg-select text-ink"
+                        : "border-transparent text-ink",
+                      cursored && !active && "bg-recess",
                       disabled && "opacity-50",
                     )}
                   >
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     {item.meta != null && (
-                      <span className="face-mono t-caption shrink-0 text-muted-foreground">
+                      <span className="face-mono t-caption shrink-0 text-ink-2">
                         {item.meta}
                       </span>
                     )}

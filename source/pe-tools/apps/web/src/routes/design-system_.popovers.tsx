@@ -99,8 +99,8 @@ function FacetFilterSpecimen() {
           className={cn(
             "face-mono t-value flex h-5 w-32 items-center justify-between gap-0.5 rounded-md border bg-transparent px-1 font-normal outline-none",
             selected.value
-              ? "border-primary/40 bg-primary/[0.06] text-foreground"
-              : "border-line text-muted-foreground",
+              ? "border-commit/40 bg-commit/[0.06] text-ink"
+              : "border-line text-ink-2",
           )}
         >
           <span className="truncate normal-case">{selected.label}</span>
@@ -140,7 +140,7 @@ function PickerChipSpecimen() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 max-w-40 justify-between gap-1 px-2 text-muted-foreground"
+              className="h-7 max-w-40 justify-between gap-1 px-2 text-ink-2"
             />
           }
         >
@@ -153,9 +153,9 @@ function PickerChipSpecimen() {
         <ComboboxList>
           {(option: (typeof CATEGORY_OPTIONS)[number]) => (
             <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
-              <span className="text-foreground">{option.label}</span>
+              <span className="text-ink">{option.label}</span>
               {option.description ? (
-                <span className="text-xs text-muted-foreground">{option.description}</span>
+                <span className="text-xs text-ink-2">{option.description}</span>
               ) : null}
             </ComboboxItem>
           )}
@@ -232,7 +232,7 @@ const SPECIMENS: readonly Specimen[] = [
       "FIXED IN SOURCE — caller intent is now `[--popup-min-width:14rem]`; shared CSS composes it with the anchor floor and viewport ceiling while permitting content growth. Browser readability remains pending.",
       'BROWSER CHECK — with `align="end"`, does the popup remain right-aligned for this chip at each viewport position? Keep this caller alignment rather than forcing a global alignment.',
       "same private-function problem: `Picker` is internal to control-chips.tsx.",
-      "the trigger is a shadcn ghost Button on `--muted-foreground` while the facet filter is a bare `ComboboxTrigger` on `--pe-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
+      "the trigger is a shadcn ghost Button on `--pe-ink-2` while the facet filter is a bare `ComboboxTrigger` on `--pe-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
     ],
     render: () => <PickerChipSpecimen />,
   },
@@ -245,7 +245,7 @@ const SPECIMENS: readonly Specimen[] = [
     defects: [
       "FIXED IN SOURCE — Select and Combobox now share the same artifact ground, radius, ring, ink, and `--pe-on` contract; both retain their Base UI width behavior and caller alignment/overflow choices.",
       "BROWSER CHECK — at the bottom-left corner, where does the selected-item positioner place the popup, and does it remain within the available viewport without unintended overlap? This wave preserves the Base UI positioning contract.",
-      "FIXED IN SOURCE — Select no longer uses the old `--popover`/`--border` vocabulary; visual retint and contrast still require the browser gate.",
+      "FIXED IN SOURCE — Select no longer uses the old `--pe-artifact`/`--pe-line` vocabulary; visual retint and contrast still require the browser gate.",
     ],
     render: () => <SelectSpecimen />,
   },
@@ -257,7 +257,7 @@ const SPECIMENS: readonly Specimen[] = [
     defects: [
       "FIXED IN SOURCE — the shared `w-max` plus anchor-floor law lets this option list grow past the input to readable content width, bounded by available viewport width. Browser sizing remains pending.",
       "no explicit anchor is passed, unlike BOTH other combobox consumers, which each wrote an anchor `div` with a comment explaining that the in-popup input must not be the positioner anchor. Nothing in the API says which shape needs it — the knowledge lives in two ponytail comments.",
-      "BROWSER CHECK — at the bottom edge, does the popup flip as intended? Separately compare the description styles: this consumer uses `text-[10px] text-muted-foreground` while the picker chip uses `text-xs text-muted-foreground`.",
+      "BROWSER CHECK — at the bottom edge, does the popup flip as intended? Separately compare the description styles: this consumer uses `text-[10px] text-ink-2` while the picker chip uses `text-xs text-ink-2`.",
     ],
     render: () => <FieldSelectSpecimen />,
   },

@@ -28,9 +28,9 @@ function DocLabRoute() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <h1 className="t-title font-pe-display tracking-tight text-foreground">Doc Lab</h1>
+          <h1 className="t-title font-pe-display tracking-tight text-ink">Doc Lab</h1>
           <HelpTip>
             The grounded-document engine in isolation. Parse a PDF: markdown blocks land on the
             left, the original pages on the right. Hovering either side highlights (and scrolls) the
@@ -66,10 +66,10 @@ function DocLabRoute() {
         </div>
       </header>
 
-      <div className="flex min-h-8 shrink-0 items-center gap-3 border-b border-border px-4 py-1">
+      <div className="flex min-h-8 shrink-0 items-center gap-3 border-b border-line px-4 py-1">
         {focused ? (
           <>
-            <span className="t-label face-mono truncate text-muted-foreground">
+            <span className="t-label face-mono truncate text-ink-2">
               {engine.pinned ? "pinned" : "focused"} · page {focused.page} · {focused.kind} ·{" "}
               {focused.id}
             </span>

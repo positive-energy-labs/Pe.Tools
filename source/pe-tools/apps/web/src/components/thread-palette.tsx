@@ -164,7 +164,7 @@ export function ThreadPalette({
     >
       <CommandInput placeholder="Search threads by title or folder…" className="h-12 text-[15px]" />
       <CommandList className="max-h-[60vh] p-1.5">
-        <CommandEmpty className="py-10 text-center text-sm text-muted-foreground">
+        <CommandEmpty className="py-10 text-center text-sm text-ink-2">
           No threads match.
         </CommandEmpty>
         <CommandItem

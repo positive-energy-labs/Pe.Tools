@@ -791,7 +791,7 @@ function ColFilter({
         <ComboboxList>
           {(choice: FacetChoice) => (
             <ComboboxItem key={choice.value ?? "\u0000all"} value={choice} className="pr-7">
-              <span className={cn("truncate", choice.value === null && "text-muted-foreground")}>
+              <span className={cn("truncate", choice.value === null && "text-ink-2")}>
                 {choice.label}
               </span>
             </ComboboxItem>

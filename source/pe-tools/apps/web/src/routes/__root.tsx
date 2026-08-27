@@ -55,7 +55,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
-      <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-accent selection:text-accent-foreground">
+      <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-select selection:text-ink">
         <RegistryContext.Provider value={appAtomRegistry}>
           {children}
           <TanStackDevtools

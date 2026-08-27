@@ -147,7 +147,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
           />
         ) : (
           <>
-            <FileUp className="size-6 text-muted-foreground" />
+            <FileUp className="size-6 text-ink-2" />
             <EmptyState story="scope" exit="drop a PDF here, paste a URL below, or load the sample">
               no document loaded
             </EmptyState>
@@ -168,7 +168,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
       {!parsing && (
         <div className="flex w-full items-center gap-1.5">
           <div className="relative flex-1">
-            <Link2 className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Link2 className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-2" />
             <Input
               type="url"
               value={url}
@@ -211,13 +211,13 @@ function MarkdownPane({
 
   return (
     <div
-      className="min-w-0 flex-1 overflow-y-auto border-r border-border"
+      className="min-w-0 flex-1 overflow-y-auto border-r border-line"
       onMouseLeave={() => engine.hoverBlock(null, "markdown")}
     >
       <div className="flex flex-col gap-1 p-3">
         {doc.pages.map((page) => (
           <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
-            <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-background/95 px-3 py-1 text-muted-foreground backdrop-blur">
+            <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-page/95 px-3 py-1 text-ink-2 backdrop-blur">
               Page {page.page}
             </p>
             <div className="flex flex-col gap-1">
@@ -254,7 +254,7 @@ function ImagesPane({
 
   return (
     <div
-      className="min-w-0 flex-1 overflow-y-auto border-r border-border"
+      className="min-w-0 flex-1 overflow-y-auto border-r border-line"
       onMouseLeave={() => engine.hoverBlock(null, "image")}
     >
       <div className="flex flex-col gap-1 p-3">
@@ -263,7 +263,7 @@ function ImagesPane({
           if (images.length === 0) return null;
           return (
             <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
-              <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-background/95 px-3 py-1 text-muted-foreground backdrop-blur">
+              <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-page/95 px-3 py-1 text-ink-2 backdrop-blur">
                 Page {page.page}
               </p>
               <div className="flex flex-col gap-2">
@@ -280,7 +280,7 @@ function ImagesPane({
                       className={cn(
                         "group flex flex-col overflow-hidden rounded-md border bg-white text-left",
                         // Over imagery a fill cannot separate: the locate mark is ink (R13a).
-                        isFocused ? "border-ink" : "border-border",
+                        isFocused ? "border-ink" : "border-line",
                         !isFocused && VEIL_HOVER,
                       )}
                     >
@@ -290,8 +290,8 @@ function ImagesPane({
                         loading="lazy"
                         className="max-h-72 w-full object-contain"
                       />
-                      <span className="flex items-center gap-1.5 border-t border-border bg-recess px-1.5 py-0.5">
-                        <span className="t-caption face-mono text-muted-foreground">
+                      <span className="flex items-center gap-1.5 border-t border-line bg-recess px-1.5 py-0.5">
+                        <span className="t-caption face-mono text-ink-2">
                           {image.category}
                         </span>
                         {isPinned && <Pin className="size-3 text-ink" />}
@@ -338,7 +338,7 @@ function MarkdownBlock({
       )}
     >
       <div className="mb-0.5 flex items-center gap-1.5">
-        <span className="t-caption face-mono text-muted-foreground">{block.kind}</span>
+        <span className="t-caption face-mono text-ink-2">{block.kind}</span>
         {!groundable && (
           <span
             className="t-caption italic text-ink-mute"
@@ -409,9 +409,9 @@ function PageCanvas({
 
   return (
     <div ref={laneAnchorRef(refs, pageKey(page.page))}>
-      <p className="t-label t-upper mb-1 text-muted-foreground">Page {page.page}</p>
+      <p className="t-label t-upper mb-1 text-ink-2">Page {page.page}</p>
       <div
-        className="relative overflow-hidden rounded-md border border-border bg-white"
+        className="relative overflow-hidden rounded-md border border-line bg-white"
         style={{ aspectRatio: `${page.width} / ${page.height}` }}
       >
         {page.screenshotUrl && (
@@ -460,7 +460,7 @@ function PageCanvas({
                       ? "border-caution"
                       : cn("border-transparent hover:border-ink", VEIL_HOVER)
                     : // Wireframe mode (no screenshot): keep boxes faintly visible.
-                      cn("border-border hover:border-ink", VEIL_HOVER),
+                      cn("border-line hover:border-ink", VEIL_HOVER),
               )}
             >
               {!page.screenshotUrl && (

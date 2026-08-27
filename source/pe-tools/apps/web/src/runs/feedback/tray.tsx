@@ -41,7 +41,7 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
           label="✕"
           reason="Remove this item from the staged set."
           onClick={() => fb.unstage(item.key)}
-          className="face-mono t-caption ml-auto text-muted-foreground hover:text-foreground"
+          className="face-mono t-caption ml-auto text-ink-2 hover:text-ink"
         />
       </div>
       <FlagChips item={item} />
@@ -59,13 +59,13 @@ export function Tray(props: {
 }) {
   const { items, loadedSet } = useFb();
   return (
-    <div className="flex size-full min-h-0 flex-col bg-background">
+    <div className="flex size-full min-h-0 flex-col bg-page">
       <div
         className="flex h-8 shrink-0 items-center gap-2 border-b px-2"
         style={{ borderColor: "var(--pe-line-2)" }}
       >
-        <span className="t-label t-upper text-muted-foreground">staging</span>
-        <span className="face-mono t-caption t-label text-muted-foreground">
+        <span className="t-label t-upper text-ink-2">staging</span>
+        <span className="face-mono t-caption t-label text-ink-2">
           {items.length === 0 ? "empty" : `${items.length} staged`}
         </span>
         <span className="ml-auto flex items-center gap-1.5">
@@ -82,8 +82,8 @@ export function Tray(props: {
               className={cn(
                 "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
                 props.review
-                  ? "bg-secondary text-secondary-foreground"
-                  : "border text-muted-foreground hover:text-foreground",
+                  ? "bg-recess text-ink"
+                  : "border text-ink-2 hover:text-ink",
               )}
               style={props.review ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
@@ -93,14 +93,14 @@ export function Tray(props: {
               label="clear"
               reason="Unstage everything."
               onClick={() => fb.clear()}
-              className="face-mono t-caption text-muted-foreground hover:text-foreground"
+              className="face-mono t-caption text-ink-2 hover:text-ink"
             />
           )}
         </span>
       </div>
       {loadedSet && (
         <div
-          className="face-mono t-caption shrink-0 truncate border-b px-2 py-1 text-muted-foreground"
+          className="face-mono t-caption shrink-0 truncate border-b px-2 py-1 text-ink-2"
           style={{ borderColor: "var(--pe-line-2)" }}
           title="This staging was rehydrated from an export manifest — it is editable; exporting mints a NEW stamp, the loaded set is never overwritten."
         >
@@ -109,8 +109,8 @@ export function Tray(props: {
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items.length === 0 ? (
-          <p className="face-mono t-caption px-2 py-3 t-label leading-relaxed text-muted-foreground">
-            Nothing staged. Hit <span className="text-foreground">＋ stage</span> on a zone card to
+          <p className="face-mono t-caption px-2 py-3 t-label leading-relaxed text-ink-2">
+            Nothing staged. Hit <span className="text-ink">＋ stage</span> on a zone card to
             pin its current A/B pair here; click rooms/residues on the staged B panel to flag them.
             Export writes PNGs + manifest.json + clip.txt and puts the block on the clipboard.
           </p>
@@ -139,7 +139,7 @@ export function TrayCollapsed(props: { count: number; onExpand: () => void }) {
       label={`▸ staging${props.count > 0 ? ` · ${props.count}` : ""}`}
       reason="Expand the staging tray."
       onClick={props.onExpand}
-      className="flex size-full flex-col items-center gap-2 bg-background pt-2 hover:bg-muted"
+      className="flex size-full flex-col items-center gap-2 bg-page pt-2 hover:bg-recess"
     />
   );
 }

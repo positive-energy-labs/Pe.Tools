@@ -19,7 +19,7 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
     <CommandPrimitive
       data-slot="command"
       className={cn(
-        "flex size-full flex-col overflow-hidden rounded-lg bg-popover p-1 text-popover-foreground",
+        "flex size-full flex-col overflow-hidden rounded-lg bg-artifact p-1 text-ink",
         className,
       )}
       {...props}
@@ -65,7 +65,7 @@ function CommandInput({
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
     <div data-slot="command-input-wrapper" className="p-1 pb-0">
-      <InputGroup className="h-8! bg-input/20 dark:bg-input/30">
+      <InputGroup className="h-8! bg-line/20 dark:bg-line/30">
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
@@ -117,7 +117,7 @@ function CommandGroup({
       data-slot="command-group"
       className={cn(
         // Group headings take the section-label voice (small-caps tracked sans).
-        "overflow-hidden p-1 text-foreground **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:text-[11px] **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:text-muted-foreground",
+        "overflow-hidden p-1 text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:text-[11px] **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:text-ink-2",
         className,
       )}
       {...props}
@@ -132,7 +132,7 @@ function CommandSeparator({
   return (
     <CommandPrimitive.Separator
       data-slot="command-separator"
-      className={cn("-mx-1 my-1 h-px bg-border/50", className)}
+      className={cn("-mx-1 my-1 h-px bg-line/50", className)}
       {...props}
     />
   );
@@ -151,7 +151,7 @@ function CommandItem({
         // FILL, never a hue (the select rung), plus a neutral ink left rule as the locate
         // mark — the rule keeps keyboard nav visible without spending the commit blue on
         // something that is not a write.
-        "group/command-item relative flex min-h-7 cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-1 text-[13px] outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-ink data-selected:bg-select data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-muted-foreground",
+        "group/command-item relative flex min-h-7 cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-1 text-[13px] outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-ink data-selected:bg-select data-selected:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-ink-2",
         className,
       )}
       {...props}
@@ -167,7 +167,7 @@ function CommandShortcut({ className, ...props }: React.ComponentProps<"span">) 
       data-slot="command-shortcut"
       className={cn(
         // Shortcuts are machine facts — telemetry voice.
-        "ml-auto font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase group-data-selected/command-item:text-foreground",
+        "ml-auto font-mono text-[10px] tracking-[0.08em] text-ink-2 uppercase group-data-selected/command-item:text-ink",
         className,
       )}
       {...props}

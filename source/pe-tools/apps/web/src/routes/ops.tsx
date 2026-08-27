@@ -213,7 +213,7 @@ function OpsPlayground() {
   }
 
   return (
-    <main className="grid h-screen grid-cols-[19rem_1fr] gap-0 bg-background text-foreground">
+    <main className="grid h-screen grid-cols-[19rem_1fr] gap-0 bg-page text-ink">
       {/* Op list */}
       <aside className="flex min-h-0 flex-col border-r border-line-2">
         <div className="border-b border-line p-2">

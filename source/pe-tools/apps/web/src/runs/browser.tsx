@@ -243,12 +243,12 @@ function Delta({
   goodWhenUp?: boolean;
   suffix?: string;
 }) {
-  if (value === null) return <span className="text-muted-foreground/60">—</span>;
+  if (value === null) return <span className="text-ink-2/60">—</span>;
   const eps = 0.5 * 10 ** -digits; // half a display unit — matches every precision, incl. scorer's 3
 
   if (Math.abs(value) < eps) {
     return (
-      <span className="text-muted-foreground/60" title="No change vs the baseline run.">
+      <span className="text-ink-2/60" title="No change vs the baseline run.">
         ·
       </span>
     );
@@ -600,19 +600,19 @@ export function ZonePanel(props: {
         </svg>
       </div>
       {plan === null ? (
-        <div className="face-mono t-caption absolute bottom-1 left-1 border bg-background/90 px-1 text-muted-foreground">
+        <div className="face-mono t-caption absolute bottom-1 left-1 border bg-page/90 px-1 text-ink-2">
           plan unavailable in this package
         </div>
       ) : null}
       {/* Instant id popover — replaces the slow native tooltip on these elements. */}
       {hover && (
         <div
-          className="face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-background/95 px-1.5 py-0.5 shadow-sm"
+          className="face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-page/95 px-1.5 py-0.5 shadow-sm"
           style={{
             left: Math.min(hover.x + 10, maxW - 90),
             top: Math.min(hover.y + 12, maxH - 22),
             borderColor: hover.flagged ? "var(--pe-alarm)" : "var(--pe-line-2)",
-            color: hover.flagged ? "var(--pe-alarm)" : "var(--foreground)",
+            color: hover.flagged ? "var(--pe-alarm)" : "var(--pe-ink)",
             borderRadius: 2,
           }}
         >
@@ -627,7 +627,7 @@ export function ZonePanel(props: {
 function MissingPanel(props: { w: number; h: number; label: string }) {
   return (
     <div
-      className="face-mono t-caption flex shrink-0 items-center justify-center bg-secondary t-label text-muted-foreground"
+      className="face-mono t-caption flex shrink-0 items-center justify-center bg-recess t-label text-ink-2"
       style={{ width: props.w, height: props.h, borderRadius: 2 }}
     >
       {props.label}
@@ -707,7 +707,7 @@ const STAT_ROWS: StatRow[] = [
     value: (z) => (
       <span style={{ color: z.triage.verdict === "solve" ? "var(--pe-done)" : "var(--pe-caution)" }}>
         {z.triage.verdict}
-        <span className="text-muted-foreground"> · {z.triage.reason}</span>
+        <span className="text-ink-2"> · {z.triage.reason}</span>
       </span>
     ),
   },
@@ -742,7 +742,7 @@ const STAT_ROWS: StatRow[] = [
     value: (z) => {
       const top = topRejections(z, 2);
       return top.length === 0 ? (
-        <span className="text-muted-foreground">none</span>
+        <span className="text-ink-2">none</span>
       ) : (
         top.map(([k, n]) => `${k} ×${n}`).join(" · ")
       );
@@ -780,7 +780,7 @@ function ZoneCard(props: {
 
   return (
     <div
-      className="flex min-w-0 flex-col gap-1.5 border bg-background p-2"
+      className="flex min-w-0 flex-col gap-1.5 border bg-page p-2"
       style={{ borderColor: "var(--pe-line-2)", borderRadius: 2 }}
     >
       <div className="flex items-baseline gap-2">
@@ -831,8 +831,8 @@ function ZoneCard(props: {
               className={cn(
                 "face-mono t-caption shrink-0 border px-1.5",
                 props.highlighted
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-recess text-ink"
+                  : "text-ink-2 hover:text-ink",
               )}
             />
           ) : null}
@@ -897,7 +897,7 @@ function ZoneCard(props: {
         </colgroup>
         {comparing ? (
           <thead>
-            <tr className="t-caption text-muted-foreground">
+            <tr className="t-caption text-ink-2">
               <th aria-label="stat" />
               <th className="text-left font-normal">A · baseline</th>
               <th className="text-left font-normal">B · current</th>
@@ -908,7 +908,7 @@ function ZoneCard(props: {
         <tbody>
           {STAT_ROWS.map((row) => (
             <tr key={row.label} className="align-top">
-              <td className="pr-2 text-muted-foreground">{row.label}</td>
+              <td className="pr-2 text-ink-2">{row.label}</td>
               {comparing ? (
                 <>
                   <td className="truncate pr-2">{a ? row.value(a) : "—"}</td>
@@ -922,7 +922,7 @@ function ZoneCard(props: {
           ))}
           {knobs.length > 0 ? (
             <tr className="align-top">
-              <td className="pr-2 text-muted-foreground">knobs</td>
+              <td className="pr-2 text-ink-2">knobs</td>
               <td colSpan={comparing ? 3 : 1}>
                 <span className="flex flex-wrap gap-1">
                   {knobs.map(([k, v]) => (
@@ -972,7 +972,7 @@ function RunStrip(props: {
             style={{
               borderColor: isCur || isPrev ? "var(--pe-ink-2)" : "var(--pe-line-2)",
               borderRadius: 2,
-              background: isCur ? "var(--secondary)" : "transparent",
+              background: isCur ? "var(--pe-recess)" : "transparent",
             }}
           >
             <Verb
@@ -985,7 +985,7 @@ function RunStrip(props: {
                 {isCur ? <b>B · </b> : null}
                 {meta?.label ?? entry.id.slice(0, 15)}
               </span>
-              <span className="face-mono t-caption leading-3 text-muted-foreground">
+              <span className="face-mono t-caption leading-3 text-ink-2">
                 {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
                 {typeof meta?.zoneFilter === "string" ? (
                   <span style={{ color: "var(--pe-caution)" }} title={partialTitle(meta.zoneFilter)}>
@@ -1003,8 +1003,8 @@ function RunStrip(props: {
               className="border-l px-1.5 t-caption"
               style={{
                 borderColor: "var(--pe-line-2)",
-                background: isPrev ? "var(--secondary)" : "transparent",
-                color: isCur ? "var(--pe-line-2)" : isPrev ? "var(--foreground)" : "var(--pe-ink-2)",
+                background: isPrev ? "var(--pe-recess)" : "transparent",
+                color: isCur ? "var(--pe-line-2)" : isPrev ? "var(--pe-ink)" : "var(--pe-ink-2)",
               }}
             >
               {isPrev ? "A✕" : "A"}
@@ -1465,19 +1465,19 @@ function PlanPane(props: {
       </div>
       {props.tag && (
         <div
-          className="face-mono t-caption absolute left-2 top-2 border bg-background/90 px-1.5 py-0.5 t-label text-muted-foreground"
+          className="face-mono t-caption absolute left-2 top-2 border bg-page/90 px-1.5 py-0.5 t-label text-ink-2"
           style={{ borderRadius: 2 }}
         >
           {props.tag}
         </div>
       )}
       {!data && (
-        <div className="absolute inset-0 flex items-center justify-center t-prose text-muted-foreground">
+        <div className="absolute inset-0 flex items-center justify-center t-prose text-ink-2">
           loading {props.runId}…
         </div>
       )}
       {data && !data.plan ? (
-        <div className="face-mono t-caption absolute bottom-2 left-2 border bg-background/90 px-1.5 py-0.5 text-muted-foreground">
+        <div className="face-mono t-caption absolute bottom-2 left-2 border bg-page/90 px-1.5 py-0.5 text-ink-2">
           plan unavailable in this package
         </div>
       ) : null}
@@ -1544,7 +1544,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
   );
   return (
     <div
-      className="face-mono t-caption absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-background/95 px-2 py-1.5 text-muted-foreground shadow-sm"
+      className="face-mono t-caption absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-page/95 px-2 py-1.5 text-ink-2 shadow-sm"
       style={{ borderRadius: 2 }}
     >
       <span className="flex items-baseline">
@@ -1560,7 +1560,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
           label="x"
           reason="Hide the key; the plan header key control brings it back."
           onClick={props.onClose}
-          className="face-mono t-caption ml-auto text-muted-foreground hover:text-foreground"
+          className="face-mono t-caption ml-auto text-ink-2 hover:text-ink"
         />
       </span>
       <div className={cn("flex flex-col gap-0.5", !props.underlay && "opacity-40")}>
@@ -1647,16 +1647,16 @@ function LevelStatsFloater(props: {
   if (!b) return null;
   return (
     <div
-      className="face-mono t-caption absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-background/95 px-2 py-1.5 t-label shadow-sm"
+      className="face-mono t-caption absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-page/95 px-2 py-1.5 t-label shadow-sm"
       style={{ borderRadius: 2 }}
     >
-      <span className="flex items-baseline t-caption font-semibold uppercase tracking-wide text-muted-foreground">
+      <span className="flex items-baseline t-caption font-semibold uppercase tracking-wide text-ink-2">
         {level} — this run
         <Verb
           label="x"
           reason="Hide the level stats; the plan header stats control brings them back."
           onClick={props.onClose}
-          className="face-mono t-caption ml-auto normal-case tracking-normal hover:text-foreground"
+          className="face-mono t-caption ml-auto normal-case tracking-normal hover:text-ink"
         />
       </span>
       <span>
@@ -1676,7 +1676,7 @@ function LevelStatsFloater(props: {
         {a ? <Delta value={b.heldSqft - a.heldSqft} goodWhenUp={false} suffix=" sf" /> : null}
       </span>
       {b.rejTop.length > 0 && (
-        <span className="mt-0.5 flex flex-col text-muted-foreground">
+        <span className="mt-0.5 flex flex-col text-ink-2">
           {b.rejTop.map(([k, n]) => (
             <span key={k} title={`${n} rejections of kind ${k} across this level's zones.`}>
               {k} ×{n}
@@ -1727,13 +1727,13 @@ function ZonePeekFloater(props: {
   const knobs = adaptedKnobs(b);
   return (
     <div
-      className="face-mono t-caption pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 border bg-background/95 p-2 t-label shadow-sm"
+      className="face-mono t-caption pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 border bg-page/95 p-2 t-label shadow-sm"
       style={{ borderRadius: 2 }}
     >
       <div className="mb-1 flex flex-col items-center">
-        <span className="text-foreground">{props.zoneName}</span>
+        <span className="text-ink">{props.zoneName}</span>
         {props.highlighted && (
-          <span className="t-caption text-muted-foreground">highlighted · esc clears</span>
+          <span className="t-caption text-ink-2">highlighted · esc clears</span>
         )}
       </div>
       <table className="w-full table-fixed">
@@ -1745,25 +1745,25 @@ function ZonePeekFloater(props: {
         <tbody>
           {rows.map(([label, f]) => (
             <tr key={label} className="align-top">
-              {comparing && <td className="pr-2 text-right text-foreground">{a ? f(a) : "—"}</td>}
-              <td className="text-center text-muted-foreground">{label}</td>
-              <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
+              {comparing && <td className="pr-2 text-right text-ink">{a ? f(a) : "—"}</td>}
+              <td className="text-center text-ink-2">{label}</td>
+              <td className={cn("pl-2 text-ink", comparing ? "text-left" : "text-center")}>
                 {f(b)}
               </td>
             </tr>
           ))}
           <tr className="align-top">
-            {comparing && <td className="pr-2 text-right text-foreground">{rejList(a, true)}</td>}
-            <td className="text-center text-muted-foreground">rejections</td>
-            <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
+            {comparing && <td className="pr-2 text-right text-ink">{rejList(a, true)}</td>}
+            <td className="text-center text-ink-2">rejections</td>
+            <td className={cn("pl-2 text-ink", comparing ? "text-left" : "text-center")}>
               {rejList(b, false)}
             </td>
           </tr>
           {knobs.length > 0 && (
             <tr className="align-top">
               {comparing && <td />}
-              <td className="text-center text-muted-foreground">knobs</td>
-              <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
+              <td className="text-center text-ink-2">knobs</td>
+              <td className={cn("pl-2 text-ink", comparing ? "text-left" : "text-center")}>
                 {knobs.map(([k, v]) => `${k}=${v}`).join(" · ")}
               </td>
             </tr>
@@ -1891,8 +1891,8 @@ function PlanDock(props: {
               className={cn(
                 "face-mono t-caption rounded-[2px] px-2 py-0.5 t-label",
                 l === level
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground hover:bg-muted",
+                  ? "bg-recess text-ink"
+                  : "text-ink-2 hover:bg-recess",
               )}
             />
           ))}
@@ -1905,8 +1905,8 @@ function PlanDock(props: {
             className={cn(
               "face-mono t-caption rounded-[2px] border px-1.5 py-0.5",
               showKey
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:bg-muted",
+                ? "bg-recess text-ink"
+                : "text-ink-2 hover:bg-recess",
             )}
             style={{ borderColor: "var(--pe-line-2)" }}
           />
@@ -1917,12 +1917,12 @@ function PlanDock(props: {
             className={cn(
               "face-mono t-caption rounded-[2px] border px-1.5 py-0.5",
               showStats
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:bg-muted",
+                ? "bg-recess text-ink"
+                : "text-ink-2 hover:bg-recess",
             )}
             style={{ borderColor: "var(--pe-line-2)" }}
           />
-          <span className="face-mono t-caption text-muted-foreground">
+          <span className="face-mono t-caption text-ink-2">
             drag = pan · wheel = zoom · click zone = highlight · esc = clear
           </span>
         </span>
@@ -1965,7 +1965,7 @@ function PlanDock(props: {
             </div>
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center t-prose text-muted-foreground">
+          <div className="flex flex-1 items-center justify-center t-prose text-ink-2">
             loading {level ?? "level"}…
           </div>
         )}
@@ -2093,7 +2093,7 @@ function scoreCell(row: RunRow, value: number | null): ReactNode {
   if (row.scores === null) {
     return (
       <span
-        className="face-mono t-caption block px-1.5 text-right text-muted-foreground"
+        className="face-mono t-caption block px-1.5 text-right text-ink-2"
         title={NO_SCORES_TITLE}
       >
         no scores
@@ -2131,7 +2131,7 @@ function HeaderScores(props: {
   const f = (value: number | null | undefined) => (value == null ? "—" : value.toFixed(3));
   return (
     <span
-      className="face-mono t-caption t-value text-muted-foreground"
+      className="face-mono t-caption t-value text-ink-2"
       title="scores.json — the python scorer's board (score-looks-good.py, the single measure authority), persisted into the run package at harness time."
     >
       saved {f(primary?.savedWork)} {v11 ? "v1.1" : "v1"}
@@ -2185,11 +2185,11 @@ function LedgerDock(props: {
         cell: (row) => (
           <span className="face-mono t-caption flex min-w-0 items-baseline gap-1.5 px-1.5">
             <span
-              className={cn("truncate", row.label ? "text-foreground" : "text-muted-foreground")}
+              className={cn("truncate", row.label ? "text-ink" : "text-ink-2")}
             >
               {runName(row)}
             </span>
-            <span className="shrink-0 t-caption text-muted-foreground/70">{fmtTime(row.when)}</span>
+            <span className="shrink-0 t-caption text-ink-2/70">{fmtTime(row.when)}</span>
             <PartialityChip part={row.partiality} compact />
           </span>
         ),
@@ -2218,7 +2218,7 @@ function LedgerDock(props: {
         cell: (row) => {
           if (row.id === curId) {
             return (
-              <span className="face-mono t-caption block px-1.5 font-semibold text-foreground">
+              <span className="face-mono t-caption block px-1.5 font-semibold text-ink">
                 B
               </span>
             );
@@ -2244,8 +2244,8 @@ function LedgerDock(props: {
               className={cn(
                 "face-mono t-caption h-7 w-full px-1.5 text-left",
                 isA
-                  ? "font-semibold text-foreground"
-                  : "text-muted-foreground/60 hover:text-muted-foreground",
+                  ? "font-semibold text-ink"
+                  : "text-ink-2/60 hover:text-ink-2",
               )}
             />
           );
@@ -2302,7 +2302,7 @@ function LedgerDock(props: {
         title: "Square footage in held rooms — area the solver found but did not trust.",
         sort: (row) => row.board.heldSqft,
         cell: (row) => (
-          <span className="face-mono t-caption block px-1.5 text-right tabular-nums text-muted-foreground">
+          <span className="face-mono t-caption block px-1.5 text-right tabular-nums text-ink-2">
             {fmtNum(row.board.heldSqft, 0)}
           </span>
         ),
@@ -2463,7 +2463,7 @@ function LedgerDock(props: {
             : "Expand the run ledger; rows are runs, marks drive the sheet's A/B."
         }
         onClick={onToggle}
-        className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-muted"
+        className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-recess"
       />
       {open && (
         <div className="flex flex-col" style={{ height: 320 }}>
@@ -2471,7 +2471,7 @@ function LedgerDock(props: {
               at?" is never an inference from the run labels. */}
           {pool && (
             <div
-              className="face-mono t-caption shrink-0 truncate border-b px-3 py-1 text-muted-foreground"
+              className="face-mono t-caption shrink-0 truncate border-b px-3 py-1 text-ink-2"
               style={{ borderColor: "var(--pe-line-2)" }}
               title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
             >
@@ -2479,7 +2479,7 @@ function LedgerDock(props: {
             </div>
           )}
           {rows === null ? (
-            <div className="face-mono t-caption p-4 t-prose text-muted-foreground">
+            <div className="face-mono t-caption p-4 t-prose text-ink-2">
               loading the run ledger…
             </div>
           ) : (
@@ -2809,7 +2809,7 @@ export default function RunBrowser() {
   }
   if (!runs) {
     return (
-      <div className="face-mono t-caption p-8 t-prose text-muted-foreground">loading run pool…</div>
+      <div className="face-mono t-caption p-8 t-prose text-ink-2">loading run pool…</div>
     );
   }
   // Empty pool is a SYSTEM story, not a filter story: nothing is hidden, nothing has been
@@ -2820,9 +2820,9 @@ export default function RunBrowser() {
         <EmptyState story="scope" exit="run the takeoff harness to fill the pool">
           No runs captured yet
         </EmptyState>
-        <p className="face-mono t-caption t-label leading-relaxed text-muted-foreground">
+        <p className="face-mono t-caption t-label leading-relaxed text-ink-2">
           Every run of{" "}
-          <span className="text-foreground">
+          <span className="text-ink">
             ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope
           </span>{" "}
           auto-persists its package (report.json, zone TSVs, INKP bins) into the pool; this page
@@ -2830,7 +2830,7 @@ export default function RunBrowser() {
         </p>
         {pool && (
           <p
-            className="face-mono t-caption break-all text-muted-foreground"
+            className="face-mono t-caption break-all text-ink-2"
             title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
           >
             pool {pool}
@@ -2855,25 +2855,25 @@ export default function RunBrowser() {
   const sheetBody = (
     <main ref={setMainRefs} onScroll={onSheetScroll} className="size-full min-h-0 overflow-y-auto">
       {reportCur === null ? (
-        <div className="face-mono t-caption p-8 t-prose text-muted-foreground">loading run…</div>
+        <div className="face-mono t-caption p-8 t-prose text-ink-2">loading run…</div>
       ) : review ? (
         <div className="flex flex-col gap-4 p-4">
           <div className="flex items-baseline gap-3">
             <h2 className="face-mono t-caption t-value font-semibold uppercase tracking-wide">
               review — {stagedItems.length} staged
             </h2>
-            <span className="face-mono t-caption t-label text-muted-foreground">
+            <span className="face-mono t-caption t-label text-ink-2">
               each item at its pinned A/B pair · the lens is untouched
             </span>
             <Verb
               label="x exit review"
               reason="Back to the normal sheet."
               onClick={() => setReview(false)}
-              className="face-mono t-caption ml-auto border px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
+              className="face-mono t-caption ml-auto border px-1.5 py-0.5 text-ink-2 hover:text-ink"
             />
           </div>
           {stagedItems.length === 0 && (
-            <p className="face-mono t-caption t-label text-muted-foreground">
+            <p className="face-mono t-caption t-label text-ink-2">
               Nothing staged anymore — stage zone cards from the normal sheet.
             </p>
           )}
@@ -2890,13 +2890,13 @@ export default function RunBrowser() {
                         : "Pinned pair differs from the current lens; click to swing the lens to this pair."
                     }
                     onClick={() => swingLens(item)}
-                    className="face-mono t-caption flex items-baseline gap-2 t-label text-muted-foreground hover:text-foreground"
+                    className="face-mono t-caption flex items-baseline gap-2 t-label text-ink-2 hover:text-ink"
                   />
                   <Verb
                     label="x unstage"
                     reason="Remove this item from the staged set."
                     onClick={() => fb.unstage(item.key)}
-                    className="face-mono t-caption ml-auto text-muted-foreground hover:text-foreground"
+                    className="face-mono t-caption ml-auto text-ink-2 hover:text-ink"
                   />
                 </div>
                 <ZoneCard
@@ -2938,13 +2938,13 @@ export default function RunBrowser() {
                 }}
               >
                 <div
-                  className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-background px-4 py-1"
+                  className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1"
                   style={{ borderColor: "var(--pe-line-2)" }}
                 >
                   <h2 className="face-mono t-caption t-value font-semibold uppercase tracking-wide">
                     {level}
                   </h2>
-                  <span className="face-mono t-caption t-label text-muted-foreground">
+                  <span className="face-mono t-caption t-label text-ink-2">
                     {solved}/{zonePairs.length} solved · {fmtSqft(sf)}
                   </span>
                   {hidden > 0 && (
@@ -3046,7 +3046,7 @@ export default function RunBrowser() {
   );
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col bg-background text-foreground">
+    <div className="flex h-dvh min-h-0 flex-col bg-page text-ink">
       <header
         className="flex shrink-0 flex-col gap-1.5 border-b px-4 py-2"
         style={{ borderColor: "var(--pe-line-2)" }}
@@ -3063,7 +3063,7 @@ export default function RunBrowser() {
             </span>
           )}
           {board && (
-            <span className="face-mono t-caption t-value text-muted-foreground">
+            <span className="face-mono t-caption t-value text-ink-2">
               B: {board.solved}/{board.zones} solved · {board.acceptedRooms} rooms ·{" "}
               {fmtSqft(board.acceptedSqft)} accepted · {fmtSqft(board.heldSqft)} held
             </span>
@@ -3071,7 +3071,7 @@ export default function RunBrowser() {
           <PartialityChip part={partCur} prefix="B: " />
           <PartialityChip part={partPrev} prefix="A: " />
           {boardPrev && board && (
-            <span className="face-mono t-caption t-value text-muted-foreground">
+            <span className="face-mono t-caption t-value text-ink-2">
               Δ vs A: <Delta value={board.solved - boardPrev.solved} /> solved ·{" "}
               <Delta value={board.acceptedSqft - boardPrev.acceptedSqft} suffix=" sf" /> ·{" "}
               <Delta
@@ -3110,14 +3110,14 @@ export default function RunBrowser() {
                     : "Restore the default baseline: the current run's chronological predecessor."
                 }
                 onClick={() => setBaseline(null)}
-                className="face-mono t-caption border px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
+                className="face-mono t-caption border px-1.5 py-0.5 text-ink-2 hover:text-ink"
               />
             ) : (
               <Verb
                 label="A: auto"
                 reason="Restore the default baseline: the current run's chronological predecessor."
                 onClick={() => setBaseline("auto")}
-                className="face-mono t-caption border px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
+                className="face-mono t-caption border px-1.5 py-0.5 text-ink-2 hover:text-ink"
               />
             )}
             <Verb
@@ -3127,8 +3127,8 @@ export default function RunBrowser() {
               className={cn(
                 "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
                 underlay
-                  ? "bg-secondary text-secondary-foreground"
-                  : "border text-muted-foreground",
+                  ? "bg-recess text-ink"
+                  : "border text-ink-2",
               )}
               style={underlay ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
@@ -3144,8 +3144,8 @@ export default function RunBrowser() {
               className={cn(
                 "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
                 changedOnly && comparing
-                  ? "bg-secondary text-secondary-foreground"
-                  : "border text-muted-foreground disabled:opacity-40",
+                  ? "bg-recess text-ink"
+                  : "border text-ink-2 disabled:opacity-40",
               )}
               style={changedOnly && comparing ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
@@ -3186,7 +3186,7 @@ export default function RunBrowser() {
                   label={planOpen ? "▴ hide plan" : "▾ show plan"}
                   reason={planOpen ? "Collapse the plan dock." : "Expand the plan dock."}
                   onClick={() => setPlanOpen((o) => !o)}
-                  className="face-mono t-caption px-1.5 t-label text-muted-foreground hover:text-foreground"
+                  className="face-mono t-caption px-1.5 t-label text-ink-2 hover:text-ink"
                 />
               }
             >

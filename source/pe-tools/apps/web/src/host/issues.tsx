@@ -167,7 +167,7 @@ export function HostIssuePanel({
         // a busy bridge / doc conflict is NOT the model disagreeing — caution, not alarm.
         issue.kind === "conflict" || issue.kind === "bridge_busy"
           ? "border-caution/30 bg-caution/10 text-caution"
-          : "border-destructive/30 bg-destructive/10 text-destructive",
+          : "border-alarm/30 bg-alarm/10 text-alarm",
         compact && "p-2 text-xs",
       )}
     >

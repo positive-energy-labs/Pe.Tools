@@ -102,7 +102,7 @@ function Picker({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 max-w-40 justify-between gap-1 px-2 text-muted-foreground"
+              className="h-7 max-w-40 justify-between gap-1 px-2 text-ink-2"
             />
           }
         >
@@ -115,9 +115,9 @@ function Picker({
         <ComboboxList>
           {(option: PickerOption) => (
             <ComboboxItem key={option.id} value={option} className="flex-col items-start pr-7">
-              <span className="text-foreground">{option.name}</span>
+              <span className="text-ink">{option.name}</span>
               {option.hint ? (
-                <span className="text-xs text-muted-foreground">{option.hint}</span>
+                <span className="text-xs text-ink-2">{option.hint}</span>
               ) : null}
             </ComboboxItem>
           )}

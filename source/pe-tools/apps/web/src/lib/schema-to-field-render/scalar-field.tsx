@@ -86,7 +86,7 @@ export function ScalarField({
                   field.handleChange(checked as never);
                 }}
               />
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-ink-2">
                 {field.state.value ? "Enabled" : "Disabled"}
               </span>
             </div>

@@ -26,8 +26,8 @@ export function ExportVerbs(props: {
       className={cn(
         "face-mono t-caption border px-2 py-0.5 t-label disabled:opacity-40",
         primary
-          ? "border-transparent bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:text-foreground",
+          ? "border-transparent bg-commit text-on-commit"
+          : "text-ink-2 hover:text-ink",
       )}
       style={{ borderColor: primary ? undefined : "var(--pe-line-2)", borderRadius: 2 }}
     />
@@ -58,7 +58,7 @@ export function ExportStatus(props: { className?: string }) {
   const { exporting, lastExport, exportError } = useFb();
   if (exporting) {
     return (
-      <div className={cn("face-mono t-caption text-muted-foreground", props.className)}>
+      <div className={cn("face-mono t-caption text-ink-2", props.className)}>
         compositing + writing export…
       </div>
     );
@@ -77,13 +77,13 @@ export function ExportStatus(props: { className?: string }) {
   return (
     <div
       className={cn(
-        "face-mono t-caption flex flex-col gap-0.5 text-muted-foreground",
+        "face-mono t-caption flex flex-col gap-0.5 text-ink-2",
         props.className,
       )}
     >
       <span className="break-all">
         wrote {lastExport.files.length} file{lastExport.files.length === 1 ? "" : "s"} + clip.txt →{" "}
-        <span className="text-foreground">{lastExport.dir}</span>
+        <span className="text-ink">{lastExport.dir}</span>
       </span>
       <span>
         {lastExport.verb === "chat" &&
@@ -98,7 +98,7 @@ export function ExportStatus(props: { className?: string }) {
       <a
         href={`/runs?set=${lastExport.stamp}`}
         title="This export's rehydration link — open it (or paste it) to reload this staged set, editable. Re-exporting mints a new stamp."
-        className="break-all underline decoration-dotted hover:text-foreground"
+        className="break-all underline decoration-dotted hover:text-ink"
       >
         ?set={lastExport.stamp}
       </a>
@@ -120,7 +120,7 @@ export function ExportStatus(props: { className?: string }) {
 export function FlagChips(props: { item: StagedItem }) {
   if (props.item.flags.length === 0) {
     return (
-      <span className="face-mono t-caption text-muted-foreground/60">
+      <span className="face-mono t-caption text-ink-2/60">
         no flags — click rooms/residues on the staged B panel
       </span>
     );
@@ -161,7 +161,7 @@ export function NoteInput(props: {
       "One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block.",
     autoFocus: props.autoFocus,
     className: cn(
-      "face-mono t-caption w-full border bg-background px-1.5 py-0.5 t-label placeholder:text-muted-foreground/50",
+      "face-mono t-caption w-full border bg-page px-1.5 py-0.5 t-label placeholder:text-ink-2/50",
       props.className,
     ),
     style: { borderColor: "var(--pe-line-2)", borderRadius: 2 },

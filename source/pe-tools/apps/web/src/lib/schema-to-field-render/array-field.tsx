@@ -110,10 +110,10 @@ export function ArrayField({
                   return (
                     <div
                       key={childPathPrefix}
-                      className="space-y-3 rounded-md border border-border p-3"
+                      className="space-y-3 rounded-md border border-line p-3"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">
+                        <span className="text-xs font-medium text-ink-2">
                           Item {index + 1}
                         </span>
                         <Verb
@@ -161,7 +161,7 @@ export function ArrayField({
               className="min-h-32 font-mono text-xs"
             />
           )}
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-ink-2">
             {isPrimitiveArray
               ? "Multi-value combobox with searchable suggestions and removable chips."
               : isObjectArray

@@ -20,8 +20,8 @@ export function ValueDiff({
     <span className={cn("face-mono t-value", className)}>
       {changed && (
         <>
-          <span className="text-muted-foreground line-through opacity-70">{from || "—"}</span>
-          <span className="mx-1 text-muted-foreground">→</span>
+          <span className="text-ink-2 line-through opacity-70">{from || "—"}</span>
+          <span className="mx-1 text-ink-2">→</span>
         </>
       )}
       <span>{to || "—"}</span>

@@ -286,7 +286,7 @@ function Seam({ op }: { op: string }) {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span className="t-label t-upper text-muted-foreground">{children}</span>;
+  return <span className="t-label t-upper text-ink-2">{children}</span>;
 }
 
 /**
@@ -336,7 +336,7 @@ function NamePicker({
       >
         {collapsed ? (
           <span
-            className="px-1 t-label text-muted-foreground"
+            className="px-1 t-label text-ink-2"
             title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
           >
             all {values.length}
@@ -351,7 +351,7 @@ function NamePicker({
         <ComboboxChipsInput
           aria-label={ariaLabel}
           placeholder={values.length === 0 ? placeholder : "add…"}
-          className="face-mono t-label placeholder:text-muted-foreground"
+          className="face-mono t-label placeholder:text-ink-2"
         />
         <ComboboxTrigger />
       </ComboboxChips>
@@ -684,7 +684,7 @@ function FamiliesRoute() {
                 return next;
               })
             }
-            className="face-mono t-value h-7 w-full px-1.5 text-left text-muted-foreground hover:text-foreground"
+            className="face-mono t-value h-7 w-full px-1.5 text-left text-ink-2 hover:text-ink"
           >
             {pickedIds.has(row.familyId) ? "▪" : "□"}
           </button>
@@ -1169,21 +1169,21 @@ function FamiliesRoute() {
                             return next;
                           })
                         }
-                        className="face-mono t-value text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
+                        className="face-mono t-value text-ink-2 hover:text-ink disabled:cursor-not-allowed"
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </button>
                     </td>
                     <td className="face-mono py-0.5 t-label">{entry.familyName}</td>
                     <td
-                      className="face-mono w-24 py-0.5 t-label text-muted-foreground"
+                      className="face-mono w-24 py-0.5 t-label text-ink-2"
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className="face-mono truncate py-0.5 t-caption text-muted-foreground"
+                      className="face-mono truncate py-0.5 t-caption text-ink-2"
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
@@ -1202,11 +1202,11 @@ function FamiliesRoute() {
               {outsideProfile.map((family) => (
                 <tr key={`outside-${family.familyId}`} className="border-b border-line opacity-60">
                   <td className="w-8 py-0.5 text-center">
-                    <span className="face-mono t-value text-muted-foreground">✕</span>
+                    <span className="face-mono t-value text-ink-2">✕</span>
                   </td>
                   <td className="face-mono py-0.5 t-label">{family.familyName}</td>
-                  <td className="face-mono w-24 py-0.5 t-label text-muted-foreground">—</td>
-                  <td className="face-mono py-0.5 t-caption text-muted-foreground" colSpan={2}>
+                  <td className="face-mono w-24 py-0.5 t-label text-ink-2">—</td>
+                  <td className="face-mono py-0.5 t-caption text-ink-2" colSpan={2}>
                     in scope, but the bound profile does not claim this family
                   </td>
                 </tr>
@@ -1270,14 +1270,14 @@ function FamiliesRoute() {
                     </FactChip>
                   </td>
                   <td
-                    className="face-mono w-40 py-0.5 t-caption text-muted-foreground"
+                    className="face-mono w-40 py-0.5 t-caption text-ink-2"
                     title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
                   >
                     {entry.parametersChanged} changed · +{entry.diffSummary.added} −
                     {entry.diffSummary.removed} ~{entry.diffSummary.modified}
                   </td>
                   <td
-                    className="face-mono truncate py-0.5 t-caption text-muted-foreground"
+                    className="face-mono truncate py-0.5 t-caption text-ink-2"
                     title={
                       entry.operationsRun.length > 0
                         ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
@@ -1382,7 +1382,7 @@ function FamiliesRoute() {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-line p-2 t-caption text-muted-foreground">
+                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-line p-2 t-caption text-ink-2">
                   {entry.profileJson}
                 </pre>
               )}

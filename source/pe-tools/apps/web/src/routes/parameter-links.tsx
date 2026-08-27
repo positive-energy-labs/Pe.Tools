@@ -181,13 +181,13 @@ function ParameterLinksRoute() {
         };
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-background">
+    <main className="flex h-screen flex-col overflow-hidden bg-page">
       <AddressingBar
         name="parameter links"
         sentence={
           <span className="flex items-center gap-2">
             <span
-              className="t-value face-mono text-foreground"
+              className="t-value face-mono text-ink"
               title={
                 document?.binding.target
                   ? `bound to ${document.binding.target}`
@@ -251,7 +251,7 @@ function ParameterLinksRoute() {
       />
 
       {(busy || outcome || route.error) && (
-        <div className="shrink-0 border-b border-border px-4 py-0.5">
+        <div className="shrink-0 border-b border-line px-4 py-0.5">
           {busy ? (
             <OutcomeLine kind="busy" label={busy} />
           ) : outcome ? (
@@ -341,7 +341,7 @@ function ParameterLinksRoute() {
           minWidth={340}
           defaultWidth={520}
           maxWidth={760}
-          header={<span className="t-label t-upper text-muted-foreground">Evaluation</span>}
+          header={<span className="t-label t-upper text-ink-2">Evaluation</span>}
         >
           <div className="flex h-full flex-col gap-4 px-4 py-3">
             <RuntimeStatusBar
