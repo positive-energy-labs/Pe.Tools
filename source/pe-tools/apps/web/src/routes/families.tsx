@@ -8,9 +8,7 @@ import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 
 export const Route = createFileRoute("/families")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { thread?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
     thread:
       typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
   }),
@@ -23,7 +21,11 @@ function FamiliesRoute() {
   );
 }
 
-function FamiliesStoreOwner({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
+function FamiliesStoreOwner({
+  documentAddress,
+}: {
+  documentAddress: import("@pe/agent-contracts").Address;
+}) {
   const store = useRouteStore(() => {
     const scope = { documentAddress };
     return createFamiliesStore({

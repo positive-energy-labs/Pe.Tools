@@ -110,7 +110,11 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
       }
       receipt={
         failure ? (
-          <OutcomeLine kind={failure.kind} label={`${failure.verb} failed`} says={failure.message} />
+          <OutcomeLine
+            kind={failure.kind}
+            label={`${failure.verb} failed`}
+            says={failure.message}
+          />
         ) : receipt ? (
           <OutcomeLine kind="receipt" label={receipt.text} />
         ) : undefined

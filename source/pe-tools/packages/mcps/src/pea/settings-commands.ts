@@ -93,13 +93,10 @@ export function createSettingsCommandHandlers(
 
       let validation;
       try {
-        validation = await caller.call(
-          "settings.document.validate",
-          {
-            documentId,
-            rawContent,
-          },
-        );
+        validation = await caller.call("settings.document.validate", {
+          documentId,
+          rawContent,
+        });
       } catch (error) {
         throw new Error(`settings.document.validate failed (${message(error)}).`);
       }
@@ -137,9 +134,7 @@ export function createSettingsCommandHandlers(
           documentId,
           rawContent,
           expectedVersionToken:
-            snapshot.versionToken != null
-              ? { value: snapshot.versionToken }
-              : undefined,
+            snapshot.versionToken != null ? { value: snapshot.versionToken } : undefined,
         });
       } catch (error) {
         throw new Error(`settings.document.save failed (${message(error)}).`);

@@ -1,6 +1,10 @@
 import { expect, test } from "vite-plus/test";
 import { createWorkbenchState } from "@pe/agent-contracts";
-import type { KnownAgentControllerEvent, MastraDBMessage, MastraMessagePart } from "@mastra/client-js";
+import type {
+  KnownAgentControllerEvent,
+  MastraDBMessage,
+  MastraMessagePart,
+} from "@mastra/client-js";
 import { applyAgentControllerEvent, hydrateWorkbenchState } from "./adapter.ts";
 
 function reduce(events: KnownAgentControllerEvent[]) {
@@ -187,18 +191,18 @@ test("hydrate projects messages, tools, models and inspector from REST snapshots
     messages: [
       message("u1", "user", [{ type: "text", text: "hi" }]),
       message("a1", "assistant", [
-          { type: "text", text: "calling" },
-          {
-            type: "tool-invocation",
-            toolInvocation: {
-              state: "result",
-              toolCallId: "tc1",
-              toolName: "grep",
-              args: { query: "foo" },
-              result: "match",
-            },
+        { type: "text", text: "calling" },
+        {
+          type: "tool-invocation",
+          toolInvocation: {
+            state: "result",
+            toolCallId: "tc1",
+            toolName: "grep",
+            args: { query: "foo" },
+            result: "match",
           },
-        ]),
+        },
+      ]),
     ],
     inspect: {
       systemPrompt: { content: "You are Pea.", source: "resolved" },

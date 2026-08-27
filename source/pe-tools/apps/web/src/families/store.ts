@@ -156,12 +156,14 @@ export function createFamiliesStore(deps: {
     const patches: RouteStatePatch[] = [];
     if (current(doc?.bindings.world, deps.scope.documentAddress)?.id !== (nextTarget || null))
       patches.push({
-          path: ["bindings", "world"],
-          value: nextTarget
-            ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
-            : undefined,
+        path: ["bindings", "world"],
+        value: nextTarget
+          ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
+          : undefined,
       });
-    return patches.length ? expectRouteWrite(await writer.apply(patches), "bind failed") : { ok: true };
+    return patches.length
+      ? expectRouteWrite(await writer.apply(patches), "bind failed")
+      : { ok: true };
   };
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,

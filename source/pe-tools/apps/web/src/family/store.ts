@@ -331,8 +331,7 @@ export function createFamilyStore(deps: {
   };
   const buildOutcome = Atom.make((get): BuildRefusal | null => {
     const failure = get(core.failure);
-    if (failure?.verb === "build")
-      return { code: "host", says: failure.message };
+    if (failure?.verb === "build") return { code: "host", says: failure.message };
     const receipt = get(core.receipt);
     return receipt?.verb === "build" && receipt.text === BUILD_OUTCOME_UNKNOWN
       ? { code: "unknown", says: BUILD_OUTCOME_UNKNOWN }

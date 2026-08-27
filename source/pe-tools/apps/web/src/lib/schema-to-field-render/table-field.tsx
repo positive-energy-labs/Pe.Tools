@@ -7,11 +7,7 @@ import {
   FieldMessages,
   FieldOptionsMetadata,
 } from "./field-metadata";
-import {
-  type ResolvedFieldRendererProps,
-  useFieldOptions,
-  useSettingsField,
-} from "./shared";
+import { type ResolvedFieldRendererProps, useFieldOptions, useSettingsField } from "./shared";
 
 type TableRow = Record<string, unknown>;
 
@@ -175,9 +171,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
     field.change(normalizeRows(nextRows, fixedColumnKeys, nextDynamicColumns));
   const updateCell = (rowIndex: number, columnKey: string, nextValue: string) =>
     commitRows(
-      rows.map((row, index) =>
-        index === rowIndex ? { ...row, [columnKey]: nextValue } : row,
-      ),
+      rows.map((row, index) => (index === rowIndex ? { ...row, [columnKey]: nextValue } : row)),
     );
   const addColumn = () => {
     const base = "NewType";
@@ -200,149 +194,154 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
       trimmed === columnKey ||
       fixedColumnKeySet.has(trimmed) ||
       dynamicColumnKeys.includes(trimmed)
-    ) return;
-    const columns = dynamicColumnKeys.map((key) => key === columnKey ? trimmed : key);
+    )
+      return;
+    const columns = dynamicColumnKeys.map((key) => (key === columnKey ? trimmed : key));
     commitRows(
-      rows.map((row) => Object.fromEntries(
-        Object.entries(row).map(([key, value]) => [key === columnKey ? trimmed : key, value]),
-      )),
+      rows.map((row) =>
+        Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [key === columnKey ? trimmed : key, value]),
+        ),
+      ),
       columns,
     );
   };
   const removeColumn = (columnKey: string) =>
     commitRows(
-      rows.map((row) => Object.fromEntries(
-        Object.entries(row).filter(([key]) => key !== columnKey),
-      )),
+      rows.map((row) =>
+        Object.fromEntries(Object.entries(row).filter(([key]) => key !== columnKey)),
+      ),
       dynamicColumnKeys.filter((key) => key !== columnKey),
     );
   const addRow = () =>
-    field.push(normalizeRowOrder(
-      createRowTemplate(fixedColumns, dynamicColumnKeys, missingValue),
-      fixedColumnKeys,
-      dynamicColumnKeys,
-    ));
+    field.push(
+      normalizeRowOrder(
+        createRowTemplate(fixedColumns, dynamicColumnKeys, missingValue),
+        fixedColumnKeys,
+        dynamicColumnKeys,
+      ),
+    );
 
   return (
     <div className="space-y-3">
-            <FieldLabelRow
-              label={label}
-              required={effectiveNodeRef.isRequired()}
-              description={description}
-              defaultValue={defaultValue}
-              path={path}
-            />
-            <FieldMessages messages={field.errors} />
-            <div className="overflow-auto rounded-lg border border-border">
-              <table className="min-w-full border-collapse text-sm">
-                <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    {fixedColumns.map(([columnKey]) => (
-                      <th key={columnKey} className="px-3 py-2">
-                        {columnKey}
-                      </th>
-                    ))}
-                    {dynamicColumnKeys.map((columnKey) => (
-                      <th key={columnKey} className="min-w-36 px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <Input
-                            defaultValue={columnKey}
-                            onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
-                            className="h-8 min-w-24 bg-background"
-                          />
-                          <Verb
-                            label="remove"
-                            reason={`Drop the "${columnKey}" column from every row of this table. The change lives in the form until save writes it.`}
-                            onClick={() => removeColumn(columnKey)}
-                          />
-                        </div>
-                      </th>
-                    ))}
-                    <th className="w-24 px-3 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={fixedColumns.length + dynamicColumnKeys.length + 1}
-                        className="px-3 py-6 text-center text-sm text-muted-foreground"
-                      >
-                        No rows yet.
+      <FieldLabelRow
+        label={label}
+        required={effectiveNodeRef.isRequired()}
+        description={description}
+        defaultValue={defaultValue}
+        path={path}
+      />
+      <FieldMessages messages={field.errors} />
+      <div className="overflow-auto rounded-lg border border-border">
+        <table className="min-w-full border-collapse text-sm">
+          <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr>
+              {fixedColumns.map(([columnKey]) => (
+                <th key={columnKey} className="px-3 py-2">
+                  {columnKey}
+                </th>
+              ))}
+              {dynamicColumnKeys.map((columnKey) => (
+                <th key={columnKey} className="min-w-36 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      defaultValue={columnKey}
+                      onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
+                      className="h-8 min-w-24 bg-background"
+                    />
+                    <Verb
+                      label="remove"
+                      reason={`Drop the "${columnKey}" column from every row of this table. The change lives in the form until save writes it.`}
+                      onClick={() => removeColumn(columnKey)}
+                    />
+                  </div>
+                </th>
+              ))}
+              <th className="w-24 px-3 py-2 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={fixedColumns.length + dynamicColumnKeys.length + 1}
+                  className="px-3 py-6 text-center text-sm text-muted-foreground"
+                >
+                  No rows yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, rowIndex) => (
+                <tr key={`${path}.${rowIndex}`} className="border-t border-border align-top">
+                  {fixedColumns.map(([columnKey], fixedColumnIndex) => {
+                    const cellPath = `${path}.${rowIndex}.${columnKey}`;
+                    return (
+                      <td key={columnKey} className="px-3 py-2">
+                        <TableCellField
+                          path={cellPath}
+                          value={row[columnKey]}
+                          list={
+                            fixedColumnIndex === 0 && optionValues.length > 0
+                              ? datalistId
+                              : undefined
+                          }
+                          onChange={(nextValue) => updateCell(rowIndex, columnKey, nextValue)}
+                        />
                       </td>
-                    </tr>
-                  ) : (
-                    rows.map((row, rowIndex) => (
-                      <tr key={`${path}.${rowIndex}`} className="border-t border-border align-top">
-                        {fixedColumns.map(([columnKey], fixedColumnIndex) => {
-                          const cellPath = `${path}.${rowIndex}.${columnKey}`;
-                          return (
-                            <td key={columnKey} className="px-3 py-2">
-                              <TableCellField
-                                path={cellPath}
-                                value={row[columnKey]}
-                                list={
-                                  fixedColumnIndex === 0 && optionValues.length > 0
-                                    ? datalistId
-                                    : undefined
-                                }
-                                onChange={(nextValue) => updateCell(rowIndex, columnKey, nextValue)}
-                              />
-                            </td>
-                          );
-                        })}
-                        {dynamicColumnKeys.map((columnKey) => {
-                          const cellPath = `${path}.${rowIndex}.${columnKey}`;
-                          return (
-                            <td key={columnKey} className="px-3 py-2">
-                              <TableCellField
-                                path={cellPath}
-                                value={row[columnKey] ?? missingValue}
-                                onChange={(nextValue) => updateCell(rowIndex, columnKey, nextValue)}
-                              />
-                            </td>
-                          );
-                        })}
-                        <td className="px-3 py-2 text-right">
-                          <Verb
-                            label="remove"
-                            reason={`Drop row ${rowIndex + 1} from this table. The change lives in the form until save writes it.`}
-                            onClick={() => field.remove(rowIndex)}
-                          />
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-              {optionValues.length > 0 ? (
-                <datalist id={datalistId}>
-                  {optionValues.map((value) => (
-                    <option key={value} value={value} />
-                  ))}
-                </datalist>
-              ) : null}
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-muted-foreground">
-                {primaryColumnOptions.isLoading
-                  ? "Loading table suggestions..."
-                  : "Schema-driven table with fixed and dynamic columns."}
-              </span>
-              <FieldOptionsMetadata options={primaryColumnOptions} />
-              <div className="flex items-center gap-2">
-                <Verb
-                  label="add column"
-                  reason="Add a dynamic column to this table. Every existing row gains the key, empty. The change lives in the form until save writes it."
-                  onClick={addColumn}
-                />
-                <Verb
-                  label="add row"
-                  reason="Append a row built from the schema's own defaults for this table. The change lives in the form until save writes it."
-                  onClick={addRow}
-                />
-              </div>
-            </div>
+                    );
+                  })}
+                  {dynamicColumnKeys.map((columnKey) => {
+                    const cellPath = `${path}.${rowIndex}.${columnKey}`;
+                    return (
+                      <td key={columnKey} className="px-3 py-2">
+                        <TableCellField
+                          path={cellPath}
+                          value={row[columnKey] ?? missingValue}
+                          onChange={(nextValue) => updateCell(rowIndex, columnKey, nextValue)}
+                        />
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2 text-right">
+                    <Verb
+                      label="remove"
+                      reason={`Drop row ${rowIndex + 1} from this table. The change lives in the form until save writes it.`}
+                      onClick={() => field.remove(rowIndex)}
+                    />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        {optionValues.length > 0 ? (
+          <datalist id={datalistId}>
+            {optionValues.map((value) => (
+              <option key={value} value={value} />
+            ))}
+          </datalist>
+        ) : null}
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs text-muted-foreground">
+          {primaryColumnOptions.isLoading
+            ? "Loading table suggestions..."
+            : "Schema-driven table with fixed and dynamic columns."}
+        </span>
+        <FieldOptionsMetadata options={primaryColumnOptions} />
+        <div className="flex items-center gap-2">
+          <Verb
+            label="add column"
+            reason="Add a dynamic column to this table. Every existing row gains the key, empty. The change lives in the form until save writes it."
+            onClick={addColumn}
+          />
+          <Verb
+            label="add row"
+            reason="Append a row built from the schema's own defaults for this table. The change lives in the form until save writes it."
+            onClick={addRow}
+          />
+        </div>
+      </div>
     </div>
   );
 }

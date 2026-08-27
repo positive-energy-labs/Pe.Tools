@@ -55,9 +55,15 @@ function ScheduleGridRoute() {
   return <RouteDocument>{(at) => <ScheduleGridWorkspace documentAddress={at} />}</RouteDocument>;
 }
 
-function ScheduleGridWorkspace({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
-  const { slice, hydrated, apply, command, peaActive, connected } =
-    useRouteState(scheduleGridRouteState, { documentAddress });
+function ScheduleGridWorkspace({
+  documentAddress,
+}: {
+  documentAddress: import("@pe/agent-contracts").Address;
+}) {
+  const { slice, hydrated, apply, command, peaActive, connected } = useRouteState(
+    scheduleGridRouteState,
+    { documentAddress },
+  );
   const document = slice;
   const snapshot = document?.snapshot ?? null;
   const catalog = document?.catalog ?? null;

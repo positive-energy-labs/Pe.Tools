@@ -10,7 +10,8 @@ describe("route pane registry", () => {
   });
 
   it("writes only changed top-level document branches", () => {
-    expect(topLevelPatches({ fields: { a: 1 }, binding: null }, { fields: { a: 2 }, binding: null }))
-      .toEqual([{ path: ["fields"], value: { a: 2 } }]);
+    expect(
+      topLevelPatches({ fields: { a: 1 }, binding: null }, { fields: { a: 2 }, binding: null }),
+    ).toEqual([{ path: ["fields"], value: { a: 2 } }]);
   });
 });

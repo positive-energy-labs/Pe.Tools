@@ -1,10 +1,6 @@
 import { useMemo } from "react";
 import { FieldRenderer } from "./field-renderer";
-import {
-  SchemaRenderProvider,
-  type SchemaToFieldRenderProps,
-  type SettingsValues,
-} from "./shared";
+import { SchemaRenderProvider, type SchemaToFieldRenderProps, type SettingsValues } from "./shared";
 import { SchemaDocument, type SchemaNodeRef } from "@pe/schema-core";
 import { buildFieldChangeMap, projectHostValidationState } from "./field-state";
 

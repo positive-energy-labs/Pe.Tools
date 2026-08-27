@@ -1,8 +1,4 @@
-import {
-  createFileRoute,
-  retainSearchParams,
-  stripSearchParams,
-} from "@tanstack/react-router";
+import { createFileRoute, retainSearchParams, stripSearchParams } from "@tanstack/react-router";
 import { z } from "zod";
 import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";

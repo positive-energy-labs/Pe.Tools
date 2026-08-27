@@ -366,7 +366,8 @@ export function createTakeoffStore(deps: {
     "slice/takeoffs",
     deps.slice ?? docAtom(takeoffsRouteState, deps.scope),
   );
-  const takeoffsWriter = deps.writer ?? docWriter(takeoffsRouteState, deps.scope, deps.registry, takeoffsSlice);
+  const takeoffsWriter =
+    deps.writer ?? docWriter(takeoffsRouteState, deps.scope, deps.registry, takeoffsSlice);
   const bindingsAtom = Atom.make((get) => {
     const result = get(takeoffsSlice);
     return AsyncResult.isSuccess(result) ? (result.value.doc?.bindings ?? {}) : {};

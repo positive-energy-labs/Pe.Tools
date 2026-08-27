@@ -452,9 +452,7 @@ describe("takeoff route store", () => {
         ];
       },
     };
-    const store = createStore({ host: h.host, sessions }, (next) =>
-      patches.push(next),
-    );
+    const store = createStore({ host: h.host, sessions }, (next) => patches.push(next));
     await store.actions.settle(store.atoms.sessions);
 
     store.actions.setBindings({ bound: { world: "session:world-a" } });

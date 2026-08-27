@@ -217,9 +217,7 @@ describe("route store kit", () => {
       .mockResolvedValueOnce(response({ ok: true, revision: 8 }))
       .mockResolvedValueOnce(response({ ok: true, revision: 9 }))
       .mockResolvedValueOnce(response({ ok: true, revision: 10 }))
-      .mockResolvedValueOnce(
-        response({ ok: false, kind: "refused", code: "request_id_conflict" }),
-      )
+      .mockResolvedValueOnce(response({ ok: false, kind: "refused", code: "request_id_conflict" }))
       .mockResolvedValueOnce(response({ ok: false, kind: "refused", code: "stale_revision" }));
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
       "00000000-0000-4000-8000-000000000005",

@@ -110,11 +110,9 @@ export function createChatPageStore(deps: {
       setPluginOpen: (value: Setter<boolean>) => set("set-plugin", pluginOpen, value),
       setLensInspectKey: (value: Setter<string | null>) =>
         set("set-lens-inspect-key", lensInspectKey, value),
-      setLensFollowing: (value: Setter<boolean>) =>
-        set("set-lens-following", lensFollowing, value),
+      setLensFollowing: (value: Setter<boolean>) => set("set-lens-following", lensFollowing, value),
       setWorld: (value: Setter<WorldState>) => set("set-world", world, value),
-      setWorldCache: (value: Setter<WorldCacheState>) =>
-        set("set-world-cache", worldCache, value),
+      setWorldCache: (value: Setter<WorldCacheState>) => set("set-world-cache", worldCache, value),
       setDraft,
       setMode: (mode: string) => void deps.search.patch({ mode }),
       setTurn,

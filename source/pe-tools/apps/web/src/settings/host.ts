@@ -18,14 +18,16 @@ export function createLiveSettingsHost(): SettingsHost {
       return (await callHostRpc("settings.workspaces", undefined)).workspaces;
     },
     async tree(moduleKey, rootKey) {
-      return (await callHostRpc("settings.tree", {
-        moduleKey,
-        rootKey,
-        subDirectory: "",
-        recursive: true,
-        includeFragments: false,
-        includeSchemas: false,
-      })).files;
+      return (
+        await callHostRpc("settings.tree", {
+          moduleKey,
+          rootKey,
+          subDirectory: "",
+          recursive: true,
+          includeFragments: false,
+          includeSchemas: false,
+        })
+      ).files;
     },
     async schema(moduleKey, rootKey) {
       return (await callHostRpc("settings.schema", { moduleKey, rootKey })).schemaJson;

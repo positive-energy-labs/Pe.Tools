@@ -21,7 +21,10 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
   const { item, lens } = props;
   const onLens = pinMatchesLens(item, lens);
   return (
-    <div className="flex flex-col gap-1 border-b px-2 py-1.5" style={{ borderColor: "var(--line-2)" }}>
+    <div
+      className="flex flex-col gap-1 border-b px-2 py-1.5"
+      style={{ borderColor: "var(--line-2)" }}
+    >
       <div className="flex items-baseline gap-2">
         <button
           type="button"
@@ -36,7 +39,10 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
           <span className="tele text-xs font-semibold" title={item.zone}>
             {zoneShort(item.zone)}
           </span>
-          <span className="tele truncate text-[10px] text-muted-foreground" title={`pinned A=${item.runA ?? "(none)"} B=${item.runB}`}>
+          <span
+            className="tele truncate text-[10px] text-muted-foreground"
+            title={`pinned A=${item.runA ?? "(none)"} B=${item.runB}`}
+          >
             {item.level.replace(" Level", "")} · A {runShort(item.runA)} → B {runShort(item.runB)}
           </span>
           {!onLens && (
@@ -74,7 +80,10 @@ export function Tray(props: {
   const { items, loadedSet } = useFb();
   return (
     <div className="flex size-full min-h-0 flex-col bg-background">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2" style={{ borderColor: "var(--line-2)" }}>
+      <div
+        className="flex h-8 shrink-0 items-center gap-2 border-b px-2"
+        style={{ borderColor: "var(--line-2)" }}
+      >
         <span className="tele-label text-muted-foreground">staging</span>
         <span className="tele text-[11px] text-muted-foreground">
           {items.length === 0 ? "empty" : `${items.length} staged`}
@@ -91,7 +100,9 @@ export function Tray(props: {
               }
               className={cn(
                 "tele rounded-[2px] px-1.5 py-0.5 text-[10px]",
-                props.review ? "bg-secondary text-secondary-foreground" : "border text-muted-foreground hover:text-foreground",
+                props.review
+                  ? "bg-secondary text-secondary-foreground"
+                  : "border text-muted-foreground hover:text-foreground",
               )}
               style={props.review ? undefined : { borderColor: "var(--line-2)" }}
             >
@@ -123,9 +134,8 @@ export function Tray(props: {
         {items.length === 0 ? (
           <p className="tele px-2 py-3 text-[11px] leading-relaxed text-muted-foreground">
             Nothing staged. Hit <span className="text-foreground">＋ stage</span> on a zone card to
-            pin its current A/B pair here; click rooms/residues on the staged B panel to flag
-            them. Export writes PNGs + manifest.json + clip.txt and puts the block on the
-            clipboard.
+            pin its current A/B pair here; click rooms/residues on the staged B panel to flag them.
+            Export writes PNGs + manifest.json + clip.txt and puts the block on the clipboard.
           </p>
         ) : (
           items.map((item) => (
@@ -133,7 +143,10 @@ export function Tray(props: {
           ))
         )}
       </div>
-      <div className="flex flex-col gap-1.5 border-t px-2 py-2" style={{ borderColor: "var(--line-2)" }}>
+      <div
+        className="flex flex-col gap-1.5 border-t px-2 py-2"
+        style={{ borderColor: "var(--line-2)" }}
+      >
         <ExportVerbs items={items} pool={props.pool} />
         <ExportStatus />
       </div>
@@ -152,10 +165,7 @@ export function TrayCollapsed(props: { count: number; onExpand: () => void }) {
       className="flex size-full flex-col items-center gap-2 bg-background pt-2 hover:bg-muted"
     >
       <span className="tele text-[11px] text-muted-foreground">▸</span>
-      <span
-        className="tele-label text-muted-foreground"
-        style={{ writingMode: "vertical-rl" }}
-      >
+      <span className="tele-label text-muted-foreground" style={{ writingMode: "vertical-rl" }}>
         staging{props.count > 0 ? ` · ${props.count}` : ""}
       </span>
     </button>

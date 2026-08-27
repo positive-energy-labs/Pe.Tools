@@ -8,15 +8,14 @@ import { cn } from "#/lib/utils";
 import { runExport } from "./export";
 import { fb, flagLabel, type StagedItem, useFb } from "./staging";
 
-export function ExportVerbs(props: { items: StagedItem[]; pool: string | null; compact?: boolean }) {
+export function ExportVerbs(props: {
+  items: StagedItem[];
+  pool: string | null;
+  compact?: boolean;
+}) {
   const { exporting } = useFb();
   const disabled = props.items.length === 0 || exporting !== null;
-  const btn = (
-    verb: "chat" | "sheet" | "snip",
-    label: string,
-    title: string,
-    primary = false,
-  ) => (
+  const btn = (verb: "chat" | "sheet" | "snip", label: string, title: string, primary = false) => (
     <button
       type="button"
       disabled={disabled}
@@ -73,14 +72,23 @@ export function ExportStatus(props: { className?: string }) {
   }
   if (!lastExport) return null;
   return (
-    <div className={cn("tele flex flex-col gap-0.5 text-[10px] text-muted-foreground", props.className)}>
+    <div
+      className={cn(
+        "tele flex flex-col gap-0.5 text-[10px] text-muted-foreground",
+        props.className,
+      )}
+    >
       <span className="break-all">
         wrote {lastExport.files.length} file{lastExport.files.length === 1 ? "" : "s"} + clip.txt →{" "}
         <span className="text-foreground">{lastExport.dir}</span>
       </span>
       <span>
-        {lastExport.verb === "chat" && lastExport.copiedVia && "text block on clipboard — paste into the agent TUI"}
-        {lastExport.verb === "sheet" && lastExport.copiedVia && "contact-sheet PNG on clipboard — paste into a GUI chat"}
+        {lastExport.verb === "chat" &&
+          lastExport.copiedVia &&
+          "text block on clipboard — paste into the agent TUI"}
+        {lastExport.verb === "sheet" &&
+          lastExport.copiedVia &&
+          "contact-sheet PNG on clipboard — paste into a GUI chat"}
         {lastExport.verb === "snip" && `opened in Snipping Tool: ${lastExport.opened ?? "?"}`}
         {lastExport.copiedVia === "browser" && " (browser fallback)"}
       </span>
@@ -91,12 +99,13 @@ export function ExportStatus(props: { className?: string }) {
       >
         ?set={lastExport.stamp}
       </a>
-      {lastExport.warning && (
-        <span style={{ color: "var(--r-alarm)" }}>{lastExport.warning}</span>
-      )}
+      {lastExport.warning && <span style={{ color: "var(--r-alarm)" }}>{lastExport.warning}</span>}
       <details>
         <summary className="cursor-pointer">view the clip block</summary>
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5" style={{ borderColor: "var(--line-2)", borderRadius: 2 }}>
+        <pre
+          className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5"
+          style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
+        >
           {lastExport.text}
         </pre>
       </details>
@@ -107,7 +116,11 @@ export function ExportStatus(props: { className?: string }) {
 /** The staged item's flags as removable alarm chips. A flag is DATA — the element id shows. */
 export function FlagChips(props: { item: StagedItem }) {
   if (props.item.flags.length === 0) {
-    return <span className="tele text-[10px] text-muted-foreground/60">no flags — click rooms/residues on the staged B panel</span>;
+    return (
+      <span className="tele text-[10px] text-muted-foreground/60">
+        no flags — click rooms/residues on the staged B panel
+      </span>
+    );
   }
   return (
     <span className="flex flex-wrap gap-1">
@@ -150,7 +163,11 @@ export function NoteInput(props: {
     ),
     style: { borderColor: "var(--line-2)", borderRadius: 2 },
   };
-  return props.multiline ? <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} /> : <input {...shared} />;
+  return props.multiline ? (
+    <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} />
+  ) : (
+    <input {...shared} />
+  );
 }
 
 export const zoneShort = (name: string) => (name.includes("#") ? `#${name.split("#")[1]}` : name);

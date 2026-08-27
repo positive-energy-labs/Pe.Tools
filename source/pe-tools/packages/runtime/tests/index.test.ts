@@ -150,45 +150,49 @@ test(
   runtimeTestTimeout,
 );
 
-test("scoped web sessions deny notifications before Core admission", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "pea-web-notifications-"));
-  const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
-  process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
-  const admissions: unknown[] = [];
-  const sendNotificationSignal = vi
-    .spyOn(Session.prototype, "sendNotificationSignal")
-    .mockImplementation(async (input, options) => {
-      admissions.push({ input, options });
-      return { native: true } as never;
-    });
-  let web: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
-  let tui: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
-  try {
-    web = await createPeaRuntime({ workspaceRoot: path.join(root, "web"), protocol: "web" });
-    const webSession = await web.controller.createSession({
-      resourceId: web.resourceId,
-      scope: "web-thread",
-      threadId: "web-thread",
-    });
-    const notification = { source: "test", kind: "test", summary: "test" };
+test(
+  "scoped web sessions deny notifications before Core admission",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pea-web-notifications-"));
+    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
+    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
+    const admissions: unknown[] = [];
+    const sendNotificationSignal = vi
+      .spyOn(Session.prototype, "sendNotificationSignal")
+      .mockImplementation(async (input, options) => {
+        admissions.push({ input, options });
+        return { native: true } as never;
+      });
+    let web: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
+    let tui: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
+    try {
+      web = await createPeaRuntime({ workspaceRoot: path.join(root, "web"), protocol: "web" });
+      const webSession = await web.controller.createSession({
+        resourceId: web.resourceId,
+        scope: "web-thread",
+        threadId: "web-thread",
+      });
+      const notification = { source: "test", kind: "test", summary: "test" };
 
-    await expect(webSession.sendNotificationSignal(notification)).rejects.toThrow(
-      "Pea web sessions do not support notifications.",
-    );
-    expect(admissions).toHaveLength(0);
+      await expect(webSession.sendNotificationSignal(notification)).rejects.toThrow(
+        "Pea web sessions do not support notifications.",
+      );
+      expect(admissions).toHaveLength(0);
 
-    tui = await createPeaRuntime({ workspaceRoot: path.join(root, "tui") });
-    await expect(tui.session!.sendNotificationSignal(notification)).resolves.toEqual({
-      native: true,
-    });
-    expect(admissions).toHaveLength(1);
-  } finally {
-    sendNotificationSignal.mockRestore();
-    await Promise.all([web?.close?.(), tui?.close?.()]);
-    if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
-    else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
-  }
-}, runtimeTestTimeout);
+      tui = await createPeaRuntime({ workspaceRoot: path.join(root, "tui") });
+      await expect(tui.session!.sendNotificationSignal(notification)).resolves.toEqual({
+        native: true,
+      });
+      expect(admissions).toHaveLength(1);
+    } finally {
+      sendNotificationSignal.mockRestore();
+      await Promise.all([web?.close?.(), tui?.close?.()]);
+      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
+    }
+  },
+  runtimeTestTimeout,
+);
 
 test(
   "Pea uses native category resolution and exact permission matrices",

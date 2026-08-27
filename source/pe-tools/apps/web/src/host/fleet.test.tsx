@@ -36,11 +36,7 @@ test("capability admission gates every fleet request", async () => {
   const mount = (enabled: boolean) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
-      createElement(
-        QueryClientProvider,
-        { client },
-        createElement(FleetProbe, { enabled }),
-      ),
+      createElement(QueryClientProvider, { client }, createElement(FleetProbe, { enabled })),
     );
   };
 
@@ -69,9 +65,7 @@ test("mounted chat makes no session or bridge requests without Revit capability"
 
   try {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      createElement(QueryClientProvider, { client }, createElement(ChatSentence)),
-    );
+    render(createElement(QueryClientProvider, { client }, createElement(ChatSentence)));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(requests).toEqual([]);
   } finally {

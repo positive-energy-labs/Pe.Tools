@@ -72,11 +72,7 @@ export function createLiveFamiliesHost(): FamiliesHost {
         .sort((a, b) => a.localeCompare(b));
     },
     project: (target, familyIds) =>
-      callHostRpc(
-        "familyfoundry.project",
-        { familyIds },
-        { bridgeSessionId: target || undefined },
-      ),
+      callHostRpc("familyfoundry.project", { familyIds }, { bridgeSessionId: target || undefined }),
     openPath: (target, path) =>
       callHostRpc("host.shell.open", { path }, { bridgeSessionId: target || undefined }),
   };

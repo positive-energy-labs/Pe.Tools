@@ -42,11 +42,7 @@ import {
   type FamilyParameterSnapshot,
   type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
-import {
-  HOST_QUERY_KEY,
-  useHostStatusQuery,
-  useLoadedFamiliesMatrixQuery,
-} from "#/host/queries";
+import { HOST_QUERY_KEY, useHostStatusQuery, useLoadedFamiliesMatrixQuery } from "#/host/queries";
 import { cn } from "#/lib/utils";
 
 type FfFamilyPlan = FfPlanEntry;
@@ -789,8 +785,9 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         {/* RULED 2026-08-16 (fit reviews): the third EmptyState that sat here — "no categories
             picked yet" — is deleted; the two visibly-empty pickers beside it announce
             themselves. */}
-        {draftCategories.length === 0 ? null : draftFamilyNames.length === 0 &&
-          familyFeed.state === "loading" || familyFeed.stale ? (
+        {draftCategories.length === 0 ? null : (draftFamilyNames.length === 0 &&
+            familyFeed.state === "loading") ||
+          familyFeed.stale ? (
           <OutcomeLine className="shrink-0" kind="busy" label="resolving families" />
         ) : (
           <FactChip title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated.">
@@ -803,11 +800,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
 
       {failure && (
         <div className="border-b border-[var(--r-line)] px-4 py-1.5">
-          <OutcomeLine
-            kind="error"
-            label={`${failure.verb} failed`}
-            says={failure.message}
-          />
+          <OutcomeLine kind="error" label={`${failure.verb} failed`} says={failure.message} />
         </div>
       )}
       {matrixIssue && (
@@ -978,7 +971,9 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                         label="artifacts"
                         tone="nav"
                         direction="out"
-                        onClick={() => void store.actions.openPath(entry.artifactDirectoryPath ?? "")}
+                        onClick={() =>
+                          void store.actions.openPath(entry.artifactDirectoryPath ?? "")
+                        }
                         reason={`Open the artifact bundle for this family in your OS file browser (${entry.artifactDirectoryPath}). The bundle stays on disk — this route never copies it.`}
                       />
                     )}
@@ -1130,9 +1125,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         /* Fleet → one family. The URL is the whole handoff: /family opens the requested
            family in the bound session's family editor and lands in its live lane. No
            cross-route store, nothing to keep in sync. */
-        onRowClick={() =>
-          void navigate({ to: "/family", search: {} })
-        }
+        onRowClick={() => void navigate({ to: "/family", search: {} })}
       />
     </main>
   );

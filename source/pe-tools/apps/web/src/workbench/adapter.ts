@@ -366,9 +366,7 @@ function messagePart(content: MastraMessagePart): WorkbenchMessagePart[] {
       const text = signalText(data.contents);
       if (!text) return [];
       return [
-        data.tagName === "route-workspace"
-          ? { kind: "text", text }
-          : { kind: "status", text },
+        data.tagName === "route-workspace" ? { kind: "text", text } : { kind: "status", text },
       ];
     }
     default:

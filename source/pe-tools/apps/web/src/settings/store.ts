@@ -77,9 +77,14 @@ export function createSettingsStore(deps: {
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
   host: SettingsHost;
-  slice?: Atom.Atom<AsyncResult.AsyncResult<import("#/state/route-store").Slice<SettingsRouteDocument>, Error>>;
+  slice?: Atom.Atom<
+    AsyncResult.AsyncResult<import("#/state/route-store").Slice<SettingsRouteDocument>, Error>
+  >;
   apply?: (patches: RouteStatePatch[]) => Promise<RouteStateWriteResult>;
-  command?: (name: "open" | "refresh" | "validate" | "save", input?: unknown) => Promise<RouteStateWriteResult>;
+  command?: (
+    name: "open" | "refresh" | "validate" | "save",
+    input?: unknown,
+  ) => Promise<RouteStateWriteResult>;
 }) {
   const core = createRouteStoreCore("settings", deps.registry);
   const { registry, owned, write, runVerb } = core;
@@ -88,7 +93,10 @@ export function createSettingsStore(deps: {
   Reflect.set(runtime.layer, "keepAlive", false);
   const lane: Lane = "read";
 
-  const settingsSlice = owned("slice/settings", deps.slice ?? docAtom(settingsRouteState, deps.scope));
+  const settingsSlice = owned(
+    "slice/settings",
+    deps.slice ?? docAtom(settingsRouteState, deps.scope),
+  );
   const liveWriter = docWriter(settingsRouteState, deps.scope, deps.registry, settingsSlice);
   const apply = deps.apply ?? liveWriter.apply;
   const command = deps.command ?? liveWriter.command;
@@ -103,7 +111,9 @@ export function createSettingsStore(deps: {
           deps.host.open(documentId),
         )
       : Effect.succeed(
-          unbound<import("@pe/agent-contracts").SettingsSnapshot | null>(null, ["settings document"]),
+          unbound<import("@pe/agent-contracts").SettingsSnapshot | null>(null, [
+            "settings document",
+          ]),
         );
   });
   const snapshotResult = runtimeFactory
@@ -121,9 +131,7 @@ export function createSettingsStore(deps: {
   );
   const binding = Atom.make((get) => ({
     target: current(get(document)?.bindings.file, deps.scope.documentAddress)?.id ?? null,
-  })).pipe(
-    owned("view/binding"),
-  );
+  })).pipe(owned("view/binding"));
   const proposals = Atom.make((get) =>
     Object.entries(get(fields)).filter(([, field]) => field.proposal != null),
   ).pipe(owned("view/proposals"));
@@ -310,9 +318,7 @@ export function createSettingsStore(deps: {
     const patches: RouteStatePatch[] = [
       {
         path: ["bindings", "file"],
-        value: target
-          ? { id: target, label: target, at: deps.scope.documentAddress }
-          : undefined,
+        value: target ? { id: target, label: target, at: deps.scope.documentAddress } : undefined,
       },
       { path: ["documentId"], value: documentId },
     ];
@@ -390,7 +396,10 @@ export function createSettingsStore(deps: {
       runVerb(
         "validate",
         async () => {
-          expectRouteWrite(await command("validate", { includeProposals: false }), "validate failed");
+          expectRouteWrite(
+            await command("validate", { includeProposals: false }),
+            "validate failed",
+          );
           return "validated settings";
         },
         ["settings"],

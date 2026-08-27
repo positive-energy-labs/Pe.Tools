@@ -29,7 +29,9 @@ const MODEL = {
 };
 const SETTINGS_PATH = "C:\\Settings\\test.family.json";
 const settings = (): SettingsRouteDocument => ({
-  bindings: { file: { id: SETTINGS_PATH, label: SETTINGS_PATH, at: address("C:\\Models\\Test.rfa") } },
+  bindings: {
+    file: { id: SETTINGS_PATH, label: SETTINGS_PATH, at: address("C:\\Models\\Test.rfa") },
+  },
   documentId: {
     moduleKey: "FamilyFoundry",
     rootKey: "models",
@@ -219,10 +221,7 @@ describe("family route store", () => {
     const testFixture = fixture();
     const writers = {
       ...testFixture.writers,
-      familyCommand: (
-        name: "capture_evidence" | "build_evidence",
-        input?: unknown,
-      ) =>
+      familyCommand: (name: "capture_evidence" | "build_evidence", input?: unknown) =>
         name === "capture_evidence"
           ? new Promise<{ ok: true; result: {} }>((resolve) => {
               release = resolve;
@@ -277,7 +276,12 @@ describe("family route store", () => {
     const writers = {
       ...testFixture.writers,
       familyCommand: async () =>
-        ({ ok: false, kind: "refused", error: "build moved", hint: "re-read" }) satisfies RouteStateWriteResult,
+        ({
+          ok: false,
+          kind: "refused",
+          error: "build moved",
+          hint: "re-read",
+        }) satisfies RouteStateWriteResult,
     };
     const { registry, store } = make({ ...testFixture, writers });
     await tick();

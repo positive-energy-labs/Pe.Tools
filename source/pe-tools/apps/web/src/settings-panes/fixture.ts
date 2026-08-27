@@ -137,11 +137,11 @@ export const fixtureSnapshot: SettingsSnapshot = {
     isValid: false,
     issues: [
       {
-          // Seeded scenario (the real file is valid): exercises issue-to-field joinery.
-          message:
-            'seeded fixture issue — "REFRIGERANT TYPE (FULL DESIGNATION)" exceeds the column-header budget',
-          severity: "error",
-          path: "/Fields/1/ColumnHeaderOverride",
+        // Seeded scenario (the real file is valid): exercises issue-to-field joinery.
+        message:
+          'seeded fixture issue — "REFRIGERANT TYPE (FULL DESIGNATION)" exceeds the column-header budget',
+        severity: "error",
+        path: "/Fields/1/ColumnHeaderOverride",
       },
     ],
   },

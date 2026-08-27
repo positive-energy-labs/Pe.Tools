@@ -74,27 +74,33 @@ export function CellTrichotomyReviewer({
     stagedCount > 0 && stagedEntries(cells).every(([, cell]) => cell.review !== "attention");
 
   const approve = (key: string, cell: ReviewerCell) =>
-    void state.apply([
-      // Stage the proposal's edit verbatim — settings proposals may be { delete: true }.
-      {
-        path: [segment, key, "staged"],
-        value:
-          cell.proposal != null && "delete" in cell.proposal && cell.proposal.delete === true
-            ? { delete: true }
-            : { value: cell.proposal?.value },
-      },
-      { path: [segment, key, "review"], value: "good" },
-    ]).catch(() => undefined);
+    void state
+      .apply([
+        // Stage the proposal's edit verbatim — settings proposals may be { delete: true }.
+        {
+          path: [segment, key, "staged"],
+          value:
+            cell.proposal != null && "delete" in cell.proposal && cell.proposal.delete === true
+              ? { delete: true }
+              : { value: cell.proposal?.value },
+        },
+        { path: [segment, key, "review"], value: "good" },
+      ])
+      .catch(() => undefined);
   const deny = (key: string) =>
-    void state.apply([
-      { path: [segment, key, "proposal"] },
-      { path: [segment, key, "review"], value: "none" },
-    ]).catch(() => undefined);
+    void state
+      .apply([
+        { path: [segment, key, "proposal"] },
+        { path: [segment, key, "review"], value: "none" },
+      ])
+      .catch(() => undefined);
   const undo = (key: string) =>
-    void state.apply([
-      { path: [segment, key, "staged"] },
-      { path: [segment, key, "review"], value: "none" },
-    ]).catch(() => undefined);
+    void state
+      .apply([
+        { path: [segment, key, "staged"] },
+        { path: [segment, key, "review"], value: "none" },
+      ])
+      .catch(() => undefined);
 
   return (
     <div className="mt-1.5 w-full border-t border-[var(--r-line-2)]">

@@ -30,11 +30,7 @@ import { applyAgentControllerEvent, hydrateWorkbenchState, type PeInspect } from
 import { usePeInfo } from "#/host/info";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
-import {
-  createChatPageStore,
-  type ChatPageStore,
-  type WorkbenchAttachment,
-} from "./store";
+import { createChatPageStore, type ChatPageStore, type WorkbenchAttachment } from "./store";
 
 export type { WorkbenchAttachment } from "./store";
 

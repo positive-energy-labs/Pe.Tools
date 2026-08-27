@@ -13,13 +13,34 @@
       "unit": "level",
       "question": "is this right?",
       "resolution": "plan-native",
-      "layers": ["plan", "void", "excluded", "candidateFill", "candidateHatch", "zoneOutline", "label"]
+      "layers": [
+        "plan",
+        "void",
+        "excluded",
+        "candidateFill",
+        "candidateHatch",
+        "zoneOutline",
+        "label"
+      ]
     },
     "forensic": {
       "unit": "zone",
       "question": "why is it wrong?",
       "resolution": "plan-native crop",
-      "layers": ["plan", "close", "sealRun", "sealDoor", "ink", "void", "excluded", "candidateFill", "candidateHatch", "candidateOutline", "zoneOutline", "label"]
+      "layers": [
+        "plan",
+        "close",
+        "sealRun",
+        "sealDoor",
+        "ink",
+        "void",
+        "excluded",
+        "candidateFill",
+        "candidateHatch",
+        "candidateOutline",
+        "zoneOutline",
+        "label"
+      ]
     }
   },
   "substrate": {
@@ -53,7 +74,11 @@
       "hueKey": "zone+candidateId",
       "adjacentDistinct": true,
       "$amendment": "v1.1 2026-08-23. v1 said 'saturated' and 'fillDarkened' without numbers, so each consumer would have invented its own and the two surfaces would have drifted on day one. These are the values lane W shipped; they are now the law.",
-      "hue": { "generator": "golden-angle", "stepDeg": 137.507, "seed": "sha256(zone+candidateId)" },
+      "hue": {
+        "generator": "golden-angle",
+        "stepDeg": 137.507,
+        "seed": "sha256(zone+candidateId)"
+      },
       "saturationPct": 82,
       "lightnessPct": 48,
       "darkenedLightnessPct": 28,
@@ -64,9 +89,14 @@
       "forensic": { "widthPx": 1, "color": "fillDarkened" }
     },
     "status": {
-      "accepted":   { "hatch": null },
-      "held":       { "hatch": { "angleDeg": 45, "spacingPx": 6, "widthPx": 1, "color": "fillDarkened" } },
-      "reviewHeld": { "hatch": { "angleDeg": 45, "spacingPx": 6, "widthPx": 1, "color": "fillDarkened" }, "chip": "C" }
+      "accepted": { "hatch": null },
+      "held": {
+        "hatch": { "angleDeg": 45, "spacingPx": 6, "widthPx": 1, "color": "fillDarkened" }
+      },
+      "reviewHeld": {
+        "hatch": { "angleDeg": 45, "spacingPx": 6, "widthPx": 1, "color": "fillDarkened" },
+        "chip": "C"
+      }
     }
   },
   "zone": {
@@ -77,19 +107,19 @@
     "$comment": "Sealers manufacture obstruction. Forensic render only, translucent warm tint, never dithered.",
     "drawnIn": ["forensic"],
     "sealDoor": [222, 58, 20, 110],
-    "sealRun":  [235, 130, 20, 110],
-    "close":    [200, 165, 130, 90]
+    "sealRun": [235, 130, 20, 110],
+    "close": [200, 165, 130, 90]
   },
   "$washAmendment": "v1.2 2026-08-23. v1 was WRONG: voidWash and excludedWash both composited to RGB 226 over white and were indistinguishable (found by lane R implementing them faithfully). Worse, kaitpw's first annotation pass flagged excluded residue in 4 of 4 zones - it is the top-ranked defect class - so it must be the more legible of the two, never a near-invisible wash. Void stays a neutral grey; excluded becomes a warm tint that a 1 ft sliver still shows.",
   "$residueAmendment": "v1.3 2026-08-23. A solid wash cannot serve both jobs. Excluded residue is the top-flagged defect class and its instances are THIN (1 ft ribbons along wall bands), but a single instance can also be HUGE - Lower Level#03 is 2,579 sf of one excluded blob, and rendered as a solid it hid 85% of the zone's plan. kaitpw: 'the opaque excluded residue blocks the view of plan ... very bad but I'm not sure why' - unable to diagnose because the render painted over the evidence. Outline guarantees a 1 ft sliver registers; hatch keeps a 2,500 sf blob transparent. NEITHER MAY EVER OBSCURE THE PLAN.",
   "void": {
     "outline": { "widthPx": 1, "rgba": [140, 140, 140, 200] },
-    "hatch":   { "angleDeg": 135, "spacingPx": 9, "widthPx": 1, "rgba": [140, 140, 140, 150] },
+    "hatch": { "angleDeg": 135, "spacingPx": 9, "widthPx": 1, "rgba": [140, 140, 140, 150] },
     "fill": null
   },
   "excluded": {
     "outline": { "widthPx": 1, "rgba": [214, 96, 32, 235] },
-    "hatch":   { "angleDeg": 135, "spacingPx": 7, "widthPx": 1, "rgba": [214, 96, 32, 170] },
+    "hatch": { "angleDeg": 135, "spacingPx": 7, "widthPx": 1, "rgba": [214, 96, 32, 170] },
     "fill": null
   },
   "label": {

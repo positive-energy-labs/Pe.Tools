@@ -2151,7 +2151,11 @@ export function FamilyWorkspace({
         runner={runner}
         receipt={
           failure != null ? (
-            <OutcomeLine kind={failure.kind} label={`${failure.verb} failed`} says={failure.message} />
+            <OutcomeLine
+              kind={failure.kind}
+              label={`${failure.verb} failed`}
+              says={failure.message}
+            />
           ) : lane.parseError != null ? (
             <OutcomeLine
               kind="error"

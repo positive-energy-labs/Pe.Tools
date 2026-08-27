@@ -59,7 +59,11 @@ function ParameterLinksRoute() {
   return <RouteDocument>{(at) => <ParameterLinksWorkspace documentAddress={at} />}</RouteDocument>;
 }
 
-function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
+function ParameterLinksWorkspace({
+  documentAddress,
+}: {
+  documentAddress: import("@pe/agent-contracts").Address;
+}) {
   const route = useRouteState(parameterLinksRouteState, { documentAddress });
   const document = route.slice;
   const stored = document?.profile ?? null;
@@ -217,10 +221,7 @@ function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import(
         name="parameter links"
         sentence={
           <span className="flex items-center gap-2">
-            <span
-              className="t-value face-mono text-foreground"
-              title="bound Revit document"
-            >
+            <span className="t-value face-mono text-foreground" title="bound Revit document">
               {documentAddress}
             </span>
             {/* The write's safety model lives ON the arming strip below (its one home) — this

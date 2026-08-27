@@ -54,7 +54,15 @@ function RoutePaneOwner({ chat, spec }: { chat: ChatPageStore; spec: RouteStateS
   );
 }
 
-function AddressedRoutePaneOwner({ chat, spec, documentAddress }: { chat: ChatPageStore; spec: RouteStateSpec<z.ZodType>; documentAddress: Address }) {
+function AddressedRoutePaneOwner({
+  chat,
+  spec,
+  documentAddress,
+}: {
+  chat: ChatPageStore;
+  spec: RouteStateSpec<z.ZodType>;
+  documentAddress: Address;
+}) {
   const store = useRouteStore(() => createRoutePaneStore(chat, spec, documentAddress));
   return <RoutePane store={store} />;
 }
@@ -63,13 +71,19 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
   const result = useAtomValue(store.slice);
   const { spec } = store;
   if (!AsyncResult.isSuccess(result)) {
-    return <EmptyState story="scope" exit="wait for the route document">opening {spec.title}</EmptyState>;
+    return (
+      <EmptyState story="scope" exit="wait for the route document">
+        opening {spec.title}
+      </EmptyState>
+    );
   }
   const { doc, connected, error } = result.value;
   return (
     <RouteWorkspaceShell title={spec.title} connected={connected === true} error={error}>
       {doc == null ? (
-        <EmptyState story="scope" exit="bind or open the route document">no document is open</EmptyState>
+        <EmptyState story="scope" exit="bind or open the route document">
+          no document is open
+        </EmptyState>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-4">
           <OutcomeLine kind="receipt" label="document-scoped route document" />
@@ -94,13 +108,19 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
   );
 }
 
-function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodType>, documentAddress: Address) {
+function createRoutePaneStore(
+  chat: ChatPageStore,
+  spec: RouteStateSpec<z.ZodType>,
+  documentAddress: Address,
+) {
   const core = createRouteStoreCore(`pane/${spec.route}`, chat.registry);
   const scope = { documentAddress };
   const slice = core.owned("slice/document", docAtom(spec, scope));
   const searchState = core.owned("page/search", Atom.make({ target: chat.search.target ?? "" }));
   const search = {
-    get target() { return chat.registry.get(searchState).target; },
+    get target() {
+      return chat.registry.get(searchState).target;
+    },
     patch(partial: { target?: string }) {
       core.write("set-search", "page/search", () =>
         chat.registry.update(searchState, (previous) => ({ ...previous, ...partial })),
@@ -115,9 +135,14 @@ function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodTyp
     search,
     atoms: { search: searchState },
     actions: {
-      apply: (patches: RouteStatePatch[]) => core.runVerb("apply", async () => {
-        return expectRouteWrite(await writer.apply(patches), "route update failed");
-      }, [spec.route]),
+      apply: (patches: RouteStatePatch[]) =>
+        core.runVerb(
+          "apply",
+          async () => {
+            return expectRouteWrite(await writer.apply(patches), "route update failed");
+          },
+          [spec.route],
+        ),
     },
     dispose: core.dispose,
   };

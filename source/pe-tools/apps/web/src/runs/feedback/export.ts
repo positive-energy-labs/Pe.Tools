@@ -26,11 +26,14 @@ function stamp(): string {
 }
 
 function slug(item: StagedItem, index: number): string {
-  const zone = item.zone.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const zone = item.zone
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
   return `${String(index + 1).padStart(2, "0")}-${zone}`;
 }
 
-const shortRun = (id: string | null) => (id ?? "(none)");
+const shortRun = (id: string | null) => id ?? "(none)";
 
 type ServerResult = {
   dir: string;
@@ -48,13 +51,17 @@ type ServerResult = {
  * (it owns the final stamp — collisions get suffixed — and the absolute paths). */
 function buildClipTemplate(items: StagedItem[], pool: string | null): string {
   const lines: string[] = [];
-  lines.push(`takeoff /runs feedback — ${items.length} staged item${items.length === 1 ? "" : "s"}`);
+  lines.push(
+    `takeoff /runs feedback — ${items.length} staged item${items.length === 1 ? "" : "s"}`,
+  );
   lines.push(`set: {{SET}}`);
   if (pool) lines.push(`pool: ${pool}`);
   lines.push("");
   items.forEach((item, i) => {
     lines.push(`[${i + 1}] ${item.zone} · A=${shortRun(item.runA)} · B=${item.runB}`);
-    lines.push(`    flags: ${item.flags.length > 0 ? item.flags.map(flagLabel).join(", ") : "none"}`);
+    lines.push(
+      `    flags: ${item.flags.length > 0 ? item.flags.map(flagLabel).join(", ") : "none"}`,
+    );
     if (item.note.trim()) lines.push(`    note: ${item.note.trim()}`);
     lines.push(`    png: {{DIR}}/${slug(item, i)}.png`);
     lines.push("");
@@ -123,7 +130,10 @@ export async function runExport(
 
     const sheetCanvas =
       verb === "sheet"
-        ? stitchSheet(composites, `takeoff /runs feedback — ${items.length} staged — ${new Date().toISOString()}`)
+        ? stitchSheet(
+            composites,
+            `takeoff /runs feedback — ${items.length} staged — ${new Date().toISOString()}`,
+          )
         : null;
     // Blob made up-front so a navigator fallback still sits inside the user gesture's
     // transient activation window when the server clipboard refuses.

@@ -42,19 +42,31 @@ type ExportPayload = {
   clipTemplate?: string;
   items: { fileName: string; pngBase64: string }[];
   sheetBase64?: string | null;
-  manifest: { stamp: string | null; setUrl: string | null; items: { png: string | null }[] } & Record<string, unknown>;
+  manifest: {
+    stamp: string | null;
+    setUrl: string | null;
+    items: { png: string | null }[];
+  } & Record<string, unknown>;
 };
 
 const psq = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 /** Windows-native clipboard — the PRIMARY copy path (Set-Clipboard needs no user activation
  * and works when the pane is embedded/unfocused, where navigator.clipboard throws). */
-function setOsClipboard(req: { textPath?: string; imagePath?: string }): { ok: boolean; detail: string } {
+function setOsClipboard(req: { textPath?: string; imagePath?: string }): {
+  ok: boolean;
+  detail: string;
+} {
   if (req.textPath) {
     // Round-trip through the UTF-8 clip.txt — clip.exe mangles non-ASCII, PS args mangle newlines.
     const r = spawnSync(
       "powershell.exe",
-      ["-NoProfile", "-STA", "-Command", `Get-Content -Raw -Encoding UTF8 ${psq(req.textPath)} | Set-Clipboard`],
+      [
+        "-NoProfile",
+        "-STA",
+        "-Command",
+        `Get-Content -Raw -Encoding UTF8 ${psq(req.textPath)} | Set-Clipboard`,
+      ],
       { timeout: 15_000 },
     );
     return { ok: r.status === 0, detail: r.status === 0 ? req.textPath : String(r.stderr) };
@@ -150,7 +162,17 @@ export const Route = createFileRoute("/api/runs-export")({
           opened = target;
         }
 
-        return Response.json({ dir, stamp, files, manifestPath, clipPath, clipText, setUrl, clipboard, opened });
+        return Response.json({
+          dir,
+          stamp,
+          files,
+          manifestPath,
+          clipPath,
+          clipText,
+          setUrl,
+          clipboard,
+          opened,
+        });
       },
     },
   },

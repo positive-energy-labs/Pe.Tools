@@ -131,7 +131,10 @@ export function useSettingsField(path: string) {
     change: (next: unknown) => onChange(path, next),
     push: (next: unknown) => onChange(path, [...(Array.isArray(value) ? value : []), next]),
     remove: (index: number) =>
-      onChange(path, (Array.isArray(value) ? value : []).filter((_, at) => at !== index)),
+      onChange(
+        path,
+        (Array.isArray(value) ? value : []).filter((_, at) => at !== index),
+      ),
   };
 }
 

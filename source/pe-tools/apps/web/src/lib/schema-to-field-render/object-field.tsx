@@ -1,9 +1,6 @@
 import { FieldLegendRow, FieldMessages } from "./field-metadata";
 import { FieldRenderer } from "./field-renderer";
-import {
-  type ResolvedFieldRendererProps,
-  useSettingsField,
-} from "./shared";
+import { type ResolvedFieldRendererProps, useSettingsField } from "./shared";
 
 export function ObjectField({
   path,
@@ -18,25 +15,23 @@ export function ObjectField({
   }
 
   return (
-        <fieldset className="space-y-4 rounded-lg border border-border p-4">
-          <legend>
-            <FieldLegendRow
-              label={label}
-              required={isRequired}
-              description={effectiveNodeRef.description()}
-              defaultValue={
-                effectiveNodeRef.hasExplicitDefault()
-                  ? effectiveNodeRef.explicitDefault()
-                  : undefined
-              }
-              path={path}
-            />
-          </legend>
-          <FieldMessages messages={field.errors} />
-          {propertyEntries.map(([childKey, childNodeRef]) => {
-            const childPath = `${path}.${childKey}`;
-            return <FieldRenderer key={childPath} path={childPath} node={childNodeRef.raw()} />;
-          })}
-        </fieldset>
+    <fieldset className="space-y-4 rounded-lg border border-border p-4">
+      <legend>
+        <FieldLegendRow
+          label={label}
+          required={isRequired}
+          description={effectiveNodeRef.description()}
+          defaultValue={
+            effectiveNodeRef.hasExplicitDefault() ? effectiveNodeRef.explicitDefault() : undefined
+          }
+          path={path}
+        />
+      </legend>
+      <FieldMessages messages={field.errors} />
+      {propertyEntries.map(([childKey, childNodeRef]) => {
+        const childPath = `${path}.${childKey}`;
+        return <FieldRenderer key={childPath} path={childPath} node={childNodeRef.raw()} />;
+      })}
+    </fieldset>
   );
 }

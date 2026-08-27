@@ -43,10 +43,11 @@ export function Composer({
     store.actions.setDraft((previous) => ({ ...previous, text: value }));
   const setAttachments = (
     value: WorkbenchAttachment[] | ((previous: WorkbenchAttachment[]) => WorkbenchAttachment[]),
-  ) => store.actions.setDraft((previous) => ({
-    ...previous,
-    attachments: typeof value === "function" ? value(previous.attachments) : value,
-  }));
+  ) =>
+    store.actions.setDraft((previous) => ({
+      ...previous,
+      attachments: typeof value === "function" ? value(previous.attachments) : value,
+    }));
   const fileRef = useRef<HTMLInputElement>(null);
 
   const commands = useMemo<SlashCommand[]>(

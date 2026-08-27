@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
-export function useRouteStore<T extends { dispose(): void; registry: AtomRegistry.AtomRegistry }>(create: () => T): T {
+export function useRouteStore<T extends { dispose(): void; registry: AtomRegistry.AtomRegistry }>(
+  create: () => T,
+): T {
   const storeRef = useRef<T | null>(null);
   const disposeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   storeRef.current ??= create();
