@@ -16,15 +16,15 @@
  *                        vocabulary has ZERO consumers and never grows one back — the
  *                        old vocabulary is deleted, so consuming it is consuming nothing.
  *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --pe-line /
- *                        --pe-line-2 (pe-base.css); the bare names died with the Lens
+ *                        --pe-line-2 (base.css); the bare names died with the Lens
  *                        vocabulary. (The regex is literal, so var(--pe-line) never matches.)
  *  3. tele classes       tele / tele-label / section-label as class words. The TYPE TIERS
  *                        ruling: tier x face x case replaced
  *                        the tele bundles, deleted 2026-08-16. Comments are stripped first;
  *                        lang's `dl-section-label` is a different word and stays legal.
- *  4. hex literals       #rrggbb / #rrggbbaa outside pe-base.css. THE LAW in the canon
+ *  4. hex literals       #rrggbb / #rrggbbaa outside base.css. THE LAW in the canon
  *                        header: "no component, no route, and no CSS file downstream may name
- *                        a colour literal" — a colour is a one-line edit in pe-base.css.
+ *                        a colour literal" — a colour is a one-line edit in base.css.
  *  5. sub-10px type      text-[Npx] with N < 10. The 10px floor from the type-tier ruling
  *                        (ops enforced it on itself; the flagship pass finished the job).
  *
@@ -36,7 +36,7 @@
  *  uiButtonImports  import sites of ui/button — the still-open half; each route
  *                   pass that migrates a consumer lowers this until the file is deleted.
  *  dashed           border-dashed / stroke-dasharray / border-style: dashed outside
- *                   components/lang + design-lang.css. R13b: every broken-edge mechanism
+ *                   components/lang + base.css + design-lang.css. R13b: every broken-edge mechanism
  *                   occupies the SAME slot and means SEAM. The baseline covers the audited
  *                   deliberate spends (exhibit chrome, drawing-set's seam, atlas's legend).
  *  longTitle        title= props over 240 characters — the hover-shadow-doc ratchet from fit
@@ -146,7 +146,7 @@ const stripComments = (text: string): string =>
 const CSS_SEAMS = new Set([
   "styles.css",
   "design-lang.css",
-  "pe-base.css",
+  "base.css",
   "components/lang/lang.css",
   "workbench/lens.css",
   "settings-panes/json-editor.css",
@@ -378,7 +378,7 @@ describe("design guard — hard zeros", () => {
     const offences = scan(FILES, re);
     expect(
       offences.length,
-      `Deleted token vocabulary consumed — these were removed at zero consumers; use the --pe-* canon (pe-base.css):\n${report(offences)}`,
+      `Deleted token vocabulary consumed — these were removed at zero consumers; use the --pe-* canon (base.css):\n${report(offences)}`,
     ).toBe(0);
   });
 
@@ -406,10 +406,10 @@ describe("design guard — hard zeros", () => {
     ).toBe(0);
   });
 
-  it("no hex colour literal outside pe-base.css (a colour is a one-line edit there)", () => {
+  it("no hex colour literal outside base.css (a colour is a one-line edit there)", () => {
     const re = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b/g;
     const offences = scan(
-      FILES.filter((f) => f.rel !== "pe-base.css"),
+      FILES.filter((f) => f.rel !== "base.css"),
       re,
     );
     expect(
@@ -500,7 +500,7 @@ describe("design guard — foundation topology", () => {
       '@import "tailwindcss";',
       "@plugin '@tailwindcss/typography';",
       '@import "tw-animate-css";',
-      '@import "./pe-base.css";',
+      '@import "./base.css";',
       '@import "./design-lang.css";',
     ]);
     expect(directiveRemainder(entry!.text, matches), "styles.css has non-directive content").toBe(
@@ -518,8 +518,8 @@ describe("design guard — foundation topology", () => {
   });
 
   it("keeps the browser base flat, scoped, and separate from Tailwind", () => {
-    const base = CSS_FILES.find((file) => file.rel === "pe-base.css");
-    expect(base, "pe-base.css must be collected").toBeDefined();
+    const base = CSS_FILES.find((file) => file.rel === "base.css");
+    expect(base, "base.css must be collected").toBeDefined();
     const text = stripComments(base!.text);
     expect(text).not.toMatch(/@(apply|theme|utility|custom-variant|plugin)\b/);
     expect(text).not.toMatch(
@@ -543,7 +543,7 @@ describe("design guard — foundation topology", () => {
   });
 
   it("rejects form-control component skins in the browser base", () => {
-    const base = CSS_FILES.find((file) => file.rel === "pe-base.css");
+    const base = CSS_FILES.find((file) => file.rel === "base.css");
     expect(base).toBeDefined();
     const mutated = base!.text.replace(
       "font: inherit;",
@@ -574,7 +574,7 @@ describe("design guard — foundation topology", () => {
   });
 
   it("keeps PE raw authority in pe-base and embeds that exact source in the report", () => {
-    const base = CSS_FILES.find((file) => file.rel === "pe-base.css");
+    const base = CSS_FILES.find((file) => file.rel === "base.css");
     const lang = CSS_FILES.find((file) => file.rel === "design-lang.css");
     expect(base).toBeDefined();
     expect(lang).toBeDefined();
@@ -699,7 +699,9 @@ describe("design guard — ratchets (baselines may only fall)", () => {
     ratchet(
       "dashed",
       scan(
-        FILES.filter((f) => !inUiOrLang(f) && f.rel !== "design-lang.css"),
+        FILES.filter(
+          (f) => !inUiOrLang(f) && f.rel !== "base.css" && f.rel !== "design-lang.css",
+        ),
         /border-dashed|stroke-dasharray|border-style:\s*dashed/g,
       ),
     );

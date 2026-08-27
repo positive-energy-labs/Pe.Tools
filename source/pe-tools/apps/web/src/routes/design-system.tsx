@@ -583,7 +583,7 @@ function Tokens() {
     <Section
       index="02"
       label="tokens"
-      note="eighteen, and every one of them is oklch(L C h) off a declared band — src/pe-base.css is the one place a colour is decided"
+      note="eighteen, and every one of them is oklch(L C h) off a declared band — src/base.css is the one place a colour is decided"
     >
       <p className="t-prose max-w-[80ch] text-ink-2">
         <code className="face-mono t-label">--pe-*</code> is canon. The old{" "}
@@ -623,7 +623,7 @@ function Tokens() {
       <GapNote>
         the swatch reads a resolved value for every token except the two hairlines, which are
         declared as <code>color-mix()</code> and read back unresolved. Nothing is wrong with the
-        colour; the ledger of computed contrast lives in the header of <code>src/pe-base.css</code>{" "}
+        colour; the ledger of computed contrast lives in the header of <code>src/base.css</code>{" "}
         because no component can compute it.
       </GapNote>
     </Section>

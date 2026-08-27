@@ -1,7 +1,7 @@
 /*
  * Lens/World/Moment styles — MIGRATED onto the `--pe-*` canon (workbench pass, 2026-08-16).
  * No Lens-vocabulary token (--paper*, --basalt, --slate, --pe-*, --user*, --line*) survives
- * here; every colour is a real role from pe-base.css. Per the --pe-on rule, every rule that
+ * here; every colour is a real role from base.css. Per the --pe-on rule, every rule that
  * sets a ground background re-declares --pe-on beside it.
  *
  * Colour decisions this file encodes:

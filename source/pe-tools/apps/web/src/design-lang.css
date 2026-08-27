@@ -1,4 +1,4 @@
-/* App-only Tailwind authoring layer. Native PE tokens, projections, and defaults live in pe-base.css. */
+/* App-only Tailwind authoring layer. Native PE tokens, projections, and defaults live in base.css. */
 @custom-variant dark (&:is(.dark *));
 
 /* PE font tokens stay non-inline so generated utilities retain custom-property references. */

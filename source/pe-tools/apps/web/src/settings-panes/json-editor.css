@@ -1,6 +1,6 @@
 /* settings-panes round 1 — json pane primitive (throwaway with the round).
    Token classes come from @tanstack/highlight (`th-token th-<class>`); colors ride
-   the pe-base role tokens (pe-base.css) so the pane reads as part of the
+   the pe-base role tokens (base.css) so the pane reads as part of the
    design under review. Washes follow lang.css's color-mix-over---pe-on idiom. */
 
 .jsonpane {

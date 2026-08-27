@@ -15,7 +15,7 @@ import { cn } from "#/lib/utils";
 
 /* ── VizChip — the taxonomy chip ──────────────────────────────────────────── */
 
-/** A rung of the viz ladder (pe-base.css). Indexed, not named: a viz colour asserts
+/** A rung of the viz ladder (base.css). Indexed, not named: a viz colour asserts
  * "different from its neighbours" and nothing else. */
 export type VizIndex = 1 | 2 | 3 | 4 | 5 | 6;
 

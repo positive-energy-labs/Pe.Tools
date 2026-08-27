@@ -1,6 +1,6 @@
 /**
  * COVERAGE BAR — proportions with an honest legend; THE viz ladder's first catalogued
- * consumer (pe-base.css: "--viz-* … governed by the grayscale law (from ops CoverageBar,
+ * consumer (base.css: "--viz-* … governed by the grayscale law (from ops CoverageBar,
  * this palette's first shipped consumer)").
  *
  * CONSUMERS: src/ops/** glance views (migrating from ops/primitives CoverageBar).

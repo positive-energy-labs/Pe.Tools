@@ -27,7 +27,7 @@ export function ExportSheet({
     const svg = document.querySelector<SVGSVGElement>(`#export-${id} svg`);
     if (!svg) return;
     const clone = svg.cloneNode(true) as SVGSVGElement;
-    // bake the tokens: a standalone file has no pe-base.css
+    // bake the tokens: a standalone file has no base.css
     const cs = getComputedStyle(svg);
     const colors = ["--pe-ink", "--pe-ink-2", "--pe-page", "--pe-alarm"].map((token) => {
       const value = cs.getPropertyValue(token).trim();

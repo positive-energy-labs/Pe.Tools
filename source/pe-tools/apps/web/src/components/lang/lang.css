@@ -2,7 +2,7 @@
    components/lang — THE DESIGN-LANGUAGE PRIMITIVES, one stylesheet.
    =============================================================================================
 
-   Every colour below is `var(--pe-…)` from `src/pe-base.css`. There is not one colour
+   Every colour below is `var(--pe-…)` from `src/base.css`. There is not one colour
    literal in this file, on purpose: a literal would be invariant against the token layer and
    would quietly un-decide a colour the palette round already decided. That invariance is the
    exact defect round 2 found in canon `Button`/`Chip`, and

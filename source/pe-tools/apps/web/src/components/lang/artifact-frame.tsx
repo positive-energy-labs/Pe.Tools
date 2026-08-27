@@ -17,7 +17,7 @@
  *   Both currently answer "no" — they are plain content.
  * - `--pe-on` PLUMBING: the frame declares the ground its children actually sit on, and the
  *   recessed bands re-declare it again, so every wash the cell grammar mixes lands on the right
- *   ground without any child naming its own container. See pe-base.css.
+ *   ground without any child naming its own container. See base.css.
  */
 import { cn } from "#/lib/utils";
 
