@@ -165,7 +165,10 @@ export async function buildAgentControllerApp(
         try {
           return c.json(await write.run(scope, c.req.param("route"), actor, parsed.data));
         } catch (error) {
-          return c.json({ ok: false, kind: "error", error: errorMessage(error) }, 403);
+          return c.json(
+            { ok: false, kind: "error", error: errorMessage(error), hint: "re-read the document before retrying." },
+            403,
+          );
         }
       });
   };

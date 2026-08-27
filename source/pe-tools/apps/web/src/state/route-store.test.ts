@@ -280,4 +280,47 @@ describe("route store kit", () => {
     core.dispose();
     registry.dispose();
   });
+
+  it("reuses one request id per external gesture until it lands", async () => {
+    const schema = z.object({});
+    const spec = {
+      route: "test-route",
+      title: "Test",
+      description: "Test",
+      schema,
+      agentWriteMask: [],
+      commands: {
+        external: { description: "External", actor: "human", input: z.object({ n: z.number() }), mutatesExternal: true },
+      },
+    } satisfies RouteStateSpec<typeof schema>;
+    const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+    const core = createRouteStoreCore("test-writer", registry);
+    const slice = core.owned(
+      "slice/document",
+      Atom.make<AsyncResult.AsyncResult<Slice<z.infer<typeof schema>>, Error>>(
+        AsyncResult.success({ doc: {}, revision: 1, hydrated: true, connected: true, error: null, peaActive: false }),
+      ),
+    );
+    const response = (body: unknown) => Response.json(body);
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(response({ ok: false, kind: "error", error: "lost", hint: "retry" }))
+      .mockResolvedValueOnce(response({ ok: true, revision: 1 }))
+      .mockResolvedValueOnce(response({ ok: true, revision: 1 }));
+    const ids = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"];
+    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => ids.shift() as `${string}-${string}-${string}-${string}-${string}`);
+    const writer = docWriter(spec, { documentAddress: address("C:\\Models\\One.rvt") }, registry, slice);
+
+    await writer.command("external", { n: 1 });
+    await writer.command("external", { n: 1 });
+    await writer.command("external", { n: 1 });
+    const sent = request.mock.calls.slice(-3).map((call) => JSON.parse(call[1]!.body as string).requestId);
+    expect(sent).toEqual([
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+    ]);
+    core.dispose();
+    registry.dispose();
+  });
 });

@@ -440,6 +440,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
       return fail(cause instanceof Error ? cause.message : String(cause), "error");
     }
   };
+  const pendingRequestIds = new Map<string, string>();
   const writeRevision = (explicit?: number): number | null => {
     const current = registry.get(slice);
     if (!AsyncResult.isSuccess(current) || current.value.revision === null) return null;
@@ -451,15 +452,23 @@ export function docWriter<S extends RouteStateSpec<any>>(
       if (revision === null) return Promise.resolve(notHydrated);
       return write("apply", { patches, expectedRevision: revision });
     },
-    command: (name: keyof S["commands"] & string, input?: unknown) => {
+    command: async (name: keyof S["commands"] & string, input?: unknown) => {
       const revision = writeRevision();
-      if (revision === null) return Promise.resolve(notHydrated);
-      return write("command", {
+      if (revision === null) return notHydrated;
+      // One request id per (command, input) until it lands: a re-click after a lost response
+      // replays the receipt instead of mutating Revit twice. expectedRevision orders; requestId is at-most-once.
+      const gesture = JSON.stringify([name, input ?? {}]);
+      const external = spec.commands[name]?.mutatesExternal === true;
+      const requestId = external ? (pendingRequestIds.get(gesture) ?? crypto.randomUUID()) : undefined;
+      if (requestId) pendingRequestIds.set(gesture, requestId);
+      const result = await write("command", {
         command: name,
         input: input ?? {},
         expectedRevision: revision,
-        ...(spec.commands[name]?.mutatesExternal ? { requestId: crypto.randomUUID() } : {}),
+        ...(requestId ? { requestId } : {}),
       });
+      if (result.ok) pendingRequestIds.delete(gesture);
+      return result;
     },
   };
 }
