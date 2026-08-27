@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-pe>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PE base probe</title>
+    <link rel="stylesheet" href="../../../source/pe-tools/apps/web/src/pe-base.css">
+  </head>
+  <body>
+    <main class="page-wrap">
+      <header>
+        <p>PE / browser-native base</p>
+        <h1>Isolated base probe</h1>
+        <p>One relative stylesheet link. Toggle <code>class="dark"</code> on the HTML element for the dark-mode proof.</p>
+      </header>
+      <nav aria-label="Probe links">
+        <a href="#evidence">Jump to evidence</a>
+      </nav>
+      <section id="evidence" aria-labelledby="evidence-title">
+        <h2 id="evidence-title">Computed-style evidence</h2>
+        <p><label for="native-action">Focusable native control</label></p>
+        <button id="native-action" type="button">Focus this control</button>
+        <p>Inline <code>code</code> stays distinct from the block below.</p>
+        <pre><code>data-pe → page ground → semantic defaults</code></pre>
+      </section>
+    </main>
+  </body>
+</html>

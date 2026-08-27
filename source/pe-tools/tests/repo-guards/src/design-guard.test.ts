@@ -77,6 +77,10 @@ import { describe, expect, it } from "vite-plus/test";
 
 const GUARD_ROOT = dirname(fileURLToPath(import.meta.url)); // …/tests/repo-guards/src
 const ROOT = resolve(GUARD_ROOT, "../../../apps/web/src");
+const REPORT = resolve(
+  GUARD_ROOT,
+  "../../../../../docs/features/design-system/NORMALIZATION-2026-08-27.html",
+);
 const SKIP_DIRS = new Set([".artifacts", ".git", "build", "coverage", "dist", "node_modules"]);
 const SKIP_FILES = new Set(["routeTree.gen.ts"]);
 
@@ -142,7 +146,7 @@ const stripComments = (text: string): string =>
 const CSS_SEAMS = new Set([
   "styles.css",
   "design-lang.css",
-  "design-defaults.css",
+  "pe-base.css",
   "components/lang/lang.css",
   "workbench/lens.css",
   "settings-panes/json-editor.css",
@@ -226,8 +230,6 @@ const MOUNTED_ROUTE_FILES = (() => {
 })();
 
 const routeArbitrary = (): Offence[] => {
-  const re =
-    /(?:^|\s)((?:text|bg|border|rounded|ring|shadow|p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|space-[xy]|w|h|min-w|max-w|min-h|max-h|leading|tracking|font|top|right|bottom|left|inset|translate-x|translate-y|opacity|z)-\[[^\s\]]+\])/g;
   const offences: Offence[] = [];
   for (const f of FILES.filter((file) => MOUNTED_ROUTE_FILES.has(file.rel))) {
     const sf = createSourceFile(f.rel, f.text, ScriptTarget.Latest, true, ScriptKind.TSX);
@@ -244,12 +246,11 @@ const routeArbitrary = (): Offence[] => {
           )
             continue;
           for (const text of literalClassTexts(attribute.initializer)) {
-            re.lastIndex = 0;
-            for (const match of text.matchAll(re)) {
+            for (const match of routeArbitraryTokens(text)) {
               offences.push({
                 rel: f.rel,
                 line: lineOf(f.text, node.getStart(sf)),
-                match: match[1],
+                match,
               });
             }
           }
@@ -260,6 +261,12 @@ const routeArbitrary = (): Offence[] => {
     visit(sf);
   }
   return offences;
+};
+
+const routeArbitraryTokens = (text: string) => {
+  const re =
+    /(?:^|\s)((?:(?:[^\s:]+|\[[^\]]+\]):)*(?:text|bg|border|rounded|ring|shadow|p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|space-[xy]|w|h|min-w|max-w|min-h|max-h|leading|tracking|font|top|right|bottom|left|inset|translate-x|translate-y|opacity|z)-\[[^\s\]]+\])/g;
+  return [...text.matchAll(re)].map((match) => match[1]);
 };
 
 const semanticRoles = new Set([
@@ -296,6 +303,7 @@ const isSemanticRawUtility = (rawToken: string) => {
   const token = rawToken
     .replace(/^["'`“”‘’]+/, "")
     .replace(/["'`“”‘’.,;:]+$/, "")
+    .replace(/^\((.*)\)$/, "$1")
     .replace(/^!/, "");
   const utility = stripVariantPrefix(token).replace(/^!/, "").replace(/!$/, "");
   const color =
@@ -323,6 +331,7 @@ const semanticRawUtilityMatrix = [
   ["hover:rounded-(--radius)!", true],
   ["font-[family-name:var(--font-pe-mono)]", true],
   ['Use "bg-[var(--r-page)]" here.', true],
+  ["Use (bg-[var(--r-page)]) here.", true],
   ["var(--r-page)", false],
   ["color: var(--r-page)", false],
   ["[--r-on:var(--r-page)]", false],
@@ -400,7 +409,7 @@ describe("design guard — hard zeros", () => {
   it("no hex colour literal outside design-lang.css (a colour is a one-line edit there)", () => {
     const re = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b/g;
     const offences = scan(
-      FILES.filter((f) => f.rel !== "design-lang.css"),
+      FILES.filter((f) => f.rel !== "pe-base.css"),
       re,
     );
     expect(
@@ -440,8 +449,8 @@ describe("design guard — foundation topology", () => {
       '@import "tailwindcss";',
       "@plugin '@tailwindcss/typography';",
       '@import "tw-animate-css";',
+      '@import "./pe-base.css";',
       '@import "./design-lang.css";',
-      '@import "./design-defaults.css";',
     ]);
     expect(directiveRemainder(entry!.text, matches), "styles.css has non-directive content").toBe(
       "",
@@ -457,9 +466,43 @@ describe("design guard — foundation topology", () => {
     expect(directiveRemainder(mutated, matches)).toContain("body { display: block; }");
   });
 
+  it("keeps the browser base flat, scoped, and separate from Tailwind", () => {
+    const base = CSS_FILES.find((file) => file.rel === "pe-base.css");
+    expect(base, "pe-base.css must be collected").toBeDefined();
+    const text = stripComments(base!.text);
+    expect(text).not.toMatch(/@(apply|theme|utility|custom-variant|plugin)\b/);
+    expect(text).not.toMatch(
+      /@import\b|tailwindcss|tw-animate|url\(|<script\b|animation(?:-name)?\s*:/i,
+    );
+    const selectors = [...text.matchAll(/(?:^|})\s*([^{}]+)\{/gm)]
+      .flatMap((match) => match[1].split(","))
+      .map((selector) => selector.trim())
+      .filter(Boolean);
+    const allowed =
+      /^(?::root|\.dark|\[data-pe\](?: \*| body| #app| a(:hover)?| code| pre code| \.page-wrap)?)$/;
+    expect(selectors.filter((selector) => !allowed.test(selector))).toEqual([]);
+  });
+
+  it("keeps PE raw authority in pe-base and embeds that exact source in the report", () => {
+    const base = CSS_FILES.find((file) => file.rel === "pe-base.css");
+    const lang = CSS_FILES.find((file) => file.rel === "design-lang.css");
+    expect(base).toBeDefined();
+    expect(lang).toBeDefined();
+    expect(lang!.text).not.toMatch(/^\s*--(?:r-|viz-)/m);
+    expect(lang!.text).not.toContain("[data-pe]");
+    const reportText = readFileSync(REPORT, "utf8");
+    const embedded = /<style id="pe-base">([\s\S]*?)<\/style>/.exec(reportText);
+    expect(embedded, "report must contain the exact pe-base embedding").toBeTruthy();
+    expect(embedded![1]).toBe(base!.text);
+  });
+
   it("uses only route sources mounted by routeTree.gen.ts", () => {
     expect(MOUNTED_ROUTE_FILES.has("routes/index.tsx")).toBe(true);
     expect(MOUNTED_ROUTE_FILES.has("routes/__wave1b-unmounted.tsx")).toBe(false);
+  });
+
+  it("counts variant-prefixed arbitrary route utilities", () => {
+    expect(routeArbitraryTokens("sm:max-w-[44rem]")).toEqual(["sm:max-w-[44rem]"]);
   });
 
   it("collects template substitution literals exactly once", () => {
