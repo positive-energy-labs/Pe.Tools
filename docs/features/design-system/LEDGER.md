@@ -16,6 +16,9 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 - 2026-08-24 — The targeting manifest is canon (`apps/web/src/targeting/`): a route declares a static `Product` (links forest · stages of demanding verbs · panes), supplies one `Feed` per link from its queries, and keeps bindings in URL search; `TargetingHead` renders it as a sentence of TERMINALS only (links with `dir`); trunks (world › rvt, folder) never print — they are the picker's crumbs, and terminals under one trunk share its binding. The verb rail expands in place (`▾`) into verb · needs · state. Seams derive (`feed.options === null`, `run === null`), refusals derive (unwired → unbound → stale → gate). `/takeoffs` is the reference adoption; the round-5 proto stays on main until every route converges.
 
+- 2026-08-27 — [ADR 0010](../../adr/0010-standardize-vocabulary-first.md): vocabulary and grammar standardize before consumers; components keep the second-consumer rule. Tokens rename `--r-*`→`--pe-*`; shadcn aliases die; bare `var(--pe-*)` in TSX, role utilities in route files, and `shadow-*` become hard zeros; `base.css` + `data-pe` is the one base every surface and standalone HTML links; `components/ui/`→`components/mechanism/`. Ruled by kaitpw (demiurge sitting, occam on every tie).
+- 2026-08-27 — `proto*` trees are internal-only: exempt from every guard, deleted rather than maintained (kaitpw).
+
 ### The language
 
 - 2026-08-16 — The design language is settled (base 2, rounds 1–2); `--r-*` tokens are canon in `src/pe-base.css`, Tailwind grammar/projections in `src/design-lang.css`, and component grammar in `components/lang/`. Standing law: nothing exists on `/design-system` unless it is a real component with a real consumer (no shims — a workaround is noise that hides a gap).
@@ -172,6 +175,9 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 - 2026-08-25 — Route-store shapes rejected in the W1 demiurge (`w1-demiurge.md` §1): store-as-source (S1: Pea, dock and iframe write the same doc from other realms; the host's 1,393 LOC of ordering/gate proof would need remaking in a tab); two truths reconciled on save (S3: every "hardest three" in the route census is this bug already); bare atoms with no owner (S4: no `dispose`, no fixture root); `abstract class RouteStore` (S5: five subclasses of one base is a framework); one app store with routes as slices (S6: couples five routes' dispose); TanStack Query as feed substrate (S8: tracked waterfalls lost; survives only as page cache for reads that feed no link); page memory in the doc (S9: hover as a thread event); per-realm stores with iframe replication (S10: a fourth truth; delete the iframe instead).
 
 ## Owed
+
+- ADR 0010 codemods, in order, before `goal/tailwind-foundation` merges: (1) `--r-*`→`--pe-*` across CSS/TSX/guard; (2) delete the 19 shadcn aliases in `pe-base.css` and rewrite the 93 `bg-background`/`bg-muted`/… uses; (3) rewrite 717 bare `var(--r-*)` TSX sites to utilities (JS colour maps in `master-table/cells.tsx` become class maps); (4) move `dl-*` composition rules from `lang.css` to `@utility`; (5) `git mv components/ui components/mechanism`; (6) restore the band-math header from `design-lang.css@1455d25` into `pe-base.css` (rename to `base.css`); (7) add `z-raised/z-sticky/z-popup/z-modal` and one `--pe-motion` duration, replace `z-1…z-50` and `zIndex: 9999`; (8) guard: app-wide arbitrary ratchet, hard zeros for `var(--pe-`, `shadow-*`, role utilities in `routes/**`, drop the 6-digit floor on the hex rule (`workbench/lens.css:115` `#999`).
+- The agent cheat sheet (one screen: roles, tiers, z, laws, link line) lives beside `base.css`; `triangulate`/`execute` isolated-HTML variants link `base.css` instead of inventing a palette.
 
 ### Cross-route language gaps (the single owners)
 
