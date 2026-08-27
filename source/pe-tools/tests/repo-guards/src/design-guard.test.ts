@@ -262,20 +262,84 @@ const routeArbitrary = (): Offence[] => {
   return offences;
 };
 
-const semanticRawUtilityRe =
-  /(?:^|\s)((?:[^\s:]+:)*!?((?:bg|text|border|divide|ring|outline|fill|stroke)(?:-[A-Za-z0-9_-]+)*-\[var\(--r-(?:page|artifact|recess|select|ink|ink-2|ink-mute|line|line-2|pea|pea-ink|alarm|caution|done|commit|on-commit|nav)\)\](?:\/[^\s]+)?|rounded-\[var\(--radius\)\]|font-\[family-name:var\(--font-pe-(?:mono|display)\)\]))(?=\s|$)/g;
+const semanticRoles = new Set([
+  "page",
+  "artifact",
+  "recess",
+  "select",
+  "ink",
+  "ink-2",
+  "ink-mute",
+  "line",
+  "line-2",
+  "pea",
+  "pea-ink",
+  "alarm",
+  "caution",
+  "done",
+  "commit",
+  "on-commit",
+  "nav",
+]);
+
+const stripVariantPrefix = (token: string) => {
+  let brackets = 0;
+  for (let i = token.length - 1; i >= 0; i -= 1) {
+    if (token[i] === "]") brackets += 1;
+    else if (token[i] === "[") brackets -= 1;
+    else if (token[i] === ":" && brackets === 0) return token.slice(i + 1);
+  }
+  return token;
+};
+
+const isSemanticRawUtility = (rawToken: string) => {
+  const token = rawToken
+    .replace(/^["'`“”‘’]+/, "")
+    .replace(/["'`“”‘’.,;:]+$/, "")
+    .replace(/^!/, "");
+  const utility = stripVariantPrefix(token).replace(/^!/, "").replace(/!$/, "");
+  const color =
+    /^(?:bg|text|border|divide|ring|outline|fill|stroke)(?:-[A-Za-z0-9_-]+)*-(\[(?:[A-Za-z][A-Za-z0-9_-]*:)?var\(--r-([a-z0-9-]+)\)\]|\(--r-([a-z0-9-]+)\))(?:\/[^\s]+)?$/.exec(
+      utility,
+    );
+  if (color && semanticRoles.has(color[2] ?? color[3])) return true;
+  if (/^rounded-(?:\[var\(--radius\)\]|\(--radius\))$/.test(utility)) return true;
+  return /^font-\[family-name:var\(--font-pe-(?:mono|display)\)\]$/.test(utility);
+};
+
+const semanticRawUtilityTokens = (text: string) =>
+  text.split(/\s+/).filter((token) => token && isSemanticRawUtility(token));
+
+const semanticRawUtilityMatrix = [
+  ["bg-[var(--r-page)]", true],
+  ["data-[s=idle]:bg-[var(--r-page)]", true],
+  ["[&:not(:first-child)]:bg-[var(--r-page)]", true],
+  ["border-r-[var(--r-line)]/50", true],
+  ["!bg-[var(--r-page)]", true],
+  ["bg-[var(--r-page)]!", true],
+  ["bg-[color:var(--r-page)]", true],
+  ["bg-(--r-page)", true],
+  ["rounded-[var(--radius)]", true],
+  ["hover:rounded-(--radius)!", true],
+  ["font-[family-name:var(--font-pe-mono)]", true],
+  ['Use "bg-[var(--r-page)]" here.', true],
+  ["var(--r-page)", false],
+  ["color: var(--r-page)", false],
+  ["[--r-on:var(--r-page)]", false],
+  ["hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]", false],
+  ["w-[var(--r-page)]", false],
+] as const;
 
 const semanticRawUtilities = (): Offence[] => {
   const offences: Offence[] = [];
   for (const file of FILES.filter((entry) => /\.tsx?$/.test(entry.rel))) {
     const source = createSourceFile(file.rel, file.text, ScriptTarget.Latest, true, ScriptKind.TSX);
     for (const literal of literalAuthoringTexts(source)) {
-      semanticRawUtilityRe.lastIndex = 0;
-      for (const match of literal.text.matchAll(semanticRawUtilityRe)) {
+      for (const token of semanticRawUtilityTokens(literal.text)) {
         offences.push({
           rel: file.rel,
-          line: lineOf(file.text, literal.index + (match.index ?? 0)),
-          match: match[1],
+          line: lineOf(file.text, literal.index),
+          match: token,
         });
       }
     }
@@ -289,8 +353,14 @@ describe("design guard — hard zeros", () => {
   it("no eligible PE semantic token arbitrary utilities remain in production literals", () => {
     expect(
       semanticRawUtilities(),
-      "Use the existing literal semantic Tailwind role in class attributes and class builders",
+      "Deprecated raw PE utility spellings are forbidden in every production literal, including quoted examples; use the canonical semantic Tailwind role",
     ).toEqual([]);
+  });
+
+  it("matches the complete deprecated raw-token spelling matrix", () => {
+    for (const [text, forbidden] of semanticRawUtilityMatrix) {
+      expect(semanticRawUtilityTokens(text).length > 0, text).toBe(forbidden);
+    }
   });
 
   it("no dead shim token is consumed (the alias shim reads zero lines, forever)", () => {

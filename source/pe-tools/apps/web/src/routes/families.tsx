@@ -332,7 +332,7 @@ function NamePicker({
       <ComboboxChips
         ref={anchor}
         title={title}
-        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-md border-line-2 bg-transparent py-0.5 t-label"
+        className="face-mono max-h-13 min-h-7 min-w-0 flex-1 overflow-y-auto rounded-md border-line-2 bg-transparent py-0.5 t-label"
       >
         {collapsed ? (
           <span

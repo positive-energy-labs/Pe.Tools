@@ -86,7 +86,7 @@ function ArmingRoute() {
           label="live"
           note="type a reason to arm it · the first commit takes a drift refusal · re-plan, then commit again"
         >
-          <div className="max-w-[44rem] flex flex-col gap-2.5">
+          <div className="max-w-176 flex flex-col gap-2.5">
             {phase === "written" ? (
               <>
                 <OutcomeLine

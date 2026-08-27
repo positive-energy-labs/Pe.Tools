@@ -452,7 +452,7 @@ function LangGroup() {
         consumers="1 consumer — routes/design-system_.arming"
       >
         <Lane className="items-stretch">
-          <Spec cap='reason="" → unarmed' className="w-full max-w-[26rem]">
+          <Spec cap='reason="" → unarmed' className="w-full max-w-104">
             <ArmingStrip
               verb={ARMING_FIXTURE.verb}
               target={ARMING_FIXTURE.target}
@@ -465,7 +465,7 @@ function LangGroup() {
               onCancel={noop}
             />
           </Spec>
-          <Spec cap="reason supplied → armed" className="w-full max-w-[26rem]">
+          <Spec cap="reason supplied → armed" className="w-full max-w-104">
             <ArmingStrip
               verb={ARMING_FIXTURE.verb}
               target={ARMING_FIXTURE.target}
@@ -478,7 +478,7 @@ function LangGroup() {
               onCancel={noop}
             />
           </Spec>
-          <Spec cap="state.phase=refused" className="w-full max-w-[26rem]">
+          <Spec cap="state.phase=refused" className="w-full max-w-104">
             <ArmingStrip
               verb={ARMING_FIXTURE.verb}
               target={ARMING_FIXTURE.target}
@@ -566,8 +566,8 @@ function LangGroup() {
         </Lane>
         <Lane>
           {CELL_EXTRAS.map((r) => (
-            <Spec key={r.key} cap={CELL_EXTRA_CAPS[r.key] ?? r.key} className="max-w-[19rem]">
-              <span className="block w-[19rem] max-w-full">
+            <Spec key={r.key} cap={CELL_EXTRA_CAPS[r.key] ?? r.key} className="max-w-76">
+              <span className="block w-76 max-w-full">
                 <StateCell {...cellProps(r)} />
               </span>
             </Spec>

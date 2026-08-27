@@ -263,7 +263,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
     demo: (
       // width is explicit because `.dl-foot` is `nowrap` and clamps only inside a bounded block —
       // in the table the column supplies that bound; here nothing does.
-      <span className="flex w-[19rem] max-w-full flex-col gap-1.5">
+      <span className="flex w-76 max-w-full flex-col gap-1.5">
         <StateCell {...cellProps(row("connectedLoad"))} />
         <Cap>
           one coordinate, three readings — pea proposes, you hold, the model disagrees. The body,
@@ -357,7 +357,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
     demo: (
       // the long-value row on purpose: the citation has to survive the footline clamp, or the
       // specimen truncates the very thing the law is about.
-      <span className="block w-[19rem] max-w-full">
+      <span className="block w-76 max-w-full">
         <StateCell {...cellProps(row("typeComments"))} />
       </span>
     ),
@@ -1234,7 +1234,7 @@ function RealTable() {
         }
       >
         {/* MasterTable is `flex min-h-0 flex-1 flex-col` internally and expects a bounded parent. */}
-        <div className="flex h-[26rem] flex-col">
+        <div className="flex h-104 flex-col">
           <MasterTable
             rows={PARAM_ROWS}
             columns={columns}

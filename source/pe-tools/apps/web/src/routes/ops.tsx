@@ -788,7 +788,7 @@ function ProjectedOutput({ value }: { value: unknown }) {
     return (
       <div>
         <h2 className="t-label t-upper mb-1 text-ink-2">{projection.title}</h2>
-        <ul className="t-value max-h-[24rem] overflow-auto rounded-md border border-line">
+        <ul className="t-value max-h-96 overflow-auto rounded-md border border-line">
           {rows.map((row, index) => (
             <li key={index} className="border-b border-line px-2 py-1 last:border-b-0">
               {formatCell(row)}
@@ -807,7 +807,7 @@ function ProjectedOutput({ value }: { value: unknown }) {
   return (
     <div>
       <h2 className="t-label t-upper mb-1 text-ink-2">{projection.title}</h2>
-      <div className="max-h-[24rem] overflow-auto rounded-md border border-line">
+      <div className="max-h-96 overflow-auto rounded-md border border-line">
         <table className="t-value w-full text-left">
           <thead className="sticky top-0 bg-recess [--r-on:var(--r-recess)]">
             <tr>
@@ -839,7 +839,7 @@ function OutputBlock({ title, value }: { title: string; value: unknown }) {
   return (
     <div className="min-w-0">
       {title && <h2 className="t-label t-upper mb-1 text-ink-2">{title}</h2>}
-      <pre className="t-value max-h-[32rem] overflow-auto rounded-md border border-line bg-recess [--r-on:var(--r-recess)] p-3">
+      <pre className="t-value max-h-128 overflow-auto rounded-md border border-line bg-recess [--r-on:var(--r-recess)] p-3">
         {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
       </pre>
     </div>

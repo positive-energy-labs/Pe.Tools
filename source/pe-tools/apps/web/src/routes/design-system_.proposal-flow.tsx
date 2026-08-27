@@ -118,7 +118,7 @@ function ProposalFlow() {
           label="scale one · pea's chat card"
           note="a machine-operated object carrying state — it keeps its frame"
         >
-          <div className="max-w-[42rem]">
+          <div className="max-w-168">
             {PROPOSAL_THREAD.map((m, i) => (
               <div key={i} className="flex gap-3 pb-2.5">
                 <span
@@ -349,7 +349,7 @@ function ProposalTable({
 
   return (
     <ArtifactFrame
-      className="max-w-[46rem]"
+      className="max-w-184"
       head={
         <>
           <span className="dl-tag">{PROPOSAL_TARGET} · under review</span>
@@ -359,7 +359,7 @@ function ProposalTable({
         </>
       }
     >
-      <div className="flex h-[16rem] flex-col">
+      <div className="flex h-64 flex-col">
         <MasterTable
           rows={items}
           columns={columns}
