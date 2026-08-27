@@ -106,7 +106,10 @@ function FacetFilterSpecimen() {
           <span className="truncate normal-case">{selected.label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent anchor={anchorRef} className="min-w-44 rounded-[var(--radius)]">
+      <ComboboxContent
+        anchor={anchorRef}
+        className="[--popup-min-width:11rem] rounded-[var(--radius)]"
+      >
         <ComboboxInput placeholder="filter values…" />
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>
@@ -147,7 +150,7 @@ function PickerChipSpecimen() {
           <span className="face-mono t-value truncate">{picked?.label ?? "category"}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent align="end" anchor={anchorRef} className="min-w-56">
+      <ComboboxContent align="end" anchor={anchorRef} className="[--popup-min-width:14rem]">
         <ComboboxInput placeholder="Search category…" />
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>
@@ -216,7 +219,7 @@ const SPECIMENS: readonly Specimen[] = [
       "components/master-table/master-table.tsx → every MasterTable column header (atlas/takeoffs, families, data-tables)",
     shape: "explicit anchor on the trigger · in-popup search · wrapper default side/align",
     defects: [
-      "FIXED IN SOURCE — the consumer's `min-w-44` now survives: the shared combobox law grows to requested/content width, keeps the anchor as a floor, and clamps to available viewport width. Browser sizing remains pending.",
+      "FIXED IN SOURCE — caller intent is now `[--popup-min-width:11rem]`; shared CSS computes `min(available, max(anchor, caller))`, grows to content, and clamps to the available viewport. Browser sizing remains pending.",
       "REMAINS FOR BROWSER — flip works (bottom edge opens upward) but the in-popup search input stays at the popup's top, so after a flip the search box is the FURTHEST thing from the trigger you just clicked.",
       "no component to import: `ColFilter` is a private function inside master-table.tsx, so this composition is duplicated wherever a facet filter is wanted.",
       "the anchor is an extra `div` that exists only to stop the in-popup search input from becoming the positioner anchor (a jitter loop). Every consumer has to know that.",
@@ -229,7 +232,7 @@ const SPECIMENS: readonly Specimen[] = [
     consumers: "components/control-chips.tsx → the chat composer, families",
     shape: "ghost Button trigger · align=end · explicit anchor · searchable",
     defects: [
-      "FIXED IN SOURCE — `min-w-56` now survives and the shared combobox law permits content growth up to the viewport bound; browser readability remains pending.",
+      "FIXED IN SOURCE — caller intent is now `[--popup-min-width:14rem]`; shared CSS composes it with the anchor floor and viewport ceiling while permitting content growth. Browser readability remains pending.",
       'REMAINS FOR BROWSER — `align="end"` is a meaningful caller choice, so the popup stays right-aligned for this chip rather than forcing a global alignment.',
       "same private-function problem: `Picker` is internal to control-chips.tsx.",
       "the trigger is a shadcn ghost Button on `--muted-foreground` while the facet filter is a bare `ComboboxTrigger` on `--r-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
@@ -255,7 +258,7 @@ const SPECIMENS: readonly Specimen[] = [
     consumers: "routes/ops.tsx, ops/views-catalog.tsx, parameter-links/ProfileEditor.tsx",
     shape: "the INPUT is the trigger · NO explicit anchor · defaults everywhere",
     defects: [
-      "OBSERVED — anchor-width again: `Mechanical Equipment` wraps onto two lines here while `ui/select` renders the same option on one. Same data, same page, two answers.",
+      "FIXED IN SOURCE — the shared `w-max` plus anchor-floor law lets this option list grow past the input to readable content width, bounded by available viewport width. Browser sizing remains pending.",
       "no explicit anchor is passed, unlike BOTH other combobox consumers, which each wrote an anchor `div` with a comment explaining that the in-popup input must not be the positioner anchor. Nothing in the API says which shape needs it — the knowledge lives in two ponytail comments.",
       "OBSERVED — flips at the bottom edge (correct), but the description sub-line is `text-[10px] text-muted-foreground` here and `text-xs text-muted-foreground` in the picker chip: the same option list, rendered at two sizes by two consumers.",
     ],
@@ -268,7 +271,7 @@ const SPECIMENS: readonly Specimen[] = [
     shape: "chips container is the anchor · the anchor GROWS as chips are added",
     defects: [
       "the anchor is the chips container, which GROWS every time a chip is added, so an open popup re-positions mid-selection — worst at the bottom edge, where each new chip can force a flip.",
-      "`data-chips` switches the popup to `min-w-(--anchor-width)` — the ONLY consumer that escapes the anchor-width clamp, and it escapes it by accident of which sub-component was anchored.",
+      "FIXED IN SOURCE — chips and unanchored inputs now use the same width law; chip anchoring still means adding a chip can reposition an open popup.",
       "FIXED — the trailing count line spent `--lichen`, a raw palette hue from the old vocabulary; it now sits on `--r-ink-2` (and the old cat-lichen identity lives on only as `--viz-4`).",
     ],
     render: () => <FieldMultiSpecimen />,
@@ -362,21 +365,24 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
             key={d}
             className="border-l border-dashed border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]"
           >
-            <span className="text-[var(--r-caution)]">observed · </span>
+            <span className="text-[var(--r-caution)]">testimony · </span>
             {d}
           </p>
         ))}
         <p className="border-l border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]">
           <span className="text-[var(--r-alarm)]">the source headline · </span>
-          Combobox now uses <code>w-max</code> with an anchor-width floor and an available-width
-          ceiling, so <code>min-w-44</code> and <code>min-w-56</code> survive. Select and Combobox
-          also consume the same canonical popup surface; Base UI positioning and browser sizing
-          remain pending observation.
+          Combobox now composes <code>min(available, max(anchor, caller))</code> from its shared CSS
+          class; callers encode wider requests as <code>--popup-min-width</code>, so
+          <code>11rem</code>, <code>14rem</code>, and <code>13rem</code> do not collide with the
+          anchor term. <code>w-max</code> permits content growth and the available-width term is the
+          ceiling. Select and Combobox also consume the same canonical popup surface; Base UI
+          positioning and browser sizing remain pending observation.
         </p>
         <p className="pt-1 text-[10px] leading-relaxed text-[var(--r-ink-mute)]">
-          Open the same specimen at all nine positions and compare. Nothing here is corrected — each
-          is mounted exactly as its consumer mounts it. Fixed source laws are labeled above; the
-          remaining flip, clamp, alignment, and content-observation obligations are still pending.
+          Open the same specimen at all nine positions and compare. The harness does not claim
+          browser correction; each specimen is mounted exactly as its consumer mounts it. Fixed
+          source laws are labeled above; the remaining flip, clamp, alignment, and content
+          observation obligations are still pending.
         </p>
       </div>
     </div>

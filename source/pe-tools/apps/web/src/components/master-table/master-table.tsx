@@ -787,7 +787,10 @@ function ColFilter({
           <span className="truncate normal-case">{value === null ? all : selected.label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent anchor={anchorRef} className="min-w-44 rounded-[var(--radius)]">
+      <ComboboxContent
+        anchor={anchorRef}
+        className="[--popup-min-width:11rem] rounded-[var(--radius)]"
+      >
         {options.length > 7 && <ComboboxInput placeholder="filter values…" />}
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>

@@ -1286,7 +1286,7 @@ function ComboboxSpec() {
           <span className="truncate">{picked?.label ?? "category"}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent anchor={anchorRef} className="min-w-52">
+      <ComboboxContent anchor={anchorRef} className="[--popup-min-width:13rem]">
         <ComboboxInput placeholder="search category…" />
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>

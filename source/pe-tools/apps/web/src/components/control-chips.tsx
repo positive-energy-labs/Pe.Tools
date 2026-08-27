@@ -109,7 +109,7 @@ function Picker({
           <span className="t-value face-mono truncate">{label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent align="end" anchor={anchorRef} className="min-w-56">
+      <ComboboxContent align="end" anchor={anchorRef} className="[--popup-min-width:14rem]">
         {searchable ? <ComboboxInput placeholder={`Search ${title.toLowerCase()}…`} /> : null}
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>
