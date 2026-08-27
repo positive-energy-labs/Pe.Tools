@@ -248,7 +248,9 @@ function OpsPlayground() {
                           setSelected(undefined);
                         }}
                         className={cn(
-                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
+                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors",
+                          !active &&
+                            "hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
                           active && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
                         )}
                       >
@@ -282,7 +284,9 @@ function OpsPlayground() {
                       <button
                         onClick={() => select(op)}
                         className={cn(
-                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
+                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors",
+                          !active &&
+                            "hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
                           active && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
                         )}
                       >
