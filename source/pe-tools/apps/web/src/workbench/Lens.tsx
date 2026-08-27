@@ -946,7 +946,7 @@ function formatTime(date?: Date): string | undefined {
 }
 
 // Telemetry metadata for a tool trace row: status hue + a human duration. Both feed the hybrid
-// header's right-aligned mono cluster. Hues ride the outcome mapping (design-lang.css):
+// header's right-aligned mono cluster. Hues ride the outcome mapping (pe-base.css):
 // landed → done, failed → caution (a busy bridge is NOT the model disagreeing),
 // in flight → ink-2 (busy), pending → ink-mute (not started).
 const TOOL_STATUS_COLOR: Record<string, string> = {
