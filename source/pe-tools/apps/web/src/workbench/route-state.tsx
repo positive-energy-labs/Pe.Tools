@@ -108,7 +108,7 @@ function createRouteStateStore<TSchema extends z.ZodType>(
       const result = await run(command, () =>
         writer.command(command as keyof TSchema & string, input),
       );
-      registry.set(lastCommand, { command, input });
+      if (result.ok) registry.set(lastCommand, { command, input });
       return result;
     },
     dispose: core.dispose,

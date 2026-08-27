@@ -168,7 +168,6 @@ function ParameterLinksWorkspace({
         if (name === "preview" && hasUnsavedEdits && !(await saveDraft(profile))) return;
         const result = await route.command(name, { profile });
         if (!result.ok) {
-          // An op-level rejection is the host refusing the plan, not a broken bridge.
           setOutcome({
             kind: result.kind ?? "error",
             text: result.error ?? result.hint ?? `${name} refused`,
