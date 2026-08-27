@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
-import { selectWorkbenchChrome } from "@pe/agent-contracts";
 import { ModeDial } from "#/components/mode-dial";
 import { Composer } from "#/components/composer";
 import { ThreadList, ThreadPalette } from "#/components/thread-palette";
@@ -11,6 +10,7 @@ import { MODES } from "#/workbench/depth";
 import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
+import { selectBreakdown, selectRunStatus } from "#/workbench/chat-state";
 import { Button } from "#/components/ui/button";
 import { SidePane } from "#/components/ui/side-pane";
 import { X } from "lucide-react";
@@ -44,7 +44,9 @@ export function ChatShell({
 function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatPluginRoute }) {
   const {
     store,
-    debug,
+    chat,
+    loading,
+    error,
     threads,
     currentThreadId,
     world,
@@ -78,17 +80,15 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
   // Collapsed → the pane is a 40px rail (SidePane's RAIL) and the chat column absorbs the rest.
   const PluginPane = plugin ? selectRoutePane(plugin) : null;
 
-  const chrome = useMemo(() => selectWorkbenchChrome(debug.state), [debug.state]);
+  const status = selectRunStatus(chat);
+  const threadLabel =
+    threads.find((item) => item.id === currentThreadId)?.title ?? "new session";
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
-  const breakdown = debug.state.inspector.contextBreakdown;
+  const breakdown = useMemo(() => selectBreakdown(chat), [chat]);
   const userTurns = useMemo(
-    () =>
-      debug.state.transcript.messages.reduce(
-        (count, message) => (message.role === "user" ? count + 1 : count),
-        0,
-      ),
-    [debug.state.transcript.messages],
+    () => chat.messages.reduce((count, m) => (m.role === "user" ? count + 1 : count), 0),
+    [chat.messages],
   );
   const cache = useCacheView(breakdown, userTurns);
 
@@ -114,7 +114,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
     { hotkey: "Mod+3", callback: () => setMode(MODES[2]!) },
   ]);
 
-  const statusLine = debug.loading ? "Loading thread state" : (debug.error ?? operationError);
+  const statusLine = loading ? "Loading thread state" : (error ?? operationError);
 
   return (
     <main
@@ -132,11 +132,11 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
                 your call is owed (caution), error = a bridge/run error (caution — NOT the
                 alarm), idle = muted. */}
             <span
-              title={chrome.status}
+              title={status}
               className="size-2 shrink-0 rounded-full data-[s=error]:bg-[var(--r-caution)] data-[s=idle]:bg-[var(--r-ink-mute)] data-[s=running]:bg-[var(--r-pea)] data-[s=waiting]:bg-[var(--r-caution)]"
-              data-s={chrome.status}
+              data-s={status}
             />
-            <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
+            <span className="truncate text-sm font-semibold">{threadLabel}</span>
           </div>
           <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
             <WorldBadge world={world} />
@@ -148,7 +148,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
           {statusLine ? (
             <div
               className={`border-b border-[var(--r-line)] py-1.5 t-label ${
-                debug.error || operationError ? "text-[var(--r-caution)]" : "text-[var(--r-ink-2)]"
+                error || operationError ? "text-[var(--r-caution)]" : "text-[var(--r-ink-2)]"
               }`}
             >
               {statusLine}
@@ -159,7 +159,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
         <div className="relative flex min-h-0 min-w-0">
           <div className="relative min-h-0 min-w-0 flex-1">
             <Lens
-              state={debug.state}
+              state={chat}
               mode={mode}
               initialTurn={initialTurn}
               scrollKey={currentThreadId}

@@ -1,8 +1,4 @@
-import type {
-  WorkbenchContextBreakdown,
-  WorkbenchContextItem,
-  WorkbenchContextSegment,
-} from "@pe/agent-contracts";
+import type { ContextBreakdown, ContextItem, ContextSegment } from "./chat-state";
 
 /**
  * Pure cache-position logic for the World inspector — no JSX, so it's unit-testable.
@@ -41,13 +37,13 @@ export interface CacheView {
 }
 
 /** Signature that changes whenever a layer's bytes change — tokens + named contents. */
-export function segSignature(segment: WorkbenchContextSegment): string {
+export function segSignature(segment: ContextSegment): string {
   const items = (segment.items ?? []).map((item) => `${item.name}:${item.tokens ?? ""}`).join("~");
   return `${Math.round(segment.tokens)}|${items}`;
 }
 
 export function signatureMap(
-  breakdown: WorkbenchContextBreakdown | undefined,
+  breakdown: ContextBreakdown | undefined,
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const segment of breakdown?.segments ?? []) map.set(segment.id, segSignature(segment));
@@ -56,7 +52,7 @@ export function signatureMap(
 
 /** Diff the current segments against the prior send's signatures to infer cache state. */
 export function computeCacheView(
-  breakdown: WorkbenchContextBreakdown | undefined,
+  breakdown: ContextBreakdown | undefined,
   baseline: Map<string, string> | null,
 ): CacheView {
   const hasBaseline = baseline !== null;
@@ -85,11 +81,11 @@ export interface Layer {
   label: string;
   tokens: number;
   rank: number;
-  items: WorkbenchContextItem[];
+  items: ContextItem[];
 }
 
 /** Real layers (drops free), ordered by request position then size. */
-export function orderedLayers(breakdown: WorkbenchContextBreakdown | undefined): Layer[] {
+export function orderedLayers(breakdown: ContextBreakdown | undefined): Layer[] {
   return (breakdown?.segments ?? [])
     .filter((segment) => segment.id !== "free")
     .map((segment) => ({
@@ -135,7 +131,7 @@ export function cacheTotals(
   return { cached, reprocessed };
 }
 
-type MemoryWindows = NonNullable<WorkbenchContextBreakdown["memoryWindows"]>;
+type MemoryWindows = NonNullable<ContextBreakdown["memoryWindows"]>;
 
 /** Fill width (%) of a window, clamped to [0,100]. cap<=0 → 0 (avoids divide-by-zero). */
 export function budgetFillPct(value: number, cap: number): number {

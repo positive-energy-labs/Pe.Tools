@@ -24,16 +24,17 @@ import { toolTitle } from "@pe/agent-contracts";
 import { Check, ChevronRight, X } from "lucide-react";
 import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
-import { isRenderable, workbenchToThreadMessages } from "./aui-adapter";
+import { isRenderable, toThreadMessages } from "./aui-adapter";
+import { APPROVAL_OPTIONS, toolTarget } from "./chat-state";
 import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 
 /**
- * assistant-ui mounted as a pure render-from view over WorkbenchState. The runtime
- * holds no state of its own — it renders `workbenchToThreadMessages(state)` and routes
- * its actions (send, cancel) back into the existing WorkbenchProvider. Approvals are
- * resolved through our proven `/workbench/approve` route directly from the tool part,
- * so we don't double-plumb assistant-ui's approval transport.
+ * assistant-ui mounted as a pure render-from view over ChatState. The runtime holds no state
+ * of its own — it renders `toThreadMessages(chat)` and routes its actions (send, cancel) back
+ * into the WorkbenchProvider. Approvals resolve through the native session's `approveTool` /
+ * `respondToToolSuspension` directly from the tool part, so we don't double-plumb
+ * assistant-ui's approval transport.
  *
  * `ThreadPrimitive.Messages` owns iteration (it's the consumer that binds the v0.14
  * message-store client), but each message renders inside a `.lens-moment` section WE own
@@ -48,11 +49,11 @@ export function useThreadMessages(): ThreadMessageLike[] {
 }
 
 export function WorkbenchRuntimeProvider({ children }: { children: ReactNode }) {
-  const { debug, isRunning, sendPrompt, cancel } = useWorkbench();
+  const { chat, isRunning, sendPrompt, cancel } = useWorkbench();
   // Runtime gets EVERY turn (stable, append-only membership — see aui-adapter). The Lens bands
   // consume only the renderable ones via context; empty turns render nothing (moment components
   // return null), so there's no blank "you"/"pea" row despite the fuller runtime array.
-  const messages = useMemo(() => workbenchToThreadMessages(debug.state), [debug.state]);
+  const messages = useMemo(() => toThreadMessages(chat), [chat]);
   const visible = useMemo(() => messages.filter(isRenderable), [messages]);
 
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({
@@ -311,11 +312,6 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   );
 };
 
-const DEFAULT_APPROVAL_OPTIONS = [
-  { id: "allow_once", kind: "allow-once", label: "Approve" },
-  { id: "reject_once", kind: "reject-once", label: "Deny" },
-];
-
 /**
  * Inline tool marker (one line in the spine; full I/O lives in the trace lane). When the
  * call carries a pending approval gate, the HITL approve/deny buttons render here and
@@ -325,14 +321,13 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   toolCallId,
   toolName,
   args,
-  result,
   isError,
   status,
   approval,
 }) => {
-  const { debug, resolveApproval } = useWorkbench();
+  const { chat, resolveApproval } = useWorkbench();
   const tone = isError ? "failed" : status?.type === "running" ? "active" : "";
-  const target = toolTarget(args, result);
+  const target = toolTarget(args);
   const pending = approval && approval.approved === undefined && !approval.resolution;
   return (
     // data-tool-id lets the Lens anchor this tool's trace card to the marker's real chat
@@ -360,14 +355,14 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         toolCallId={toolCallId}
         toolName={toolName}
         args={args}
-        sessionState={debug.state.sessionState.values}
+        sessionState={chat.sessionValues}
         running={status?.type === "running"}
       />
       {pending ? (
         // The HITL gate is a verb lane: approving lets pea write beyond the page (the one
         // filled blue); denying is a safe, page-scoped act. Reasons ride the titles.
         <div className="flex flex-wrap gap-[7px]">
-          {(approval.options ?? DEFAULT_APPROVAL_OPTIONS).map((option) => {
+          {(approval.options ?? APPROVAL_OPTIONS).map((option) => {
             const allow = option.kind.startsWith("allow");
             return (
               <Verb
@@ -390,15 +385,3 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   );
 };
 
-function toolTarget(args: unknown, _result: unknown): string | undefined {
-  if (isRecord(args)) {
-    const candidate = args.path ?? args.file ?? args.query ?? args.command;
-    if (typeof candidate === "string") return candidate;
-  }
-  if (typeof args === "string" && args.length <= 64) return args;
-  return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}

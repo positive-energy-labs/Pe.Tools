@@ -18,15 +18,23 @@ import {
   type PlanResume,
   type ToolCategory,
 } from "@mastra/client-js";
-import {
-  createWorkbenchState,
-  selectPendingApprovals,
-  type PeaWorldDescriptor,
-  type WorkbenchAccessLevel,
-  type WorkbenchState,
-} from "@pe/agent-contracts";
+import type { PeaWorldDescriptor } from "@pe/agent-contracts";
 import { peUrl, resolveWorkbenchConfig, type WorkbenchEndpointConfig } from "./config";
-import { applyAgentControllerEvent, hydrateWorkbenchState, type PeInspect } from "./adapter";
+import {
+  accessLevelFromPermissions,
+  applyEvent,
+  emptyChatState,
+  hydrateChatState,
+  readRecord,
+  readString,
+  selectApprovals,
+  selectRunStatus,
+  shortId,
+  PERMISSION_LEVELS,
+  type AccessLevel,
+  type ChatState,
+  type PeInspect,
+} from "./chat-state";
 import { usePeInfo } from "#/host/info";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
@@ -44,11 +52,6 @@ type ToolResume = string | string[] | PlanResume;
 type MessageFile = { data: string; mediaType: string; filename?: string };
 
 const MESSAGE_LIMIT = 200;
-const PERMISSION_LEVELS = {
-  "read-only": { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
-  ask: { read: "allow", edit: "ask", execute: "ask", mcp: "ask", other: "deny" },
-  trusted: { read: "allow", edit: "allow", execute: "allow", mcp: "allow", other: "deny" },
-} as const satisfies Record<WorkbenchAccessLevel, Record<ToolCategory, PermissionPolicy>>;
 
 /** The session client type, derived from the SDK (its class type isn't re-exported at the root). */
 type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["session"]>;
@@ -57,7 +60,9 @@ type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["
 interface WorkbenchContextValue {
   store: ChatPageStore;
   config: WorkbenchEndpointConfig;
-  debug: { state: WorkbenchState; loading: boolean; error?: string };
+  chat: ChatState;
+  loading: boolean;
+  error?: string;
   threads: StoredThreadSummary[];
   /** Derived from the URL `thread` search param — the single source of truth for "which thread". */
   currentThreadId: string;
@@ -71,9 +76,9 @@ interface WorkbenchContextValue {
   forkThread: () => Promise<void>;
   openThread: (threadId: string) => void;
   deleteThread: (threadId: string) => Promise<void>;
-  resolveApproval: (requestId: string, optionId?: string) => Promise<void>;
+  resolveApproval: (toolCallId: string, optionId?: string) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
-  setAccessLevel: (accessLevel: WorkbenchAccessLevel) => Promise<void>;
+  setAccessLevel: (accessLevel: AccessLevel) => Promise<void>;
 }
 
 const WorkbenchContext = createContext<WorkbenchContextValue | undefined>(undefined);
@@ -98,9 +103,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const infoQuery = usePeInfo(config);
   const info = infoQuery.data;
-  const [state, setState] = useState<WorkbenchState>(() => createWorkbenchState());
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const [chat, setChat] = useState<ChatState>(emptyChatState);
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -116,8 +121,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     return { controller, session: controller.session(info.resourceId, currentThreadId) };
   }, [config.origin, currentThreadId, info]);
 
-  const isRunning =
-    state.uiStatus.overall.status === "running" || state.uiStatus.overall.status === "waiting";
+  const status = selectRunStatus(chat);
+  const isRunning = status === "running" || status === "waiting";
 
   /** Replace the URL thread param (no history spam on auto-landing / switching). */
   const gotoThread = useCallback(
@@ -134,34 +139,20 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }
   }, [api]);
 
-  /** Fetch every snapshot for a thread and project the initial WorkbenchState. */
+  /** Seed the state a thread starts from. Live truth then arrives as `display_state_changed`. */
   const hydrate = useCallback(
     async (threadId: string, options?: { silent?: boolean }) => {
-      if (!api || !info) return;
+      if (!api) return;
       if (!options?.silent) setLoading(true);
       try {
-        const [display, messages, inspect, models, modes, permissions] = await Promise.all([
+        const [session, messages, inspect, models, permissions] = await Promise.all([
           api.session.state({ threadId }).catch(() => undefined),
           api.session.listMessages(threadId, MESSAGE_LIMIT).catch(() => []),
           fetchPeInspect(config).catch(() => ({}) as PeInspect),
           api.controller.listModels().catch(() => []),
-          api.controller.listModes().catch(() => []),
           api.session.getPermissions().catch(() => undefined),
         ]);
-        setState(
-          hydrateWorkbenchState({
-            controllerId: info.controllerId,
-            resourceId: info.resourceId,
-            threadId,
-            displayState: display,
-            threads: threadsRef.current,
-            messages,
-            inspect,
-            models,
-            modes,
-            permissions,
-          }),
-        );
+        setChat(hydrateChatState({ session, messages, inspect, models, permissions }));
         setError(undefined);
       } catch (caught) {
         setError(errorMessage(caught));
@@ -169,16 +160,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         if (!options?.silent) setLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [api, info, config],
+    [api, config],
   );
-
-  const threadsRef = useRef(threads);
-  threadsRef.current = threads;
-  const hydrateRef = useRef(hydrate);
-  hydrateRef.current = hydrate;
-  const refreshThreadsRef = useRef(refreshThreads);
-  refreshThreadsRef.current = refreshThreads;
 
   useEffect(() => {
     if (!infoQuery.error) return;
@@ -198,13 +181,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     const terminalError = (caught: unknown) => {
       if (cancelled) return;
       setError(errorMessage(caught));
-      setState((previous) =>
-        applyAgentControllerEvent(previous, { type: "agent_end", reason: "error" }),
-      );
+      setChat((previous) => applyEvent(previous, { type: "agent_end", reason: "error" }));
     };
     void (async () => {
       try {
-        setState(createWorkbenchState());
+        setChat(emptyChatState());
         setLoading(true);
         await api.session.create({ threadId: currentThreadId });
         if (cancelled) return;
@@ -212,19 +193,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         const subscription = await api.session.subscribe({
           reconnect: true,
-          onReconnect: () => void hydrateRef.current(currentThreadId, { silent: true }),
+          onReconnect: () => void hydrate(currentThreadId, { silent: true }),
           onEvent: (event) => {
             if (!isKnownAgentControllerEvent(event)) return;
-            setState((previous) => applyAgentControllerEvent(previous, event));
+            setChat((previous) => applyEvent(previous, event));
             if (event.type === "thread_created" || event.type === "thread_deleted") {
-              void refreshThreadsRef.current();
-            }
-            if (
-              event.type === "agent_end" &&
-              event.reason !== "suspended" &&
-              selectPendingApprovals(stateRef.current).length === 0
-            ) {
-              void hydrateRef.current(currentThreadId, { silent: true });
+              void refreshThreads();
             }
           },
           onError: terminalError,
@@ -247,24 +221,22 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       // An image-only send (empty text) is valid — guard on "nothing to send", not "no text".
       if ((!prompt && !attachments?.length) || !api) return;
       // Optimistically show the user's turn (text + any attached images) + running state; the
-      // stream confirms via agent_start. Images render from the in-hand base64, no server echo needed.
+      // stream confirms via display_state_changed. Images render from the in-hand base64.
       const files = toFiles(attachments);
-      setState((previous) => ({
-        ...applyAgentControllerEvent(previous, {
+      setChat((previous) => ({
+        ...applyEvent(previous, {
           type: "message_start",
           message: optimisticMessage(prompt, files),
         }),
-        uiStatus: {
-          ...previous.uiStatus,
-          overall: { ...previous.uiStatus.overall, status: "running" },
-        },
+        display: { ...previous.display, isRunning: true },
+        errors: [],
       }));
       setError(undefined);
       try {
         await api.session.sendMessage({ content: prompt, files });
       } catch (caught) {
         setError(errorMessage(caught));
-        setState((previous) => applyAgentControllerEvent(previous, { type: "agent_end" }));
+        setChat((previous) => ({ ...previous, display: { ...previous.display, isRunning: false } }));
       }
     },
     [api],
@@ -272,16 +244,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const cancel = useCallback(() => {
     if (!api) return;
-    for (const approval of selectPendingApprovals(stateRef.current)) {
-      void rejectApproval(
-        api.session,
-        approval.requestId,
-        approval.toolCall.title,
-        approval.toolCall.rawOutput,
-      ).catch(() => undefined);
+    for (const approval of selectApprovals(chatRef.current.display)) {
+      void rejectApproval(api.session, approval).catch(() => undefined);
     }
     void api.session.abort().catch(() => undefined);
-    setState((previous) => applyAgentControllerEvent(previous, { type: "agent_end" }));
+    setChat((previous) => ({ ...previous, display: { ...previous.display, isRunning: false } }));
   }, [api]);
 
   const newThread = useCallback(() => {
@@ -318,34 +285,22 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const resolveApproval = useCallback(
-    async (requestId: string, optionId?: string) => {
+    async (toolCallId: string, optionId?: string) => {
       if (!api) return;
       const reject = optionId?.startsWith("reject") ?? false;
-      // Optimistically resolve so the inline buttons disappear; the stream confirms via tool_end.
-      setState((previous) => ({
-        ...previous,
-        approvals: {
-          requests: previous.approvals.requests.map((request) =>
-            request.requestId === requestId
-              ? { ...request, status: "resolved", selectedOptionId: optionId }
-              : request,
-          ),
-        },
-      }));
+      const approval = selectApprovals(chatRef.current.display).find(
+        (item) => item.toolCallId === toolCallId,
+      );
+      // Optimistically clear the gate so the inline buttons disappear; the stream confirms with
+      // the next display state.
+      setChat((previous) => ({ ...previous, display: withoutGate(previous.display, toolCallId) }));
       try {
-        if (requestId.startsWith("tool-suspended:")) {
-          const toolCallId = requestId.slice("tool-suspended:".length);
-          const request = stateRef.current.approvals.requests.find(
-            (item) => item.requestId === requestId,
-          );
+        if (approval?.suspended) {
           await api.session.respondToToolSuspension(
             toolCallId,
-            resumeDataForSuspension(request?.toolCall.title, request?.toolCall.rawOutput, reject),
+            resumeDataForSuspension(approval.toolName, approval.suspendPayload, reject),
           );
         } else {
-          const toolCallId = requestId.startsWith("tool-approval:")
-            ? requestId.slice("tool-approval:".length)
-            : requestId;
           await api.session.approveTool(toolCallId, !reject);
         }
       } catch (caught) {
@@ -358,12 +313,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const setModel = useCallback(
     async (modelId: string) => {
       if (!api) return;
+      // No optimistic write: `model_changed` lands on the stream.
       try {
         await api.session.switchModel(modelId);
-        setState((previous) => ({
-          ...previous,
-          models: { ...previous.models, currentModelId: modelId },
-        }));
       } catch (caught) {
         setError(errorMessage(caught));
       }
@@ -372,7 +324,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const setAccessLevel = useCallback(
-    async (accessLevel: WorkbenchAccessLevel) => {
+    async (accessLevel: AccessLevel) => {
       if (!api) return;
       try {
         await Promise.all(
@@ -383,10 +335,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
             ),
           ),
         );
-        setState((previous) => ({
-          ...previous,
-          access: { ...previous.access, currentAccessLevel: accessLevel },
-        }));
+        // Re-read rather than assume: the server owns the rules, and the collapse to a named
+        // level is only true if every category landed.
+        const rules = await api.session.getPermissions().catch(() => undefined);
+        setChat((previous) => ({ ...previous, access: accessLevelFromPermissions(rules) }));
       } catch (caught) {
         setError(errorMessage(caught));
       }
@@ -394,51 +346,30 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [api],
   );
 
-  const operationError = error ?? state.uiStatus.errors[0];
-  const context = useMemo<WorkbenchContextValue>(
-    () => ({
-      store,
-      config,
-      debug: { state, loading, error },
-      threads,
-      currentThreadId,
-      revit: info?.capabilities.revit,
-      world: info?.world,
-      isRunning,
-      operationError,
-      sendPrompt,
-      cancel,
-      newThread,
-      forkThread,
-      openThread,
-      deleteThread,
-      resolveApproval,
-      setModel,
-      setAccessLevel,
-    }),
-    [
-      config,
-      store,
-      state,
-      loading,
-      error,
-      operationError,
-      threads,
-      currentThreadId,
-      info?.capabilities.revit,
-      info?.world,
-      isRunning,
-      sendPrompt,
-      cancel,
-      newThread,
-      forkThread,
-      openThread,
-      deleteThread,
-      resolveApproval,
-      setModel,
-      setAccessLevel,
-    ],
-  );
+  const operationError = error ?? chat.errors[0];
+  // No memo: `chat` changes on every event anyway, so a dep array over it buys nothing.
+  const context: WorkbenchContextValue = {
+    store,
+    config,
+    chat,
+    loading,
+    error,
+    threads,
+    currentThreadId,
+    revit: info?.capabilities.revit,
+    world: info?.world,
+    isRunning,
+    operationError,
+    sendPrompt,
+    cancel,
+    newThread,
+    forkThread,
+    openThread,
+    deleteThread,
+    resolveApproval,
+    setModel,
+    setAccessLevel,
+  };
 
   return <WorkbenchContext.Provider value={context}>{children}</WorkbenchContext.Provider>;
 }
@@ -447,6 +378,18 @@ export function useWorkbench(): WorkbenchContextValue {
   const context = useContext(WorkbenchContext);
   if (!context) throw new Error("useWorkbench must be used inside WorkbenchProvider.");
   return context;
+}
+
+/** Drop a resolved call from both native gates (single-slot approval, keyed suspensions). */
+function withoutGate(display: ChatState["display"], toolCallId: string): ChatState["display"] {
+  const suspensions = { ...display.pendingSuspensions };
+  delete suspensions[toolCallId];
+  return {
+    ...display,
+    pendingApproval:
+      display.pendingApproval?.toolCallId === toolCallId ? null : display.pendingApproval,
+    pendingSuspensions: suspensions,
+  };
 }
 
 export async function forkSessionThread(
@@ -496,21 +439,16 @@ export function resumeDataForSuspension(
 
 async function rejectApproval(
   session: SessionClient,
-  requestId: string,
-  toolName: string | undefined,
-  suspendPayload: unknown,
+  approval: { toolCallId: string; toolName: string; suspended: boolean; suspendPayload?: unknown },
 ): Promise<void> {
-  if (requestId.startsWith("tool-suspended:")) {
+  if (approval.suspended) {
     await session.respondToToolSuspension(
-      requestId.slice("tool-suspended:".length),
-      resumeDataForSuspension(toolName, suspendPayload, true),
+      approval.toolCallId,
+      resumeDataForSuspension(approval.toolName, approval.suspendPayload, true),
     );
     return;
   }
-  await session.approveTool(
-    requestId.startsWith("tool-approval:") ? requestId.slice("tool-approval:".length) : requestId,
-    false,
-  );
+  await session.approveTool(approval.toolCallId, false);
 }
 
 /** Map composer attachments to native `Session.sendMessage({ content, files })`. */
@@ -581,18 +519,8 @@ async function fetchPeInspect(config: WorkbenchEndpointConfig): Promise<PeInspec
   return (await response.json().catch(() => ({}))) as PeInspect;
 }
 
-function readRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
 function readArray(value: unknown): unknown[] | undefined {
   return Array.isArray(value) ? value : undefined;
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }
 
 function optionText(value: unknown): string {
@@ -609,10 +537,6 @@ function copyStrings(
       return value ? [[key, value]] : [];
     }),
   );
-}
-
-function shortId(value: string): string {
-  return value.length <= 12 ? value : `${value.slice(0, 8)}...`;
 }
 
 function errorMessage(value: unknown): string {

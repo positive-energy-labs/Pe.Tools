@@ -19,6 +19,7 @@ import { Link } from "@tanstack/react-router";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Verb } from "#/components/lang/verb";
 import { useWorkbench } from "./provider";
+import { selectToolCalls } from "./chat-state";
 import { useRouteState, type RouteStateHandle } from "./route-state";
 import { CellTrichotomyReviewer } from "./trichotomy-reviewer";
 import { FamilyChatPlugin } from "./plugins/family-chat-plugin";
@@ -103,17 +104,16 @@ export function RouteChatPluginView(props: RouteChatPluginViewProps) {
 }
 
 /**
- * The transcript projection drops completed tool calls from its live-tool list and may briefly lag
- * route state after `agent_end`. Keep exactly one authoritative reviewer at the end of chat; inline
- * tool cards remain the historical record of how Pea changed the route.
+ * Inline tool cards are the historical record of how Pea changed a route; this dock is the one
+ * authoritative reviewer, rendered at the end of chat once the run settles.
  */
 export function RouteChatPluginDock() {
-  const { debug, isRunning } = useWorkbench();
+  const { chat, isRunning } = useWorkbench();
   const registrations = Array.from(
     new Set(
-      debug.state.tools.calls.flatMap((call) => {
-        if (!ROUTE_TOOL_NAMES.has(call.title) || !isRecord(call.rawInput)) return [];
-        const route = call.rawInput.route;
+      selectToolCalls(chat).flatMap((call) => {
+        if (!ROUTE_TOOL_NAMES.has(call.title) || !isRecord(call.args)) return [];
+        const route = call.args.route;
         return typeof route === "string" && routeChatPlugins[route] ? [route] : [];
       }),
     ),

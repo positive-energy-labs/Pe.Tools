@@ -267,9 +267,6 @@ importers:
 
   packages/agent-contracts:
     dependencies:
-      '@agentclientprotocol/sdk':
-        specifier: ^0.25.0
-        version: 0.25.0(zod@4.3.6)
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -480,11 +477,6 @@ packages:
 
   '@agentclientprotocol/sdk@0.21.1':
     resolution: {integrity: sha512-ZTLH+o9QxcZDLX/9ww+W7C2iExnXFM+vD/uGFVSlR61Kzj9FaxUqBC6Rv/kwgA7qVWYUEI9c5ZNqCuO9PM4rKg==}
-    peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
-
-  '@agentclientprotocol/sdk@0.25.0':
-    resolution: {integrity: sha512-wU1VgXNtMvdVotX49txc3WJUDV+/QbLpsgjMvFhlRmp37osdLbI7L7y+iwAlQATwfjLxcv1r1p3ZxZBcXlGhcQ==}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
@@ -7170,10 +7162,6 @@ snapshots:
   '@acemir/cssom@0.9.31': {}
 
   '@agentclientprotocol/sdk@0.21.1(zod@4.3.6)':
-    dependencies:
-      zod: 4.3.6
-
-  '@agentclientprotocol/sdk@0.25.0(zod@4.3.6)':
     dependencies:
       zod: 4.3.6
 

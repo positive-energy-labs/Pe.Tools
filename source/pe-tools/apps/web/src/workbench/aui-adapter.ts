@@ -1,85 +1,100 @@
 import type { ThreadMessageLike } from "@assistant-ui/react";
-import type {
-  WorkbenchApprovalRequest,
-  WorkbenchMessage,
-  WorkbenchState,
-  WorkbenchToolCall,
-} from "@pe/agent-contracts";
+import type { MastraDBMessage } from "@mastra/client-js";
+import {
+  APPROVAL_OPTIONS,
+  imageSource,
+  readRecord,
+  readString,
+  selectApprovals,
+  stringify,
+  toolTarget,
+  type ChatDisplay,
+  type ChatState,
+} from "./chat-state";
 
 type LikeContent = Exclude<ThreadMessageLike["content"], string>;
 type LikePart = LikeContent[number];
 
 /**
- * The render-from-WorkbenchState projection: `WorkbenchState -> ThreadMessageLike[]`.
+ * `ChatState -> ThreadMessageLike[]`: the one contract that lets assistant-ui render our chat
+ * WITHOUT owning any state. Its ExternalStoreRuntime holds no copy; it renders whatever this
+ * returns.
  *
- * This is the single contract that lets assistant-ui render our chat WITHOUT owning
- * any state — WorkbenchState stays the one source of truth (the rule that keeps us
- * out of the dual-store mess Phases 1-4 removed). assistant-ui's ExternalStoreRuntime
- * holds no copy; it renders whatever this returns.
- *
- * Tools live in `state.tools.calls` (not on message parts in the live path), so we fold
- * each tool into its parent assistant message as a `tool-call` part — assistant-ui's
- * native shape. A pending approval for that tool rides along as the part's `approval`
- * gate (rendered + resolved by the ToolCall part component).
+ * Messages are native `MastraDBMessage`s, so a tool call is read straight off its
+ * `tool-invocation` part (which already carries `state`/`args`/`result`/`isError`) and lands where
+ * the model emitted it. A tool that is still streaming has no part yet — those come from
+ * `display.activeTools` and append to the last assistant turn. A pending approval or suspension
+ * for a call rides along as the part's `approval` gate.
  */
-export function workbenchToThreadMessages(state: WorkbenchState): ThreadMessageLike[] {
-  const chat = state.transcript.messages.filter(
+export function toThreadMessages(state: ChatState): ThreadMessageLike[] {
+  const display = state.display;
+  const chat = state.messages.filter(
     (message) => message.role === "user" || message.role === "assistant",
   );
   const lastAssistantId = [...chat].reverse().find((m) => m.role === "assistant")?.id;
-
-  // Group tools under their parent assistant message; orphans fall to the last assistant
-  // turn (never a trailing user message — that would hoist a prior run's tools below it).
-  const assistantIds = new Set(chat.filter((m) => m.role === "assistant").map((m) => m.id));
-  const toolsByParent = new Map<string, WorkbenchToolCall[]>();
-  for (const call of state.tools.calls) {
-    const ref = call.parentMessageId ?? call.provenance?.messageId;
-    const parent = ref && assistantIds.has(ref) ? ref : lastAssistantId;
-    if (!parent) continue; // ponytail: tool before any assistant turn — drop (never happens live)
-    const list = toolsByParent.get(parent);
-    if (list) list.push(call);
-    else toolsByParent.set(parent, [call]);
-  }
-
-  const callById = new Map(state.tools.calls.map((call) => [call.id, call]));
+  const streamingId = display.isRunning ? display.currentMessage?.id : undefined;
+  const emitted = new Set<string>();
 
   const projected = chat.map((message): ThreadMessageLike => {
-    if (message.role === "user") {
-      return { role: "user", id: message.id, content: textContent(message), ...createdAt(message) };
-    }
-    // Walk parts in order so tool calls land where the model emitted them (a tool_call_ref part
-    // marks the spot) instead of all sinking below the text. Falls back to append-at-end for tools
-    // with no ref part yet (a live tool_start before its content lands in the message).
     const content: LikePart[] = [];
-    const emitted = new Set<string>();
-    for (const part of message.parts) {
-      if (part.kind === "tool_call_ref" || part.kind === "tool_result_ref") {
-        const call = callById.get(part.toolCallId);
-        if (!call || emitted.has(call.id)) continue;
-        emitted.add(call.id);
-        content.push(toolCallPart(call, findApproval(state.approvals.requests, call.id)));
-      } else if (part.kind === "text") {
-        content.push({ type: "text", text: part.text ?? "" });
-      } else if (part.kind === "reasoning" || part.kind === "thought") {
-        content.push({ type: "reasoning", text: part.text ?? "" });
-      } else if (part.kind === "image") {
-        content.push({ type: "image", image: part.url });
+    for (const part of message.content.parts) {
+      if (part.type === "text") content.push({ type: "text", text: part.text });
+      else if (part.type === "reasoning") content.push({ type: "reasoning", text: part.reasoning });
+      else if (part.type === "file") {
+        const url = imageSource(undefined, part.data, part.mimeType);
+        if (url && (!part.mimeType || part.mimeType.startsWith("image/")))
+          content.push({ type: "image", image: url });
+      } else if (part.type === "tool-invocation") {
+        const call = part.toolInvocation;
+        if (emitted.has(call.toolCallId)) continue;
+        emitted.add(call.toolCallId);
+        content.push(
+          toolCallPart({
+            id: call.toolCallId,
+            name: call.toolName,
+            args: call.rawInput ?? call.args,
+            result: call.result,
+            isError: call.isError === true || call.state === "output-error",
+            display,
+          }),
+        );
+      } else if (part.type === "data-signal" || part.type === "data-user-message") {
+        // A route-workspace signal is prose the user should read; other signals are chrome.
+        const data = readRecord(part.data);
+        const text = signalText(data?.contents);
+        if (text && data?.tagName === "route-workspace") content.push({ type: "text", text });
       }
     }
-    for (const call of toolsByParent.get(message.id) ?? []) {
-      if (emitted.has(call.id)) continue;
-      content.push(toolCallPart(call, findApproval(state.approvals.requests, call.id)));
+    if (message.role === "user")
+      return {
+        role: "user",
+        // A user turn with no text part still needs a content entry to render.
+        content: content.length > 0 ? content : [{ type: "text", text: "" }],
+        id: message.id,
+        ...createdAt(message),
+      };
+    if (message.id === lastAssistantId) {
+      for (const [id, tool] of Object.entries(display.activeTools ?? {})) {
+        if (emitted.has(id)) continue;
+        emitted.add(id);
+        content.push(
+          toolCallPart({
+            id,
+            name: tool.name,
+            args: tool.args,
+            result: tool.result ?? tool.shellOutput ?? tool.partialResult,
+            isError: tool.status === "error" || tool.isError === true,
+            display,
+          }),
+        );
+      }
     }
     return {
       role: "assistant",
       id: message.id,
       content,
       status:
-        message.status === "streaming"
-          ? { type: "running" }
-          : message.status === "error"
-            ? { type: "incomplete", reason: "error" }
-            : { type: "complete", reason: "unknown" },
+        message.id === streamingId ? { type: "running" } : { type: "complete", reason: "unknown" },
       ...createdAt(message),
     };
   });
@@ -100,87 +115,47 @@ export function isRenderable(message: ThreadMessageLike): boolean {
   return hasText || hasImage || hasTool || running;
 }
 
-function textContent(message: WorkbenchMessage): LikePart[] {
-  const parts = message.parts.flatMap((part): LikePart[] => {
-    if (part.kind === "text") return [{ type: "text", text: part.text ?? "" }];
-    if (part.kind === "reasoning" || part.kind === "thought")
-      return [{ type: "reasoning", text: part.text ?? "" }];
-    if (part.kind === "image") return [{ type: "image", image: part.url }];
-    return [];
-  });
-  // A user turn with no text part still needs a content entry to render.
-  if (parts.length === 0 && message.role === "user") return [{ type: "text", text: "" }];
-  return parts;
-}
-
-function toolCallPart(
-  call: WorkbenchToolCall,
-  approval: WorkbenchApprovalRequest | undefined,
-): LikePart {
-  const result = call.rawOutput ?? call.content;
-  const argsObject = isRecord(call.rawInput)
-    ? (call.rawInput as Record<string, unknown>)
-    : undefined;
-  // rawInput/rawOutput are no longer streamed (fetched on demand for the trace card), so the
-  // inline marker falls back to the small `target` label the server still sends.
-  const args = argsObject ?? (call.target ? { path: call.target } : undefined);
+function toolCallPart(call: {
+  id: string;
+  name: string;
+  args: unknown;
+  result: unknown;
+  isError: boolean;
+  display: ChatDisplay;
+}): LikePart {
+  const target = toolTarget(call.args);
+  const args = readRecord(call.args) ?? (target ? { path: target } : undefined);
+  const gated = selectApprovals(call.display).some(
+    (approval) => approval.toolCallId === call.id,
+  );
   // Built as a plain record then cast once at this boundary — the tool-call part's
-  // `args`/`result` are JSON-typed and our WorkbenchToolCall fields are `unknown`.
+  // `args`/`result` are JSON-typed and ours are `unknown`.
   const part: Record<string, unknown> = {
     type: "tool-call",
     toolCallId: call.id,
-    toolName: call.title,
-    ...(args ? { args } : { argsText: stringifyArgs(call.rawInput) }),
-    ...(result !== undefined ? { result } : {}),
-    ...(call.status === "failed" ? { isError: true } : {}),
-    ...(approval
-      ? {
-          approval: {
-            id: approval.requestId,
-            approved: undefined,
-            options: approval.options.map((option) => ({
-              id: option.optionId,
-              kind: approvalKind(option.kind),
-              label: option.name,
-            })),
-          },
-        }
-      : {}),
+    toolName: call.name,
+    ...(args ? { args } : { argsText: stringify(call.args) }),
+    ...(call.result !== undefined ? { result: call.result } : {}),
+    ...(call.isError ? { isError: true } : {}),
+    // The approval id IS the toolCallId — the provider reads `display` to tell an approval gate
+    // from a suspension, so nothing has to be string-encoded into it.
+    ...(gated ? { approval: { id: call.id, approved: undefined, options: APPROVAL_OPTIONS } } : {}),
   };
   return part as LikePart;
 }
 
-function findApproval(
-  requests: WorkbenchApprovalRequest[],
-  toolCallId: string,
-): WorkbenchApprovalRequest | undefined {
-  return requests.find(
-    (request) => request.status === "pending" && request.toolCall.id === toolCallId,
-  );
-}
-
-/** ACP option kinds use underscores; assistant-ui's ToolApprovalOptionKind uses hyphens. */
-function approvalKind(kind: string): string {
-  return kind.replaceAll("_", "-");
-}
-
-function stringifyArgs(value: unknown): string {
-  if (value === undefined || value === null) return "";
+function signalText(value: unknown): string {
   if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return "[unserializable]";
-  }
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((part) => readString(readRecord(part)?.text) ?? "")
+    .filter(Boolean)
+    .join("\n");
 }
 
-function createdAt(message: WorkbenchMessage): { createdAt?: Date } {
-  const iso = message.createdAt ?? message.updatedAt;
-  if (!iso) return {};
-  const date = new Date(iso);
+function createdAt(message: MastraDBMessage): { createdAt?: Date } {
+  const at = message.createdAt;
+  if (!at) return {};
+  const date = at instanceof Date ? at : new Date(at);
   return Number.isNaN(date.getTime()) ? {} : { createdAt: date };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -8,7 +8,6 @@ export * from "./events.ts";
 export * from "./context.ts";
 export * from "./system-prompt-capture.ts";
 export * from "./tool-list-capture.ts";
-export * from "./context-breakdown.ts";
 export * from "./storage/profiles.ts";
 export * from "./storage/thread-state.ts";
 export * from "./memory/profiles.ts";
