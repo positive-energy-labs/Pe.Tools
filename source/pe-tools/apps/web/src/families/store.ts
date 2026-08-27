@@ -303,9 +303,7 @@ export function createFamiliesStore(deps: {
       showUncommon,
       table,
       picker,
-      busy: core.busy,
-      failure: core.failure,
-      receipt: core.receipt,
+      ...core.verbAtoms,
     },
     feeds: {
       category: categoryFeed,

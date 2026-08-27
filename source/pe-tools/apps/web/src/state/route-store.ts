@@ -169,6 +169,8 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     busy,
     failure,
     receipt,
+    /** The one busy/failure/receipt triple every store spreads onto its atoms. */
+    verbAtoms: { busy, failure, receipt },
     dispose() {
       if (disposed) return;
       disposed = true;

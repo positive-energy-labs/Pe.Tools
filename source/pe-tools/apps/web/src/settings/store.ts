@@ -428,9 +428,7 @@ export function createSettingsStore(deps: {
       sliceError,
       picker,
       targeting,
-      busy: core.busy,
-      failure: core.failure,
-      receipt: core.receipt,
+      ...core.verbAtoms,
     },
     feeds: {
       workspace: workspaceFeed,

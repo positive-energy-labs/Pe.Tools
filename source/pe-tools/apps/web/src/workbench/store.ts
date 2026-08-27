@@ -100,9 +100,7 @@ export function createChatPageStore(deps: {
       world,
       worldCache,
       draft,
-      busy: core.busy,
-      failure: core.failure,
-      receipt: core.receipt,
+      ...core.verbAtoms,
     },
     actions: {
       setPaletteOpen: (value: Setter<boolean>) => set("set-palette", paletteOpen, value),

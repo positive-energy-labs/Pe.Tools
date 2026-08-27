@@ -183,8 +183,7 @@ export function createOpsStore(deps: {
       selectedGlance,
       hydrated,
       result,
-      busy: core.busy,
-      failure: core.failure,
+      ...core.verbAtoms,
     },
     actions,
     dispose() {
