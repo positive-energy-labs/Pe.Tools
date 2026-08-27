@@ -11,8 +11,8 @@ import { useState } from "react";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Verb as VerbButton } from "#/components/lang/verb";
+import { TargetCaption, TargetingFlow } from "#/targeting/flow";
 import {
-  freshnessWord,
   PaneStrip,
   Picker,
   SeamChip,
@@ -20,27 +20,7 @@ import {
   type Bindings,
   type Runner,
 } from "#/targeting/kit";
-import { targetMode, targets, type Link, type Product, type Verb } from "#/targeting/model";
-
-const RUN_CSS =
-  "@keyframes tb-run{from{transform:translateX(-100%)}to{transform:translateX(400%)}}";
-
-function Caption<K extends string>({ b, link }: { b: Bindings<K>; link: Link<K> }) {
-  const fresh = freshnessWord(b, link);
-  const f = b.feeds[link.key];
-  const warn = f?.stale || f?.state === "error";
-  return (
-    <span
-      className="face-mono t-caption"
-      style={{ color: warn ? "var(--r-caution)" : "var(--r-ink-mute)", lineHeight: 1 }}
-    >
-      {targetMode(link)}
-      {link.liveness ? ` · ${link.liveness}` : ""}
-      {fresh ? ` · ${fresh}` : ""}
-      {f?.basis?.length ? ` | basis ${f.basis.join(" / ")}` : ""}
-    </span>
-  );
-}
+import { targets, type Link, type Product, type Verb } from "#/targeting/model";
 
 function Demand<K extends string>({
   product,
@@ -93,7 +73,7 @@ export function TargetingHead<K extends string>({
   receipt,
   extra,
   aside,
-  variant = "head",
+  mode = "sentence",
 }: {
   product: Product<K>;
   b: Bindings<K>;
@@ -104,7 +84,7 @@ export function TargetingHead<K extends string>({
   extra?: (link: Link<K>) => React.ReactNode;
   /** Route-owned chips for the head's right edge (fixture lane, etc.). */
   aside?: React.ReactNode;
-  variant?: "head" | "line";
+  mode?: "sentence" | "flow" | "line";
 }) {
   const [expanded, setExpanded] = useState(false);
   const verbs = [...b.stage.verbs].sort(
@@ -113,7 +93,6 @@ export function TargetingHead<K extends string>({
 
   const gridRow = (v: Verb<K>, i: number) => {
     const can = runner.canRun(v);
-    const busy = runner.busy === v.key;
     return (
       <div
         key={v.key}
@@ -143,21 +122,6 @@ export function TargetingHead<K extends string>({
         >
           {v.kind === "commit" && !can.ok ? "" : can.ok ? "ready" : can.reason}
         </span>
-        {busy ? (
-          <span
-            className="absolute overflow-hidden"
-            style={{ left: 0, right: 0, bottom: -1, height: 2 }}
-          >
-            <span
-              className="block h-full"
-              style={{
-                width: "25%",
-                background: "var(--r-ink)",
-                animation: "tb-run 1s linear infinite",
-              }}
-            />
-          </span>
-        ) : null}
       </div>
     );
   };
@@ -194,7 +158,7 @@ export function TargetingHead<K extends string>({
               style={{ opacity: dim ? 0.45 : 1, whiteSpace: "nowrap" }}
               title={dim ? `${t.key} is out of scope at ${b.stage.label}` : undefined}
             >
-              <Caption b={b} link={t} />
+              <TargetCaption b={b} link={t} />
               <span className="inline-flex items-baseline gap-1.5">
                 <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
                   {t.joiner}
@@ -216,19 +180,10 @@ export function TargetingHead<K extends string>({
       <SeamChip product={product} />
     </>
   );
-  if (variant === "line") return <div className="flex min-w-0 flex-1 items-end gap-3">{line}</div>;
+  if (mode === "line") return <div className="flex min-w-0 flex-1 items-end gap-3">{line}</div>;
 
-  return (
-    <ArtifactFrame
-      head={line}
-      foot={
-        <>
-          <PaneStrip product={product} b={b} />
-          {receipt ?? <span />}
-        </>
-      }
-    >
-      <style>{RUN_CSS}</style>
+  const body = (
+    <>
       <StageStrip product={product} b={b} runner={runner} trailing={expandToggle} />
       {expanded ? (
         <>
@@ -251,6 +206,33 @@ export function TargetingHead<K extends string>({
           {verbs.map((v) => verbButton(v, runner))}
         </div>
       )}
+    </>
+  );
+  if (mode === "flow")
+    return (
+      <TargetingFlow
+        product={product}
+        b={b}
+        runner={runner}
+        receipt={receipt}
+        extra={extra}
+        aside={aside}
+      >
+        {body}
+      </TargetingFlow>
+    );
+
+  return (
+    <ArtifactFrame
+      head={line}
+      foot={
+        <>
+          <PaneStrip product={product} b={b} />
+          {receipt ?? <span />}
+        </>
+      }
+    >
+      {body}
     </ArtifactFrame>
   );
 }

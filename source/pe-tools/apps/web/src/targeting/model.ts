@@ -71,6 +71,12 @@ const slotValues = <K extends string>(manifest: Product<K>): readonly Link<K>[] 
 
 export const targetMode = (link: Link) => link.dir ?? "manage";
 
+export const terminals = <K extends string>(manifest: Product<K>) =>
+  slotValues(manifest).filter((slot) => slot.dir !== null);
+
+export const trunks = <K extends string>(manifest: Product<K>) =>
+  slotValues(manifest).filter((slot) => slot.dir === null);
+
 /** Terminals print; a trunk prints only when this product declares no child beneath it. */
 export const prints = <K extends string>(manifest: Product<K>, key: K) =>
   manifest.slots[key].dir !== null || !slotValues(manifest).some((slot) => slot.under === key);

@@ -10,6 +10,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Decided
 
+- 2026-08-26 — Flow is the targeting manifest's second projection: trunks stay in the page context; read terminals enter from the left; write terminals leave on the right; sync and duplex terminals keep both heads on the right. `/takeoffs?targeting=flow` is the reference consumer.
 - 2026-08-26 — U1 supersedes thread-scoped route documents: a route document is about a Revit document and is keyed by `(route, documentId)`; `?thread` is only the conversation view over it. `/chat` keys its sidebar by document, with threads nested under each document.
 - 2026-08-26 — J7 executes U1: `RouteWorkspace` and its HTTP/SSE clients scope documents by `(route, Address)` through `?doc=`; the document carries `Bind { id, label, at }` values per slot and render-time `current(bind, documentAddress)` is the only currency check. `?thread` remains only the conversation view and `?source` the fixture selector. There is no migration: the former thread-keyed route documents are orphaned.
 - 2026-08-26 — The route-document machine owns no product meaning: `agent-contracts/route-doc.ts` exports the pure `applyPatches`, `guardCommand`, and `commitDoc` functions; `RouteWorkspace` is only their persistence, serialization, crash-barrier, and publication shell.
@@ -182,7 +183,6 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Owed
 
-- 2026-08-26 — Promote the FLOW view as a second projection of `targeting/model.ts` (`terminals()` + trunks), per `MAP.md:274`. Its side rule (reads left, writes·syncs right, context to the head line) was written against the round-5 SUBJECT clause, which round 7 deleted; restate it for trunk-vs-terminal before rebuilding. Code to graft from: `git show 76ae024^:source/pe-tools/apps/web/src/targeting-proto/view-flow.tsx` (346 lines, old `Link` model).
 - Promote the typed manifest to `@pe/agent-contracts` only when Pea reads it; that consumer is the gate for a wire contract and generated projections.
 - 2026-08-25 — Eight design guard gates remain: hard-zero dead shim tokens 14, bare hairlines 29, deleted tele classes 83, hex colour literals 8, sub-10px type 1; `textPx` 99 > 41; `rawButton` 92 > 56; `dashed` 8 > 7. The six docs guards are green.
 - 2026-08-25 — The fixture lane has two spellings: `?source=fixture` (`/takeoffs`, `/settings`) and none on `/family` (lane = whether a document is open). Rule one spelling before a chat pane needs a fixture lane.

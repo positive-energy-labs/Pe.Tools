@@ -36,5 +36,5 @@ export function ChatSentence() {
     setQuery,
   );
   const runner = useRunner(manifest, bindings);
-  return <TargetingHead variant="line" product={manifest} b={bindings} runner={runner} />;
+  return <TargetingHead mode="line" product={manifest} b={bindings} runner={runner} />;
 }

@@ -8,8 +8,11 @@ import {
   progress,
   refusal,
   targets,
+  terminals,
+  trunks,
   type Feeds,
 } from "#/targeting/model";
+import { flowSide } from "#/targeting/flow";
 
 const slots = {
   world: {
@@ -148,6 +151,8 @@ const bound = { world: "w1", rvt: "d1", view: "v1", zones: null, folder: null, r
 describe("targeting manifest", () => {
   it("prints terminals and only leaf trunks", () => {
     expect(targets(P).map((link) => link.key)).toEqual(["view", "zones", "r10"]);
+    expect(terminals(P).map((link) => link.key)).toEqual(["view", "zones", "r10"]);
+    expect(trunks(P).map((link) => link.key)).toEqual(["world", "rvt", "folder"]);
     expect(
       prints(
         product("instances", "instances", { world: slots.world })({
@@ -159,6 +164,15 @@ describe("targeting manifest", () => {
       ),
     ).toBe(true);
     expect(pathOf(P, "zones").map((link) => link.key)).toEqual(["world", "rvt", "zones"]);
+  });
+
+  it("puts read terminals left and every output terminal right", () => {
+    expect(flowSide("read")).toBe("left");
+    expect([flowSide("write"), flowSide("sync"), flowSide("duplex")]).toEqual([
+      "right",
+      "right",
+      "right",
+    ]);
   });
 
   it("re-picking a shared trunk clears every descendant", () => {

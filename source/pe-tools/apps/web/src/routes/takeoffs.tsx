@@ -54,6 +54,7 @@ export const Route = createFileRoute("/takeoffs")({
   validateSearch: (search: Record<string, unknown>) => ({
     source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
     thread: str(search.thread) || undefined,
+    targeting: search.targeting === "flow" ? ("flow" as const) : undefined,
   }),
   component: TakeoffsRoute,
 });
@@ -108,7 +109,7 @@ function TakeoffsStoreOwner({
 
 function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const navigate = useNavigate({ from: "/takeoffs" });
-  const { source } = Route.useSearch();
+  const { source, targeting } = Route.useSearch();
   const views = useAtomValue(store.atoms.views);
   const zones = useAtomValue(store.atoms.zones);
   const dir = useAtomValue(store.atoms.dir);
@@ -358,6 +359,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
           product={product}
           b={b}
           runner={runner}
+          mode={targeting}
           extra={addFolder}
           aside={
             !live ? (
