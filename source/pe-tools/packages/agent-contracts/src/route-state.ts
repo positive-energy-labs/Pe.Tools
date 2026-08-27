@@ -46,10 +46,11 @@ export type RouteDocOf<TSpec> =
   TSpec extends RouteStateSpec<infer TSchema> ? z.infer<TSchema> : never;
 
 /** A single segment-array patch. Omit `value` to delete the key. */
-export interface RouteStatePatch {
-  path: (string | number)[];
-  value?: unknown;
-}
+export const routeStatePatchSchema = z.object({
+  path: z.array(z.union([z.string(), z.number()])),
+  value: z.unknown().optional(),
+});
+export type RouteStatePatch = z.infer<typeof routeStatePatchSchema>;
 
 export type RouteWriteKind = "error" | "refused" | "advisory" | "partial";
 
@@ -116,3 +117,11 @@ export type RouteStateCommandHandlers<TDoc = unknown> = Record<
   string,
   RouteStateCommandHandler<TDoc>
 >;
+
+export function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

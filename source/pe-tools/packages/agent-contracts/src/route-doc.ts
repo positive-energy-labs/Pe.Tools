@@ -1,5 +1,12 @@
 import { z } from "zod";
-import type { RouteStateCommandSpec, RouteStateSpec, RouteWriteKind } from "./route-state.ts";
+import {
+  isRecord,
+  message,
+  type RouteStateCommandSpec,
+  type RouteStatePatch,
+  type RouteStateSpec,
+  type RouteWriteKind,
+} from "./route-state.ts";
 
 export interface ExternalOperation {
   command: string;
@@ -26,11 +33,11 @@ export interface RouteEnvelope<D> {
   receipts?: Record<string, CommandReceipt>;
 }
 
-export type RoutePatch = { path: (string | number)[]; value?: unknown };
+export type RoutePatch = RouteStatePatch;
 export type RouteActor = "agent" | "human";
 export type RouteRefusal = {
   ok: false;
-  kind?: RouteWriteKind;
+  kind: RouteWriteKind;
   error: string;
   hint: string;
   code?: RouteRefusalCode;
@@ -55,26 +62,20 @@ export function applyPatches<S extends z.ZodType>(
   if (actor === "agent") {
     const forbidden = patches.find((patch) => !isMaskAllowed(spec.agentWriteMask, patch.path));
     if (forbidden)
-      return {
-        ok: false,
-        kind: "refused",
-        error: `patch path ${formatPath(forbidden.path)} is not agent-writable`,
-        hint: `the agent write mask allows only ${spec.agentWriteMask
+      return refuse(
+        "refused",
+        `patch path ${formatPath(forbidden.path)} is not agent-writable`,
+        `the agent write mask allows only ${spec.agentWriteMask
           .map(formatPath)
           .join(", ")} (and their subtrees); everything else is human-only.`,
-      };
+      );
   }
 
   const draft = structuredClone(envelope.doc) as Record<string, unknown>;
   try {
     for (const patch of patches) applyPatch(draft, patch);
   } catch (error) {
-    return {
-      ok: false,
-      kind: "error",
-      error: message(error),
-      hint: "patch paths must address plain document keys.",
-    };
+    return refuse("error", message(error), "patch paths must address plain document keys.");
   }
   return commitDoc(spec, envelope, draft);
 }
@@ -85,13 +86,12 @@ export function checkRevision(
 ): RouteRefusal | null {
   return expectedRevision === envelope.revision
     ? null
-    : {
-        ok: false,
-        kind: "refused",
-        code: "stale_revision",
-        error: `the document moved to r${envelope.revision}`,
-        hint: "re-read before patching.",
-      };
+    : refuse(
+        "refused",
+        `the document moved to r${envelope.revision}`,
+        "re-read before patching.",
+        "stale_revision",
+      );
 }
 
 /** Stable JSON for comparing the raw command input across retransmissions. */
@@ -110,34 +110,26 @@ export function guardCommand<S extends z.ZodType>(
 ): { ok: true; input: unknown; command: RouteStateCommandSpec } | RouteRefusal {
   const command = spec.commands[name];
   if (!command)
-    return {
-      ok: false,
-      kind: "error",
-      error: `unknown command '${name}'`,
-      hint: `available commands: ${Object.keys(spec.commands).join(", ") || "(none)"}.`,
-    };
+    return refuse(
+      "error",
+      `unknown command '${name}'`,
+      `available commands: ${Object.keys(spec.commands).join(", ") || "(none)"}.`,
+    );
   if (command.actor === "human" && actor !== "human")
-    return {
-      ok: false,
-      kind: "refused",
-      error: `command '${name}' is human-only`,
-      hint: "a human must run this command from the browser UI.",
-    };
+    return refuse(
+      "refused",
+      `command '${name}' is human-only`,
+      "a human must run this command from the browser UI.",
+    );
   const parsed = command.input.safeParse(input ?? {});
   if (!parsed.success)
-    return {
-      ok: false,
-      kind: "error",
-      error: `invalid input for command '${name}'`,
-      hint: formatZodError(parsed.error),
-    };
+    return refuse("error", `invalid input for command '${name}'`, formatZodError(parsed.error));
   if (envelope.outcomeUnknown && command.mutatesExternal && !command.recoversExternal)
-    return {
-      ok: false,
-      kind: "refused",
-      error: `command '${name}' is blocked because a prior external outcome is unknown`,
-      hint: "run a recovery command successfully before another external mutation.",
-    };
+    return refuse(
+      "refused",
+      `command '${name}' is blocked because a prior external outcome is unknown`,
+      "run a recovery command successfully before another external mutation.",
+    );
   return { ok: true, input: parsed.data, command };
 }
 
@@ -148,12 +140,7 @@ export function commitDoc<S extends z.ZodType>(
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const parsed = spec.schema.safeParse(next);
   if (!parsed.success)
-    return {
-      ok: false,
-      kind: "error",
-      error: "the patched document is invalid",
-      hint: formatZodError(parsed.error),
-    };
+    return refuse("error", "the patched document is invalid", formatZodError(parsed.error));
   return {
     ok: true,
     envelope: { ...envelope, revision: envelope.revision + 1, doc: parsed.data },
@@ -199,6 +186,15 @@ function formatZodError(error: z.ZodError): string {
     .join("; ");
 }
 
+export function refuse(
+  kind: RouteWriteKind,
+  error: string,
+  hint: string,
+  code?: RouteRefusalCode,
+): RouteRefusal {
+  return { ok: false, kind, error, hint, ...(code ? { code } : {}) };
+}
+
 function sortJson(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortJson);
   if (!isRecord(value)) return value;
@@ -207,12 +203,4 @@ function sortJson(value: unknown): unknown {
       .sort()
       .map((key) => [key, sortJson(value[key])]),
   );
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
