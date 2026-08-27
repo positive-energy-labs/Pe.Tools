@@ -19,7 +19,11 @@ import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
-import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
+import {
+  RouteDocumentEmpty,
+  RouteDocumentSurface,
+  useRouteDocumentAddress,
+} from "#/workbench/route-document";
 import { ValueDiff } from "#/components/ui/value-diff";
 import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";
@@ -54,7 +58,11 @@ type ScheduleRow = Snapshot["rows"][number];
 function ScheduleGridRoute() {
   const documentAddress = useRouteDocumentAddress();
   if (!documentAddress) return <RouteDocumentEmpty />;
-  return <ScheduleGridWorkspace documentAddress={documentAddress} />;
+  return (
+    <RouteDocumentSurface at={documentAddress}>
+      <ScheduleGridWorkspace documentAddress={documentAddress} />
+    </RouteDocumentSurface>
+  );
 }
 
 function ScheduleGridWorkspace({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {

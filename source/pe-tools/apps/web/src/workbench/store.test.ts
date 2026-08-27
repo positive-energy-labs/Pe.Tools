@@ -10,14 +10,14 @@ test("chat route store owns page atoms, URL projection, and verb receipts only",
     registry,
     search: {
       mode: "threads",
-      patch: (partial, replace) => patches.push({ partial, replace }),
+      patch: async (partial, replace) => void patches.push({ partial, replace }),
     },
   });
 
   store.actions.setLensInspectKey("tool-1");
   store.actions.setLensFollowing(false);
   store.actions.setMode("world");
-  store.actions.openThread("thread-2", true);
+  await store.actions.openThread("thread-2", true);
   await store.runVerb("inspect", async () => "inspected");
 
   expect(registry.get(store.atoms.lensInspectKey)).toBe("tool-1");

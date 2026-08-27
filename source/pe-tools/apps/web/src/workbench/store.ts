@@ -17,7 +17,7 @@ export interface ChatSearch {
   readonly plugin?: "family" | "families" | "settings" | "parameter-links" | "schedule-grid";
   readonly target?: string;
   readonly prompt?: string;
-  patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): void;
+  patch(partial: Partial<Omit<ChatSearch, "patch">>, replace?: boolean): Promise<void>;
 }
 
 type Setter<A> = A | ((previous: A) => A);
@@ -78,14 +78,14 @@ export function createChatPageStore(deps: {
     const value = deps.registry.get(draft);
     const prompt = value.text.trim();
     if (!prompt || prompt.length > 200 || value.attachments.length) {
-      deps.search.patch({ prompt: undefined }, true);
+      void deps.search.patch({ prompt: undefined }, true);
       return;
     }
-    promptTimer = setTimeout(() => deps.search.patch({ prompt }, true), 300);
+    promptTimer = setTimeout(() => void deps.search.patch({ prompt }, true), 300);
   };
   const setTurn = (turn?: number) => {
     if (turnTimer) clearTimeout(turnTimer);
-    turnTimer = setTimeout(() => deps.search.patch({ turn }, true), 1000);
+    turnTimer = setTimeout(() => void deps.search.patch({ turn }, true), 1000);
   };
 
   return {
@@ -116,9 +116,9 @@ export function createChatPageStore(deps: {
       setWorldCache: (value: Setter<WorldCacheState>) =>
         set("set-world-cache", worldCache, value),
       setDraft,
-      setMode: (mode: string) => deps.search.patch({ mode }),
+      setMode: (mode: string) => void deps.search.patch({ mode }),
       setTurn,
-      setPlugin: (plugin?: ChatSearch["plugin"]) => deps.search.patch({ plugin }),
+      setPlugin: (plugin?: ChatSearch["plugin"]) => void deps.search.patch({ plugin }),
       openThread: (thread: string, replace = false) => deps.search.patch({ thread }, replace),
     },
     runVerb: core.runVerb,

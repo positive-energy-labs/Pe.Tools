@@ -1,5 +1,6 @@
-import { useMemo, useSyncExternalStore } from "react";
-import type { Address } from "@pe/agent-contracts";
+import { useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { useLocation, useSearch } from "@tanstack/react-router";
+import { addressSchema, type Address } from "@pe/agent-contracts";
 
 import { EmptyState } from "#/components/lang/empty";
 import { useFleet } from "#/host/fleet";
@@ -40,17 +41,52 @@ export function routeDocumentChoices(sessions: readonly SessionFacts[]): RouteDo
 export function routeDocumentAddress(
   choices: readonly RouteDocumentChoice[],
   bound: Address | null,
+  requested?: Address | null,
 ): Address | null {
+  if (requested !== undefined)
+    return requested && choices.some((choice) => choice.at === requested) ? requested : null;
   if (bound && choices.some((choice) => choice.at === bound)) return bound;
   return choices.length === 1 ? choices[0]!.at : null;
+}
+
+export function routeDocumentSearch(search: Record<string, unknown>): { doc?: Address | null } {
+  if (search.doc === undefined) return {};
+  return { doc: addressSchema.safeParse(search.doc).data ?? null };
+}
+
+export function routeDocumentTabHref(href: string, at: Address) {
+  const url = new URL(href, "http://localhost");
+  url.searchParams.set("doc", at);
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 export function useRouteDocumentAddress() {
   const { sessions } = useFleet();
   const bound = useSyncExternalStore(subscribe, () => boundDocument);
+  const requested = useSearch({
+    strict: false,
+    select: (search) => (search as { doc?: Address | null }).doc,
+  });
   return useMemo(
-    () => routeDocumentAddress(routeDocumentChoices(sessions), bound),
-    [sessions, bound],
+    () => routeDocumentAddress(routeDocumentChoices(sessions), bound, requested),
+    [sessions, bound, requested],
+  );
+}
+
+export function RouteDocumentSurface({ at, children }: { at: Address; children: ReactNode }) {
+  const href = useLocation({ select: (location) => location.href });
+  return (
+    <>
+      <a
+        href={routeDocumentTabHref(href, at)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed right-3 top-3 z-50 t-label text-[var(--r-nav)] underline-offset-2 hover:underline"
+      >
+        open in another tab
+      </a>
+      {children}
+    </>
   );
 }
 

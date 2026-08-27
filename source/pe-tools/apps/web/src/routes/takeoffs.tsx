@@ -29,7 +29,11 @@ import {
 } from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
-import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
+import {
+  RouteDocumentEmpty,
+  RouteDocumentSurface,
+  useRouteDocumentAddress,
+} from "#/workbench/route-document";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
 import { documentTrunk, worldTrunk } from "#/targeting/world";
@@ -77,11 +81,11 @@ const readDirs = (): string[] => {
 
 export function TakeoffsRoute() {
   const { source } = Route.useSearch();
+  const fixtureAddress = address("C:\\Fixtures\\project-a Residence.rvt");
   return source === "fixture" ? (
-    <TakeoffsStoreOwner
-      source="fixture"
-      documentAddress={address("C:\\Fixtures\\project-a Residence.rvt")}
-    />
+    <RouteDocumentSurface at={fixtureAddress}>
+      <TakeoffsStoreOwner source="fixture" documentAddress={fixtureAddress} />
+    </RouteDocumentSurface>
   ) : (
     <LiveTakeoffsRoute />
   );
@@ -115,7 +119,15 @@ export function LiveTakeoffsRoute() {
 function LiveTakeoffsDocumentRoute() {
   const documentAddress = useRouteDocumentAddress();
   if (!documentAddress) return <RouteDocumentEmpty />;
-  return <TakeoffsStoreOwner key={`live:${documentAddress}`} source="live" documentAddress={documentAddress} />;
+  return (
+    <RouteDocumentSurface at={documentAddress}>
+      <TakeoffsStoreOwner
+        key={`live:${documentAddress}`}
+        source="live"
+        documentAddress={documentAddress}
+      />
+    </RouteDocumentSurface>
+  );
 }
 
 function TakeoffsStoreOwner({

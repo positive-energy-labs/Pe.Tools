@@ -16,7 +16,11 @@ import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 import { product as defineProduct } from "#/targeting/model";
 import { worldTrunk, type WorldStart } from "#/targeting/world";
-import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
+import {
+  RouteDocumentEmpty,
+  RouteDocumentSurface,
+  useRouteDocumentAddress,
+} from "#/workbench/route-document";
 import { useRouteState } from "#/workbench/route-state";
 
 const YEARS = ["24", "25", "26"];
@@ -147,7 +151,11 @@ function StartFields({
 export function InstancesPage() {
   const documentAddress = useRouteDocumentAddress();
   if (!documentAddress) return <RouteDocumentEmpty />;
-  return <AddressedInstancesPage documentAddress={documentAddress} />;
+  return (
+    <RouteDocumentSurface at={documentAddress}>
+      <AddressedInstancesPage documentAddress={documentAddress} />
+    </RouteDocumentSurface>
+  );
 }
 
 function AddressedInstancesPage({ documentAddress }: { documentAddress: Address }) {

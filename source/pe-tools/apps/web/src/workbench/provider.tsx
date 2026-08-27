@@ -72,6 +72,7 @@ interface WorkbenchContextValue {
   sendPrompt: (text: string, attachments?: WorkbenchAttachment[]) => Promise<void>;
   cancel: () => void;
   newThread: () => void;
+  forkThread: () => Promise<void>;
   openThread: (threadId: string) => void;
   deleteThread: (threadId: string) => Promise<void>;
   resolveApproval: (requestId: string, optionId?: string) => Promise<void>;
@@ -94,7 +95,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       search: {
         ...search,
         patch: (partial, replace = false) =>
-          void navigate({ search: (previous) => ({ ...previous, ...partial }), replace }),
+          navigate({ search: (previous) => ({ ...previous, ...partial }), replace }),
       },
     }),
   );
@@ -124,9 +125,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   /** Replace the URL thread param (no history spam on auto-landing / switching). */
   const gotoThread = useCallback(
-    (threadId: string, replace = false) => {
-      store.actions.openThread(threadId, replace);
-    },
+    (threadId: string, replace = false) => store.actions.openThread(threadId, replace),
     [store],
   );
 
@@ -192,7 +191,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   }, [infoQuery.error]);
 
   useEffect(() => {
-    if (!currentThreadId) gotoThread(mintedThreadId, true);
+    if (!currentThreadId) void gotoThread(mintedThreadId, true);
   }, [currentThreadId, gotoThread, mintedThreadId]);
 
   // The URL owns this provider's immutable session. Navigation replaces the whole lifecycle.
@@ -290,12 +289,21 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   }, [api]);
 
   const newThread = useCallback(() => {
-    gotoThread(crypto.randomUUID());
+    void gotoThread(crypto.randomUUID());
   }, [gotoThread]);
+
+  const forkThread = useCallback(async () => {
+    if (!api || !currentThreadId) return;
+    try {
+      await forkSessionThread(api.session, currentThreadId, gotoThread);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }, [api, currentThreadId, gotoThread]);
 
   const openThread = useCallback(
     (threadId: string) => {
-      gotoThread(threadId); // hydrate effect reacts to the URL change
+      void gotoThread(threadId); // hydrate effect reacts to the URL change
     },
     [gotoThread],
   );
@@ -303,18 +311,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const deleteThread = useCallback(
     async (threadId: string) => {
       if (!api) return;
-      if (threadId === currentThreadId) {
-        setError("Open another thread before deleting the current thread.");
-        return;
-      }
       try {
-        await api.session.deleteThread(threadId);
+        await deleteSessionThread(api.session, currentThreadId, threadId, gotoThread);
       } catch (caught) {
         setError(errorMessage(caught));
       }
       await refreshThreads();
     },
-    [api, currentThreadId, refreshThreads],
+    [api, currentThreadId, gotoThread, refreshThreads],
   );
 
   const resolveApproval = useCallback(
@@ -409,6 +413,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       sendPrompt,
       cancel,
       newThread,
+      forkThread,
       openThread,
       deleteThread,
       resolveApproval,
@@ -430,6 +435,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       sendPrompt,
       cancel,
       newThread,
+      forkThread,
       openThread,
       deleteThread,
       resolveApproval,
@@ -445,6 +451,25 @@ export function useWorkbench(): WorkbenchContextValue {
   const context = useContext(WorkbenchContext);
   if (!context) throw new Error("useWorkbench must be used inside WorkbenchProvider.");
   return context;
+}
+
+export async function forkSessionThread(
+  session: Pick<SessionClient, "cloneThread">,
+  currentThreadId: string,
+  gotoThread: (threadId: string) => Promise<void>,
+) {
+  const clone = await session.cloneThread({ sourceThreadId: currentThreadId });
+  await gotoThread(clone.id);
+}
+
+export async function deleteSessionThread(
+  session: Pick<SessionClient, "deleteThread">,
+  currentThreadId: string,
+  threadId: string,
+  gotoThread: (threadId: string) => Promise<void>,
+) {
+  if (threadId === currentThreadId) await gotoThread(crypto.randomUUID());
+  await session.deleteThread(threadId);
 }
 
 /** Preserve the built-in suspension payloads expected by MastraCode tools. */

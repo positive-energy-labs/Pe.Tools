@@ -12,7 +12,11 @@ import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { SidePane } from "#/components/ui/side-pane";
-import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
+import {
+  RouteDocumentEmpty,
+  RouteDocumentSurface,
+  useRouteDocumentAddress,
+} from "#/workbench/route-document";
 import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
@@ -52,7 +56,11 @@ function profileHash(profile: ParameterLinkProfile | null): string {
 function ParameterLinksRoute() {
   const documentAddress = useRouteDocumentAddress();
   if (!documentAddress) return <RouteDocumentEmpty />;
-  return <ParameterLinksWorkspace documentAddress={documentAddress} />;
+  return (
+    <RouteDocumentSurface at={documentAddress}>
+      <ParameterLinksWorkspace documentAddress={documentAddress} />
+    </RouteDocumentSurface>
+  );
 }
 
 function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {

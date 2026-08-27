@@ -21,7 +21,11 @@ import { useRouteStore } from "#/state/use-route-store";
 import type { ChatPageStore } from "./store";
 import type { ChatPluginRoute } from "./route-chat-plugins";
 import { RouteWorkspaceShell } from "./route-workspace-shell";
-import { RouteDocumentEmpty, useRouteDocumentAddress } from "./route-document";
+import {
+  RouteDocumentEmpty,
+  RouteDocumentSurface,
+  useRouteDocumentAddress,
+} from "./route-document";
 
 type PaneProps = { store: ChatPageStore };
 type Pane = (props: PaneProps) => ReactNode;
@@ -49,7 +53,11 @@ export function selectRoutePane(route: ChatPluginRoute): Pane {
 function RoutePaneOwner({ chat, spec }: { chat: ChatPageStore; spec: RouteStateSpec<z.ZodType> }) {
   const documentAddress = useRouteDocumentAddress();
   if (!documentAddress) return <RouteDocumentEmpty />;
-  return <AddressedRoutePaneOwner chat={chat} spec={spec} documentAddress={documentAddress} />;
+  return (
+    <RouteDocumentSurface at={documentAddress}>
+      <AddressedRoutePaneOwner chat={chat} spec={spec} documentAddress={documentAddress} />
+    </RouteDocumentSurface>
+  );
 }
 
 function AddressedRoutePaneOwner({ chat, spec, documentAddress }: { chat: ChatPageStore; spec: RouteStateSpec<z.ZodType>; documentAddress: Address }) {

@@ -22,6 +22,7 @@ interface SlashCommand {
 
 const BUILTIN_COMMANDS: SlashCommand[] = [
   { name: "new", description: "Start a new thread", kind: "builtin" },
+  { name: "fork", description: "Fork this thread", kind: "builtin" },
   { name: "threads", description: "Show the thread list", kind: "builtin" },
   { name: "trace", description: "Show the trace gutter", kind: "builtin" },
   { name: "world", description: "Show the context world inspector", kind: "builtin" },
@@ -35,7 +36,7 @@ export function Composer({
   /** Rendered flush at the top edge of the box — the inline budget/progress bar. */
   topBar?: ReactNode;
 }) {
-  const { store, debug, sendPrompt, cancel, isRunning, operationError, newThread } =
+  const { store, debug, sendPrompt, cancel, isRunning, operationError, newThread, forkThread } =
     useWorkbench();
   const { text, attachments } = useAtomValue(store.atoms.draft);
   const setText = (value: string) =>
@@ -67,6 +68,9 @@ export function Composer({
     switch (name) {
       case "new":
         newThread();
+        return true;
+      case "fork":
+        void forkThread();
         return true;
       case "threads":
       case "trace":

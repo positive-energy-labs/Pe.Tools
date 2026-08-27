@@ -4,7 +4,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { OpsReceipt } from "@pe/agent-contracts";
 
 import { FactChip, type FactTone } from "#/components/lang/chip";
-import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
+import {
+  RouteDocumentEmpty,
+  RouteDocumentSurface,
+  useRouteDocumentAddress,
+} from "#/workbench/route-document";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
@@ -55,7 +59,11 @@ export const Route = createFileRoute("/ops")({
 function OpsRoute() {
   const documentAddress = useRouteDocumentAddress();
   if (!documentAddress) return <RouteDocumentEmpty />;
-  return <OpsStoreOwner key={documentAddress} documentAddress={documentAddress} />;
+  return (
+    <RouteDocumentSurface at={documentAddress}>
+      <OpsStoreOwner key={documentAddress} documentAddress={documentAddress} />
+    </RouteDocumentSurface>
+  );
 }
 
 function OpsStoreOwner({
