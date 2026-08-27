@@ -54,7 +54,7 @@
  * =============================================================================================
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createSourceFile,
@@ -66,6 +66,7 @@ import {
   isJsxSelfClosingElement,
   isNoSubstitutionTemplateLiteral,
   isStringLiteral,
+  isTemplateExpression,
   ScriptKind,
   ScriptTarget,
 } from "typescript";
@@ -73,32 +74,42 @@ import { describe, expect, it } from "vite-plus/test";
 
 // ── the walk ─────────────────────────────────────────────────────────────────────────────────
 
-const ROOT = dirname(fileURLToPath(import.meta.url)); // …/apps/web/src
-const SELF = "design-guard.test.ts";
-const SKIP_DIRS = new Set(["node_modules", "src"]); // src/src is a stray vite artifact
-const SKIP_FILES = new Set(["routeTree.gen.ts", SELF]);
+const GUARD_ROOT = dirname(fileURLToPath(import.meta.url)); // …/tests/repo-guards/src
+const ROOT = resolve(GUARD_ROOT, "../../../apps/web/src");
+const SKIP_DIRS = new Set([".artifacts", ".git", "build", "coverage", "dist", "node_modules"]);
+const SKIP_FILES = new Set(["routeTree.gen.ts"]);
 
 type Entry = { rel: string; text: string };
 
-const collect = (dir: string, relBase: string, out: Entry[]): Entry[] => {
+const collectCss = (dir: string, relBase: string, out: Entry[]): Entry[] => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const rel = relBase === "" ? e.name : `${relBase}/${e.name}`;
     if (e.isDirectory()) {
-      // Prototype code is exempt (the TODO above): find-the-product rounds may not arm the
-      // ratchets. The promotion pass deletes the proto dir, which re-arms them for the winner.
-      if (!SKIP_DIRS.has(e.name) && !e.name.startsWith("proto"))
-        collect(join(dir, e.name), rel, out);
+      if (!SKIP_DIRS.has(e.name)) collectCss(join(dir, e.name), rel, out);
       continue;
     }
     if (SKIP_FILES.has(e.name)) continue;
-    if (e.name.endsWith("-proto.tsx")) continue;
-    if (!/\.(?:tsx?|css)$/.test(e.name)) continue;
-    out.push({ rel, text: readFileSync(join(dir, e.name), "utf8") });
+    if (e.name.endsWith(".css")) out.push({ rel, text: readFileSync(join(dir, e.name), "utf8") });
   }
   return out;
 };
 
-const FILES: Entry[] = collect(ROOT, "", []);
+const collectCode = (dir: string, relBase: string, out: Entry[]): Entry[] => {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const rel = relBase === "" ? e.name : `${relBase}/${e.name}`;
+    if (e.isDirectory()) {
+      if (!SKIP_DIRS.has(e.name) && !e.name.startsWith("proto"))
+        collectCode(join(dir, e.name), rel, out);
+      continue;
+    }
+    if (SKIP_FILES.has(e.name) || e.name.endsWith("-proto.tsx")) continue;
+    if (/\.tsx?$/.test(e.name)) out.push({ rel, text: readFileSync(join(dir, e.name), "utf8") });
+  }
+  return out;
+};
+
+const CSS_FILES = collectCss(ROOT, "", []);
+const FILES: Entry[] = [...collectCode(ROOT, "", []), ...CSS_FILES];
 
 const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;
 
@@ -140,9 +151,24 @@ const literalClassTexts = (
   initializer: import("typescript").JsxAttribute["initializer"],
 ): string[] => {
   if (!initializer) return [];
-  if (isStringLiteral(initializer) || isNoSubstitutionTemplateLiteral(initializer))
-    return [initializer.getText()];
-  return isJsxExpression(initializer) && initializer.expression ? [initializer.getText()] : [];
+  const texts: string[] = [];
+  const collectLiterals = (node: import("typescript").Node) => {
+    if (isStringLiteral(node) || isNoSubstitutionTemplateLiteral(node)) {
+      texts.push(node.text);
+      return;
+    }
+    if (isTemplateExpression(node)) {
+      texts.push(node.head.text, ...node.templateSpans.map((span) => span.literal.text));
+      return;
+    }
+    forEachChild(node, collectLiterals);
+  };
+  if (isStringLiteral(initializer) || isNoSubstitutionTemplateLiteral(initializer)) {
+    return [initializer.text];
+  }
+  if (isJsxExpression(initializer) && initializer.expression)
+    collectLiterals(initializer.expression);
+  return texts;
 };
 
 const routeArbitrary = (): Offence[] => {
@@ -166,6 +192,7 @@ const routeArbitrary = (): Offence[] => {
           )
             continue;
           for (const text of literalClassTexts(attribute.initializer)) {
+            re.lastIndex = 0;
             for (const match of text.matchAll(re)) {
               offences.push({
                 rel: f.rel,
@@ -173,7 +200,6 @@ const routeArbitrary = (): Offence[] => {
                 match: match[1],
               });
             }
-            re.lastIndex = 0;
           }
         }
         if (isJsxElement(node)) for (const child of node.children) visit(child);
@@ -246,18 +272,25 @@ describe("design guard — foundation topology", () => {
   it("keeps styles.css as the app entry and import order", () => {
     const entry = FILES.find((file) => file.rel === "styles.css");
     expect(entry, "styles.css must be collected").toBeDefined();
-    const declarations = stripComments(entry!.text)
-      .replace(/@import\s+(?:url\([^)]*\)|["'][^"']+["']);/g, "")
-      .replace(/@plugin\s+["'][^"']+["'];/g, "")
-      .trim();
-    expect(declarations, "styles.css may contain imports and build plugins only").toBe("");
+    const directives = [
+      ...entry!.text.matchAll(/^\s*@(import|plugin)\s+(?:url\([^)]*\)|["'][^"']+["']);/gm),
+    ].map((match) => match[0].trim());
+    expect(directives, "styles.css must keep the six ordered entry directives").toEqual([
+      '@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Spectral:wght@500;600;700&display=swap");',
+      '@import "tailwindcss";',
+      "@plugin '@tailwindcss/typography';",
+      '@import "tw-animate-css";',
+      '@import "./design-lang.css";',
+      '@import "./design-defaults.css";',
+    ]);
   });
 
   it("keeps CSS declarations inside the explicit foundation seams", () => {
     const declarationRe = /(?<![-\w])[-a-zA-Z][\w-]*\s*:\s*[^;{}]+;/g;
-    const outside = FILES.filter(
-      (file) => file.rel.endsWith(".css") && !CSS_SEAMS.has(file.rel),
-    ).map((file) => ({ ...file, text: stripComments(file.text) }));
+    const outside = CSS_FILES.filter((file) => !CSS_SEAMS.has(file.rel)).map((file) => ({
+      ...file,
+      text: stripComments(file.text),
+    }));
     expect(scan(outside, declarationRe), "CSS declarations outside the foundation seams").toEqual(
       [],
     );
@@ -268,7 +301,7 @@ describe("design guard — foundation topology", () => {
 
 type Baseline = Record<string, number>;
 const BASELINE: Baseline = JSON.parse(
-  readFileSync(join(ROOT, "design-guard.baseline.json"), "utf8"),
+  readFileSync(join(GUARD_ROOT, "design-guard.baseline.json"), "utf8"),
 );
 
 const isTsx = (f: Entry) => f.rel.endsWith(".tsx");

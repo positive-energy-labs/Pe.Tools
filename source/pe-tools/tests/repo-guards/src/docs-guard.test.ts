@@ -138,7 +138,7 @@ describe("docs guard — no archive banners", () => {
 
 // ── 4. authority registry ────────────────────────────────────────────────────────────────────
 
-const SKILL_REL = ".agents/skills/docs/SKILL.md";
+const SKILL_REL = ".agents/skills/slot.docs/SKILL.md";
 
 /** Parse the bullet list under "Current registry:" — additions are picked up automatically. */
 const registryPaths = (): string[] => {
@@ -199,7 +199,7 @@ describe("docs guard — links resolve", () => {
 // ── 6. root allowlist ────────────────────────────────────────────────────────────────────────
 
 /** The repo root is not a docs home. Four files, all of them entry points. */
-const ROOT_ALLOWLIST = new Set(["AGENTS.md", "CLAUDE.md", "Readme.md", "CONTEXT.md"]);
+const ROOT_ALLOWLIST = new Set(["AGENTS.md", "CLAUDE.md", "Readme.md", "TASTE.md"]);
 
 describe("docs guard — repo root", () => {
   it("only AGENTS.md / CLAUDE.md / Readme.md / CONTEXT.md live at the repo root", () => {
