@@ -1,6 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
+import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
+import { serve } from "@hono/node-server";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { address, current, routeBindingsSchema } from "@pe/agent-contracts";
@@ -480,6 +482,70 @@ test("HTTP writes forward revision and request identity while refusing a missing
     await rm(workspaceRoot, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("route event stream publishes an applied revision and ends on abort", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-route-events-"));
+  const runtime = await createPeaRuntime({ workspaceRoot });
+  const abort = new AbortController();
+  let server: ReturnType<typeof serve> | undefined;
+  try {
+    const app = await buildAgentControllerApp({
+      runtime,
+      label: "pea",
+      routeRegistrations: [registration()],
+    });
+    server = serve({ fetch: app.fetch, port: 0 });
+    await once(server, "listening");
+    const socket = server.address();
+    if (!socket || typeof socket === "string") throw new Error("Expected a TCP server.");
+    const base = `http://127.0.0.1:${socket.port}`;
+    const doc = encodeURIComponent(documentA.documentAddress);
+    const response = await fetch(`${base}/pe/route-state/test-route/events?doc=${doc}`, {
+      signal: abort.signal,
+    });
+    const reader = response.body!.getReader();
+    expect((await readSse(reader)).revision).toBe(0);
+
+    await fetch(`${base}/pe/route-state/test-route/apply?doc=${doc}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          patches: [{ path: ["values", "sse"], value: "landed" }],
+          expectedRevision: 0,
+        }),
+      });
+    expect(await readSse(reader)).toMatchObject({ revision: 1, doc: { values: { sse: "landed" } } });
+
+    abort.abort();
+    const ended = await reader.read().then(
+      ({ done }) => done,
+      (error: unknown) => error instanceof DOMException && error.name === "AbortError",
+    );
+    expect(ended).toBe(true);
+  } finally {
+    abort.abort();
+    if (server)
+      await new Promise<void>((resolve, reject) =>
+        server!.close((error) => (error ? reject(error) : resolve())),
+      );
+    await runtime.close?.();
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+}, 30_000);
+
+async function readSse(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<Record<string, unknown>> {
+  const { value, done } = await reader.read();
+  if (done || !value) throw new Error("Expected an SSE frame.");
+  const data = new TextDecoder()
+    .decode(value)
+    .split("\n")
+    .find((line) => line.startsWith("data: "))
+    ?.slice(6);
+  if (!data) throw new Error("Expected SSE data.");
+  return JSON.parse(data) as Record<string, unknown>;
+}
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;

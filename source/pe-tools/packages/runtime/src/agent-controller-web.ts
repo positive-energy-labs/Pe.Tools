@@ -4,7 +4,7 @@ import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { addressSchema } from "@pe/agent-contracts";
+import { addressSchema, routeStatePatchSchema } from "@pe/agent-contracts";
 import {
   RouteWorkspace,
   type RouteWorkspaceRegistration,
@@ -13,10 +13,6 @@ import {
 
 /* ── Route-state dispatcher request bodies ─────────────────────────────────── */
 
-const routeStatePatchSchema = z.object({
-  path: z.array(z.union([z.string(), z.number()])),
-  value: z.unknown().optional(),
-});
 const routeStateApplyBodySchema = z.object({
   patches: z.array(routeStatePatchSchema),
   expectedRevision: z.number().int().nonnegative(),
@@ -28,15 +24,12 @@ const routeStateCommandBodySchema = z.object({
   requestId: z.string().trim().min(1).optional(),
 });
 
-/** The minimal shape we serve: an AgentController + its session, on a Mastra. */
 export interface ServableRuntime {
   controller: AgentController;
   resourceId?: string;
   session?: Session;
   mastra?: Mastra;
-  /** The controller's storage, shared with the wrap Mastra so thread routes resolve. */
   storage?: unknown;
-  /** Pe-owned transparency payload (system prompt, tool list, skills, OM config). */
   metadata?: Record<string, unknown>;
   isSessionAdmitted?(session: Session): boolean;
   close?: () => Promise<void> | void;
@@ -51,13 +44,6 @@ function requireServableRuntime(value: unknown): ServableRuntime {
   return runtime as ServableRuntime;
 }
 
-/**
- * Resolve the Mastra to mount and the registration key the controller lives under
- * (route paths are `/api/agent-controller/:controllerId/...`). Controllers built by
- * `createRuntimeController` are already registered on an explicit Mastra (keyed by
- * config.id). Controllers from mastracode's `createMastraCode` use an internal
- * Mastra that doesn't list them, so we wrap them on a fresh Mastra under `label`.
- */
 function resolveServingTarget(runtime: ServableRuntime, label: string): Mastra {
   const existing = runtime.mastra ?? runtime.controller.getMastra();
   if (existing) {
@@ -65,6 +51,7 @@ function resolveServingTarget(runtime: ServableRuntime, label: string): Mastra {
       if (value === runtime.controller) return existing;
     }
   }
+  // Mastracode's Mastra does not list its controllers, so the server wraps them under the label.
   return new Mastra({
     agentControllers: { [label]: runtime.controller },
     ...(runtime.storage ? { storage: runtime.storage as never } : {}),
@@ -72,22 +59,11 @@ function resolveServingTarget(runtime: ServableRuntime, label: string): Mastra {
 }
 
 export interface BuildAgentControllerAppOptions {
-  /** A pre-constructed runtime: an AgentController + its session (plus optional Mastra/metadata). */
   runtime: ServableRuntime;
-  /** Registration key used when the controller isn't already listed on a Mastra. */
   label: string;
-  /** Fixed route registrations supplied by the host composition root. */
   routeRegistrations?: readonly RouteWorkspaceRegistration[];
 }
 
-/**
- * Build the Hono app that fronts a runtime's AgentController — the Pe-owned `/pe/*` extras
- * plus the native `@mastra/server` agent-controller routes (`/api/agent-controller/*`).
- *
- * Pure: it does NOT bind a port. Mount `app.fetch` under any server — the host mounts it into
- * its Effect `HttpRouter` at the absolute paths; the dev shim below binds it with
- * `@hono/node-server`. `MastraServer#init` is async, so the builder is async.
- */
 export async function buildAgentControllerApp(
   options: BuildAgentControllerAppOptions,
 ): Promise<Hono> {
@@ -96,9 +72,7 @@ export async function buildAgentControllerApp(
   const resourceId = runtime.resourceId!;
 
   const app = new Hono();
-  // Pe-owned transparency: resolved system prompt, final tool list, skills, OM
-  // config — captured on pea's agent (InputProcessor + model wrap), surfaced here
-  // because native display-state doesn't carry them. Composition, not a core fork.
+  // Native display state omits Pe prompt, tool, skill, and OM metadata.
   app.get("/pe/inspect", (c) => c.json((runtime.metadata?.workbench as unknown) ?? {}));
   const registrations = options.routeRegistrations ?? [];
   const storage = mastra.getStorage();
@@ -112,24 +86,22 @@ export async function buildAgentControllerApp(
       getState: ({ documentAddress, route }) =>
         threadState!.getState({
           threadId: resourceId,
-          type: `route-workspace:${documentAddress}:${route}`,
+          type: routeDocumentKey(documentAddress, route),
         }),
       setState: ({ documentAddress, route, value }) =>
         threadState!.setState({
           threadId: resourceId,
-          type: `route-workspace:${documentAddress}:${route}`,
+          type: routeDocumentKey(documentAddress, route),
           value,
         }),
     },
   });
 
-  // Discovery is deliberately unscoped and shallow. Every document read/write must name
-  // exactly one scope; omission never falls back to the active session thread.
+  // Discovery is unscoped; every document read or write must name one scope.
   app.get("/pe/route-state", (c) => c.json(routeWorkspace.list()));
   app.get("/pe/route-state/:route", async (c) => {
-    const scope = parseRouteWorkspaceScope(c);
-    if (typeof scope === "string")
-      return c.json({ error: "route scope is required", hint: scope }, 400);
+    const scope = scopeOr400(c, "read");
+    if (scope instanceof Response) return scope;
     try {
       const view = await routeWorkspace.read(scope, c.req.param("route"));
       return view
@@ -140,9 +112,8 @@ export async function buildAgentControllerApp(
     }
   });
   app.get("/pe/route-state/:route/events", async (c) => {
-    const scope = parseRouteWorkspaceScope(c);
-    if (typeof scope === "string")
-      return c.json({ error: "route scope is required", hint: scope }, 400);
+    const scope = scopeOr400(c, "read");
+    if (scope instanceof Response) return scope;
     const route = c.req.param("route");
     try {
       if (!(await routeWorkspace.read(scope, route)))
@@ -152,75 +123,51 @@ export async function buildAgentControllerApp(
     }
     return streamRouteWorkspace(c, routeWorkspace, scope, route);
   });
+  const writes = [
+    {
+      suffix: "apply",
+      schema: routeStateApplyBodySchema,
+      hint: "expected { patches, expectedRevision }",
+      run: (scope: RouteWorkspaceScope, route: string, actor: "agent" | "human", data: unknown) => {
+        const body = data as z.infer<typeof routeStateApplyBodySchema>;
+        return routeWorkspace.apply(scope, route, actor, body.patches, body.expectedRevision);
+      },
+    },
+    {
+      suffix: "command",
+      schema: routeStateCommandBodySchema,
+      hint: "expected { command, input?, expectedRevision, requestId? }",
+      run: (scope: RouteWorkspaceScope, route: string, actor: "agent" | "human", data: unknown) => {
+        const body = data as z.infer<typeof routeStateCommandBodySchema>;
+        return routeWorkspace.command(
+          scope,
+          route,
+          actor,
+          body.command,
+          body.input,
+          body.expectedRevision,
+          body.requestId,
+        );
+      },
+    },
+  ] as const;
   const mountRouteStateWrites = (prefix: string, actor: "agent" | "human") => {
-    app.post(`${prefix}/:route/apply`, async (c) => {
-      const scope = parseRouteWorkspaceScope(c);
-      if (typeof scope === "string")
-        return c.json(
-          { ok: false, kind: "error", error: "route scope is required", hint: scope },
-          400,
-        );
-      const parsed = routeStateApplyBodySchema.safeParse(await c.req.json().catch(() => null));
-      if (!parsed.success) {
-        return c.json(
-          {
-            ok: false,
-            kind: "error",
-            error: "invalid body",
-            hint: "expected { patches, expectedRevision }",
-          },
-          400,
-        );
-      }
-      try {
-        return c.json(
-          await routeWorkspace.apply(
-            scope,
-            c.req.param("route"),
-            actor,
-            parsed.data.patches,
-            parsed.data.expectedRevision,
-          ),
-        );
-      } catch (error) {
-        return c.json({ ok: false, kind: "error", error: errorMessage(error) }, 403);
-      }
-    });
-    app.post(`${prefix}/:route/command`, async (c) => {
-      const scope = parseRouteWorkspaceScope(c);
-      if (typeof scope === "string")
-        return c.json(
-          { ok: false, kind: "error", error: "route scope is required", hint: scope },
-          400,
-        );
-      const parsed = routeStateCommandBodySchema.safeParse(await c.req.json().catch(() => null));
-      if (!parsed.success) {
-        return c.json(
-          {
-            ok: false,
-            kind: "error",
-            error: "invalid body",
-            hint: "expected { command, input?, expectedRevision, requestId? }",
-          },
-          400,
-        );
-      }
-      try {
-        return c.json(
-          await routeWorkspace.command(
-            scope,
-            c.req.param("route"),
-            actor,
-            parsed.data.command,
-            parsed.data.input,
-            parsed.data.expectedRevision,
-            parsed.data.requestId,
-          ),
-        );
-      } catch (error) {
-        return c.json({ ok: false, kind: "error", error: errorMessage(error) }, 403);
-      }
-    });
+    for (const write of writes)
+      app.post(`${prefix}/:route/${write.suffix}`, async (c) => {
+        const scope = scopeOr400(c, "write");
+        if (scope instanceof Response) return scope;
+        const parsed = write.schema.safeParse(await c.req.json().catch(() => null));
+        if (!parsed.success)
+          return c.json(
+            { ok: false, kind: "error", error: "invalid body", hint: write.hint },
+            400,
+          );
+        try {
+          return c.json(await write.run(scope, c.req.param("route"), actor, parsed.data));
+        } catch (error) {
+          return c.json({ ok: false, kind: "error", error: errorMessage(error) }, 403);
+        }
+      });
   };
   mountRouteStateWrites("/pe/route-state", "human");
   mountRouteStateWrites("/pe/agent/route-state", "agent");
@@ -230,9 +177,15 @@ export async function buildAgentControllerApp(
   return app;
 }
 
-function parseRouteWorkspaceScope(c: Context): RouteWorkspaceScope | string {
+function scopeOr400(c: Context, shape: "read" | "write"): RouteWorkspaceScope | Response {
   const parsed = addressSchema.safeParse(c.req.query("doc")?.trim());
-  return parsed.success ? { documentAddress: parsed.data } : "doc required";
+  if (parsed.success) return { documentAddress: parsed.data };
+  return c.json(
+    shape === "read"
+      ? { error: "route scope is required", hint: "doc required" }
+      : { ok: false, kind: "error", error: "route scope is required", hint: "doc required" },
+    400,
+  );
 }
 
 function streamRouteWorkspace(
@@ -251,7 +204,7 @@ function streamRouteWorkspace(
       wake = undefined;
     };
     const unsubscribe = workspace.subscribe((event) => {
-      if (event.route === route && sameRouteWorkspaceScope(event.scope, scope)) notify();
+      if (event.route === route && event.scope.documentAddress === scope.documentAddress) notify();
     });
     stream.onAbort(() => {
       aborted = true;
@@ -272,21 +225,11 @@ function streamRouteWorkspace(
   });
 }
 
-function sameRouteWorkspaceScope(left: RouteWorkspaceScope, right: RouteWorkspaceScope): boolean {
-  return left.documentAddress === right.documentAddress;
+function routeDocumentKey(documentAddress: string, route: string): string {
+  // ponytail: KV keyed by string on resourceId; use a document table only for enumeration or scope-delete.
+  return `${route}:${documentAddress}`;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-export interface RuntimeAgentControllerWebOptions<TRuntimeOptions = unknown> {
-  label: string;
-  title?: string;
-  createRuntime: (options: TRuntimeOptions) => Promise<unknown>;
-  runtimeOptions?: TRuntimeOptions;
-  host?: string;
-  port?: number;
-  /** Static SPA build to serve alongside the API (production single-server). Omit in dev. */
-  staticDir?: string;
 }
