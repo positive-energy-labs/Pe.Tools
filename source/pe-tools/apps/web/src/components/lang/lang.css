@@ -436,10 +436,12 @@
   background: var(--r-artifact);
   --r-on: var(--r-artifact);
   border: 1px solid var(--r-line-2);
+  display: none;
   visibility: hidden;
 }
 .dl-help:hover .dl-help-pop,
 .dl-help:focus-within .dl-help-pop {
+  display: block;
   visibility: visible;
 }
 
