@@ -1,30 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-pe>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>remote software factory · pe</title>
+<link rel="stylesheet" href="../source/pe-tools/apps/web/src/pe-base.css">
 <style>
-/* tokens lifted from src/design-lang.css (p3 · wholistic bands). one-off artifact, not a route. */
-:root{
-  --r-page:#fdfaf2; --r-artifact:#f1eee6; --r-recess:#e4e1d9; --r-select:#d9d6ce;
-  --r-ink:#38352d; --r-ink-2:#5f5a4e; --r-ink-mute:#888682;
-  --r-line:#38352d1f; --r-line-2:#38352d38;
-  --r-pea:#42815e; --r-pea-ink:#296948; --r-alarm:#8e4120; --r-caution:#77531b;
-  --r-done:#486531; --r-commit:#325e88; --r-nav:#325e88; --r-on-commit:#fdfaf2;
-  --r-on:var(--r-page);
-  --mono:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
-}
-@media (prefers-color-scheme:dark){:root{
-  --r-page:#15120d; --r-artifact:#1e1c16; --r-recess:#27251f; --r-select:#33302a;
-  --r-ink:#eeebe2; --r-ink-2:#c1bcae; --r-ink-mute:#868481;
-  --r-line:#eeebe224; --r-line-2:#eeebe242;
-  --r-pea:#74b48f; --r-pea-ink:#8dcda7; --r-alarm:#fba381; --r-caution:#ddb47e;
-  --r-done:#a7c890; --r-commit:#92c1f1; --r-nav:#92c1f1; --r-on-commit:#15120d;
-}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--r-page);--r-on:var(--r-page);color:var(--r-ink);
-  font:400 13px/1.5 var(--mono);letter-spacing:-.01em;padding:40px 24px 80px}
+  font:400 13px/1.5 var(--font-mono);letter-spacing:-.01em;padding:40px 24px 80px}
 main{max-width:900px;margin:0 auto}
 h1{font-size:15px;font-weight:600;letter-spacing:.02em;margin:0 0 4px}
 .eyebrow{font-size:10.5px;color:var(--r-ink-mute);text-transform:uppercase;letter-spacing:.09em;margin:0 0 22px}
@@ -33,7 +17,7 @@ h2{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;
 h2::before{content:attr(data-n);color:var(--r-ink-mute);font-weight:400}
 p{margin:0 0 8px;color:var(--r-ink-2);max-width:78ch}
 strong{color:var(--r-ink);font-weight:600}
-code{font-family:var(--mono);color:var(--r-ink)}
+code{font-family:var(--font-mono);color:var(--r-ink)}
 
 .frame{background:var(--r-artifact);--r-on:var(--r-artifact);
   box-shadow:inset 0 0 0 1px var(--r-line);border-radius:3px;overflow:hidden;margin:0 0 8px}
@@ -74,7 +58,7 @@ tr.win td:first-child{color:var(--r-pea-ink)}
 .diag p{font-size:10.5px;margin:6px 0 0;color:var(--r-ink-mute);line-height:1.35;max-width:none}
 svg{display:block;width:100%;height:auto}
 .node{fill:var(--r-select);stroke:var(--r-line-2)}
-.lbl{fill:var(--r-ink-2);font:600 8px var(--mono);letter-spacing:.04em}
+.lbl{fill:var(--r-ink-2);font:600 8px var(--font-mono);letter-spacing:.04em}
 .wire{stroke:var(--r-ink-mute);stroke-width:1.5;fill:none}
 .wire-live{stroke:var(--r-pea);stroke-width:2;fill:none}
 .wire-fall{stroke:var(--r-ink-mute);stroke-width:1.5;fill:none;stroke-dasharray:3 3}

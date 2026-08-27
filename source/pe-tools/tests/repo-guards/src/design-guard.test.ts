@@ -10,10 +10,10 @@
  * regexes; the route ratchet uses TypeScript AST plus a narrow utility regex.
  *
  * ── HARD ZERO (any occurrence fails) ────────────────────────────────────────────────────────
- *  1. dead-shim tokens   var(--st-* --act-* --cat-* --pe-blue* --pe-green --paper* --mist
+ *  1. deleted tokens      var(--st-* --act-* --cat-* --pe-blue* --pe-green --paper* --mist
  *                        --basalt --slate --lens-ink-2 --clay* --kiln --lichen --fail --user*
- *                        --pea-tint --pea-line --line-soft). The GROUND FLIP ruling: the alias
- *                        shim in styles.css reads ZERO lines and never grows one back — the
+ *                        --pea-tint --pea-line --line-soft). The GROUND FLIP ruling: the old
+ *                        vocabulary has ZERO consumers and never grows one back — the
  *                        old vocabulary is deleted, so consuming it is consuming nothing.
  *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --r-line /
  *                        --r-line-2 (pe-base.css); the bare names died with the Lens
@@ -372,13 +372,13 @@ describe("design guard — hard zeros", () => {
     }
   });
 
-  it("no dead shim token is consumed (the alias shim reads zero lines, forever)", () => {
+  it("no deleted token vocabulary is consumed (zero consumers, forever)", () => {
     const re =
       /var\(--(?:st-|act-|cat-|pe-blue|pe-green|paper|mist|basalt|slate|lens-ink-2|clay|kiln|lichen|fail|user|pea-tint|pea-line|line-soft)/g;
     const offences = scan(FILES, re);
     expect(
       offences.length,
-      `Dead shim tokens consumed — these were deleted at zero consumers; use the --r-* canon (pe-base.css):\n${report(offences)}`,
+      `Deleted token vocabulary consumed — these were removed at zero consumers; use the --r-* canon (pe-base.css):\n${report(offences)}`,
     ).toBe(0);
   });
 
@@ -439,6 +439,57 @@ describe("design guard — foundation topology", () => {
     return remainder.trim();
   };
 
+  const splitSelectors = (text: string): string[] => {
+    const selectors: string[] = [];
+    let start = 0;
+    let depth = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "(") depth++;
+      if (text[i] === ")") depth--;
+      if (text[i] === "," && depth === 0) {
+        selectors.push(text.slice(start, i).trim());
+        start = i + 1;
+      }
+    }
+    selectors.push(text.slice(start).trim());
+    return selectors.filter(Boolean);
+  };
+
+  const BASE_PROPERTY_ALLOWLIST: Record<string, string> = {
+    "[data-pe]":
+      "border-color outline-color min-height scrollbar-width scrollbar-color color-scheme",
+    "[data-pe] *": "border-color outline-color",
+    "[data-pe] body":
+      "min-height margin background-color color font-family line-height -webkit-font-smoothing -moz-osx-font-smoothing",
+    "[data-pe] #app": "min-height",
+    "[data-pe].dark": "color-scheme",
+    "[data-pe] :where(button, input, select, textarea)": "font",
+    "[data-pe] :where(code, pre, kbd, samp)": "font-family",
+    "[data-pe] :where(:focus-visible)": "outline outline-offset",
+    "[data-pe] a": "color text-underline-offset",
+    "[data-pe] a:hover": "text-decoration",
+    "[data-pe] code": "font-size border background border-radius padding",
+    "[data-pe] pre code": "border background padding border-radius font-size",
+  };
+
+  const basePropertyViolations = (layer: string): string[] => {
+    const violations: string[] = [];
+    for (const rule of layer.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const properties = [...rule[2].matchAll(/(?:^|;)\s*([\w-]+)\s*:/g)].map((match) => match[1]);
+      for (const selector of splitSelectors(rule[1])) {
+        const allowed = BASE_PROPERTY_ALLOWLIST[selector]?.split(" ");
+        if (!allowed) {
+          violations.push(`${selector} (selector)`);
+          continue;
+        }
+        for (const property of properties) {
+          if (!allowed.includes(property)) violations.push(`${selector} -> ${property}`);
+        }
+      }
+    }
+    return violations;
+  };
+
   it("keeps styles.css as the app entry and import order", () => {
     const entry = FILES.find((file) => file.rel === "styles.css");
     expect(entry, "styles.css must be collected").toBeDefined();
@@ -483,16 +534,31 @@ describe("design guard — foundation topology", () => {
     expect(baseLayer![1]).toContain("font: inherit;");
     expect(baseLayer![1]).toContain("font-family: var(--font-mono);");
     expect(baseLayer![1]).toContain("outline: 2px solid var(--r-ink);");
-    const selectorText = text
-      .replace(/@layer base\s*\{/, "")
-      .replace(/:where\(([^)]*)\)/g, (_, inner: string) => `:where(${inner.replaceAll(",", "|")})`);
-    const selectors = [...selectorText.matchAll(/(?:^|})\s*([^{}]+)\{/gm)]
-      .flatMap((match) => match[1].split(","))
-      .map((selector) => selector.trim())
-      .filter(Boolean);
-    const allowed =
-      /^(?::root|\.dark|\[data-pe\](?: \*| body| #app| a(:hover)?| code| pre code| \.page-wrap| :where\(button\| input\| select\| textarea\)| :where\(code\| pre\| kbd\| samp\)| :where\(:focus-visible\))?)$/;
-    expect(selectors.filter((selector) => !allowed.test(selector))).toEqual([]);
+    expect(baseLayer![1]).toContain("color-scheme: light;");
+    expect(baseLayer![1]).toContain("[data-pe].dark");
+    expect(text).not.toMatch(/(?:^|\n)\s*:root\s*\{[^}]*color-scheme:/);
+    expect(text).not.toMatch(/(?:^|\n)\s*\.dark\s*\{[^}]*color-scheme:/);
+    expect(basePropertyViolations(baseLayer![1])).toEqual([]);
+  });
+
+  it("rejects form-control component skins in the browser base", () => {
+    const base = CSS_FILES.find((file) => file.rel === "pe-base.css");
+    expect(base).toBeDefined();
+    const mutated = base!.text.replace(
+      "font: inherit;",
+      "font: inherit;\n    padding: 2rem;\n    background: var(--r-commit);\n    border-radius: 999px;",
+    );
+    const layer = /@layer base\s*\{([\s\S]*?)\n\}\s*\n\[data-pe\] \.page-wrap/.exec(
+      stripComments(mutated),
+    );
+    expect(layer).toBeTruthy();
+    expect(basePropertyViolations(layer![1])).toEqual(
+      expect.arrayContaining([
+        "[data-pe] :where(button, input, select, textarea) -> padding",
+        "[data-pe] :where(button, input, select, textarea) -> background",
+        "[data-pe] :where(button, input, select, textarea) -> border-radius",
+      ]),
+    );
   });
 
   it("keeps PE raw authority in pe-base and embeds that exact source in the report", () => {

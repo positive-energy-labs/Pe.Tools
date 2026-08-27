@@ -11,7 +11,6 @@
  * no Tailwind-only rules or component ownership.
  */
 :root {
-  color-scheme: light;
   --r-page: #fdfaf2;
   --r-artifact: #f1eee6;
   --r-recess: #e4e1d9;
@@ -64,7 +63,6 @@
 }
 
 .dark {
-  color-scheme: dark;
   --r-page: #15120d;
   --r-artifact: #1e1c16;
   --r-recess: #27251f;
@@ -105,8 +103,13 @@
   }
 
   [data-pe] {
+    color-scheme: light;
     scrollbar-width: thin;
     scrollbar-color: color-mix(in srgb, var(--foreground) 25%, transparent) transparent;
+  }
+
+  [data-pe].dark {
+    color-scheme: dark;
   }
 
   [data-pe] body {
@@ -164,7 +167,6 @@
 }
 </style>
     <style id="report-layout">
-      :root { color-scheme: light dark; }
       *, *::before, *::after { box-sizing: border-box; }
       [data-pe] body { min-width: 20rem; font-family: var(--font-body); line-height: 1.45; }
       [data-pe] main { padding: 1.25rem 0 3rem; }
@@ -196,7 +198,7 @@
       [data-pe] code { font-family: var(--font-mono); overflow-wrap: anywhere; }
       [data-pe] footer { border-top: 0.2rem solid var(--r-ink); margin-top: 3rem; padding-top: 1rem; color: var(--r-ink-2); font-size: 0.82rem; }
       @media (max-width: 42rem) { [data-pe] .section-head { display: block; } [data-pe] .section-head p { text-align: left; margin-top: 0.3rem; } [data-pe] table { display: block; overflow-x: auto; } }
-      @media print { :root { color-scheme: light; } [data-pe] body { background: white; color: black; } [data-pe] .no-print { display: none; } [data-pe] a { color: black; } }
+      @media print { [data-pe] { color-scheme: light; } [data-pe] body { background: white; color: black; } [data-pe] .no-print { display: none; } [data-pe] a { color: black; } }
     </style>
   </head>
   <body>
@@ -211,14 +213,14 @@
       <nav aria-label="Report sections"><a href="#receipts">Receipts</a> · <a href="#shape">Implementation</a> · <a href="#lessons">Falsifiers</a> · <a href="#queue">Remaining queue</a></nav>
 
       <section id="receipts" aria-labelledby="receipts-title">
-        <div class="section-head"><h2 id="receipts-title">Outcomes at a glance</h2><p>source parent <code>c1cf1bc</code> · 2026-08-27</p></div>
+        <div class="section-head"><h2 id="receipts-title">Outcomes at a glance</h2><p>source parent <code>44c6ea5</code> · 2026-08-27</p></div>
         <div class="metrics">
           <div class="metric"><span class="metric-label">route token rewrites</span><strong>285</strong><small>mounted, non-prototype route literals</small></div>
           <div class="metric"><span class="metric-label">shared token rewrites</span><strong>610</strong><small>production TS/TSX literal owners</small></div>
           <div class="metric"><span class="metric-label">spacing substitutions</span><strong>19</strong><small>18 removed by the old counter; one variant was missed</small></div>
           <div class="metric"><span class="metric-label">route arbitrary</span><strong>348 → 57</strong><small>honest guarded frontier; 57 remains</small></div>
           <div class="metric"><span class="metric-label">raw semantic frontier</span><strong>0</strong><small>source-wide deprecated spelling hard zero</small></div>
-          <div class="metric"><span class="metric-label">goal chain net</span><strong>+384</strong><small>78 files · +2055 / −1671 from 00af0d5 at final settled scope</small></div>
+          <div class="metric"><span class="metric-label">goal chain net</span><strong>+439</strong><small>80 files · +2132 / −1693 from 00af0d5 at final settled scope</small></div>
         </div>
         <table>
           <caption>Goal commits from base <code>00af0d5</code></caption>
@@ -228,7 +230,7 @@
             <tr><td class="mono">2c3984d · a11cfb1</td><td>isolated repo-guards and truth repairs</td><td>mounted custody, directives, templates</td></tr>
             <tr><td class="mono">532fd34 · ad63940</td><td>mounted route vocabulary and font indirection</td><td>285 renames; formatter is a gate</td></tr>
             <tr><td class="mono">e0dda1c · d352829</td><td>shared vocabulary and spacing frontier</td><td>610 renames; 19 substitutions, 18 counted</td></tr>
-            <tr><td class="mono">c1cf1bc</td><td>normalization report before native-base close</td><td>this report is regenerated from pe-base.css</td></tr>
+            <tr><td class="mono">44c6ea5</td><td>browser base defaults and authority repair</td><td>opt-in color scheme, remote-factory consumer, declaration boundary</td></tr>
           </tbody>
         </table>
       </section>
@@ -256,7 +258,7 @@
             <tr><td>isolated probe</td><td class="pass">PASS</td><td>local server; one local stylesheet, zero scripts, no console/network errors; semantic <code>main</code>/<code>nav</code>/labelled region and an accessible labelled native button</td></tr>
             <tr><td>light computed styles</td><td class="pass">PASS</td><td>body <code>rgb(253,250,242)</code> / <code>rgb(56,53,45)</code>; link <code>rgb(50,94,136)</code>; root roles present; inline code/recess treatment, 1080px page-wrap, and no horizontal overflow</td></tr>
             <tr><td>dark computed styles</td><td class="pass">PASS</td><td>body <code>rgb(21,18,13)</code> / <code>rgb(238,235,226)</code>; link <code>rgb(146,193,241)</code>; dark page/ink/commit roles present</td></tr>
-            <tr><td>opt-in boundary</td><td class="pass">PASS</td><td>removing <code>data-pe</code> removed background/ink/link/code/page-wrap defaults: transparent/black/UA blue/transparent/full width</td></tr>
+            <tr><td>opt-in boundary</td><td class="pass">PASS</td><td>removing <code>data-pe</code> removed background/ink/link/code/page-wrap defaults; the marker probe checks <code>getComputedStyle(document.documentElement).colorScheme</code> for light on marked roots, dark on marked <code>.dark</code> roots, and no explicit scheme when unmarked</td></tr>
             <tr><td>app <code>/design-system</code></td><td class="pass">PASS</td><td>1280px render retained <code>data-pe</code>, Open Sans body, semantic content, and no horizontal overflow; ThemeToggle cycled Auto → Light → Dark with exact ground/ink changes; Tab reached the focus-visible shipping “apply to Revit” button</td></tr>
             <tr><td>host boundary</td><td class="warn">LIMITED</td><td><code>/events</code> returned 500 because the host backend was absent; this proves the web/UI interaction lane, not host connectivity</td></tr>
             <tr><td>report inspection</td><td class="pass">PASS</td><td>visually inspected at 1280×800 and 600×844; hierarchy and wrapping held. Exact 390px mobile was not claimed because T3 resize timed out and Windows headless has a narrow-window floor. Print remains source-only until separately proved.</td></tr>
@@ -267,7 +269,7 @@
       <section id="shape" aria-labelledby="shape-title">
         <div class="section-head"><h2 id="shape-title">The supported shape</h2><p>proven now versus reserved later</p></div>
         <div class="grid">
-          <div class="rule"><h3>Proven now</h3><p><code>pe-base.css</code> is one flat browser-native entry: raw light/dark <code>--r-*</code> and <code>--viz-*</code> tokens, native shadcn projections, and scoped semantic defaults plus <code>page-wrap</code>. The isolated probe is one relative stylesheet link; this report embeds the exact same bytes in <code>&lt;style id="pe-base"&gt;</code>. The source is checked in and guarded; it does not auto-update.</p></div>
+          <div class="rule"><h3>Proven now</h3><p><code>pe-base.css</code> is one flat browser-native entry: raw light/dark <code>--r-*</code> and <code>--viz-*</code> tokens, native shadcn projections, marker-owned <code>color-scheme</code>, and scoped semantic defaults plus <code>page-wrap</code>. The isolated probe and <code>remote-factory.html</code> are one-link consumers; this report embeds the exact same bytes in <code>&lt;style id="pe-base"&gt;</code>. The source is checked in and guarded; it does not auto-update.</p></div>
           <div class="rule"><h3>App authoring</h3><p><code>styles.css</code> owns import order. <code>design-lang.css</code> owns <code>@custom-variant</code>, <code>@theme</code>/<code>@theme inline</code>, semantic Tailwind vocabulary, and type/face/case utilities. The app remains unprefixed. Non-inline PE font tokens preserve custom-property indirection. Global Preflight remains app-owned.</p></div>
           <div class="rule"><h3>Reserved boundary</h3><p><code>pe:</code> is reserved only for a future independently compiled portable utility/component bundle. That work is not implied by this receipt. A portable artifact would omit app-owned Preflight and must earn isolated HTML, computed-style, accessibility, visual hierarchy, density, and portability proof.</p></div>
           <div class="rule"><h3>Negative boundary</h3><p>The public base is tokens, scoped semantic element defaults, and <code>page-wrap</code> only. Components, animations, interactions, and behavior stay out; app components remain app-owned. Explicit semantic utilities/components own any future animation or behavior.</p></div>
@@ -297,7 +299,7 @@
           <div class="rule"><h3>Formatting is a real gate</h3><p>The unqualified web check—not a no-format substitute—required canonical formatter output on the named route files. Formatting output is retained when it is the canonical result.</p></div>
           <div class="rule"><h3>Font indirection</h3><p>PE font definitions stay together in non-inline <code>@theme</code>, preserving custom-property references in emitted <code>font-pe-*</code> utilities without changing values or taxonomy.</p></div>
           <div class="rule"><h3>Syntax-complete spelling policy</h3><p>The source-wide token-level matcher covers the repaired matrix: typed/untyped and shorthand arbitrary values, important modifiers, directional families, variants, radius, PE fonts, and quoted/parenthesized prose. It is not a claim to implement all Tailwind grammar; deprecated spellings in examples intentionally fail.</p></div>
-          <div class="rule"><h3>Generated custody and arithmetic</h3><p>Sanctioned web commands may rewrite the generated route tree; proof restores only that noise and checks bytes/hash. The 19-versus-18 spacing discrepancy is scanner arithmetic, not a hidden extra design win; the honest guarded frontier remains 57.</p></div>
+          <div class="rule"><h3>Generated custody and arithmetic</h3><p>Sanctioned web commands may rewrite the generated route tree; proof restores only that noise and checks bytes/hash. The 19-versus-18 spacing discrepancy is scanner arithmetic, not a hidden extra design win; the honest guarded frontier remains 57. The base boundary now checks selector-to-property ownership so allowed selectors cannot grow component skins.</p></div>
         </div>
       </section>
 
@@ -317,7 +319,7 @@
       </section>
 
       <footer>
-        <p><strong>Provenance.</strong> This report is the 2026-08-27 receipt for the chain from base <code>00af0d5c236f9c4c9290b6e1338adfce562183cd</code> through source parent <code>c1cf1bcf2c7aeb106e6e0c4dc18e68e01e66eb65</code>. The embedded <code>pe-base</code> block is exact source bytes checked by the design guard in this implementation; the final implementation commit is intentionally not claimed inside its own receipt.</p>
+        <p><strong>Provenance.</strong> This report is the 2026-08-27 receipt for the chain from base <code>00af0d5c236f9c4c9290b6e1338adfce562183cd</code> through source parent <code>44c6ea524c9719bf8028f4a95ec5d14dec4f0523</code>. The embedded <code>pe-base</code> block is exact source bytes checked by the design guard in this implementation; the final implementation commit is intentionally not claimed inside its own receipt.</p>
         <p>Portable next work is reserved, not shipped: independently compile the <code>pe:</code> boundary only after a separate isolated-browser proof. The current supported boundary is the native base and its one-link probe.</p>
       </footer>
     </main>
