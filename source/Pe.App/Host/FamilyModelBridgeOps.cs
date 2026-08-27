@@ -4,6 +4,7 @@ using Pe.Revit.DocumentData.Families.Extraction;
 using Pe.Revit.Extensions.ProjDocument;
 using Pe.Revit.FamilyFoundry.Apply;
 using Pe.Revit.FamilyFoundry.Capture;
+using Pe.Revit.Operations;
 using Pe.Revit.Ui.Core;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData.Families;
@@ -12,23 +13,21 @@ using System.IO;
 namespace Pe.App.Host;
 
 internal static class FamilyModelBridgeOps {
-    public static readonly BridgeOp Capture = FamilyModelHostOperations.Capture(
-        static (_, _, ct) => PaletteThreading.RunRevitAsync(CaptureActiveFamily, ct));
+    [Op("revit.detail.family-model", Does = "Capture the active Revit family document as portable family.json authored truth, including explicit unmodeled diagnostics.", Title = "Capture Family Model", Finds = ["family-model", "family-json", "capture", "roundtrip", "family-foundry"], Cost = OpCost.Bounded)]
+    private static Task<FamilyModelCaptureData> Capture(FamilyModelCaptureRequest _, FamilyDocument document, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => CaptureActiveFamily(document.Value), cancellationToken);
 
-    public static readonly BridgeOp Build = FamilyModelHostOperations.Build(
-        static (request, _, ct) => PaletteThreading.RunRevitAsync(() => BuildFamily(request), ct));
+    [Op("revit.apply.family-model", Does = "Build a new target-year Revit family from portable family.json and save it to an explicit .rfa output path.", Title = "Build Family Model", Finds = ["family-model", "family-json", "build", "replay", "family-foundry", "manager"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static Task<FamilyModelBuildData> Build(FamilyModelBuildRequest request, CancellationToken cancellationToken) =>
+        PaletteThreading.RunRevitAsync(() => BuildFamily(request), cancellationToken);
 
-    private static FamilyModelCaptureData CaptureActiveFamily() {
-        var document = RevitUiSession.CurrentUIApplication.ActiveUIDocument?.Document
-                       ?? throw BridgeOperationExceptions.Conflict("No active Revit document.");
-        if (!document.IsFamilyDocument)
-            throw BridgeOperationExceptions.Conflict("The active Revit document is not a family document.");
-
+    private static FamilyModelCaptureData CaptureActiveFamily(Document document) {
         var model = document.CaptureFamilyModel();
         var evidence = FamilyModelEvidenceProjector.Project(
             model,
             FamilySnapshotExtractor.ExtractFromFamilyDocument(document));
         return new FamilyModelCaptureData(
+            DocumentReading.Here(document),
             model.Family.Name,
             JsonConvert.SerializeObject(model, Formatting.Indented),
             model.Unmodeled.Count,
@@ -67,7 +66,12 @@ internal static class FamilyModelBridgeOps {
             throw BridgeOperationExceptions.BadRequest(exception.Message);
         }
         var evidence = FamilyModelEvidenceProjector.Project(parsed.Value, result.Snapshot);
-        return new FamilyModelBuildData(parsed.Value.Family.Name, outputPath, result.TemplatePath, evidence);
+        return new FamilyModelBuildData(
+            result.Reading,
+            parsed.Value.Family.Name,
+            outputPath,
+            result.TemplatePath,
+            evidence);
     }
 
     private static string ResolvePath(string? path, string field) {

@@ -219,20 +219,12 @@ return (
   expect(live.calls.zones).toBe(0);
   expect(state.registry.get(state.atoms.zonesFeed)).toMatchObject({ state: "fixture" });
 });</code></pre>
-<pre><code class="language-ts">inspect() {
-  return {
-    ...inspector.snapshot(),          // every labeled atom, parents/children, last cause
-    url: registry.get(searchAtom),
-    persisted: { recentDirs: registry.get(recentDirsAtom) },
-    page: { hover: currentHover, staged: [...stagedIds],
-            busy: registry.get(busyAtom), failure: registry.get(failureAtom),
-            receipt: registry.get(receiptAtom) },
-    feeds: Object.fromEntries(Object.entries(feeds).map(([k, a]) =&gt; [k, registry.get(a)])),
-    actions: registry.get(actionsLogAtom),
-  };
-}</code></pre></div>
-<p class="src">sb-effect-atom …/effect-atom/bench.test.ts:19–32 · takeoff/store.ts:1088–1105</p>
-<p><code>inspect()</code> is the seam three things hang off: the TanStack Devtools panel (<code>integrations/atoms/devtools.tsx</code>, shows the cause of the last write via <code>note({verb,key})</code>), the deterministic diagram generator (<code>13-diagram-gen.md</code>: 70 nodes/63 edges from labels + Product), and any agent asking "what is this route's state right now". URL / persisted / page / feeds are separate keys because they are separate atoms — the separation is structural, not a comment.</p>
+<pre><code class="language-ts">if (import.meta.env.DEV)
+  Object.assign(globalThis, { __PE_INSPECT__: inspectAtomRegistry(appAtomRegistry) });
+
+globalThis.__PE_INSPECT__.inspect(); // labeled nodes, cached values, graph, last causes</code></pre></div>
+<p class="src">routes/__root.tsx · state/atom-inspect.ts</p>
+<p><code>inspect()</code> is the only observation surface. It scans public Registry nodes and calls <code>Node.value()</code> only when <code>currentState() === "valid"</code>, so an unread or stale feed is never materialized. The dev handle exists from app boot. Route verbs call <code>note({verb,key})</code>; the next observed change consumes and clears that cause. <code>page/hover</code> is a labeled atom, so hover is part of the same bounded census.</p>
 
 <h2>7. The two decisions you didn't understand</h2>
 
@@ -257,6 +249,7 @@ return (
 <div class="rule"><b>Recommendation:</b> keep the per-route <em>store object</em> (namespace, actions, <code>inspect()</code>, fixture seam) but make it a handle over the <b>one app registry</b>, passed in like the host: <code>createTakeoffStore({ host, sessions, search, registry })</code>. Atoms stay per-store-instance; families that must dedupe across mounts (route docs, host reads) key on <code>(route, scope)</code> exactly like <code>route-state.tsx</code> already does. Write it as an ADR; the cost is one constructor arg and deleting line 297.</div>
 
 <h2>8. Chat plugins — what I missed, and what it changes</h2>
+<p><b>Retraction (2026-08-25):</b> A shared browser registry cannot unify iframe, dock, and server realms; the route document is the source and each store subscribes, as ruled in <code>w1-demiurge.md</code> §3a.</p>
 <p>Not considered in the bake-off. Reading it now (<code>workbench/route-chat-plugins.tsx</code>, ADR 0001):</p>
 <ul>
 <li>A plugin is <code>{ spec: RouteStateSpec, Renderer }</code>; the same <code>spec</code> drives the pea MCP tool, the runtime workspace, and the web card. Route identity is the URL segment. Good — that is the S1 "Product" noun already living server-side.</li>

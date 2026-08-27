@@ -1,5 +1,15 @@
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import {
+  address,
+  takeoffsRouteState,
+  type RouteStatePatch,
+  type TakeoffSnapshot,
+  type TakeoffsRouteDocument,
+} from "@pe/agent-contracts";
+import type { Slice } from "#/state/route-store";
 
 import {
   createFixtureTakeoffHost,
@@ -7,68 +17,131 @@ import {
 } from "#/takeoff/proto/fixture-world";
 import {
   createTakeoffStore,
-  EMPTY_TAKEOFF_SEARCH,
-  type SearchPort,
+  EMPTY_TAKEOFF_SELECTION,
   type SessionEvent,
   type SessionSource,
   type TakeoffHost,
-  type TakeoffSearch,
-  type TakeoffSnapshot,
+  type TakeoffSelection,
 } from "#/takeoff/store";
 
-const bound: TakeoffSearch = {
-  ...EMPTY_TAKEOFF_SEARCH,
-  target: "session:dev-26",
-  view: "Mechanical Zoning Plan - Main Level",
+const bound: TakeoffSelection = {
+  ...EMPTY_TAKEOFF_SELECTION,
+  views: ["Mechanical Zoning Plan - Main Level"],
   zones: ["zone-1"],
   dir: "C:\\Takeoffs",
   r10: "C:\\Takeoffs\\projectA.r10",
   stage: "audit",
 };
 
-const searchPort = () => {
-  const patches: Partial<TakeoffSearch>[] = [];
-  return {
-    patches,
-    port: { patch: (patch) => patches.push(patch) } satisfies SearchPort,
-  };
-};
-
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-const wait = (milliseconds: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 const registries: AtomRegistry.AtomRegistry[] = [];
 afterEach(() => {
   for (const registry of registries.splice(0)) registry.dispose();
+  vi.restoreAllMocks();
 });
 
-const createStore = (deps: Omit<Parameters<typeof createTakeoffStore>[0], "registry">) => {
-  const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+type StoreDeps = Parameters<typeof createTakeoffStore>[0];
+const createStore = (
+  deps: Omit<StoreDeps, "registry" | "scope" | "slice" | "writer"> &
+    Partial<Pick<StoreDeps, "registry" | "scope" | "slice" | "writer">>,
+  observe?: (patches: RouteStatePatch[]) => void,
+) => {
+  const registry = deps.registry ?? AtomRegistry.make({ defaultIdleTTL: 400 });
   registries.push(registry);
-  return createTakeoffStore({
+  const initial: TakeoffsRouteDocument = {
+    bindings: {},
+    snapshot: null,
+    staged: [],
+  };
+  const slice =
+    deps.slice ??
+    Atom.make(
+      AsyncResult.success({
+        doc: initial,
+        revision: 0,
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+  let publishedSlice = slice;
+  const publish = (document: TakeoffsRouteDocument) =>
+    registry.set(
+      publishedSlice as Atom.Writable<AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>>,
+      AsyncResult.success({
+        doc: document,
+        revision: 0,
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+  const writer = deps.writer ?? {
+    async apply(patches: RouteStatePatch[]) {
+      observe?.(patches);
+      const current = registry.get(publishedSlice);
+      if (!AsyncResult.isSuccess(current) || !current.value.doc) return { ok: false as const };
+      const document = structuredClone(current.value.doc);
+      for (const patch of patches) {
+        if (patch.path[0] === "bindings")
+          document.bindings[String(patch.path[1])] = patch.value as never;
+        if (patch.path[0] === "snapshot")
+          document.snapshot = (patch.value ?? null) as TakeoffsRouteDocument["snapshot"];
+        if (patch.path[0] === "staged")
+          document.staged = patch.value as TakeoffsRouteDocument["staged"];
+      }
+      publish(document);
+      return { ok: true as const };
+    },
+    async command() {
+      return { ok: true as const };
+    },
+  };
+  const store = createTakeoffStore({
     ...deps,
     registry,
+    scope: deps.scope ?? { documentAddress: address("C:\\Models\\Test.rvt") },
+    slice,
+    writer,
   });
+  publishedSlice = store.slices.takeoffs;
+  return store;
 };
 
 function harness() {
   const events = new Set<(event: SessionEvent) => void>();
-  const calls = { sessions: 0, doc: 0, snapshot: 0, candidates: 0, list: 0, open: 0, adopt: 0 };
+  const calls = {
+    sessions: 0,
+    doc: 0,
+    snapshot: 0,
+    views: 0,
+    candidates: 0,
+    list: 0,
+    open: 0,
+    adopt: 0,
+  };
   let failSnapshot = false;
   let failR10 = false;
-  let liveProjection = false;
   let holdSnapshot = false;
+  let documentTitle = "Harness.rvt";
+  let documentId = "C:\\Models\\Harness.rvt";
   let releaseSnapshot: (() => void) | undefined;
   const snapshot: TakeoffSnapshot = {
+    reading: {
+      at: address(documentId),
+      version: "v1",
+      observedAt: "2026-08-25T00:00:00Z",
+    },
     world: {
       docName: "Harness.rvt",
       r10Path: null,
-      lanes: [{ view: bound.view, label: "Main", replayPath: null }],
+      lanes: [{ view: bound.views[0]!, label: "Main", replayPath: null }],
       zones: [],
       systems: [],
     },
-    views: [{ name: bound.view, level: "Main", regions: 1 }],
     zoneFrs: [],
     regionsByZone: {},
   };
@@ -82,14 +155,20 @@ function harness() {
           processId: 42,
           lane: "dev",
           custody: "controlled",
-          activeDocumentTitle: "Harness.rvt",
+          year: "2026",
+          activeDocumentTitle: documentTitle,
+          activeDocumentId: documentId,
           openDocumentCount: 1,
         },
       ];
     },
     async activeDocument(session) {
       calls.doc += 1;
-      return { session, title: "Harness.rvt" };
+      return {
+        session,
+        documentId: session.activeDocumentId!,
+        title: session.activeDocumentTitle!,
+      };
     },
     subscribe(listener) {
       events.add(listener);
@@ -98,13 +177,27 @@ function harness() {
   };
   const host: TakeoffHost = {
     fixture: false,
-    async readSnapshot() {
+    async readSnapshot(_session, _document, _views, write) {
       calls.snapshot += 1;
       if (failSnapshot) throw new Error("snapshot rejected");
       if (holdSnapshot) await new Promise<void>((resolve) => (releaseSnapshot = resolve));
-      return liveProjection
-        ? { ...snapshot, status: { doc: "Harness.rvt", systems: [], regions: [] } }
-        : snapshot;
+      const next = {
+        ...snapshot,
+        reading: {
+          at: address(documentId),
+          version: "v2",
+          observedAt: new Date().toISOString(),
+        },
+      };
+      await write(next);
+      return next;
+    },
+    async readViews() {
+      calls.views += 1;
+      return [
+        { name: bound.views[0]!, level: "Main", regions: 1 },
+        { name: "Zero Regions", level: "Roof", regions: 0 },
+      ];
     },
     async listRhvac(dir) {
       calls.list += 1;
@@ -146,49 +239,370 @@ function harness() {
   return {
     calls,
     host,
+    snapshot,
     sessions,
     emit: (event: SessionEvent) => events.forEach((listener) => listener(event)),
     fail: () => (failSnapshot = true),
     failR10: () => (failR10 = true),
     recoverR10: () => (failR10 = false),
-    live: () => (liveProjection = true),
     hold: () => (holdSnapshot = true),
     release: () => releaseSnapshot?.(),
+    setDocumentTitle: (title: string) => {
+      documentTitle = title;
+      documentId = `C:\\Models\\${title}`;
+    },
   };
 }
 
 describe("takeoff route store", () => {
-  it("clears every declared descendant when a trunk is re-picked", () => {
-    const h = harness();
-    const search = searchPort();
-    const store = createStore({ host: h.host, sessions: h.sessions, search: search.port });
-    store.actions.setSearch(bound);
+  it("produces a fixture snapshot accepted by the route document schema", async () => {
+    const sessions = createFixtureSessionSource();
+    const session = (await sessions.list())[0]!;
+    const document = (await sessions.activeDocument(session))!;
+    let snapshot: TakeoffSnapshot | undefined;
 
-    store.actions.pick("world", "session:other");
-
-    expect(search.patches.at(-1)).toMatchObject({
-      target: "session:other",
-      view: "",
-      zones: [],
-      dir: bound.dir,
-      r10: bound.r10,
+    const host = createFixtureTakeoffHost();
+    const views = await host.readViews(session);
+    await host.readSnapshot(session, document, views, async (value) => {
+      snapshot = value;
     });
+
+    const parsed = takeoffsRouteState.schema.safeParse({
+      bindings: {},
+      snapshot,
+      staged: [],
+    });
+    if (!parsed.success) throw parsed.error;
+    expect(parsed.success).toBe(true);
+  });
+
+  it("makes persisted snapshot and live view feeds ready", async () => {
+    const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+    const sessions = createFixtureSessionSource();
+    const session = (await sessions.list())[0]!;
+    const document = (await sessions.activeDocument(session))!;
+    const host = createFixtureTakeoffHost();
+    const views = await host.readViews(session);
+    const snapshot = await host.readSnapshot(session, document, views, async () => undefined);
+    const slice = Atom.make(
+      AsyncResult.success(
+        {
+          doc: { bindings: {}, snapshot, staged: [] },
+          revision: 0,
+          hydrated: true,
+          connected: true,
+          error: null,
+          peaActive: false,
+        },
+        { waiting: true },
+      ),
+    );
+    const store = createStore({
+      registry,
+      slice,
+      host,
+      sessions,
+    });
+    await store.actions.settle(store.atoms.viewFacts);
+
+    expect(registry.get(store.feeds.views)).toMatchObject({ state: "ready", stale: false });
+    expect(registry.get(store.feeds.zones)).toMatchObject({ state: "ready", stale: false });
+    await store.actions.openAdopt();
+    expect(registry.get(store.atoms.panel)).toBe("adopt");
+    store.dispose();
+  });
+
+  it("does not offer a view with zero filled regions", async () => {
+    const h = harness();
+    const store = createStore({
+      host: h.host,
+      sessions: h.sessions,
+    });
+    store.actions.setSelection(bound);
+
+    await store.actions.settle(store.atoms.viewFacts);
+
+    expect(store.atoms.registry.get(store.feeds.views).options).toEqual([
+      { id: bound.views[0], label: bound.views[0], sub: "Main · 1 region" },
+    ]);
+    store.dispose();
+  });
+
+  it("binds a persisted snapshot from the current document", async () => {
+    const h = harness();
+    h.hold();
+    const observedAt = "2026-08-25T01:02:03Z";
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: {
+          bindings: {
+            world: {
+              id: "session:dev-26",
+              label: "dev-26",
+              at: address("C:\\Models\\Test.rvt"),
+            },
+          },
+          snapshot: {
+            ...h.snapshot,
+            reading: {
+              at: address("C:\\Models\\Harness.rvt"),
+              version: "v1",
+              observedAt,
+            },
+          },
+          staged: [],
+        },
+        revision: 0,
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    const store = createStore({
+      slice,
+      host: h.host,
+      sessions: h.sessions,
+    });
+    await store.actions.settle(store.atoms.activeDocument);
+
+    const read = await store.actions.settle(store.atoms.snapshot);
+
+    expect(read).toMatchObject({
+      bound: true,
+      at: Date.parse(observedAt),
+      basis: ["C:\\Models\\Harness.rvt"],
+    });
+    h.release();
+    store.dispose();
+  });
+
+  it("unbinds a persisted snapshot from another document", async () => {
+    const h = harness();
+    h.hold();
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: {
+          bindings: {
+            world: {
+              id: "session:dev-26",
+              label: "dev-26",
+              at: address("C:\\Models\\Test.rvt"),
+            },
+          },
+          snapshot: {
+            ...h.snapshot,
+            reading: {
+              at: address("C:\\Models\\Other.rvt"),
+              version: "v1",
+              observedAt: "2026-08-25T01:02:03Z",
+            },
+          },
+          staged: [],
+        },
+        revision: 0,
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    const store = createStore({
+      slice,
+      host: h.host,
+      sessions: h.sessions,
+    });
+    await store.actions.settle(store.atoms.activeDocument);
+
+    const read = await store.actions.settle(store.atoms.snapshot);
+
+    expect(read).toMatchObject({ bound: false, value: null });
+    h.release();
+    store.dispose();
+  });
+
+  it("binds equal-titled sessions by distinct document identity without an RPC", async () => {
+    const h = harness();
+    const patches: RouteStatePatch[][] = [];
+    const title = "Equal title.rvt";
+    const sessions: SessionSource = {
+      ...h.sessions,
+      async list() {
+        return [
+          {
+            sessionId: "bridge-a",
+            sdkSessionId: "world-a",
+            processId: 41,
+            lane: "dev",
+            custody: "controlled",
+            activeDocumentTitle: title,
+            activeDocumentId: "C:\\Models\\A.rvt",
+            openDocumentCount: 1,
+          },
+          {
+            sessionId: "bridge-b",
+            sdkSessionId: "world-b",
+            processId: 42,
+            lane: "dev",
+            custody: "controlled",
+            activeDocumentTitle: title,
+            activeDocumentId: "C:\\Models\\B.rvt",
+            openDocumentCount: 1,
+          },
+        ];
+      },
+    };
+    const store = createStore({ host: h.host, sessions }, (next) =>
+      patches.push(next),
+    );
+    await store.actions.settle(store.atoms.sessions);
+
+    store.actions.setBindings({ bound: { world: "session:world-a" } });
+    await tick();
+    const first = await store.actions.settle(store.atoms.activeDocument);
+    expect(h.calls.doc).toBe(1);
+
+    store.actions.setBindings({ bound: { world: "session:world-b" } });
+    await tick();
+    const second = await store.actions.settle(store.atoms.activeDocument);
+    expect(h.calls.doc).toBe(2);
+
+    expect([first.value?.documentId, second.value?.documentId]).toEqual([
+      "C:\\Models\\A.rvt",
+      "C:\\Models\\B.rvt",
+    ]);
+    expect(first.value?.title).toBe(second.value?.title);
+    expect(
+      patches.flatMap((batch) =>
+        batch.flatMap((patch) =>
+          patch.path[0] === "bindings" && patch.path[1] === "world"
+            ? [(patch.value as { id: string }).id]
+            : [],
+        ),
+      ),
+    ).toEqual(["session:world-a", "session:world-b"]);
+    store.dispose();
+  });
+
+  it("binds another document without clearing the snapshot", async () => {
+    const h = harness();
+    h.hold();
+    const patches: RouteStatePatch[][] = [];
+    const sessions: SessionSource = {
+      ...h.sessions,
+      async list() {
+        return [
+          ...(await h.sessions.list()),
+          {
+            sessionId: "bridge-other",
+            sdkSessionId: "other",
+            processId: 43,
+            lane: "dev",
+            custody: "controlled",
+            year: "2026",
+            activeDocumentTitle: "Other.rvt",
+            activeDocumentId: "C:\\Models\\Other.rvt",
+            openDocumentCount: 1,
+          },
+        ];
+      },
+    };
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: {
+          bindings: {
+            world: {
+              id: "session:dev-26",
+              label: "dev-26",
+              at: address("C:\\Models\\Test.rvt"),
+            },
+          },
+          snapshot: h.snapshot,
+          staged: [],
+        },
+        revision: 0,
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    const store = createStore(
+      {
+        slice,
+        host: h.host,
+        sessions,
+      },
+      (next) => patches.push(next),
+    );
+    await store.actions.settle(store.atoms.sessions);
+
+    store.actions.setBindings({ bound: { world: "session:other" } });
+    await tick();
+
+    expect(patches).toContainEqual([
+      {
+        path: ["bindings", "world"],
+        value: expect.objectContaining({ id: "session:other" }),
+      },
+    ]);
+    const landed = store.atoms.registry.get(store.slices.takeoffs);
+    expect(AsyncResult.getOrThrow(landed).doc?.snapshot).toEqual(h.snapshot);
+    h.release();
+    store.dispose();
+  });
+
+  it("writes the fixture host read into the document and renders only that slice", async () => {
+    const patches: RouteStatePatch[][] = [];
+    const store = createStore(
+      {
+        host: createFixtureTakeoffHost(),
+        sessions: createFixtureSessionSource(),
+      },
+      (next) => patches.push(next),
+    );
+    await store.actions.settle(store.atoms.snapshot);
+
+    expect(patches[0]?.[0]).toMatchObject({ path: ["snapshot"] });
+    expect(store.atoms.registry.get(store.atoms.world).docName).toBe("project-a Residence.rvt");
+    store.dispose();
+  });
+
+  it("writes one apply patch for a staged room edit", async () => {
+    const patches: RouteStatePatch[][] = [];
+    const store = createStore(
+      {
+        host: createFixtureTakeoffHost(),
+        sessions: createFixtureSessionSource(),
+      },
+      (next) => patches.push(next),
+    );
+    await store.actions.settle(store.atoms.snapshot);
+    patches.length = 0;
+
+    await store.actions.stage("room-1", { name: "Old" }, { name: "Proposed" });
+
+    expect(patches).toEqual([
+      [
+        {
+          path: ["staged"],
+          value: [{ roomId: "room-1", base: { name: "Old" }, next: { name: "Proposed" } }],
+        },
+      ],
+    ]);
     store.dispose();
   });
 
   it("swaps the whole capability root for the project-a fixture", async () => {
-    const search = searchPort();
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: search.port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
 
     const snapshot = await store.actions.settle(store.atoms.snapshot);
 
     expect(snapshot.value!.world.docName).toBe("project-a Residence.rvt");
-    expect(store.atoms.registry.get(store.feeds.world).state).toBe("fixture");
     store.dispose();
   });
 
@@ -196,9 +610,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
     const room = store.atoms.registry
       .get(store.atoms.world)
@@ -207,32 +620,28 @@ describe("takeoff route store", () => {
 
     store.actions.setAtlasPage({
       level: "Main",
+      zoneKey: zone.zone.key,
       cursor: room.guid,
       planOpen: false,
       statsOpen: true,
     });
-    store.actions.focusZone(zone.zone.guid);
-    store.actions.selectRoom(room.guid);
     store.actions.hover(room.guid);
     store.actions.patchRoom(room.guid, { name: "Staged room" });
     store.actions.decide(room.guid, "thin residue", "accept");
     store.actions.setTargetingOpen("zones");
-    store.actions.setTargetingLevel("view");
+    store.actions.setTargetingLevel("views");
     store.actions.setTargetingQuery("main");
 
-    expect(store.atoms.registry.get(store.atoms.atlasPage)).toMatchObject({
-      level: "Main",
-      cursor: room.guid,
-      planOpen: false,
-      statsOpen: true,
-    });
+    expect(store.atoms.registry.get(store.atoms.level)).toBe("Main");
+    expect(store.atoms.registry.get(store.atoms.cursor)).toBe(room.guid);
+    expect(store.atoms.registry.get(store.atoms.planOpen)).toBe(false);
+    expect(store.atoms.registry.get(store.atoms.statsOpen)).toBe(true);
     expect(store.atoms.registry.get(store.atoms.entity(room.guid))).toMatchObject({
       hovered: true,
       selected: true,
       dirty: true,
       staged: { base: { name: room.name }, next: { name: "Staged room" } },
     });
-    expect(store.atoms.registry.get(store.atoms.entity(zone.zone.guid)).selected).toBe(true);
     expect(store.atoms.registry.get(store.atoms.entity(room.guid)).decided).toEqual({
       "thin residue": "accept",
     });
@@ -246,7 +655,7 @@ describe("takeoff route store", () => {
       [`${room.guid}::thin residue`]: "accept",
     });
     expect(store.atoms.registry.get(store.atoms.targetingOpen)).toBe("zones");
-    expect(store.atoms.registry.get(store.atoms.targetingLevel)).toBe("view");
+    expect(store.atoms.registry.get(store.atoms.targetingLevel)).toBe("views");
     expect(store.atoms.registry.get(store.atoms.targetingQuery)).toBe("main");
     store.dispose();
   });
@@ -255,9 +664,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
 
     store.actions.setSort([{ key: "name", dir: "desc" }]);
@@ -297,9 +705,8 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
     const rows = store.atoms.registry.get(store.atoms.atlasRows);
     const visibleRows = store.atoms.registry.get(store.atoms.visibleRows);
@@ -312,39 +719,12 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("releases its nodes from a shared registry after the idle TTL", async () => {
-    const registry = AtomRegistry.make({ defaultIdleTTL: 20, timeoutResolution: 5 });
-    registries.push(registry);
-    const baseline = registry.getNodes().size;
-
-    for (let cycle = 0; cycle < 4; cycle += 1) {
-      const store = createTakeoffStore({
-        host: createFixtureTakeoffHost(),
-        sessions: createFixtureSessionSource(),
-        search: searchPort().port,
-        registry,
-      });
-      store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
-      await store.actions.settle(store.atoms.snapshot);
-      registry.get(store.atoms.visibleRows);
-      const room = registry.get(store.atoms.world).zones.flatMap((zone) => zone.rooms)[0]!;
-      store.actions.decide(room.guid, room.flags[0] ?? "thin residue", "accept");
-      store.actions.patchRoom(room.guid, { name: "Staged room" });
-
-      store.dispose();
-      await wait(200);
-
-      expect(registry.getNodes().size).toBe(baseline);
-    }
-  });
-
   it("does not invent a conflict from nested Manual J base fields", async () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({ ...EMPTY_TAKEOFF_SEARCH, source: "fixture", target: "fixture" });
+    store.actions.setSelection({ ...EMPTY_TAKEOFF_SELECTION, source: "fixture" });
     await store.actions.settle(store.atoms.snapshot);
     const room = store.atoms.registry
       .get(store.atoms.world)
@@ -360,44 +740,16 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("keeps the prior snapshot stale after adopt, then re-reads it", async () => {
-    const h = harness();
-    const store = createStore({
-      host: h.host,
-      sessions: h.sessions,
-      search: searchPort().port,
-    });
-    store.actions.setSearch(bound);
-    await Promise.all([
-      store.actions.settle(store.atoms.snapshot),
-      store.actions.settle(store.atoms.candidates),
-    ]);
-    h.hold();
-
-    await store.actions.adopt({ view: bound.view, items: [] });
-    await tick();
-
-    expect(store.atoms.registry.get(store.feeds.zones).state).toBe("stale");
-    h.release();
-    await store.actions.settle(store.atoms.snapshot);
-    expect(h.calls.adopt).toBe(1);
-    expect(h.calls.snapshot).toBe(2);
-    expect(h.calls.candidates).toBe(2);
-    expect(store.atoms.registry.get(store.feeds.zones).state).toBe("fresh");
-    store.dispose();
-  });
-
   it("brackets capture and publishes its replay through the store world", async () => {
     const h = harness();
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
     await store.actions.settle(store.atoms.snapshot);
 
-    await store.actions.capture({ view: bound.view, label: "Main" });
+    await store.actions.capture({ view: bound.views[0]!, label: "Main" });
 
     expect(store.atoms.registry.get(store.atoms.busy)).toBeNull();
     expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
@@ -410,66 +762,104 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("keeps a failed live read as an error instead of falling back to a fixture snapshot", async () => {
+    const h = harness();
+    const session = (await h.sessions.list())[0]!;
+    const document = await h.sessions.activeDocument(session);
+    const fixtureHost = createFixtureTakeoffHost();
+    const fixture = await fixtureHost.readSnapshot(
+      session,
+      document,
+      await fixtureHost.readViews(session),
+      async () => undefined,
+    );
+    const slice = Atom.make(
+      AsyncResult.success({
+        doc: { bindings: {}, snapshot: fixture, staged: [] },
+        revision: 0,
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
+    h.fail();
+    const store = createStore({
+      slice,
+      host: h.host,
+      sessions: h.sessions,
+    });
+    store.actions.setSelection(bound);
+
+    await vi.waitFor(() => expect(store.atoms.registry.get(store.feeds.zones).state).toBe("error"));
+    await expect(store.actions.settle(store.atoms.snapshot)).rejects.toThrow("snapshot rejected");
+    store.dispose();
+  });
+
   it("projects a snapshot failure into every snapshot-backed feed", async () => {
     const h = harness();
     h.fail();
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
 
     await expect(store.actions.settle(store.atoms.snapshot)).rejects.toThrow("snapshot rejected");
 
-    expect(store.atoms.registry.get(store.feeds.view)).toMatchObject({
-      state: "error",
-      note: expect.stringContaining("snapshot rejected"),
-    });
     expect(store.atoms.registry.get(store.feeds.zones).state).toBe("error");
     store.dispose();
   });
 
-  it("cascades one pushed document invalidation through doc and snapshot only", async () => {
+  it("refreshes the active document after a pushed document change", async () => {
     const h = harness();
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
     await Promise.all([
       store.actions.settle(store.atoms.snapshot),
       store.actions.settle(store.atoms.r10),
     ]);
     const before = { ...h.calls };
 
+    h.setDocumentTitle("Second.rvt");
     h.emit({ kind: "docChanged", sessionId: "bridge-dev-26" });
     await tick();
     await store.actions.settle(store.atoms.snapshot);
 
-    expect(h.calls.doc).toBe(before.doc + 1);
-    expect(h.calls.snapshot).toBe(before.snapshot + 1);
+    expect(h.calls.sessions).toBe(before.sessions + 1);
+    expect(h.calls.doc).toBeGreaterThan(before.doc);
+    expect(h.calls.snapshot).toBeGreaterThan(before.snapshot);
     expect(h.calls.list).toBe(before.list);
     expect(h.calls.open).toBe(before.open);
+    expect(
+      AsyncResult.getOrThrow(store.atoms.registry.get(store.atoms.activeDocument)).value,
+    ).toMatchObject({
+      documentId: "C:\\Models\\Second.rvt",
+      title: "Second.rvt",
+    });
+    expect(
+      AsyncResult.getOrThrow(store.atoms.registry.get(store.atoms.sessions)).value[0]
+        ?.activeDocumentTitle,
+    ).toBe("Second.rvt");
     store.dispose();
   });
 
-  it("joins the opened .r10 into a live authority world", async () => {
+  it("does not rebox an opened .r10 into the document world", async () => {
     const h = harness();
-    h.live();
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
     await Promise.all([
       store.actions.settle(store.atoms.snapshot),
       store.actions.settle(store.atoms.r10),
     ]);
 
-    expect(store.atoms.registry.get(store.atoms.world).r10Path).toBe(bound.r10);
+    expect(store.atoms.registry.get(store.atoms.world).r10Path).toBeNull();
     expect(h.calls.open).toBe(1);
     store.dispose();
   });
@@ -480,18 +870,67 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: h.host,
       sessions: h.sessions,
-      search: searchPort().port,
     });
-    store.actions.setSearch(bound);
+    store.actions.setSelection(bound);
     await expect(store.actions.settle(store.atoms.r10)).rejects.toThrow("r10 rejected");
     const before = { ...h.calls };
 
     h.recoverR10();
-    store.actions.retryRhvac();
+    await store.actions.retryRhvac();
     await store.actions.settle(store.atoms.r10);
 
     expect(h.calls.list).toBe(before.list + 1);
     expect(h.calls.open).toBeGreaterThan(before.open);
+    expect(store.atoms.registry.get(store.atoms.receipt)?.verb).toBe("retry-r10");
+    store.dispose();
+  });
+
+  it("concatenates candidates and adopts once per bound view", async () => {
+    const h = harness();
+    const adopted: Array<Parameters<TakeoffHost["adopt"]>[1]> = [];
+    const host: TakeoffHost = {
+      ...h.host,
+      async readCandidates(_session, view) {
+        return [
+          {
+            elementId: view === "North" ? 1 : 2,
+            typeName: `${view} zone`,
+            view: "wrong source tag",
+            color: "1,2,3",
+            sqft: 100,
+            role: "zoning-region",
+            guid: null,
+            blob: JSON.stringify({ view, name: `${view} zone`, systemTag: "A" }),
+            loops: [],
+          },
+        ];
+      },
+      async adopt(_session, input) {
+        adopted.push(input);
+        return { text: "host receipt" };
+      },
+    };
+    const store = createStore({ host, sessions: h.sessions });
+    store.actions.setSelection({ ...bound, views: ["North", "South"] });
+
+    const candidates = await store.actions.settle(store.atoms.candidates);
+    expect(candidates.value.map((candidate) => candidate.view)).toEqual(["North", "South"]);
+    await store.actions.adoptSelected();
+
+    expect(adopted).toEqual([
+      {
+        view: "North",
+        items: [{ elementId: 1, name: "North zone", systemTag: "A" }],
+      },
+      {
+        view: "South",
+        items: [{ elementId: 2, name: "South zone", systemTag: "A" }],
+      },
+    ]);
+    expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
+      verb: "adopt",
+      text: "2 regions across 2 views",
+    });
     store.dispose();
   });
 
@@ -499,29 +938,24 @@ describe("takeoff route store", () => {
     const store = createStore({
       host: createFixtureTakeoffHost(),
       sessions: createFixtureSessionSource(),
-      search: searchPort().port,
     });
-    store.actions.setSearch({
-      ...EMPTY_TAKEOFF_SEARCH,
+    store.actions.setSelection({
+      ...EMPTY_TAKEOFF_SELECTION,
       source: "fixture",
-      view: "Mechanical Zoning Plan - Lower Level",
+      views: ["Mechanical Zoning Plan - Lower Level"],
     });
     await store.actions.settle(store.atoms.candidates);
     await tick();
 
     expect(store.atoms.registry.get(store.atoms.adoptRows)).toHaveLength(11);
-    store.inspect();
-    store.actions.openPanel("adopt");
+    await store.actions.openAdopt();
     await store.actions.adoptSelected();
 
     expect(store.atoms.registry.get(store.atoms.panel)).toBeNull();
     expect(store.atoms.registry.get(store.atoms.receipt)).toMatchObject({
       verb: "adopt",
-      text: "fixture adopted 11 zoning regions",
+      text: "11 regions across 1 views",
     });
-    const inspection = store.inspect();
-    expect(inspection.nodes.some((node) => node.label === "takeoffs/verb/adopt")).toBe(true);
-    expect(inspection.changes.some((change) => change.cause?.verb === "adopt")).toBe(true);
     store.dispose();
   });
 });

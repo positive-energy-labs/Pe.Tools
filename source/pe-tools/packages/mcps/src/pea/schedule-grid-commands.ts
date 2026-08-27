@@ -49,7 +49,7 @@ export function createScheduleGridCommandHandlers(
 
   return {
     catalog: async (input, ctx) => {
-      const target = resolveTarget(input, ctx.getDoc());
+      const target = resolveTarget(input);
       let response: RevitCatalogSchedules.Res.Response;
       try {
         response = await caller(target).call("revit.catalog.schedules", {
@@ -82,7 +82,7 @@ export function createScheduleGridCommandHandlers(
 
     refresh: async (input, ctx) => {
       const { scheduleName, scheduleId, maxRows } = (input ?? {}) as RefreshInput;
-      const target = resolveTarget(input, ctx.getDoc());
+      const target = resolveTarget(input);
       const query = buildScheduleQuery(scheduleName, scheduleId, maxRows ?? 200);
 
       let response: RevitDetailSchedules.Res.Response;

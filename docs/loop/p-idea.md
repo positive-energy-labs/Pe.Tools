@@ -4,7 +4,7 @@ worktree for writing. Your whole output is one file: `<THINKFILE>`.
 The fan-out has gone dry — the last rounds spent real effort and adopted nothing. That is a signal
 the frame is wrong, not that the builders were lazy. Your job is to say what the frame should be.
 
-READ: `<BRIEF>`, `<TASTE>` (kaitpw's verdicts outrank every metric), `<LEDGER>` (Decided, Tried &
+READ: `<BRIEF>`, [`<TASTE>`](../features/takeoffs/TASTE.md) (kaitpw's verdicts outrank every metric), `<LEDGER>` (Decided, Tried &
 rejected, Owed — the tombstones are evidence, not clutter), and every `REPORT.md` and `ROUND.md`
 under `<RUNS>`. Read the rejected rounds most carefully; a slate of failures with a common shape is
 the most informative thing in the pile.

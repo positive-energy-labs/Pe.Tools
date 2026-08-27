@@ -17,7 +17,7 @@
  * when pea's family editing runs through the live lane's own commands.
  */
 import { z } from "zod";
-import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 import {
   LOW_CONFIDENCE_REFINE_ERROR,
   cellProposalSchema,
@@ -124,7 +124,6 @@ export type SpecDoc = z.infer<typeof specDocSchema>;
 
 export const familyTypesDocumentSchema = z
   .object({
-    binding: routeBindingSchema,
     snapshot: familyTypesSnapshotSchema.nullish(),
     doc: specDocSchema.nullish(),
     /** cellKey -> cell trichotomy state. */
@@ -138,11 +137,10 @@ export const familyTypesDocumentSchema = z
   });
 export type FamilyTypesDocument = z.infer<typeof familyTypesDocumentSchema>;
 
-export const familyTypesRouteState = defineRouteState({
+export const familyTypesRouteState = {
   route: "family-types",
   title: "Family Types",
   description: "Review and apply proposed family parameter values against a grounded spec.",
-  key: "route:family-types",
   schema: familyTypesDocumentSchema,
   agentWriteMask: trichotomyAgentMask(),
   commands: {
@@ -167,7 +165,7 @@ export const familyTypesRouteState = defineRouteState({
       mutatesExternal: true,
     },
   },
-});
+} satisfies RouteStateSpec<typeof familyTypesDocumentSchema>;
 
 /* ── Cell keys ── `${param}::${type}`; formulas use the `@formula` pseudo-type. ──
    Param names may contain `::`, so keys split on the LAST `::`. */

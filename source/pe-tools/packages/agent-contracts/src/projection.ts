@@ -9,7 +9,6 @@ import {
   type WorkbenchThreadInfo,
   type WorkbenchToolCall,
 } from "./contracts.ts";
-import { deriveActivity, type Activity } from "./activity.ts";
 
 export function defaultWorkbenchUiPreferences() {
   return {
@@ -189,58 +188,6 @@ export function selectCurrentModeLabel(state: WorkbenchState): string | undefine
 
 export function selectOverallRunStatus(state: WorkbenchState): WorkbenchRunStatus {
   return state.uiStatus.overall.status;
-}
-
-/* ── Sentence snapshot — the chat sentence's testimony, minus route-doc facts.
-   Trichotomy counts (awaiting-review) and the committed relax timer live with the
-   route docs in the web layer; this selector only speaks WorkbenchState. ── */
-
-export interface SentenceSnapshot {
-  phase: "idle" | "thinking" | "working" | "asking";
-  /** Present for working/asking. */
-  activity?: Activity;
-  /** Most recent finished tool call — the UI renders failures and relaxes on a timer. */
-  lastCompleted?: { activity: Activity; isError: boolean; completedAt?: string };
-}
-
-export function selectSentenceSnapshot(state: WorkbenchState): SentenceSnapshot {
-  const lastId = state.tools.recentToolCallIds[state.tools.recentToolCallIds.length - 1];
-  const last = lastId ? state.tools.calls.find((call) => call.id === lastId) : undefined;
-  const lastCompleted = last
-    ? {
-        activity: deriveActivity(last),
-        isError: last.status === "failed",
-        completedAt: last.completedAt,
-      }
-    : undefined;
-
-  const asking = selectPendingApprovals(state)[0];
-  if (asking) {
-    const wanted = deriveActivity(asking.toolCall);
-    return {
-      phase: "asking",
-      activity: { ...wanted, gerund: `asking to start ${wanted.gerund}` },
-      lastCompleted,
-    };
-  }
-
-  const running =
-    state.uiStatus.overall.status === "running" || state.uiStatus.overall.status === "waiting";
-  if (!running) return { phase: "idle", lastCompleted };
-
-  const activeId = state.uiStatus.overall.activeToolCallId;
-  const active =
-    (activeId ? state.tools.calls.find((call) => call.id === activeId) : undefined) ??
-    selectActiveToolCalls(state)[0];
-  if (active) return { phase: "working", activity: deriveActivity(active), lastCompleted };
-
-  // running with no live tool: thinking when the streaming tail is a reasoning part
-  const tail = state.transcript.messages[state.transcript.messages.length - 1];
-  const tailPart = tail?.status === "streaming" ? tail.parts[tail.parts.length - 1] : undefined;
-  if (tailPart?.kind === "reasoning" || tailPart?.kind === "thought")
-    return { phase: "thinking", lastCompleted };
-
-  return { phase: "working", activity: { verb: "working", gerund: "working" }, lastCompleted };
 }
 
 export interface WorkbenchFeatureCard {

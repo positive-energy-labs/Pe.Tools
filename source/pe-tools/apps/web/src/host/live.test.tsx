@@ -119,7 +119,7 @@ test("PeInfo reads host status with one-shot query failure", async () => {
 
   await waitFor(() => expect(error).toBeInstanceOf(Error));
   expect(fetchMock).toHaveBeenCalledOnce();
-  const routeState = readFileSync(join(process.cwd(), "src/workbench/route-state.tsx"), "utf8");
-  expect(routeState).toContain("await fetchPeInfo(config)");
-  expect(routeState).not.toContain('peUrl(config, "/info")');
+  const routeStore = readFileSync(join(process.cwd(), "src/state/route-store.ts"), "utf8");
+  expect(routeStore).toContain("await fetchPeInfo(config)");
+  expect(routeStore).not.toContain('peUrl(config, "/info")');
 });

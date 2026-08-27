@@ -1,40 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
-import { worldName } from "#/host/fleet";
-import { useBridgeSessionsListQuery } from "#/host/queries";
-import {
-  fromBridgeSessions,
-  resolveTarget,
-  type SessionFacts,
-  type TargetResolution,
-  type TargetSelector,
-} from "#/host/target";
+import type { SessionFacts } from "#/host/target";
+import { worldTrunk } from "#/targeting/world";
 
-/**
- * Resolve a target selector against the live session list. The caller owns WHERE the selector
- * is stored (chat search param, route search param, plugin state); this hook owns resolution.
- * Root-mounted SSE invalidation keeps the underlying query live; no per-surface refresh needed.
- */
-export function useTarget(
-  selector: TargetSelector,
-  enabled = true,
-): {
-  resolution: TargetResolution;
-  sessions: SessionFacts[];
-  isLoading: boolean;
-} {
-  const query = useBridgeSessionsListQuery({ enabled });
-  const sessions = fromBridgeSessions(query.data?.sessions ?? []);
-  return {
-    resolution: resolveTarget(sessions, selector),
-    sessions,
-    isLoading: query.isLoading,
-  };
-}
-
-// ── world log — client-observed world events, for the thread lane ───────────────────────────────
-
-export type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
+type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
 
 export interface WorldEvent {
   atMs: number;
@@ -43,11 +12,7 @@ export interface WorldEvent {
   label: string;
 }
 
-/**
- * Derives world events by diffing consecutive session-list observations. Client-observed
- * (timestamps are when THIS tab noticed, within the SSE debounce of reality) — good enough to
- * align world changes with conversation time; never presented as broker truth.
- */
+/** Timestamps are when this tab observed the session-list change, not broker truth. */
 export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
   const [log, setLog] = useState<WorldEvent[]>([]);
   const prev = useRef<Map<string, SessionFacts> | null>(null);
@@ -66,9 +31,9 @@ export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
           atMs,
           kind: "session-appeared",
           sessionId: id,
-          label: `${worldName({ id: s.sdkSessionId ?? s.sessionId, custody: s.custody })} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
+          label: `${worldTrunk.label({ pid: s.processId, session: s })} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
         });
-      } else if (old.activeDocumentTitle !== s.activeDocumentTitle) {
+      } else if (old.activeDocumentId !== s.activeDocumentId) {
         events.push({
           atMs,
           kind: "doc-changed",
@@ -88,7 +53,7 @@ export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
     }
     if (events.length) setLog((l) => [...l.slice(-99), ...events]); // ponytail: capped ring, per-tab only
     // Keyed by identity+doc signature so unrelated field churn doesn't re-diff.
-  }, [sessions.map((s) => `${s.sessionId}:${s.activeDocumentTitle ?? ""}`).join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessions.map((s) => `${s.sessionId}:${s.activeDocumentId ?? ""}`).join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return log;
 }

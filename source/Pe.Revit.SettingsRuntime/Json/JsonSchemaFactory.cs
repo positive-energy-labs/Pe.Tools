@@ -17,11 +17,13 @@ using System.Text;
 namespace Pe.Revit.SettingsRuntime.Json;
 
 public sealed class JsonSchemaBuildOptions(
-    SettingsRuntimeMode runtimeMode
+    SettingsRuntimeMode runtimeMode,
+    Document? document = null
 ) {
     private readonly ConcurrentDictionary<string, IReadOnlyList<ValueDomainOptionItem>> _valueDomainSampleCache = new(StringComparer.Ordinal);
 
     public SettingsRuntimeMode RuntimeMode { get; } = runtimeMode;
+    private Document? Document { get; } = document;
 
     public bool ResolveValueDomainSamples { get; init; } = true;
 
@@ -29,7 +31,8 @@ public sealed class JsonSchemaBuildOptions(
         IReadOnlyDictionary<string, string>? fieldValues = null
     ) => new(
         this.RuntimeMode,
-        fieldValues
+        fieldValues,
+        this.Document
     );
 
     public bool TryGetCachedValueDomainSamples(

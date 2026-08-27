@@ -11,6 +11,7 @@ public sealed class FamilyFoundryHostContractTests {
         var request = JsonConvert.DeserializeObject<FamilyFoundryPlanRequest>(
             """{ "profileJson": "{\"FamilyParameters\":[]}", "familyId": 42 }""");
         var data = new FamilyFoundryPlanData(
+            new Reading("C:\\model.rvt", "v1", "2026-08-26T00:00:00.0000000Z"),
             "abc",
             [new FamilyFoundryFamilyPlanData(42, "AHU", CreatePlan("Width"))],
             [new FamilyFoundryDiagnostic("NamedDiagnostic", "$.profileJson.old", "stale field")]);

@@ -5,6 +5,8 @@
  * exercisable with dense mid-project state and no Revit attached. Everything here is synthetic
  * or replayed project-a data; elementIds are null, so every write path is inert by construction.
  */
+import { address } from "@pe/agent-contracts";
+
 import type { SessionSource, TakeoffHost } from "#/takeoff/store";
 import type { World, WorldRoom, WorldZone } from "#/takeoff/world";
 
@@ -68,7 +70,7 @@ const zone = (z: GeoZone | MockZone): WorldZone => ({
   driftSqft: z.driftSqft,
 });
 
-export const projectFixtureWorld = (fixture: MockWorld): World => ({
+const projectFixtureWorld = (fixture: MockWorld): World => ({
   docName: fixture.docName,
   r10Path: fixture.r10Path,
   lanes: [...new Map(fixture.zones.map((z) => [z.zone.lane.view, z.zone.lane])).values()].map(
@@ -84,16 +86,33 @@ export const projectFixtureWorld = (fixture: MockWorld): World => ({
   })),
 });
 
+const fixtureWorld = loadMockWorldGeo()
+  .catch(() => mockWorld())
+  .then(projectFixtureWorld);
+
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
-  async readSnapshot() {
-    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
-    return {
-      world,
-      views: world.lanes.map((lane) => ({ name: lane.view, level: lane.label, regions: 0 })),
+  async readSnapshot(_session, document, _views, write) {
+    const snapshot = {
+      reading: {
+        at: address(document.documentId),
+        version: null,
+        observedAt: new Date().toISOString(),
+      },
+      world: await fixtureWorld,
       zoneFrs: [],
       regionsByZone: {},
     };
+    await write(snapshot);
+    return snapshot;
+  },
+  async readViews() {
+    const world = await fixtureWorld;
+    return world.lanes.map((lane) => ({
+      name: lane.view,
+      level: lane.label,
+      regions: world.zones.filter((zone) => zone.zone.lane.view === lane.view).length,
+    }));
   },
   async listRhvac(dir) {
     return [{ path: `${dir}\\projectA.r10`, name: "projectA.r10" }];
@@ -102,8 +121,7 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
     return { path };
   },
   async readCandidates(_session, view) {
-    const world = projectFixtureWorld(await loadMockWorldGeo().catch(() => mockWorld()));
-    return world.zones
+    return (await fixtureWorld).zones
       .filter((zone) => zone.zone.lane.view === view)
       .map((zone, index) => ({
         elementId: index + 1,
@@ -150,6 +168,7 @@ export const createFixtureSessionSource = (): SessionSource => {
     processId: 0,
     lane: null,
     custody: "observed" as const,
+    activeDocumentId: "C:\\Fixtures\\project-a Residence.rvt",
     activeDocumentTitle: "project-a Residence.rvt",
     openDocumentCount: 1,
   };
@@ -158,7 +177,7 @@ export const createFixtureSessionSource = (): SessionSource => {
       return [session];
     },
     async activeDocument() {
-      return { session, title: session.activeDocumentTitle };
+      return { session, documentId: session.activeDocumentId, title: session.activeDocumentTitle };
     },
     subscribe() {
       return () => undefined;

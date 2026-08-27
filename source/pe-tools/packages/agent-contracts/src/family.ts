@@ -6,20 +6,21 @@
  *   - `doc`: an OCR'd spec sheet (markdown blocks only — geometry stays in the parse
  *     cache, same law as family-types),
  *   - `evidence`: the resolved per-type value/provenance projection Revit returned,
- *     stamped with where it came from so staleness is renderable, never silent.
+ *     stamped with the Revit document Reading so currency is renderable, never silent.
  *
  * Pea acts on this slice through commands only (empty agent write mask). Proposals
  * against the family live in `route:settings` fields, where the human review
  * lifecycle already exists.
  */
 import { z } from "zod";
-import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
 import { specDocSchema } from "./family-types.ts";
 import { settingsDocumentIdSchema } from "./settings.ts";
+import { readingSchema } from "./reading.ts";
 
 /* ── Evidence projection (mirror of C# FamilyModelEvidence, camelCase) ──────── */
 
-export const familyEvidenceValueSourceSchema = z.enum([
+const familyEvidenceValueSourceSchema = z.enum([
   "AuthoredGlobal",
   "AuthoredTypeOverride",
   "Formula",
@@ -27,23 +28,23 @@ export const familyEvidenceValueSourceSchema = z.enum([
   "Unresolved",
 ]);
 
-export const familyEvidenceProvenanceSchema = z.enum(["Exact", "Inferred", "Unresolved"]);
+const familyEvidenceProvenanceSchema = z.enum(["Exact", "Inferred", "Unresolved"]);
 
-export const familyEvidenceResolvedValueSchema = z.object({
+const familyEvidenceResolvedValueSchema = z.object({
   value: z.string().nullish(),
   source: familyEvidenceValueSourceSchema,
   provenance: familyEvidenceProvenanceSchema,
   formula: z.string().nullish(),
 });
 
-export const familyEvidenceParameterSchema = z.object({
+const familyEvidenceParameterSchema = z.object({
   name: z.string(),
   isShared: z.boolean(),
   propertiesGroup: z.string().nullish(),
   valuesPerType: z.record(z.string(), familyEvidenceResolvedValueSchema),
 });
 
-export const familyEvidenceDiagnosticSchema = z.object({
+const familyEvidenceDiagnosticSchema = z.object({
   code: z.string(),
   path: z.string(),
   message: z.string(),
@@ -51,51 +52,40 @@ export const familyEvidenceDiagnosticSchema = z.object({
   confidence: z.number().nullish(),
 });
 
-/** Where the evidence came from — the staleness contract. A UI compares
- * `documentVersionToken` against the open settings snapshot's token: equal means
- * the evidence describes what you're editing; different means dashed/stale. */
-export const familyEvidenceOriginSchema = z.object({
-  origin: z.enum(["capture", "build"]),
-  capturedAt: z.string(),
-  target: z.string().nullish(),
-  documentId: settingsDocumentIdSchema.nullish(),
-  documentVersionToken: z.string().nullish(),
-  familyName: z.string(),
-  rfaPath: z.string().nullish(),
-});
-
+/** Revit evidence carries only the Reading for the document it describes. */
 export const familyEvidenceSchema = z.object({
   typeNames: z.array(z.string()),
   parameters: z.array(familyEvidenceParameterSchema),
   diagnostics: z.array(familyEvidenceDiagnosticSchema),
-  from: familyEvidenceOriginSchema,
+  reading: readingSchema,
+  origin: z.enum(["capture", "build"]),
+  familyName: z.string(),
+  rfaPath: z.string().nullish(),
 });
-export type FamilyEvidence = z.infer<typeof familyEvidenceSchema>;
-
 /* ── The document ──────────────────────────────────────────────────────────── */
 
 /** Parser-extracted figures/diagram crops — ids only; geometry stays in the parse
  * cache. Pea may cite an image id as a proposal source; the parser measured its
  * region, so image citations ground exactly (never estimated). */
-export const familyDocImageSchema = z.object({
+const familyDocImageSchema = z.object({
   id: z.string(),
   page: z.number(),
   category: z.string(),
 });
 
-export const familyDocumentSchema = z.object({
-  binding: routeBindingSchema,
+const familyDocumentSchema = z.object({
+  bindings: routeBindingsSchema,
+  stage: z.enum(["author", "evidence"]).optional(),
   doc: specDocSchema.extend({ images: z.array(familyDocImageSchema).default([]) }).nullish(),
   evidence: familyEvidenceSchema.nullish(),
 });
 export type FamilyDocument = z.infer<typeof familyDocumentSchema>;
 
-export const familyRouteState = defineRouteState({
+export const familyRouteState = {
   route: "family",
   title: "Family",
   description:
     "Anatomy, types, and spec grounding for one authored family.json. Authored edits and proposals live in route:settings; this slice carries the spec doc and Revit evidence.",
-  key: "route:family",
   schema: familyDocumentSchema,
   // Pea never patches this slice directly — doc and evidence arrive via commands.
   agentWriteMask: [],
@@ -126,4 +116,4 @@ export const familyRouteState = defineRouteState({
       mutatesExternal: true,
     },
   },
-});
+} satisfies RouteStateSpec<typeof familyDocumentSchema>;

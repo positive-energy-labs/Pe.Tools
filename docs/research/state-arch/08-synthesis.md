@@ -25,6 +25,8 @@ into the sibling branch).
 
 ## 2. The shape (library-independent)
 
+Retraction (2026-08-25): a route store is not the canonical home of a cross-realm route document; the document is the source and stores subscribe, as ruled in `w1-demiurge.md` §3a.
+
 Ten parts named by two or more judges as "steal this whatever wins". This is the spec; the
 substrate below is one way to run it.
 

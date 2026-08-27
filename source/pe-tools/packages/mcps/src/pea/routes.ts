@@ -6,20 +6,26 @@
 import type { z } from "zod";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 import {
+  familiesRouteState,
   familyRouteState,
   familyTypesRouteState,
+  opsRouteState,
+  instancesRouteState,
   parameterLinksRouteState,
   scheduleGridRouteState,
   settingsRouteState,
+  takeoffsRouteState,
 } from "@pe/agent-contracts";
 
 import { createFamilyCommandHandlers } from "./family-commands.ts";
+import { createFamiliesCommandHandlers } from "./families-commands.ts";
 import {
   createFamilyTypesCommandHandlers,
   createParameterLinksCommandHandlers,
 } from "./route-state-commands.ts";
 import { createScheduleGridCommandHandlers } from "./schedule-grid-commands.ts";
 import { createSettingsCommandHandlers } from "./settings-commands.ts";
+import { createTakeoffsCommandHandlers } from "./takeoffs-commands.ts";
 
 export interface RouteRegistration {
   spec: RouteStateSpec<z.ZodType>;
@@ -40,10 +46,14 @@ export function createRouteRegistrations(
   options: { hostBaseUrl?: string } = {},
 ): RouteRegistration[] {
   return [
+    entry(familiesRouteState, createFamiliesCommandHandlers(options)),
     entry(familyRouteState, createFamilyCommandHandlers(options)),
     entry(familyTypesRouteState, createFamilyTypesCommandHandlers(options)),
+    entry(opsRouteState, {}),
+    entry(instancesRouteState, {}),
     entry(parameterLinksRouteState, createParameterLinksCommandHandlers(options)),
     entry(settingsRouteState, createSettingsCommandHandlers(options)),
     entry(scheduleGridRouteState, createScheduleGridCommandHandlers(options)),
+    entry(takeoffsRouteState, createTakeoffsCommandHandlers(options)),
   ];
 }

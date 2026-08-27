@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect } from "react";
+import { useAtomValue } from "@effect/atom-react";
 import type { WorkbenchContextBreakdown, WorkbenchContextItem } from "@pe/agent-contracts";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
 import { Switcher } from "#/components/lang/switcher";
 import { cn } from "#/lib/utils";
+import { useWorkbench } from "./provider";
 import {
   blastOf,
   BLAST_LABEL,
@@ -46,23 +48,29 @@ const PLAIN_CAP: Record<string, string> = {
 /**
  * Tracks the previous send's breakdown as the diff baseline. The baseline only advances when
  * a new user turn lands (a "send"), so streaming pushes within a turn don't flicker the diff.
- * Refs-in-render derived state: idempotent given the same inputs.
+ * The chat store owns the baseline so route remounts do not reset page memory.
  */
 export function useCacheView(
   breakdown: WorkbenchContextBreakdown | undefined,
   userTurns: number,
 ): CacheView {
-  const lastTurn = useRef<number>(userTurns);
-  const prevSig = useRef<Map<string, string>>(signatureMap(breakdown));
-  const baseline = useRef<Map<string, string> | null>(null);
-
-  if (userTurns !== lastTurn.current) {
-    baseline.current = prevSig.current; // the prior send's layers
-    lastTurn.current = userTurns;
-  }
-  const view = computeCacheView(breakdown, baseline.current);
-  prevSig.current = signatureMap(breakdown);
-  return view;
+  const { store } = useWorkbench();
+  const cache = useAtomValue(store.atoms.worldCache);
+  const baseline =
+    cache.lastTurn !== null && userTurns !== cache.lastTurn ? cache.prevSig : cache.baseline;
+  useEffect(() => {
+    store.actions.setWorldCache((previous) => ({
+      lastTurn: userTurns,
+      prevSig: signatureMap(breakdown),
+      baseline:
+        previous.lastTurn === null
+          ? null
+          : previous.lastTurn === userTurns
+            ? previous.baseline
+            : previous.prevSig,
+    }));
+  }, [store, breakdown, userTurns]);
+  return computeCacheView(breakdown, baseline);
 }
 
 // Per-layer identity hue — TAXONOMY, so it spends the viz ladder (never a meaning role).
@@ -157,10 +165,9 @@ export function WorldLane({
   cache: CacheView;
   sendNumber?: number;
 }) {
-  const [density, setDensity] = useState<"inspect" | "plain">("inspect");
-  const [diff, setDiff] = useState(false);
-  const [open, setOpen] = useState<Set<string>>(() => new Set(["system-prompt"]));
-  const [openItems, setOpenItems] = useState<Set<string>>(() => new Set());
+  const { store } = useWorkbench();
+  const { density, diff, open, openItems } = useAtomValue(store.atoms.world);
+  const setWorld = store.actions.setWorld;
   const inspect = density === "inspect";
   const layers = orderedLayers(breakdown);
   const used = layers.reduce((sum, layer) => sum + layer.tokens, 0) || 1;
@@ -177,18 +184,18 @@ export function WorldLane({
   }
 
   const toggle = (id: string) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
+    setWorld((previous) => {
+      const next = new Set(previous.open);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
+      return { ...previous, open: next };
     });
   const toggleItem = (key: string) =>
-    setOpenItems((prev) => {
-      const next = new Set(prev);
+    setWorld((previous) => {
+      const next = new Set(previous.openItems);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      return next;
+      return { ...previous, openItems: next };
     });
 
   return (
@@ -202,7 +209,7 @@ export function WorldLane({
           <Switcher
             ariaLabel="density"
             value={density}
-            onChange={setDensity}
+            onChange={(density) => setWorld((previous) => ({ ...previous, density }))}
             options={[
               {
                 value: "plain",
@@ -221,7 +228,7 @@ export function WorldLane({
             type="button"
             className="h-6 w-[26px] cursor-pointer rounded-sm border-[0.5px] border-[var(--r-line-2)] bg-transparent text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] aria-pressed:bg-[var(--r-select)] aria-pressed:text-[var(--r-ink)] disabled:cursor-default disabled:italic disabled:opacity-40"
             aria-pressed={diff}
-            onClick={() => setDiff((value) => !value)}
+            onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
             title={
               cache.hasBaseline && sendNumber
                 ? `Highlight what changed vs send #${sendNumber - 1}`

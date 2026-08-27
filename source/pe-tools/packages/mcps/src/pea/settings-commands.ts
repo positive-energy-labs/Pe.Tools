@@ -1,17 +1,7 @@
-/**
- * /settings command handlers — open/refresh/validate/save over the host settings.* ops.
- * See route-state-commands.ts for the handler idiom (getDoc/setDoc, hint-rich errors).
- *
- * These are the side-effectful work the agent write mask forbids doing by hand: open a
- * schema-backed settings document, re-read it, validate a candidate splice, and save
- * (human-only). They run where the pea runtime is composed (in-process with the host),
- * reaching the TS host through `HostRpcCaller` — no Revit session required.
- */
 import {
   type SettingsDocumentId,
   type SettingsRouteDocument,
   type SettingsSnapshot,
-  resolveTarget,
   settingsFieldSegments,
   stagedEntries,
 } from "@pe/agent-contracts";
@@ -24,14 +14,12 @@ import type {
 import { HostRpcCaller } from "../shared/host-rpc-caller.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
 
-export { settingsRouteState } from "@pe/agent-contracts";
-
 /** Build the settings command handlers, bound to a resolved host base URL. */
 export function createSettingsCommandHandlers(
   options: { hostBaseUrl?: string } = {},
 ): RouteStateCommandHandlers<SettingsRouteDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
-  const caller = (target?: string) => new HostRpcCaller({ hostBaseUrl, bridgeSessionId: target });
+  const caller = new HostRpcCaller({ hostBaseUrl });
 
   return {
     create: async (input, ctx) => {
@@ -39,9 +27,8 @@ export function createSettingsCommandHandlers(
         documentId: SettingsDocumentId;
         rawContent: string;
       };
-      const rpc = caller(resolveTarget(input, ctx.getDoc()));
-      const result = await rpc.call("settings.document.save", {
-        documentId: toHostDocumentId(documentId),
+      const result = await caller.call("settings.document.save", {
+        documentId,
         rawContent,
         createOnly: true,
       });
@@ -51,9 +38,14 @@ export function createSettingsCommandHandlers(
         );
       if (!result.writeApplied) throw new Error("The settings document was not created.");
 
-      const snapshot = await openSnapshot(rpc, documentId);
+      const snapshot = await openSnapshot(caller, documentId);
       const document = ctx.getDoc();
-      document.snapshot = snapshot;
+      document.bindings.file = {
+        id: snapshot.path,
+        label: snapshot.path,
+        at: ctx.documentAddress,
+      };
+      document.documentId = documentId;
       document.fields = {};
       document.savedAt = new Date().toISOString();
       await ctx.setDoc(document);
@@ -62,35 +54,38 @@ export function createSettingsCommandHandlers(
 
     open: async (input, ctx) => {
       const { documentId } = input as { documentId: SettingsDocumentId };
-      const snapshot = await openSnapshot(caller(resolveTarget(input, ctx.getDoc())), documentId);
+      const snapshot = await openSnapshot(caller, documentId);
       const document = ctx.getDoc();
-      document.snapshot = snapshot; // Preserve existing fields (proposals/staged).
+      document.bindings.file = {
+        id: snapshot.path,
+        label: snapshot.path,
+        at: ctx.documentAddress,
+      };
+      document.documentId = documentId;
       await ctx.setDoc(document);
       return summarizeSnapshot(snapshot);
     },
 
     refresh: async (_input, ctx) => {
       const document = ctx.getDoc();
-      const documentId = document.snapshot?.documentId;
+      const documentId = document.documentId;
       if (!documentId) {
         throw new Error(
           "No settings document is open. Run the `open` command with a documentId (module/root/relative path) first.",
         );
       }
-      const snapshot = await openSnapshot(caller(resolveTarget(_input, document)), documentId);
-      const latest = ctx.getDoc();
-      latest.snapshot = snapshot;
-      await ctx.setDoc(latest);
+      const snapshot = await openSnapshot(caller, documentId);
       return summarizeSnapshot(snapshot);
     },
 
     validate: async (input, ctx) => {
       const { includeProposals } = input as { includeProposals?: boolean };
       const document = ctx.getDoc();
-      const snapshot = document.snapshot;
-      if (!snapshot) {
+      const documentId = document.documentId;
+      if (!documentId) {
         throw new Error("No settings document is open. Run the `open` command first.");
       }
+      const snapshot = await openSnapshot(caller, documentId);
 
       const parsed = parseRawContent(snapshot.rawContent);
       spliceFields(parsed, document, { includeProposals: includeProposals ?? false });
@@ -98,10 +93,10 @@ export function createSettingsCommandHandlers(
 
       let validation;
       try {
-        validation = await caller(resolveTarget(input, document)).call(
+        validation = await caller.call(
           "settings.document.validate",
           {
-            documentId: toHostDocumentId(snapshot.documentId),
+            documentId,
             rawContent,
           },
         );
@@ -109,18 +104,16 @@ export function createSettingsCommandHandlers(
         throw new Error(`settings.document.validate failed (${message(error)}).`);
       }
 
-      const latest = ctx.getDoc();
-      if (latest.snapshot) latest.snapshot.validation = toRouteValidation(validation);
-      await ctx.setDoc(latest);
       return validation;
     },
 
     save: async (_input, ctx) => {
       const document = ctx.getDoc();
-      const snapshot = document.snapshot;
-      if (!snapshot) {
+      const documentId = document.documentId;
+      if (!documentId) {
         throw new Error("No settings document is open. Run the `open` command first.");
       }
+      const snapshot = await openSnapshot(caller, documentId);
 
       const stagedPaths = stagedEntries(document.fields);
       if (stagedPaths.length === 0)
@@ -138,14 +131,15 @@ export function createSettingsCommandHandlers(
       }
       const rawContent = JSON.stringify(parsed, null, 2);
 
-      const rpc = caller(resolveTarget(_input, document));
       let result;
       try {
-        result = await rpc.call("settings.document.save", {
-          documentId: toHostDocumentId(snapshot.documentId),
+        result = await caller.call("settings.document.save", {
+          documentId,
           rawContent,
           expectedVersionToken:
-            snapshot.versionToken != null ? { value: snapshot.versionToken } : undefined,
+            snapshot.versionToken != null
+              ? { value: snapshot.versionToken }
+              : undefined,
         });
       } catch (error) {
         throw new Error(`settings.document.save failed (${message(error)}).`);
@@ -158,19 +152,12 @@ export function createSettingsCommandHandlers(
       }
       if (!result.writeApplied) {
         // Validation failed host-side: fold the fresh validation in and leave staged fields.
-        const latest = ctx.getDoc();
-        if (latest.snapshot) latest.snapshot.validation = toRouteValidation(result.validation);
-        await ctx.setDoc(latest);
         throw new Error(
           `Save not applied: ${result.validation.isValid ? "the host rejected the write" : `${result.validation.issues.length} validation issue(s)`}. Fix and save again.`,
         );
       }
 
-      // Re-open after the write so raw, composed, validation, and metadata describe the
-      // same canonical document (including any injected `$schema` or fragment expansion).
-      const savedSnapshot = await openSnapshot(rpc, snapshot.documentId);
       const latest = ctx.getDoc();
-      latest.snapshot = savedSnapshot;
       for (const [path] of stagedPaths) {
         latest.fields[path] = { review: "none" };
       }
@@ -191,7 +178,7 @@ async function openSnapshot(
   let raw: SettingsDocumentSnapshot;
   try {
     raw = await caller.call("settings.document.open", {
-      documentId: toHostDocumentId(documentId),
+      documentId,
       includeComposedContent: true,
     });
   } catch (error) {
@@ -199,23 +186,18 @@ async function openSnapshot(
       `settings.document.open failed (${message(error)}). Check the module/root/relative path against settings.workspaces and settings.tree.`,
     );
   }
+  const absolutePath = raw.metadata.documentId.stableId;
+  if (!absolutePath) throw new Error("settings.document.open returned no absolute document path.");
+  const versionToken = raw.metadata.versionToken?.value;
   return {
     documentId,
+    path: absolutePath,
+    versionToken: versionToken ?? null,
+    observedAt: new Date().toISOString(),
     rawContent: raw.rawContent,
     composedContent: raw.composedContent ?? null,
-    versionToken: raw.metadata.versionToken?.value ?? null,
     modifiedUtc: raw.metadata.modifiedUtc ?? null,
     validation: toRouteValidation(raw.validation),
-    takenAt: new Date().toISOString(),
-  };
-}
-
-/** The route-doc documentId carries only the three addressing keys; the host op accepts them. */
-function toHostDocumentId(documentId: SettingsDocumentId) {
-  return {
-    moduleKey: documentId.moduleKey,
-    rootKey: documentId.rootKey,
-    relativePath: documentId.relativePath,
   };
 }
 

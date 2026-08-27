@@ -9,6 +9,8 @@ restated here.
 
 ## Decided
 
+- 2026-08-25 — Route-state HTTP and SSE require `threadId`; `scope=workspace` is a 400. The runtime test `workspace scope is isolated by resource identity` is deleted; `thread documents are isolated, authorized, and survive module recreation` carries isolation proof. PROVEN[deterministic, worktree, 650ed3a]: runtime 15/15, mcps 52/52 with 1 skipped, agent-contracts 27/27, web 30/30, tsc 0.
+
 ### Context ladder and capability map
 
 - 2026-07 — Revit agent context is a progressive ladder, not one context dump: `Context` (orient) → `Catalog` (inventory) → `Resolve` (fuzzy phrase → stable handle) → `Matrix` (joins/coverage) → `Detail` (known handle) → `Apply` (after proof). Missing layers get added as small bounded projections. All 39 `revit.*` public ops in `host-ops.generated.ts` follow it.
@@ -42,6 +44,7 @@ restated here.
 - 2026-08-16 — Streaming (the blinking `mg-caret` in `--r-pea`) is an agent-identity mark, not an outcome kind: nothing machine-shaped is in flight and there is no receipt. Recorded so nobody "fixes" it into an `OutcomeLine`.
 - 2026-08-16 — An owed approval renders at the tool marker where the evidence is, not in a gutter — the chat has no gutter, and putting the decision beside its evidence is R3's spirit.
 - 2026-08-16 — A dangling target pin wears the ALARM: the pin is a claim ("this chat acts against session X") and the world no longer contains X, so the claim disagrees with reality — the drift family's top rank. Counter-reading (nothing the *model* said is contradicted) would fall back to caution; one line in `TARGET_RAIL_COLOR` (`Lens.tsx`).
+- 2026-08-25 — `/chat` is a route store: `workbench/store.ts` owns the hydrated-then-SSE `WorkbenchState` slice, search/page atoms, and single-flight verbs; provider refs and private loading/error/thread state died. The remaining refs include two DOM measurements, one DOM file-input handle, and scoped safety/disclosure state; the World cache is `page/world-cache`. PROVEN[deterministic, `234901e`]: `vp test src/workbench src/components src/routes` 7 files / 34 tests; direct TypeScript 6.0.3 had no W4-B diagnostics (the shared lane was temporarily red only in concurrent `family/**` and `takeoff/**` edits).
 
 ### Local runtime / auth shape (promote to ADR only if adopted)
 
@@ -81,6 +84,8 @@ restated here.
 - 2026-07-06 — WebMCP as a bet today: W3C draft (Feb 2026), Chrome 149 origin trial (June 2026), discovery/invocation partly TODO, consumers are Gemini-in-Chrome and an inspector extension. Watch it; the shared toolset shape means zero rework when it matures.
 - 2026-08-16 — `components/document-chips.tsx` (391 LOC): dead, zero importers, deleted.
 
+- 2026-08-25 — One object-valued `page/lens-intent` atom for `inspectKey` and `following`: the `Lens` controller wrote fresh identities during its subscribed effect and caused an unbounded React notification loop. Replaced by primitive atoms.
+
 ## Owed
 
 - Fan rvt lifecycle events and human route edits into every bound Pea thread as document events.
@@ -91,6 +96,8 @@ restated here.
 - Upgrade `@mastra/core` 1.61.0 to a release that contains Mastra commit `9ee8120c` / PR #22262. One native `approveTool` call resumes both internal workflows and logs one warning from each because their `shouldPersistSnapshot` excludes `running`; upstream sets `allowUnclaimedResumes: true` at `packages/core/src/loop/workflows/agentic-loop/index.ts:90` and `agentic-execution/index.ts:111`. See [cleanroom owed](pea-cleanroom.html#owed).
 - First-class Mesa UI remains owed: auth and mount health; a world chooser only after more than one real world exists; checkpoint, history, and diff controls; and reopen and teardown. Gate all of it on one real FUSE plus `bwrap` round-trip. The current census estimates 550-990 UI LOC, excluding CLI ownership, recovery, and Linux deployment work. This range is not an implementation promise. See [Mesa owed](pea-cleanroom.html#owed-mesa).
 - Migrate non-Pea Revit web route capability gates: `/instances` and `/ops` are the falsifier; keep every eager Revit query and action behind literal `capabilities.revit === true`. Estimated 75-160 production+test LOC. See [cleanroom owed](pea-cleanroom.html#owed).
+- 2026-08-25 — `withThread` (`routes/-with-thread.tsx`) creates a thread during route load when none exists — a GET that writes. Rule whether landing may mint or must show a "pick/create a thread" state (agent ledger owns the transport).
+- 2026-08-25 — Every human route command (`open`, `bind`, `save`…) is echoed into the thread as a `YOU` turn ("Human command open on settings succeeded" ×9 in thread `28c3e9ac`, 03:37 and 12:41; PROVEN[browser, worktree host 5180]). A command is a receipt on the route document, not a conversational turn; render it as a receipt line (or a collapsed system event), never as the human speaking. Pre-existing before the route-store cutover.
 - Compressed agent-facing capability/document maps are still unbuilt — the `Toon` library landed but nothing generates a compressed host-capability or Revit-document map. The two specs (`plans/agent-schema-compression.plan.md` — renderer + host-capability map; `plans/revit-document-progressive-discovery.plan.md` — project/schedule/parameter/electrical map shapes) were deleted 2026-08-17 and survive in git history. Verification bar in both, and the part worth keeping: a compressed map must lead Pea to the same next operation a developer would pick from the C# client docs, and must not hide truncation or absence.
 - Request-shape normalization is unfinished: some schedule/query requests still wrap separate query objects while newer RevitData contracts use the `Filter / Scope / References / Projection / Budget / Options` envelope. Do not block compression on it; use the map to surface the inconsistencies.
 - Open ladder questions: is active-view context a standalone operation or folded into document-session context; what is the smallest useful visible-context summary for a graphical view without becoming a model scrape; how much project-browser structure is exposed directly vs as search/navigation projections; which UI-session facts can be mirrored in a DA-friendly document-owned shape vs staying desktop-bridge-only.

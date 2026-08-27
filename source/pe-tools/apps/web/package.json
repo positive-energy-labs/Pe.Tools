@@ -26,7 +26,6 @@
     "@pe/schema-core": "workspace:*",
     "@tanstack/highlight": "catalog:",
     "@tanstack/react-devtools": "0.10.11",
-    "@tanstack/react-form": "catalog:",
     "@tanstack/react-hotkeys": "catalog:",
     "@tanstack/react-query": "5.101.4",
     "@tanstack/react-query-devtools": "5.101.4",

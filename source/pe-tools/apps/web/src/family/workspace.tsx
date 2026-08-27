@@ -83,7 +83,7 @@
  *   blind (SURFACE-PHILOSOPHY §2). Per-cell capture/apply stay in the drill-in.
  *
  * ── WHAT IS AND IS NOT WIRED (phase B, 2026-08-17) ──────────────────────────────────────────
- * TWO LANES, ONE SHAPE. `useFamilyLane` answers the only question that separates them — is a
+ * TWO LANES, ONE SHAPE. The family store answers the only question that separates them — is a
  * family document open in `route:settings`? — and the page below it renders ONE `PageWorld` either
  * way. Nothing in this file asks whether a host exists.
  *
@@ -116,7 +116,8 @@
  * and the proposals with their accept/deny (they need `route:settings` field
  * proposals, which the projection deliberately does not invent), and the doc pane's parse.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useAtomValue } from "@effect/atom-react";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -131,26 +132,15 @@ import {
 } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
-import { Sentence } from "#/components/sentence";
 import { Pane, PaneWorkspace } from "#/components/ui/pane";
-import { AddressingBar } from "#/components/lang/addressing-bar";
 import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";
-import {
-  BUILD_OUTCOME_UNKNOWN,
-  BUILD_VERB,
-  BuildStrip,
-  buildOutputPath,
-  buildReceiptLine,
-  buildRefusals,
-  readBuildReceipt,
-  type BuildFacts,
-  type BuildRefusal,
-} from "#/family/build";
+import { BUILD_VERB, BuildStrip, buildOutputPath } from "#/family/build";
 import { ProposalCard, SpecSheet, SpecText } from "#/family/doc-pane";
 import { NavStateCell, ProposedCell } from "#/family/marks";
-import { FAMILY_MODULE } from "#/family/host";
-import { useFamilyLane } from "#/family/lane";
+import { FAMILY_PRODUCT, type FamilySlot } from "#/family/product";
+import type { FamilyStore } from "#/family/store";
+import { useFleet } from "#/host/fleet";
 import {
   AGREEMENT_TONE,
   MARK,
@@ -163,7 +153,6 @@ import {
   draftValueAt,
   effective,
   ghostRows,
-  initialDraft,
   isFormula,
   isUnsavedAt,
   paramNameFor,
@@ -171,18 +160,14 @@ import {
   partsInFocus,
   pinnedSort,
   rowAgreement,
-  savedFrom,
   savedValueAt,
   sortDirOf,
   type CellVerdict,
   type Draft,
   type Focus,
-  type Overlay,
   type PRow,
   type PageWorld,
-  type SavedProfile,
 } from "#/family/model";
-import { draftToPatches } from "#/family/project";
 import {
   boundParam,
   type GeomMeta,
@@ -190,97 +175,76 @@ import {
   type ProtoProposal,
 } from "#/family/world";
 import { cn } from "#/lib/utils";
+import { TargetingHead } from "#/targeting/head";
+import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
+import { worldTrunk } from "#/targeting/world";
 
-type DocMode = "text" | "sheet";
-
-export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string }) {
+export function FamilyWorkspace({
+  store,
+  requestedFamily,
+}: {
+  store: FamilyStore;
+  requestedFamily?: string;
+}) {
+  const profile = useAtomValue(store.atoms.profile);
+  const stage = useAtomValue(store.atoms.routeStage);
   /** WHICH LANE — the one question that separates them, asked once (see `#/family/lane`). */
-  const lane = useFamilyLane();
-  const { world, store } = lane;
+  const lane = useAtomValue(store.atoms.lane);
+  const world = lane.world;
   /**
    * The last-read document, as a draft. It is the page's record of the DISK and the baseline the
    * reverse projection diffs against — so a save writes what moved and nothing else, and a draft
    * back at its baseline honestly has nothing to save.
    */
-  const savedDraft = useMemo(() => initialDraft(world), [world]);
-
-  const [draft, setDraft] = useState<Draft>(() => initialDraft(world));
+  const draft = useAtomValue(store.atoms.draft);
+  const setDraft = store.actions.setDraft;
   /** THE PSEUDO-DIMENSION. PAGE state, never the URL: which reading you are looking through is not
    * a place, and a link that restored someone else's overlay would be claiming it is. Draft is the
    * default because it is the only one you can work in. */
-  const [overlay, setOverlay] = useState<Overlay>("draft");
+  const overlay = useAtomValue(store.atoms.overlay);
+  const setOverlay = store.actions.setOverlay;
   /** The disk, per cell. Seeded from the document — it starts saved — and re-snapshotted on save. */
-  const [saved, setSaved] = useState<SavedProfile>(() => savedFrom(initialDraft(world)));
+  const saved = useAtomValue(store.atoms.saved);
   /** Table state is OWNED here, because the sort direction is an input to the ghost-pinning
    * workaround — the sort key has to know which way it is about to be read. */
-  const [tableState, setTableState] = useState<MasterTableState>(() => ({
-    filters: {},
-    sorts: [],
-    query: "",
-  }));
-  const [drillState, setDrillState] = useState<MasterTableState>(() => ({
-    filters: {},
-    sorts: [],
-    query: "",
-  }));
-  const [docMode, setDocMode] = useState<DocMode>("text");
-  const [docZoom, setDocZoom] = useState(1);
-  const [drillType, setDrillType] = useState<string | null>(null);
-  const [stageType, setStageType] = useState<string>(
-    world.typeNames[1] ?? world.typeNames[0] ?? "Standard",
-  );
-  const [focus, setFocus] = useState<Focus>(null);
-  const [focusedProposal, setFocusedProposal] = useState<string | null>(null);
+  const tableState = useAtomValue(store.atoms.table);
+  const setTableState = store.actions.setTable;
+  const drillState = useAtomValue(store.atoms.drill);
+  const setDrillState = store.actions.setDrill;
+  const docMode = useAtomValue(store.atoms.docMode);
+  const setDocMode = store.actions.setDocMode;
+  const docZoom = useAtomValue(store.atoms.docZoom);
+  const setDocZoom = store.actions.setDocZoom;
+  const drillType = useAtomValue(store.atoms.drillType);
+  const setDrillType = store.actions.setDrillType;
+  const stageType = useAtomValue(store.atoms.stageType);
+  const setStageType = store.actions.setStageType;
+  const focus = useAtomValue(store.atoms.focus);
+  const setFocus = store.actions.setFocus;
+  const focusedProposal = useAtomValue(store.atoms.focusedProposal);
+  const setFocusedProposal = store.actions.setFocusedProposal;
   /** The row whose proposals were last LOCATED from the table. Sticky — hover comes and goes, but
    * "I clicked this row's rail dot" has to survive the pointer leaving the row on its way to the
    * sidebar, or the cards would go dark exactly as you reached for them. */
-  const [pinnedParam, setPinnedParam] = useState<string | null>(null);
-  const [anatomyCollapsed, setAnatomyCollapsed] = useState(false);
-  const [receipt, setReceipt] = useState<{ text: string; atMs: number } | null>(null);
-  const [target, setTarget] = useState("");
+  const pinnedParam = useAtomValue(store.atoms.pinnedParam);
+  const setPinnedParam = store.actions.setPinnedParam;
+  const anatomyCollapsed = useAtomValue(store.atoms.anatomyCollapsed);
+  const setAnatomyCollapsed = store.actions.setAnatomyCollapsed;
+  const target = useAtomValue(store.atoms.target);
   /**
    * What the doc pane's LOWER HALF is showing. One slot, two subjects: a constituent's
    * non-bindable metadata, or a parameter's family-level value. They share the slot because they
    * are the same question asked twice — "what is true of this thing itself, rather than of it at
    * some type" — and because a page with two inspectors has no answer to which one you meant.
    */
-  const [inspect, setInspect] = useState<
-    { kind: "part"; slug: string } | { kind: "param"; name: string } | null
-  >(null);
+  const inspect = useAtomValue(store.atoms.inspect);
+  const setInspect = store.actions.setInspect;
   /** The ghost row whose bind picker is open. One at a time; picking or cancelling closes it. */
-  const [binding, setBinding] = useState<{ slug: string; property: string } | null>(null);
+  const binding = useAtomValue(store.atoms.binding);
+  const setBinding = store.actions.setBinding;
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const say = (text: string) => setReceipt({ text, atMs: Date.now() });
-
-  /**
-   * RE-SEED ON A NEW REVISION, and only then.
-   *
-   * `lane.seedKey` is "which document, at which version token". It changes when you pick a
-   * different document and when a save bumps the token — both of which mean the draft you were
-   * holding describes something that is no longer in front of you. It does NOT change on an
-   * unrelated re-render, which is what keeps work in progress alive.
-   *
-   * The ref rather than the effect's dependency list is load-bearing: React may run an effect twice
-   * for the same value, and a re-seed that fired twice would throw away the edit you made between.
-   */
-  const seededRef = useRef(lane.seedKey);
-  useEffect(() => {
-    if (seededRef.current === lane.seedKey) return;
-    seededRef.current = lane.seedKey;
-    const next = initialDraft(world);
-    setDraft(next);
-    setSaved(savedFrom(next));
-    setStageType(world.typeNames[1] ?? world.typeNames[0] ?? "");
-    // Modes that named something in the OLD document cannot survive it.
-    setDrillType(null);
-    setInspect(null);
-    setBinding(null);
-    setFocus(null);
-    setFocusedProposal(null);
-    setPinnedParam(null);
-    setOverlay("draft");
-  }, [lane.seedKey, world]);
+  const say = store.actions.say;
 
   // Esc unwinds ONE thing, innermost first: the bind picker, then the inspector, then the
   // drill-in. Each is a mode of a pane rather than a place, so leaving one must never feel like
@@ -521,27 +485,12 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     say(`applied ${count} value${count === 1 ? "" : "s"} into the live family`);
   };
 
-  const [saving, setSaving] = useState(false);
-
-  /**
-   * OPEN — the lane switch, and the only verb on this page that changes which file the page IS.
-   * It runs the settings lifecycle's `open`, which preserves the field trichotomy: proposals pea
-   * already made against a document survive you looking at another one and coming back.
-   */
-  const openDocument = (relativePath: string) =>
-    void (async () => {
-      const opened = await store.settingsCommand("open", {
-        documentId: { ...FAMILY_MODULE, relativePath },
-      });
-      if (!opened.ok)
-        say(
-          `Could not open ${relativePath} — ${opened.hint ?? opened.error ?? "the host refused, without saying why"}`,
-        );
-    })();
+  const busy = useAtomValue(store.atoms.busy);
 
   /** The host's own schema verdict on the SAVED file. Only meaningful on the live lane: the fixture
    * has no schema behind it, and a green chip there would be claiming a check nobody ran. */
-  const validation = lane.document ? (store.snapshot?.validation ?? null) : null;
+  const snapshot = useAtomValue(store.atoms.snapshot);
+  const validation = lane.document ? (snapshot?.validation ?? null) : null;
   const validationSays = (validation?.issues ?? [])
     .slice(0, 3)
     .map((issue) =>
@@ -561,46 +510,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * LIVE: the draft is diffed into staged field patches, staged onto `route:settings`, and the
    * host's own `save` writes them under the version token captured at open. Nothing is folded in
    * here on success: the snapshot comes back over SSE with a new token, the lane re-projects, and
-   * the re-seed effect above rebuilds the draft from what actually landed. That is the difference
+   * the store's version-token guard rebuilds the draft from what actually landed. That is the difference
    * between a surface that shows you the write and one that shows you its own optimism.
    */
-  const save = async () => {
-    if (!lane.document) {
-      setSaved(savedFrom(draft));
-      setDraft((previous) => ({ ...previous, dirty: false }));
-      say(`saved ${world.path} — ${unsavedCount} value${unsavedCount === 1 ? "" : "s"} written`);
-      return;
-    }
-    const patches = draftToPatches(lane.document.model, draft, savedDraft);
-    if (patches.length === 0) {
-      say(
-        `Nothing to write — every value in the draft already matches ${lane.document.relativePath} on disk.`,
-      );
-      return;
-    }
-    setSaving(true);
-    try {
-      // The host refuses in its own words, and those words are the teaching channel — a conflict, a
-      // schema failure and a field flagged for attention are three different refusals, and
-      // flattening them into "save failed" would be the surface throwing away the only help there is.
-      const staged = await store.applyFields(patches);
-      if (!staged.ok) {
-        say(`Refused while staging — ${staged.hint ?? staged.error ?? "the document rejected it"}`);
-        return;
-      }
-      const written = await store.settingsCommand("save");
-      if (!written.ok) {
-        say(`Refused — ${written.hint ?? written.error ?? "save failed"}`);
-        return;
-      }
-      say(
-        `saved ${lane.document.relativePath} — ${patches.length} field${patches.length === 1 ? "" : "s"} written`,
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
   // ── THE HOST CROSSINGS (phase D) ──────────────────────────────────────────────────────────────
   //
   // Two verbs, and they are the only two on this page that talk to Revit. Everything else above is
@@ -618,114 +530,14 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
   // `family.editor.apply` is deliberately NOT wired: the profile-wins direction is a later phase,
   // and the apply verbs above stay page-local and honest about it.
 
-  const [capturing, setCapturing] = useState(false);
+  const capturing = busy?.id === "capture";
   /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
-  const [armedBuild, setArmedBuild] = useState<{ token: string | null; reason: string } | null>(
-    null,
-  );
-  const [building, setBuilding] = useState(false);
-  /** The host's own last word on a build, or a latched unknown outcome. Outranks the predicates. */
-  const [buildSaid, setBuildSaid] = useState<BuildRefusal | null>(null);
-
-  /** Fields staged onto `route:settings` but not yet written — unsaved by another route. */
-  const stagedCount = useMemo(
-    () => Object.values(store.fields).filter((field) => field.staged != null).length,
-    [store.fields],
-  );
-
-  /** Everything the ceremony reads, in one flat record. The predicates live in `#/family/build`. */
-  const buildFacts = useMemo<BuildFacts>(
-    () => ({
-      relativePath: lane.document?.relativePath ?? null,
-      versionToken: lane.document?.versionToken ?? null,
-      validation,
-      unsavedCount,
-      stagedCount,
-      boundTarget: store.boundTarget,
-      armedToken: armedBuild?.token ?? null,
-    }),
-    [lane.document, validation, unsavedCount, stagedCount, store.boundTarget, armedBuild],
-  );
-
-  /**
-   * A FRESH READ IS NOT A NEW DOCUMENT. Evidence arriving — from either crossing — has to reach the
-   * LIVE half of the draft, and must not touch the authored half: `lane.seedKey` deliberately does
-   * not move for a capture, because re-seeding would throw away edits in progress. A live value is
-   * a READING of Revit, not part of what you are editing, so it is folded in on its own.
-   */
-  const evidenceStamp = store.evidence?.from.capturedAt ?? null;
-  const liveValues = world.live?.values ?? null;
-  const evidenceRef = useRef(evidenceStamp);
-  useEffect(() => {
-    if (evidenceRef.current === evidenceStamp) return;
-    evidenceRef.current = evidenceStamp;
-    setDraft((previous) => ({ ...previous, live: structuredClone(liveValues ?? {}) }));
-  }, [evidenceStamp, liveValues]);
-
-  const captureLive = async () => {
-    setCapturing(true);
-    try {
-      const read = await store.familyCommand("capture_evidence", {});
-      if (!read.ok) {
-        // The host's words verbatim — "is a family document active in the bound session?" IS the
-        // exit, and paraphrasing it into "capture failed" would throw away the only help there is.
-        say(
-          `Could not read the live family — ${read.hint ?? read.error ?? "the host refused, without saying why"}`,
-        );
-        return;
-      }
-      const payload = (read.result ?? {}) as { familyName?: string; parameterCount?: number };
-      say(
-        `read ${payload.familyName ?? "the live family"} out of Revit — ${payload.parameterCount ?? 0} parameters; the ⇄ live overlay is now stamped with this read`,
-      );
-    } finally {
-      setCapturing(false);
-    }
-  };
-
-  /**
-   * THE COMMIT. Fires only from the armed strip, and only once its own predicates are silent — but
-   * it re-checks them here anyway, because the strip's arming is page state and this is the write.
-   */
-  const runBuild = async () => {
-    const relativePath = lane.document?.relativePath;
-    if (relativePath == null || armedBuild == null) return;
-    if (buildRefusals({ ...buildFacts, armedToken: armedBuild.token }).length > 0) return;
-    setBuilding(true);
-    setBuildSaid(null);
-    try {
-      const built = await store.familyCommand("build_evidence", {
-        documentId: { ...FAMILY_MODULE, relativePath },
-      });
-      if (!built.ok) {
-        const says = built.hint ?? built.error ?? "the host refused, without saying why";
-        setBuildSaid({ code: "host", says });
-        say(`Build refused — ${says}`);
-        return;
-      }
-      const receipt = readBuildReceipt(built.result);
-      if (receipt == null) {
-        // OUTCOME UNKNOWN, latched. `build_evidence` mutates outside the page — it writes a file —
-        // so an answer with no receipt is neither a success nor a refusal, and claiming either
-        // would be the surface inventing a fact about the disk.
-        setBuildSaid({ code: "unknown", says: BUILD_OUTCOME_UNKNOWN });
-        say(BUILD_OUTCOME_UNKNOWN);
-        return;
-      }
-      // Disarm on the way out: the plan was spent, and a strip still armed against a token the
-      // build has already consumed would invite a second, differently-named .rfa.
-      setArmedBuild(null);
-      say(buildReceiptLine(receipt, new Date().toLocaleTimeString()));
-    } finally {
-      setBuilding(false);
-    }
-  };
-
-  /** Re-arm against the file as it now stands. Writes nothing — the one exit every refusal shares. */
-  const replanBuild = () => {
-    setBuildSaid(null);
-    setArmedBuild({ token: lane.document?.versionToken ?? null, reason: "" });
-  };
+  const armedBuild = useAtomValue(store.atoms.armedBuild);
+  const building = busy?.id === "build";
+  const failure = useAtomValue(store.atoms.failure);
+  /** A latched unknown outcome. Host failures stay on the core's failure channel. */
+  const buildFacts = useAtomValue(store.atoms.buildFacts);
+  const buildOutcome = useAtomValue(store.atoms.buildOutcome);
 
   // ── the geometry verbs ────────────────────────────────────────────────────────────────────────
 
@@ -1855,7 +1667,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               label="capture live"
               busy={capturing}
               disabled={lane.document == null || capturing}
-              onClick={() => void captureLive()}
+              onClick={() => void store.actions.capture().catch(() => undefined)}
               reason={
                 lane.document == null
                   ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
@@ -1867,9 +1679,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
               tone="commit"
               busy={building}
               disabled={lane.document == null || building}
-              onClick={() =>
-                setArmedBuild({ token: lane.document?.versionToken ?? null, reason: "" })
-              }
+              onClick={store.actions.armBuild}
               reason={
                 lane.document == null
                   ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
@@ -1888,19 +1698,14 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         className="mx-2 mt-2 shrink-0"
         armed={armedBuild}
         building={building}
-        said={buildSaid}
+        said={buildOutcome}
         facts={buildFacts}
         familyName={world.familyName}
         count={world.paramRows.length}
-        onReasonChange={(reason) =>
-          setArmedBuild((previous) => (previous == null ? previous : { ...previous, reason }))
-        }
-        onCommit={() => void runBuild()}
-        onCancel={() => {
-          setArmedBuild(null);
-          setBuildSaid(null);
-        }}
-        onReplan={replanBuild}
+        onReasonChange={store.actions.setBuildReason}
+        onCommit={() => void store.actions.build().catch(() => undefined)}
+        onCancel={store.actions.cancelBuild}
+        onReplan={store.actions.armBuild}
       />
       {drillIn ?? crossType}
     </Pane>
@@ -2295,72 +2100,83 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     </Pane>
   );
 
+  const picker = useAtomValue(store.atoms.picker);
+  const receipt = useAtomValue(store.atoms.receipt);
+  const fleet = useFleet();
+  const feeds = {
+    world: worldTrunk.feed(fleet),
+    profile: useAtomValue(store.feeds.profile),
+  };
+  const product = FAMILY_PRODUCT(feeds, {
+    open: store.commandVerb("open", () => ({
+      documentId: { moduleKey: "FamilyFoundry", rootKey: "models", relativePath: profile },
+    })),
+    ...store.verbs,
+  });
+  const bindingState: BindingState<FamilySlot> = {
+    bound: { world: target || null, profile: profile || null },
+    multi: {},
+    stage,
+  };
+  const setBindingState = useCallback(
+    (patch: BindingPatch<FamilySlot>) => {
+      const nextWorld = patch.bound?.world ?? null;
+      const nextProfile = patch.bound?.profile ?? null;
+      if (nextWorld !== null && nextWorld !== target)
+        void store.actions.bind(nextWorld).catch(() => undefined);
+      if (nextProfile !== null && nextProfile !== profile) void store.actions.open(nextProfile);
+      const nextStage = patch.stage === "evidence" ? "evidence" : "author";
+      if (patch.stage && nextStage !== stage) void store.actions.setStage(nextStage);
+    },
+    [profile, stage, store, target],
+  );
+  const bindings = useBindings(
+    product,
+    bindingState,
+    setBindingState,
+    picker.open,
+    (open) => store.actions.setPicker((previous) => ({ ...previous, open })),
+    picker.level,
+    (level) => store.actions.setPicker((previous) => ({ ...previous, level })),
+    picker.query,
+    (query) => store.actions.setPicker((previous) => ({ ...previous, query })),
+  );
+  const runner = useRunner(product, bindings, busy?.id ?? null);
+
   return (
     <main className="flex h-screen min-h-0 flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
-      {/* ── ONE head rail (lang AddressingBar — the five-slot rule this head proved).
-             Everything else — the overlay switch, the crossings, the doc's own verbs — lives
-             in the pane that owns it, so no fact and no verb is ever far from the thing it
-             describes (SURFACE-PHILOSOPHY §4). ── */}
-      <AddressingBar
-        name="family"
-        sentence={
-          <Sentence
-            prefix={
-              openProposals.length > 0 ? `${openProposals.length} proposals against` : "editing"
-            }
-            prefixTone={openProposals.length > 0 ? "awaiting" : "rest"}
-            documentLabel={world.path}
-            /* THE DOCUMENT SLOT IS THE LANE SWITCH — there is no separate mode toggle, which is
-               the Sentence's own law. The list is always what the bound session can SEE, and the
-               label is always what the page is READING: on the fixture lane those disagree, which
-               is exactly the honest state (the label names the fixture, the list offers the way
-               out). Picking one runs settings `open`; nothing else on the page changes shape. */
-            documents={store.documents}
-            onPickDocument={openDocument}
-            documentsEmpty="No family.json is visible from here — bind a world in the clause to the right, or author one under FamilyFoundry/models. Until one is open this page reads its declared fixture, and says so."
-            slots={[
-              {
-                key: "family",
-                joiner: "against",
-                text: world.live ? `${world.live.familyName} in ${world.live.worldLabel}` : null,
-                placeholder: "nothing live",
-                options: null,
-                title:
-                  "The family open in the bound Revit session — what the ⇄ live overlay reads and the only thing apply writes into. Without it the profile still edits; it just cannot disagree with anything.",
-              },
-            ]}
-            target={target}
-            onBind={(selector) => {
-              setTarget(selector ?? "");
-              // Pointing the page at a different world changes WHICH documents it can see, so the
-              // list is re-read in the same beat rather than going quietly stale.
-              store.refreshDocuments();
-            }}
-            receipt={receipt}
-          />
+      <TargetingHead
+        product={product}
+        b={bindings}
+        runner={runner}
+        receipt={
+          failure != null ? (
+            <OutcomeLine kind="error" label={`${failure.verb} failed`} says={failure.message} />
+          ) : lane.parseError != null ? (
+            <OutcomeLine
+              kind="error"
+              label="the open document will not parse"
+              says={`${snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
+            />
+          ) : requestedFamily != null ? (
+            <OutcomeLine
+              kind="advisory"
+              label={`?family=${requestedFamily} ignored`}
+              says="this surface opens an authored family.json, not a placed element — pick the profile"
+            />
+          ) : receipt != null ? (
+            <OutcomeLine kind="receipt" label={receipt.text} />
+          ) : undefined
         }
-        facts={
+        aside={
           <>
-            {world.live && (
-              <FactChip
-                tone={lane.document?.evidenceStale ? "caution" : "meta"}
-                title={
-                  lane.document?.evidenceStale
-                    ? "STALE — this read was stamped with a different revision of the document than the one you are editing, so every claim under the ⇄ live overlay describes a family that has moved since. Capture again before trusting it."
-                    : "How long ago the live family was read. Every claim under the ⇄ live overlay is only as true as this number — an old read is a weaker claim, not a wrong one."
-                }
-              >
-                live · read {world.live.readAgo}
-                {lane.document?.evidenceStale ? " · stale" : ""}
-              </FactChip>
-            )}
             {validation && (
               <FactChip
                 tone={validation.isValid ? "done" : "caution"}
                 title={
                   validation.isValid
-                    ? "The host validated this document against its schema on the last read or save, and it passed."
-                    : `The host reports ${validation.issues.length} schema issue(s) in the saved document: ${validationSays}`
+                    ? "The host validated this document against its schema on the last read or save."
+                    : `The host reports ${validation.issues.length} schema issue(s): ${validationSays}`
                 }
               >
                 {validation.isValid
@@ -2370,69 +2186,19 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
             )}
             <FactChip
               tone={draft.dirty ? "caution" : "meta"}
-              title={
-                draft.dirty
-                  ? "The profile document has changes that are not on disk — an edit, an accepted proposal, or a capture. Nothing about Revit is implied by this; it is a fact about the file."
-                  : "The profile on disk matches what you are looking at. Edits and accepted proposals flip this the moment they land."
-              }
+              title="Whether the family profile has edits that are not saved to its document."
             >
               {draft.dirty ? `unsaved draft · ${unsavedCount}` : "saved"}
             </FactChip>
+            {!lane.document && (
+              <FactChip
+                dashed
+                title="This page reads the checked-in family fixture. Bind a session and pick a profile to replace it with host state."
+              >
+                fixture · no host
+              </FactChip>
+            )}
           </>
-        }
-        verb={
-          <Verb
-            label="save profile"
-            tone="commit"
-            busy={saving}
-            onClick={() => void save()}
-            disabled={!draft.dirty || saving}
-            reason={
-              !draft.dirty
-                ? "Nothing to save — the document already matches the file."
-                : lane.document
-                  ? `Stage every value you moved and write them into ${lane.document.relativePath} through route:settings, under the version token this snapshot was read at. If someone else saved first the write is REFUSED rather than merged, and the reason lands on the sentence verbatim. It touches nothing in Revit — that is what apply is for.`
-                  : `Write the profile back to ${world.path}. This commits the DOCUMENT — it touches nothing in Revit, which is what apply is for.`
-            }
-          />
-        }
-        advisory={
-          /* Two advisories, and only ever one at a time — the second is strictly worse news.
-             A document that is OPEN but unparseable must never quietly become the fixture. */
-          lane.parseError != null ? (
-            <OutcomeLine
-              kind="error"
-              label="the open document will not parse"
-              says={`${store.snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, NOT your file; fix the JSON and re-read.`}
-            />
-          ) : requestedFamily != null ? (
-            <OutcomeLine
-              kind="advisory"
-              label={`?family=${requestedFamily} ignored`}
-              says="this surface opens an authored family.json, not a placed element — pick the document in the sentence"
-            />
-          ) : undefined
-        }
-        seam={
-          lane.document ? (
-            /* THE LIVE LANE'S CHIP. Not dashed: nothing is standing in. It names what you are
-               actually editing and the token the next save will be guarded by, because "which
-               revision" is the fact a save can refuse over. */
-            <FactChip
-              title={`LIVE — reading ${lane.document.relativePath} through route:settings. The version token guards the next save: if the file moved underneath you, the write is REFUSED rather than merged. Capture, apply and pea's proposals stay page-local.`}
-            >
-              {lane.document.versionToken
-                ? `live · v${lane.document.versionToken}`
-                : "live · untokened"}
-            </FactChip>
-          ) : (
-            <FactChip
-              dashed
-              title="FIXTURE LANE, declared rather than fallen back to. Every value, proposal and live reading on this page comes from the checked-in world in `src/family/world.ts`; no host, no store, no network, and every verb rewrites page-local state. What replaces it: route:settings for the document, family.editor.snapshot/apply for the live half, and the grounded-doc camera for the sheet mode."
-            >
-              fixture · no host
-            </FactChip>
-          )
         }
       />
 

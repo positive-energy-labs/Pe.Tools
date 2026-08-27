@@ -18,6 +18,7 @@
  */
 
 import type { Custody, Lane } from "@pe/host-contracts/pe-revit-contract";
+import { addressSchema, type Address } from "@pe/agent-contracts";
 
 export type { Custody, Lane };
 
@@ -36,8 +37,8 @@ export interface SessionFacts {
    * already refuses every mutation on `observed`, and a second guard here can only disagree.
    */
   custody: Custody;
+  activeDocumentId?: string;
   activeDocumentTitle?: string;
-  activeDocumentIsFamilyDocument?: boolean;
   openDocumentCount: number;
   /** activeDocumentObservedAtUnixMs from the bridge snapshot — an observation time, not computed staleness. */
   observedAtUnixMs?: number;
@@ -115,9 +116,16 @@ export function mintSelector(session: SessionFacts, all: readonly SessionFacts[]
   return String(session.processId);
 }
 
+/** Mint the active Revit document identity. The world remains only the call target. */
+export function documentAddress(session: SessionFacts): Address | null {
+  return addressSchema.safeParse(session.activeDocumentId).data ?? null;
+}
+
 /** Wire entry (bridge.sessions.list) → SessionFacts. Disconnected entries are not targets. */
 export function fromBridgeSessions(
   entries: readonly {
+    activeDocumentCloudModelGuid?: string | null;
+    activeDocumentPath?: string | null;
     sessionId: string;
     connected: boolean;
     lane?: string | null;
@@ -125,7 +133,6 @@ export function fromBridgeSessions(
     custody?: string | null;
     processId?: number | null;
     activeDocumentTitle?: string | null;
-    activeDocumentIsFamilyDocument?: boolean | null;
     activeDocumentObservedAtUnixMs?: number | null;
     openDocumentCount: number;
   }[],
@@ -141,16 +148,11 @@ export function fromBridgeSessions(
       // The broker discloses custody; an entry that predates the field is treated as observed —
       // the read-only reading, which is the safe one to be wrong about.
       custody: CUSTODIES.find((c) => c === e.custody) ?? "observed",
+      activeDocumentId: e.activeDocumentCloudModelGuid ?? e.activeDocumentPath ?? undefined,
       activeDocumentTitle: e.activeDocumentTitle ?? undefined,
-      activeDocumentIsFamilyDocument: e.activeDocumentIsFamilyDocument ?? undefined,
       observedAtUnixMs: e.activeDocumentObservedAtUnixMs ?? undefined,
       openDocumentCount: e.openDocumentCount,
     }));
-}
-
-/** Human label for a session: document first, process as fallback. */
-export function sessionLabel(session: SessionFacts): string {
-  return session.activeDocumentTitle ?? `Revit ${session.processId}`;
 }
 
 /** Short human phrase for a selector (chip text, tooltips). */

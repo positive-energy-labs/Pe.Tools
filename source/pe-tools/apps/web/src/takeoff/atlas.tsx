@@ -409,10 +409,12 @@ const PLAN_CHROME_PX = 34;
 
 export function Atlas({ store }: AtlasProps) {
   const world = useAtomValue(store.atoms.world);
-  const live = useAtomValue(store.atoms.source) === "live";
+  const views = useAtomValue(store.atoms.views);
+  const live = store.source === "live";
   const busyState = useAtomValue(store.atoms.busy);
   const busy = busyState ? `${busyState.id} · ${busyState.seconds}s queued/running` : null;
-  const geoReady = AsyncResult.isSuccess(useAtomValue(store.atoms.snapshot));
+  const snapshot = useAtomValue(store.atoms.snapshot);
+  const geoReady = AsyncResult.isSuccess(snapshot) && snapshot.value.bound;
   const actions = useMemo(() => createAtlasActions(store), [store]);
   const stageFilter = useAtomValue(store.atoms.stageFilter);
   const zoneKey = useAtomValue(store.atoms.zoneKey);
@@ -425,22 +427,18 @@ export function Atlas({ store }: AtlasProps) {
   const rows = useAtomValue(store.atoms.atlasRows);
   const visibleKeys = useAtomValue(store.atoms.visibleRows);
   const decided = useAtomValue(store.atoms.decisions);
-  const level = pageLevel || world.lanes[0]?.label || "";
+  // ponytail: one plan pane draws the first bound view; add comparison panes only if demanded.
+  const firstBoundLane = world.lanes.find((lane) => lane.view === views[0]);
+  const level = pageLevel || firstBoundLane?.label || world.lanes[0]?.label || "";
   const setStageFilter = (value: Stage | null) =>
     store.actions.setAtlasPage({ stageFilter: value });
   const setLevel = useCallback(
     (value: string) => store.actions.setAtlasPage({ level: value }),
     [store],
   );
-  const setZoneKey = (value: string | null) => {
-    store.actions.setAtlasPage({ zoneKey: value });
-    store.actions.focusZone(world.zones.find((zone) => zone.zone.key === value)?.zone.guid ?? "");
-  };
+  const setZoneKey = (value: string | null) => store.actions.setAtlasPage({ zoneKey: value });
   const setCursor = useCallback(
-    (value: string | null) => {
-      store.actions.setAtlasPage({ cursor: value });
-      store.actions.selectRoom(value ?? "");
-    },
+    (value: string | null) => store.actions.setAtlasPage({ cursor: value }),
     [store],
   );
   /** Where the per-room Manual J fields live: inline table columns (dense, whole-scope entry)

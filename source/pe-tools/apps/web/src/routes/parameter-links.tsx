@@ -12,6 +12,7 @@ import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { SidePane } from "#/components/ui/side-pane";
+import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
 import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
@@ -26,7 +27,13 @@ import { useRouteState } from "#/workbench/route-state";
  * Preview evaluates it without writing; Apply (human-only, freshness-gated) stores it and
  * reconciles the changed target parameters. Mirrors the /family-types route architecture.
  */
-export const Route = createFileRoute("/parameter-links")({ component: ParameterLinksRoute });
+export const Route = createFileRoute("/parameter-links")({
+  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
+    thread:
+      typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
+  }),
+  component: ParameterLinksRoute,
+});
 
 type CommandName = "refresh" | "preview" | "apply";
 
@@ -43,7 +50,13 @@ function profileHash(profile: ParameterLinkProfile | null): string {
 }
 
 function ParameterLinksRoute() {
-  const route = useRouteState(parameterLinksRouteState);
+  const documentAddress = useRouteDocumentAddress();
+  if (!documentAddress) return <RouteDocumentEmpty />;
+  return <ParameterLinksWorkspace documentAddress={documentAddress} />;
+}
+
+function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
+  const route = useRouteState(parameterLinksRouteState, { documentAddress });
   const document = route.slice;
   const stored = document?.profile ?? null;
   const remoteDraft = document?.draftProfile ?? null;
@@ -188,13 +201,9 @@ function ParameterLinksRoute() {
           <span className="flex items-center gap-2">
             <span
               className="t-value face-mono text-foreground"
-              title={
-                document?.binding.target
-                  ? `bound to ${document.binding.target}`
-                  : "no target document bound"
-              }
+              title="bound Revit document"
             >
-              {document?.binding.target ?? "unbound"}
+              {documentAddress}
             </span>
             {/* The write's safety model lives ON the arming strip below (its one home) — this
                 tip only orients. */}
@@ -311,7 +320,7 @@ function ParameterLinksRoute() {
                 <ArmingStrip
                   className="mb-4"
                   verb="apply"
-                  target={document?.binding.target ?? "unbound"}
+                  target={documentAddress}
                   count={evaluation?.changedWriteCount ?? 0}
                   planHash={profileHash(previewed ?? editing)}
                   reason={writeReason}
@@ -326,7 +335,6 @@ function ParameterLinksRoute() {
               <ProfileEditor
                 profile={editing}
                 disabled={busy != null || route.peaActive}
-                target={document?.binding.target ?? undefined}
                 onChange={onDraftChange}
               />
             </>

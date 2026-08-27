@@ -1,12 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import {
-  createWorkbenchState,
-  deriveActivity,
-  deriveOpActivity,
-  selectSentenceSnapshot,
-  type WorkbenchState,
-  type WorkbenchToolCall,
-} from "../src/index.ts";
+import { deriveActivity, deriveOpActivity, type WorkbenchToolCall } from "../src/index.ts";
 
 const call = (
   title: string,
@@ -57,57 +50,4 @@ test("tool map is total and parses string rawInput", () => {
   // unparseable / unknown fall back to working
   expect(deriveActivity(call("host_operation_call", '{"key":')).verb).toBe("working");
   expect(deriveActivity(call("mystery_tool")).verb).toBe("working");
-});
-
-const withRun = (state: WorkbenchState, patch: Partial<WorkbenchState>): WorkbenchState => ({
-  ...state,
-  ...patch,
-});
-
-test("sentence snapshot: idle → working(active tool) → asking(approval) → failed surfaces in lastCompleted", () => {
-  const base = createWorkbenchState();
-  expect(selectSentenceSnapshot(base).phase).toBe("idle");
-
-  const active = call(
-    "host_operation_call",
-    { key: "family.editor.open" },
-    { status: "in_progress" },
-  );
-  const working = withRun(base, {
-    uiStatus: { ...base.uiStatus, overall: { status: "running", activeToolCallId: "t1" } },
-    tools: { ...base.tools, calls: [active], activeToolCallIds: ["t1"], recentToolCallIds: [] },
-  });
-  const snapshot = selectSentenceSnapshot(working);
-  expect(snapshot.phase).toBe("working");
-  expect(snapshot.activity?.gerund).toBe("opening");
-
-  const asking = withRun(base, {
-    approvals: {
-      ...base.approvals,
-      requests: [
-        {
-          requestId: "a1",
-          sessionId: "s1",
-          toolCall: call("script_execute"),
-          options: [],
-          status: "pending",
-        },
-      ],
-    },
-  });
-  expect(selectSentenceSnapshot(asking).phase).toBe("asking");
-  expect(selectSentenceSnapshot(asking).activity?.gerund).toContain("scripting");
-
-  const failed = call("script_execute", undefined, {
-    status: "failed",
-    completedAt: "2026-07-16T00:00:00Z",
-  });
-  const afterFail = withRun(base, {
-    tools: { ...base.tools, calls: [failed], activeToolCallIds: [], recentToolCallIds: ["t1"] },
-  });
-  const relaxed = selectSentenceSnapshot(afterFail);
-  expect(relaxed.phase).toBe("idle");
-  expect(relaxed.lastCompleted).toEqual(
-    expect.objectContaining({ isError: true, completedAt: "2026-07-16T00:00:00Z" }),
-  );
 });

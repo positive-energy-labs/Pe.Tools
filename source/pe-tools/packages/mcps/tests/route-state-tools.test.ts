@@ -1,4 +1,3 @@
-import { MASTRA_THREAD_ID_KEY } from "@mastra/core/request-context";
 import { expect, test } from "vite-plus/test";
 
 import { routeCommand, routeStateApply, routeStateRead } from "../src/pea/route-state.ts";
@@ -7,7 +6,7 @@ type ExecutableTool = {
   execute?: (input: never, context: never) => Promise<unknown>;
 };
 
-test("route-state tools keep discovery shallow and scope detail and writes to the active thread", async () => {
+test("route-state tools keep discovery shallow and scope detail and writes to a document", async () => {
   // Explicit override: this test asserts URL routing, not host discovery (which requires a live
   // service file and would correctly fail without a running worktree host).
   const originalBaseUrl = process.env.PE_TOOLS_HOST_BASE_URL;
@@ -17,53 +16,43 @@ test("route-state tools keep discovery shallow and scope detail and writes to th
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
     calls.push({ method: init?.method ?? "GET", url: new URL(url) });
-    return Response.json({ ok: true });
+    return Response.json(
+      new URL(url).pathname === "/pe/route-state"
+        ? [{ route: "family-types", title: "Family Types", description: "Review values." }]
+        : { ok: true },
+    );
   }) as typeof globalThis.fetch;
 
-  const requestContext = {
-    get(key: string) {
-      if (key === "controller") return { threadId: "thread/controller" };
-      if (key === MASTRA_THREAD_ID_KEY) return "thread/fallback";
-      return undefined;
-    },
-  };
-  const context = { requestContext };
+  const doc = "C:\\Models\\projectA.rvt";
 
   try {
-    await execute(routeStateRead, {}, {});
-    await execute(routeStateRead, { route: "family-types" }, context);
+    const discovery = await execute(routeStateRead, {}, {});
+    await execute(routeStateRead, { route: "family-types", doc }, {});
     await execute(
       routeStateApply,
-      { route: "family-types", patches: [{ path: ["cells", "one", "proposal"], value: 1 }] },
-      context,
+      { route: "family-types", doc, patches: [{ path: ["cells", "one", "proposal"], value: 1 }] },
+      {},
     );
-    await execute(routeCommand, { route: "family-types", command: "refresh", input: {} }, context);
-    await execute(
-      routeStateRead,
-      { route: "parameter-links" },
-      {
-        requestContext: {
-          get: (key: string) => (key === MASTRA_THREAD_ID_KEY ? "thread/fallback" : undefined),
-        },
-      },
-    );
+    await execute(routeCommand, { route: "family-types", doc, command: "refresh", input: {} }, {});
+    await execute(routeStateRead, { route: "parameter-links", doc }, {});
 
     expect(
-      calls.map(({ method, url }) => [method, url.pathname, url.searchParams.get("threadId")]),
+      calls.map(({ method, url }) => [method, url.pathname, url.searchParams.get("doc")]),
     ).toEqual([
       ["GET", "/pe/route-state", null],
-      ["GET", "/pe/route-state/family-types", "thread/controller"],
-      ["POST", "/pe/agent/route-state/family-types/apply", "thread/controller"],
-      ["POST", "/pe/agent/route-state/family-types/command", "thread/controller"],
-      ["GET", "/pe/route-state/parameter-links", "thread/fallback"],
+      ["GET", "/pe/route-state/family-types", doc],
+      ["POST", "/pe/agent/route-state/family-types/apply", doc],
+      ["POST", "/pe/agent/route-state/family-types/command", doc],
+      ["GET", "/pe/route-state/parameter-links", doc],
     ]);
 
     const missing = await execute(routeStateRead, { route: "family-types" }, {});
     expect(missing).toMatchObject({
       isError: true,
-      content: expect.stringContaining("active Pea thread"),
+      content: expect.stringContaining("document address"),
     });
     expect(calls).toHaveLength(5);
+    expect(JSON.stringify(discovery)).not.toContain('"key"');
   } finally {
     globalThis.fetch = originalFetch;
     if (originalBaseUrl === undefined) delete process.env.PE_TOOLS_HOST_BASE_URL;

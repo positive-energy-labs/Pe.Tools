@@ -166,9 +166,15 @@ export namespace FamilyfoundryPlan {
     export type ParameterIdentityKind = "SharedGuid" | "BuiltInParameter" | "ParameterElement" | "NameFallback";
 
     export interface Response {
+      reading: Reading;
       planHash?: null | string;
       families: FamilyFoundryFamilyPlanData[];
       diagnostics: FamilyFoundryDiagnostic[];
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
     }
     export interface FamilyFoundryFamilyPlanData {
       familyId: number;
@@ -281,8 +287,7 @@ export namespace HostOpsCatalog {
       intent: string;
       costTier: string;
       visibility: string;
-      requiresActiveDocument: boolean;
-      supportedActiveDocumentKind: string;
+      needs: string;
       description: string;
       searchTerms: string[];
       requestExamples: HostOperationRequestExample[];
@@ -351,10 +356,16 @@ export namespace RevitApplyFamilyModel {
     export type FamilyModelEvidenceProvenance = "Exact" | "Inferred" | "Unresolved";
 
     export interface Response {
+      reading: Reading;
       familyName: string;
       outputPath: string;
       templatePath: string;
       evidence: FamilyModelEvidence;
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
     }
     export interface FamilyModelEvidence {
       typeNames: string[];
@@ -3124,10 +3135,16 @@ export namespace RevitDetailFamilyModel {
     export type FamilyModelEvidenceProvenance = "Exact" | "Inferred" | "Unresolved";
 
     export interface Response {
+      reading: Reading;
       familyName: string;
       modelJson: string;
       unmodeledCount: number;
       evidence: FamilyModelEvidence;
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
     }
     export interface FamilyModelEvidence {
       typeNames: string[];
@@ -4898,6 +4915,289 @@ export namespace SettingsSchema {
   }
 }
 
+/** Adopt Filled Regions as Zoning Regions and register their System tags in one transaction. */
+export namespace TakeoffsAdopt {
+  export namespace Req {
+    export interface Request {
+      view: string;
+      items: TakeoffAdoptItem[];
+    }
+    export interface TakeoffAdoptItem {
+      elementId: number;
+      name: string;
+      systemTag: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      adopted: TakeoffAdopted[];
+    }
+    export interface TakeoffAdopted {
+      elementId: number;
+      guid: string;
+    }
+  }
+}
+
+/** Read Filled Regions and their boundary loops from one named plan view. */
+export namespace TakeoffsCandidates {
+  export namespace Req {
+    export interface Request {
+      view: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      regions: TakeoffRegionFacts[];
+    }
+    export interface TakeoffRegionFacts {
+      elementId: number;
+      typeName: string;
+      view: string;
+      color: string;
+      sqft: number;
+      role?: null | string;
+      guid?: null | string;
+      blob: string;
+      loops: number[][][];
+    }
+  }
+}
+
+/** Write review decisions to one Room Region provenance blob in one transaction. */
+export namespace TakeoffsDecisions {
+  export namespace Req {
+    export interface Request {
+      elementId: number;
+      resolutions: TakeoffResolution[];
+    }
+    export interface TakeoffResolution {
+      subject: string;
+      flag: string;
+      verb: string;
+      at: string;
+      runId: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      elementId: number;
+      zoneGuid: string;
+      bytes: number;
+      blob: string;
+    }
+  }
+}
+
+/** Capture one level, detect room geometry, and write replay evidence without committing Revit changes. */
+export namespace TakeoffsDetectCapture {
+  export namespace Req {
+    export interface Request {
+      level: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      level: string;
+      replayPath: string;
+      rooms: number;
+      totalSqft: number;
+    }
+  }
+}
+
+/** Partition one Zoning Region from replay evidence and materialize Room Regions in one transaction. */
+export namespace TakeoffsPartition {
+  export namespace Req {
+    export interface Request {
+      replayPath: string;
+      view: string;
+      levelFragment: string;
+      zoneName: string;
+      zoneGuid: string;
+      runId: string;
+      loops: number[][][];
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      levelName: string;
+      elevation: number;
+      created: number;
+      held: number;
+      rebound: number;
+      orphaned: number;
+      promotion: TakeoffPromotionFacts;
+      domainSqft: number;
+      claimedWallSqft: number;
+      excludedResidueSqft: number;
+      totalSqft: number;
+      profile: string;
+      failures: string[];
+      rooms: TakeoffDetectedRoom[];
+      residues: TakeoffDetectedResidue[];
+      regions: TakeoffLiveRegion[];
+    }
+    export interface TakeoffPromotionFacts {
+      accepted: number;
+      held: number;
+      strict: boolean;
+    }
+    export interface TakeoffDetectedRoom {
+      id: string;
+      rawSqft: number;
+      perimeterFt: number;
+      meanCeilingFt: number;
+      label: number[];
+      flags: string[];
+      outer: number[][];
+    }
+    export interface TakeoffDetectedResidue {
+      id: string;
+      reason: string;
+      rawSqft: number;
+      label: number[];
+      outer: number[][];
+    }
+    export interface TakeoffLiveRegion {
+      elementId: number;
+      role: string;
+      guid: string;
+      sqft: number;
+      roomType: string;
+      blob: string;
+      outer: number[][];
+    }
+  }
+}
+
+/** Prepare the capture views for one Takeoff plan view in one transaction. */
+export namespace TakeoffsPrepareCapture {
+  export namespace Req {
+    export interface Request {
+      view: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      level: string;
+    }
+  }
+}
+
+/** Write RHVAC file and room links to Room Region provenance in one transaction. */
+export namespace TakeoffsRhvacLinks {
+  export namespace Req {
+    export interface Request {
+      writes: TakeoffRhvacLinkWrite[];
+    }
+    export interface TakeoffRhvacLinkWrite {
+      elementId: number;
+      link: TakeoffRhvacLink;
+    }
+    export interface TakeoffRhvacLink {
+      identifier: number;
+      fileIdentity: string;
+      syncedAt: string;
+      lastSyncedSqft: number;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      writes: TakeoffWriteResult[];
+    }
+    export interface TakeoffWriteResult {
+      elementId: number;
+      zoneGuid: string;
+      bytes: number;
+      blob: string;
+    }
+  }
+}
+
+/** Write and read back one Room Region room type in one transaction. */
+export namespace TakeoffsRoomType {
+  export namespace Req {
+    export interface Request {
+      elementId: number;
+      roomType: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      roomType: string;
+    }
+  }
+}
+
+/** Read Takeoff model status, plan views, zoning regions, materialized rooms, and source identity from the active project. */
+export namespace TakeoffsSnapshot {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export interface Response {
+      reading: Reading;
+      snapshot: TakeoffSnapshotData;
+    }
+    export interface Reading {
+      at: string;
+      version?: null | string;
+      observedAt: string;
+    }
+    export interface TakeoffSnapshotData {
+      status: TakeoffModelStatus;
+      zoneFrs: TakeoffRegionFacts[];
+      regionsByZone: {
+        [k: string]: TakeoffLiveRegion[];
+      };
+    }
+    export interface TakeoffModelStatus {
+      systems: TakeoffRegistrySystem[];
+    }
+    export interface TakeoffRegistrySystem {
+      guid: string;
+      tag: string;
+    }
+    export interface TakeoffRegionFacts {
+      elementId: number;
+      typeName: string;
+      view: string;
+      color: string;
+      sqft: number;
+      role?: null | string;
+      guid?: null | string;
+      blob: string;
+      loops: number[][][];
+    }
+    export interface TakeoffLiveRegion {
+      elementId: number;
+      role: string;
+      guid: string;
+      sqft: number;
+      roomType: string;
+      blob: string;
+      outer: number[][];
+    }
+  }
+}
+
+/** Read non-template plan views with the Filled Region count for each view. */
+export namespace TakeoffsViews {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export interface Response {
+      views: TakeoffViewFacts[];
+    }
+    export interface TakeoffViewFacts {
+      elementId: number;
+      regions: number;
+    }
+  }
+}
+
 /** Key → request/response types for every bridge op the generating session supported. */
 export interface HostOps {
   "family.editor.apply": { request: FamilyEditorApply.Req.Request; response: FamilyEditorApply.Res.Response };
@@ -4956,6 +5256,16 @@ export interface HostOps {
   "settings.module-catalog": { request: SettingsModuleCatalog.Req.Request; response: SettingsModuleCatalog.Res.Response };
   "settings.parameter-catalog": { request: SettingsParameterCatalog.Req.Request; response: SettingsParameterCatalog.Res.Response };
   "settings.schema": { request: SettingsSchema.Req.Request; response: SettingsSchema.Res.Response };
+  "takeoffs.adopt": { request: TakeoffsAdopt.Req.Request; response: TakeoffsAdopt.Res.Response };
+  "takeoffs.candidates": { request: TakeoffsCandidates.Req.Request; response: TakeoffsCandidates.Res.Response };
+  "takeoffs.decisions": { request: TakeoffsDecisions.Req.Request; response: TakeoffsDecisions.Res.Response };
+  "takeoffs.detect-capture": { request: TakeoffsDetectCapture.Req.Request; response: TakeoffsDetectCapture.Res.Response };
+  "takeoffs.partition": { request: TakeoffsPartition.Req.Request; response: TakeoffsPartition.Res.Response };
+  "takeoffs.prepare-capture": { request: TakeoffsPrepareCapture.Req.Request; response: TakeoffsPrepareCapture.Res.Response };
+  "takeoffs.rhvac-links": { request: TakeoffsRhvacLinks.Req.Request; response: TakeoffsRhvacLinks.Res.Response };
+  "takeoffs.room-type": { request: TakeoffsRoomType.Req.Request; response: TakeoffsRoomType.Res.Response };
+  "takeoffs.snapshot": { request: TakeoffsSnapshot.Req.Request; response: TakeoffsSnapshot.Res.Response };
+  "takeoffs.views": { request: TakeoffsViews.Req.Request; response: TakeoffsViews.Res.Response };
 }
 
 /** Runtime key list matching HostOps — powers key guards without a metadata catalog. */
@@ -5016,4 +5326,14 @@ export const hostOpKeys = [
   "settings.module-catalog",
   "settings.parameter-catalog",
   "settings.schema",
+  "takeoffs.adopt",
+  "takeoffs.candidates",
+  "takeoffs.decisions",
+  "takeoffs.detect-capture",
+  "takeoffs.partition",
+  "takeoffs.prepare-capture",
+  "takeoffs.rhvac-links",
+  "takeoffs.room-type",
+  "takeoffs.snapshot",
+  "takeoffs.views",
 ] as const satisfies readonly (keyof HostOps)[];

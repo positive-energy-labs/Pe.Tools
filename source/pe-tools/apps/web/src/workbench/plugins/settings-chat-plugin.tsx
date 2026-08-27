@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import { cellSummary, readRouteState, settingsRouteState } from "@pe/agent-contracts";
+import { cellSummary, parseRouteDoc, settingsRouteState } from "@pe/agent-contracts";
 
 import {
   InlineRoutePlugin,
@@ -17,11 +17,12 @@ export function SettingsChatPlugin({
   sessionState,
   running,
   active,
+  routeState,
 }: RouteChatPluginProps) {
-  const document = readRouteState(sessionState, settingsRouteState);
+  const document = parseRouteDoc(sessionState, settingsRouteState);
   const isFamilyModel =
-    document?.snapshot?.documentId.moduleKey === "FamilyFoundry" &&
-    document.snapshot.documentId.rootKey === "models";
+    document?.documentId?.moduleKey === "FamilyFoundry" &&
+    document.documentId.rootKey === "models";
   const fields = document?.fields ?? {};
   const summary = cellSummary(fields);
   const openProposals = Object.values(fields).filter(
@@ -53,7 +54,7 @@ export function SettingsChatPlugin({
 
       {active && reviewable ? (
         <CellTrichotomyReviewer
-          route="settings"
+          state={routeState}
           segment="fields"
           cells={fields}
           commitCommand="save"

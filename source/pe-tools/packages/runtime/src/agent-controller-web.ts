@@ -1,16 +1,14 @@
-import { createSignal } from "@mastra/core/agent";
 import { AgentController, type Session } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
-import type { MemoryStorage } from "@mastra/core/storage";
 import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
+import { addressSchema } from "@pe/agent-contracts";
 import {
   RouteWorkspace,
   type RouteWorkspaceRegistration,
   type RouteWorkspaceScope,
-  type RouteWorkspaceThreadEvent,
 } from "./route-workspace.ts";
 
 /* ── Route-state dispatcher request bodies ─────────────────────────────────── */
@@ -21,6 +19,7 @@ const routeStatePatchSchema = z.object({
 });
 const routeStateApplyBodySchema = z.object({
   patches: z.array(routeStatePatchSchema),
+  expectedRevision: z.number().optional(),
 });
 const routeStateCommandBodySchema = z.object({
   command: z.string(),
@@ -105,22 +104,24 @@ export async function buildAgentControllerApp(
   const registrations = options.routeRegistrations ?? [];
   const storage = mastra.getStorage();
   const threadState = await storage?.getStore("threadState");
-  const memoryStore = await storage?.getStore("memory");
   if (registrations.length > 0 && !threadState)
     throw new Error("RouteWorkspace requires the native threadState store.");
-  if (registrations.length > 0 && !memoryStore)
-    throw new Error("RouteWorkspace requires the native memory store for durable chronology.");
 
   const routeWorkspace = new RouteWorkspace({
     registrations,
-    store: threadState!,
-    resourceId,
-    authorizeThread: async (threadId) => {
-      const thread = await memoryStore!.getThreadById({ threadId, resourceId });
-      return thread?.resourceId === resourceId;
+    store: {
+      getState: ({ documentAddress, route }) =>
+        threadState!.getState({
+          threadId: resourceId,
+          type: `route-workspace:${documentAddress}:${route}`,
+        }),
+      setState: ({ documentAddress, route, value }) =>
+        threadState!.setState({
+          threadId: resourceId,
+          type: `route-workspace:${documentAddress}:${route}`,
+          value,
+        }),
     },
-    appendThreadEvent: (event) =>
-      appendRouteWorkspaceThreadEvent(runtime, memoryStore!, resourceId, event),
   });
 
   // Discovery is deliberately unscoped and shallow. Every document read/write must name
@@ -128,7 +129,8 @@ export async function buildAgentControllerApp(
   app.get("/pe/route-state", (c) => c.json(routeWorkspace.list()));
   app.get("/pe/route-state/:route", async (c) => {
     const scope = parseRouteWorkspaceScope(c);
-    if (typeof scope === "string") return c.json({ error: scope }, 400);
+    if (typeof scope === "string")
+      return c.json({ error: "route scope is required", hint: scope }, 400);
     try {
       const view = await routeWorkspace.read(scope, c.req.param("route"));
       return view
@@ -140,7 +142,8 @@ export async function buildAgentControllerApp(
   });
   app.get("/pe/route-state/:route/events", async (c) => {
     const scope = parseRouteWorkspaceScope(c);
-    if (typeof scope === "string") return c.json({ error: scope }, 400);
+    if (typeof scope === "string")
+      return c.json({ error: "route scope is required", hint: scope }, 400);
     const route = c.req.param("route");
     try {
       if (!(await routeWorkspace.read(scope, route)))
@@ -153,14 +156,21 @@ export async function buildAgentControllerApp(
   const mountRouteStateWrites = (prefix: string, actor: "agent" | "human") => {
     app.post(`${prefix}/:route/apply`, async (c) => {
       const scope = parseRouteWorkspaceScope(c);
-      if (typeof scope === "string") return c.json({ ok: false, error: scope }, 400);
+      if (typeof scope === "string")
+        return c.json({ ok: false, error: "route scope is required", hint: scope }, 400);
       const parsed = routeStateApplyBodySchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return c.json({ ok: false, error: "invalid body", hint: "expected { patches }" }, 400);
       }
       try {
         return c.json(
-          await routeWorkspace.apply(scope, c.req.param("route"), actor, parsed.data.patches),
+          await routeWorkspace.apply(
+            scope,
+            c.req.param("route"),
+            actor,
+            parsed.data.patches,
+            parsed.data.expectedRevision,
+          ),
         );
       } catch (error) {
         return c.json({ ok: false, error: errorMessage(error) }, 403);
@@ -168,7 +178,8 @@ export async function buildAgentControllerApp(
     });
     app.post(`${prefix}/:route/command`, async (c) => {
       const scope = parseRouteWorkspaceScope(c);
-      if (typeof scope === "string") return c.json({ ok: false, error: scope }, 400);
+      if (typeof scope === "string")
+        return c.json({ ok: false, error: "route scope is required", hint: scope }, 400);
       const parsed = routeStateCommandBodySchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return c.json(
@@ -200,59 +211,8 @@ export async function buildAgentControllerApp(
 }
 
 function parseRouteWorkspaceScope(c: Context): RouteWorkspaceScope | string {
-  const threadId = c.req.query("threadId")?.trim();
-  const rawScope = c.req.query("scope");
-  if (rawScope != null && rawScope !== "workspace")
-    return "scope must be 'workspace' when supplied";
-  if (threadId && rawScope === "workspace")
-    return "choose exactly one route scope: threadId or scope=workspace";
-  if (threadId) return { kind: "thread", threadId };
-  if (rawScope === "workspace") return { kind: "workspace" };
-  return "route scope is required: threadId=<id> or scope=workspace";
-}
-
-async function appendRouteWorkspaceThreadEvent(
-  runtime: ServableRuntime,
-  memoryStore: MemoryStorage,
-  resourceId: string,
-  event: RouteWorkspaceThreadEvent,
-): Promise<void> {
-  const action =
-    event.action === "command" ? `command ${event.command ?? "unknown"}` : "review edit";
-  const outcome = event.ok ? "succeeded" : `failed: ${event.error ?? "unknown error"}`;
-  const signal = createSignal({
-    type: "state",
-    tagName: "route-workspace",
-    contents: `Human ${action} on ${event.route} ${outcome}.`,
-    attributes: {
-      route: event.route,
-      action: event.action,
-      command: event.command,
-      revision: event.revision,
-      patchCount: event.patchCount,
-      ok: event.ok,
-    },
-    metadata: { routeWorkspace: event },
-  });
-  await memoryStore.saveMessages({
-    messages: [signal.toDBMessage({ threadId: event.threadId, resourceId })],
-  });
-
-  // Direct persistence makes the event visible on reload and to the next model turn. Only the
-  // currently displayed thread also needs a live message event; other threads hydrate normally.
-  const session = await runtime.controller.getSessionByResource(resourceId, event.threadId);
-  if (
-    !session ||
-    session.thread.getId() !== event.threadId ||
-    runtime.isSessionAdmitted?.(session) === false
-  )
-    return;
-  const messages = await session.thread.listMessages({
-    threadId: event.threadId,
-    limit: 20,
-  });
-  const persisted = messages.find((message) => message.id === signal.id);
-  if (persisted) session.emit({ type: "message_end", message: persisted });
+  const parsed = addressSchema.safeParse(c.req.query("doc")?.trim());
+  return parsed.success ? { documentAddress: parsed.data } : "doc required";
 }
 
 function streamRouteWorkspace(
@@ -293,10 +253,7 @@ function streamRouteWorkspace(
 }
 
 function sameRouteWorkspaceScope(left: RouteWorkspaceScope, right: RouteWorkspaceScope): boolean {
-  return (
-    left.kind === right.kind &&
-    (left.kind === "workspace" || (right.kind === "thread" && left.threadId === right.threadId))
-  );
+  return left.documentAddress === right.documentAddress;
 }
 
 function errorMessage(error: unknown): string {

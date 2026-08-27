@@ -11,47 +11,33 @@ import { useState } from "react";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Verb as VerbButton } from "#/components/lang/verb";
+import { TargetCaption, TargetingFlow } from "#/targeting/flow";
 import {
-  freshnessWord,
   PaneStrip,
-  peaNote,
   Picker,
   SeamChip,
   StageStrip,
   type Bindings,
   type Runner,
 } from "#/targeting/kit";
-import { terminals, type Link, type Product, type Verb } from "#/targeting/model";
+import { targets, type Link, type Product, type Verb } from "#/targeting/model";
 
-const RUN_CSS =
-  "@keyframes tb-run{from{transform:translateX(-100%)}to{transform:translateX(400%)}}";
-
-function Caption({ b, link }: { b: Bindings; link: Link }) {
-  const fresh = freshnessWord(b, link);
-  const f = b.feeds[link.key];
-  const warn = f?.state === "stale" || f?.state === "error";
-  return (
-    <span
-      className="face-mono t-caption"
-      style={{ color: warn ? "var(--r-caution)" : "var(--r-ink-mute)", lineHeight: 1 }}
-    >
-      {link.dir}
-      {link.liveness ? ` · ${link.liveness}` : ""}
-      {fresh ? ` · ${fresh}` : ""}
-      {f?.basis?.length ? ` | basis ${f.basis.join(" / ")}` : ""}
-    </span>
-  );
-}
-
-function Demand({ product, k, b }: { product: Product; k: string; b: Bindings }) {
-  const link = product.links.find((l) => l.key === k);
-  if (!link) return null;
+function Demand<K extends string>({
+  product,
+  k,
+  b,
+}: {
+  product: Product<K>;
+  k: K;
+  b: Bindings<K>;
+}) {
+  const link = product.slots[k];
   const bound = b.isBound(link);
-  const seam = b.feeds[k]?.options === null;
+  const seam = b.feeds[k]?.seam;
   return (
     <span
       className="face-mono t-caption"
-      title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${link.needs}` : ""}`}
+      title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${seam.needs}` : ""}`}
       style={{
         color: bound ? "var(--r-ink)" : "var(--r-caution)",
         borderBottom: seam ? "1px dashed var(--r-caution)" : "1px solid transparent",
@@ -63,7 +49,7 @@ function Demand({ product, k, b }: { product: Product; k: string; b: Bindings })
   );
 }
 
-function verbButton(v: Verb, runner: Runner) {
+function verbButton<K extends string>(v: Verb<K>, runner: Runner<K>) {
   const can = runner.canRun(v);
   const busy = runner.busy === v.key;
   const common = {
@@ -73,40 +59,40 @@ function verbButton(v: Verb, runner: Runner) {
     disabled: !can.ok,
     busy,
   };
-  return v.nav ? (
+  return v.kind === "nav" ? (
     <VerbButton key={v.key} tone="nav" direction="out" {...common} />
   ) : (
-    <VerbButton key={v.key} tone={v.commit ? "commit" : "act"} {...common} />
+    <VerbButton key={v.key} tone={v.kind === "commit" ? "commit" : "act"} {...common} />
   );
 }
 
-export function TargetingHead({
+export function TargetingHead<K extends string>({
   product,
   b,
   runner,
   receipt,
   extra,
   aside,
+  mode = "sentence",
 }: {
-  product: Product;
-  b: Bindings;
-  runner: Runner;
+  product: Product<K>;
+  b: Bindings<K>;
+  runner: Runner<K>;
   /** Last receipt / busy line for the foot. */
   receipt?: React.ReactNode;
   /** Route-owned control appended inside a level's option list. */
-  extra?: (link: Link) => React.ReactNode;
+  extra?: (link: Link<K>) => React.ReactNode;
   /** Route-owned chips for the head's right edge (fixture lane, etc.). */
   aside?: React.ReactNode;
+  mode?: "sentence" | "flow" | "line";
 }) {
   const [expanded, setExpanded] = useState(false);
   const verbs = [...b.stage.verbs].sort(
-    (x, y) => Number(x.commit ?? false) - Number(y.commit ?? false),
+    (x, y) => Number(x.kind === "commit") - Number(y.kind === "commit"),
   );
-  const note = peaNote(product, b, runner);
 
-  const gridRow = (v: Verb, i: number) => {
+  const gridRow = (v: Verb<K>, i: number) => {
     const can = runner.canRun(v);
-    const busy = runner.busy === v.key;
     return (
       <div
         key={v.key}
@@ -134,23 +120,8 @@ export function TargetingHead({
             fontStyle: can.ok ? undefined : "italic",
           }}
         >
-          {v.commit && !can.ok ? "" : can.ok ? "ready" : can.reason}
+          {v.kind === "commit" && !can.ok ? "" : can.ok ? "ready" : can.reason}
         </span>
-        {busy ? (
-          <span
-            className="absolute overflow-hidden"
-            style={{ left: 0, right: 0, bottom: -1, height: 2 }}
-          >
-            <span
-              className="block h-full"
-              style={{
-                width: "25%",
-                background: "var(--r-ink)",
-                animation: "tb-run 1s linear infinite",
-              }}
-            />
-          </span>
-        ) : null}
       </div>
     );
   };
@@ -172,53 +143,47 @@ export function TargetingHead({
     </button>
   );
 
-  return (
-    <ArtifactFrame
-      head={
-        <>
-          <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
-            {product.name}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
-            {terminals(product).map((t) => {
-              const dim = !b.demanded.has(t.key);
-              return (
-                <span
-                  key={t.key}
-                  className="inline-flex flex-col items-start"
-                  style={{ opacity: dim ? 0.45 : 1, whiteSpace: "nowrap" }}
-                  title={dim ? `${t.key} is out of scope at ${b.stage.label}` : undefined}
-                >
-                  <Caption b={b} link={t} />
-                  <span className="inline-flex items-baseline gap-1.5">
-                    <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
-                      {t.joiner}
-                    </span>
-                    <Picker
-                      product={product}
-                      link={t}
-                      b={b}
-                      runner={runner}
-                      extra={extra}
-                      inert={dim}
-                    />
-                  </span>
+  const line = (
+    <>
+      <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
+        {product.name}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
+        {targets(product).map((t) => {
+          const dim = t.dir !== null && !b.demanded.has(t.key);
+          return (
+            <span
+              key={t.key}
+              className="inline-flex flex-col items-start"
+              style={{ opacity: dim ? 0.45 : 1, whiteSpace: "nowrap" }}
+              title={dim ? `${t.key} is out of scope at ${b.stage.label}` : undefined}
+            >
+              <TargetCaption b={b} link={t} />
+              <span className="inline-flex items-baseline gap-1.5">
+                <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+                  {t.joiner}
                 </span>
-              );
-            })}
-          </span>
-          {aside}
-          <SeamChip product={product} feeds={b.feeds} />
-        </>
-      }
-      foot={
-        <>
-          <PaneStrip product={product} b={b} />
-          {receipt ?? <span />}
-        </>
-      }
-    >
-      <style>{RUN_CSS}</style>
+                <Picker
+                  product={product}
+                  link={t}
+                  b={b}
+                  runner={runner}
+                  extra={extra}
+                  inert={dim}
+                />
+              </span>
+            </span>
+          );
+        })}
+      </span>
+      {aside}
+      <SeamChip product={product} />
+    </>
+  );
+  if (mode === "line") return <div className="flex min-w-0 flex-1 items-end gap-3">{line}</div>;
+
+  const body = (
+    <>
       <StageStrip product={product} b={b} runner={runner} trailing={expandToggle} />
       {expanded ? (
         <>
@@ -239,13 +204,35 @@ export function TargetingHead({
       ) : (
         <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2">
           {verbs.map((v) => verbButton(v, runner))}
-          {note ? (
-            <span className="t-caption pl-2" style={{ color: "var(--r-pea-ink)" }}>
-              pea · {note}
-            </span>
-          ) : null}
         </div>
       )}
+    </>
+  );
+  if (mode === "flow")
+    return (
+      <TargetingFlow
+        product={product}
+        b={b}
+        runner={runner}
+        receipt={receipt}
+        extra={extra}
+        aside={aside}
+      >
+        {body}
+      </TargetingFlow>
+    );
+
+  return (
+    <ArtifactFrame
+      head={line}
+      foot={
+        <>
+          <PaneStrip product={product} b={b} />
+          {receipt ?? <span />}
+        </>
+      }
+    >
+      {body}
     </ArtifactFrame>
   );
 }

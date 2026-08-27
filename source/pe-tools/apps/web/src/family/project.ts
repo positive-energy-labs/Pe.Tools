@@ -23,7 +23,7 @@
  */
 import { settingsFieldPointer } from "@pe/agent-contracts";
 
-import type { RouteStatePatch } from "#/workbench/route-state";
+import type { RouteStatePatch } from "@pe/agent-contracts";
 import { timeAgo } from "#/lib/utils";
 import type { ConnectorSpec, FamilyModel, ParamSpec, SolidSpec } from "#/family/family-model";
 import { paramRef, paramSpec } from "#/family/family-model";
@@ -317,9 +317,9 @@ function projectEvidence(
   }
   const reported = new Set(evidence.parameters.map((parameter) => parameter.name));
   return {
-    familyName: evidence.from.familyName,
-    worldLabel: evidence.from.rfaPath ?? evidence.from.origin,
-    readAgo: timeAgo(evidence.from.capturedAt) || "just now",
+    familyName: evidence.familyName,
+    worldLabel: evidence.rfaPath ?? evidence.origin,
+    readAgo: timeAgo(evidence.reading.observedAt) || "just now",
     values,
     extraParams: [...reported].filter((name) => !authored.has(name)),
     // A parameter the read did not report is UNREAD, not missing — only a read that saw the whole

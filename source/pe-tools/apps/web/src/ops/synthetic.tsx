@@ -2,41 +2,26 @@ import { type ComponentType, useCallback, useEffect, useState } from "react";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
-import { callHostDynamic } from "#/host/client";
+import { callHostRpc } from "#/host/client";
+import type { HostSessionScope, OpCallArgs, OpKey } from "@pe/host-contracts/operation-types";
 
-/**
- * Synthetic ops: composed views that fan out several real host ops and render
- * one glance-level surface. They are prototypes of contracts that don't exist
- * yet — each one is an argument that some first-class op should return this
- * shape directly. Purely web-side; the wire stays { key, request? } per call.
- */
-
-export type SyntheticDep = {
-  /** Real host op key to call. */
-  key: string;
+type SyntheticDep = {
+  key: OpKey;
   request?: unknown;
-  /** Alias in the results map (defaults to key). Lets one op appear twice. */
   as?: string;
-  /** Optional deps render the view even when they fail; required ones block it. */
   optional?: boolean;
 };
 
 export type SyntheticViewProps = {
-  /** Dep results keyed by alias/key; absent when that dep failed. */
   results: Record<string, unknown>;
-  /** Wall-clock of the fan-out completing — every synthetic claim is "as of" this. */
   observedAtMs: number;
-  /** Staged follow-up fetches (same session scope as the fan-out). */
-  call: (key: string, request?: unknown) => Promise<unknown>;
+  call: (key: OpKey, request?: unknown) => Promise<unknown>;
 };
 
 export type SyntheticOp = {
-  /** Namespaced away from real ops: "glance.*". */
   key: string;
   displayName: string;
-  /** One line: what question this answers at a glance. */
   blurb: string;
-  /** The contract this prototypes — feeds the op-contract feedback loop. */
   contractNote?: string;
   deps: SyntheticDep[];
   View: ComponentType<SyntheticViewProps>;
@@ -57,7 +42,11 @@ export function SyntheticRunner({
   const [running, setRunning] = useState(false);
 
   const call = useCallback(
-    (key: string, request?: unknown) => callHostDynamic(key, request, { bridgeSessionId }),
+    (key: OpKey, request?: unknown) =>
+      callHostRpc(
+        key,
+        ...([request, { bridgeSessionId }] as OpCallArgs<typeof key, HostSessionScope>),
+      ),
     [bridgeSessionId],
   );
 
@@ -112,8 +101,6 @@ export function SyntheticRunner({
       {running && !results && (
         <OutcomeLine kind="busy" label={`gathering ${op.deps.length} ops…`} />
       )}
-      {/* a failed dep is an ERROR outcome (caution — a busy bridge is not the model
-          disagreeing), one line per dep, unenclosed (border budget: plain content). */}
       {results &&
         failedRequired.map((status) => (
           <OutcomeLine

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { parameterIdentitySchema } from "./family-types.ts";
-import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 
 const parameterLinkParameterIdentitySchema = parameterIdentitySchema.extend({
   kind: z.enum(["SharedGuid", "BuiltInParameter", "ParameterElement", "NameFallback"]),
@@ -111,7 +111,6 @@ export const parameterLinksDataSchema = z.object({
 export type ParameterLinksData = z.infer<typeof parameterLinksDataSchema>;
 
 export const parameterLinksDocumentSchema = z.object({
-  binding: routeBindingSchema,
   profile: parameterLinkProfileSchema.nullish().default(null),
   draftProfile: parameterLinkProfileSchema.nullish().default(null),
   evaluation: parameterLinkEvaluationSchema.nullish().default(null),
@@ -121,11 +120,10 @@ export const parameterLinksDocumentSchema = z.object({
 });
 export type ParameterLinksDocument = z.infer<typeof parameterLinksDocumentSchema>;
 
-export const parameterLinksRouteState = defineRouteState({
+export const parameterLinksRouteState = {
   route: "parameter-links",
   title: "Parameter Links",
   description: "Review, preview, and reconcile a model-owned parameter linkage profile.",
-  key: "route:parameter-links",
   schema: parameterLinksDocumentSchema,
   agentWriteMask: [["draftProfile"]],
   commands: {
@@ -152,4 +150,4 @@ export const parameterLinksRouteState = defineRouteState({
       mutatesExternal: true,
     },
   },
-});
+} satisfies RouteStateSpec<typeof parameterLinksDocumentSchema>;

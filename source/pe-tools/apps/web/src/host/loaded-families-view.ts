@@ -6,17 +6,11 @@
  * `string | null` (null = no value, "" = empty string). This module only adds
  * local aliases and tiny pure helpers (visible filtering and render coercion).
  */
-import type {
-  RevitCatalogLoadedFamilies,
-  RevitMatrixLoadedFamilies,
-} from "@pe/host-contracts/generated";
+import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 
-type LoadedFamiliesCatalogRequest = RevitCatalogLoadedFamilies.Req.Request;
 export type LoadedFamiliesMatrixRequest = RevitMatrixLoadedFamilies.Req.Request;
 export type FamilySnapshotRecord = RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord;
 export type FamilyParameterSnapshot = RevitMatrixLoadedFamilies.Res.FamilyParameterSnapshot;
-
-export type LoadedFamiliesRequest = LoadedFamiliesCatalogRequest | LoadedFamiliesMatrixRequest;
 
 /** Wire enum for filter.placementScope, usable as `.Member` in route code. */
 export const LoadedFamilyPlacementScope = {

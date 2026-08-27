@@ -1,7 +1,8 @@
 # Room-solve tuning rounds — standing brief
 
 Living doc for the 2026-08 tuning orchestration (worktree `room-solve-tuning`). Every experiment
-agent reads this first. Orchestrator: the session's Fable. Verdict authority: kaitpw, via TASTE.md.
+agent reads this first. Orchestrator: the session's Fable. Verdict authority: kaitpw, via
+[TASTE.md](TASTE.md).
 
 ## Mission (kaitpw-locked, 2026-08-16)
 
@@ -79,7 +80,7 @@ Success = better on every regime, no regime sacrificed.
    not regress; sacred list above.
 5. kaitpw summoned only on: board savedWork ±10%, report-card regime flip, or subtle-unmeasured
    win needing a verdict (which then becomes a metric). A/B image bundles via
-   compare-zone-runs.py; verdicts recorded in TASTE.md (zone, images, pick, kaitpw's words).
+   compare-zone-runs.py; verdicts recorded in [TASTE.md](TASTE.md) (zone, images, pick, kaitpw's words).
    A proxy that disagrees with a recorded verdict is wrong by fiat.
 
 ## Hypothesis backlog (seeded from DECISIONS deferred items + baseline)
@@ -117,7 +118,7 @@ Success = better on every regime, no regime sacrificed.
   wall band. The R3c snap guard stops edges crossing ink but nothing unifies
   parallel-on-same-wall pairs; the missing move is a snap ALONG ink (room edge joins the zone
   line when both stand on one wall band), which the guard currently refuses no differently
-  than a crossing sweep. Annotated image in kaitpw's round-3 reply; TASTE.md entry.
+  than a crossing sweep. Annotated image in kaitpw's round-3 reply; [TASTE.md](TASTE.md) entry.
 - **Round-4 — tilted-longest-edge anchor election (C2 test discovery, pinned as
   `LIMITATION_a_tilted_longest_edge_wins_the_anchor_election_and_is_not_squared`)**: when an
   off-frame edge is the ring's LONGEST, the anchor law elects the tilt itself as frame
@@ -150,7 +151,7 @@ Success = better on every regime, no regime sacrificed.
 - report.json is test-harness-owned; product-side emitter is a known gap (do not build during
   tuning; note only).
 
-## TASTE.md
+## [TASTE.md](TASTE.md)
 
 Worktree-root ledger of kaitpw verdicts. Append-only. Entry: date, zones, image paths, pick,
 kaitpw's words verbatim, metric agreement (did savedWork rank the same way — if not, the metric

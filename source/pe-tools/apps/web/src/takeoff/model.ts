@@ -8,13 +8,27 @@
  */
 import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
 import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
+import type {
+  DetectedRoom,
+  LiveRegion,
+  PartitionRun,
+  Resolution,
+} from "@pe/agent-contracts";
 
-// ── Levels ──────────────────────────────────────────────────────────────────
-//
+export type {
+  CandidateRegion,
+  DetectedRoom,
+  LiveRegion,
+  PartitionRun,
+  RegistrySystem,
+  Resolution,
+  ViewFacts,
+} from "@pe/agent-contracts";
+
 // A zoning view, its Revit level, and the level-wide capture the partition replays. The capture
 // is the honesty boundary (DetectSnapshot's header): everything upstream of the .bin is baked.
 
-export interface LevelLane {
+interface LevelLane {
   /** Zoning view name — matched exactly against a non-template ViewPlan. */
   view: string;
   /** Short label for the board. */
@@ -25,7 +39,7 @@ export interface LevelLane {
   replayFile: string;
 }
 
-export const LEVEL_LANES: LevelLane[] = [
+const LEVEL_LANES: LevelLane[] = [
   {
     view: "Mechanical Zoning Plan - Lower Level",
     label: "Lower",
@@ -55,9 +69,8 @@ export const LEVEL_LANES: LevelLane[] = [
 /** Default artifact directory — where the live runs dumped the replay snapshots. */
 export const DEFAULT_ARTIFACT_DIR = "%USERPROFILE%\\OneDrive\\Documents\\Pe.Tools\\takeoff";
 
-// ── Zones ───────────────────────────────────────────────────────────────────
-
-export interface Zone extends DeclaredZone {
+export interface Zone extends Omit<DeclaredZone, "color"> {
+  color: string;
   lane: LevelLane;
   /** "Main#06" — stable within the fixture, and what the deterministic GUID is derived from. */
   key: string;
@@ -146,6 +159,7 @@ export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
         const ordinal = i + 1;
         zones.push({
           ...z,
+          color: z.color ?? "0,0,0",
           lane,
           ordinal,
           key: `${lane.label}#${String(ordinal).padStart(2, "0")}`,
@@ -158,123 +172,16 @@ export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
   return zones;
 }
 
-// ── Live results (wire shapes of the scripting calls) ───────────────────────
-
-export interface DetectedRoom {
-  id: string;
-  rawSqft: number;
-  perimeterFt: number;
-  meanCeilingFt: number;
-  label: [number, number];
-  flags: string[];
-  outer: [number, number][];
-}
-
-export interface DetectedResidue {
-  id: string;
-  reason: string;
-  rawSqft: number;
-  label: [number, number];
-  outer: [number, number][];
-}
-
-/** A non-template ViewPlan, for the adoption flow's view pick. */
-export interface ViewFacts {
-  name: string;
-  /** GenLevel name; "" for plan views with no level. */
-  level: string;
-  /** FilledRegion count on the view — sorts zoning-plan candidates up without name-matching. */
-  regions: number;
-}
-
-/** A FilledRegion as the adoption/zone reads see it: identity stamps + tessellated loops. */
-export interface CandidateRegion {
-  elementId: number;
-  typeName: string;
-  /** Owner view name. */
-  view: string;
-  /** "r,g,b" foreground pattern color of the FR type. */
-  color: string;
-  sqft: number;
-  /** Pe role stamp — null = unstamped designer FR (an adoption candidate). */
-  role: string | null;
-  guid: string | null;
-  /** Raw provenance blob ("" when absent). */
-  blob: string;
-  loops: [number, number][][];
-}
-
-/** A Room Region / held-residue FR that exists in the model right now. */
-export interface LiveRegion {
-  elementId: number;
-  role: string;
-  guid: string;
-  sqft: number;
-  roomType?: string;
-  /** Raw provenance blob text — the datum's home for decisions. */
-  blob: string;
-  outer: [number, number][];
-}
-
-export interface PartitionRun {
-  levelName: string;
-  elevation: number;
-  created: number;
-  held: number;
-  rebound: number;
-  orphaned: number;
-  domainSqft: number;
-  claimedWallSqft: number;
-  excludedResidueSqft: number;
-  totalSqft: number;
-  profile: string;
-  failures: string[];
-  rooms: DetectedRoom[];
-  residues: DetectedResidue[];
-  regions: LiveRegion[];
-}
-
-export interface RegistrySystem {
-  guid: string;
-  tag: string;
-}
-
-export interface RegistryState {
-  systems: RegistrySystem[];
-  appeared: string[];
-  vanished: RegistrySystem[];
-  renameCandidates: { fromGuid: string; fromTag: string; toTag: string }[];
-  needsHuman: boolean;
-}
-
-export interface ModelStatus {
-  doc: string;
-  systems: RegistrySystem[];
-  regions: { zoneGuid: string; rooms: number; held: number }[];
-}
-
-// ── Zone status (step the zone is at) ───────────────────────────────────────
-
-export type ZoneStage = "unregistered" | "registered" | "partitioned";
+type ZoneStage = "unregistered" | "registered" | "partitioned";
 
 export const zoneStage = (tags: string[], materializedRooms: number): ZoneStage =>
   materializedRooms > 0 ? "partitioned" : tags.length > 0 ? "registered" : "unregistered";
-
-// ── Decisions (the write-through blob extension) ────────────────────────────
 
 /**
  * Two verbs, per README's review law: `accept` takes the recalculation's proposal, `dismiss`
  * keeps the designer's state. Written straight into the Room Region's provenance blob at
  * decision time — there is no batch commit and no sidecar.
  */
-export interface Resolution {
-  subject: string;
-  flag: string;
-  verb: "accept" | "dismiss";
-  at: string;
-  runId: string;
-}
-
 /** Reads the `resolutions` array spliced onto a v1 RegionProvenance blob. Fail-soft: a blob we
  *  cannot parse reads as "no decisions", never as "decided". */
 export function readResolutions(blob: string): Resolution[] {
@@ -300,9 +207,7 @@ export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRe
   );
 }
 
-// ── Decision queue rows ─────────────────────────────────────────────────────
-
-export interface DecisionRow {
+interface DecisionRow {
   /** Stable row key. */
   key: string;
   kind: "flag" | "orphan" | "failure";

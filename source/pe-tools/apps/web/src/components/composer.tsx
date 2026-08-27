@@ -1,13 +1,11 @@
 import {
-  useEffect,
   useMemo,
   useRef,
-  useState,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useAtomValue } from "@effect/atom-react";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
 import type { WorkbenchState } from "@pe/agent-contracts";
 import { Button } from "#/components/ui/button";
@@ -15,7 +13,6 @@ import { ControlChips } from "#/components/control-chips";
 import { Textarea } from "#/components/ui/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
 import type { Mode } from "#/workbench/depth";
-import { PROMPT_MAX } from "#/routes/chat";
 
 interface SlashCommand {
   name: string;
@@ -32,41 +29,24 @@ const BUILTIN_COMMANDS: SlashCommand[] = [
 
 export function Composer({
   setMode,
-  promptSeed,
   topBar,
 }: {
   setMode: (mode: Mode) => void;
-  /** Initial draft from the URL `prompt` param (read once on mount, then cleared from the URL). */
-  promptSeed?: string;
   /** Rendered flush at the top edge of the box — the inline budget/progress bar. */
   topBar?: ReactNode;
 }) {
-  const { debug, sendPrompt, cancel, isRunning, operationError, newThread } = useWorkbench();
-  const navigate = useNavigate({ from: "/chat" });
-  const [text, setText] = useState(promptSeed ?? "");
-  const [attachments, setAttachments] = useState<WorkbenchAttachment[]>([]);
+  const { store, debug, sendPrompt, cancel, isRunning, operationError, newThread } =
+    useWorkbench();
+  const { text, attachments } = useAtomValue(store.atoms.draft);
+  const setText = (value: string) =>
+    store.actions.setDraft((previous) => ({ ...previous, text: value }));
+  const setAttachments = (
+    value: WorkbenchAttachment[] | ((previous: WorkbenchAttachment[]) => WorkbenchAttachment[]),
+  ) => store.actions.setDraft((previous) => ({
+    ...previous,
+    attachments: typeof value === "function" ? value(previous.attachments) : value,
+  }));
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // Clear the seed from the URL once consumed — it lives in composer state from here on.
-  useEffect(() => {
-    if (promptSeed)
-      void navigate({ search: (prev) => ({ ...prev, prompt: undefined }), replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Mirror short drafts back to the URL (debounced). Drop the param past PROMPT_MAX or whenever
-  // attachments are present — those never serialize. Still goes through the router, never raw history.
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      const next = text.trim();
-      const keep = next.length > 0 && next.length <= PROMPT_MAX && attachments.length === 0;
-      void navigate({
-        search: (prev) => ({ ...prev, prompt: keep ? next : undefined }),
-        replace: true,
-      });
-    }, 1500);
-    return () => window.clearTimeout(id);
-  }, [text, attachments.length, navigate]);
 
   const commands = useMemo<SlashCommand[]>(
     () => [

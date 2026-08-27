@@ -8,13 +8,11 @@
  */
 import { describe, expect, it } from "vite-plus/test";
 
-import { isEvidenceStale } from "./lane.ts";
 import {
   BUILD_VERB,
   type BuildFacts,
   buildOutputPath,
   buildPlanHash,
-  buildReceiptLine,
   buildRefusals,
   buildTarget,
   issueText,
@@ -170,32 +168,6 @@ describe("the arming preview — which family, from which document, to which .rf
   });
 });
 
-describe("the staleness law — a fresh crossing clears it by replacing the stamp, not by exception", () => {
-  it("a stamp from another revision is stale; the same revision is not", () => {
-    expect(isEvidenceStale("6", "7")).toBe(true);
-    expect(isEvidenceStale("7", "7")).toBe(false);
-  });
-
-  it("an UNSTAMPED read claims nothing either way — capture has no revision to stamp", () => {
-    // `capture_evidence` reads out of Revit, not out of a document, so it stamps null. Null must
-    // never read as stale (it would cry wolf on every capture) or as fresh (it would vouch for a
-    // revision nobody checked).
-    expect(isEvidenceStale(null, "7")).toBe(false);
-    expect(isEvidenceStale(undefined, "7")).toBe(false);
-  });
-
-  it("an untokened document cannot be disagreed with", () => {
-    expect(isEvidenceStale("6", null)).toBe(false);
-  });
-
-  it("a BUILD's own evidence is never stale — it stamps the revision it just read", () => {
-    // This is the no-special-casing claim: build_evidence returns the token it opened the document
-    // at, so the chip goes out because the stamps AGREE, not because build was exempted.
-    const documentToken = "7";
-    expect(isEvidenceStale(documentToken, documentToken)).toBe(false);
-  });
-});
-
 describe("issueText — host issues are `unknown` on the wire", () => {
   it("reads a message, passes a string through, and stringifies anything else", () => {
     expect(issueText({ message: "boom" })).toBe("boom");
@@ -237,18 +209,5 @@ describe("readBuildReceipt — a build with no receipt is not a success", () => 
       documentVersionToken: null,
       parameterCount: null,
     });
-  });
-
-  it("the receipt line carries family, path and when — the three facts a build is judged on", () => {
-    const line = buildReceiptLine(
-      {
-        familyName: "Fan Coil Unit",
-        rfaPath: "out.rfa",
-        documentVersionToken: "7",
-        parameterCount: 12,
-      },
-      "14:15:00",
-    );
-    expect(line).toBe("built Fan Coil Unit → out.rfa · 12 params · captured 14:15:00");
   });
 });

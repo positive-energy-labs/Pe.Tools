@@ -3,7 +3,7 @@ hypotheses right now; you will never talk to them. Worktree `<WORKTREE>`, branch
 autonomously; nobody will answer questions. You have `<TIMEBOX>` minutes of wall clock; note the
 time you start.
 
-READ FIRST: `<BRIEF>`, `<TASTE>` (kaitpw's verdicts outrank every metric), `<LEDGER>` (never re-try a
+READ FIRST: `<BRIEF>`, [`<TASTE>`](../features/takeoffs/TASTE.md) (kaitpw's verdicts outrank every metric), `<LEDGER>` (never re-try a
 tombstone without new evidence), and the package `AGENTS.md`. Shell tax rules in `AGENTS.md` are law:
 absolute paths, no JSON on the command line, tee long runs to files.
 

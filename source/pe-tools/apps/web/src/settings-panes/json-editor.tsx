@@ -10,7 +10,7 @@
  * ponytail: no virtualization, no folding — settings files are a few hundred lines;
  * revisit if a profile ever exceeds a few thousand.
  */
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { createHighlighter, type HighlightDecoration } from "@tanstack/highlight/core";
 import { json } from "@tanstack/highlight/languages/json";
 
@@ -58,7 +58,6 @@ export function JsonEditor({
   className?: string;
   placeholder?: string;
 }) {
-  const preRef = useRef<HTMLDivElement>(null);
   const html = useMemo(
     // Trailing newline keeps the pre's height in step while the caret sits on a fresh line.
     () => highlighter.highlightToHtml(value + "\n", { lang: "json" }),
@@ -68,7 +67,6 @@ export function JsonEditor({
   return (
     <div className={cn("jsonpane jsonpane--editor face-mono t-value", className)}>
       <div
-        ref={preRef}
         aria-hidden
         className="jsonpane-paint"
         dangerouslySetInnerHTML={{ __html: html }}
@@ -83,8 +81,8 @@ export function JsonEditor({
         wrap="off"
         onChange={(e) => onChange(e.target.value)}
         onScroll={(e) => {
-          const paint = preRef.current;
-          if (!paint) return;
+          const paint = e.currentTarget.previousElementSibling;
+          if (!(paint instanceof HTMLElement)) return;
           paint.scrollTop = e.currentTarget.scrollTop;
           paint.scrollLeft = e.currentTarget.scrollLeft;
         }}

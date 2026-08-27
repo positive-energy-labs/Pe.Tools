@@ -1,6 +1,6 @@
 import {
   cellSummary,
-  readRouteState,
+  parseRouteDoc,
   scheduleGridRouteState,
   splitScheduleCellKey,
 } from "@pe/agent-contracts";
@@ -30,8 +30,9 @@ export function ScheduleGridChatPlugin({
   sessionState,
   running,
   active,
+  routeState,
 }: RouteChatPluginProps) {
-  const document = readRouteState(sessionState, scheduleGridRouteState);
+  const document = parseRouteDoc(sessionState, scheduleGridRouteState);
   const snapshot = document?.snapshot ?? null;
   const cells = document?.cells ?? {};
   const summary = cellSummary(cells);
@@ -92,7 +93,7 @@ export function ScheduleGridChatPlugin({
 
       {active && reviewable ? (
         <CellTrichotomyReviewer
-          route="schedule-grid"
+          state={routeState}
           segment="cells"
           cells={cells}
           commitCommand="push"

@@ -200,46 +200,6 @@ public static class Annotate
         return vname;
     }
 
-    // Separate ReadOnly execution (see class comment). Returns exported file paths.
-    public static List<string> ExportEvidence(Document doc, string viewNamePrefix, string outDir, Action<string> log)
-    {
-        Directory.CreateDirectory(outDir);
-        var files = new List<string>();
-        foreach (var v in new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
-                 .Where(x => !x.IsTemplate && x.Name.StartsWith(viewNamePrefix)))
-        {
-            string basePath = Path.Combine(outDir, string.Concat(v.Name.Select(ch => char.IsLetterOrDigit(ch) ? char.ToLowerInvariant(ch) : '_')));
-            var eo = new ImageExportOptions {
-                ExportRange = ExportRange.SetOfViews,
-                FilePath = basePath,
-                HLRandWFViewsFileType = ImageFileType.PNG,
-                ShadowViewsFileType = ImageFileType.PNG,
-                ImageResolution = ImageResolution.DPI_150,
-                PixelSize = 3000,
-                FitDirection = FitDirectionType.Horizontal,
-                ZoomType = ZoomFitType.FitToPage,
-            };
-            eo.SetViewsAndSheets(new List<ElementId> { v.Id });
-            doc.ExportImage(eo);
-            var file = Directory.GetFiles(outDir, Path.GetFileName(basePath) + "*")
-                .OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
-            if (file != null) { files.Add(file); log($"[evidence] {file}"); }
-        }
-        return files;
-    }
-
-    // Census-then-delete of everything this library created (views carry their regions with
-    // them). Census-first is the law on a shared bridge: after a transport failure the mutation
-    // may still have landed — never blindly re-issue, count first.
-    public static int Cleanup(Document doc, TakeoffOptions opt, Action<string> log)
-    {
-        var views = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
-            .Where(v => v.Name.StartsWith(opt.Marker)).Select(v => v.Id).ToList();
-        if (views.Count > 0) doc.Delete(views);
-        log($"[cleanup] deleted {views.Count} views (regions go with them)");
-        return views.Count;
-    }
-
     internal static CurveLoop ToLoop(List<double[]> pts, double z = 0)
     {
         var clean = CleanPoints(pts, z);

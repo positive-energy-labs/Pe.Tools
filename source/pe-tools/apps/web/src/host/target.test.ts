@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { mintSelector, resolveTarget, selectorLabel, type SessionFacts } from "./target";
+import {
+  documentAddress,
+  mintSelector,
+  resolveTarget,
+  selectorLabel,
+  type SessionFacts,
+} from "./target";
 
 /** The user's own Revit: pe-revit holds no receipt for it, so custody is `observed`. */
 const observed: SessionFacts = {
@@ -8,6 +14,7 @@ const observed: SessionFacts = {
   processId: 4128,
   lane: "installed",
   custody: "observed",
+  activeDocumentId: "C:\\Models\\Tower-A.rvt",
   activeDocumentTitle: "Tower-A.rvt",
   openDocumentCount: 1,
 };
@@ -19,7 +26,6 @@ const controlled: SessionFacts = {
   custody: "controlled",
   sdkSessionId: "fam-lab",
   activeDocumentTitle: "Door-Single.rfa",
-  activeDocumentIsFamilyDocument: true,
   openDocumentCount: 1,
 };
 
@@ -91,6 +97,20 @@ describe("mintSelector", () => {
     // Two observed sessions: `observed` would be ambiguous, so fall back to the pid that dies
     // with the process rather than mint a selector that resolves to the wrong Revit.
     expect(mintSelector(observed, [observed, second])).toBe("4128");
+  });
+});
+
+describe("documentAddress", () => {
+  it("names the document without world identity or custody restrictions", () => {
+    expect(documentAddress(observed)).toBe("C:\\Models\\Tower-A.rvt");
+    expect(documentAddress({ ...observed, activeDocumentId: undefined })).toBeNull();
+  });
+
+  it("renders unsupported Revit document paths unbound", () => {
+    expect(documentAddress({ ...observed, activeDocumentId: "RSN://server/model.rvt" })).toBeNull();
+    expect(
+      documentAddress({ ...observed, activeDocumentId: "Autodesk Docs://project/model.rvt" }),
+    ).toBeNull();
   });
 });
 

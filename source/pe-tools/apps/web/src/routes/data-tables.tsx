@@ -12,8 +12,8 @@ import { Verb } from "#/components/lang/verb";
 import { Input } from "#/components/ui/input";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
-import { callHostDynamic } from "#/host/client";
-import { useHostOpDynamic } from "#/host/queries";
+import { callHostRpc } from "#/host/client";
+import { useHostOp } from "#/host/queries";
 import { useVerb } from "#/lib/use-verb";
 import { cn } from "#/lib/utils";
 
@@ -45,15 +45,11 @@ interface TableHandle {
   placements: { sheetNumber: string }[];
 }
 
-interface DetailData {
-  tables: TableHandle[];
-}
-
 const rowKey = () => `row-${crypto.randomUUID().slice(0, 8)}`;
 
 function DataTablesRoute() {
-  const detail = useHostOpDynamic("revit.detail.data-tables", {});
-  const tables = (detail.data as DetailData | undefined)?.tables ?? [];
+  const detail = useHostOp("revit.detail.data-tables", {});
+  const tables = detail.data?.tables ?? [];
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const verb = useVerb();
@@ -81,14 +77,14 @@ function DataTablesRoute() {
   const applyDraft = () =>
     verb.run("apply", async () => {
       if (!draft) return;
-      const result = (await callHostDynamic("revit.apply.schedule", {
+      const result = await callHostRpc("revit.apply.schedule", {
         table: {
           name: draft.name,
           columns: draft.columns,
           rows: draft.rows,
           pruneMissingRows: true,
         },
-      })) as { warnings?: string[] };
+      });
       setDraft((d) => (d ? { ...d, isNew: false } : d));
       await detail.refetch();
       if (result.warnings?.length) {

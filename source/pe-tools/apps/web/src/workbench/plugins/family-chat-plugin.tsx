@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import { familyRouteState, readRouteState, settingsRouteState } from "@pe/agent-contracts";
+import { familyRouteState, parseRouteDoc } from "@pe/agent-contracts";
 
 import {
   InlineRoutePlugin,
@@ -9,32 +9,21 @@ import {
   actionLabel,
 } from "../route-chat-plugins";
 
-/** Inline chat card for route:family commands (parse_spec / capture / build).
- * Authored-field review renders through the settings plugin; this card carries the
- * sibling context — spec doc size and evidence provenance/freshness. */
 export function FamilyChatPlugin({ toolName, args, sessionState, running }: RouteChatPluginProps) {
-  const document = readRouteState(sessionState, familyRouteState);
-  const settings = readRouteState(sessionState, settingsRouteState);
+  const document = parseRouteDoc(sessionState, familyRouteState);
   const evidence = document?.evidence ?? null;
-  const evidenceFresh =
-    evidence != null &&
-    (evidence.from.documentVersionToken == null ||
-      evidence.from.documentVersionToken === settings?.snapshot?.versionToken);
 
   return (
     <InlineRoutePlugin title={familyRouteState.title} action={actionLabel(toolName, args, running)}>
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={document?.doc?.blocks.length ?? 0} label="doc blocks" />
         <Metric value={document?.doc?.images?.length ?? 0} label="doc images" />
-        {/* freshness rides the squiggle family's colours: fresh → done, stale → caution */}
         {evidence ? (
           <span
-            className={`t-label face-mono ${
-              evidenceFresh ? "text-[var(--r-done)]" : "text-[var(--r-caution)]"
-            }`}
-            title={`Evidence from ${evidence.from.origin} of ${evidence.from.familyName} at ${evidence.from.capturedAt}`}
+            className="t-label face-mono text-[var(--r-done)]"
+            title={`Evidence from ${evidence.origin} of ${evidence.familyName} at ${evidence.reading.observedAt}`}
           >
-            evidence · {evidence.from.origin} · {evidenceFresh ? "fresh" : "stale"}
+            evidence · {evidence.origin}
           </span>
         ) : (
           <span className="t-label text-[var(--r-ink-mute)]">no evidence yet</span>

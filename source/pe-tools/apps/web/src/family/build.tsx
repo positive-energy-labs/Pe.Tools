@@ -45,13 +45,12 @@ import { OutcomeLine } from "#/components/lang/outcome";
 /** The commit label, shared by the verb that arms and the strip that commits. */
 export const BUILD_VERB = "build .rfa";
 
-export type BuildRefusalCode =
+type BuildRefusalCode =
   | "no-document"
   | "unbound"
   | "unsaved"
   | "invalid"
   | "superseded"
-  /** The host said no, in its own words. Never paraphrased — its wording is the teaching channel. */
   | "host"
   /** The command answered without proving anything. Not a no; unprovable. */
   | "unknown";
@@ -183,7 +182,7 @@ function describeUnsaved(facts: BuildFacts): string {
 }
 
 /** The receipt `build_evidence` returns, read defensively — the wire type is `unknown`. */
-export interface BuildReceipt {
+interface BuildReceipt {
   familyName: string;
   rfaPath: string;
   documentVersionToken: string | null;
@@ -208,27 +207,18 @@ export function readBuildReceipt(result: unknown): BuildReceipt | null {
   };
 }
 
-/** The receipt in the page's own voice — family, path, and when, on the one receipt channel. */
-export function buildReceiptLine(receipt: BuildReceipt, capturedAt: string): string {
-  return (
-    `built ${receipt.familyName} → ${receipt.rfaPath}` +
-    `${receipt.parameterCount == null ? "" : ` · ${receipt.parameterCount} params`}` +
-    ` · captured ${capturedAt}`
-  );
-}
-
 /** What the surface says when it cannot vouch for its own write (finding 3 above). */
 export const BUILD_OUTCOME_UNKNOWN =
   "OUTCOME UNKNOWN — the build command returned without a receipt, so this surface cannot say whether " +
   "the .rfa was written. It writes a NEW timestamped file rather than overwriting, so a second build " +
   "cannot undo a first one: look in .artifacts/tmp/family before pressing again.";
 
-export interface BuildStripProps {
+interface BuildStripProps {
   /** null → unarmed; the strip is not on the page at all. */
   armed: { token: string | null; reason: string } | null;
   /** The command is out. Nothing about the .rfa is known yet. */
   building: boolean;
-  /** A host refusal, verbatim, or the latched unknown outcome. Outranks the local predicates. */
+  /** A host failure or latched unknown outcome. Outranks the local predicates. */
   said: BuildRefusal | null;
   facts: BuildFacts;
   familyName: string;

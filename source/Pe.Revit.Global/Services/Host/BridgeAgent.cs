@@ -13,6 +13,7 @@ using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Schedules;
 using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Loader;
+using Pe.Revit.Operations;
 using Pe.Revit.Tasks;
 using Serilog;
 using System.Net.WebSockets;
@@ -21,23 +22,11 @@ using System.Runtime.InteropServices;
 
 namespace Pe.Revit.Global.Services.Host;
 
-internal sealed class BridgeOperationContext(
-    RequestService requestService,
-    RevitDataRequestService revitDataRequestService,
-    ScriptingBridgeMessageHandler scriptingMessageHandler
-) : IBridgeOperationContext {
-    public RequestService RequestService { get; } = requestService;
-    public RevitDataRequestService RevitDataRequestService { get; } = revitDataRequestService;
-    public ScriptingBridgeMessageHandler ScriptingMessageHandler { get; } = scriptingMessageHandler;
-    public ISettingsBridgeService Settings => this.RequestService;
-    public IRevitDataService RevitData => this.RevitDataRequestService;
-    public IScriptingBridgeService Scripting => this.ScriptingMessageHandler;
-}
-
 internal sealed class BridgeAgent : IDisposable {
-    private readonly BridgeOperationContext _bridgeOperationContext;
     private readonly BridgeDocumentNotifier _documentNotifier;
+    private readonly RevitTaskQueue _revitTaskQueue;
     private readonly RevitDataRequestService _revitDataRequestService;
+    private readonly ScriptingBridgeMessageHandler _scriptingMessageHandler;
     private readonly Action<string?>? _onDisconnected;
 
     private readonly BridgeConnectionOptions _bridgeOptions;
@@ -70,14 +59,12 @@ internal sealed class BridgeAgent : IDisposable {
         Action<string?>? onDisconnected = null
     ) {
         var startupStopwatch = Stopwatch.StartNew();
-        var discoveredOps = BridgeOpRegistry.RegisterFromLoadedPeAssemblies();
-        Log.Information("Host bridge agent discovered {DiscoveredOpCount} attribute-registered operations.",
-            discoveredOps);
         var uiapp = RevitUiSession.CurrentUIApplication;
         var activeDocument = uiapp.GetActiveDocument();
         this._moduleRegistry = moduleRegistry;
         this._bridgeOptions = bridgeOptions;
         this._onDisconnected = onDisconnected;
+        this._revitTaskQueue = revitTaskQueue;
         Log.Information(
             "Host bridge agent starting: BridgeUri={BridgeUri}, ConnectTimeoutMs={ConnectTimeoutMs}, ActiveDocument={ActiveDocumentTitle}, Modules={ModuleCount}",
             bridgeOptions.BridgeUri,
@@ -86,15 +73,21 @@ internal sealed class BridgeAgent : IDisposable {
             moduleRegistry.GetModules().Count()
         );
         var requestService = new RequestService(revitTaskQueue, this._moduleRegistry, this._throttleGate);
-        this._revitDataRequestService = new RevitDataRequestService(revitTaskQueue);
-        var scriptingMessageHandler = new ScriptingBridgeMessageHandler(
+        this._revitDataRequestService = new RevitDataRequestService();
+        this._scriptingMessageHandler = new ScriptingBridgeMessageHandler(
             () => RevitUiSession.CurrentUIApplication,
             message => Log.Information("Revit scripting notification: {Message}", message)
         );
-        this._bridgeOperationContext = new BridgeOperationContext(
+        var discoveredOps = OpRegistry.RegisterFromLoadedPeAssemblies();
+        var boundOps = OpRegistry.Bind(
             requestService,
             this._revitDataRequestService,
-            scriptingMessageHandler
+            this._scriptingMessageHandler
+        );
+        Log.Information(
+            "Host bridge agent discovered {DiscoveredOpCount} operations and bound {BoundOpCount} instance handlers.",
+            discoveredOps,
+            boundOps
         );
         this._webSocket = new ClientWebSocket();
         var connectStopwatch = Stopwatch.StartNew();
@@ -172,7 +165,7 @@ internal sealed class BridgeAgent : IDisposable {
             "Host bridge dispose canceled read loop token. Disposing WebSocket resources to unblock reads.");
 
         this.SafeDispose("document notifier", this._documentNotifier.Dispose);
-        this.SafeDispose("scripting message handler", this._bridgeOperationContext.ScriptingMessageHandler.Dispose);
+        this.SafeDispose("scripting message handler", this._scriptingMessageHandler.Dispose);
         this.SafeDispose("transport session", this._transportSession.Dispose);
         this.SafeDispose("websocket", this._webSocket.Dispose);
 
@@ -271,12 +264,24 @@ internal sealed class BridgeAgent : IDisposable {
                 request.OperationKey,
                 request.RequestId
             );
-            if (!BridgeOpRegistry.TryGet(request.OperationKey, out var bridgeOp))
+            if (!OpRegistry.TryGet(request.OperationKey, out var op))
                 throw new InvalidOperationException($"Unsupported bridge operation '{request.OperationKey}'.");
 
-            var responseEnvelope = await bridgeOp
-                .ExecuteAsync(request.PayloadJson, this._bridgeOperationContext, cancellationToken)
-                .ConfigureAwait(false);
+            Task<object?> responseTask;
+            if (op.Thread == OpThread.Revit) {
+                responseTask = await this._revitTaskQueue.Run(
+                    context => op.ExecuteAsync(
+                        request.PayloadJson,
+                        ResolveDocument(op, context.Cancellation),
+                        context.Cancellation),
+                    new RevitRunOptions { Label = op.Key, Timeout = TimeSpan.FromMinutes(2) },
+                    cancellationToken
+                ).ConfigureAwait(false);
+            } else {
+                responseTask = op.ExecuteAsync(request.PayloadJson, null, cancellationToken);
+            }
+
+            var responseEnvelope = await responseTask.ConfigureAwait(false);
             Log.Information(
                 "Host bridge dispatch completed: OperationKey={OperationKey}, RequestId={RequestId}",
                 request.OperationKey,
@@ -396,6 +401,21 @@ internal sealed class BridgeAgent : IDisposable {
                     this._inFlightOperationKey = null;
             }
         }
+    }
+
+    private static object? ResolveDocument(Op op, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (op.Definition.Needs == OpNeeds.Nothing)
+            return null;
+
+        var document = RevitUiSession.CurrentUIApplication.GetActiveDocument();
+        OpDocumentGate.Require(op.Definition.Needs, document != null, document?.IsFamilyDocument == true);
+        return op.Definition.Needs switch {
+            OpNeeds.Document => new RevitDocument(document!),
+            OpNeeds.ProjectDocument => new ProjectDocument(document!),
+            OpNeeds.FamilyDocument => new FamilyDocument(document!),
+            _ => null
+        };
     }
 
     /// <summary>

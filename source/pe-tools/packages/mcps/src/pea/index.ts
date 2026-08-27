@@ -65,10 +65,10 @@ const hostOperationSearchInputSchema = z.object({
     .enum(["Read", "Mutate"])
     .optional()
     .describe("Filter to read-only or mutating operations."),
-  requiresActiveDocument: z
-    .boolean()
+  needs: z
+    .enum(["nothing", "document", "project-document", "family-document"])
     .optional()
-    .describe("Filter by whether the operation needs an active Revit document."),
+    .describe("Filter by the document capability required by the operation."),
   visibility: z
     .enum(["DefaultVisible", "EscalationVisible", "ExpertOnly"])
     .optional()

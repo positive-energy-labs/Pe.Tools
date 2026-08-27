@@ -9,13 +9,10 @@ import {
 import { Switch } from "#/components/ui/switch";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
-  clearFieldServerErrors,
   coercePrimitive,
-  formatFormError,
   type ResolvedFieldRendererProps,
-  type SettingsFieldApi,
   useFieldOptions,
-  useSettingsForm,
+  useSettingsField,
 } from "./shared";
 
 export function ScalarField({
@@ -26,7 +23,7 @@ export function ScalarField({
   isRequired,
   placeholder,
 }: ResolvedFieldRendererProps) {
-  const form = useSettingsForm();
+  const field = useSettingsField(path);
   const optionsState = useFieldOptions({
     node: effectiveNodeRef,
     fieldPath: path,
@@ -44,8 +41,6 @@ export function ScalarField({
     : undefined;
 
   return (
-    <form.Field name={path as never}>
-      {(field: SettingsFieldApi) => (
         <div className="flex flex-col gap-2">
           <FieldLabelRow
             label={label}
@@ -57,11 +52,8 @@ export function ScalarField({
           />
           {shouldRenderSelect ? (
             <Select
-              value={String(field.state.value ?? "")}
-              onValueChange={(value) => {
-                clearFieldServerErrors(form, path);
-                field.handleChange(value as never);
-              }}
+              value={String(field.value ?? "")}
+              onValueChange={field.change}
             >
               <SelectTrigger id={path} className="h-9 w-full justify-between">
                 <SelectValue placeholder="Select an option" />
@@ -77,17 +69,13 @@ export function ScalarField({
           ) : isBoolean ? (
             <div className="flex items-center gap-3">
               <Switch
-                checked={Boolean(field.state.value)}
+                checked={Boolean(field.value)}
                 id={path}
                 size="sm"
-                onBlur={field.handleBlur}
-                onCheckedChange={(checked) => {
-                  clearFieldServerErrors(form, path);
-                  field.handleChange(checked as never);
-                }}
+                onCheckedChange={field.change}
               />
               <span className="text-sm text-muted-foreground">
-                {field.state.value ? "Enabled" : "Disabled"}
+                {field.value ? "Enabled" : "Disabled"}
               </span>
             </div>
           ) : options.length > 0 && allowsCustomValue ? (
@@ -96,14 +84,12 @@ export function ScalarField({
                 id={path}
                 type={isNumber ? "number" : "text"}
                 list={datalistId}
-                value={String(field.state.value ?? "")}
-                onBlur={field.handleBlur}
+                value={String(field.value ?? "")}
                 onChange={(event) => {
-                  clearFieldServerErrors(form, path);
-                  field.handleChange(
-                    (isNumber
+                  field.change(
+                    isNumber
                       ? coercePrimitive(event.currentTarget.value, nodeType)
-                      : event.currentTarget.value) as never,
+                      : event.currentTarget.value,
                   );
                 }}
                 placeholder={placeholder}
@@ -120,23 +106,19 @@ export function ScalarField({
             <Input
               id={path}
               type={isNumber ? "number" : "text"}
-              value={String(field.state.value ?? "")}
-              onBlur={field.handleBlur}
+              value={String(field.value ?? "")}
               onChange={(event) => {
-                clearFieldServerErrors(form, path);
-                field.handleChange(
-                  (isNumber
+                field.change(
+                  isNumber
                     ? coercePrimitive(event.currentTarget.value, nodeType)
-                    : event.currentTarget.value) as never,
+                    : event.currentTarget.value,
                 );
               }}
               placeholder={placeholder}
             />
           )}
           <FieldOptionsMetadata options={optionsState} />
-          <FieldMessages messages={field.state.meta.errors.map(formatFormError)} />
+          <FieldMessages messages={field.errors} />
         </div>
-      )}
-    </form.Field>
   );
 }

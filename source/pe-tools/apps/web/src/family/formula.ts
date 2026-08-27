@@ -19,7 +19,7 @@
  */
 
 /** The slice of an authored parameter spec this validator reads. */
-export interface AuthoredParamLike {
+interface AuthoredParamLike {
   formula?: string | null;
   /** Absent means TYPE — Revit's default, and the authored schema's (`isInstance` is nullable). */
   isInstance?: boolean | null;
@@ -87,9 +87,9 @@ const BOUNDARY_CHARS = new Set([
   "\n",
 ]);
 
-export type FormulaProblemKind = "invalid-ref" | "cycle" | "type-refs-instance";
+type FormulaProblemKind = "invalid-ref" | "cycle" | "type-refs-instance";
 
-export interface FormulaProblem {
+interface FormulaProblem {
   kind: FormulaProblemKind;
   message: string;
   /** The offending token, when the problem localizes to one. */
@@ -153,7 +153,7 @@ function tokenize(masked: string): string[] {
   return tokens;
 }
 
-export interface FormulaTokens {
+interface FormulaTokens {
   /** Valid parameter names this formula references (subset of `validNames`). */
   refs: string[];
   /** Tokens that resolve to no parameter and no function — suspicious references. */

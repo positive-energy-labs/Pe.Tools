@@ -83,7 +83,7 @@ export function defineCommitCommand<TDoc, TCell extends TrichotomyCellLike, TEdi
     }
 
     if (edits.length > 0) {
-      failures.push(...(await options.run(edits, doc, resolveTarget(input, doc))));
+      failures.push(...(await options.run(edits, doc, resolveTarget(input))));
     }
 
     const failedKeys = new Set(failures.map((failure) => failure.key));

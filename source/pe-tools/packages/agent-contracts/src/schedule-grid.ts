@@ -9,7 +9,7 @@
  * revit.apply.parameter-values in one host-owned transaction.
  */
 import { z } from "zod";
-import { defineRouteState, routeBindingSchema } from "./route-state.ts";
+import type { RouteStateSpec } from "./route-state.ts";
 import {
   LOW_CONFIDENCE_REFINE_ERROR,
   lowConfidenceIsFlagged,
@@ -91,7 +91,6 @@ export type ScheduleGridSnapshot = z.infer<typeof scheduleGridSnapshotSchema>;
 
 export const scheduleGridDocumentSchema = z
   .object({
-    binding: routeBindingSchema,
     /** Every schedule in the bound document — the picker both actors choose from. */
     catalog: scheduleCatalogSchema.nullish(),
     snapshot: scheduleGridSnapshotSchema.nullish(),
@@ -104,11 +103,10 @@ export const scheduleGridDocumentSchema = z
   });
 export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
 
-export const scheduleGridRouteState = defineRouteState({
+export const scheduleGridRouteState = {
   route: "schedule-grid",
   title: "Schedule Grid",
   description: "Review and apply proposed edits to bound Revit schedule cells.",
-  key: "route:schedule-grid",
   schema: scheduleGridDocumentSchema,
   agentWriteMask: trichotomyAgentMask(),
   commands: {
@@ -139,7 +137,7 @@ export const scheduleGridRouteState = defineRouteState({
       mutatesExternal: true,
     },
   },
-});
+} satisfies RouteStateSpec<typeof scheduleGridDocumentSchema>;
 
 export function scheduleCellKey(rowNumber: number, columnNumber: number): string {
   return `${rowNumber}::${columnNumber}`;

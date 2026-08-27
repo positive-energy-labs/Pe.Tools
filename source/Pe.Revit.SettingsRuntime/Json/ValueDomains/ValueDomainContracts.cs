@@ -1,4 +1,3 @@
-using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.StorageRuntime.Capabilities;
 
 namespace Pe.Revit.SettingsRuntime.Json.ValueDomains;
@@ -16,16 +15,20 @@ public sealed record ValueDomainExecutionContext {
 
     public ValueDomainExecutionContext(
         SettingsRuntimeMode runtimeMode,
-        IReadOnlyDictionary<string, string>? fieldValues = null
+        IReadOnlyDictionary<string, string>? fieldValues = null,
+        Document? document = null
     ) {
         this.RuntimeMode = runtimeMode;
         this.FieldValues = fieldValues ?? EmptyFieldValues;
+        this.Document = document;
     }
 
     public SettingsRuntimeMode RuntimeMode { get; }
     public IReadOnlyDictionary<string, string> FieldValues { get; }
+    private Document? Document { get; }
 
-    public Document GetActiveDocument() => RevitUiSession.CurrentUIApplication.GetActiveDocument()!;
+    public Document GetActiveDocument() => this.Document
+                                           ?? throw new InvalidOperationException("No document was supplied for live value-domain resolution.");
 
     public bool TryGetFieldValue(string key, out string value) =>
         this.FieldValues.TryGetValue(key, out value!);

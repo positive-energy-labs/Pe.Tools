@@ -65,7 +65,7 @@ compress visible quality into one scalar just to fill `CURRENCY`.
 MISSION      Raise accepted coverage on project-a by making more geometry honestly pass the existing
              gates - never by loosening gates.
 BASE         C:\Users\kaitp\source\repos\Pe.Tools-takeoff-frontier   BRANCH  takeoff-frontier
-BRIEF        docs/features/takeoffs/TUNING.md                        TASTE   TASTE.md (repo root of BASE)
+BRIEF        docs/features/takeoffs/TUNING.md                        TASTE   [TASTE.md](../features/takeoffs/TASTE.md)
 LEDGER       docs/features/takeoffs/LEDGER.md
 CURRENCY     python eval/rhvac/score-looks-good.py score <run>/report.json -> board v1.1 savedWork
 SECONDARY    accepted rooms / accepted sf / residue ft, from the BOARD line. savedWork credits HELD

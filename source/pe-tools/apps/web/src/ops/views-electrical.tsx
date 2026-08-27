@@ -15,7 +15,7 @@ import {
 
 /**
  * Readonly electrical views: panels, circuits, load classifications, and the
- * panel-schedule panelboard. Shapes mirror RevitBridgeOps electrical contracts.
+ * panel-schedule panelboard. Shapes mirror the electrical `[Op]` handlers in `OpRegistry`.
  */
 
 type Rec = Record<string, unknown>;

@@ -1,20 +1,3 @@
-/**
- * The authored family model — /family's ONE resolution path.
- *
- * RESOLUTION LAW: every surface (triptych, register cards, type matrix, geometry table,
- * inspector) reads a parameter through `resolveParam` and a dimension through
- * `resolveDim` / `evalLen`. There is exactly one copy of that path and it lives here. The
- * prototype kept a second copy to dodge an import cycle between the route and its helpers;
- * this module exists so that cycle never has to be dodged again.
- *
- * Precedence, in order: a TYPE OVERRIDE wins, then a formula's resolved value (evidence
- * injected, else the formula text verbatim), then the family value, then "—" for missing.
- * A parameter carries a value XOR a formula — that rule is the HOST's to enforce; the edit
- * helpers here only refuse the cases the schema already forbids, and never silently repair.
- *
- * Everything in this module is pure: `FamilyModel` values are immutable and every edit
- * returns a new model, so the route can diff before/after into JSON Pointer patches.
- */
 import {
   familyModelFamilyPlane,
   familyModelPlaneOffset,
@@ -24,7 +7,7 @@ import {
 /** Every authored construct that reads one parameter, grouped by how it reads it.
  * Inlined here (it used to live on the deleted inspector) because `paramAssociations`
  * below is its only producer — the shape belongs with the derivation. */
-export interface ParamAssociations {
+interface ParamAssociations {
   dimensions: string[];
   arrays: string[];
   nested: string[];
@@ -44,13 +27,13 @@ export interface ParamSpec {
   readOnly?: boolean;
 }
 
-export interface PlaneSpec {
+interface PlaneSpec {
   from: string;
   by: string;
   direction: string;
 }
 
-export interface FrameSpec {
+interface FrameSpec {
   origin: string[];
   normal: string;
   up: string;
@@ -65,7 +48,7 @@ export interface SolidSpec {
   diameter?: string;
 }
 
-export interface StubSpec {
+interface StubSpec {
   depth: string;
   direction: string;
 }
@@ -82,14 +65,14 @@ export interface ConnectorSpec {
   flowDirection?: string;
 }
 
-export interface NestedSpec {
+interface NestedSpec {
   family: string;
   type?: string;
   frame: string;
   parameterBindings?: Record<string, string>;
 }
 
-export interface ArraySpec {
+interface ArraySpec {
   kind: string;
   member: string;
   axis: string;
@@ -138,8 +121,6 @@ export function inches(text: string | undefined): number | null {
   return m[6] === "ft" ? n * 12 : m[6] === "mm" ? n / 25.4 : n;
 }
 
-export const fmtIn = (n: number) => `${Math.round(n * 2) / 2}in`;
-
 /** `param:Body Width` → `Body Width`; anything else → null (it is a literal). */
 export const paramRef = (text: string | undefined) =>
   text?.startsWith("param:") ? text.slice("param:".length) : null;
@@ -165,21 +146,8 @@ export function resolveParam(
   return { text: spec.value ?? "—", source: "value" };
 }
 
-/** One authored dimension reference (`param:X` or a literal), resolved for one type. */
-export function resolveDim(model: FamilyModel, typeName: string, raw: string | undefined) {
-  if (!raw) return null;
-  const param = paramRef(raw);
-  if (!param) return { label: raw, text: raw, source: "value" as ValueSource, param: null };
-  const resolved = resolveParam(model, typeName, param);
-  return { label: raw, ...resolved, param };
-}
-
 /** The same reference as a NUMBER of inches — null when it does not resolve to a length. */
-export function evalLen(
-  model: FamilyModel,
-  typeName: string,
-  raw: string | undefined,
-): number | null {
+function evalLen(model: FamilyModel, typeName: string, raw: string | undefined): number | null {
   if (!raw) return null;
   const param = paramRef(raw);
   if (!param) return inches(raw);
@@ -224,37 +192,6 @@ export const setOverride = (
   return { ...model, types: { ...model.types, [typeName]: type } };
 };
 
-export const addType = (model: FamilyModel, name: string): FamilyModel =>
-  name && !model.types[name] ? { ...model, types: { ...model.types, [name]: {} } } : model;
-
-export const setSolidDim = (
-  model: FamilyModel,
-  slug: string,
-  field: keyof SolidSpec,
-  value: string,
-): FamilyModel => ({
-  ...model,
-  solids: { ...model.solids, [slug]: { ...(model.solids?.[slug] as SolidSpec), [field]: value } },
-});
-
-export const toggleStub = (model: FamilyModel, slug: string): FamilyModel => {
-  const connector = model.connectors?.[slug];
-  if (!connector?.stub) return model;
-  const direction = connector.stub.direction === "Out" ? "In" : "Out";
-  return {
-    ...model,
-    connectors: {
-      ...model.connectors,
-      [slug]: { ...connector, stub: { ...connector.stub, direction } },
-    },
-  };
-};
-
-export const toggleRcp = (model: FamilyModel): FamilyModel => ({
-  ...model,
-  roomCalculationPoint: { enabled: !(model.roomCalculationPoint?.enabled ?? false) },
-});
-
 // ── the dumb evaluator: params → arithmetic → plane intersection → face lookup ──────────────────
 
 export type Axis = "x" | "y" | "z";
@@ -275,7 +212,7 @@ export interface SolidGeo {
   h: number | null;
 }
 
-export interface PlaneGeo {
+interface PlaneGeo {
   slug: string;
   axis: Axis | null;
   offset: number | null;
@@ -284,7 +221,7 @@ export interface PlaneGeo {
   text: string;
 }
 
-export interface FrameGeo {
+interface FrameGeo {
   slug: string;
   pos: Vec3;
   normal: string;
@@ -303,7 +240,7 @@ export interface ConnGeo {
 }
 
 /** The stock family reference planes, keyed by the reference an authored document writes. */
-export const DATUM_AXIS: Record<string, Axis> = Object.fromEntries(
+const DATUM_AXIS: Record<string, Axis> = Object.fromEntries(
   ["Bottom", "CenterFB", "CenterLR"].map((member) => [
     `plane:family.${member}`,
     familyModelFamilyPlane(member)!.axis,
@@ -322,7 +259,7 @@ function datumOutwardSign(reference: string): number {
 // ponytail: v1 lowering convention — solids centered on the family center planes, sitting ON
 // family.Bottom. Face names and family-plane directions come from the conformance conventions,
 // which do NOT agree on the Y sign: a solid's Front face is +Y, a family plane's Out is −Y.
-export function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
+function solidGeos(model: FamilyModel, typeName: string): SolidGeo[] {
   return Object.entries(model.solids ?? {}).map(([slug, solid]) => ({
     slug,
     kind: solid.kind,
@@ -362,7 +299,7 @@ function faceCoord(solids: SolidGeo[], ref: string): { axis: Axis; value: number
   return coordinate ? { axis: coordinate.axis, value: coordinate.coordinate } : null;
 }
 
-export function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneGeo[]): FrameGeo[] {
+function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneGeo[]): FrameGeo[] {
   return Object.entries(model.frames ?? {}).map(([slug, frame]) => {
     const pos: Vec3 = { x: null, y: null, z: null };
     for (const ref of frame.origin) {
@@ -380,7 +317,7 @@ export function frameGeos(model: FamilyModel, solids: SolidGeo[], planes: PlaneG
   });
 }
 
-export function connGeos(model: FamilyModel, typeName: string, frames: FrameGeo[]): ConnGeo[] {
+function connGeos(model: FamilyModel, typeName: string, frames: FrameGeo[]): ConnGeo[] {
   return Object.entries(model.connectors ?? {}).map(([slug, connector]) => {
     const frame =
       connector.frame === "frame:family"
@@ -463,26 +400,6 @@ export function sheetBounds(sheet: Sheet): Record<Axis, [number, number]> {
 }
 
 // ── reference indices ───────────────────────────────────────────────────────────────────────────
-
-/** Reverse reference index — who uses each constituent. Feeds the relationship caption. */
-export function usedByIndex(model: FamilyModel): Record<string, string[]> {
-  const index: Record<string, string[]> = {};
-  const add = (id: string, user: string) => (index[id] = [...(index[id] ?? []), user]);
-  for (const [slug, frame] of Object.entries(model.frames ?? {}))
-    for (const ref of frame.origin) {
-      if (ref.startsWith("face:")) add(`s:${ref.slice(5).split(".")[0]}`, `frame:${slug}`);
-      else if (ref.startsWith("plane:") && !DATUM_AXIS[ref])
-        add(`pl:${ref.slice(6)}`, `frame:${slug}`);
-    }
-  for (const [slug, connector] of Object.entries(model.connectors ?? {}))
-    if (connector.frame !== "frame:family")
-      add(`f:${connector.frame.slice(6)}`, `connector:${slug}`);
-  for (const [slug, arraySpec] of Object.entries(model.arrays ?? {}))
-    for (const limit of [arraySpec.limits?.start, arraySpec.limits?.end])
-      if (limit?.startsWith("plane:") && !DATUM_AXIS[limit])
-        add(`pl:${limit.slice(6)}`, `array:${slug}`);
-  return index;
-}
 
 /** Every authored construct that reads this parameter — the inspector's "associates through",
  * derived from the authored model, never from a host GetAssociated call. */

@@ -28,19 +28,20 @@ import {
 import { peUrl, resolveWorkbenchConfig, type WorkbenchEndpointConfig } from "./config";
 import { applyAgentControllerEvent, hydrateWorkbenchState, type PeInspect } from "./adapter";
 import { usePeInfo } from "#/host/info";
+import { appAtomRegistry } from "#/state/registry";
+import { useRouteStore } from "#/state/use-route-store";
+import {
+  createChatPageStore,
+  type ChatPageStore,
+  type WorkbenchAttachment,
+} from "./store";
+
+export type { WorkbenchAttachment } from "./store";
 
 export interface StoredThreadSummary {
   id: string;
   title: string;
   updatedAt: string;
-}
-
-/** Composer attachment: text files carry `text`, binary/image carry base64 `data`. */
-export interface WorkbenchAttachment {
-  name?: string;
-  mimeType?: string;
-  text?: string;
-  data?: string;
 }
 
 type ToolResume = string | string[] | PlanResume;
@@ -58,6 +59,7 @@ type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["
 
 /** Connection handshake — which controller/session the native routes drive. */
 interface WorkbenchContextValue {
+  store: ChatPageStore;
   config: WorkbenchEndpointConfig;
   debug: { state: WorkbenchState; loading: boolean; error?: string };
   threads: StoredThreadSummary[];
@@ -83,8 +85,19 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
   const navigate = useNavigate({ from: "/chat" });
   // URL is canonical for which thread is open. Everything below is server-derived cache.
-  const { thread } = useSearch({ from: "/chat" });
+  const search = useSearch({ from: "/chat" });
+  const { thread } = search;
   const currentThreadId = thread ?? "";
+  const store = useRouteStore(() =>
+    createChatPageStore({
+      registry: appAtomRegistry,
+      search: {
+        ...search,
+        patch: (partial, replace = false) =>
+          void navigate({ search: (previous) => ({ ...previous, ...partial }), replace }),
+      },
+    }),
+  );
 
   const infoQuery = usePeInfo(config);
   const info = infoQuery.data;
@@ -112,9 +125,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   /** Replace the URL thread param (no history spam on auto-landing / switching). */
   const gotoThread = useCallback(
     (threadId: string, replace = false) => {
-      void navigate({ search: (prev) => ({ ...prev, thread: threadId }), replace });
+      store.actions.openThread(threadId, replace);
     },
-    [navigate],
+    [store],
   );
 
   const refreshThreads = useCallback(async () => {
@@ -384,6 +397,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const operationError = error ?? state.uiStatus.errors[0];
   const context = useMemo<WorkbenchContextValue>(
     () => ({
+      store,
       config,
       debug: { state, loading, error },
       threads,
@@ -403,6 +417,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }),
     [
       config,
+      store,
       state,
       loading,
       error,

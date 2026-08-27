@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance } from "#/components/lang/section";
-import { callHostDynamic } from "#/host/client";
+import { callHostRpc } from "#/host/client";
 import type { Lane } from "#/host/target";
 import { LaneBadge, LiveDot } from "#/host/target-ui";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
@@ -49,7 +49,7 @@ function useSessionDocuments(sessionIds: string[]): Record<string, DocFetch> {
     for (const sessionId of bounded) {
       // The synthetic `call` prop is bound to the page's session scope; topology
       // needs per-session scope, so it goes to the client directly. Readonly op.
-      void callHostDynamic("revit.context.document-session", undefined, {
+      void callHostRpc("revit.context.document-session", undefined, {
         bridgeSessionId: sessionId,
       })
         .then((data) => {

@@ -19,6 +19,7 @@ import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
+import { RouteDocumentEmpty, useRouteDocumentAddress } from "#/workbench/route-document";
 import { ValueDiff } from "#/components/ui/value-diff";
 import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";
@@ -39,6 +40,10 @@ import { useRouteState } from "#/workbench/route-state";
  * table; the pending strip is the reviewer.
  */
 export const Route = createFileRoute("/schedule-grid")({
+  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
+    thread:
+      typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
+  }),
   component: ScheduleGridRoute,
 });
 
@@ -47,8 +52,14 @@ type Snapshot = NonNullable<ScheduleGridDocument["snapshot"]>;
 type ScheduleRow = Snapshot["rows"][number];
 
 function ScheduleGridRoute() {
+  const documentAddress = useRouteDocumentAddress();
+  if (!documentAddress) return <RouteDocumentEmpty />;
+  return <ScheduleGridWorkspace documentAddress={documentAddress} />;
+}
+
+function ScheduleGridWorkspace({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
   const { slice, hydrated, apply, command, peaActive, connected } =
-    useRouteState(scheduleGridRouteState);
+    useRouteState(scheduleGridRouteState, { documentAddress });
   const document = slice;
   const snapshot = document?.snapshot ?? null;
   const catalog = document?.catalog ?? null;

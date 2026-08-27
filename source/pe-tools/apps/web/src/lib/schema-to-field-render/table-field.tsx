@@ -8,12 +8,9 @@ import {
   FieldOptionsMetadata,
 } from "./field-metadata";
 import {
-  clearFieldServerErrors,
-  formatFormError,
   type ResolvedFieldRendererProps,
-  type SettingsFieldApi,
   useFieldOptions,
-  useSettingsForm,
+  useSettingsField,
 } from "./shared";
 
 type TableRow = Record<string, unknown>;
@@ -112,44 +109,35 @@ function createRowTemplate(
 }
 
 function TableCellField({
-  form,
   path,
   value,
   onChange,
   list,
 }: {
-  form: ReturnType<typeof useSettingsForm>;
   path: string;
   value: unknown;
   onChange: (nextValue: string) => void;
   list?: string;
 }) {
+  const field = useSettingsField(path);
   return (
-    <form.Field name={path as never}>
-      {(field: SettingsFieldApi) => (
-        <div className="space-y-1">
-          <Input
-            list={list}
-            value={String(field.state.value ?? value ?? "")}
-            onBlur={field.handleBlur}
-            onChange={(event) => {
-              clearFieldServerErrors(form, path);
-              onChange(event.currentTarget.value);
-            }}
-            className={field.state.meta.errors.length > 0 ? "border-destructive" : undefined}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <FieldChangeBadge path={path} compact />
-          </div>
-          <FieldMessages messages={field.state.meta.errors.map(formatFormError)} compact />
-        </div>
-      )}
-    </form.Field>
+    <div className="space-y-1">
+      <Input
+        list={list}
+        value={String(field.value ?? value ?? "")}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        className={field.errors.length > 0 ? "border-destructive" : undefined}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <FieldChangeBadge path={path} compact />
+      </div>
+      <FieldMessages messages={field.errors} compact />
+    </div>
   );
 }
 
 export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRendererProps) {
-  const form = useSettingsForm();
+  const field = useSettingsField(path);
   const itemNodeRef = effectiveNodeRef.item()?.effective();
   const uiMetadata = effectiveNodeRef.uiMetadata();
   const fixedColumnKeys =
@@ -179,103 +167,64 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
     : undefined;
   const missingValue = uiMetadata?.behavior?.missingValue ?? "";
 
+  const rows = Array.isArray(field.value) ? (field.value as TableRow[]) : [];
+  const preferredDynamicColumns = uiMetadata?.behavior?.dynamicColumnOrder?.values ?? [];
+  const observedDynamicColumns = collectObservedDynamicColumnKeys(rows, fixedColumnKeySet);
+  const dynamicColumnKeys = mergeDynamicColumnKeys(preferredDynamicColumns, observedDynamicColumns);
+  const commitRows = (nextRows: TableRow[], nextDynamicColumns: string[] = dynamicColumnKeys) =>
+    field.change(normalizeRows(nextRows, fixedColumnKeys, nextDynamicColumns));
+  const updateCell = (rowIndex: number, columnKey: string, nextValue: string) =>
+    commitRows(
+      rows.map((row, index) =>
+        index === rowIndex ? { ...row, [columnKey]: nextValue } : row,
+      ),
+    );
+  const addColumn = () => {
+    const base = "NewType";
+    let next = base;
+    let suffix = 1;
+    const existing = new Set([...fixedColumnKeys, ...dynamicColumnKeys]);
+    while (existing.has(next)) next = `${base}${++suffix}`;
+    const columns = [...dynamicColumnKeys, next];
+    commitRows(
+      rows.length
+        ? rows.map((row) => ({ ...row, [next]: missingValue }))
+        : [createRowTemplate(fixedColumns, columns, missingValue)],
+      columns,
+    );
+  };
+  const renameColumn = (columnKey: string, nextColumnKey: string) => {
+    const trimmed = nextColumnKey.trim();
+    if (
+      !trimmed ||
+      trimmed === columnKey ||
+      fixedColumnKeySet.has(trimmed) ||
+      dynamicColumnKeys.includes(trimmed)
+    ) return;
+    const columns = dynamicColumnKeys.map((key) => key === columnKey ? trimmed : key);
+    commitRows(
+      rows.map((row) => Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [key === columnKey ? trimmed : key, value]),
+      )),
+      columns,
+    );
+  };
+  const removeColumn = (columnKey: string) =>
+    commitRows(
+      rows.map((row) => Object.fromEntries(
+        Object.entries(row).filter(([key]) => key !== columnKey),
+      )),
+      dynamicColumnKeys.filter((key) => key !== columnKey),
+    );
+  const addRow = () =>
+    field.push(normalizeRowOrder(
+      createRowTemplate(fixedColumns, dynamicColumnKeys, missingValue),
+      fixedColumnKeys,
+      dynamicColumnKeys,
+    ));
+
   return (
-    <form.Field name={path as never}>
-      {(field: SettingsFieldApi) => {
-        const rows = Array.isArray(field.state.value) ? (field.state.value as TableRow[]) : [];
-        const preferredDynamicColumns = uiMetadata?.behavior?.dynamicColumnOrder?.values ?? [];
-        const observedDynamicColumns = collectObservedDynamicColumnKeys(rows, fixedColumnKeySet);
-        const dynamicColumnKeys = mergeDynamicColumnKeys(
-          preferredDynamicColumns,
-          observedDynamicColumns,
-        );
-        const commitRows = (
-          nextRows: TableRow[],
-          nextDynamicColumns: string[] = dynamicColumnKeys,
-        ) => {
-          clearFieldServerErrors(form, path);
-          field.handleChange(normalizeRows(nextRows, fixedColumnKeys, nextDynamicColumns) as never);
-        };
-        const updateCell = (rowIndex: number, columnKey: string, nextValue: string) => {
-          const nextRows = rows.map((row, index) =>
-            index === rowIndex ? { ...row, [columnKey]: nextValue } : row,
-          );
-          commitRows(nextRows);
-        };
-        const addColumn = () => {
-          const nextColumnKeyBase = "NewType";
-          let nextColumnKey = nextColumnKeyBase;
-          let suffix = 1;
-          const existingKeys = new Set([...fixedColumnKeys, ...dynamicColumnKeys]);
-
-          while (existingKeys.has(nextColumnKey)) {
-            suffix++;
-            nextColumnKey = `${nextColumnKeyBase}${suffix}`;
-          }
-
-          const nextDynamicColumns = [...dynamicColumnKeys, nextColumnKey];
-          if (rows.length === 0) {
-            const nextRow = createRowTemplate(fixedColumns, nextDynamicColumns, missingValue);
-            commitRows([nextRow], nextDynamicColumns);
-            return;
-          }
-
-          const nextRows = rows.map((row) => ({
-            ...row,
-            [nextColumnKey]: missingValue,
-          }));
-          commitRows(nextRows, nextDynamicColumns);
-        };
-        const renameColumn = (columnKey: string, nextColumnKey: string) => {
-          const trimmed = nextColumnKey.trim();
-          if (
-            trimmed.length === 0 ||
-            trimmed === columnKey ||
-            fixedColumnKeySet.has(trimmed) ||
-            dynamicColumnKeys.includes(trimmed)
-          ) {
-            return;
-          }
-
-          const nextDynamicColumns = dynamicColumnKeys.map((key) =>
-            key === columnKey ? trimmed : key,
-          );
-          const nextRows = rows.map((row) => {
-            const renamed: TableRow = {};
-            for (const [key, value] of Object.entries(row)) {
-              renamed[key === columnKey ? trimmed : key] = value;
-            }
-
-            if (!(trimmed in renamed)) {
-              renamed[trimmed] = missingValue;
-            }
-
-            return renamed;
-          });
-          for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-            clearFieldServerErrors(form, `${path}.${rowIndex}.${columnKey}`);
-          }
-          commitRows(nextRows, nextDynamicColumns);
-        };
-        const removeColumn = (columnKey: string) => {
-          const nextDynamicColumns = dynamicColumnKeys.filter((key) => key !== columnKey);
-          const nextRows = rows.map((row) => {
-            const { [columnKey]: _removed, ...rest } = row;
-            return rest;
-          });
-          for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-            clearFieldServerErrors(form, `${path}.${rowIndex}.${columnKey}`);
-          }
-          commitRows(nextRows, nextDynamicColumns);
-        };
-        const addRow = () => {
-          const nextRow = createRowTemplate(fixedColumns, dynamicColumnKeys, missingValue);
-          clearFieldServerErrors(form, path);
-          field.pushValue(normalizeRowOrder(nextRow, fixedColumnKeys, dynamicColumnKeys) as never);
-        };
-
-        return (
-          <div className="space-y-3">
+    <div className="space-y-3">
             <FieldLabelRow
               label={label}
               required={effectiveNodeRef.isRequired()}
@@ -283,7 +232,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
               defaultValue={defaultValue}
               path={path}
             />
-            <FieldMessages messages={field.state.meta.errors.map(formatFormError)} />
+            <FieldMessages messages={field.errors} />
             <div className="overflow-auto rounded-lg border border-border">
               <table className="min-w-full border-collapse text-sm">
                 <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -330,7 +279,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                           return (
                             <td key={columnKey} className="px-3 py-2">
                               <TableCellField
-                                form={form}
                                 path={cellPath}
                                 value={row[columnKey]}
                                 list={
@@ -348,7 +296,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                           return (
                             <td key={columnKey} className="px-3 py-2">
                               <TableCellField
-                                form={form}
                                 path={cellPath}
                                 value={row[columnKey] ?? missingValue}
                                 onChange={(nextValue) => updateCell(rowIndex, columnKey, nextValue)}
@@ -360,10 +307,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                           <Verb
                             label="remove"
                             reason={`Drop row ${rowIndex + 1} from this table. The change lives in the form until save writes it.`}
-                            onClick={() => {
-                              clearFieldServerErrors(form, path);
-                              field.removeValue(rowIndex);
-                            }}
+                            onClick={() => field.remove(rowIndex)}
                           />
                         </td>
                       </tr>
@@ -399,9 +343,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                 />
               </div>
             </div>
-          </div>
-        );
-      }}
-    </form.Field>
+    </div>
   );
 }

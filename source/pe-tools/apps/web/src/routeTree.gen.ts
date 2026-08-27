@@ -9,112 +9,36 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from "./routes/__root";
-import { Route as IndexRouteImport } from "./routes/index";
-import { Route as ChatRouteImport } from "./routes/chat";
-import { Route as DataTablesRouteImport } from "./routes/data-tables";
-import { Route as DesignSystemRouteImport } from "./routes/design-system";
-import { Route as DocLabRouteImport } from "./routes/doc-lab";
-import { Route as FamiliesRouteImport } from "./routes/families";
-import { Route as FamilyRouteImport } from "./routes/family";
-import { Route as FamilyEditorProtoRouteImport } from "./routes/family-editor-proto";
-import { Route as FamilyReviewProtoRouteImport } from "./routes/family-review-proto";
-import { Route as GrillesRouteImport } from "./routes/grilles";
-import { Route as InstancesRouteImport } from "./routes/instances";
-import { Route as OpsRouteImport } from "./routes/ops";
-import { Route as ParamTablesRouteImport } from "./routes/param-tables";
-import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
-import { Route as RunsRouteImport } from "./routes/runs";
-import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
-import { Route as SettingsRouteImport } from "./routes/settings";
 import { Route as TakeoffsRouteImport } from "./routes/takeoffs";
-import { Route as TargetingProtoRouteImport } from "./routes/targeting-proto";
-import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
-import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
-import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
-import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
+import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as ScheduleGridRouteImport } from "./routes/schedule-grid";
+import { Route as RunsRouteImport } from "./routes/runs";
+import { Route as ParameterLinksRouteImport } from "./routes/parameter-links";
+import { Route as ParamTablesRouteImport } from "./routes/param-tables";
+import { Route as OpsRouteImport } from "./routes/ops";
+import { Route as InstancesRouteImport } from "./routes/instances";
+import { Route as GrillesRouteImport } from "./routes/grilles";
+import { Route as FamilyReviewProtoRouteImport } from "./routes/family-review-proto";
+import { Route as FamilyEditorProtoRouteImport } from "./routes/family-editor-proto";
+import { Route as FamilyRouteImport } from "./routes/family";
+import { Route as FamiliesRouteImport } from "./routes/families";
+import { Route as DocLabRouteImport } from "./routes/doc-lab";
+import { Route as DesignSystemRouteImport } from "./routes/design-system";
+import { Route as DataTablesRouteImport } from "./routes/data-tables";
+import { Route as ChatRouteImport } from "./routes/chat";
+import { Route as IndexRouteImport } from "./routes/index";
 import { Route as DesignSystemSwatchRouteImport } from "./routes/design-system_.swatch";
-import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
+import { Route as DesignSystemProposalFlowRouteImport } from "./routes/design-system_.proposal-flow";
+import { Route as DesignSystemPopoversRouteImport } from "./routes/design-system_.popovers";
+import { Route as DesignSystemArmingRouteImport } from "./routes/design-system_.arming";
+import { Route as ApiRunsExportRouteImport } from "./routes/api/runs-export";
 import { Route as ApiRunsDataSplatRouteImport } from "./routes/api/runs-data.$";
+import { Route as ApiPdfAuditParseRouteImport } from "./routes/api/pdf-audit/parse";
 import { Route as ApiPdfAuditParseParseIdRouteImport } from "./routes/api/pdf-audit/parse.$parseId";
 
-const IndexRoute = IndexRouteImport.update({
-  id: "/",
-  path: "/",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ChatRoute = ChatRouteImport.update({
-  id: "/chat",
-  path: "/chat",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DataTablesRoute = DataTablesRouteImport.update({
-  id: "/data-tables",
-  path: "/data-tables",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DesignSystemRoute = DesignSystemRouteImport.update({
-  id: "/design-system",
-  path: "/design-system",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const DocLabRoute = DocLabRouteImport.update({
-  id: "/doc-lab",
-  path: "/doc-lab",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamiliesRoute = FamiliesRouteImport.update({
-  id: "/families",
-  path: "/families",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyRoute = FamilyRouteImport.update({
-  id: "/family",
-  path: "/family",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyEditorProtoRoute = FamilyEditorProtoRouteImport.update({
-  id: "/family-editor-proto",
-  path: "/family-editor-proto",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const FamilyReviewProtoRoute = FamilyReviewProtoRouteImport.update({
-  id: "/family-review-proto",
-  path: "/family-review-proto",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const GrillesRoute = GrillesRouteImport.update({
-  id: "/grilles",
-  path: "/grilles",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const InstancesRoute = InstancesRouteImport.update({
-  id: "/instances",
-  path: "/instances",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const OpsRoute = OpsRouteImport.update({
-  id: "/ops",
-  path: "/ops",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ParamTablesRoute = ParamTablesRouteImport.update({
-  id: "/param-tables",
-  path: "/param-tables",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ParameterLinksRoute = ParameterLinksRouteImport.update({
-  id: "/parameter-links",
-  path: "/parameter-links",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const RunsRoute = RunsRouteImport.update({
-  id: "/runs",
-  path: "/runs",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const ScheduleGridRoute = ScheduleGridRouteImport.update({
-  id: "/schedule-grid",
-  path: "/schedule-grid",
+const TakeoffsRoute = TakeoffsRouteImport.update({
+  id: "/takeoffs",
+  path: "/takeoffs",
   getParentRoute: () => rootRouteImport,
 } as any);
 const SettingsRoute = SettingsRouteImport.update({
@@ -122,29 +46,89 @@ const SettingsRoute = SettingsRouteImport.update({
   path: "/settings",
   getParentRoute: () => rootRouteImport,
 } as any);
-const TakeoffsRoute = TakeoffsRouteImport.update({
-  id: "/takeoffs",
-  path: "/takeoffs",
+const ScheduleGridRoute = ScheduleGridRouteImport.update({
+  id: "/schedule-grid",
+  path: "/schedule-grid",
   getParentRoute: () => rootRouteImport,
 } as any);
-const TargetingProtoRoute = TargetingProtoRouteImport.update({
-  id: "/targeting-proto",
-  path: "/targeting-proto",
+const RunsRoute = RunsRouteImport.update({
+  id: "/runs",
+  path: "/runs",
   getParentRoute: () => rootRouteImport,
 } as any);
-const ApiRunsExportRoute = ApiRunsExportRouteImport.update({
-  id: "/api/runs-export",
-  path: "/api/runs-export",
+const ParameterLinksRoute = ParameterLinksRouteImport.update({
+  id: "/parameter-links",
+  path: "/parameter-links",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
-  id: "/design-system_/arming",
-  path: "/design-system/arming",
+const ParamTablesRoute = ParamTablesRouteImport.update({
+  id: "/param-tables",
+  path: "/param-tables",
   getParentRoute: () => rootRouteImport,
 } as any);
-const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
-  id: "/design-system_/popovers",
-  path: "/design-system/popovers",
+const OpsRoute = OpsRouteImport.update({
+  id: "/ops",
+  path: "/ops",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const InstancesRoute = InstancesRouteImport.update({
+  id: "/instances",
+  path: "/instances",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const GrillesRoute = GrillesRouteImport.update({
+  id: "/grilles",
+  path: "/grilles",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyReviewProtoRoute = FamilyReviewProtoRouteImport.update({
+  id: "/family-review-proto",
+  path: "/family-review-proto",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyEditorProtoRoute = FamilyEditorProtoRouteImport.update({
+  id: "/family-editor-proto",
+  path: "/family-editor-proto",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamilyRoute = FamilyRouteImport.update({
+  id: "/family",
+  path: "/family",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const FamiliesRoute = FamiliesRouteImport.update({
+  id: "/families",
+  path: "/families",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DocLabRoute = DocLabRouteImport.update({
+  id: "/doc-lab",
+  path: "/doc-lab",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DesignSystemRoute = DesignSystemRouteImport.update({
+  id: "/design-system",
+  path: "/design-system",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DataTablesRoute = DataTablesRouteImport.update({
+  id: "/data-tables",
+  path: "/data-tables",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ChatRoute = ChatRouteImport.update({
+  id: "/chat",
+  path: "/chat",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const IndexRoute = IndexRouteImport.update({
+  id: "/",
+  path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
+  id: "/design-system_/swatch",
+  path: "/design-system/swatch",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DesignSystemProposalFlowRoute =
@@ -153,19 +137,29 @@ const DesignSystemProposalFlowRoute =
     path: "/design-system/proposal-flow",
     getParentRoute: () => rootRouteImport,
   } as any);
-const DesignSystemSwatchRoute = DesignSystemSwatchRouteImport.update({
-  id: "/design-system_/swatch",
-  path: "/design-system/swatch",
+const DesignSystemPopoversRoute = DesignSystemPopoversRouteImport.update({
+  id: "/design-system_/popovers",
+  path: "/design-system/popovers",
   getParentRoute: () => rootRouteImport,
 } as any);
-const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
-  id: "/api/pdf-audit/parse",
-  path: "/api/pdf-audit/parse",
+const DesignSystemArmingRoute = DesignSystemArmingRouteImport.update({
+  id: "/design-system_/arming",
+  path: "/design-system/arming",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiRunsExportRoute = ApiRunsExportRouteImport.update({
+  id: "/api/runs-export",
+  path: "/api/runs-export",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiRunsDataSplatRoute = ApiRunsDataSplatRouteImport.update({
   id: "/api/runs-data/$",
   path: "/api/runs-data/$",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ApiPdfAuditParseRoute = ApiPdfAuditParseRouteImport.update({
+  id: "/api/pdf-audit/parse",
+  path: "/api/pdf-audit/parse",
   getParentRoute: () => rootRouteImport,
 } as any);
 const ApiPdfAuditParseParseIdRoute = ApiPdfAuditParseParseIdRouteImport.update({
@@ -193,7 +187,6 @@ export interface FileRoutesByFullPath {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/targeting-proto": typeof TargetingProtoRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
@@ -222,7 +215,6 @@ export interface FileRoutesByTo {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/targeting-proto": typeof TargetingProtoRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system/arming": typeof DesignSystemArmingRoute;
   "/design-system/popovers": typeof DesignSystemPopoversRoute;
@@ -252,7 +244,6 @@ export interface FileRoutesById {
   "/schedule-grid": typeof ScheduleGridRoute;
   "/settings": typeof SettingsRoute;
   "/takeoffs": typeof TakeoffsRoute;
-  "/targeting-proto": typeof TargetingProtoRoute;
   "/api/runs-export": typeof ApiRunsExportRoute;
   "/design-system_/arming": typeof DesignSystemArmingRoute;
   "/design-system_/popovers": typeof DesignSystemPopoversRoute;
@@ -283,7 +274,6 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
-    | "/targeting-proto"
     | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/popovers"
@@ -312,7 +302,6 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
-    | "/targeting-proto"
     | "/api/runs-export"
     | "/design-system/arming"
     | "/design-system/popovers"
@@ -341,7 +330,6 @@ export interface FileRouteTypes {
     | "/schedule-grid"
     | "/settings"
     | "/takeoffs"
-    | "/targeting-proto"
     | "/api/runs-export"
     | "/design-system_/arming"
     | "/design-system_/popovers"
@@ -371,7 +359,6 @@ export interface RootRouteChildren {
   ScheduleGridRoute: typeof ScheduleGridRoute;
   SettingsRoute: typeof SettingsRoute;
   TakeoffsRoute: typeof TakeoffsRoute;
-  TargetingProtoRoute: typeof TargetingProtoRoute;
   ApiRunsExportRoute: typeof ApiRunsExportRoute;
   DesignSystemArmingRoute: typeof DesignSystemArmingRoute;
   DesignSystemPopoversRoute: typeof DesignSystemPopoversRoute;
@@ -383,116 +370,11 @@ export interface RootRouteChildren {
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    "/": {
-      id: "/";
-      path: "/";
-      fullPath: "/";
-      preLoaderRoute: typeof IndexRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/chat": {
-      id: "/chat";
-      path: "/chat";
-      fullPath: "/chat";
-      preLoaderRoute: typeof ChatRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/data-tables": {
-      id: "/data-tables";
-      path: "/data-tables";
-      fullPath: "/data-tables";
-      preLoaderRoute: typeof DataTablesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/design-system": {
-      id: "/design-system";
-      path: "/design-system";
-      fullPath: "/design-system";
-      preLoaderRoute: typeof DesignSystemRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/doc-lab": {
-      id: "/doc-lab";
-      path: "/doc-lab";
-      fullPath: "/doc-lab";
-      preLoaderRoute: typeof DocLabRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/families": {
-      id: "/families";
-      path: "/families";
-      fullPath: "/families";
-      preLoaderRoute: typeof FamiliesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family": {
-      id: "/family";
-      path: "/family";
-      fullPath: "/family";
-      preLoaderRoute: typeof FamilyRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-editor-proto": {
-      id: "/family-editor-proto";
-      path: "/family-editor-proto";
-      fullPath: "/family-editor-proto";
-      preLoaderRoute: typeof FamilyEditorProtoRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/family-review-proto": {
-      id: "/family-review-proto";
-      path: "/family-review-proto";
-      fullPath: "/family-review-proto";
-      preLoaderRoute: typeof FamilyReviewProtoRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/grilles": {
-      id: "/grilles";
-      path: "/grilles";
-      fullPath: "/grilles";
-      preLoaderRoute: typeof GrillesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/instances": {
-      id: "/instances";
-      path: "/instances";
-      fullPath: "/instances";
-      preLoaderRoute: typeof InstancesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/ops": {
-      id: "/ops";
-      path: "/ops";
-      fullPath: "/ops";
-      preLoaderRoute: typeof OpsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/param-tables": {
-      id: "/param-tables";
-      path: "/param-tables";
-      fullPath: "/param-tables";
-      preLoaderRoute: typeof ParamTablesRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/parameter-links": {
-      id: "/parameter-links";
-      path: "/parameter-links";
-      fullPath: "/parameter-links";
-      preLoaderRoute: typeof ParameterLinksRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/runs": {
-      id: "/runs";
-      path: "/runs";
-      fullPath: "/runs";
-      preLoaderRoute: typeof RunsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/schedule-grid": {
-      id: "/schedule-grid";
-      path: "/schedule-grid";
-      fullPath: "/schedule-grid";
-      preLoaderRoute: typeof ScheduleGridRouteImport;
+    "/takeoffs": {
+      id: "/takeoffs";
+      path: "/takeoffs";
+      fullPath: "/takeoffs";
+      preLoaderRoute: typeof TakeoffsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/settings": {
@@ -502,46 +384,116 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/takeoffs": {
-      id: "/takeoffs";
-      path: "/takeoffs";
-      fullPath: "/takeoffs";
-      preLoaderRoute: typeof TakeoffsRouteImport;
+    "/schedule-grid": {
+      id: "/schedule-grid";
+      path: "/schedule-grid";
+      fullPath: "/schedule-grid";
+      preLoaderRoute: typeof ScheduleGridRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/targeting-proto": {
-      id: "/targeting-proto";
-      path: "/targeting-proto";
-      fullPath: "/targeting-proto";
-      preLoaderRoute: typeof TargetingProtoRouteImport;
+    "/runs": {
+      id: "/runs";
+      path: "/runs";
+      fullPath: "/runs";
+      preLoaderRoute: typeof RunsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/api/runs-export": {
-      id: "/api/runs-export";
-      path: "/api/runs-export";
-      fullPath: "/api/runs-export";
-      preLoaderRoute: typeof ApiRunsExportRouteImport;
+    "/parameter-links": {
+      id: "/parameter-links";
+      path: "/parameter-links";
+      fullPath: "/parameter-links";
+      preLoaderRoute: typeof ParameterLinksRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/design-system_/arming": {
-      id: "/design-system_/arming";
-      path: "/design-system/arming";
-      fullPath: "/design-system/arming";
-      preLoaderRoute: typeof DesignSystemArmingRouteImport;
+    "/param-tables": {
+      id: "/param-tables";
+      path: "/param-tables";
+      fullPath: "/param-tables";
+      preLoaderRoute: typeof ParamTablesRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/design-system_/popovers": {
-      id: "/design-system_/popovers";
-      path: "/design-system/popovers";
-      fullPath: "/design-system/popovers";
-      preLoaderRoute: typeof DesignSystemPopoversRouteImport;
+    "/ops": {
+      id: "/ops";
+      path: "/ops";
+      fullPath: "/ops";
+      preLoaderRoute: typeof OpsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/design-system_/proposal-flow": {
-      id: "/design-system_/proposal-flow";
-      path: "/design-system/proposal-flow";
-      fullPath: "/design-system/proposal-flow";
-      preLoaderRoute: typeof DesignSystemProposalFlowRouteImport;
+    "/instances": {
+      id: "/instances";
+      path: "/instances";
+      fullPath: "/instances";
+      preLoaderRoute: typeof InstancesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/grilles": {
+      id: "/grilles";
+      path: "/grilles";
+      fullPath: "/grilles";
+      preLoaderRoute: typeof GrillesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family-review-proto": {
+      id: "/family-review-proto";
+      path: "/family-review-proto";
+      fullPath: "/family-review-proto";
+      preLoaderRoute: typeof FamilyReviewProtoRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family-editor-proto": {
+      id: "/family-editor-proto";
+      path: "/family-editor-proto";
+      fullPath: "/family-editor-proto";
+      preLoaderRoute: typeof FamilyEditorProtoRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/family": {
+      id: "/family";
+      path: "/family";
+      fullPath: "/family";
+      preLoaderRoute: typeof FamilyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/families": {
+      id: "/families";
+      path: "/families";
+      fullPath: "/families";
+      preLoaderRoute: typeof FamiliesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/doc-lab": {
+      id: "/doc-lab";
+      path: "/doc-lab";
+      fullPath: "/doc-lab";
+      preLoaderRoute: typeof DocLabRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system": {
+      id: "/design-system";
+      path: "/design-system";
+      fullPath: "/design-system";
+      preLoaderRoute: typeof DesignSystemRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/data-tables": {
+      id: "/data-tables";
+      path: "/data-tables";
+      fullPath: "/data-tables";
+      preLoaderRoute: typeof DataTablesRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/chat": {
+      id: "/chat";
+      path: "/chat";
+      fullPath: "/chat";
+      preLoaderRoute: typeof ChatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/design-system_/swatch": {
@@ -551,11 +503,32 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof DesignSystemSwatchRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    "/api/pdf-audit/parse": {
-      id: "/api/pdf-audit/parse";
-      path: "/api/pdf-audit/parse";
-      fullPath: "/api/pdf-audit/parse";
-      preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
+    "/design-system_/proposal-flow": {
+      id: "/design-system_/proposal-flow";
+      path: "/design-system/proposal-flow";
+      fullPath: "/design-system/proposal-flow";
+      preLoaderRoute: typeof DesignSystemProposalFlowRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system_/popovers": {
+      id: "/design-system_/popovers";
+      path: "/design-system/popovers";
+      fullPath: "/design-system/popovers";
+      preLoaderRoute: typeof DesignSystemPopoversRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/design-system_/arming": {
+      id: "/design-system_/arming";
+      path: "/design-system/arming";
+      fullPath: "/design-system/arming";
+      preLoaderRoute: typeof DesignSystemArmingRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/runs-export": {
+      id: "/api/runs-export";
+      path: "/api/runs-export";
+      fullPath: "/api/runs-export";
+      preLoaderRoute: typeof ApiRunsExportRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/api/runs-data/$": {
@@ -563,6 +536,13 @@ declare module "@tanstack/react-router" {
       path: "/api/runs-data/$";
       fullPath: "/api/runs-data/$";
       preLoaderRoute: typeof ApiRunsDataSplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/pdf-audit/parse": {
+      id: "/api/pdf-audit/parse";
+      path: "/api/pdf-audit/parse";
+      fullPath: "/api/pdf-audit/parse";
+      preLoaderRoute: typeof ApiPdfAuditParseRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/api/pdf-audit/parse/$parseId": {
@@ -605,7 +585,6 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleGridRoute: ScheduleGridRoute,
   SettingsRoute: SettingsRoute,
   TakeoffsRoute: TakeoffsRoute,
-  TargetingProtoRoute: TargetingProtoRoute,
   ApiRunsExportRoute: ApiRunsExportRoute,
   DesignSystemArmingRoute: DesignSystemArmingRoute,
   DesignSystemPopoversRoute: DesignSystemPopoversRoute,
@@ -617,12 +596,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>();
-
-import type { getRouter } from "./router.tsx";
-import type { createStart } from "@tanstack/react-start";
-declare module "@tanstack/react-start" {
-  interface Register {
-    ssr: true;
-    router: Awaited<ReturnType<typeof getRouter>>;
-  }
-}

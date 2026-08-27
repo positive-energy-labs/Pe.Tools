@@ -6,6 +6,13 @@ design-system ledger, not restated here.
 
 ## Decided
 
+- 2026-08-26 — Repository guards live in their own `@pe/repo-guards` workspace package; the web route lane runs route code alone, so its result remains route signal.
+- 2026-08-26 — `Reading.Here(Document)` mints document addresses in `Pe.Revit.Extensions.ProjDocument`; `Pe.Shared.RevitData` owns only the Revit-free `Reading` record because it may not reference the Revit API.
+
+- 2026-08-25 — Generic view contracts use `View.Name` as raw `name` and `View.Title` as display `title` or handle `label`; project-index and agent-context share that law.
+- 2026-08-25 — Generic Revit facts keep one operation owner: `revit.context.document-session` supplies active document identity and labels, while `revit.catalog.project-index` supplies view type and level. Feature operations such as `takeoffs.*` return only their domain facts and join generic facts at the caller.
+- 2026-08-25 — Stable Takeoff Revit work is ten typed `takeoffs.*` bridge operations generated into the checked-in TypeScript catalog; `TakeoffAtlas` owns the library behavior and `scripting.execute` stays available only for exploration.
+- 2026-08-25 — `GET /docs/recents[?year]` and `POST /docs/open {path,id,year?,conflictPolicy?,detach?}` relay `pe-revit doc recents|open` through the generated argv builders, envelope untouched, 600 s open budget; 400/500 bodies are plain host JSON, never envelope-shaped (afa762c).
 - 2026-08-20 — beta.126 final drive (dev lane `slot3-25`, controlled, start → restart → stop → `gc --forget`): the installed product's `Addins5` slot is byte-identical to baseline on all four files after the forget (`slot-backup\` carries the installed original across restart, never a prior generation's rewrite), `install verify` 0 missing / 0 hash-mismatch, `op list` on the forgotten id is `session.no-match`. Closes the year-slot thread opened by the Hello.Addin poison. Residual (SDK NEXT): forget sweeps only the last incarnation's journal, so one orphan journal survives per restart. Pe.Tools main pinned beta.126, doctor 26/26.
 - 2026-08-20 — beta.125 re-drive (dev lane `slot2-25`, installed lane `slot-repair`, both controlled, real Revit 2025, SHA-256 comparator after every step): the beta.123 data loss is gone — `gc --forget` preserves the installed shim + `Pe.Revit.Loader.dll`, re-points the `.addin` route, removes the session's shim/contract dlls and sweeps its own journal/receipts (`session.year-slot-shared` names all of it); an installed-lane forget owns no slot; `op list` on a forgotten id is `session.no-match` exit 3; `start --plan` prints 8 planned legs. Residual: the re-pointed `00-Pe.App.addin` loses its XML declaration (440→400 B) and `loader.json` keeps the dev start's compact form, so `install verify` shows two `hash-mismatch` rows until the SDK restores bytes (in flight). `doctor` was green while `install verify` was not — `install verify` is the integrity oracle after any dev session on this machine. Evidence: `.artifacts/tmp/missions-20260820/r-pt-redrive.md` (disposable).
 - 2026-08-20 — beta.123 field drive (dev lane, session `slot-25`, custody controlled, real Revit 2025): the year-slot reclaim in `session gc --forget` deleted the INSTALLED product's `Addins5-Pe.App.addin` + `Pe.App\` because a dev session of the same product shares that slot (the start re-points the `.addin` route to its own `Pe.Revit.Loader.Pe.App.<hash>.dll` and leaves `loader.json` on the installed payload root); `install repair` could not restore it; restored by hand byte-exact (`install verify` ok). Pe.Tools stays pinned at beta.123 until the SDK ships a slot-aware reclaim; never `gc --forget` a dev row of the installed product on this machine before then. Also field-proven the same drive: sibling hosts (dev host `host-source-…` on 50314 and installed `host` on 5180 both `up how=health`, neither evicted; `host.json` `sessionId` flips to the connected session), receipts for product ops (`op list` 3 rows incl. a failed one), doctor exits 3 on a failing check. Evidence: `.artifacts/tmp/missions-20260820/r-pt-fielddrive.md` (disposable).
@@ -18,7 +25,11 @@ design-system ledger, not restated here.
 - 2026-07-08 — The single Revit UI thread keeps one in-flight op per session, but concurrent machine callers are now normal: a bounded FIFO queue (423 only when full) replaced the instant-423 mailbox.
 - 2026-08-18 — Queue provenance ruled: lenient `x-pe-origin` header (missing → counted `unknown`; attribution, not authorization), `QueueLedger` in `Pe.Revit.Global` wrapping the queue call sites (SDK untouched), `x-pe-queue-wait-ms`/`x-pe-queue-behind` + envelope `queuedMs`/`execMs` on every `/call` response, `revit.queue.snapshot` answered from ledger memory — spec in [queue-provenance.md](queue-provenance.md).
 - 2026-07-08 — `host-ops.generated.ts` is checked in and committed like a lockfile; TS-native ops (settings.*, aps.*, logs, host.status) keep hand-authored schemas in `operation-types.ts` because they are not projections. `bridge-protocol`/`product` constants likewise became hand-authored — they are wire/product invariants.
-- 2026-07-08 — Kept deliberately: `IBridgeOperationContext` (DI seam, not ceremony), Effect *inside* the host process (implementation, off the boundary), Ajv validation of settings docs (settings are TS-owned).
+- 2026-07-08 — Kept deliberately: `IBridgeOperationContext` (DI seam, not ceremony), Effect *inside* the host process (implementation, off the boundary), and Ajv validation of settings docs (settings are TS-owned).
+- 2026-08-26 — `[Op]` on the implementation handler is the only C# operation declaration. `OpRegistry` discovers all 66 handlers, including the five `Pe.App` factory operations; the deleted service interfaces and `IBridgeOperationContext` had one implementation and 60/60 handlers were passthroughs.
+- 2026-08-26 — An operation declares its document need only by a `RevitDocument`, `ProjectDocument`, or `FamilyDocument` handler parameter. Dispatch resolves and enforces that need once on the Revit thread; the catalog projects the parameter as `needs`.
+- 2026-08-26 — Route-state transport is document-keyed: `/pe/route-state/:route?doc=<Address>` and its SSE/write siblings address one Revit document, never a chat thread. `RouteWorkspace` uses the native state store behind a document-address adapter; legacy thread-keyed values are deliberately not migrated.
+- 2026-08-26 — This decision overturns the 2026-07-08 decision to keep `IBridgeOperationContext`; `[Op]` handlers now receive only their request, derived document wrapper, and cancellation token.
 - 2026-07-08 — Old pipeline deleted outright, no deprecation: `RevitBridgeOps.cs`, per-op `HostOperationDefinition` classes, `HostOperationsCatalog`, `[ExportTsSchema]`, `JsonSchemaDocumentService` disk writes, Pe.Dev.Cli codegen; TS `host-contracts/src/effect/*`, the generated contract files, `rpc.ts`/`rpc-error.ts`, the host RpcServer switchboard, the `.schemas/` mirror.
 
 ### The service seam, install lane, and SEA packaging
@@ -38,6 +49,7 @@ design-system ledger, not restated here.
 
 ### The `/ops` console
 
+- 2026-08-25 — `/ops` is the catalog explorer on the targeting framework: `world` and its catalog-fed duplex `op` terminal are URL bindings; request draft/mode and the last result belong to the route store; completed calls persist one bound Reading. The user-selected live-catalog key is its only dynamic call. Every checked-in literal key is typed. Reads may run on observed custody; mutating ops refuse there before HTTP.
 - 2026-08-16 — `/ops` ran a parallel design vocabulary (`ops/primitives.tsx`: Chip · MonoNote · EmptyState · OpSection · KVGrid · Provenance · CoverageBar); the sweep dissolved it onto the one language. Only the Revit-familiar shapes survive ops-owned — TreeView (project browser), DataTable (schedule grid), KVGrid (properties palette) — plus a new `VizChip` for taxonomy spends. `CatHue`/`catVar` deleted at zero consumers.
 - 2026-08-16 — `EmptyFrame` for sheets outside the 10-sheet detail budget keeps its dashed border as a legal R13(b) seam: a declared sheet with no geometry behind it. (verify — review may rule "not-fetched ≠ seam"; the replacement is a plain `--r-line` frame.)
 - 2026-08-16 — `/ops` gets no `AddressingBar` head rail: it is a two-pane console and its per-op header is op identity, not route addressing.
@@ -45,6 +57,8 @@ design-system ledger, not restated here.
 
 ### The fleet cockpit (`/instances`)
 
+- 2026-08-25 — `/instances` declares and binds the kit's managed `world` trunk. `worldTrunk.verbs` owns `start | converge | restart | stop` over the existing `POST /sessions` relay; observed custody refuses every lifecycle verb before HTTP. This supersedes the route's 2026-08-20 id prediction/pre-emption policy: the browser never mints or guesses SDK ids.
+- 2026-08-25 — Fleet state and lifecycle outcomes are live process truth, not route-document `Reading`s: the page-memory action ledger appends only after the SDK envelope answers and retains its state, diagnostics, and next steps. Never add `ReadingFrom`/`from` provenance to this ledger.
 - 2026-08-16 — Instances state is a **row-level pipeline verdict** (world phase), not a value pseudo-dimension: the fleet is the first real consumer of the `verdict:` column clause (R5), and essentially nothing here maps to the four value axes. That is the census's result, not a gap.
 - 2026-08-16 — A lifecycle cockpit is legitimately blue-dense: every verb here (declare ×3, restart/stop per row, start-again per killed row) boots or kills an OS process, so all wear `commit` per the letter of the scarcity law. The `VerbGroup` radius line carries the blast statement once.
 - 2026-08-16 — Honest empties beat "—": "no open document" (live world, none open) and "nothing observed" (registry-only world) say which silence it is.
@@ -52,6 +66,8 @@ design-system ledger, not restated here.
 
 ### Settings
 
+- 2026-08-25 — (/settings) runs on `settings/store.ts`; TanStack Form deleted; the form pane is controlled over `slice.fields[*].staged` with one `stage` writer emitting `apply` patches; `formDirty` is derived from staged fields. 17 state sites → 0. PROVEN[deterministic, worktree, 04e7b99]: 7/7, tsc 0.
+- 2026-08-25 — (/settings) `SETTINGS_PRODUCT` (`workspace › module › root › file`, `session`) runs on `TargetingHead`; `?thread` is declared in `validateSearch`.
 - 2026-08-16 — /settings stays a list of `StateCell`s at CARD scale, not a table: it is a small trichotomy reviewer over a JSON file, and at list scale per-row approve/deny/unstage verbs are the honest form even at ~3 verb widths per row.
 - 2026-08-16 — Prior value under a proposal/stage rides "was X" leading the note: card scale has an inline ghost only for `drift`, and a schema-flagged or pea-proposed value is not drift. Prose where the chat card renders a real diff — accepted until the model carries the proposal's prior value.
 - 2026-08-16 — A busy/down SSE bridge is a caution `FactChip`, not an agreement signal: a broken lane is not the model disagreeing.
@@ -60,6 +76,7 @@ design-system ledger, not restated here.
 
 ## Tried & rejected
 
+- 2026-08-25 — (/settings) TanStack Form as a second draft beside `document.fields[*].staged`; save had to convert one into patches for the other (C1 settings #1).
 - 2026-08-16 — Rendering "response shape the view cannot narrow" as an `EmptyState` (~40 call sites): claims absence when rows may exist. Now `UnrecognizedShape` — an error `OutcomeLine` pointing at the raw-response disclosure. Mirror image of takeoffs' finding that an empty state must never stand in for an unreadable result.
 - 2026-08-16 — `--pe-blue` circuit-number gutter in the panelboard and `--pe-green` for the curated-view list marker: Revit-flavoured decoration spending blue (commit/nav only) and pea's identity on a non-pea fact. Both neutralized; Revit verisimilitude knowingly traded away.
 - 2026-08-16 — Hue carrying rank in `revit.resolve.references` (blue edge/wash for the leader, kiln for demoted): grayscale law. Rank now rides order + `#n` gutter + a single-series `--viz-1` score bar.
@@ -69,6 +86,7 @@ design-system ledger, not restated here.
 
 ## Owed
 
+- 2026-08-25 — (/settings) `@tanstack/react-form` removal needs the next `pnpm install`.
 - Installed-lane `host.json` `sessionId` is a write-once-on-attach cache with no invalidation: a host process that outlives the session it attached to keeps advertising a reaped id until the next attach overwrites it. Evidence 2026-08-21: `host.log:23797` records the attach to `slot3-25`, the file now reads `"sessionId": "ovn-25"`, and `pe-revit session status --json` reports zero live sessions — so an agent reading the service file and an agent reading `/call` disagree about which session is current. Routing was never wrong (the typed op used the live bridge); the cost is a misleading read during triage. Self-heals on the next attach. Fix by clearing the field when the named session's receipt is gone, or by stamping it with the session's generation so a stale read is detectable.
 - Headless `pea --prompt` without `--workspace-root` refuses before the Mastra runtime exists: `scripting.workspace.bootstrap` answers "No Revit session is connected to the bridge" (2026-08-20, installed host 5180, zero Revit). A prompt that needs no Revit must not need Revit to bootstrap a workspace; `--workspace-root <dir>` bypasses it today.
 - `pea` workspace bootstrap writes the product skills (`packages/mcps/src/pea/skills.ts`) into `<workspace-root>/.agents/skills/`; pointed at this checkout it pollutes the repo's own skill dir (7 untracked dirs, 2026-08-20). Write them under a product-owned dir or exclude them from the checkout.

@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createFileRoute,
   retainSearchParams,
   stripSearchParams,
-  useNavigate,
 } from "@tanstack/react-router";
 import { z } from "zod";
 import { MODES } from "#/workbench/depth";
@@ -14,7 +12,8 @@ import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
  * (validateSearch + the middlewares below); nothing hand-rolls `new URL().searchParams`.
- *   thread — which thread is open (empty/absent = auto-land on latest or a fresh one)
+ *   thread — which thread is open (empty/absent = latest existing thread, else the empty
+ *            state)
  *   mode   — chat | trace | world view depth (default stripped from the URL)
  *   turn   — turn number to focal-scroll on open/share (absent = tail)
  *   target — pinned Revit session selector ("observed", "session:<id>", pid…), retained like thread.
@@ -22,10 +21,9 @@ import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
  *   prompt — short composer draft; the composer drops it from the URL past PROMPT_MAX or when
  *            attachments are present (attachments never serialize).
  */
-export const PROMPT_MAX = 2000;
+export const PROMPT_MAX = 200;
 
 const DEFAULTS = { mode: "threads" as const };
-const DRAFT_THREAD_KEY = "draft";
 
 const chatSearchSchema = z.object({
   thread: z.string().optional(),
@@ -49,36 +47,10 @@ export const Route = createFileRoute("/chat")({
 });
 
 function RouteComponent() {
-  const { plugin, prompt, thread, turn } = Route.useSearch();
-  const navigate = useNavigate({ from: "/chat" });
-  // Debounce the scroll-driven turn → URL write: scrolling fires turn changes every frame, and each
-  // navigate re-renders the route. ~1s lag keeps the shareable URL fresh without thrashing the router
-  // (and the Lens reads `turn` only for the initial snap, so a lagging URL never re-scrolls the view).
-  const turnTimer = useRef<number>(0);
-  const setTurn = useCallback(
-    (next: number | undefined) => {
-      window.clearTimeout(turnTimer.current);
-      turnTimer.current = window.setTimeout(() => {
-        void navigate({ search: (prev) => ({ ...prev, turn: next }), replace: true });
-      }, 1000);
-    },
-    [navigate],
-  );
-  useEffect(() => () => window.clearTimeout(turnTimer.current), []);
-  // The workbench is a browser-only app (local server fetch + SSE streaming + hotkeys/localStorage).
-  // Mount client-only to keep it out of SSR/hydration entirely.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  if (!mounted) return null;
+  const { plugin, thread, turn } = Route.useSearch();
   return (
-    <WorkbenchProvider key={thread ?? DRAFT_THREAD_KEY}>
-      <ChatShell
-        initialTurn={turn}
-        plugin={plugin}
-        promptSeed={prompt}
-        onTurnChange={setTurn}
-        onPluginClose={() => void navigate({ search: (prev) => ({ ...prev, plugin: undefined }) })}
-      />
+    <WorkbenchProvider key={thread ?? "draft"}>
+      <ChatShell initialTurn={turn} plugin={plugin} />
     </WorkbenchProvider>
   );
 }

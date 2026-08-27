@@ -1,52 +1,13 @@
-/**
- * The /takeoffs route's live wire into Revit.
- *
- * Every call is `scripting.execute` against the connected host — the scripts in scripts.ts stand
- * in for the `takeoffs.*` operations that do not exist yet. Keep this file thin: it owns the
- * transport, the structured script result, and the session scope; nothing about the pipeline's meaning.
- */
-import { callHostDynamic, callHostRpc } from "#/host/client";
+import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions } from "#/host/target";
-import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { RhvacInsertRoomData } from "@pe/host-contracts/operation-types";
 import {
-  adoptZonesScript,
-  candidateRegionsScript,
-  decisionScript,
-  detectCaptureScript,
-  linkRhvacBatchScript,
-  listViewsScript,
-  partitionScript,
-  prepareCaptureScript,
-  registryScript,
-  roomTypeScript,
-  snapshotScript,
-  statusScript,
-  zoneRegionsScript,
-  zonesScript,
-  type AdoptItem,
-  type PartitionArgs,
-  type RegistryArgs,
-  type RhvacLink,
-} from "#/takeoff/scripts";
-import type {
-  CandidateRegion,
-  LiveRegion,
-  ModelStatus,
-  PartitionRun,
-  RegistryState,
-  Resolution,
-  ViewFacts,
-} from "#/takeoff/model";
+  projectTakeoffSnapshot,
+  projectTakeoffViews,
+  takeoffProjectIndexRequest,
+} from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
 import type { SessionEvent, SessionSource, TakeoffHost } from "#/takeoff/store";
-import { buildLiveWorld, emptyOverlay, type WorldRoom, type WorldZone } from "#/takeoff/world";
-
-export interface LiveSnapshot {
-  status: ModelStatus;
-  views: ViewFacts[];
-  zoneFrs: CandidateRegion[];
-  regionsByZone: Record<string, LiveRegion[]>;
-}
+import type { WorldRoom, WorldZone } from "#/takeoff/world";
 
 const WALL_ASSEMBLY =
   "R-3 insulated sheathing, R-13 closed cell sprayfoam in a 2x6 wood stud cavity, R-15 Fiberglass batt";
@@ -157,7 +118,7 @@ async function syncRhvacRooms(
   });
   if (byNumber.size !== links.length)
     throw Error(`.r10 sync returned ${byNumber.size} receipts for ${links.length} rooms`);
-  await linkRhvacBatch(scope, links);
+  await callHostRpc("takeoffs.rhvac-links", { writes: links }, scope);
   return {
     text:
       `synced ${result.insertedRooms.length}/${inserts.length} rooms into ${path}` +
@@ -169,12 +130,26 @@ async function syncRhvacRooms(
 export const createHostSessionSource = (): SessionSource => ({
   async list() {
     const response = await callHostRpc("bridge.sessions.list", undefined);
-    return fromBridgeSessions(response.sessions);
+    const yearBySession = new Map(
+      response.sessions.map((session) => [session.sessionId, session.revitVersion ?? undefined]),
+    );
+    return fromBridgeSessions(response.sessions).map((session) => ({
+      ...session,
+      year: yearBySession.get(session.sessionId),
+    }));
   },
   async activeDocument(session) {
-    if (!session.activeDocumentTitle)
-      throw new Error(`session ${session.sessionId} has no active document`);
-    return { session, title: session.activeDocumentTitle };
+    const response = await callHostRpc("revit.context.document-session", undefined, {
+      bridgeSessionId: session.sessionId,
+    });
+    const document = response.activeDocument;
+    if (!document) throw new Error(`session ${session.sessionId} has no active document`);
+    const documentId = document.cloudModelGuid ?? document.path;
+    if (!documentId)
+      throw new Error(
+        `session ${session.sessionId} active document has no cloud model GUID or absolute path`,
+      );
+    return { session, documentId, title: document.title };
   },
   subscribe(listener) {
     const source = new EventSource("/events");
@@ -200,47 +175,93 @@ export const createHostSessionSource = (): SessionSource => ({
 
 export const createLiveTakeoffHost = (): TakeoffHost => ({
   fixture: false,
-  async readSnapshot(session) {
-    const raw = await readSnapshot({ bridgeSessionId: session.sessionId });
-    return {
-      ...raw,
-      world: buildLiveWorld({
-        ...raw,
-        overlay: emptyOverlay(),
-        r10Path: null,
-        r10: null,
-      }),
-    };
+  async readSnapshot(session, document, views, write) {
+    const scope = { bridgeSessionId: session.sessionId };
+    const response = await callHostRpc("takeoffs.snapshot", undefined, scope);
+    const snapshot = projectTakeoffSnapshot(response, document.title, views);
+    await write(snapshot);
+    return snapshot;
+  },
+  async readViews(session) {
+    const scope = { bridgeSessionId: session.sessionId };
+    const [views, projectIndex] = await Promise.all([
+      callHostRpc("takeoffs.views", undefined, scope),
+      callHostRpc("revit.catalog.project-index", takeoffProjectIndexRequest, scope),
+    ]);
+    return projectTakeoffViews(views, projectIndex);
   },
   async listRhvac(dir) {
-    const response = (await callHostDynamic("rhvac.list", { dir })) as {
-      readonly exists?: boolean;
-      readonly files?: readonly { readonly path: string; readonly name: string }[];
-    };
+    const response = await callHostRpc("rhvac.list", { dir });
     return response.exists ? [...(response.files ?? [])] : [];
   },
   openRhvac: (path) => callHostRpc("rhvac.open", { path }),
-  readCandidates: (session, view) => readCandidates({ bridgeSessionId: session.sessionId }, view),
+  readCandidates: async (session, view) => {
+    const response = await callHostRpc(
+      "takeoffs.candidates",
+      { view },
+      { bridgeSessionId: session.sessionId },
+    );
+    return response.regions.map((region) => ({
+      ...region,
+      role: region.role ?? null,
+      guid: region.guid ?? null,
+      loops: region.loops.map(toPoints),
+    }));
+  },
   async adopt(session, input) {
-    const adopted = await adoptZones({ bridgeSessionId: session.sessionId }, input.view, [
-      ...input.items,
-    ]);
-    return { text: `adopted ${adopted.length} zoning regions` };
+    const adopted = await callHostRpc(
+      "takeoffs.adopt",
+      { view: input.view, items: [...input.items] },
+      { bridgeSessionId: session.sessionId },
+    );
+    return { text: `adopted ${adopted.adopted.length} zoning regions` };
   },
   async capture(session, lane) {
     const scope = { bridgeSessionId: session.sessionId };
-    const prepared = await prepareCapture(scope, lane.view);
-    return detectCapture(scope, prepared.level);
+    const prepared = await callHostRpc("takeoffs.prepare-capture", { view: lane.view }, scope);
+    return callHostRpc("takeoffs.detect-capture", { level: prepared.level }, scope);
   },
-  partition: (session, input) => partitionZone({ bridgeSessionId: session.sessionId }, input),
+  async partition(session, input) {
+    const response = await callHostRpc(
+      "takeoffs.partition",
+      {
+        ...input,
+        loops: input.loops.map((loop) => loop.map(([x, y]) => [x, y])),
+      },
+      { bridgeSessionId: session.sessionId },
+    );
+    return {
+      ...response,
+      rooms: response.rooms.map((room) => ({
+        ...room,
+        label: toPoint(room.label),
+        outer: toPoints(room.outer),
+      })),
+      residues: response.residues.map((residue) => ({
+        ...residue,
+        label: toPoint(residue.label),
+        outer: toPoints(residue.outer),
+      })),
+      regions: response.regions.map((region) => ({
+        ...region,
+        outer: toPoints(region.outer),
+      })),
+    };
+  },
   async writeDecisions(session, elementId, resolutions) {
-    const result = await writeDecisions({ bridgeSessionId: session.sessionId }, elementId, [
-      ...resolutions,
-    ]);
+    const result = await callHostRpc(
+      "takeoffs.decisions",
+      { elementId, resolutions: [...resolutions] },
+      { bridgeSessionId: session.sessionId },
+    );
     return { blob: result.blob };
   },
   writeRoomType: async (session, elementId, roomType) => {
-    await writeRoomType({ bridgeSessionId: session.sessionId }, elementId, roomType);
+    await callHostRpc(
+      "takeoffs.room-type",
+      { elementId, roomType },
+      { bridgeSessionId: session.sessionId },
+    );
   },
   async launchRhvac(session, path) {
     await callHostRpc(
@@ -252,159 +273,9 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
   syncRhvac: (session, path, inserts) => syncRhvacRooms(session.sessionId, path, inserts),
 });
 
-interface ScriptResponse {
-  status: string;
-  output?: string;
-  data?: unknown;
-  diagnostics?: { severity?: string; message?: string }[];
-}
+const toPoint = ([x, y]: number[]): [number, number] => {
+  if (x === undefined || y === undefined) throw Error("Takeoff boundary point requires x and y");
+  return [x, y];
+};
 
-/** `Result(...)` is the contract; terminal output is reserved for short human diagnostics. */
-function parseEnvelope<T>(response: ScriptResponse, sourceName: string): T {
-  if (response.status !== "Succeeded") {
-    const errors = (response.diagnostics ?? [])
-      .filter((d) => d.severity === "Error")
-      .map((d) => d.message)
-      .filter(Boolean);
-    throw new Error(`${sourceName}: ${response.status}${errors.length ? ` — ${errors[0]}` : ""}`);
-  }
-  if (response.data === undefined || response.data === null)
-    throw new Error(`${sourceName}: script produced no structured result`);
-  if (typeof response.data !== "string")
-    throw new Error(`${sourceName}: structured result was not Takeoff JSON`);
-  return JSON.parse(response.data) as T;
-}
-
-async function runScript<T>(
-  scope: HostSessionScope,
-  scriptContent: string,
-  permissionMode: "ReadOnly" | "WriteTransaction",
-  sourceName: string,
-): Promise<T> {
-  const response = (await callHostDynamic(
-    "scripting.execute",
-    {
-      scriptContent,
-      permissionMode,
-      timeoutSeconds: 300,
-      sourceName,
-    },
-    scope,
-  )) as ScriptResponse;
-  return parseEnvelope<T>(response, sourceName);
-}
-
-/** One model read and one script compile for the whole atlas. */
-export const readSnapshot = (scope: HostSessionScope) =>
-  runScript<LiveSnapshot>(scope, snapshotScript(), "ReadOnly", "takeoff-snapshot.cs");
-
-/** Step 0 — what the live document already carries: registry + per-zone region census. */
-export const readStatus = (scope: HostSessionScope) =>
-  runScript<ModelStatus>(scope, statusScript(), "ReadOnly", "takeoff-status.cs");
-
-/** Step 1 (read) — non-template plan views, for the adoption flow's view pick. */
-export const readViews = (scope: HostSessionScope) =>
-  runScript<{ views: ViewFacts[] }>(scope, listViewsScript(), "ReadOnly", "takeoff-views.cs").then(
-    (r) => r.views,
-  );
-
-/** Step 1 (read) — every FilledRegion on one view, stamped or not: the adoption candidates. */
-export const readCandidates = (scope: HostSessionScope, view: string) =>
-  runScript<{ regions: CandidateRegion[] }>(
-    scope,
-    candidateRegionsScript({ view }),
-    "ReadOnly",
-    "takeoff-candidates.cs",
-  ).then((r) => r.regions);
-
-/** Step 1 (write) — stamp designer FRs in place as Zoning Regions. Idempotent; re-adopt = edit. */
-export const adoptZones = (scope: HostSessionScope, view: string, items: AdoptItem[]) =>
-  runScript<{ adopted: { elementId: number; guid: string }[] }>(
-    scope,
-    adoptZonesScript({ view, items }),
-    "WriteTransaction",
-    "takeoff-adopt.cs",
-  ).then((r) => r.adopted);
-
-/** The zone board's live source: every stamped Zoning Region with its tessellated loops. */
-export const readZones = (scope: HostSessionScope) =>
-  runScript<{ zones: CandidateRegion[] }>(
-    scope,
-    zonesScript(),
-    "ReadOnly",
-    "takeoff-zones.cs",
-  ).then((r) => r.zones);
-
-/** Step 2 — validate + register: mints GUIDs for new tags, reports the rename-vs-new questions. */
-export const applyRegistry = (scope: HostSessionScope, args: RegistryArgs) =>
-  runScript<RegistryState>(scope, registryScript(args), "WriteTransaction", "takeoff-registry.cs");
-
-/** Step 2.5a — capture prepare (WriteTransaction): crop + stripped seed views for the level. */
-export const prepareCapture = (scope: HostSessionScope, view: string) =>
-  runScript<{ level: string }>(
-    scope,
-    prepareCaptureScript({ view }),
-    "WriteTransaction",
-    "takeoff-prepare.cs",
-  );
-
-/** Step 2.5b — capture detect (ReadOnly): export ink, detect, dump replay_<level>.bin. */
-export const detectCapture = (scope: HostSessionScope, level: string) =>
-  runScript<{ level: string; replayPath: string; rooms: number; totalSqft: number }>(
-    scope,
-    detectCaptureScript({ level }),
-    "ReadOnly",
-    "takeoff-detect.cs",
-  );
-
-/** Step 3 — partition one zone and materialize it into the real zoning view. */
-export const partitionZone = (scope: HostSessionScope, args: PartitionArgs) =>
-  runScript<PartitionRun>(scope, partitionScript(args), "WriteTransaction", "takeoff-partition.cs");
-
-/** Step 3 (read side) — what is materialized for a zone right now. */
-export const readZoneRegions = (
-  scope: HostSessionScope,
-  args: { view: string; zoneGuid: string },
-) =>
-  runScript<{ regions: LiveRegion[] }>(
-    scope,
-    zoneRegionsScript(args),
-    "ReadOnly",
-    "takeoff-regions.cs",
-  ).then((r) => r.regions);
-
-/**
- * The write-through review law: one accept/dismiss, persisted into the Room Region's provenance
- * blob before the UI shows it as decided.
- */
-export const writeDecisions = (
-  scope: HostSessionScope,
-  elementId: number,
-  resolutions: Resolution[],
-) =>
-  runScript<{ elementId: number; zoneGuid: string; bytes: number; blob: string }>(
-    scope,
-    decisionScript({ elementId, resolutionsJson: JSON.stringify(resolutions) }),
-    "WriteTransaction",
-    "takeoff-decision.cs",
-  );
-
-/** Post-sync: merge the .r10 identity into the typed provenance authority in Revit. */
-export const linkRhvacBatch = (
-  scope: HostSessionScope,
-  writes: { elementId: number; link: RhvacLink }[],
-) =>
-  runScript<{ elementId: number; zoneGuid: string; bytes: number; blob: string }[]>(
-    scope,
-    linkRhvacBatchScript(writes),
-    "WriteTransaction",
-    "takeoff-rhvac-links.cs",
-  );
-
-export const writeRoomType = (scope: HostSessionScope, elementId: number, roomType: string) =>
-  runScript<string>(
-    scope,
-    roomTypeScript({ elementId, roomType }),
-    "WriteTransaction",
-    "takeoff-room-type.cs",
-  );
+const toPoints = (values: number[][]): [number, number][] => values.map(toPoint);
