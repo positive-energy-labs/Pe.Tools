@@ -16,6 +16,7 @@ import { FactChip, type FactTone } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Provenance } from "#/components/lang/section";
+import { Verb } from "#/components/lang/verb";
 import { callHostDynamic } from "#/host/client";
 import { useFieldOptions } from "#/host/field-options";
 import { type HostIssue, HostIssuePanel, toHostIssue } from "#/host/issues";
@@ -88,12 +89,6 @@ function opDomain(key: string): Domain {
 function costTone(tier: string | undefined): FactTone {
   return tier?.toLowerCase() === "expensive" ? "caution" : "meta";
 }
-
-/** Selection is a fill, never a hue — the select rung, ground re-declared. */
-const SELECT_FILL = {
-  background: "var(--r-select)",
-  "--r-on": "var(--r-select)",
-} as React.CSSProperties;
 
 function OpsPlayground() {
   const [query, setQuery] = useState("");
@@ -253,8 +248,10 @@ function OpsPlayground() {
                           setSelectedGlance(glance);
                           setSelected(undefined);
                         }}
-                        className="w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
-                        style={active ? SELECT_FILL : undefined}
+                        className={cn(
+                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
+                          active && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+                        )}
                       >
                         <div className="t-value min-w-0 truncate font-medium">
                           {glance.displayName}
@@ -285,8 +282,10 @@ function OpsPlayground() {
                     <li key={op.key}>
                       <button
                         onClick={() => select(op)}
-                        className="w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
-                        style={active ? SELECT_FILL : undefined}
+                        className={cn(
+                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
+                          active && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+                        )}
                       >
                         <div className="flex items-center gap-1.5">
                           <span
@@ -495,9 +494,12 @@ function OpsPlayground() {
             </details>
 
             <div className="flex items-center gap-3">
-              <Button onClick={() => void run()} disabled={running}>
-                {running ? "Running..." : "Run"}
-              </Button>
+              <Verb
+                label="Run"
+                onClick={() => void run()}
+                busy={running}
+                reason="Run the selected operation against the selected host session."
+              />
               {result && (
                 <OutcomeLine
                   kind="receipt"
@@ -821,12 +823,7 @@ function ProjectedOutput({ value }: { value: unknown }) {
       <h2 className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{projection.title}</h2>
       <div className="max-h-[24rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)]">
         <table className="t-value w-full text-left">
-          <thead
-            className="sticky top-0"
-            style={
-              { background: "var(--r-recess)", "--r-on": "var(--r-recess)" } as React.CSSProperties
-            }
-          >
+          <thead className="sticky top-0 bg-[var(--r-recess)] [--r-on:var(--r-recess)]">
             <tr>
               {columns.map((column) => (
                 <th
@@ -859,12 +856,7 @@ function OutputBlock({ title, value }: { title: string; value: unknown }) {
   return (
     <div className="min-w-0">
       {title && <h2 className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{title}</h2>}
-      <pre
-        className="t-value max-h-[32rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)] p-3"
-        style={
-          { background: "var(--r-recess)", "--r-on": "var(--r-recess)" } as React.CSSProperties
-        }
-      >
+      <pre className="t-value max-h-[32rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)] bg-[var(--r-recess)] [--r-on:var(--r-recess)] p-3">
         {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
       </pre>
     </div>

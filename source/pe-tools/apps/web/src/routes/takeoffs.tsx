@@ -320,8 +320,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
         <input
           name="dir"
           placeholder={`add a folder — e.g. ${DEFAULT_ARTIFACT_DIR}`}
-          className="face-mono t-caption w-full bg-transparent px-1 py-0.5 outline-none"
-          style={{ borderTop: "1px solid var(--r-line-2)", color: "var(--r-ink)" }}
+          className="face-mono t-caption w-full border-t border-[var(--r-line-2)] bg-transparent px-1 py-0.5 text-[var(--r-ink)] outline-none"
         />
       </form>
     ) : null;

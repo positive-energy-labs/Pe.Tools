@@ -49,8 +49,8 @@ import { useRouteState } from "#/workbench/route-state";
  * proposals arrive identically over SSE. The picker still speaks the host directly
  * (settings.workspaces / settings.tree) to choose which document `open` targets.
  *
- * Design-language pass 2026-08-16: head is the one `AddressingBar` (this route no longer
- * rides `RouteWorkspaceShell`); the field grid is the machine-operated object and wears the
+ * Design-language pass 2026-08-16: head is the one `AddressingBar`; the field grid is the
+ * machine-operated object and wears the
  * one `ArtifactFrame`; field values render through `StateCell` (proposed / staged / clean);
  * verbs are lang `Verb`s bracketed by `useVerb`.
  */

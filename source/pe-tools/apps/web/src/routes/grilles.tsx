@@ -158,10 +158,7 @@ function GrillesRoute() {
 
   return (
     <main className="flex h-full min-h-0 flex-col">
-      <header
-        className="flex flex-wrap items-baseline gap-2 border-b px-3 py-2"
-        style={{ borderColor: "var(--r-line)" }}
-      >
+      <header className="flex flex-wrap items-baseline gap-2 border-b border-[var(--r-line)] px-3 py-2">
         <span className="face-mono t-label t-upper text-[var(--r-ink-mute)]">
           wood floor grille
         </span>

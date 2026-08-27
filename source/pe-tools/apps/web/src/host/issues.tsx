@@ -208,17 +208,3 @@ export function HostIssuePanel({
 function HostIssueMeta({ children }: { children: ReactNode }) {
   return <span className="rounded border border-current/20 px-1.5 py-0.5">{children}</span>;
 }
-
-export function HostConnectionPill({ connected, label }: { connected: boolean; label?: string }) {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-      <span
-        className={cn(
-          "size-2 rounded-full",
-          connected ? "bg-accent-foreground" : "bg-muted-foreground/50",
-        )}
-      />
-      {connected ? (label ?? "Connected") : "Disconnected"}
-    </span>
-  );
-}
