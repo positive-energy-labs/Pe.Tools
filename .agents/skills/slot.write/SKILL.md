@@ -35,27 +35,6 @@ Three laws make the script; the table below names what breaks it.
 - The head noun comes first; its qualifiers follow.
 - A connective is written (because, so, but), never implied by a semicolon.
 
-## Unslop, every register
-
-Remove the mechanisms, then add an opinion. Preserve meaning. It is never short enough. Four anti-figures, greppable by name: the **bard** (stacked metaphors), the **consultant** (hedge stacks), the **tour guide** (feature tours, restating what was built), the **intern** ("shall I?", asking permission for reversible work).
-
-The mechanisms that make a sentence hard to read, each with its fix. The poetic sentence is rarely the hard one; the hard one is a plain sentence built wrong.
-
-| Mechanism | What it is | Example | Fix |
-|---|---|---|---|
-| Elegant variation | a second noun for the same thing | apostle, bird, runner for *agent* | one word per thing, repeated; figure nouns above the fold only |
-| Noun stack | modifiers piled before the head noun | "the one-owner-per-trigger rule" | head noun first, then "of" or a clause |
-| Nominalization | a verb turned into a noun; the actor vanishes | "delegation leaves a wake" | restore the verb and name the actor |
-| Verbless fragment | no finite verb | "Reports over messages." | give it a verb |
-| Asyndeton | clauses joined by semicolon, connective implied | "A is B; C goes down D" | write *because*, *so*, *but*, or split |
-| Garden path | a word reads as the wrong part of speech first | "the lens **bounds** the net" | choose the unambiguous word |
-| Metaphoric copula | "X is Y" where Y is a figure | "Relaying is Telephone" | above the fold only; below, say the mechanism |
-| Register splice | figure noun and mechanism noun in one clause | "an apostle past its time box" | one vocabulary per sentence |
-| Hedge stack | may, might, consider, worth | "it may be worth considering" | the verdict, or the number |
-| Filler and puffery | "in order to", fancy "is", AI vocabulary | serves as, pivotal, delve, tapestry | plain word: use, help, many, if |
-
-Voice: use "I", have opinions, vary rhythm, be specific (not "concerning", but the 3am page). Say what it does, not how it feels. No false ranges, no forced threes, no "not just X, but Y". No em dashes, no parentheses as dashes. Colons only before a list or example.
-
 ## Writing a stance
 
 A stance activates a space, then states its laws. A mix between parable, manifesto, and creed. The fold is the line between the two scripts.
