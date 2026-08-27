@@ -188,6 +188,43 @@ test("apply refuses a revision that moved", async () => {
   expect((await module.read(documentA, "test-route"))?.doc).toMatchObject({ count: 1 });
 });
 
+test("a handler throw discards its staged document write", async () => {
+  const { store } = memoryStore();
+  const module = workspace(store, {
+    registration: registration({
+      fail: async (_input, context) => {
+        const doc = context.getDoc();
+        doc.count = 1;
+        await context.setDoc(doc);
+        throw new Error("deliberate failure");
+      },
+    }),
+  });
+
+  expect(await module.command(documentA, "test-route", "human", "fail", {}, 0)).toMatchObject({
+    ok: false,
+  });
+  expect(await module.read(documentA, "test-route")).toMatchObject({
+    revision: 0,
+    doc: { count: 0 },
+  });
+});
+
+test("registration rejects route delimiters and schemas that cannot become JSON Schema", () => {
+  const { store } = memoryStore();
+  const colonRoute = registration();
+  colonRoute.spec.route = "bad:route";
+  expect(() => workspace(store, { registration: colonRoute })).toThrow("cannot contain ':'");
+
+  const badDocument = registration();
+  badDocument.spec.schema = z.date() as unknown as typeof documentSchema;
+  expect(() => workspace(store, { registration: badDocument })).toThrow();
+
+  const badCommand = registration();
+  badCommand.spec.commands.increment!.input = z.date();
+  expect(() => workspace(store, { registration: badCommand })).toThrow();
+});
+
 test("an abandoned external mutation becomes outcomeUnknown and recovery clears it", async () => {
   const { store, state } = memoryStore();
   const started = deferred<void>();
