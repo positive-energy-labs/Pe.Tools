@@ -53,13 +53,14 @@
  *  not a ratchet. Update src/design-guard.baseline.json in the same commit as the win.
  * =============================================================================================
  */
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createSourceFile,
   forEachChild,
   isIdentifier,
+  isImportDeclaration,
   isJsxAttribute,
   isJsxElement,
   isJsxExpression,
@@ -110,6 +111,7 @@ const collectCode = (dir: string, relBase: string, out: Entry[]): Entry[] => {
 
 const CSS_FILES = collectCss(ROOT, "", []);
 const FILES: Entry[] = [...collectCode(ROOT, "", []), ...CSS_FILES];
+const ROUTE_TREE_TEXT = readFileSync(join(ROOT, "routeTree.gen.ts"), "utf8");
 
 const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;
 
@@ -158,7 +160,11 @@ const literalClassTexts = (
       return;
     }
     if (isTemplateExpression(node)) {
-      texts.push(node.head.text, ...node.templateSpans.map((span) => span.literal.text));
+      texts.push(node.head.text);
+      for (const span of node.templateSpans) {
+        texts.push(span.literal.text);
+        collectLiterals(span.expression);
+      }
       return;
     }
     forEachChild(node, collectLiterals);
@@ -171,13 +177,34 @@ const literalClassTexts = (
   return texts;
 };
 
+const MOUNTED_ROUTE_FILES = (() => {
+  const mounted = new Set<string>();
+  const routeTree = createSourceFile(
+    "routeTree.gen.ts",
+    ROUTE_TREE_TEXT,
+    ScriptTarget.Latest,
+    true,
+    ScriptKind.TS,
+  );
+  const visit = (node: import("typescript").Node) => {
+    if (isImportDeclaration(node) && isStringLiteral(node.moduleSpecifier)) {
+      const specifier = node.moduleSpecifier.text;
+      if (specifier.startsWith("./routes/")) {
+        const rel = `${specifier.slice(2)}.tsx`;
+        if (!rel.endsWith("-proto.tsx") && existsSync(resolve(ROOT, rel))) mounted.add(rel);
+      }
+    }
+    forEachChild(node, visit);
+  };
+  visit(routeTree);
+  return mounted;
+})();
+
 const routeArbitrary = (): Offence[] => {
   const re =
     /(?:^|\s)((?:text|bg|border|rounded|ring|shadow|p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|space-[xy]|w|h|min-w|max-w|min-h|max-h|leading|tracking|font|top|right|bottom|left|inset|translate-x|translate-y|opacity|z)-\[[^\s\]]+\])/g;
   const offences: Offence[] = [];
-  for (const f of FILES.filter(
-    (file) => /^routes\/.*\.tsx$/.test(file.rel) && !file.rel.endsWith("-proto.tsx"),
-  )) {
+  for (const f of FILES.filter((file) => MOUNTED_ROUTE_FILES.has(file.rel))) {
     const sf = createSourceFile(f.rel, f.text, ScriptTarget.Latest, true, ScriptKind.TSX);
     const visit = (node: import("typescript").Node) => {
       if (isJsxElement(node) || isJsxSelfClosingElement(node)) {
@@ -269,12 +296,24 @@ describe("design guard — hard zeros", () => {
 });
 
 describe("design guard — foundation topology", () => {
+  const directiveMatches = (text: string) => [
+    ...text.matchAll(/^\s*@(import|plugin)\s+(?:url\([^)]*\)|["'][^"']+["']);/gm),
+  ];
+
+  const directiveRemainder = (text: string, matches: RegExpMatchArray[]) => {
+    let remainder = stripComments(text);
+    for (const match of [...matches].reverse()) {
+      const start = match.index ?? 0;
+      remainder = remainder.slice(0, start) + remainder.slice(start + match[0].length);
+    }
+    return remainder.trim();
+  };
+
   it("keeps styles.css as the app entry and import order", () => {
     const entry = FILES.find((file) => file.rel === "styles.css");
     expect(entry, "styles.css must be collected").toBeDefined();
-    const directives = [
-      ...entry!.text.matchAll(/^\s*@(import|plugin)\s+(?:url\([^)]*\)|["'][^"']+["']);/gm),
-    ].map((match) => match[0].trim());
+    const matches = directiveMatches(entry!.text);
+    const directives = matches.map((match) => match[0].trim());
     expect(directives, "styles.css must keep the six ordered entry directives").toEqual([
       '@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=Spectral:wght@500;600;700&display=swap");',
       '@import "tailwindcss";',
@@ -283,6 +322,42 @@ describe("design guard — foundation topology", () => {
       '@import "./design-lang.css";',
       '@import "./design-defaults.css";',
     ]);
+    expect(directiveRemainder(entry!.text, matches), "styles.css has non-directive content").toBe(
+      "",
+    );
+  });
+
+  it("rejects declarations and unknown directives left in styles.css", () => {
+    const entry = FILES.find((file) => file.rel === "styles.css");
+    expect(entry).toBeDefined();
+    const mutated = `${entry!.text}\n@source "./rogue";\nbody { display: block; }`;
+    const matches = directiveMatches(mutated);
+    expect(directiveRemainder(mutated, matches)).toContain('@source "./rogue";');
+    expect(directiveRemainder(mutated, matches)).toContain("body { display: block; }");
+  });
+
+  it("uses only route sources mounted by routeTree.gen.ts", () => {
+    expect(MOUNTED_ROUTE_FILES.has("routes/index.tsx")).toBe(true);
+    expect(MOUNTED_ROUTE_FILES.has("routes/__wave1b-unmounted.tsx")).toBe(false);
+  });
+
+  it("collects template substitution literals exactly once", () => {
+    const source = createSourceFile(
+      "template-regression.tsx",
+      '<div className={`p-[1px] ${ok ? "m-[2px]" : ""} h-[3px]`} />',
+      ScriptTarget.Latest,
+      true,
+      ScriptKind.TSX,
+    );
+    let initializer: import("typescript").JsxAttribute["initializer"];
+    const visit = (node: import("typescript").Node) => {
+      if (isJsxAttribute(node) && isIdentifier(node.name) && node.name.text === "className") {
+        initializer = node.initializer;
+      }
+      forEachChild(node, visit);
+    };
+    visit(source);
+    expect(literalClassTexts(initializer)).toEqual(["p-[1px] ", " h-[3px]", "m-[2px]", ""]);
   });
 
   it("keeps CSS declarations inside the explicit foundation seams", () => {
