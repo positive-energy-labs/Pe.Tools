@@ -16,7 +16,13 @@ import {
 export type { RouteStatePatch, RouteStateWriteResult } from "@pe/agent-contracts";
 
 import { appAtomRegistry } from "#/state/registry";
-import { createRouteStoreCore, docAtom, docWriter, type Scope } from "#/state/route-store";
+import {
+  createRouteStoreCore,
+  docAtom,
+  docWriter,
+  RouteWriteFailure,
+  type Scope,
+} from "#/state/route-store";
 import { useRouteStore } from "#/state/use-route-store";
 
 type LastCommand = { command: string; input?: unknown } | null;
@@ -79,12 +85,17 @@ function createRouteStateStore<TSchema extends z.ZodType>(
   const writer = docWriter(spec, scope, registry, slice);
   const lastCommand = core.owned("page/last-command", Atom.make<LastCommand>(null));
   const run = (verb: string, write: () => Promise<RouteStateWriteResult>) =>
-    core.runVerb(verb, async () => {
-      const result = await write();
-      const failure = routeWriteFailure(result);
-      if (failure) throw Error(failure);
-      return result;
-    }, [spec.route]);
+    core
+      .runVerb(verb, async () => {
+        const result = await write();
+        const failure = routeWriteFailure(result);
+        if (result.ok && failure) throw Error(failure);
+        return result;
+      }, [spec.route])
+      .catch((cause: unknown) => {
+        if (cause instanceof RouteWriteFailure) return cause.result;
+        throw cause;
+      });
   return {
     registry,
     slice,

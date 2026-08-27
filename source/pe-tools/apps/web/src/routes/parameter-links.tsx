@@ -135,7 +135,7 @@ function ParameterLinksWorkspace({
       );
       if (!result.ok) {
         setOutcome({
-          kind: "error",
+          kind: result.kind ?? "error",
           text: result.error ?? result.hint ?? "saving the draft failed",
         });
         return false;
@@ -155,7 +155,10 @@ function ParameterLinksWorkspace({
         if (name === "refresh") {
           const result = await route.command("refresh", {});
           if (!result.ok)
-            setOutcome({ kind: "error", text: result.error ?? result.hint ?? "refresh failed" });
+            setOutcome({
+              kind: result.kind ?? "error",
+              text: result.error ?? result.hint ?? "refresh failed",
+            });
           return;
         }
         // preview/apply need the reviewed profile persisted first (the command guard
@@ -167,7 +170,7 @@ function ParameterLinksWorkspace({
         if (!result.ok) {
           // An op-level rejection is the host refusing the plan, not a broken bridge.
           setOutcome({
-            kind: "refused",
+            kind: result.kind ?? "error",
             text: result.error ?? result.hint ?? `${name} refused`,
           });
           return;
