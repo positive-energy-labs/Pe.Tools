@@ -29,6 +29,7 @@ restated here.
 ### Collaborative UI — agent-writable route state
 
 - 2026-08-27 — The route-document store is the native `threadState` KV on the resource id, keyed by one `routeDocumentKey(route, Address)` (route first, because an Address may contain `:`; a route name may not). Accepted as the document store, not a smuggle awaiting a "real" one: a document table would be the same KV behind a rename. Ceiling named in code: build a table only if enumeration or scope-delete by rvt is ever needed. Ruled by kaitpw on `post/REVIEW-2.md` G2; retires the "real `documentState`" Owed row.
+- 2026-08-27 — `expectedRevision` orders, `requestId` is at-most-once: the browser mints one request id per `(command, input)` gesture and reuses it until the write lands, so a re-click after a lost response replays the receipt instead of mutating Revit twice. Found by the round-two prover on `b26bcc1` (fresh id per click made the whole receipt machine unreachable from the human lane); fixed `c3aed05`.
 - 2026-08-27 — `toJsonSchema` fails fast at registration; a route spec or command input that cannot serialize is a wiring bug, never a `schema unavailable` placeholder handed to the agent.
 
 - 2026-07-06 — The question is **collaborative UI**, not generative UI: the agent does not invent UI, it writes known-schema state through tools. Write paths must include in-app Pea, external MCP agents (Claude, scripts), and eventually browser-native agents. The requirement decomposes into four layers — artifact (persistence) · write paths (tools) · reactivity (fan-out) · approval — and no single library covers all four.
@@ -93,6 +94,9 @@ restated here.
 ## Owed
 
 - Fan rvt lifecycle events and human route edits into every bound Pea thread as document events.
+- Restore OM observation/reflection trace cards from `om_*` events (≈ +40 LOC) or accept the loss; native `omProgress` carries gauges, not a cycle log. Lost in the 2026-08-27 shadow wave.
+- The partial-write note says "N values failed": `useRouteState` hardwires the noun (`route-state.tsx:93`); the spec or handle should carry the domain noun (`cell` on `/schedule-grid`).
+- Second verbosity sweep, ≈ −270 non-test LOC, itemized in `.artifacts/handoffs/merge-review/post/r2-verb-*.md`; rule first on `parseReceipts` → zod and `feed()`'s silent `seam` drop.
 - Settle the staged plugin-edit payload delivered to Pea.
 - Execute REVIEW section 4's zero-behavior folds as one deletion wave of about 800 LOC (cutover −315, cleanroom −486). The `WorkbenchState` shadow is not part of this row; it is the 2026-08-27 Decided wave above (~−2,400 LOC).
 - Loro remains unfetched, and Mastra `session.create` idempotency across tabs remains unverified.
