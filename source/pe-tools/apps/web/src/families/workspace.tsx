@@ -800,7 +800,11 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
 
       {failure && (
         <div className="border-b border-[var(--r-line)] px-4 py-1.5">
-          <OutcomeLine kind={failure.kind} label={`${failure.verb} failed`} says={failure.message} />
+          <OutcomeLine
+            kind={failure.kind}
+            label={`${failure.verb} failed`}
+            says={failure.message}
+          />
         </div>
       )}
       {matrixIssue && (
