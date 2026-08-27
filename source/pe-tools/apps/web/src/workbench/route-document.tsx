@@ -1,5 +1,5 @@
-import { useMemo, useSyncExternalStore, type ReactNode } from "react";
-import { useLocation, useSearch } from "@tanstack/react-router";
+import { useMemo, type ReactNode } from "react";
+import { useLocation, useRouter, useSearch } from "@tanstack/react-router";
 import { addressSchema, type Address } from "@pe/agent-contracts";
 
 import { EmptyState } from "#/components/lang/empty";
@@ -9,19 +9,6 @@ import { documentAddress, type SessionFacts } from "#/host/target";
 export interface RouteDocumentChoice {
   at: Address;
   label: string;
-}
-
-let boundDocument: Address | null = null;
-const listeners = new Set<() => void>();
-
-function bindDocument(at: Address) {
-  boundDocument = at;
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
 }
 
 export function routeDocumentChoices(sessions: readonly SessionFacts[]): RouteDocumentChoice[] {
@@ -40,12 +27,10 @@ export function routeDocumentChoices(sessions: readonly SessionFacts[]): RouteDo
 
 export function routeDocumentAddress(
   choices: readonly RouteDocumentChoice[],
-  bound: Address | null,
   requested?: Address | null,
 ): Address | null {
   if (requested !== undefined)
     return requested && choices.some((choice) => choice.at === requested) ? requested : null;
-  if (bound && choices.some((choice) => choice.at === bound)) return bound;
   return choices.length === 1 ? choices[0]!.at : null;
 }
 
@@ -62,14 +47,13 @@ export function routeDocumentTabHref(href: string, at: Address) {
 
 export function useRouteDocumentAddress() {
   const { sessions } = useFleet();
-  const bound = useSyncExternalStore(subscribe, () => boundDocument);
   const requested = useSearch({
     strict: false,
     select: (search) => (search as { doc?: Address | null }).doc,
   });
   return useMemo(
-    () => routeDocumentAddress(routeDocumentChoices(sessions), bound, requested),
-    [sessions, bound, requested],
+    () => routeDocumentAddress(routeDocumentChoices(sessions), requested),
+    [sessions, requested],
   );
 }
 
@@ -101,11 +85,16 @@ export function RouteDocument({ children }: { children: (at: Address) => ReactNo
 
 export function RouteDocumentEmpty() {
   const { sessions } = useFleet();
+  const router = useRouter();
+  const href = useLocation({ select: (location) => location.href });
   const choices = routeDocumentChoices(sessions);
   return (
     <main className="grid min-h-screen place-items-center bg-[var(--r-page)] font-pe">
       {choices.length > 1 ? (
-        <RouteDocumentPicker choices={choices} onPick={bindDocument} />
+        <RouteDocumentPicker
+          choices={choices}
+          onPick={(at) => void router.navigate({ href: routeDocumentTabHref(href, at) })}
+        />
       ) : (
         <EmptyState story="scope" exit="open a Revit document, then return here">
           pick a document

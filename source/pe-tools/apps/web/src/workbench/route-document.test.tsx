@@ -51,9 +51,9 @@ describe("route document choice", () => {
       session("pe.app-26", "Tower", "C:\\Models\\Tower.rvt"),
     ]);
 
-    expect(routeDocumentAddress([], null)).toBeNull();
-    expect(routeDocumentAddress(one, null)).toBe(address("C:\\Models\\projectA.rvt"));
-    expect(routeDocumentAddress(two, null)).toBeNull();
+    expect(routeDocumentAddress([])).toBeNull();
+    expect(routeDocumentAddress(one)).toBe(address("C:\\Models\\projectA.rvt"));
+    expect(routeDocumentAddress(two)).toBeNull();
 
     const pick = vi.fn();
     render(<RouteDocumentPicker choices={two} onPick={pick} />);
@@ -82,15 +82,12 @@ describe("route document choice", () => {
     const at = address("C:\\Models\\projectA.rvt");
     const choices = routeDocumentChoices([session("pe.app-25", "project-a", at)]);
     const loaded = routeDocumentSearch({ doc: at }).doc;
-    expect(routeDocumentAddress(choices, null, loaded)).toBe(at);
+    expect(routeDocumentAddress(choices, loaded)).toBe(at);
 
-    expect(
-      routeDocumentAddress(choices, null, routeDocumentSearch({ doc: "observed" }).doc),
-    ).toBeNull();
+    expect(routeDocumentAddress(choices, routeDocumentSearch({ doc: "observed" }).doc)).toBeNull();
     expect(
       routeDocumentAddress(
         choices,
-        null,
         routeDocumentSearch({ doc: "C:\\Models\\Unavailable.rvt" }).doc,
       ),
     ).toBeNull();
@@ -119,7 +116,6 @@ describe("route document choice", () => {
     expect(
       routeDocumentAddress(
         routeDocumentChoices([session("pe.app-25", "project-a", at)]),
-        null,
         (childRouter.state.location.search as { doc?: ReturnType<typeof address> }).doc,
       ),
     ).toBe(at);

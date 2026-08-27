@@ -283,9 +283,7 @@ export function createSettingsStore(deps: {
           expectRouteWrite(await apply([patch]));
           item.resolve();
         } catch (cause) {
-          write("stage", "failure", () =>
-            registry.set(core.failure, verbFailure("stage", cause)),
-          );
+          write("stage", "failure", () => registry.set(core.failure, verbFailure("stage", cause)));
           item.reject(cause);
           throw cause;
         }
