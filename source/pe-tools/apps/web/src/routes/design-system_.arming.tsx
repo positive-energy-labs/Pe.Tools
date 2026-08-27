@@ -27,7 +27,9 @@ import { ThemeToggle } from "#/components/ThemeToggle";
 import { ArmingStrip } from "#/components/lang/arming-strip";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { Section } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
+import { GapNote } from "#/design-system/gap-note";
 import { ARMING_FIXTURE } from "#/design-system/fixtures";
 
 export const Route = createFileRoute("/design-system_/arming")({ component: ArmingRoute });
@@ -79,12 +81,11 @@ function ArmingRoute() {
         </p>
 
         {/* ── live ─────────────────────────────────────────────────────────────────────── */}
-        <section className="flex flex-col gap-3">
-          <SectionHead
-            n="01"
-            title="live"
-            note="type a reason to arm it · the first commit takes a drift refusal · re-plan, then commit again"
-          />
+        <Section
+          index="01"
+          label="live"
+          note="type a reason to arm it · the first commit takes a drift refusal · re-plan, then commit again"
+        >
           <div className="max-w-[44rem] flex flex-col gap-2.5">
             {phase === "written" ? (
               <>
@@ -141,15 +142,14 @@ function ArmingRoute() {
               />
             ) : null}
           </div>
-        </section>
+        </Section>
 
         {/* ── frozen ───────────────────────────────────────────────────────────────────── */}
-        <section className="flex flex-col gap-3">
-          <SectionHead
-            n="02"
-            title="the three phases, frozen"
-            note="the same component, three states, so the sequence can be read without performing it"
-          />
+        <Section
+          index="02"
+          label="the three phases, frozen"
+          note="the same component, three states, so the sequence can be read without performing it"
+        >
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <Frozen
               phase="unarmed"
@@ -200,37 +200,37 @@ function ArmingRoute() {
               />
             </Frozen>
           </div>
-        </section>
+        </Section>
 
         <section className="flex flex-col gap-1.5">
           <span className="t-caption t-upper text-[var(--r-ink)]">what this page found</span>
-          <Gap>
+          <GapNote>
             the strip cannot say <strong>how old its own plan is</strong> — the one fact that
             decides whether to press it. It renders &ldquo;armed against a plan of unknown
             age&rdquo; rather than hiding the hole. The arming record needs <code>armedAt</code>,{" "}
             <code>armedBy</code> and <code>supersededBy</code> before that line can be deleted.
-          </Gap>
-          <Gap>
+          </GapNote>
+          <GapNote>
             the refusal and the fresh plan are <strong>not linked</strong>. This route holds a{" "}
             <code>replanned</code> boolean and swaps the hash itself; nothing in the component or
             the model connects a refusal to the plan that supersedes it, so the strip cannot show
             &ldquo;refused a91f#c04 → now planning b02e#118&rdquo;.
-          </Gap>
-          <Gap>
+          </GapNote>
+          <GapNote>
             the strip has <strong>no link to the verb it arms</strong>. <code>verb</code> is a
             string used as both the label and the ceremony&apos;s subject, so an armed strip and the
             disabled verb elsewhere on a page that it is arming cannot know about each other.
-          </Gap>
-          <Gap>
+          </GapNote>
+          <GapNote>
             <strong>the receipt is a separate component with no link back.</strong> Committing here
             renders an <code>OutcomeLine</code> this route assembled from the fixture; the strip
             reports nothing about what it did, and the outcome carries no verb or target.
-          </Gap>
-          <Gap>
+          </GapNote>
+          <GapNote>
             there is <strong>no cancelled phase</strong>. <code>onCancel</code> disarms and the
             surface simply returns to unarmed, so an abandoned write leaves no trace at all — which
             may be right, and has never been ruled.
-          </Gap>
+          </GapNote>
         </section>
       </main>
     </div>
@@ -274,24 +274,5 @@ function Header({ title, note }: { title: string; note: string }) {
         <ThemeToggle />
       </div>
     </header>
-  );
-}
-
-function SectionHead({ n, title, note }: { n: string; title: string; note: string }) {
-  return (
-    <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
-      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{n}</span>
-      <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
-      <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
-    </div>
-  );
-}
-
-function Gap({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="max-w-[86ch] border-l border-dashed border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]">
-      <span className="text-[var(--r-caution)]">gap · </span>
-      {children}
-    </p>
   );
 }

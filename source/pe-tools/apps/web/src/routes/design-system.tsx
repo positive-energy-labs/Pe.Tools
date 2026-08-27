@@ -31,10 +31,12 @@ import type { StateCellProps } from "#/components/lang/cell";
 import { FactChip, NarrowChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { Section } from "#/components/lang/section";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import { Button } from "#/components/ui/button";
+import { GapNote } from "#/design-system/gap-note";
 import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/fixtures";
 
 export const Route = createFileRoute("/design-system")({ component: DesignSystem });
@@ -49,33 +51,6 @@ const row = (key: string) => PARAM_ROWS.filter((r) => r.key === key)[0];
    The page itself obeys the border budget it documents: sections are plain content under a
    quiet head with a hairline under it, and NOTHING on this page is enclosed except the three
    objects that are allowed to be — pea's card, the table, the arming strip. */
-
-function Section({
-  n,
-  title,
-  note,
-  help,
-  children,
-}: {
-  n: string;
-  title: string;
-  note: string;
-  /** Region orientation — the HelpTip paradigm, beside the title it orients. */
-  help?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
-        <span className="t-caption t-upper text-[var(--r-ink-mute)]">{n}</span>
-        <span className="t-label t-upper">{title}</span>
-        {help != null ? <HelpTip className="self-center">{help}</HelpTip> : null}
-        <span className="t-label min-w-0 flex-1 text-[var(--r-ink-2)]">{note}</span>
-      </div>
-      {children}
-    </section>
-  );
-}
 
 /** Spec prose on the left, the living component on the right. The scaffold's whole framing. */
 function Demo({
@@ -99,16 +74,6 @@ function Demo({
       </div>
       <div className="flex min-w-0 flex-col gap-3">{children}</div>
     </div>
-  );
-}
-
-/** A recorded gap, said out loud where a reader would otherwise think the demo was finished. */
-function GapNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="face-mono t-caption max-w-[86ch] border-l border-dashed border-[var(--r-line-2)] pl-2 text-[var(--r-ink-2)]">
-      <span className="text-[var(--r-caution)]">gap · </span>
-      {children}
-    </p>
   );
 }
 
@@ -419,8 +384,8 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
 function Laws() {
   return (
     <Section
-      n="01"
-      title="the laws"
+      index="01"
+      label="the laws"
       note="fifteen rules that decide every surface — each with the shipping component obeying it. A position lives here the moment a real component can render it; SURFACE-PHILOSOPHY keeps only what nothing can render yet"
     >
       <div className="border-t border-[var(--r-line)]">
@@ -618,8 +583,8 @@ function Tokens() {
 
   return (
     <Section
-      n="02"
-      title="tokens"
+      index="02"
+      label="tokens"
       note="eighteen, and every one of them is oklch(L C h) off a declared band — src/design-lang.css is the one place a colour is decided"
     >
       <p className="t-prose max-w-[80ch] text-[var(--r-ink-2)]">
@@ -674,8 +639,8 @@ function Tokens() {
 function Catalogue() {
   return (
     <Section
-      n="03"
-      title="the catalogue"
+      index="03"
+      label="the catalogue"
       note="one block per components/lang primitive — the shipping component, the states that matter, and who consumes it"
     >
       <ArtifactFrameBlock />
@@ -1207,10 +1172,16 @@ function RealTable() {
 
   return (
     <Section
-      n="04"
-      title="the real table"
+      index="04"
+      label="the real table"
       note="the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell as its cell renderer"
-      help="The product table primitive, unmodified, with the cell grammar as its renderer. Rows never grow; click a cell and the readout band under the table speaks its facts. The gap notes below are the section's deliverable."
+      help={
+        <HelpTip className="self-center">
+          The product table primitive, unmodified, with the cell grammar as its renderer. Rows never
+          grow; click a cell and the readout band under the table speaks its facts. The gap notes
+          below are the section&apos;s deliverable.
+        </HelpTip>
+      }
     >
       <p className="t-prose max-w-[80ch] text-[var(--r-ink-2)]">
         The design-lang round hand-rolled its table, so the grammar was only ever proven against
@@ -1372,8 +1343,8 @@ const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
 function Satellites() {
   return (
     <Section
-      n="05"
-      title="satellites"
+      index="05"
+      label="satellites"
       note="mocked complicated cases — sibling routes, not nested; each announces its fixture with a dashed seam"
     >
       <div className="flex flex-col">

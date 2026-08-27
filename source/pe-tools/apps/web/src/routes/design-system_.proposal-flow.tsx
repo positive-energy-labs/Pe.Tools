@@ -29,9 +29,11 @@ import { CellStateKey } from "#/components/lang/cell-key";
 import { StateCell, type StateCellProps } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { Section } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
+import { GapNote } from "#/design-system/gap-note";
 import {
   PROPOSAL_SEED,
   PROPOSAL_TARGET,
@@ -112,12 +114,11 @@ function ProposalFlow() {
         </p>
 
         {/* ── scale 1 · pea's card, inline in the thread ───────────────────────────────── */}
-        <section className="flex flex-col gap-3">
-          <SectionHead
-            n="01"
-            title="scale one · pea's chat card"
-            note="a machine-operated object carrying state — it keeps its frame"
-          />
+        <Section
+          index="01"
+          label="scale one · pea's chat card"
+          note="a machine-operated object carrying state — it keeps its frame"
+        >
           <div className="max-w-[42rem]">
             {PROPOSAL_THREAD.map((m, i) => (
               <div key={i} className="flex gap-3 pb-2.5">
@@ -255,44 +256,43 @@ function ProposalFlow() {
               </span>
             </div>
           </div>
-        </section>
+        </Section>
 
         {/* ── scale 2 · the same world, in the real table ─────────────────────────────── */}
-        <section className="flex flex-col gap-3">
-          <SectionHead
-            n="02"
-            title="scale two · the same values, in the real table"
-            note="the actual MasterTable — no second fixture, no second reader"
-          />
+        <Section
+          index="02"
+          label="scale two · the same values, in the real table"
+          note="the actual MasterTable — no second fixture, no second reader"
+        >
           <ProposalTable items={items} committed={committed} />
-        </section>
+        </Section>
 
         <section className="flex flex-col gap-1.5">
           <span className="t-caption t-upper text-[var(--r-ink)]">what this page found</span>
-          <Gap>
+          <GapNote>
             a <strong>denied</strong> proposal has no representation in the language or the model:
             no reason, no author, no <code>denied</code> member on the cell. The card can only put
             the old value back and explain the denial in footline words — and the table row, which
             has no card next to it, reads as an ordinary clean value. A denial is currently
             invisible to anyone who was not watching.
-          </Gap>
-          <Gap>
+          </GapNote>
+          <GapNote>
             <strong>current → proposed</strong> lives beside the cell, not in it. The chat card
             knows the prior value; the table cell physically cannot show one. Until{" "}
             <code>StateCell</code> carries a prior, the two scales are the same grammar over
             different amounts of truth.
-          </Gap>
-          <Gap>
+          </GapNote>
+          <GapNote>
             every staged square on this page is <code>stagedBy=&quot;pea&quot;</code> because the
             fixture says so. In production the same square is inferred from <code>origin</code>,
             which is the author of the VALUE, not of the staging — so pea&apos;s square and yours
             are currently a guess — the strongest signal from the review.
-          </Gap>
-          <Gap>
+          </GapNote>
+          <GapNote>
             the receipt cannot name the write it reports. <code>OutcomeLine</code> carries no verb,
             target or item list, so &ldquo;{accepted} values written&rdquo; is a sentence this route
             assembled, not a fact the outcome holds.
-          </Gap>
+          </GapNote>
         </section>
       </main>
     </div>
@@ -390,24 +390,5 @@ function Header({ title, note }: { title: string; note: string }) {
         <ThemeToggle />
       </div>
     </header>
-  );
-}
-
-function SectionHead({ n, title, note }: { n: string; title: string; note: string }) {
-  return (
-    <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
-      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{n}</span>
-      <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
-      <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
-    </div>
-  );
-}
-
-function Gap({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="max-w-[86ch] border-l border-dashed border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]">
-      <span className="text-[var(--r-caution)]">gap · </span>
-      {children}
-    </p>
   );
 }

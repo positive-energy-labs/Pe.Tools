@@ -576,6 +576,21 @@
   text-transform: uppercase;
   color: var(--r-ink);
 }
+.dl-section-index {
+  flex: none;
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  color: var(--r-ink-mute);
+}
+.dl-section-note {
+  min-width: 0;
+  flex: 1;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--r-ink-2);
+}
 .dl-section-aside {
   display: flex;
   margin-left: auto;

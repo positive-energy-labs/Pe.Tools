@@ -17,12 +17,18 @@ import "./lang.css";
 
 export function Section({
   label,
+  index,
+  note,
   help,
   aside,
   children,
   className,
 }: {
   label: string;
+  /** Optional numbered section marker for documentation and exhibit heads. */
+  index?: string;
+  /** Optional one-line orientation note for documentation and exhibit heads. */
+  note?: React.ReactNode;
   /** Region orientation — a HelpTip node, beside the title it orients. */
   help?: React.ReactNode;
   /** Right-aligned counts/controls for the head row. */
@@ -33,8 +39,10 @@ export function Section({
   return (
     <section className={cn("dl-section", className)}>
       <div className="dl-section-head">
+        {index != null ? <span className="dl-section-index">{index}</span> : null}
         <h2 className="dl-section-label">{label}</h2>
         {help}
+        {note != null ? <span className="dl-section-note">{note}</span> : null}
         {aside != null ? <div className="dl-section-aside">{aside}</div> : null}
       </div>
       {children}
