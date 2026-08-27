@@ -178,12 +178,12 @@ function ProposalFlow() {
                 {items.map((item) => (
                   <div
                     key={item.key}
-                    className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 border-b border-[var(--r-line)] px-2.5 py-2 last:border-b-0"
+                    className="grid grid-cols-1 items-baseline gap-x-4 gap-y-1 border-b border-[var(--r-line)] px-2.5 py-2 last:border-b-0 sm:grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto]"
                   >
                     <span className="truncate font-[family-name:var(--font-pe-mono)] text-[10.5px] text-[var(--r-ink-2)]">
                       {item.param}
                     </span>
-                    <span className="flex min-w-0 flex-wrap items-baseline gap-2">
+                    <span className="flex min-w-0 max-w-full flex-wrap items-baseline gap-2">
                       {/* GAP (StateCell): the card knows the PRIOR value and the cell has no slot
                           for it — `current → proposed` is renderable in a chat card and physically
                           unrenderable in a table cell: the same fact is modelled twice, once
@@ -195,7 +195,10 @@ function ProposalFlow() {
                           {item.current} →
                         </span>
                       ) : null}
-                      <StateCell {...itemCell(item, committed)} />
+                      <StateCell
+                        {...itemCell(item, committed)}
+                        className="block min-w-0 max-w-full"
+                      />
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
                       {item.review === "open" ? (

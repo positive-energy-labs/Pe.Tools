@@ -460,7 +460,7 @@ function Page() {
   return (
     <div className="min-h-screen bg-[var(--r-page)]">
       <div className="mx-auto flex min-h-[85vh] max-w-6xl gap-0 px-6 py-6">
-        <div className="flex flex-1 flex-col border-r border-[var(--r-line)] pr-5">
+        <div className="flex min-w-0 flex-1 flex-col border-r border-[var(--r-line)] pr-5">
           {/* declare a new world — the only way a session comes to exist from this surface.
               The payload is an explicit choice, same words as the CLI: `installed` is a
               project-less start; `dev` asks a source-linked host for its checkout's Pe.App. */}
