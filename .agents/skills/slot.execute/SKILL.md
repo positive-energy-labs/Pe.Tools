@@ -176,7 +176,7 @@ For component-ey questions (a widget, an idiom, an interaction in isolation): on
 
 **Cleanup.**
 
-Winner folds into canon, rewritten to prod standard. Losers, switcher, and throwaway routes leave main; the full round only kept on a throwaway branch if user's rulings lacked confidence.
+Winner folds into canon, rewritten to prod standard. Losers, switcher, and throwaway routes leave main; the full round only kept on a throwaway branch if the user's verdicts lacked confidence.
 
 ## Host ops and scripts
 

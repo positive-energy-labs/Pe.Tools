@@ -45,7 +45,7 @@ For command failure rates, timeouts, and blind retries, use `python tools/loop-m
 - Serialize every candidate with provider, client, session, timestamp, path, locator, hash, and exclusion reason where applicable. Do not emit only the top results.
 - A recurrence claim requires a story ledger listing its independent authored submissions. Topic counts, provider spread, and projection copies never prove recurrence.
 - Verify provenance by rereading the canonical record and checking authorship plus the complete paraphrased meaning. Keyword presence is not verification.
-- Review candidates semantically. Rank current constitutional rulings, direct failures, and committed outcomes above capability probes, hypotheses, and frequency.
+- Review candidates semantically. Rank current constitutional verdicts, direct failures, and committed outcomes above capability probes, hypotheses, and frequency.
 - When review is sharded, adjudicate one shared calibration sample first, preserve disagreement, review full local context, and send the synthesis through a clean critic. Clip only report excerpts.
 - Keep owners separate. Product requirements, SDK contracts, harness preferences, and research-method corrections do not share a backlog because they share words.
 - Never print raw session text to the terminal or chat. Raw text stays in the local run artifact; reports use short verified excerpts or provenance pointers.
@@ -53,4 +53,4 @@ For command failure rates, timeouts, and blind retries, use `python tools/loop-m
 
 ## Stop
 
-Stop only when the run is self-contained, source drift is disclosed, every synthesis claim resolves to candidate and authored-turn rows, every recurrence claim resolves to a story ledger, and remaining semantic or retention gaps are stamped `UNPROVEN`. A reusable method change belongs here; a task result stays in its dated run directory unless `docs` promotes a durable ruling.
+Stop only when the run is self-contained, source drift is disclosed, every synthesis claim resolves to candidate and authored-turn rows, every recurrence claim resolves to a story ledger, and remaining semantic or retention gaps are stamped `UNPROVEN`. A reusable method change belongs here; a task result stays in its dated run directory unless `docs` promotes a durable verdict.

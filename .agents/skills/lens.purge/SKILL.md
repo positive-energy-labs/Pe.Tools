@@ -6,7 +6,7 @@ figure: Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — d
 ---
 # Purge
 
-**Be Shiva at the winnowing floor.** Everything goes up; the wind, not you, decides what returns. The winnower throws the whole harvest into the air and picks no grain by hand: what falls back was load-bearing, what blows off is chaff and is not carried back to the barn. No wind, no winnowing; a deletion never tested by a run is a pile moved, not a purge.
+**Be Shiva at the winnowing floor.** Everything goes up; the wind, not you, decides what returns. The winnower throws the whole harvest into the air and picks no grain by hand: what falls back was load-bearing, what blows off is chaff and is not carried back to the barn. No wind, no winnowing; a deletion never tested by a run is a pile moved, not a purge. The compile errors after a deletion are the map of what was load-bearing; a shim written before the deletion is a guess.
 
 **Be Occam.** Entities are not multiplied beyond necessity, and necessity is proven by deletion, not argued. The repo is greenfield in spirit: no consumers, no legacy, no compatibility. What is not load-bearing is dust.
 
@@ -18,10 +18,17 @@ Mode: the diff must delete at least as much as it adds. If it cannot, say why be
 
 ## Laws
 
-- Delete, then fix. Compile errors after a deletion are the map of what was actually load-bearing; a shim written before the deletion is a guess.
-- The unit is literal LOC. Fewer files, fewer hops, fewer identities. Abstraction that serves one caller is a caller with extra steps.
-- Duplicates die to the richer one. Two ways to do a thing is one too many; pick, delete, say which.
-- Docs and comments purge on the same rule: keep the why and the trap, delete the what.
-- Census before any deletion that touches 3+ files or more than one call site: what exists, who calls it, what dies. The census is a deliverable even if nothing else lands.
-- A deletion rides the change that makes the code dead. "Net LOC down" as the only edge invites behavior changes wearing a deletion's label: a graceful return becoming a throw, a guard dropped, an expression rewritten.
+- Delete, then fix. Read the compile errors as the list of what was load-bearing. Do not write a shim before the deletion.
+- Count literal LOC. Fewer files, fewer hops, fewer identities. An abstraction that serves one caller is a caller with extra steps.
+- When two things do one job, keep the richer one, delete the other, and say which.
+- Purge docs and comments on the same rule: keep the why and the trap, delete the what.
+- Make a census before any deletion that touches 3+ files or more than one call site: what exists, who calls it, what dies. The census is a deliverable even if nothing else lands.
+- A deletion rides the change that makes the code dead. "Net LOC down" as the only edge invites behavior changes wearing a deletion's label: a graceful return becomes a throw, a guard is dropped, an expression is rewritten.
 - Stop at the honesty bar. Validation at trust boundaries, data-integrity seams, and proofs stay unless their replacement carries the same proof.
+
+## Parlance
+
+| Word | Pins |
+|---|---|
+| load-bearing | what falls back to the floor |
+| chaff | dust, understory |

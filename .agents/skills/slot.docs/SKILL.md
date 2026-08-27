@@ -56,7 +56,7 @@ Rules:
 - Deleted Owed lines are not lost, git history is the archive.
 - Rebuild, don't append. A ledger longer than two screens, or whose Decided lines predate the current shape of the code, is rewritten as the current truth in one commit (date the rewrite; git holds the timeline). A Decided line that current code makes obvious is cut. A Tried & rejected line that current code makes impossible to re-propose is cut. A `MAP.md` whose frontier has moved wholesale is swept, not amended.
 - Legacy feature dirs keep their existing files until touched; when working in one, converge: fold living content into `LEDGER.md`, delete what is stale.
-- **Cross-route rule: design-language and primitive gaps are owned by `docs/features/design-system/LEDGER.md`**, one line there, consumer routes named. Route ledgers record their own application and evidence; they never restate the ruling or the gap. Same shape for any gap that spans surfaces: it lives in one ledger, and the others cite it.
+- **Cross-route rule: design-language and primitive gaps are owned by `docs/features/design-system/LEDGER.md`**, one line there, consumer routes named. Route ledgers record their own application and evidence; they never restate the verdict or the gap. Same shape for any gap that spans surfaces: it lives in one ledger, and the others cite it.
 - Ledgers never grow a fourth section. Reusable *method* belongs in a skill; *schema* belongs in doc-comments on the owning type (plus a showcase fixture beside the data when intent needs prose).
 - **Mid-session discovered gaps** (tooling in active use finds its own hole): a code site in this repo → `TODO:` at the site, never a ledger line. No code site here (SDK defect, upstream dep) → one Owed line in the *owning* surface's ledger, never the ledger of the session that discovered it.
 - When a `MAP.md` is deleted, sweep its Out-of-scope once: promote only what is expensive to re-derive or likely to be re-proposed by an agent (feature-scoped → a Tried & rejected line; cross-feature → a rejected-architecture ADR). Everything else dies with the map, code's growing mass is the real rejection.
@@ -127,3 +127,10 @@ Docs earn their keep by being findable from code and vice versa. Pragmatic rules
 ## Frozen
 
 `docs/context/` and `docs/rework/` were swept and deleted on 2026-08-17 (every surviving fact folded into ledgers, grounding docs, ADRs, or code comments, git history holds the long forms). Neither dir may be recreated; `docs-guard.test.ts` enforces this. New writing goes to ledgers, handoffs, or (research only) `docs/research/`.
+
+## Parlance
+
+| Word | Pins |
+|---|---|
+| rebuild | Ise; rewrite a ledger as current truth instead of appending |
+| sweep | sand mandala; delete a map when its effort ends |
