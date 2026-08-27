@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
+import { Input } from "#/components/mechanism/input";
+import { Label } from "#/components/mechanism/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
-import { Switch } from "#/components/ui/switch";
-import { Textarea } from "#/components/ui/textarea";
+} from "#/components/mechanism/select";
+import { Switch } from "#/components/mechanism/switch";
+import { Textarea } from "#/components/mechanism/textarea";
 import { FactChip, type FactTone } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";

@@ -132,7 +132,7 @@ import {
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column, MasterTableState, Verdict } from "#/components/master-table/model";
 import { Sentence } from "#/components/sentence";
-import { Pane, PaneWorkspace } from "#/components/ui/pane";
+import { Pane, PaneWorkspace } from "#/components/mechanism/pane";
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { Switcher } from "#/components/lang/switcher";
 import { AnatomyDrawing } from "#/family/anatomy";

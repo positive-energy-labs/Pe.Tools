@@ -34,8 +34,8 @@ import { FactChip, NarrowChip, type FactTone } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
-import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
+import { Badge } from "#/components/mechanism/badge";
+import { Button } from "#/components/mechanism/button";
 import {
   Card,
   CardAction,
@@ -44,7 +44,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "#/components/ui/card";
+} from "#/components/mechanism/card";
 import {
   Combobox,
   ComboboxContent,
@@ -54,7 +54,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/mechanism/combobox";
 import {
   Command,
   CommandEmpty,
@@ -63,7 +63,7 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
-} from "#/components/ui/command";
+} from "#/components/mechanism/command";
 import {
   Dialog,
   DialogContent,
@@ -71,34 +71,34 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "#/components/ui/dialog";
-import { Input } from "#/components/ui/input";
+} from "#/components/mechanism/dialog";
+import { Input } from "#/components/mechanism/input";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-} from "#/components/ui/input-group";
-import { Label } from "#/components/ui/label";
-import { Pane } from "#/components/ui/pane";
-import { PickList } from "#/components/ui/pick-list";
+} from "#/components/mechanism/input-group";
+import { Label } from "#/components/mechanism/label";
+import { Pane } from "#/components/mechanism/pane";
+import { PickList } from "#/components/mechanism/pick-list";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
-import { SidePane } from "#/components/ui/side-pane";
-import { Switch } from "#/components/ui/switch";
+} from "#/components/mechanism/select";
+import { SidePane } from "#/components/mechanism/side-pane";
+import { Switch } from "#/components/mechanism/switch";
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { CoverageBar } from "#/components/lang/coverage-bar";
 import { EmptyState } from "#/components/lang/empty";
 import { Provenance, Section } from "#/components/lang/section";
 import { Switcher } from "#/components/lang/switcher";
-import { Textarea } from "#/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
-import { ValueDiff } from "#/components/ui/value-diff";
+import { Textarea } from "#/components/mechanism/textarea";
+import { ToggleGroup, ToggleGroupItem } from "#/components/mechanism/toggle-group";
+import { ValueDiff } from "#/components/mechanism/value-diff";
 import { ARMING_FIXTURE, CATEGORY_OPTIONS, PARAM_ROWS, cellProps } from "#/design-system/fixtures";
 import { cn } from "#/lib/utils";
 

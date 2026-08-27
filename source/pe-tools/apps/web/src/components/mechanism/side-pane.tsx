@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "#/lib/utils";
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/mechanism/button";
 
 /**
  * SidePane — one width-adjustable flanking pane for the workbench. Replaces the ad-hoc

@@ -22,7 +22,7 @@ import { ThemeToggle } from "#/components/ThemeToggle";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Card } from "#/components/ui/card";
+import { Card } from "#/components/mechanism/card";
 
 type InstallStatus = {
   installed: boolean;

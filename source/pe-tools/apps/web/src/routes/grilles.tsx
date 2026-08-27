@@ -21,7 +21,7 @@ import { useMemo, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
 import { Verb } from "#/components/lang/verb";
-import { Pane, PaneWorkspace } from "#/components/ui/pane";
+import { Pane, PaneWorkspace } from "#/components/mechanism/pane";
 import { FieldChart, stepField } from "#/grilles/chart";
 import { ExportSheet } from "#/grilles/export";
 import { type GrilleInput, enumerate, ribToFill, solve } from "#/grilles/math";

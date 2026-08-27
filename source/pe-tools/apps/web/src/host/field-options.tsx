@@ -12,7 +12,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/mechanism/combobox";
 import { useHostOpDynamic } from "#/host/queries";
 import type { ParameterReference } from "@pe/agent-contracts";
 

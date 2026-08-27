@@ -10,9 +10,9 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
 import type { WorkbenchState } from "@pe/agent-contracts";
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/mechanism/button";
 import { ControlChips } from "#/components/control-chips";
-import { Textarea } from "#/components/ui/textarea";
+import { Textarea } from "#/components/mechanism/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
 import type { Mode } from "#/workbench/depth";
 import { PROMPT_MAX } from "#/routes/chat";

@@ -6,7 +6,7 @@ import {
 } from "@pe/agent-contracts";
 import { Link } from "@tanstack/react-router";
 
-import { ValueDiff } from "#/components/ui/value-diff";
+import { ValueDiff } from "#/components/mechanism/value-diff";
 import { timeAgo } from "#/lib/utils";
 
 import {

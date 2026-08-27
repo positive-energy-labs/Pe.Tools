@@ -11,7 +11,7 @@ import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
-import { SidePane } from "#/components/ui/side-pane";
+import { SidePane } from "#/components/mechanism/side-pane";
 import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";

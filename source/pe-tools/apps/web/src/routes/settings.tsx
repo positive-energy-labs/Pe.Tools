@@ -33,7 +33,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
+} from "#/components/mechanism/select";
 import { useSchemaQuery, useTreeQuery, useWorkspacesQuery } from "#/host/queries";
 import { useVerb } from "#/lib/use-verb";
 import { timeAgo } from "#/lib/utils";

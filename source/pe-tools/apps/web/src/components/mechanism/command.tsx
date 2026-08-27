@@ -10,8 +10,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog";
-import { InputGroup, InputGroupAddon } from "#/components/ui/input-group";
+} from "#/components/mechanism/dialog";
+import { InputGroup, InputGroupAddon } from "#/components/mechanism/input-group";
 import { Search as RiSearchLine } from "lucide-react";
 
 function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {

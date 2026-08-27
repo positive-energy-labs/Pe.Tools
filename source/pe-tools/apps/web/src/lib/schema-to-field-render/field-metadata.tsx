@@ -1,6 +1,6 @@
 import { CircleHelp } from "lucide-react";
-import { Label } from "#/components/ui/label";
-import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
+import { Label } from "#/components/mechanism/label";
+import { Tooltip, UiTooltipProvider } from "#/components/mechanism/tooltip";
 import { cn } from "#/lib/utils";
 import { type FieldOptionState, useFieldChangeSummary } from "./shared";
 

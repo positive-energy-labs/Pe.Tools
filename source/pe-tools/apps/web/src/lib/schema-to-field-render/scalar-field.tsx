@@ -1,12 +1,12 @@
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/mechanism/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
-import { Switch } from "#/components/ui/switch";
+} from "#/components/mechanism/select";
+import { Switch } from "#/components/mechanism/switch";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
   clearFieldServerErrors,

@@ -2,7 +2,7 @@
  * VERB — every control that acts, rebuilt against the design language.
  *
  * CONSUMERS: soon — the family clean-room's verb lane, the takeoff panes, the chat card's
- * accept/deny. `components/ui/verb.tsx` still serves the unmigrated routes; absorbing it is the
+ * accept/deny. `components/mechanism/verb.tsx` still serves the unmigrated routes; absorbing it is the
  * per-route normalization phase's job, not this file's.
  *
  * RULINGS EMBODIED:

@@ -40,14 +40,14 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/mechanism/combobox";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
+} from "#/components/mechanism/select";
 import { callHostRpc } from "#/host/client";
 import {
   FF_PROFILE_MODULE,

@@ -36,7 +36,7 @@ import {
   type Verdict as RowVerdict,
   type VerdictTone,
 } from "#/components/master-table/model";
-import { Pane, PaneSplit, PaneWorkspace } from "#/components/ui/pane";
+import { Pane, PaneSplit, PaneWorkspace } from "#/components/mechanism/pane";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { FLAG_MEANING, loopBounds, pathD } from "#/takeoff/model";

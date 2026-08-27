@@ -44,7 +44,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/mechanism/combobox";
 import { cn } from "#/lib/utils";
 
 export interface MasterTableProps<Row extends RowData> {

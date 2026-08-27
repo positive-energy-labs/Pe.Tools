@@ -35,7 +35,7 @@ import { Section } from "#/components/lang/section";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/mechanism/button";
 import { GapNote } from "#/design-system/gap-note";
 import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/fixtures";
 
@@ -717,7 +717,7 @@ function VerbBlock() {
   return (
     <Demo
       label="Verb · VerbGroup"
-      consumers="ArmingStrip (shipping); pea's card accept/deny (/design-system/proposal-flow); soon: the family clean-room verb lane, the takeoff panes. components/ui/verb.tsx still serves the unmigrated routes"
+      consumers="ArmingStrip (shipping); pea's card accept/deny (/design-system/proposal-flow); soon: the family clean-room verb lane, the takeoff panes. components/mechanism/verb.tsx still serves the unmigrated routes"
       spec={
         <>
           Four tones, and the tones are the whole colour story: <em>act</em> is neutral,{" "}

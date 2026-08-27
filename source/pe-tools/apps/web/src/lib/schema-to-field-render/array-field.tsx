@@ -9,8 +9,8 @@ import {
   ComboboxItem,
   ComboboxList,
   ComboboxValue,
-} from "#/components/ui/combobox";
-import { Textarea } from "#/components/ui/textarea";
+} from "#/components/mechanism/combobox";
+import { Textarea } from "#/components/mechanism/textarea";
 import { FieldRenderer } from "./field-renderer";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {

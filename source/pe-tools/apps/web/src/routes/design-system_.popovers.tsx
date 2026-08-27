@@ -10,7 +10,7 @@
  *
  * THIS PAGE DOES NOT CLAIM BROWSER PROOF. Each specimen is mounted EXACTLY as its real consumer
  * mounts it — the same composition and the same meaningful alignment/anchor props. The shared
- * popup surface and width law are now fixed in `components/ui/`; the remaining positioning and
+ * popup surface and width law are now fixed in `components/mechanism/`; the remaining positioning and
  * composition observations stay visible here for the browser gate.
  *
  * WHY TWO SPECIMENS ARE COMPOSED HERE RATHER THAN IMPORTED: the facet filter (`master-table`) and
@@ -27,7 +27,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { FactChip } from "#/components/lang/chip";
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/mechanism/button";
 import {
   Combobox,
   ComboboxContent,
@@ -37,14 +37,14 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/mechanism/combobox";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
+} from "#/components/mechanism/select";
 import { FieldOptionMultiSelect, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
 import { cn } from "#/lib/utils";

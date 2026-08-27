@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/mechanism/input";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import type { GroundedBlock, ParsedPage } from "#/grounded-doc/types";
 import { PROSE_CLASS } from "#/workbench/prose";

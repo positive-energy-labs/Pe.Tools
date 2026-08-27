@@ -1,4 +1,4 @@
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/mechanism/button";
 import { EmptyState } from "#/components/lang/empty";
 import {
   Combobox,
@@ -9,7 +9,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/mechanism/combobox";
 import { useWorkbench } from "#/workbench/provider";
 import type { WorkbenchAccessLevel } from "@pe/agent-contracts";
 

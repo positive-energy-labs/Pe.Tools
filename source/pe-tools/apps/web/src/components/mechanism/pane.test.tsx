@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 
-import { Pane, PaneWorkspace } from "#/components/ui/pane";
+import { Pane, PaneWorkspace } from "#/components/mechanism/pane";
 
 afterEach(cleanup);
 

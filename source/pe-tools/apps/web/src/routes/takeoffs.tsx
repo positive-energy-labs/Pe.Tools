@@ -26,7 +26,7 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/mechanism/dialog";
 import { mintSelector, resolveTarget } from "#/host/target";
 import { appAtomRegistry } from "#/state/registry";
 import { fmtNum } from "#/components/master-table/model";

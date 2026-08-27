@@ -1,5 +1,5 @@
 import { Verb } from "#/components/lang/verb";
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/mechanism/input";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import {
   FieldChangeBadge,

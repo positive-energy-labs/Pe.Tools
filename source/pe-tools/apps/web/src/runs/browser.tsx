@@ -38,7 +38,7 @@ import { fmtNum, type Column, type MasterTableState } from "#/components/master-
 import { FactChip as Chip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Verb } from "#/components/lang/verb";
-import { Pane, PaneSplit } from "#/components/ui/pane";
+import { Pane, PaneSplit } from "#/components/mechanism/pane";
 import { cn } from "#/lib/utils";
 
 import { hydrateFromSet } from "./feedback/hydrate";

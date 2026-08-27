@@ -11,7 +11,7 @@ import { Moments, useThreadMessages } from "./aui";
 import { RouteChatPluginDock } from "./route-chat-plugins";
 import { useCacheView, WorldLane } from "./world";
 import { useToolIo } from "./tool-io";
-import { SidePane } from "#/components/ui/side-pane";
+import { SidePane } from "#/components/mechanism/side-pane";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";

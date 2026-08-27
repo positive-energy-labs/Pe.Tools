@@ -31,9 +31,9 @@
  * ── RATCHET (count may only fall; baselines in design-guard.baseline.json) ─────────────────
  *  textPx           any text-[Npx]: off-tier type. The tier system (t-* classes) is the scale;
  *                   the remaining spends are exhibit chrome + a few audited sites.
- *  rawButton        <button> outside components/ui + components/lang: verbs come from
+ *  rawButton        <button> outside components/mechanism + components/lang: verbs come from
  *                   lang/Verb; the tail is non-verb machinery.
- *  uiButtonImports  import sites of ui/button — the still-open half; each route
+ *  mechanismButtonImports  import sites of mechanism/button — the still-open half; each route
  *                   pass that migrates a consumer lowers this until the file is deleted.
  *  dashed           border-dashed / stroke-dasharray / border-style: dashed outside
  *                   components/lang + base.css + design-lang.css. R13b: every broken-edge mechanism
@@ -647,8 +647,8 @@ const BASELINE: Baseline = JSON.parse(
 );
 
 const isTsx = (f: Entry) => f.rel.endsWith(".tsx");
-const inUiOrLang = (f: Entry) =>
-  f.rel.startsWith("components/ui/") || f.rel.startsWith("components/lang/");
+const inMechanismOrLang = (f: Entry) =>
+  f.rel.startsWith("components/mechanism/") || f.rel.startsWith("components/lang/");
 
 const ratchet = (name: string, offences: Offence[]) => {
   const base = BASELINE[name];
@@ -681,18 +681,21 @@ describe("design guard — ratchets (baselines may only fall)", () => {
     ratchet("textPx", scan(FILES, /text-\[\d+px\]/g));
   });
 
-  it("rawButton — <button> outside components/ui + components/lang", () => {
+  it("rawButton — <button> outside components/mechanism + components/lang", () => {
     ratchet(
       "rawButton",
       scan(
-        FILES.filter((f) => isTsx(f) && !inUiOrLang(f)),
+        FILES.filter((f) => isTsx(f) && !inMechanismOrLang(f)),
         /<button\b/g,
       ),
     );
   });
 
-  it("uiButtonImports — open tail; falls to 0 when ui/button dies", () => {
-    ratchet("uiButtonImports", scan(FILES, /from\s+["'][^"']*ui\/button["']/g));
+  it("mechanismButtonImports — open tail; falls to 0 when mechanism/button dies", () => {
+    ratchet(
+      "mechanismButtonImports",
+      scan(FILES, /from\s+["'][^"']*mechanism\/button["']/g),
+    );
   });
 
   it("dashed — broken-edge mechanisms outside lang (R13b: dashed means SEAM, one slot)", () => {
@@ -700,7 +703,8 @@ describe("design guard — ratchets (baselines may only fall)", () => {
       "dashed",
       scan(
         FILES.filter(
-          (f) => !inUiOrLang(f) && f.rel !== "base.css" && f.rel !== "design-lang.css",
+          (f) =>
+            !inMechanismOrLang(f) && f.rel !== "base.css" && f.rel !== "design-lang.css",
         ),
         /border-dashed|stroke-dasharray|border-style:\s*dashed/g,
       ),
