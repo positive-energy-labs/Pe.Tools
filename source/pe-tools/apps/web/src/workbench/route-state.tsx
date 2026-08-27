@@ -10,7 +10,6 @@ import {
   type RouteStatePatch,
   type RouteStateSpec,
   type RouteStateWriteResult,
-  type RouteWriteKind,
 } from "@pe/agent-contracts";
 
 export type { RouteStatePatch, RouteStateWriteResult } from "@pe/agent-contracts";
@@ -20,8 +19,10 @@ import {
   createRouteStoreCore,
   docAtom,
   docWriter,
-  RouteWriteFailure,
+  fail,
+  failuresNote,
   type Scope,
+  type VerbFailure,
 } from "#/state/route-store";
 import { useRouteStore } from "#/state/use-route-store";
 
@@ -35,8 +36,7 @@ export interface RouteStateHandle<T> {
   command: (command: string, input?: unknown) => Promise<RouteStateWriteResult>;
   peaActive: boolean;
   connected: boolean | null;
-  error: string | null;
-  failureKind: RouteWriteKind | null;
+  failure: VerbFailure | null;
   busy: string | null;
   lastCommand: LastCommand;
 }
@@ -52,6 +52,12 @@ export function useRouteState<TSchema extends z.ZodType>(
   const lastCommand = useAtomValue(store.lastCommand);
   const wire = AsyncResult.isSuccess(wireResult) ? wireResult.value : null;
   const wireFailure = AsyncResult.isFailure(wireResult) ? wireResult.cause : null;
+  const wireError = wireFailure
+    ? Option.getOrElse(
+        Option.map(Cause.findErrorOption(wireFailure), (caught) => caught.message),
+        () => "wire failed",
+      )
+    : (wire?.error ?? null);
 
   return {
     slice: wire?.doc ?? null,
@@ -61,15 +67,7 @@ export function useRouteState<TSchema extends z.ZodType>(
     command: store.command,
     peaActive: wire?.peaActive ?? false,
     connected: wireFailure ? false : (wire?.connected ?? null),
-    error:
-      failure?.message ??
-      (wireFailure
-        ? Option.getOrElse(
-            Option.map(Cause.findErrorOption(wireFailure), (caught) => caught.message),
-            () => "wire failed",
-          )
-        : (wire?.error ?? null)),
-    failureKind: failure?.kind ?? (wireFailure || wire?.error ? "error" : null),
+    failure: failure ?? (wireError ? { kind: "error", verb: "wire", message: wireError } : null),
     busy: busy?.id ?? null,
     lastCommand,
   };
@@ -84,18 +82,13 @@ function createRouteStateStore<TSchema extends z.ZodType>(
   const slice = core.owned("slice/document", docAtom(spec, scope));
   const writer = docWriter(spec, scope, registry, slice);
   const lastCommand = core.owned("page/last-command", Atom.make<LastCommand>(null));
+  /** A command that lands with per-item failures is a `partial`, not a success. */
   const run = (verb: string, write: () => Promise<RouteStateWriteResult>) =>
-    core
-      .runVerb(verb, async () => {
-        const result = await write();
-        const failure = routeWriteFailure(result);
-        if (result.ok && failure) throw Error(failure);
-        return result;
-      }, [spec.route])
-      .catch((cause: unknown) => {
-        if (cause instanceof RouteWriteFailure) return cause.result;
-        throw cause;
-      });
+    core.runVerb(verb, async (): Promise<RouteStateWriteResult> => {
+      const result = await write();
+      const partial = result.ok ? failuresNote(result, "value") : null;
+      return partial ? fail(partial, "partial") : result;
+    }, [spec.route]);
   return {
     registry,
     slice,
@@ -113,18 +106,4 @@ function createRouteStateStore<TSchema extends z.ZodType>(
     },
     dispose: core.dispose,
   };
-}
-
-function routeWriteFailure(result: RouteStateWriteResult): string | null {
-  if (!result.ok) return result.error;
-  const failures =
-    result.result && typeof result.result === "object"
-      ? (result.result as { failures?: unknown }).failures
-      : undefined;
-  if (!Array.isArray(failures) || failures.length === 0) return null;
-  const first = failures[0] as { key?: string; error?: string };
-  const detail = [first?.key, first?.error].filter((part) => typeof part === "string").join(": ");
-  return `${failures.length} value${failures.length === 1 ? "" : "s"} failed${
-    detail ? `: ${detail}` : "."
-  }`;
 }

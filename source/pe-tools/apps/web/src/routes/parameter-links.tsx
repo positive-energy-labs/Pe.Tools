@@ -270,14 +270,14 @@ function ParameterLinksWorkspace({
         // refusal) is the strip's payload and a second apply here would be a parallel path.
       />
 
-      {(busy || outcome || route.error) && (
+      {(busy || outcome || route.failure) && (
         <div className="shrink-0 border-b border-border px-4 py-0.5">
           {busy ? (
             <OutcomeLine kind="busy" label={busy} />
           ) : outcome ? (
             <OutcomeLine kind={outcome.kind} label={outcome.text} />
-          ) : route.error ? (
-            <OutcomeLine kind={route.failureKind ?? "error"} label={route.error} />
+          ) : route.failure ? (
+            <OutcomeLine kind={route.failure.kind} label={route.failure.message} />
           ) : null}
         </div>
       )}

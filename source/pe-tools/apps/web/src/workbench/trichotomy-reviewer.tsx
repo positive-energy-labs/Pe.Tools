@@ -157,7 +157,7 @@ export function CellTrichotomyReviewer({
 
       <div className="flex items-center justify-between gap-2 pt-1.5">
         <span className="min-w-0 truncate t-caption text-[var(--r-ink-2)]">
-          {state.error ??
+          {state.failure?.message ??
             (summary.attention > 0
               ? `${summary.attention} value${summary.attention === 1 ? " needs" : "s need"} review`
               : reviewHint)}

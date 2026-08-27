@@ -20,7 +20,7 @@ import { fetchPeInfo } from "#/host/info";
 import type { Option } from "#/targeting/model";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
-type VerbFailure = { kind: RouteWriteKind; verb: string; message: string };
+export type VerbFailure = { kind: RouteWriteKind; verb: string; message: string };
 export type VerbReceipt = { verb: string; text: string; at: number };
 export class VerbRefused extends Error {
   readonly name = "VerbRefused";
@@ -33,12 +33,28 @@ export class VerbRefused extends Error {
 export type RouteWriteRefusal = Extract<RouteStateWriteResult, { ok: false }>;
 type RouteWriteOk = Extract<RouteStateWriteResult, { ok: true }>;
 
+const note = (result: RouteWriteRefusal) => [result.error, result.hint].filter(Boolean).join(": ");
+
 export class RouteWriteFailure extends Error {
   readonly name = "RouteWriteFailure";
 
   constructor(readonly result: RouteWriteRefusal) {
-    super([result.error, result.hint].filter(Boolean).join(": "));
+    super(note(result));
   }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+/** A command result may report per-item failures beside an overall ok. */
+export function failuresNote(result: { result?: unknown }, noun: string): string | null {
+  const failures = isRecord(result.result) ? result.result.failures : undefined;
+  if (!Array.isArray(failures) || failures.length === 0) return null;
+  const first = failures[0] as { key?: string; error?: string };
+  const detail = [first?.key, first?.error].filter((part) => typeof part === "string").join(": ");
+  return `${failures.length} ${noun}${failures.length === 1 ? "" : "s"} failed${
+    detail ? `: ${detail}` : "."
+  }`;
 }
 
 export function expectRouteWrite(result: RouteStateWriteResult): RouteWriteOk {
@@ -109,8 +125,13 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     );
     try {
       const value = await work();
-      if (typeof value === "object" && value !== null && "ok" in value && value.ok === false)
-        throw new RouteWriteFailure(value as unknown as RouteWriteRefusal);
+      if (isRecord(value) && value.ok === false) {
+        const refusal = value as unknown as RouteWriteRefusal;
+        write(id, "failure", () =>
+          registry.set(failure, { kind: refusal.kind, verb: id, message: note(refusal) }),
+        );
+        return value;
+      }
       const text =
         typeof value === "string"
           ? value

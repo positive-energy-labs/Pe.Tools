@@ -22,6 +22,7 @@ import { SidePane } from "#/components/ui/side-pane";
 import { RouteDocument } from "#/workbench/route-document";
 import { ValueDiff } from "#/components/ui/value-diff";
 import { useVerb } from "#/lib/use-verb";
+import { failuresNote } from "#/state/route-store";
 import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
 
@@ -99,7 +100,7 @@ function ScheduleGridWorkspace({
         verb.fail(result.kind, result.error);
         return;
       }
-      const failureNote = pushFailureNote(result.result);
+      const failureNote = failuresNote(result, "cell");
       if (failureNote != null) {
         setPartial(failureNote);
         return;
@@ -606,15 +607,4 @@ function PendingStrip({
       </div>
     </div>
   );
-}
-
-/** Surface push per-cell failures returned in the command result (fold successes silently). */
-function pushFailureNote(result: unknown): string | null {
-  if (typeof result !== "object" || result == null) return null;
-  const failures = (result as { failures?: unknown }).failures;
-  if (!Array.isArray(failures) || failures.length === 0) return null;
-  const first = failures[0] as { key?: string; error?: string };
-  return `${failures.length} cell${failures.length === 1 ? "" : "s"} failed${
-    first?.error ? `: ${first.error}` : "."
-  }`;
 }

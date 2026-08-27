@@ -83,9 +83,7 @@ describe("route store kit", () => {
         error: "the patched document is invalid",
         hint: "snapshot.world.zones.43.zone.color: expected string",
       })),
-    ).rejects.toThrow(
-      "the patched document is invalid: snapshot.world.zones.43.zone.color: expected string",
-    );
+    ).resolves.toMatchObject({ ok: false, kind: "refused" });
     expect(registry.get(core.failure)).toMatchObject({
       kind: "refused",
       verb: "write",
