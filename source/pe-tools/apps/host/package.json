@@ -10,6 +10,7 @@
   "scripts": {
     "start": "vp exec jiti src/index.ts",
     "dev": "vp exec node --watch-path=src --import jiti/register src/dev.ts --take-over-host",
+    "dev:no-revit": "vp exec node --watch-path=src --import jiti/register src/dev.ts --take-over-host --no-revit",
     "attach": "vp exec node --import jiti/register src/dev.ts",
     "build": "vp pack",
     "build:payload": "vp pack && node scripts/stage-native-sidecars.mjs && pnpm --filter @pe/web build && node scripts/stage-web.mjs",

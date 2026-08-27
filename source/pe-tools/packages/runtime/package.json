@@ -39,15 +39,16 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
     "@hono/node-server": "^1.19.14",
-    "@mastra/core": "1.50.1",
-    "@mastra/hono": "1.5.6",
-    "@mastra/libsql": "1.15.1",
-    "@mastra/memory": "1.22.2",
+    "@mastra/code-sdk": "1.4.0",
+    "@mastra/core": "1.61.0",
+    "@mastra/hono": "1.7.1",
+    "@mastra/libsql": "1.21.1",
+    "@mastra/memory": "1.27.0",
     "@pe/agent-contracts": "workspace:*",
     "@pe/mcps": "workspace:*",
-    "hono": "^4.12.24",
-    "mastracode": "0.30.0",
-    "zod": "^4.4.3"
+    "hono": "4.12.8",
+    "mastracode": "0.35.0",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

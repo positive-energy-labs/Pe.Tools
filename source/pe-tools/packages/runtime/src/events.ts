@@ -1,5 +1,3 @@
-import type { RuntimeToolMetadata } from "@pe/agent-contracts";
-
 export type RuntimeJsonValue =
   | string
   | number
@@ -12,8 +10,6 @@ export type RuntimeJsonObject = { [key: string]: RuntimeJsonValue };
 
 export type RuntimeProtocol = "tui" | "acp" | "ag-ui" | "test" | "web";
 
-export type RuntimeToolStatus = "streaming_input" | "running" | "pending_approval" | "suspended";
-
 export interface RuntimeError {
   name: string;
   message: string;
@@ -23,55 +19,6 @@ export interface RuntimeError {
   retryDelay?: number;
   details?: RuntimeJsonValue;
 }
-
-export type RuntimeEvent =
-  | { type: "run_started" }
-  | {
-      type: "run_finished";
-      reason?: "complete" | "aborted" | "error" | "suspended";
-    }
-  | { type: "assistant_message_started"; messageId: string }
-  | { type: "assistant_message_delta"; messageId: string; delta: string }
-  | { type: "assistant_message_finished"; messageId: string }
-  | {
-      type: "tool_started";
-      toolCallId: string;
-      toolName: string;
-      title?: string;
-      status: RuntimeToolStatus;
-      input?: RuntimeJsonValue;
-      suspendPayload?: RuntimeJsonValue;
-      resumeSchema?: RuntimeJsonValue;
-      tool?: RuntimeToolMetadata;
-    }
-  | {
-      type: "tool_input_delta";
-      toolCallId: string;
-      toolName?: string;
-      delta: string;
-      tool?: RuntimeToolMetadata;
-    }
-  | { type: "tool_input_finished"; toolCallId: string }
-  | { type: "tool_updated"; toolCallId: string; partialResult?: RuntimeJsonValue }
-  | {
-      type: "tool_shell_output";
-      toolCallId: string;
-      output: string;
-      stream?: "stdout" | "stderr";
-    }
-  | {
-      type: "tool_finished";
-      toolCallId: string;
-      toolName?: string;
-      title?: string;
-      result?: RuntimeJsonValue;
-      isError: boolean;
-      providerMetadata?: RuntimeJsonObject;
-      tool?: RuntimeToolMetadata;
-    }
-  | { type: "plan_updated"; tasks: RuntimeJsonValue }
-  | { type: "plan_requested"; title: string; plan: string }
-  | { type: "runtime_error"; source: string; error: RuntimeError };
 
 export function toRuntimeError(
   error: unknown,

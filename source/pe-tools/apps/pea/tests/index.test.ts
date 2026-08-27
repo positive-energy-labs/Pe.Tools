@@ -3,64 +3,51 @@ import os from "node:os";
 import path from "node:path";
 import { expect, test } from "vite-plus/test";
 import { createRuntimeRequestContext, resolveRuntimeThreadStateStore } from "@pe/runtime";
-import { bundledPeaSkills, peaProductHomeEnvVar, peaStandardSkillsRoot } from "@pe/mcps";
 import {
-  createPeaCliCommand,
+  bundledPeaSkills,
+  peaProductHomeEnvVar,
+  peaProductToolMetadata,
+  peaProductTools,
+  peaStandardSkillsRoot,
+} from "@pe/mcps";
+import {
   createPeaRuntime,
-  defaultPeaRuntimeToolCatalog,
-  defaultPeaRuntimeToolProfile,
-  getPeaCliCommandNames,
   PeaContextSignalProvider,
   PeaContextStateProcessor,
   type PeaContextStateSignalArgs,
-} from "../src/index.ts";
-import { createPeaRuntimeAuthProfile } from "../src/runtime.ts";
+} from "@pe/runtime/pea";
+import { createPeaCliCommand, getPeaCliCommandNames } from "../src/index.ts";
 
 const slowRuntimeTestTimeout = 30_000;
+
+test("pea exposes the exact 14-tool product surface", () => {
+  const names = [
+    "pe_status",
+    "pe_logs",
+    "host_operation_search",
+    "host_operation_call",
+    "request_access",
+    "read_image",
+    "capture_view",
+    "revit_api_docs_search",
+    "revit_api_docs_fetch",
+    "script_bootstrap",
+    "script_execute",
+    "route_state_read",
+    "route_state_apply",
+    "route_command",
+  ];
+
+  expect(Object.keys(peaProductTools)).toEqual(names);
+  expect(Object.keys(peaProductToolMetadata)).toEqual(names);
+  expect(peaProductToolMetadata.host_operation_call.category).toBe("execute");
+});
 
 test("pea composes product commands without dev", () => {
   expect(getPeaCliCommandNames()).toEqual(expect.arrayContaining(["host", "script"]));
   expect(getPeaCliCommandNames()).not.toContain("dev");
   // The standalone `web` subcommand was removed when the host absorbed the web-server path.
   expect(getPeaCliCommandNames()).not.toContain("web");
-});
-
-test("pea defaults to Pea Cloud Gateway auth", () => {
-  const auth = createPeaRuntimeAuthProfile();
-
-  expect(auth.descriptor.source).toBe("gateway");
-  expect(auth.descriptor.methods.map((method) => method.id)).toEqual(["pea-cloud-gateway"]);
-  expect(auth.descriptor.metadata).toEqual({ gateway: "mastra", gatewayAuthority: "pea-cloud" });
-});
-
-test("pea can opt out of cloud auth for local provider-key use", () => {
-  const auth = createPeaRuntimeAuthProfile({ noCloudAuth: true });
-
-  expect(auth.descriptor.source).toBe("api-key");
-  expect(auth.descriptor.methods.map((method) => method.id)).toEqual(["openai-api-key"]);
-  expect(auth.descriptor.metadata).toBeUndefined();
-});
-
-test("pea exports the product tool profile used by the default runtime", () => {
-  expect(defaultPeaRuntimeToolProfile.id).toBe("pea-product");
-  expect(
-    [...defaultPeaRuntimeToolCatalog.keys()].sort((left, right) => left.localeCompare(right)),
-  ).toEqual([
-    "capture_view",
-    "host_operation_call",
-    "host_operation_search",
-    "pe_logs",
-    "pe_status",
-    "read_image",
-    "request_access",
-    "revit_api_docs_fetch",
-    "revit_api_docs_search",
-    "route_command",
-    "route_state_apply",
-    "route_state_read",
-    "script_bootstrap",
-    "script_execute",
-  ]);
 });
 
 test("pea root command exposes ACP stdio mode without the old protocol stack", () => {
@@ -75,14 +62,19 @@ test(
   async () => {
     const launchCwd = await mkdtemp(path.join(os.tmpdir(), "pea-launch-cwd-"));
     const productHomePath = await mkdtemp(path.join(os.tmpdir(), "pea-product-home-"));
+    const state = await isolatePeaState("pea-launch-state-");
     const previousProductHome = process.env[peaProductHomeEnvVar];
-    process.env[peaProductHomeEnvVar] = productHomePath;
-
-    const skill = bundledPeaSkills[0]!;
-    const skillPath = path.join(productHomePath, peaStandardSkillsRoot, skill.name, "SKILL.md");
-    const launchCwdSkillPath = path.join(launchCwd, peaStandardSkillsRoot, skill.name, "SKILL.md");
 
     try {
+      process.env[peaProductHomeEnvVar] = productHomePath;
+      const skill = bundledPeaSkills[0]!;
+      const skillPath = path.join(productHomePath, peaStandardSkillsRoot, skill.name, "SKILL.md");
+      const launchCwdSkillPath = path.join(
+        launchCwd,
+        peaStandardSkillsRoot,
+        skill.name,
+        "SKILL.md",
+      );
       const runtime = await createPeaRuntime({ workspaceRoot: launchCwd });
 
       try {
@@ -107,6 +99,7 @@ test(
     } finally {
       if (previousProductHome == null) delete process.env[peaProductHomeEnvVar];
       else process.env[peaProductHomeEnvVar] = previousProductHome;
+      state.restore();
       await rm(launchCwd, { recursive: true, force: true });
       await rm(productHomePath, { recursive: true, force: true });
     }
@@ -118,9 +111,11 @@ test(
   "pea runtime agent exposes task tools through TaskSignalProvider",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-runtime-"));
-    const runtime = await createPeaRuntime({ workspaceRoot });
+    const state = await isolatePeaState("pea-runtime-state-");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
     try {
+      runtime = await createPeaRuntime({ workspaceRoot });
       const agent = getRuntimeAgent(runtime.controller.getMastra(), "pea-agent");
       const tools = await agent.listTools();
       expect(tools).toEqual(
@@ -132,7 +127,11 @@ test(
         }),
       );
     } finally {
-      await runtime.close?.();
+      try {
+        await runtime?.close?.();
+      } finally {
+        state.restore();
+      }
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   },
@@ -222,15 +221,21 @@ test(
   "pea runtime starts with product defaults",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-yolo-"));
-    const runtime = await createPeaRuntime({ workspaceRoot });
+    const state = await isolatePeaState("pea-yolo-state-");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
     try {
+      runtime = await createPeaRuntime({ workspaceRoot });
       expect(runtime.session?.model.get()).toBe("openai/gpt-5.6-terra");
       expect(runtime.session?.state.get()).toEqual(
-        expect.objectContaining({ yolo: true, thinkingLevel: "high" }),
+        expect.objectContaining({ yolo: false, thinkingLevel: "high" }),
       );
     } finally {
-      await runtime.close?.();
+      try {
+        await runtime?.close?.();
+      } finally {
+        state.restore();
+      }
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   },
@@ -241,15 +246,18 @@ test(
   "pea runtime honors configured startup model",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-model-"));
-    const runtime = await createPeaRuntime({
-      workspaceRoot,
-      modelId: "openai/gpt-5.5",
-    });
+    const state = await isolatePeaState("pea-model-state-");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
     try {
+      runtime = await createPeaRuntime({ workspaceRoot, modelId: "openai/gpt-5.5" });
       expect(runtime.session?.model.get()).toBe("openai/gpt-5.5");
     } finally {
-      await runtime.close?.();
+      try {
+        await runtime?.close?.();
+      } finally {
+        state.restore();
+      }
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   },
@@ -260,9 +268,11 @@ test(
   "pea task tools keep memory context when durable execution passes sparse context",
   async () => {
     const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-task-context-"));
-    const runtime = await createPeaRuntime({ workspaceRoot });
+    const state = await isolatePeaState("pea-task-state-");
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
 
     try {
+      runtime = await createPeaRuntime({ workspaceRoot });
       const threadId = runtime.session?.thread.getId();
       const resourceId = runtime.session?.identity.getResourceId();
       if (!threadId || !resourceId) throw new Error("Expected Pea runtime session thread.");
@@ -312,7 +322,11 @@ test(
       );
       expect(taskState).toEqual([expect.objectContaining({ content: "Inspect context" })]);
     } finally {
-      await runtime.close?.();
+      try {
+        await runtime?.close?.();
+      } finally {
+        state.restore();
+      }
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   },
@@ -358,4 +372,17 @@ function readRecord(value: unknown): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function isolatePeaState(prefix: string) {
+  const root = await mkdtemp(path.join(os.tmpdir(), prefix));
+  const previous = process.env.PE_TOOLS_STATE_DIR;
+  process.env.PE_TOOLS_STATE_DIR = root;
+  return {
+    root,
+    restore: () => {
+      if (previous === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previous;
+    },
+  };
 }

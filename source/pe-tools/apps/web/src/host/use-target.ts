@@ -15,12 +15,15 @@ import {
  * is stored (chat search param, route search param, plugin state); this hook owns resolution.
  * Root-mounted SSE invalidation keeps the underlying query live; no per-surface refresh needed.
  */
-export function useTarget(selector: TargetSelector): {
+export function useTarget(
+  selector: TargetSelector,
+  enabled = true,
+): {
   resolution: TargetResolution;
   sessions: SessionFacts[];
   isLoading: boolean;
 } {
-  const query = useBridgeSessionsListQuery();
+  const query = useBridgeSessionsListQuery({ enabled });
   const sessions = fromBridgeSessions(query.data?.sessions ?? []);
   return {
     resolution: resolveTarget(sessions, selector),

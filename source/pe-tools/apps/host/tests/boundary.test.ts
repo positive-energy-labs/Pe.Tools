@@ -22,7 +22,7 @@ import { readServiceFile } from "@pe/host-contracts/pe-service";
 const StubMastraLive = Layer.succeed(MastraRuntime, {
   fetch: (request: Request) => {
     const url = new URL(request.url);
-    if (url.pathname === "/pe/info") {
+    if (url.pathname === "/pe/inspect") {
       return Promise.resolve(
         new Response(JSON.stringify({ controllerId: "pea", resourceId: "test-resource" }), {
           status: 200,
@@ -64,6 +64,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
       const latch = yield* Deferred.make<void>();
       const handle = yield* Deferred.make<ServiceHostHandle>();
       const HttpLive = makeHttpLive({
+        capabilities: { revit: true },
         port: 0,
         mastraLayer: StubMastraLive,
         lifecycle: { latch, handle },
@@ -135,10 +136,10 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
     expect(spa.status).toBe(200);
     expect(await spa.text()).toContain("pe-spa");
 
-    // (4) the Mastra mount answers /pe/info at its absolute path.
-    const info = await fetch(`${base}/pe/info`);
-    expect(info.status).toBe(200);
-    expect(await info.json()).toMatchObject({ controllerId: "pea" });
+    // (4) the Mastra mount answers /pe/inspect at its absolute path.
+    const inspect = await fetch(`${base}/pe/inspect`);
+    expect(inspect.status).toBe(200);
+    expect(await inspect.json()).toMatchObject({ controllerId: "pea" });
 
     // (5) the server is authoritative: a client cannot launch update when this lane has no update.
     const updateStatus = await fetch(`${base}/host/update`);

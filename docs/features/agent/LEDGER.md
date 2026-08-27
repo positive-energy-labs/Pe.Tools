@@ -53,6 +53,11 @@ restated here.
 
 ### Mastra dependency posture
 
+- 2026-08-26 — `authorizeThread` stays deleted for single-user localhost; revisit it only with multi-user principals.
+- 2026-08-26 — Native Mastra `AgentController` owns chat truth, and `createRouteStoreCore` owns page atoms, URL projection, and verb receipts; `wire.ts`, claims, and singleton `switchThread` stay deleted.
+- 2026-08-26 — Fork returns as a palette verb over native `cloneThread`.
+- 2026-08-26 — Deleting the open thread navigates to a new thread before deletion.
+- 2026-08-26 — Provider error detail stays authoritative; `Run failed.` is only the bare terminal fallback.
 - 2026-08-17 — When Mastra ships a native equivalent, delete the Pe adapter rather than keeping it; precedent is commit `2b96990` (+2,546/−9,195), which deleted the Pe-owned browser/protocol stack for native `AgentController`. (folded from mastra-purge-audit-2026-07-08.md, deleted — git history)
 - 2026-08-17 — Mastra stays a dependency; Pe.Tools never recreates controller/session/thread/model/permission/storage/TUI/ACP mechanics (`@mastra/libsql` `LibSQLStore`/`ThreadStateLibSQL` especially). (folded from mastra-purge-audit-2026-07-08.md, deleted — git history)
 - 2026-08-17 — The keep-list survives every purge because it is Pea product identity, not glue: tool access policy, storage/memory path profiles, prompt/tool transparency capture, `/pe/messages` attachments, and the same-thread `switchThread` guard. (folded from mastra-purge-audit-2026-07-08.md, deleted — git history)
@@ -60,6 +65,9 @@ restated here.
 
 ## Tried & rejected
 
+- 2026-08-26 — Fake Mesa through Git copy/sync, the in-process SDK filesystem, or a claimed mount without authenticated FUSE plus `bwrap`: none proves a versioned, isolated user world.
+- 2026-08-26 — Rewrite Pea/Host around Effect AI or newer Effect v4 for novelty: Mastra and Effect already own different seams, and the rewrite offered no deletion or named fix.
+- 2026-08-26 — Replace assistant-ui with private Mastra Factory UI or local primitives: Factory UI is not a public package, and rebuilding assistant-ui's 590-LOC render boundary would recreate message, markdown, streaming, and accessibility behavior.
 - 2026-08-17 — AG-UI as the browser event protocol, evaluated against ACP on a full HarnessEvent-by-event adapter map: its native `STATE_SNAPSHOT`/`STATE_DELTA` and run lifecycle are real wins, but plans, partial tool output, shell output, and tool-error metadata all fall back to `CUSTOM pea.*` events that only a Pea-aware frontend can render. Declined. (folded from acp-agui-mastra-harness-adapter-report.md, deleted — git history)
 - 2026-08-17 — ACP-shaped session/update is the transport Pea speaks: native `tool_call`/`tool_call_update` carry kind, status, and raw input/output in one card, and `plan` is native. Pea-only facts ride ACP `_meta["pe.tools/workbench.update"]`, never new top-level fields. (folded from acp-agui-mastra-harness-adapter-report.md, deleted — git history)
 - 2026-07 — One broad "context dump" operation for Revit orientation: expensive, stale-prone, and it removes the agent's ability to choose a zoom path. Replaced by the bounded-projection ladder.
@@ -75,6 +83,14 @@ restated here.
 
 ## Owed
 
+- Fan rvt lifecycle events and human route edits into every bound Pea thread as document events.
+- Replace `threadId = Address` with real `documentState` keyed by Address.
+- Settle the staged plugin-edit payload delivered to Pea.
+- Execute REVIEW section 4's zero-behavior folds as one deletion wave of about 800 LOC, including the `WorkbenchState` shadow.
+- Loro remains unfetched, and Mastra `session.create` idempotency across tabs remains unverified.
+- Upgrade `@mastra/core` 1.61.0 to a release that contains Mastra commit `9ee8120c` / PR #22262. One native `approveTool` call resumes both internal workflows and logs one warning from each because their `shouldPersistSnapshot` excludes `running`; upstream sets `allowUnclaimedResumes: true` at `packages/core/src/loop/workflows/agentic-loop/index.ts:90` and `agentic-execution/index.ts:111`. See [cleanroom owed](pea-cleanroom.html#owed).
+- First-class Mesa UI remains owed: auth and mount health; a world chooser only after more than one real world exists; checkpoint, history, and diff controls; and reopen and teardown. Gate all of it on one real FUSE plus `bwrap` round-trip. The current census estimates 550-990 UI LOC, excluding CLI ownership, recovery, and Linux deployment work. This range is not an implementation promise. See [Mesa owed](pea-cleanroom.html#owed-mesa).
+- Migrate non-Pea Revit web route capability gates: `/instances` and `/ops` are the falsifier; keep every eager Revit query and action behind literal `capabilities.revit === true`. Estimated 75-160 production+test LOC. See [cleanroom owed](pea-cleanroom.html#owed).
 - Compressed agent-facing capability/document maps are still unbuilt — the `Toon` library landed but nothing generates a compressed host-capability or Revit-document map. The two specs (`plans/agent-schema-compression.plan.md` — renderer + host-capability map; `plans/revit-document-progressive-discovery.plan.md` — project/schedule/parameter/electrical map shapes) were deleted 2026-08-17 and survive in git history. Verification bar in both, and the part worth keeping: a compressed map must lead Pea to the same next operation a developer would pick from the C# client docs, and must not hide truncation or absence.
 - Request-shape normalization is unfinished: some schedule/query requests still wrap separate query objects while newer RevitData contracts use the `Filter / Scope / References / Projection / Budget / Options` envelope. Do not block compression on it; use the map to surface the inconsistencies.
 - Open ladder questions: is active-view context a standalone operation or folded into document-session context; what is the smallest useful visible-context summary for a graphical view without becoming a model scrape; how much project-browser structure is exposed directly vs as search/navigation projections; which UI-session facts can be mirrored in a DA-friendly document-owned shape vs staying desktop-bridge-only.

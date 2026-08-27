@@ -41,7 +41,7 @@ Ordinary building is not a stance. It is the primary's own work under whatever l
 | Kind | Stance | It is | Rounds | User-only | Stop |
 |---|---|---|---|---|---|
 | route | `index` | Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing | no | no |  |
-| lens | `delegate` | Abbot and Falconer — who does what, at what cost, down which line | no | no |  |
+| lens | `delegate` | Abbot, Falconer, and Breeder — who does what, at what cost, down which line | no | no |  |
 | lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | no | no |  |
 | lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | no | no |  |
 | pass | `ground` | Witness with the Chain-bearer — writes off; map and restate first | no | no | map, restatement, next stance named |
@@ -80,6 +80,7 @@ Shared words. Each is a rule compressed to a noun; use them, don't paraphrase th
 | **polish** | Work no ruling asked for; the stop for any build ("apple polishing") |
 | **dry** | A round or wave that retired nothing and narrowed nothing; two in a row end a loop |
 | **plateau** | The number stopped moving; change the approach before sending the same wave |
+| **rvt/rfa** | An authored model file; reserve document for a generic authored or state document |
 
 Three verdict vocabularies, no others. State: **proven / blocked / not done**. Claim: **PROVEN / FALSIFIED / UNPROVEN**. Candidate: **ADOPT / KILL / FALSIFIED**.
 
@@ -102,7 +103,7 @@ A skill changes method, never authorization. Capture, instrumentation, and gloss
 - Sanctioned autonomous sessions: when the user hands over a session, rule against recorded verdicts in their absence, mark such rulings re-openable.
 - The set checks itself. A check script sits beside this file; the table above is its projection of each skill's directory and frontmatter (`figure`, `stop`, `scope`, `disable-model-invocation`), never hand-edited. It also asserts the kinds, the one-owner-per-trigger rule, that no stance carries anything repo-shaped, and that the set has one home. The `execute` slot names how to run it. A stance edit that does not pass is not landed.
 - User steers and corrections are signal, not noise. Fix at the highest rung that fits. Fix above your layer? File it Owed and name the interim. Rungs:
-  1. Substrate: architecture, data structure, wire contract, tooling, dev setup. `Pe.Revit.Sdk` is this rung grown into a library.
+  1. Substrate: architecture, data structure, wire contract, tooling, dev setup.
   2. Check: a lint, codegen, or test that catches it every loop, CI or not.
   3. Prose: a skill or `AGENTS.md` line. Prescriptive prose decay fast.
 - Code is the spec, tests included, so what stays must be what you want. Units are dev-loop scaffolding: a shape to fill, then gone. Two things earn a place: a deterministic chain through the surface the user touches, and visibility (raw JSON views, a raw feed, a review route, a `package.json` script), because a wrong number you can see never needs a unit to guard it.

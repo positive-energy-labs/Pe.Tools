@@ -4,7 +4,6 @@ import type {
   Session,
 } from "@mastra/core/agent-controller";
 import type { Mastra } from "@mastra/core/mastra";
-import type { RuntimeAuthProfile } from "./auth/types.ts";
 import type { RuntimeProtocol } from "./events.ts";
 
 export interface RuntimeThreadSession {
@@ -17,13 +16,7 @@ export interface RuntimeThreadInfo extends RuntimeThreadSession {
   cwd?: string;
   createdAt?: string;
   updatedAt?: string;
-  lock?: RuntimeThreadLockInfo;
   metadata?: Record<string, unknown>;
-}
-
-export interface RuntimeThreadLockInfo {
-  status: "unlocked" | "owned" | "locked" | "unknown";
-  ownerPid?: number;
 }
 
 export interface RuntimeThreadMessage {
@@ -70,6 +63,7 @@ export interface RuntimeHandle<
   TController extends RuntimeHandleController<TState> = AgentController<TState>,
 > {
   controller: TController;
+  resourceId?: string;
   /** The Mastra the controller is registered on (keyed by config.id), for serving
    *  the native agent-controller HTTP routes via @mastra/server. */
   mastra?: Mastra;
@@ -78,7 +72,6 @@ export interface RuntimeHandle<
    *  clones (forking) that still remap observational memory. */
   memory?: AgentControllerConfig<TState>["memory"];
   workspace?: RuntimeWorkspaceInfo;
-  auth?: RuntimeAuthProfile;
   authStorage?: TServices["authStorage"];
   hookManager?: TServices["hookManager"];
   mcpManager?: TServices["mcpManager"];

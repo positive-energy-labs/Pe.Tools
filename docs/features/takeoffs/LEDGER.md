@@ -1,6 +1,8 @@
 # takeoffs ledger
 
 ## Decided
+
+- 2026-08-26 — One takeoff exists per rvt; there is no variant key.
 - 2026-08-24 — `rhvac.list` is a typed host op on main (`host-contracts/src/operation-types.ts:788`, `apps/host/src/call-route.ts:245`), merged from `takeoff-frontier` in `fa09c0f`; `takeoff/host.ts:216` `callHostDynamic("rhvac.list")` resolves. Closes doubt-0824 host #1–2 (E11).
 - 2026-08-24 — `/takeoffs` is the reference adoption of the targeting manifest (`apps/web/src/targeting/`): one static `Product` (world › rvt › view · zones; folder › r10), bindings in the URL search (`view`, `zones`, `dir`, `r10`, `stage`), and one `Feed` per link whose freshness is the query's state. Every source is a react-query whose key carries its basis — the snapshot keys `[session, docTitle]` so a document change re-reads; adopt/sync invalidate; partition/decide patch the cache. `TargetGate`, the `AddressingBar` head, the pane-strip `adopt`/`refresh` verbs, and the typed `.r10` path all fell out; the new `rhvac.list` host op is the `.r10` binding's legal-options source.
 - 2026-08-24 — A valid 2 ft shared coverage gets one 1 ft alternative, but the finer topology is elected only when its source-frame-relative off-grid boundary is at most half the incumbent and removes at least ten incumbent tolerances of boundary. The source partition supplies one length-weighted orthogonal frame and the allowed 45° family; all existing validity, adjacency, area, and label gates remain binding. This selects only Main Level#09 among baseline-valid project-a zones: its tier-1 `nonOrthogonalLength` falls 30.03% / 141.4 ft→14.78% / 68.8 ft and board Held falls 16.00% / 1,236.8 ft→15.07% / 1,164.2 ft, while all 65 Accepted rooms, honesty, recall, saved work, and stairsteps remain unchanged. Every other zone TSV is byte-identical. ML09's TSV SHA-256 exactly matches the previously reviewed 1 ft candidate (5 better / 3 tie / 0 worse); its +7 micro-jogs are benign collinear segmentation. (174/174; run `20260824-051458-24e63ec0d381`.)
@@ -197,6 +199,7 @@
 
 ## Owed
 
+- `ApplyRegistry` deletion stands; rebuild it as a typed op only when needed.
 - Wall-rail unification is hypothesis H1 for the tuning loop: the room boundary does not land on the wall rail, so the leftover band becomes thin Excluded residue where it stops short and a protrusion where it reaches in. Tier-1 `doubleLine` is 27.83% of accepted boundary at P2 and rose from 11.14% (P0) through 25.42% (P1) — the one measure that regressed across the tuning wave, and the defect kaitpw flagged on 6 of 10 annotation cards.
 - Delete the `bridgeFill` compile bridge in `source/pe-tools/apps/web/src/runs/palette.ts`. Law v1.3 sets `fill: null` for `void` and `excluded`; the viewer still paints a solid. Consumers to migrate: `browser.tsx` (ZonePanel, plan dock, legend) and `feedback/composite.ts`.
 - Lower Level reaches only 18.25 px/ft against Revit's 15000-pixel long-edge cap, below the 24 px/ft target the other three levels meet. Split the level export or accept the gap; a 4 in wall spans 6.08 px there against 8 px elsewhere.

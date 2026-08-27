@@ -175,10 +175,14 @@ export const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
 ) {
   switch (key) {
     case "host.status":
-      return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getHostStatus);
+      return yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), (snapshot) =>
+        getHostStatus(snapshot),
+      );
     case "host.topology": {
       // The operator's map: host identity + all sessions in one snapshot (ADR 0003).
-      const host = yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), getHostStatus);
+      const host = yield* Effect.flatMap(bridge.snapshot(bridgeSessionId), (snapshot) =>
+        getHostStatus(snapshot),
+      );
       const sessions = yield* listBridgeSessions(bridge.list);
       return {
         observedAtUtc: new Date().toISOString(),

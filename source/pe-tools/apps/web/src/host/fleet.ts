@@ -147,12 +147,13 @@ export function worldName(world: Pick<WorldFacts, "id" | "custody">): string {
   return world.custody === "observed" ? "your Revit" : world.id;
 }
 
-export function useSessionStatusQuery() {
+export function useSessionStatusQuery(enabled = true) {
   // Under HOST_QUERY_KEY so root SSE invalidation refetches it; the interval covers the boot
   // window where no bridge events exist yet.
   // ponytail: 5s poll, always on while mounted; a start-scoped poll if it ever matters.
   return useQuery({
     queryKey: [...HOST_QUERY_KEY, "", "sessions.status", ""],
+    enabled,
     queryFn: async (): Promise<SessionRow[]> => {
       const response = await fetch("/sessions");
       if (!response.ok) throw new Error(`session status ${response.status}`);
@@ -170,14 +171,14 @@ export function useSessionStatusQuery() {
   });
 }
 
-export function useFleet(): {
+export function useFleet(enabled = true): {
   worlds: WorldFacts[];
   sessions: SessionFacts[];
   isLoading: boolean;
   error: Error | null;
 } {
-  const sessionsQuery = useBridgeSessionsListQuery();
-  const status = useSessionStatusQuery();
+  const sessionsQuery = useBridgeSessionsListQuery({ enabled });
+  const status = useSessionStatusQuery(enabled);
   const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
   return {
     worlds: fuseFleet(status.data ?? [], sessions),

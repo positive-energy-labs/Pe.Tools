@@ -12,10 +12,10 @@ import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
 import { Button } from "#/components/ui/button";
 import { SidePane } from "#/components/ui/side-pane";
-import { Verb } from "#/components/lang/verb";
 import { X } from "lucide-react";
 import { chatPluginRegistration, chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { ChatSentence } from "#/components/chat-sentence";
+import { WorldBadge } from "#/components/world-badge";
 import "#/workbench/lens.css";
 
 /** Routes hostable as chat workspace plugins; the iframe src is `/${plugin}`.
@@ -68,11 +68,10 @@ function Surface({
     debug,
     threads,
     currentThreadId,
+    world,
     operationError,
-    readOnly,
-    takeOverThread,
     newThread,
-    switchThread,
+    openThread,
     deleteThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
@@ -142,11 +141,7 @@ function Surface({
     { hotkey: "Mod+3", callback: () => setMode(MODES[2]!) },
   ]);
 
-  const statusLine = readOnly
-    ? null
-    : debug.loading
-      ? "Loading thread state"
-      : (debug.error ?? operationError);
+  const statusLine = debug.loading ? "Loading thread state" : (debug.error ?? operationError);
 
   return (
     <main
@@ -172,23 +167,14 @@ function Surface({
             <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
           </div>
           {/* THE sentence — pea's testimony as prefix, the world slot as the chat's one bind control */}
-          <div className="flex min-w-0 flex-1 justify-end">
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+            <WorldBadge world={world} />
             <ChatSentence spec={plugin ? chatPluginRegistration(plugin)?.spec : undefined} />
           </div>
         </header>
 
         <div aria-live="polite" className="min-h-0 px-5">
-          {readOnly ? (
-            <div className="flex items-center gap-3 border-b border-[var(--r-line)] bg-[var(--r-recess)]/50 py-1.5 t-label">
-              <span>This thread is open in another tab — read-only here.</span>
-              {/* page-scoped act (moves the write lock between tabs; nothing leaves the page) */}
-              <Verb
-                label="Take over"
-                reason="Claim the write lock for this tab — the other tab drops to read-only"
-                onClick={takeOverThread}
-              />
-            </div>
-          ) : statusLine ? (
+          {statusLine ? (
             <div
               className={`border-b border-[var(--r-line)] py-1.5 t-label ${
                 debug.error || operationError ? "text-[var(--r-caution)]" : "text-[var(--r-ink-2)]"
@@ -215,7 +201,7 @@ function Surface({
                 <ThreadList
                   threads={threads}
                   currentThreadId={currentThreadId}
-                  onSelect={switchThread}
+                  onSelect={openThread}
                   onNew={newThread}
                   onDelete={(id) => void deleteThread(id)}
                   onSearch={() => setPaletteOpen(true)}
@@ -279,7 +265,7 @@ function Surface({
         currentThreadId={currentThreadId}
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
-        onSelect={switchThread}
+        onSelect={openThread}
         onNew={newThread}
         onDelete={(id) => void deleteThread(id)}
       />

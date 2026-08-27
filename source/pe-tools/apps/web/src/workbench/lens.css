@@ -531,29 +531,6 @@
     background-position: 160% 0;
   }
 }
-.lens-fork {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--r-ink-2);
-  opacity: 0;
-  transition:
-    opacity 0.14s ease,
-    background 0.12s,
-    color 0.12s;
-}
-.lens-moment:hover .lens-fork {
-  opacity: 1;
-}
-.lens-fork:hover {
-  background-image: linear-gradient(var(--r-veil), var(--r-veil));
-  color: var(--r-ink);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .lens-scroller {
     scroll-behavior: auto;

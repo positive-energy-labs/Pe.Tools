@@ -10,6 +10,10 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Decided
 
+- 2026-08-26 — Route-doc identity is `(route, Address)`, and `?thread` is only a view; route docs are facts about an rvt/rfa.
+- 2026-08-26 — Thread-keyed route docs are orphaned with no migration.
+- 2026-08-26 — Route-doc concurrency uses no locks or sync engine: apply and commands require `expectedRevision` end to end, external commands use client `requestId` idempotency, and the UI shows an open-in-another-tab cue plus a changed-elsewhere banner. Add an optimistic overlay only after measured latency demands it.
+- 2026-08-26 — Flow stays as the targeting manifest's second projection, and its strobe stays removed.
 - 2026-08-24 — The targeting manifest is canon (`apps/web/src/targeting/`): a route declares a static `Product` (links forest · stages of demanding verbs · panes), supplies one `Feed` per link from its queries, and keeps bindings in URL search; `TargetingHead` renders it as a sentence of TERMINALS only (links with `dir`); trunks (world › rvt, folder) never print — they are the picker's crumbs, and terminals under one trunk share its binding. The verb rail expands in place (`▾`) into verb · needs · state. Seams derive (`feed.options === null`, `run === null`), refusals derive (unwired → unbound → stale → gate). `/takeoffs` is the reference adoption; the round-5 proto stays on main until every route converges.
 
 ### The language

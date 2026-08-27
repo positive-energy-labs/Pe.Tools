@@ -1,6 +1,5 @@
 import { cli, define } from "gunshi";
 import { PeaCliCommands, discoverHostBaseUrl, resolveWorkspaceKey } from "@pe/mcps";
-import type { PeaRuntimeAuthSource } from "./runtime.ts";
 
 export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
   if (isRootAcpInvocation(args)) {
@@ -9,8 +8,6 @@ export async function runPeaMain(args = process.argv.slice(2)): Promise<void> {
     await runPeaAcp({
       modelId: options.modelId,
       workspaceRoot: options.workspaceRoot,
-      authSource: resolvePeaCliAuthSource(options.authSource),
-      noCloudAuth: options.noCloudAuth,
     });
     return;
   }
@@ -53,8 +50,6 @@ export function createPeaCliCommand() {
         await runPeaAcp({
           modelId: ctx.values.modelId,
           workspaceRoot: ctx.values.workspaceRoot,
-          authSource: resolvePeaCliAuthSource(ctx.values.authSource),
-          noCloudAuth: ctx.values.noCloudAuth,
         });
         return;
       }
@@ -63,8 +58,6 @@ export function createPeaCliCommand() {
       await runPeaTui({
         modelId: ctx.values.modelId,
         workspaceRoot: ctx.values.workspaceRoot,
-        authSource: resolvePeaCliAuthSource(ctx.values.authSource),
-        noCloudAuth: ctx.values.noCloudAuth,
       });
 
       console.log("Run `pea --help` to list product commands.");
@@ -82,14 +75,6 @@ export function createPeaCliSubCommands() {
 
 export function getPeaCliCommandNames(): string[] {
   return Object.keys(createPeaCliSubCommands());
-}
-
-function resolvePeaCliAuthSource(value: string | undefined): PeaRuntimeAuthSource | undefined {
-  if (value == null || value.length === 0) return undefined;
-  if (isPeaRuntimeAuthSource(value)) return value;
-  throw new Error(
-    `Unsupported Pea auth source '${value}'. Use gateway, auto, api-key, oauth, or mastra-gateway.`,
-  );
 }
 
 function isRootAcpInvocation(args: string[]): boolean {
@@ -144,14 +129,10 @@ function parsePeaRootPromptOptions(args: string[]): {
 function parsePeaRootAcpOptions(args: string[]): {
   modelId?: string;
   workspaceRoot?: string;
-  authSource?: string;
-  noCloudAuth?: boolean;
 } {
   const consumed = new Set<number>();
   const modelId = parseStringArg(args, consumed, "--model-id", "--modelId");
   const workspaceRoot = parseStringArg(args, consumed, "--workspace-root", "--workspaceRoot");
-  const authSource = parseStringArg(args, consumed, "--auth-source", "--authSource");
-  const noCloudAuth = parseBooleanArg(args, consumed, "--no-cloud-auth", "--noCloudAuth");
   parseBooleanArg(args, consumed, "--acp");
 
   const unexpected = args.filter((_, index) => !consumed.has(index));
@@ -159,7 +140,7 @@ function parsePeaRootAcpOptions(args: string[]): {
     throw new Error(`Unsupported Pea ACP option: ${unexpected.join(" ")}`);
   }
 
-  return { modelId, workspaceRoot, authSource, noCloudAuth };
+  return { modelId, workspaceRoot };
 }
 
 function parseStringArg(
@@ -200,33 +181,10 @@ function parseBooleanArg(args: string[], consumed: Set<number>, ...names: string
   return found;
 }
 
-function isPeaRuntimeAuthSource(value: string): value is PeaRuntimeAuthSource {
-  return (
-    value === "gateway" ||
-    value === "auto" ||
-    value === "api-key" ||
-    value === "oauth" ||
-    value === "mastra-gateway"
-  );
-}
-
 const workspaceArgs = {
   workspaceRoot: {
     type: "string",
     description: "Pea product workspace root. Defaults to ~/Documents/Pe.Tools.",
-  },
-} as const;
-
-const runtimeAuthArgs = {
-  authSource: {
-    type: "string",
-    description:
-      "Runtime auth source: gateway, auto, api-key, oauth, or mastra-gateway. Defaults to gateway.",
-  },
-  noCloudAuth: {
-    type: "boolean",
-    description: "Use local provider/API-key auth and do not advertise Pea Cloud Gateway auth.",
-    default: false,
   },
 } as const;
 
@@ -258,6 +216,5 @@ const protocolArgs = {
     type: "string",
     description: "Optional model id to force for the runtime.",
   },
-  ...runtimeAuthArgs,
   ...workspaceArgs,
 } as const;

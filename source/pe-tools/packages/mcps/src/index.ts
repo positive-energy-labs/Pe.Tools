@@ -3,14 +3,12 @@ export {
   bundledPeaSkills,
   configurePeaProductToolContext,
   createRouteRegistrations,
-  defaultPeaAgentModelId,
   materializeBundledPeaSkills,
   peaProductHomeEnvVar,
-  peaProductToolProfile,
+  peaProductToolMetadata,
   peaProductTools,
   peaSkillPaths,
   peaStandardSkillsRoot,
-  peaTools,
   resolvePeaProductHomePath,
   resolvePeaSkillPaths,
   resolvePeaStandardSkillsRoot,
@@ -23,7 +21,6 @@ export {
   resolveWorkspaceKey,
 } from "./shared/host-config.ts";
 export { HostRpcCaller } from "./shared/host-rpc-caller.ts";
-export { peaProductToolCatalog } from "./tool-metadata.ts";
 export {
   ScriptingTools,
   bootstrapScriptWorkspace,

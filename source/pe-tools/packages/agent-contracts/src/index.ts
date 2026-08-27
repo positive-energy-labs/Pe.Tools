@@ -9,5 +9,4 @@ export * from "./family.ts";
 export * from "./parameter-links.ts";
 export * from "./settings.ts";
 export * from "./schedule-grid.ts";
-export * from "./tool-metadata.ts";
-export * from "./tool-access-policy.ts";
+export * from "./world.ts";

@@ -4,7 +4,6 @@ import { Mastra } from "@mastra/core/mastra";
 import type { MemoryStorage } from "@mastra/core/storage";
 import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
-import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import {
@@ -13,25 +12,6 @@ import {
   type RouteWorkspaceScope,
   type RouteWorkspaceThreadEvent,
 } from "./route-workspace.ts";
-
-/**
- * Body for the Pe send route. The native `/messages` route is `{ message: string }` only, so it
- * cannot carry attachments — but the in-process `Session.sendMessage` already accepts `files`
- * (base64 + mediaType), which reach the model as multimodal content. This route bridges that gap;
- * see MASTRA_UPSTREAM_CANDIDATES.md. Delete it once the native route carries `files`.
- */
-const peSendMessageSchema = z.object({
-  message: z.string(),
-  files: z
-    .array(
-      z.object({
-        data: z.string(),
-        mediaType: z.string(),
-        filename: z.string().optional(),
-      }),
-    )
-    .optional(),
-});
 
 /* ── Route-state dispatcher request bodies ─────────────────────────────────── */
 
@@ -50,19 +30,15 @@ const routeStateCommandBodySchema = z.object({
 /** The minimal shape we serve: an AgentController + its session, on a Mastra. */
 export interface ServableRuntime {
   controller: AgentController;
+  resourceId?: string;
   session?: Session;
   mastra?: Mastra;
   /** The controller's storage, shared with the wrap Mastra so thread routes resolve. */
   storage?: unknown;
   /** Pe-owned transparency payload (system prompt, tool list, skills, OM config). */
   metadata?: Record<string, unknown>;
+  isSessionAdmitted?(session: Session): boolean;
   close?: () => Promise<void> | void;
-}
-
-/** Connection handshake the SPA reads to learn which controller/session to drive. */
-interface PeWebInfo {
-  controllerId: string;
-  resourceId: string;
 }
 
 function requireServableRuntime(value: unknown): ServableRuntime {
@@ -70,9 +46,7 @@ function requireServableRuntime(value: unknown): ServableRuntime {
   if (!(runtime?.controller instanceof AgentController)) {
     throw new Error("Runtime agent-controller web requires an AgentController.");
   }
-  if (!runtime.session) {
-    throw new Error("Runtime agent-controller web requires a session.");
-  }
+  if (!runtime.resourceId) throw new Error("Runtime agent-controller web requires resourceId.");
   return runtime as ServableRuntime;
 }
 
@@ -86,18 +60,17 @@ function requireServableRuntime(value: unknown): ServableRuntime {
 function resolveServingTarget(
   runtime: ServableRuntime,
   label: string,
-): { mastra: Mastra; controllerId: string } {
+): Mastra {
   const existing = runtime.mastra ?? runtime.controller.getMastra();
   if (existing) {
-    for (const [key, value] of Object.entries(existing.listAgentControllers())) {
-      if (value === runtime.controller) return { mastra: existing, controllerId: key };
+    for (const value of Object.values(existing.listAgentControllers())) {
+      if (value === runtime.controller) return existing;
     }
   }
-  const mastra = new Mastra({
+  return new Mastra({
     agentControllers: { [label]: runtime.controller },
     ...(runtime.storage ? { storage: runtime.storage as never } : {}),
   });
-  return { mastra, controllerId: label };
 }
 
 export interface BuildAgentControllerAppOptions {
@@ -121,31 +94,14 @@ export async function buildAgentControllerApp(
   options: BuildAgentControllerAppOptions,
 ): Promise<Hono> {
   const runtime = requireServableRuntime(options.runtime);
-  const { mastra, controllerId } = resolveServingTarget(runtime, options.label);
-  const info: PeWebInfo = {
-    controllerId,
-    resourceId: runtime.session!.identity.getResourceId(),
-  };
+  const mastra = resolveServingTarget(runtime, options.label);
+  const resourceId = runtime.resourceId!;
 
   const app = new Hono();
-  app.use("*", cors());
-  // Handshake: the SPA fetches this to learn which controller/session to drive
-  // over the native @mastra/server agent-controller routes (mounted under /api).
-  app.get("/pe/info", (c) => c.json(info));
   // Pe-owned transparency: resolved system prompt, final tool list, skills, OM
   // config — captured on pea's agent (InputProcessor + model wrap), surfaced here
   // because native display-state doesn't carry them. Composition, not a core fork.
   app.get("/pe/inspect", (c) => c.json((runtime.metadata?.workbench as unknown) ?? {}));
-  // Pe send route (multimodal): delegates to the in-process Session, which the native HTTP
-  // `/messages` route can't because its body is `{ message: string }`. The reply streams over the
-  // native session SSE, same as a native send — this only carries the input.
-  app.post("/pe/messages", async (c) => {
-    const parsed = peSendMessageSchema.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "Invalid message body." }, 400);
-    void runtime.session!.sendMessage({ content: parsed.data.message, files: parsed.data.files });
-    return c.json({ ok: true });
-  });
-
   const registrations = options.routeRegistrations ?? [];
   const storage = mastra.getStorage();
   const threadState = await storage?.getStore("threadState");
@@ -158,13 +114,13 @@ export async function buildAgentControllerApp(
   const routeWorkspace = new RouteWorkspace({
     registrations,
     store: threadState!,
-    resourceId: info.resourceId,
+    resourceId,
     authorizeThread: async (threadId) => {
-      const thread = await runtime.session!.thread.getById({ threadId });
-      return thread?.resourceId === info.resourceId;
+      const thread = await memoryStore!.getThreadById({ threadId, resourceId });
+      return thread?.resourceId === resourceId;
     },
     appendThreadEvent: (event) =>
-      appendRouteWorkspaceThreadEvent(runtime, memoryStore!, info.resourceId, event),
+      appendRouteWorkspaceThreadEvent(runtime, memoryStore!, resourceId, event),
   });
 
   // Discovery is deliberately unscoped and shallow. Every document read/write must name
@@ -284,13 +240,19 @@ async function appendRouteWorkspaceThreadEvent(
 
   // Direct persistence makes the event visible on reload and to the next model turn. Only the
   // currently displayed thread also needs a live message event; other threads hydrate normally.
-  if (runtime.session!.thread.getId() !== event.threadId) return;
-  const messages = await runtime.session!.thread.listMessages({
+  const session = await runtime.controller.getSessionByResource(resourceId, event.threadId);
+  if (
+    !session ||
+    session.thread.getId() !== event.threadId ||
+    runtime.isSessionAdmitted?.(session) === false
+  )
+    return;
+  const messages = await session.thread.listMessages({
     threadId: event.threadId,
     limit: 20,
   });
   const persisted = messages.find((message) => message.id === signal.id);
-  if (persisted) runtime.session!.emit({ type: "message_end", message: persisted });
+  if (persisted) session.emit({ type: "message_end", message: persisted });
 }
 
 function streamRouteWorkspace(

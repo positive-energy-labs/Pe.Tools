@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { HOST_QUERY_KEY } from "#/host/queries";
+import { usePeInfo } from "#/host/info";
 
 /**
  * Subscribes to the host's SSE relay of bridge events (Revit document changes,
@@ -14,7 +15,9 @@ import { HOST_QUERY_KEY } from "#/host/queries";
  */
 export function useHostLiveInvalidation() {
   const queryClient = useQueryClient();
+  const revit = usePeInfo().data?.capabilities.revit === true;
   useEffect(() => {
+    if (!revit) return;
     const source = new EventSource("/events");
     let timer: ReturnType<typeof setTimeout> | undefined;
     source.onmessage = () => {
@@ -28,5 +31,5 @@ export function useHostLiveInvalidation() {
       clearTimeout(timer);
       source.close();
     };
-  }, [queryClient]);
+  }, [queryClient, revit]);
 }

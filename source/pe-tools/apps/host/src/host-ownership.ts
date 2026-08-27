@@ -2,6 +2,7 @@ import { normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import { devHostSourceDir, hostServiceName } from "@pe/host-contracts/service-identity";
+import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
 
 export { productRoot } from "@pe/host-contracts/service-identity";
 
@@ -15,12 +16,32 @@ export type HostOwnership = {
   readonly sourceRoot: string | null;
 };
 
+export const NO_REVIT_ARGUMENT = "--no-revit";
+export const hostCapabilities = resolveHostCapabilities();
 export const hostOwnership = resolveHostOwnership();
+
+export function resolveHostCapabilities(
+  argv: readonly string[] = process.argv,
+): PeaRuntimeCapabilities {
+  return { revit: !argv.includes(NO_REVIT_ARGUMENT) };
+}
+
+export function serviceNameForCapabilities(
+  serviceName: string,
+  capabilities: PeaRuntimeCapabilities,
+): string {
+  return capabilities.revit ? serviceName : `${serviceName}-no-revit`;
+}
 
 function resolveHostOwnership(): HostOwnership {
   const lane = resolveHostLane();
+  if (!hostCapabilities.revit && lane !== "dev")
+    throw new Error(`${NO_REVIT_ARGUMENT} is available only for the dev host.`);
   const sourceRoot = lane === "dev" ? resolveSourceRoot() : null;
-  const serviceName = hostServiceName(lane, sourceRoot);
+  const serviceName = serviceNameForCapabilities(
+    hostServiceName(lane, sourceRoot),
+    hostCapabilities,
+  );
   const configuredServiceName = process.env[hostProcessIdentity.serviceNameVariable]?.trim();
   if (configuredServiceName && configuredServiceName !== serviceName)
     throw new Error(

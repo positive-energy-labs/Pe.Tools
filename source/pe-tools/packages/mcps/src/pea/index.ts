@@ -1,10 +1,6 @@
+import type { ToolCategory } from "@mastra/core/agent-controller";
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import {
-  assertRuntimeToolAccess,
-  createRuntimeToolProfile,
-  readRuntimeAccessLevelFromToolContext,
-} from "@pe/agent-contracts";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 
@@ -23,11 +19,8 @@ import { createCaptureViewTool } from "../shared/capture-view.ts";
 import { requestAccess } from "../shared/request-access.ts";
 import { revitApiFetch, revitApiSearch } from "../shared/rvt-api.ts";
 import { resolveHostBaseUrl, resolveWorkspaceKey } from "../shared/host-config.ts";
-import { peaProductToolCatalog } from "../tool-metadata.ts";
 import { routeStateTools } from "./route-state.ts";
-import { PeaCliCommands, type PeaCliCommandOptions } from "./PeaCliCommands.ts";
 export { type RouteRegistration, createRouteRegistrations } from "./routes.ts";
-export { peaProductToolCatalog } from "../tool-metadata.ts";
 export { PeaCliCommands } from "./PeaCliCommands.ts";
 export {
   bundledPeaSkills,
@@ -39,8 +32,6 @@ export {
   peaProductHomeEnvVar,
   peaStandardSkillsRoot,
 } from "./skills.ts";
-
-export const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
 
 type PeaProductToolContext = {
   hostBaseUrl?: string;
@@ -270,13 +261,11 @@ export const hostOperationCall = createTool({
       .describe("Client-side timeout for this host call, in seconds."),
     bridgeSessionId: bridgeSessionIdSchema,
   }),
-  execute: async (input, context) => {
+  execute: async (input) => {
     const hostRpcCaller = createCurrentHostRpcCaller(
       input.bridgeSessionId,
       input.timeoutSeconds * 1000,
     );
-    const operation = await hostRpcCaller.getOperation(input.key);
-    assertHostOperationCallAccess(operation, input.key, context);
     return hostRpcCaller.callOperation(input.key, coerceJsonObject(input.request), input.verbosity);
   },
 });
@@ -341,16 +330,25 @@ export const peaProductTools = {
   ...routeStateTools,
 };
 
-export const peaTools = peaProductTools;
-
-export const peaProductToolProfile = createRuntimeToolProfile({
-  id: "pea-product",
-  tools: peaProductTools,
-  catalog: peaProductToolCatalog,
-  commands: {
-    createSubCommands: (options?: PeaCliCommandOptions) => new PeaCliCommands(options).commands(),
-  },
-});
+export const peaProductToolMetadata = {
+  pe_status: { category: "read", requiresRevit: true },
+  pe_logs: { category: "read", requiresRevit: true },
+  host_operation_search: { category: "read", requiresRevit: true },
+  host_operation_call: { category: "execute", requiresRevit: true },
+  request_access: { category: "edit", requiresRevit: false },
+  read_image: { category: "read", requiresRevit: false },
+  capture_view: { category: "read", requiresRevit: true },
+  revit_api_docs_search: { category: "read", requiresRevit: false },
+  revit_api_docs_fetch: { category: "read", requiresRevit: false },
+  script_bootstrap: { category: "edit", requiresRevit: true },
+  script_execute: { category: "execute", requiresRevit: true },
+  route_state_read: { category: "read", requiresRevit: false },
+  route_state_apply: { category: "edit", requiresRevit: false },
+  route_command: { category: "execute", requiresRevit: false },
+} satisfies Record<
+  keyof typeof peaProductTools,
+  { category: ToolCategory; requiresRevit: boolean }
+>;
 
 function createCurrentHostRpcCaller(bridgeSessionId?: string, timeoutMs?: number) {
   return new HostRpcCaller({
@@ -395,24 +393,4 @@ function parseHostLogTarget(target: "host" | "revit" | "all"): HostLogTarget {
     case "all":
       return HostLogTarget.All;
   }
-}
-
-type HostOperationLookupResult = Awaited<ReturnType<HostRpcCaller["getOperation"]>>;
-
-function assertHostOperationCallAccess(
-  operation: HostOperationLookupResult,
-  operationKey: string,
-  toolContext: unknown,
-): void {
-  if (operation?.intent !== "Mutate") return;
-
-  assertRuntimeToolAccess({
-    toolName: `host_operation_call:${operationKey}`,
-    metadata: {
-      name: `host_operation_call:${operationKey}`,
-      title: operation.displayName ?? operationKey,
-      kind: "edit",
-    },
-    accessLevel: readRuntimeAccessLevelFromToolContext(toolContext),
-  });
 }

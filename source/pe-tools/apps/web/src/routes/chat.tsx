@@ -25,6 +25,7 @@ import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
 export const PROMPT_MAX = 2000;
 
 const DEFAULTS = { mode: "threads" as const };
+const DRAFT_THREAD_KEY = "draft";
 
 const chatSearchSchema = z.object({
   thread: z.string().optional(),
@@ -48,7 +49,7 @@ export const Route = createFileRoute("/chat")({
 });
 
 function RouteComponent() {
-  const { plugin, prompt, turn } = Route.useSearch();
+  const { plugin, prompt, thread, turn } = Route.useSearch();
   const navigate = useNavigate({ from: "/chat" });
   // Debounce the scroll-driven turn → URL write: scrolling fires turn changes every frame, and each
   // navigate re-renders the route. ~1s lag keeps the shareable URL fresh without thrashing the router
@@ -70,7 +71,7 @@ function RouteComponent() {
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
   return (
-    <WorkbenchProvider>
+    <WorkbenchProvider key={thread ?? DRAFT_THREAD_KEY}>
       <ChatShell
         initialTurn={turn}
         plugin={plugin}

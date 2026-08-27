@@ -25,7 +25,6 @@ interface SlashCommand {
 
 const BUILTIN_COMMANDS: SlashCommand[] = [
   { name: "new", description: "Start a new thread", kind: "builtin" },
-  { name: "fork", description: "Fork this conversation into a new thread", kind: "builtin" },
   { name: "threads", description: "Show the thread list", kind: "builtin" },
   { name: "trace", description: "Show the trace gutter", kind: "builtin" },
   { name: "world", description: "Show the context world inspector", kind: "builtin" },
@@ -42,8 +41,7 @@ export function Composer({
   /** Rendered flush at the top edge of the box — the inline budget/progress bar. */
   topBar?: ReactNode;
 }) {
-  const { debug, sendPrompt, cancel, isRunning, operationError, readOnly, newThread, forkThread } =
-    useWorkbench();
+  const { debug, sendPrompt, cancel, isRunning, operationError, newThread } = useWorkbench();
   const navigate = useNavigate({ from: "/chat" });
   const [text, setText] = useState(promptSeed ?? "");
   const [attachments, setAttachments] = useState<WorkbenchAttachment[]>([]);
@@ -83,15 +81,12 @@ export function Composer({
       ? commands.filter((command) => command.name.toLowerCase().startsWith(slash))
       : [];
   const showMenu = slash !== undefined && !text.includes(" ") && matches.length > 0;
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !isRunning && !readOnly;
+  const canSend = (text.trim().length > 0 || attachments.length > 0) && !isRunning;
 
   const runBuiltin = (name: string): boolean => {
     switch (name) {
       case "new":
         newThread();
-        return true;
-      case "fork":
-        void forkThread();
         return true;
       case "threads":
       case "trace":

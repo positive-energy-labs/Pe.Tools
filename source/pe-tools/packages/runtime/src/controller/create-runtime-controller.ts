@@ -6,7 +6,6 @@ import {
 import { Mastra } from "@mastra/core/mastra";
 import { analyticsEnabled, boundedPayload, capture } from "../analytics.ts";
 import { createRuntimeThreadLock } from "../thread-lock.ts";
-import type { RuntimeAuthProfile } from "../auth/types.ts";
 import type { RuntimeMemoryProfile } from "../memory/profiles.ts";
 import type {
   RuntimeCreateRequest,
@@ -15,14 +14,13 @@ import type {
   RuntimeWorkspaceInfo,
 } from "../runtime.ts";
 import type { RuntimeStorageProfile } from "../storage/profiles.ts";
-import type { RuntimeToolProfile, RuntimeToolSource } from "@pe/agent-contracts";
-import { guardRuntimeToolsForAccessPolicy } from "@pe/agent-contracts";
 
 export type RuntimeControllerConfig<
   TState extends Record<string, unknown> = Record<string, unknown>,
 > = AgentControllerConfig<TState>;
 
 type ClosableStorage = { close?: () => Promise<void> | void };
+type SettleableMemory = { settled(): Promise<void> };
 
 export interface RuntimeInjectedControllerConfig {
   storage?: ClosableStorage;
@@ -41,14 +39,13 @@ export interface CreateRuntimeControllerOptions<
   controller?: TController;
   storageProfile?: RuntimeStorageProfile;
   memoryProfile?: RuntimeMemoryProfile<TState>;
-  toolProfile?: RuntimeToolProfile;
-  toolCatalog?: RuntimeToolSource;
   workspace?: RuntimeWorkspaceInfo;
-  auth?: RuntimeAuthProfile;
   authStorage?: TServices["authStorage"];
-  hookManager?: TServices["hookManager"];
-  mcpManager?: TServices["mcpManager"];
   metadata?: Record<string, unknown>;
+  /** Register controller-wide policy before any eager session is materialized. */
+  configureController?: (
+    controller: AgentController<TState>,
+  ) => void | (() => Promise<void> | void);
 }
 
 export interface CreateInjectedRuntimeControllerOptions<
@@ -94,7 +91,13 @@ export async function createRuntimeController<
   let controller: AgentController<TState> | TController;
   let session: Session<TState> | undefined;
   let memory: AgentControllerConfig<TState>["memory"];
+  let ownedMemory: SettleableMemory | undefined;
   let mastra: Mastra | undefined;
+  const sessions = new Map<Session<TState>, (() => void) | undefined>();
+  let unsubscribeCreated: (() => void) | undefined;
+  let unsubscribeDeleted: (() => void) | undefined;
+  let controllerCleanup: (() => Promise<void> | void) | undefined;
+  let resourceId: string | undefined;
   if (hasInjectedRuntimeController(options)) {
     config = options.config;
     controller = options.controller;
@@ -107,8 +110,22 @@ export async function createRuntimeController<
     >;
     const resolvedConfig = await resolveRuntimeControllerConfig(createOptions, request);
     config = resolvedConfig;
+    resourceId = resolvedConfig.resourceId ?? resolvedConfig.id;
     memory = resolvedConfig.memory;
+    ownedMemory = typeof memory === "function" ? undefined : memory;
     const built = new AgentController<TState>(resolvedConfig);
+    const configured = await options.configureController?.(built);
+    controllerCleanup = typeof configured === "function" ? configured : undefined;
+    unsubscribeCreated = built.onSessionCreated(
+      (created) => {
+        sessions.set(created, instrumentRuntimeSession(created, request.protocol));
+      },
+      { blocking: true },
+    );
+    unsubscribeDeleted = built.onSessionDeleted((deleted) => {
+      sessions.get(deleted)?.();
+      sessions.delete(deleted);
+    });
     // Register on an explicit Mastra (keyed by config.id) BEFORE init so the
     // controller inherits it instead of spinning up an internal one. This is the
     // handle @mastra/server mounts to expose the native agent-controller routes.
@@ -118,25 +135,32 @@ export async function createRuntimeController<
       ...(resolvedConfig.storage ? { storage: resolvedConfig.storage } : {}),
     });
     await built.init();
-    session = await built.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
-    instrumentRuntimeSession(session, request.protocol);
+    if (request.protocol !== "web") {
+      session = await built.createSession(createRuntimeSessionIdentity(resolvedConfig, request));
+    }
     controller = built;
   }
   let closeTask: Promise<void> | null = null;
 
   return {
     controller,
+    resourceId,
     mastra,
     session,
     memory,
     workspace: options.workspace,
-    auth: options.auth,
     authStorage: options.authStorage,
-    hookManager: options.hookManager,
-    mcpManager: options.mcpManager,
     metadata: options.metadata,
     close: () => {
-      closeTask ??= closeRuntimeController(controller, session, config.storage);
+      closeTask ??= closeRuntimeController(
+        sessions,
+        ownedMemory,
+        unsubscribeCreated,
+        unsubscribeDeleted,
+        controllerCleanup,
+        hasInjectedRuntimeController(options) ? undefined : mastra,
+        hasInjectedRuntimeController(options) ? config.storage : undefined,
+      );
       return closeTask;
     },
   };
@@ -149,7 +173,10 @@ const defaultRuntimeCreateRequest: RuntimeCreateRequest = { protocol: "tui" };
  * ACP) passes through here, so prompts, tool calls, and turn usage are captured once
  * with a `surface` dimension instead of per-transport.
  */
-function instrumentRuntimeSession(session: object | undefined, surface: string): void {
+function instrumentRuntimeSession(
+  session: object | undefined,
+  surface: string,
+): (() => void) | undefined {
   if (!session || !analyticsEnabled()) return;
   const target = session as unknown as {
     sendMessage?: (request: { content?: string }) => Promise<void>;
@@ -169,7 +196,7 @@ function instrumentRuntimeSession(session: object | undefined, surface: string):
         return originalSend(request);
       };
     }
-    target.subscribe?.((event) => {
+    return target.subscribe?.((event) => {
       const record = (event ?? {}) as Record<string, unknown>;
       const type = typeof record.type === "string" ? record.type : "";
       if (type !== "tool_end" && type !== "agent_end" && type !== "error") return;
@@ -206,23 +233,28 @@ function hasInjectedRuntimeController<
 }
 
 async function closeRuntimeController<TState extends Record<string, unknown>>(
-  controller: AgentController<TState> | object,
-  session: Session<TState> | undefined,
+  sessions: Map<Session<TState>, (() => void) | undefined>,
+  memory: SettleableMemory | undefined,
+  unsubscribeCreated: (() => void) | undefined,
+  unsubscribeDeleted: (() => void) | undefined,
+  controllerCleanup: (() => Promise<void> | void) | undefined,
+  mastra: Mastra | undefined,
   storage: ClosableStorage | undefined,
 ): Promise<void> {
-  session?.abort();
-  await session?.thread.clearAndReleaseLock();
-  let closeError: unknown;
-  try {
-    if (controller instanceof AgentController) {
-      await controller.destroy();
-    } else {
-      await storage?.close?.();
-    }
-  } catch (error) {
-    closeError = error;
-  }
-  if (closeError) throw closeError;
+  unsubscribeCreated?.();
+  unsubscribeDeleted?.();
+  await controllerCleanup?.();
+  await Promise.all(
+    [...sessions].map(async ([session, unsubscribe]) => {
+      session.abort();
+      unsubscribe?.();
+      await session.thread.clearAndReleaseLock();
+    }),
+  );
+  sessions.clear();
+  await memory?.settled();
+  if (!mastra) return await storage?.close?.();
+  await mastra.shutdown();
 }
 
 async function resolveRuntimeControllerConfig<
@@ -247,14 +279,6 @@ async function resolveRuntimeControllerConfig<
       ? await options.memoryProfile.createMemory({ storage, request, config: options.config })
       : undefined);
 
-  const tools = options.config.tools ?? options.toolProfile?.tools;
-  const toolCatalog = options.toolCatalog ?? options.toolProfile?.catalog;
-  const guardedTools =
-    typeof tools === "function"
-      ? tools
-      : tools
-        ? guardRuntimeToolsForAccessPolicy(tools, toolCatalog)
-        : undefined;
   const threadLock =
     options.config.threadLock ??
     createRuntimeThreadLock({ storageProfileKind: options.storageProfile?.kind });
@@ -263,7 +287,6 @@ async function resolveRuntimeControllerConfig<
     ...options.config,
     ...(storage ? { storage } : {}),
     ...(memory ? { memory } : {}),
-    ...(guardedTools ? { tools: guardedTools } : {}),
     threadLock,
   };
 }

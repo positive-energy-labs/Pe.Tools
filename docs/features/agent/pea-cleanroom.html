@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pea cleanroom — final field report</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f5f3ed; --paper:#fffefa; --ink:#171a1d; --muted:#596168; --line:#c9c6bc; --accent:#185b52; --accent2:#7b3f18; --good:#1f6a45; --warn:#8a4d12; --bad:#8c2d32; --code:#ece9e0; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    a { color:var(--accent); text-underline-offset:.18em; }
+    a:hover { text-decoration-thickness:2px; }
+    :focus-visible { outline:3px solid #d78322; outline-offset:3px; border-radius:2px; }
+    code, .mono { font-family:ui-monospace,"Cascadia Code",Consolas,monospace; font-size:.92em; }
+    code { background:var(--code); padding:.08rem .28rem; border-radius:3px; }
+    header, main, footer { width:min(1180px,calc(100% - 2rem)); margin-inline:auto; }
+    header { padding:3rem 0 1.5rem; border-bottom:1px solid var(--line); }
+    h1 { max-width:18ch; margin:0 0 .75rem; font-size:clamp(2rem,5vw,3.5rem); line-height:1.04; letter-spacing:-.035em; }
+    h2 { margin:0 0 .8rem; font-size:clamp(1.35rem,3vw,2rem); line-height:1.2; }
+    h3 { margin:1.35rem 0 .45rem; font-size:1.03rem; }
+    p { max-width:78ch; }
+    .kicker, .eyebrow { color:var(--accent); font-size:.76rem; font-weight:750; letter-spacing:.11em; text-transform:uppercase; }
+    .lead { max-width:77ch; font-size:1.16rem; }
+    .stamp { display:inline-block; border:1px solid var(--good); color:var(--good); padding:.2rem .5rem; font-weight:700; }
+    nav ul { display:flex; flex-wrap:wrap; gap:.45rem 1rem; padding:0; list-style:none; }
+    main section { padding:2.4rem 0; border-bottom:1px solid var(--line); scroll-margin-top:1rem; }
+    .callout { border-left:5px solid var(--accent); background:var(--paper); padding:1rem 1.2rem; }
+    .callout.warn { border-color:var(--warn); }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; }
+    .card { border:1px solid var(--line); background:var(--paper); padding:1rem; }
+    .card > :first-child { margin-top:0; }
+    .table-wrap { overflow-x:auto; border:1px solid var(--line); background:var(--paper); }
+    table { width:100%; border-collapse:collapse; min-width:760px; }
+    th, td { padding:.65rem .7rem; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:#e9e6dc; font-size:.78rem; letter-spacing:.035em; text-transform:uppercase; }
+    tr:last-child td { border-bottom:0; }
+    .flow { display:grid; grid-template-columns:repeat(5,minmax(165px,1fr)); gap:.7rem; overflow-x:auto; padding-bottom:.4rem; }
+    .wave { position:relative; border-top:4px solid var(--accent); background:var(--paper); padding:.8rem; min-height:215px; }
+    .wave:not(:last-child)::after { content:"→"; position:absolute; right:-.65rem; top:45%; z-index:2; color:var(--accent2); font-weight:800; }
+    .wave ol { padding-left:1.2rem; margin:.5rem 0 0; }
+    .wave a { white-space:nowrap; }
+    .status { font-weight:750; white-space:nowrap; }
+    .proven { color:var(--good); } .blocked { color:var(--warn); } .falsified { color:var(--bad); }
+    details { border:1px solid var(--line); background:var(--paper); padding:.8rem 1rem; margin:.7rem 0; }
+    summary { cursor:pointer; font-weight:700; }
+    footer { padding:2rem 0 3rem; color:var(--muted); }
+    @media (max-width:760px) { header,main,footer{width:min(100% - 1rem,1180px)} .flow{grid-template-columns:repeat(5,82vw)} th,td{padding:.55rem} }
+    @media (prefers-color-scheme:dark) { :root{--bg:#111518;--paper:#171c20;--ink:#f0eee8;--muted:#b0b6ba;--line:#3c4449;--accent:#77c8bb;--accent2:#efaa72;--good:#82d3a6;--warn:#edb16b;--bad:#f29298;--code:#252b2f} th{background:#22292d} }
+    @media print { :root{color-scheme:light;--bg:#fff;--paper:#fff;--ink:#000;--muted:#333;--line:#aaa;--accent:#164f48;--code:#eee} body{font-size:10pt} header,main,footer{width:100%} nav{display:none} main section{padding:1rem 0} .flow{display:block} .wave{break-inside:avoid;min-height:0;margin:.5rem 0}.wave::after{display:none}.table-wrap{overflow:visible} table{min-width:0;font-size:8.5pt} a{color:inherit} details{break-inside:avoid} details[open] summary{margin-bottom:.4rem} }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="kicker">Final field report · 2026-08-26 · product HEAD <span class="mono">f5b58c9</span></div>
+    <h1>Pea cleanroom: authority made native</h1>
+    <p class="lead"><strong>Verdict:</strong> native Mastra now owns the agent wire, the cleanroom is a net deletion, the visible world is honestly local, and the no-Revit <code>/chat</code> acceptance passed <strong>7/7</strong>. Mesa is blocked at the real mount gate rather than simulated.</p>
+    <p><span class="stamp">PROVEN · browser + Host log</span> No Revit process, bridge, route, or tool was contacted during final acceptance.</p>
+    <nav aria-label="Report sections"><ul><li><a href="#change">Change</a></li><li><a href="#authority">Authority</a></li><li><a href="#census">Census</a></li><li><a href="#acceptance">Acceptance</a></li><li><a href="#mesa">Mesa</a></li><li><a href="#owed">Owed</a></li><li><a href="#rejected">Rejected</a></li><li><a href="#dependencies">Dependencies</a></li><li><a href="#sources">Sources</a></li></ul></nav>
+  </header>
+  <main>
+    <section id="verdict" aria-labelledby="verdict-title">
+      <div class="eyebrow">Lead verdict</div><h2 id="verdict-title">Less Pe wire, more named authority</h2>
+      <div class="grid">
+        <div class="card"><h3>Native authority</h3><p>One Mastra session per durable <code>(resourceId, threadId)</code> owns run, transcript, mode, model, permissions, approval, abort, and reconnect truth.</p></div>
+        <div class="card"><h3>Net deletion</h3><p>Against cleanroom base: <strong>87 files</strong>, <strong>+3,451/−7,676</strong>, net <strong>−4,225</strong>. Four Pea-core scopes lost <strong>3,337 physical lines</strong>.</p></div>
+        <div class="card"><h3>Honest world</h3><p>The browser says <q>Local folder · unversioned · this machine only</q>. It does not claim Mesa, version history, OS isolation, or Revit.</p></div>
+        <div class="card"><h3>Real stop</h3><p>Mesa remains <span class="status blocked">BLOCKED</span>: no CLI, auth, mount, or <code>bwrap</code>. The SDK's in-process filesystem is not relabeled as FUSE.</p></div>
+      </div>
+    </section>
+
+    <section id="change" aria-labelledby="change-title">
+      <div class="eyebrow">26 commits · five waves</div><h2 id="change-title">Before → authority → result</h2>
+      <div class="flow" aria-label="Cleanroom commit timeline">
+        <article class="wave"><strong>1 · Delete dead wire</strong><p>Pe chat DTOs and projections → native controller contracts → orphan-free smaller surface.</p><ol><li id="commit-7c3f2ff"><a href="#commit-7c3f2ff"><code>7c3f2ff</code></a></li><li id="commit-32d8616"><a href="#commit-32d8616"><code>32d8616</code></a></li></ol></article>
+        <article class="wave"><strong>2 · Promote and collapse</strong><p>Split graph and Pe resolvers → coherent Mastra + Zod authority → native runtime/storage/model seams.</p><ol><li id="commit-9853ed6"><a href="#commit-9853ed6"><code>9853ed6</code></a></li><li id="commit-62b39e3"><a href="#commit-62b39e3"><code>62b39e3</code></a></li><li id="commit-0effbc2"><a href="#commit-0effbc2"><code>0effbc2</code></a></li><li id="commit-db57929"><a href="#commit-db57929"><code>db57929</code></a></li></ol></article>
+        <article class="wave"><strong>3 · Make scope durable</strong><p>Mutable shared sessions and optimistic policy → immutable coordinate + serialized durable permissions → fail-closed admission.</p><ol><li id="commit-e37ee35"><a href="#commit-e37ee35"><code>e37ee35</code></a>, <span id="commit-139c84f"><a href="#commit-139c84f"><code>139c84f</code></a></span>, <span id="commit-72d5e02"><a href="#commit-72d5e02"><code>72d5e02</code></a></span>, <span id="commit-f165c6a"><a href="#commit-f165c6a"><code>f165c6a</code></a></span></li><li id="commit-998a797"><a href="#commit-998a797"><code>998a797</code></a>, <span id="commit-739b6cc"><a href="#commit-739b6cc"><code>739b6cc</code></a></span></li><li id="commit-63dbb27"><a href="#commit-63dbb27"><code>63dbb27</code></a>, <span id="commit-440b1b1"><a href="#commit-440b1b1"><code>440b1b1</code></a></span>, <span id="commit-979e9d8"><a href="#commit-979e9d8"><code>979e9d8</code></a></span>, <span id="commit-26b109d"><a href="#commit-26b109d"><code>26b109d</code></a></span></li></ol></article>
+        <article class="wave"><strong>4 · Cut browser over</strong><p>Workbench-owned transport/projections → typed AgentController client → URL-scoped send, abort, approval, and reconciliation.</p><ol><li id="commit-a5ed1a7"><a href="#commit-a5ed1a7"><code>a5ed1a7</code></a></li><li id="commit-3beaa86"><a href="#commit-3beaa86"><code>3beaa86</code></a></li><li id="commit-24d9533"><a href="#commit-24d9533"><code>24d9533</code></a></li><li id="commit-97962be"><a href="#commit-97962be"><code>97962be</code></a></li></ol></article>
+        <article class="wave"><strong>5 · Name the world and perimeter</strong><p>Implicit local filesystem and eager Revit wires → strict world/capability facts → honest badge and no-Revit chat/Takeoffs.</p><ol><li id="commit-a2bf475"><a href="#commit-a2bf475"><code>a2bf475</code></a></li><li id="commit-69b4af6"><a href="#commit-69b4af6"><code>69b4af6</code></a></li><li id="commit-64ce143"><a href="#commit-64ce143"><code>64ce143</code></a>, <span id="commit-b341d75"><a href="#commit-b341d75"><code>b341d75</code></a></span>, <span id="commit-0debcd9"><a href="#commit-0debcd9"><code>0debcd9</code></a></span>, <span id="commit-f5b58c9"><a href="#commit-f5b58c9"><code>f5b58c9</code></a></span></li></ol></article>
+      </div>
+      <details><summary>Commit subjects</summary><p>The anchors above preserve all 26 ordered commits. Exact subjects and the full hashes remain in Git; the final census packet records the comparison custody.</p></details>
+    </section>
+
+    <section id="authority" aria-labelledby="authority-title">
+      <div class="eyebrow">Wire custody</div><h2 id="authority-title">Authority table</h2>
+      <div class="table-wrap"><table><thead><tr><th>Concern</th><th>Main authority</th><th>Worktree authority</th><th>Deleted Pe layer</th><th>Remaining seam</th></tr></thead><tbody>
+        <tr><td>Thread locking / identity</td><td>Mastra session identity; process lock where cross-process CLI access requires it</td><td>One immutable session per <code>(resourceId, threadId)</code>; URL change remounts</td><td>Active-thread mutation and browser-shared session assumptions</td><td>Atomic CLI/TUI thread lock remains product custody, not browser UX locking</td></tr>
+        <tr><td>Tool name mapping / graph</td><td>Native tool IDs plus runtime capability selection</td><td>Exactly 7 no-Revit tools or 14 full tools from the same frozen fact</td><td>Custom tool-name map, metadata wire, and shadow access-policy graph</td><td>Pe still defines its actual tools and Host operation catalog</td></tr>
+        <tr><td>Access / permissions</td><td>Mastra native permission records and controller APIs</td><td>Hydrate, serialize, persist exact policy, recheck before drain; explicit deny and unknown deny</td><td>Custom permission store and browser authorization claims</td><td>Product policy chooses defaults; browser lock is UX only</td></tr>
+        <tr><td>Auth</td><td>MastraCode-compatible provider/settings boundary; server holds provider secrets</td><td>No custom cleanroom auth resolver</td><td>Custom model/auth wire layers</td><td>Future Positive Energy auth must adapt to the native boundary</td></tr>
+        <tr><td>Model selection</td><td>AgentController model APIs and native session state</td><td>Typed <code>switchModel</code>; session owns selected model</td><td>Pe model resolver and browser shadow state</td><td>Pe product configuration still selects allowed providers/models</td></tr>
+        <tr><td>Messages / stream / abort / approval</td><td><code>@mastra/client-js</code> AgentController</td><td>Native send, subscribe/reconnect, REST gap hydration, abort, suspension, and approval</td><td><code>/pe/messages</code>, Pe wire unions, raw-thread and message-claim projections, 404 swallowing</td><td>assistant-ui renders projected messages only; one upstream approval warning fix is owed</td></tr>
+        <tr><td>World / storage</td><td>Mastra workspace/storage; Pe chooses the product world descriptor</td><td>Pea factory constructs only <code>local-unversioned</code>; shared and serving schemas admit a reserved <code>mesa-versioned</code> descriptor with no backing implementation</td><td>Implicit/unnamed local-world assumptions</td><td>Real Mesa CLI/auth/FUSE/<code>bwrap</code> lifecycle and version operations</td></tr>
+        <tr><td>Revit capability</td><td>Host's frozen <code>capabilities.revit</code> fact</td><td>Same fact selects tool graph and gates chat, root events, and live Takeoffs</td><td>Fake idle events and eager chat Revit contact</td><td><code>/instances</code> and <code>/ops</code> plus mixed action routes remain owed</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section id="census" aria-labelledby="census-title">
+      <div class="eyebrow">Same rules, three points</div><h2 id="census-title">Repository census</h2>
+      <p>Line counts below are <strong>physical lines</strong>, not semantic LOC. The rule counts Git-tracked TS-family files under all <code>source/pe-tools</code>, including workspace-root files, <code>apps</code>, and <code>packages</code>; excludes generated files and <code>routeTree.gen.ts</code>; and separates production from tests.</p>
+      <div class="table-wrap"><table><thead><tr><th>Measure</th><th>Main <code>c2a8660</code></th><th>Base <code>faaf465</code></th><th>Worktree <code>f5b58c9</code></th></tr></thead><tbody>
+        <tr><td>Branch / divergence</td><td><code>main</code>; 2 left</td><td>merge base</td><td><code>goal/pea-cleanroom</code>; 26 right</td></tr>
+        <tr><td>Git delta from base</td><td>6 skill files, +20/−8</td><td>—</td><td>87 files, +3,451/−7,676; net −4,225</td></tr>
+        <tr><td>Git delta vs current main</td><td>—</td><td>—</td><td>93 files, +3,459/−7,696; includes six skill-divergence files</td></tr>
+        <tr><td>Production TS-family</td><td>365 files / 99,197 lines</td><td>Same product base as main before its two skill-only commits</td><td>354 / 95,815; −11 files / −3,382 lines</td></tr>
+        <tr><td>Tests</td><td>68 / 10,478 lines</td><td>Same product base as main</td><td>74 / 11,084; +6 files / +606 lines</td></tr>
+        <tr><td><code>apps/pea/src</code></td><td>5 / 827</td><td>Same product base as main</td><td>5 / 618; −209</td></tr>
+        <tr><td><code>packages/runtime/src</code></td><td>31 / 4,148</td><td>Same product base as main</td><td>22 / 3,872; −9 files / −276</td></tr>
+        <tr><td><code>packages/agent-contracts/src</code></td><td>15 / 5,107</td><td>Same product base as main</td><td>13 / 2,709; −2 files / −2,398</td></tr>
+        <tr><td><code>apps/web/src/workbench</code></td><td>22 / 5,909</td><td>Same product base as main</td><td>20 / 5,455; −2 files / −454</td></tr>
+        <tr><td>Four core scopes</td><td>73 / 15,991</td><td>Same product base as main</td><td>60 / 12,654; −13 files / −3,337</td></tr>
+        <tr><td>Core / MastraCode</td><td>1.50.1 / 0.30.0</td><td>1.50.1 / 0.30.0</td><td>1.61.0 / 0.35.0</td></tr>
+        <tr><td>Hono ownership</td><td>Runtime <code>^4.12.24</code></td><td>Runtime <code>^4.12.24</code></td><td>Runtime <code>4.12.8</code>; no Pea direct dependency</td></tr>
+        <tr><td>Effect</td><td>4.0.0-beta.92</td><td>4.0.0-beta.92</td><td>4.0.0-beta.92</td></tr>
+        <tr><td>assistant-ui</td><td>Catalog <code>^0.14.23</code></td><td>Catalog <code>^0.14.23</code></td><td>Same; render-only boundary retained</td></tr>
+        <tr><td>TanStack Highlight</td><td>0.0.10</td><td>0.0.10</td><td>0.0.10</td></tr>
+        <tr><td>TanStack moving specs</td><td>8 <code>latest</code></td><td>8 <code>latest</code></td><td>0; compatible installed versions pinned</td></tr>
+        <tr><td>Query / Router / Start examples</td><td><code>latest</code> specs</td><td><code>latest</code> specs</td><td>5.101.4 / 1.170.31 / 1.168.48</td></tr>
+      </tbody></table></div>
+      <p class="callout warn"><strong>Integration note:</strong> main's two later commits are skill-only and are not in this worktree. Integrating main is landing custody, not product Owed; it is not product drift and must preserve those six skill-file changes.</p>
+    </section>
+
+    <section id="acceptance" aria-labelledby="acceptance-title">
+      <div class="eyebrow">Final no-Revit browser acceptance</div><h2 id="acceptance-title">7/7 on two concurrent URLs</h2>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>Acceptance fact</th><th>DOM evidence</th><th>Host evidence</th></tr></thead><tbody>
+        <tr><td>1</td><td>Message one</td><td>Thread <code>4e6d83df-99e1-4d39-9f5e-0d0184c37124</code> rendered <q>acceptance one</q>, then idle</td><td>Native message POST 200</td></tr>
+        <tr><td>2</td><td>Message two</td><td>Thread <code>c7357a1f-8f42-4603-8ce1-cc9a7fae4d13</code> rendered <q>acceptance two</q>, then idle</td><td>Native message POST 200</td></tr>
+        <tr><td>3</td><td>Working-state third message</td><td>Second thread accepted <q>Write 500 numbered...</q>; status became <q>pea is working</q></td><td>Native message POST 200</td></tr>
+        <tr><td>4</td><td>Two chats open</td><td>Tabs <code>tab_5</code> and <code>tab_4</code> simultaneously held distinct <code>/chat?thread=</code> URLs</td><td>Both message reads 200</td></tr>
+        <tr><td>5</td><td>Interrupt while working</td><td><code>button[aria-label='Stop']</code> clicked; idle returned, Stop vanished, interrupted turn removed</td><td>Exactly 1 <code>/abort</code> 200</td></tr>
+        <tr><td>6</td><td>Exact approval path</td><td><code>request_access</code> for <code>source/pe-tools/apps/web/src/host</code> rendered Approve and Deny</td><td>Native run remained suspended</td></tr>
+        <tr><td>7</td><td>Approval result</td><td>Approve removed controls; tool card became <code>ok</code>; Pea reported <q>Access was granted.</q></td><td>Exactly 1 <code>/tool-approval</code> 200; permission reread 200</td></tr>
+      </tbody></table></div>
+      <div class="grid">
+        <div class="callout"><strong>Evidence form.</strong> The collaborative preview was automation-capable but hidden. This is browser DOM and native-control evidence, not screenshot or recording evidence.</div>
+        <div class="callout"><strong>No Revit contact.</strong> The source Host ran <code>dev:no-revit</code>. Both tabs showed the local-world badge and neither claimed Mesa or Revit.</div>
+        <div class="callout warn"><strong>Logs were not anomaly-free.</strong> Host counts: 3 bounded-regex message POST 200 matches, 1 abort 200, 1 approval 200, and zero <code>/call</code>, <code>/events</code>, or direct <code>/sessions</code> 404s. Also present: 2 devtools font 403s and 2 known upstream Mastra approval warnings.</div>
+      </div>
+    </section>
+
+    <section id="mesa" aria-labelledby="mesa-title">
+      <div class="eyebrow">First-class user world</div><h2 id="mesa-title">Mesa is a reserved truth, not a simulated feature</h2>
+      <p>The Pea factory constructs only one strict descriptor today: local root, <code>storage.kind = "local-unversioned"</code>, and <code>isolation = "none"</code>. The visible badge says exactly what that means. Shared and serving schemas deliberately admit a reserved <code>mesa-versioned</code> descriptor so the future wire has a clean slot. A valid descriptor can reach the serving app; this does not provide a mount, auth, checkpoint, isolation, or version-control implementation.</p>
+      <div class="grid"><div class="card"><h3>Why no mount exists</h3><p>WSL2 has <code>/dev/fuse</code> and <code>fusermount3</code>, but this machine has no Mesa CLI, credential/config, current mount, or <code>bwrap</code>. Pea has no <code>@mesadev/*</code> dependency. The released SDK <code>mount()</code> returns an in-process filesystem, not an OS path.</p></div><div class="card"><h3>The real gate</h3><p>Pin answering bytes; authenticate; create a Linux FUSE mount visible in <code>findmnt</code>; read and write through it; checkpoint; inspect diff/history; tear down; reopen and prove persistence; then run Pea commands inside <code>bwrap</code> against that same mount.</p></div></div>
+      <p class="callout warn"><strong>Stop condition:</strong> all eight rows must pass as one round trip. FUSE plumbing alone, downloaded tarballs, Git copy/sync, symlinks, or the SDK virtual filesystem do not count.</p>
+    </section>
+
+    <section id="owed" aria-labelledby="owed-title">
+      <div class="eyebrow">Open work only</div><h2 id="owed-title">Cleanroom-created owed</h2>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Why / status</th><th>Honest cost</th><th>Complexity tradeoff</th><th>Delete-trigger</th></tr></thead><tbody>
+        <tr id="owed-mesa"><td><strong>Mesa world lifecycle and UI</strong></td><td><span class="status blocked">Blocked</span>. Schema and local badge exist; real mount does not. Auth/mount health, second-world chooser, checkpoint/history/diff, reopen/teardown remain.</td><td>550-990 UI LOC estimated. Production/test split unknown. CLI ownership, auth, recovery, Linux deployment, and FUSE+bwrap proof unknown.</td><td>Large UI before a real second world would encode fiction. Waiting keeps one honest branch.</td><td>Delete when one pinned, authenticated FUSE+bwrap round trip proves mount, write, checkpoint, diff/history, teardown, and reopen.</td></tr>
+        <tr><td><strong>Mastra approval warning upgrade</strong></td><td><span class="status blocked">Open upstream</span>. One approval executes once; two internal workflows warn.</td><td>0 product LOC expected; manifest/lock churn and one browser approval probe. Test LOC unknown.</td><td>Forking or alpha-upgrading only to quiet logs costs more than the warning.</td><td>Accepted release contains commit <code>9ee8120c</code> / PR #22262 and the approval probe stays green.</td></tr>
+        <tr><td><strong>Non-Pea Revit web route capability migration</strong></td><td><span class="status falsified">Falsifier remains</span>. Pea chat, root SSE, and live Takeoffs are gated; <code>/instances</code> and <code>/ops</code> still expose eager Revit-only paths.</td><td>75-160 production+test LOC; UI split unknown.</td><td>One shared literal-true route boundary is small; mixed action routes need explicit disabled states and product copy.</td><td>Delete when pending/false capability yields zero <code>/sessions</code> and Revit-only operation requests across both routes.</td></tr>
+      </tbody></table></div>
+      <p class="callout"><strong>Landing custody, not product Owed.</strong> <strong>Integrate current main:</strong> main has two later skill-only commits; cleanroom has 26 product commits. Integration should add 0 product LOC, preserve the six skill-file changes, and rerun deterministic/browser gates.</p>
+      <h3>Not product owed</h3><ul><li><strong>Evidence limit:</strong> hidden preview prevented pixels; DOM/control evidence remains valid within its stated lane.</li><li><strong>Environment anomaly:</strong> two font 403s came from worktree-only TanStack devtools through main-checkout dependency junctions.</li><li><strong>Baseline red:</strong> eight untouched formatter failures remain in the full web check; focused TypeScript compiles and tests are separate green evidence.</li></ul>
+    </section>
+
+    <section id="rejected" aria-labelledby="rejected-title">
+      <div class="eyebrow">Expensive paths that lost</div><h2 id="rejected-title">Tried, falsified, and deferred</h2>
+      <h3>Falsified designs</h3>
+      <div class="table-wrap"><table><thead><tr><th>Path</th><th>Why it lost</th></tr></thead><tbody>
+        <tr><td>Fake Mesa mount: Git copy/sync, SDK virtual filesystem, symlink, or FUSE-prerequisite claim</td><td>None proves authenticated OS mount, version operations, persistence, or isolation on the same bytes.</td></tr>
+        <tr><td>Custom permission/thread/model/auth/tool-name/message layers</td><td>Native AgentController already owns these contracts; parallel Pe authority created drift and deletion opportunities.</td></tr>
+        <tr><td>Fake idle <code>/events</code> in no-Revit mode</td><td>An absent capability must stop the client request, not return a synthetic server behavior.</td></tr>
+        <tr><td>AG-UI or CopilotKit as a second protocol/state channel</td><td>Pe-only semantics still required custom events while duplicating the existing Workbench state channel.</td></tr>
+        <tr><td>Delete the reserved <code>mesa-versioned</code> discriminant</td><td>The shared and serving schemas deliberately admit the descriptor while the Pea factory constructs only <code>local-unversioned</code>. The reserved future slot has no backing implementation.</td></tr>
+      </tbody></table></div>
+      <h3>YAGNI deferrals</h3><p>Effect beta.107 rewrite, assistant-ui 0.15/removal, private Factory UI adoption, broad latest-everything promotion, Effect AI replacement, full editor replacement, and TanStack Table rewrite offered no named bug, supported public contract, or measured deletion. Reopen each only when that trigger changes.</p>
+      <h3>Critic/process incidents</h3><ul><li>A cleanup critic ran <code>git clean -fdX</code> and deleted ignored evidence and skill junctions. It exceeded critic custody; reports were rebuilt, and committed product truth was unchanged.</li><li>A critic mistook a concurrent dependency diff for test-runner churn and restored it. The intended diff was reapplied and committed; the incident is evidence for explicit custody checks, not a product defect.</li></ul>
+    </section>
+
+    <section id="dependencies" aria-labelledby="dependencies-title">
+      <div class="eyebrow">Dependency rulings</div><h2 id="dependencies-title">Installed bytes compile; upstream sources inform</h2>
+      <p class="callout"><strong>Rule:</strong> installed, pinned versions are compile authority. Registry freshness and upstream HEAD describe available direction only; they do not prove compatibility.</p>
+      <div class="table-wrap"><table><thead><tr><th>Dependency / precedent</th><th>Ruling</th><th>Authority</th></tr></thead><tbody>
+        <tr><td>Mastra / MastraCode UI precedent</td><td>Adopt native AgentController semantics. Private Factory UI is source precedent, not a supported reusable dependency.</td><td><a href="https://github.com/mastra-ai/mastra">Mastra source</a></td></tr>
+        <tr><td>assistant-ui</td><td>Keep 0.14 render-only boundary. Do not rebuild its message, markdown, streaming, and accessibility primitives; defer 0.15 until a concrete payoff.</td><td><a href="https://github.com/assistant-ui/assistant-ui">assistant-ui source</a></td></tr>
+        <tr><td>Effect v4</td><td>Keep beta.92 architecture. Host owns effects/layers/outer HTTP; Hono owns Mastra tenant routing. No beta.107 novelty rewrite.</td><td><a href="https://github.com/Effect-TS/effect">Effect source</a>; <a href="../host/EFFECT-V4-PATTERNS.md">repo patterns</a></td></tr>
+        <tr><td>TanStack Highlight</td><td>Keep 0.0.10; it owns headless decoration, while Pe owns the focused editor UI.</td><td><a href="https://github.com/TanStack/highlight">Highlight source</a></td></tr>
+        <tr><td>TanStack Query / Router / Start</td><td>Keep and pin the lock-proven compatible set: 5.101.4 / 1.170.31 / 1.168.48. Pinning removes moving resolution, not runtime code.</td><td><a href="https://github.com/TanStack/query">Query</a>; <a href="https://github.com/TanStack/router">Router/Start</a></td></tr>
+        <tr><td>Zod</td><td>Keep 4.3.6 and the intentional client/server identity split. Promote only with the coherent Mastra graph.</td><td><a href="https://github.com/colinhacks/zod">Zod source</a></td></tr>
+        <tr><td>Hono</td><td>Runtime is the one direct owner at 4.12.8; Pea's unused direct dependency was deleted. Defer version bump.</td><td><a href="https://github.com/honojs/hono">Hono source</a></td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section id="sources" aria-labelledby="sources-title">
+      <div class="eyebrow">Proof and source appendix</div><h2 id="sources-title">Where each claim came from</h2>
+      <p><strong>Durable:</strong> this report and the <a href="LEDGER.md">agent ledger</a>. <strong>Ignored evidence:</strong> the <code>.artifacts</code> packets below are local, gitignored handoffs; they support this capture but are not durable repository history.</p>
+      <div class="grid">
+        <div><h3>Final proof</h3><ul><li><a href="../../../.artifacts/handoffs/2026-08-26-pea-cleanroom-final-census.md">Final census packet</a></li><li><a href="../../../.artifacts/handoffs/2026-08-26-pea-cleanroom-final-browser-proof.md">Final browser proof</a></li><li><a href="../../../.artifacts/handoffs/2026-08-26-pea-cleanroom-browser-final-adversary.md">Browser/runtime adversary</a></li><li><a href="../../../.artifacts/handoffs/2026-08-26-pea-cleanroom-web-revit-capability-final-critic.md">Revit capability critic</a></li></ul></div>
+        <div><h3>Architecture and dependencies</h3><ul><li><a href="../../../.artifacts/handoffs/2026-08-26-mastra-ui-assistant-ui-census.md">Mastra UI / assistant-ui census</a></li><li><a href="../../../.artifacts/handoffs/2026-08-26-pea-cleanroom-web-dependency-census.md">Web dependency census</a></li><li><a href="../../../.artifacts/handoffs/2026-08-26-pea-cleanroom-mesa-world-census.md">Mesa world census</a></li><li><a href="../../../.artifacts/handoffs/2026-08-26-pea-cleanroom-world-adversary.md">World adversary</a></li></ul></div>
+        <div><h3>Primary upstream</h3><ul><li><a href="https://www.mesa.dev/features/filesystem">Mesa filesystem contract</a></li><li><a href="https://github.com/mesa-dot-dev/sdks/blob/c1ca123997212ed0b7b9c613c7427077cc07250c/typescript/src/mesa.ts#L230-L245">Mesa SDK mount contract</a></li><li><a href="https://github.com/mastra-ai/mastra">Mastra</a></li><li><a href="https://github.com/Effect-TS/effect">Effect</a></li><li><a href="https://github.com/TanStack">TanStack</a></li><li><a href="https://github.com/assistant-ui/assistant-ui">assistant-ui</a></li><li><a href="https://github.com/colinhacks/zod">Zod</a></li><li><a href="https://github.com/honojs/hono">Hono</a></li></ul></div>
+      </div>
+    </section>
+  </main>
+  <footer><p>Pea cleanroom final handoff · source state <code>f5b58c964a634a1076bb61a987f0184874a6ea7a</code> before this documentation commit · proof date 2026-08-26.</p></footer>
+</body>
+</html>

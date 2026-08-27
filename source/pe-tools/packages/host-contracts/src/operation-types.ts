@@ -410,14 +410,23 @@ export const hostProbeDataSchema = Schema.Struct({
   bridgeContractVersion: Schema.Number,
   bridgeIsConnected: Schema.Boolean,
   bridgePath: Schema.String,
+  capabilities: Schema.Struct({ revit: Schema.Boolean }),
+  controllerId: Schema.String,
   disconnectReason: Schema.optional(Schema.NullOr(Schema.String)),
   executablePath: Schema.optional(Schema.String),
   hostContractVersion: Schema.Number,
   lane: Schema.optional(Schema.Literals(["dev", "installed"])),
   processId: Schema.optional(Schema.Number),
+  resourceId: Schema.String,
   runtimeIdentity: Schema.String,
   serviceName: Schema.String,
   sourceRoot: Schema.optional(Schema.NullOr(Schema.String)),
+  world: Schema.Struct({
+    id: Schema.String,
+    root: Schema.String,
+    storage: Schema.Struct({ kind: Schema.Literals(["local-unversioned"]) }),
+    isolation: Schema.Literals(["none"]),
+  }),
 });
 
 // The operator's map (ADR 0003 glance tier, host-side): host identity + every

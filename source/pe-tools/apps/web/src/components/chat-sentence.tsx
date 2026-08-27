@@ -109,11 +109,13 @@ export function ChatSentence({ spec }: { spec?: RouteStateSpec<z.ZodType> }) {
 
 function ChatMount({ staged }: { staged: CellSummary | null }) {
   const { selector, pin } = useChatTarget();
+  const { revit } = useWorkbench();
   const line = useStatusLine(staged, selector);
   return (
     <Sentence
       prefix={line.text}
       prefixTone={line.tone}
+      fleetEnabled={revit === true}
       target={selector}
       onBind={(next) => pin(next ?? "")}
     />
