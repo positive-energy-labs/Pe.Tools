@@ -8,12 +8,10 @@
  * seen that inconsistency as ONE fact. A harness that puts nine instances of the same specimen at
  * the corners, edges and centre of the viewport turns "it sometimes opens wrong" into a picture.
  *
- * THIS PAGE FIXES NOTHING. It does not pass better `side`/`align` props, does not add collision
- * padding, does not restyle a popup. Each specimen is mounted EXACTLY as its real consumer mounts
- * it — the same composition, the same props, the same omissions — so what you see here is what
- * that consumer ships. Every observed defect is written down beside the picker. Discharging them
- * is SHIMS entry 7: one popover foundation in `components/lang/` that every popover-bearing
- * component sits on, adopted during the crusade.
+ * THIS PAGE DOES NOT CLAIM BROWSER PROOF. Each specimen is mounted EXACTLY as its real consumer
+ * mounts it — the same composition and the same meaningful alignment/anchor props. The shared
+ * popup surface and width law are now fixed in `components/ui/`; the remaining positioning and
+ * composition observations stay visible here for the browser gate.
  *
  * WHY TWO SPECIMENS ARE COMPOSED HERE RATHER THAN IMPORTED: the facet filter (`master-table`) and
  * the picker chip (`control-chips`) are PRIVATE functions inside their consumers. There is no
@@ -218,8 +216,8 @@ const SPECIMENS: readonly Specimen[] = [
       "components/master-table/master-table.tsx → every MasterTable column header (atlas/takeoffs, families, data-tables)",
     shape: "explicit anchor on the trigger · in-popup search · wrapper default side/align",
     defects: [
-      "OBSERVED — the consumer asks for `min-w-44` and gets the anchor's width instead: `ComboboxContent`'s base `w-(--anchor-width)` wins the merge, so every option longer than the trigger truncates (`Curtain Pa…`, `Mechanic…`). The filter is the one place you cannot read the values you are filtering by.",
-      "OBSERVED — flip works (bottom edge opens upward) but the in-popup search input stays at the popup's top, so after a flip the search box is the FURTHEST thing from the trigger you just clicked.",
+      "FIXED IN SOURCE — the consumer's `min-w-44` now survives: the shared combobox law grows to requested/content width, keeps the anchor as a floor, and clamps to available viewport width. Browser sizing remains pending.",
+      "REMAINS FOR BROWSER — flip works (bottom edge opens upward) but the in-popup search input stays at the popup's top, so after a flip the search box is the FURTHEST thing from the trigger you just clicked.",
       "no component to import: `ColFilter` is a private function inside master-table.tsx, so this composition is duplicated wherever a facet filter is wanted.",
       "the anchor is an extra `div` that exists only to stop the in-popup search input from becoming the positioner anchor (a jitter loop). Every consumer has to know that.",
     ],
@@ -231,8 +229,8 @@ const SPECIMENS: readonly Specimen[] = [
     consumers: "components/control-chips.tsx → the chat composer, families",
     shape: "ghost Button trigger · align=end · explicit anchor · searchable",
     defects: [
-      "OBSERVED, and it is the worst of the set — `min-w-56` is likewise beaten by `w-(--anchor-width)`, and this trigger's anchor is a ~6rem ghost Button, so the two-line items wrap character-by-character: `Windo / ws`, `OST_D / oors`. Unreadable at every one of the nine positions.",
-      'OBSERVED — `align="end"` is hard-coded, so the popup is right-aligned to the anchor everywhere, including at the left edge where there is nothing to avoid.',
+      "FIXED IN SOURCE — `min-w-56` now survives and the shared combobox law permits content growth up to the viewport bound; browser readability remains pending.",
+      'REMAINS FOR BROWSER — `align="end"` is a meaningful caller choice, so the popup stays right-aligned for this chip rather than forcing a global alignment.',
       "same private-function problem: `Picker` is internal to control-chips.tsx.",
       "the trigger is a shadcn ghost Button on `--muted-foreground` while the facet filter is a bare `ComboboxTrigger` on `--r-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
     ],
@@ -245,9 +243,9 @@ const SPECIMENS: readonly Specimen[] = [
       "routes/settings.tsx, routes/ops.tsx (bridge session + scalar fields), routes/families.tsx",
     shape: "Base UI Select — positions against the SELECTED ITEM, not the trigger",
     defects: [
-      "OBSERVED — Select's popup GROWS to fit its content (350px from a 9rem trigger) while Combobox's SHRINKS to its anchor. The two dropdown families in this app have opposite width laws, which is the single loudest inconsistency the harness exposes.",
-      "OBSERVED — the popup aligns the SELECTED item over the trigger, so at the bottom-left corner it lands up and to the right, on top of whatever it overlaps. Correct Base UI behaviour; wrong next to four neighbours that anchor below.",
-      "styled on `--popover`/`--border`, the old vocabulary, so it cannot be retinted by the `--r-*` layer at all — and in dark the popup ground is visibly lighter than every other popup on this page.",
+      "FIXED IN SOURCE — Select and Combobox now share the same artifact ground, radius, ring, ink, and `--r-on` contract; both retain their Base UI width behavior and caller alignment/overflow choices.",
+      "REMAINS FOR BROWSER — the popup aligns the SELECTED item over the trigger, so at the bottom-left corner it lands up and to the right, on top of whatever it overlaps. Correct Base UI behaviour; this wave preserves it.",
+      "FIXED IN SOURCE — Select no longer uses the old `--popover`/`--border` vocabulary; visual retint and contrast still require the browser gate.",
     ],
     render: () => <SelectSpecimen />,
   },
@@ -369,18 +367,16 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
           </p>
         ))}
         <p className="border-l border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]">
-          <span className="text-[var(--r-alarm)]">the headline · </span>
-          three of the four combobox consumers ask for a wider popup than their anchor (
-          <code>min-w-44</code>, <code>min-w-56</code>) and every one of them is overruled by{" "}
-          <code>ComboboxContent</code>&apos;s own <code>w-(--anchor-width)</code>. Meanwhile{" "}
-          <code>ui/select</code> grows to fit its content. Two dropdown families, opposite width
-          laws, and the request the consumer wrote down is silently ignored.
+          <span className="text-[var(--r-alarm)]">the source headline · </span>
+          Combobox now uses <code>w-max</code> with an anchor-width floor and an available-width
+          ceiling, so <code>min-w-44</code> and <code>min-w-56</code> survive. Select and Combobox
+          also consume the same canonical popup surface; Base UI positioning and browser sizing
+          remain pending observation.
         </p>
         <p className="pt-1 text-[10px] leading-relaxed text-[var(--r-ink-mute)]">
           Open the same specimen at all nine positions and compare. Nothing here is corrected — each
-          is mounted exactly as its consumer mounts it, so the inconsistency you see is the
-          inconsistency that ships. One popover foundation in <code>components/lang/</code>{" "}
-          discharges it (SHIMS entry 7).
+          is mounted exactly as its consumer mounts it. Fixed source laws are labeled above; the
+          remaining flip, clamp, alignment, and content-observation obligations are still pending.
         </p>
       </div>
     </div>
