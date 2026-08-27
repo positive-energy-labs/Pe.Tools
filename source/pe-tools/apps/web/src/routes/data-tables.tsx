@@ -298,11 +298,11 @@ function DraftEditor({
         <table className="border-collapse">
           <thead>
             <tr>
-              <th className="border-b border-border bg-[var(--r-recess)]" />
+              <th className="border-b border-border bg-recess" />
               {draft.columns.map((column, columnIndex) => (
                 <th
                   key={columnIndex}
-                  className="min-w-36 border-b border-l border-border bg-[var(--r-recess)] px-1.5 py-1 text-left"
+                  className="min-w-36 border-b border-l border-border bg-recess px-1.5 py-1 text-left"
                 >
                   <div className="flex items-center gap-1">
                     <Input
@@ -321,7 +321,7 @@ function DraftEditor({
                     <select
                       value={column.kind}
                       title="Column type: txt = Text, num = Number"
-                      className="t-caption face-mono h-6 rounded-[var(--radius)] border border-transparent bg-transparent text-muted-foreground hover:border-border"
+                      className="t-caption face-mono h-6 rounded-md border border-transparent bg-transparent text-muted-foreground hover:border-border"
                       onChange={(e) =>
                         patch((d) => ({
                           ...d,
@@ -350,7 +350,7 @@ function DraftEditor({
                   </div>
                 </th>
               ))}
-              <th className="border-b border-l border-border bg-[var(--r-recess)] px-1">
+              <th className="border-b border-l border-border bg-recess px-1">
                 <Verb
                   label="col"
                   icon={Plus}
@@ -377,7 +377,7 @@ function DraftEditor({
                       inputMode={column.kind === "Number" ? "decimal" : undefined}
                       onChange={(e) => setCell(rowIndex, columnIndex, e.target.value)}
                       className={cn(
-                        "t-value face-mono h-7 w-full min-w-36 bg-transparent px-2 outline-none focus:bg-[var(--r-select)]",
+                        "t-value face-mono h-7 w-full min-w-36 bg-transparent px-2 outline-none focus:bg-select",
                         column.kind === "Number" && "text-right",
                       )}
                     />

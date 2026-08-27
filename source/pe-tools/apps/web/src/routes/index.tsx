@@ -306,10 +306,10 @@ function App() {
                 className="group flex flex-1 flex-col gap-3 p-5 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
               >
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex size-9 items-center justify-center rounded-[var(--radius)] bg-[var(--r-recess)] text-foreground">
+                  <span className="inline-flex size-9 items-center justify-center rounded-md bg-recess text-foreground">
                     <tool.icon className="size-4.5" />
                   </span>
-                  <ArrowUpRight className="size-4 text-muted-foreground group-hover:text-[var(--r-nav)]" />
+                  <ArrowUpRight className="size-4 text-muted-foreground group-hover:text-nav" />
                 </div>
                 <div>
                   <p className="t-caption t-upper text-muted-foreground">{tool.label}</p>
@@ -323,7 +323,7 @@ function App() {
                     <Link
                       key={satellite.to}
                       to={satellite.to}
-                      className="text-[var(--r-nav)] hover:underline"
+                      className="text-nav hover:underline"
                     >
                       /{satellite.label}
                     </Link>

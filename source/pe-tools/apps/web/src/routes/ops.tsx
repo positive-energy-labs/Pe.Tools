@@ -215,8 +215,8 @@ function OpsPlayground() {
   return (
     <main className="grid h-screen grid-cols-[19rem_1fr] gap-0 bg-background text-foreground">
       {/* Op list */}
-      <aside className="flex min-h-0 flex-col border-r border-[var(--r-line-2)]">
-        <div className="border-b border-[var(--r-line)] p-2">
+      <aside className="flex min-h-0 flex-col border-r border-line-2">
+        <div className="border-b border-line p-2">
           <Input
             placeholder={
               catalogQuery.isPending ? "Loading op catalog..." : `Search ${ops.length} host ops...`
@@ -231,9 +231,9 @@ function OpsPlayground() {
               query was search-hostile). */}
           {matchedGlances.length > 0 && (
             <section>
-              <h2 className="t-label t-upper sticky top-0 z-10 bg-[var(--r-page)] px-3 pb-1 pt-3 text-[var(--r-ink-2)]">
+              <h2 className="t-label t-upper sticky top-0 z-10 bg-page px-3 pb-1 pt-3 text-ink-2">
                 Glance
-                <span className="face-mono t-caption ml-1.5 text-[var(--r-ink-2)]">
+                <span className="face-mono t-caption ml-1.5 text-ink-2">
                   {matchedGlances.length}
                 </span>
               </h2>
@@ -251,13 +251,13 @@ function OpsPlayground() {
                           "w-full rounded-[2px] px-2 py-1 text-left transition-colors",
                           !active &&
                             "hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
-                          active && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+                          active && "bg-select [--r-on:var(--r-select)]",
                         )}
                       >
                         <div className="t-value min-w-0 truncate font-medium">
                           {glance.displayName}
                         </div>
-                        <div className="face-mono t-caption truncate text-[var(--r-ink-2)]">
+                        <div className="face-mono t-caption truncate text-ink-2">
                           {glance.key}
                         </div>
                       </button>
@@ -269,9 +269,9 @@ function OpsPlayground() {
           )}
           {grouped.map(({ domain, ops: members }) => (
             <section key={domain}>
-              <h2 className="t-label t-upper sticky top-0 z-10 bg-[var(--r-page)] px-3 pb-1 pt-3 text-[var(--r-ink-2)]">
+              <h2 className="t-label t-upper sticky top-0 z-10 bg-page px-3 pb-1 pt-3 text-ink-2">
                 {domain}
-                <span className="face-mono t-caption ml-1.5 text-[var(--r-ink-2)]">
+                <span className="face-mono t-caption ml-1.5 text-ink-2">
                   {members.length}
                 </span>
               </h2>
@@ -287,21 +287,21 @@ function OpsPlayground() {
                           "w-full rounded-[2px] px-2 py-1 text-left transition-colors",
                           !active &&
                             "hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
-                          active && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+                          active && "bg-select [--r-on:var(--r-select)]",
                         )}
                       >
                         <div className="flex items-center gap-1.5">
                           <span
                             className={cn(
                               "t-value min-w-0 truncate",
-                              mutate ? "text-[var(--r-ink-2)]" : "font-medium",
+                              mutate ? "text-ink-2" : "font-medium",
                             )}
                           >
                             {op.displayName ?? op.key}
                           </span>
                           {mutate && (
                             <span
-                              className="face-mono t-caption shrink-0 text-[var(--r-caution)]"
+                              className="face-mono t-caption shrink-0 text-caution"
                               title="mutating op — writes to the model"
                             >
                               M
@@ -309,12 +309,12 @@ function OpsPlayground() {
                           )}
                           {opViews[op.key] && (
                             <span
-                              className="ml-auto size-[5px] shrink-0 rounded-[1px] bg-[var(--r-ink-2)]"
+                              className="ml-auto size-[5px] shrink-0 rounded-[1px] bg-ink-2"
                               title="curated view"
                             />
                           )}
                         </div>
-                        <div className="face-mono t-caption truncate text-[var(--r-ink-2)]">
+                        <div className="face-mono t-caption truncate text-ink-2">
                           {op.key}
                         </div>
                       </button>
@@ -356,13 +356,13 @@ function OpsPlayground() {
                   synthetic
                 </FactChip>
               </div>
-              <p className="face-mono t-caption mt-0.5 text-[var(--r-ink-2)]">
+              <p className="face-mono t-caption mt-0.5 text-ink-2">
                 {selectedGlance.key}
               </p>
-              <p className="t-prose mt-1 max-w-2xl text-[var(--r-ink-2)]">{selectedGlance.blurb}</p>
+              <p className="t-prose mt-1 max-w-2xl text-ink-2">{selectedGlance.blurb}</p>
               {selectedGlance.contractNote && (
-                <p className="t-label mt-1 max-w-2xl text-[var(--r-ink-2)]">
-                  <span className="face-mono t-caption t-upper mr-1 text-[var(--r-ink-2)]">
+                <p className="t-label mt-1 max-w-2xl text-ink-2">
+                  <span className="face-mono t-caption t-upper mr-1 text-ink-2">
                     contract
                   </span>
                   {selectedGlance.contractNote}
@@ -419,9 +419,9 @@ function OpsPlayground() {
                     </FactChip>
                   )}
               </div>
-              <p className="face-mono t-caption mt-0.5 text-[var(--r-ink-2)]">{selected.key}</p>
+              <p className="face-mono t-caption mt-0.5 text-ink-2">{selected.key}</p>
               {selected.description && (
-                <p className="t-prose mt-1 max-w-2xl text-[var(--r-ink-2)]">
+                <p className="t-prose mt-1 max-w-2xl text-ink-2">
                   {selected.description}
                 </p>
               )}
@@ -453,7 +453,7 @@ function OpsPlayground() {
                 initial open state is right and user toggles stay free. */}
             <details key={`${selected.key}:${result ? "ran" : "idle"}`} open={!result}>
               <summary className="mb-1 flex cursor-pointer select-none list-none items-center justify-between">
-                <h2 className="t-label t-upper text-[var(--r-ink-2)]">Request</h2>
+                <h2 className="t-label t-upper text-ink-2">Request</h2>
                 <div className="flex gap-1">
                   {selected.requestExamples?.map((ex) => (
                     <Verb
@@ -527,7 +527,7 @@ function OpResult({ opKey, result }: { opKey: string; result: RunResult }) {
         <ProjectedOutput value={result.data} />
       )}
       <details className="group">
-        <summary className="face-mono t-caption t-upper cursor-pointer select-none list-none text-[var(--r-ink-2)] hover:text-[var(--r-ink)]">
+        <summary className="face-mono t-caption t-upper cursor-pointer select-none list-none text-ink-2 hover:text-ink">
           <span className="mr-1 inline-block transition-transform group-open:rotate-90">▸</span>
           raw response
         </summary>
@@ -595,20 +595,20 @@ function JsonSchemaForm({
   const fields = schemaProperties(schema);
   const required = new Set(readStringArray(schema.required));
   if (fields.length === 0) {
-    return <p className="t-label text-[var(--r-ink-2)]">This operation has no request fields.</p>;
+    return <p className="t-label text-ink-2">This operation has no request fields.</p>;
   }
 
   return (
-    <div className="grid gap-3 rounded-[var(--radius)] border border-[var(--r-line)] p-3">
+    <div className="grid gap-3 rounded-md border border-line p-3">
       {fields.map(([name, fieldSchema]) => {
         const description = readDescription(fieldSchema, root);
         return (
           <div key={name} className="grid gap-1">
             <Label htmlFor={`op-field-${depth}-${name}`}>
               <span className="face-mono">{name}</span>
-              {required.has(name) && <span className="ml-1 text-[var(--r-caution)]">required</span>}
+              {required.has(name) && <span className="ml-1 text-caution">required</span>}
             </Label>
-            {description && <p className="t-label text-[var(--r-ink-2)]">{description}</p>}
+            {description && <p className="t-label text-ink-2">{description}</p>}
             <SchemaInput
               id={`op-field-${depth}-${name}`}
               schema={fieldSchema}
@@ -799,10 +799,10 @@ function ProjectedOutput({ value }: { value: unknown }) {
   if (objectRows.length !== rows.length) {
     return (
       <div>
-        <h2 className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{projection.title}</h2>
-        <ul className="t-value max-h-[24rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)]">
+        <h2 className="t-label t-upper mb-1 text-ink-2">{projection.title}</h2>
+        <ul className="t-value max-h-[24rem] overflow-auto rounded-md border border-line">
           {rows.map((row, index) => (
-            <li key={index} className="border-b border-[var(--r-line)] px-2 py-1 last:border-b-0">
+            <li key={index} className="border-b border-line px-2 py-1 last:border-b-0">
               {formatCell(row)}
             </li>
           ))}
@@ -818,15 +818,15 @@ function ProjectedOutput({ value }: { value: unknown }) {
 
   return (
     <div>
-      <h2 className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{projection.title}</h2>
-      <div className="max-h-[24rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)]">
+      <h2 className="t-label t-upper mb-1 text-ink-2">{projection.title}</h2>
+      <div className="max-h-[24rem] overflow-auto rounded-md border border-line">
         <table className="t-value w-full text-left">
-          <thead className="sticky top-0 bg-[var(--r-recess)] [--r-on:var(--r-recess)]">
+          <thead className="sticky top-0 bg-recess [--r-on:var(--r-recess)]">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column}
-                  className="face-mono t-label border-b border-[var(--r-line-2)] px-2 py-1"
+                  className="face-mono t-label border-b border-line-2 px-2 py-1"
                 >
                   {column}
                 </th>
@@ -835,7 +835,7 @@ function ProjectedOutput({ value }: { value: unknown }) {
           </thead>
           <tbody>
             {objectRows.map((row, index) => (
-              <tr key={index} className="border-b border-[var(--r-line)] last:border-b-0">
+              <tr key={index} className="border-b border-line last:border-b-0">
                 {columns.map((column) => (
                   <td key={column} className="max-w-64 truncate px-2 py-1">
                     {formatCell(row[column])}
@@ -853,8 +853,8 @@ function ProjectedOutput({ value }: { value: unknown }) {
 function OutputBlock({ title, value }: { title: string; value: unknown }) {
   return (
     <div className="min-w-0">
-      {title && <h2 className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{title}</h2>}
-      <pre className="t-value max-h-[32rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)] bg-[var(--r-recess)] [--r-on:var(--r-recess)] p-3">
+      {title && <h2 className="t-label t-upper mb-1 text-ink-2">{title}</h2>}
+      <pre className="t-value max-h-[32rem] overflow-auto rounded-md border border-line bg-recess [--r-on:var(--r-recess)] p-3">
         {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
       </pre>
     </div>

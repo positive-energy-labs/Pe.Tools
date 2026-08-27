@@ -130,15 +130,15 @@ function Block({
   return (
     <div
       id={`${group}-${file}`}
-      className="grid scroll-mt-14 grid-cols-1 items-start gap-x-6 gap-y-2 border-b border-[var(--r-line)] py-3.5 last:border-b-0 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
+      className="grid scroll-mt-14 grid-cols-1 items-start gap-x-6 gap-y-2 border-b border-line py-3.5 last:border-b-0 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
     >
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="face-mono t-label text-[var(--r-ink)]">{name}</span>
+        <span className="face-mono t-label text-ink">{name}</span>
         {/* `code` is display:block app-wide; `w-fit` keeps the path a token you select, not a band. */}
-        <code className="w-fit font-[family-name:var(--font-pe-mono)] text-[10px] break-all text-[var(--r-ink-2)] select-all">
+        <code className="w-fit font-pe-mono text-[10px] break-all text-ink-2 select-all">
           #/components/{group}/{file}
         </code>
-        <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+        <span className="face-mono t-caption text-ink-mute">
           {consumers} · {COUNTED}
         </span>
       </div>
@@ -167,7 +167,7 @@ function Spec({
   return (
     <div className={cn("flex min-w-0 max-w-full flex-col items-start gap-1", className)}>
       <div className="flex min-h-6 min-w-0 max-w-full items-center">{children}</div>
-      <span className="face-mono t-caption block max-w-full overflow-x-auto whitespace-nowrap text-[var(--r-ink-mute)]">
+      <span className="face-mono t-caption block max-w-full overflow-x-auto whitespace-nowrap text-ink-mute">
         {cap}
       </span>
     </div>
@@ -191,13 +191,13 @@ function Grid<R extends string, C extends string>({
     >
       <span />
       {cols.map((c) => (
-        <span key={c} className="face-mono t-caption text-[var(--r-ink-mute)]">
+        <span key={c} className="face-mono t-caption text-ink-mute">
           {c}
         </span>
       ))}
       {rows.map((r) => (
         <Fragment key={r}>
-          <span className="face-mono t-caption whitespace-nowrap text-[var(--r-ink-mute)]">
+          <span className="face-mono t-caption whitespace-nowrap text-ink-mute">
             {r}
           </span>
           {cols.map((c) => (
@@ -213,12 +213,12 @@ function Grid<R extends string, C extends string>({
 
 /** What a frozen specimen cannot show. One line, mono, never a paragraph. */
 function Note({ children }: { children: React.ReactNode }) {
-  return <p className="face-mono t-caption leading-snug text-[var(--r-ink-mute)]">{children}</p>;
+  return <p className="face-mono t-caption leading-snug text-ink-mute">{children}</p>;
 }
 
 /** A minimal bound around a component that fills its container. */
 function Bound({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn("border border-[var(--r-line)]", className)}>{children}</div>;
+  return <div className={cn("border border-line", className)}>{children}</div>;
 }
 
 /* ═══ the roster ════════════════════════════════════════════════════════════════════════════ */
@@ -265,12 +265,12 @@ const UI_FILES = [
 function Jump({ group, files }: { group: "lang" | "ui"; files: readonly string[] }) {
   return (
     <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-      <span className="t-caption t-upper text-[var(--r-ink)]">{group}</span>
+      <span className="t-caption t-upper text-ink">{group}</span>
       {files.map((f) => (
         <a
           key={f}
           href={`#${group}-${f}`}
-          className="font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-nav)] hover:underline"
+          className="font-pe-mono text-[10px] text-nav hover:underline"
         >
           {f}
         </a>
@@ -283,15 +283,15 @@ function Jump({ group, files }: { group: "lang" | "ui"; files: readonly string[]
 
 function Swatch() {
   return (
-    <div className="min-h-screen bg-[var(--r-page)] text-[13px] leading-normal text-[var(--r-ink)]">
-      <header className="sticky top-0 z-20 border-b border-[var(--r-line)] bg-[var(--r-page)]/90 backdrop-blur">
+    <div className="min-h-screen bg-page text-[13px] leading-normal text-ink">
+      <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
         <div className="page-wrap flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
-            <Link to="/design-system" className="text-[11px] text-[var(--r-nav)] hover:underline">
+            <Link to="/design-system" className="text-[11px] text-nav hover:underline">
               ← design system
             </Link>
             <span className="font-pe-display text-sm font-semibold tracking-tight">swatch</span>
-            <span className="truncate text-[11px] text-[var(--r-ink-2)]">
+            <span className="truncate text-[11px] text-ink-2">
               every component · every variant · every state · the import path
             </span>
             <FactChip
@@ -308,15 +308,15 @@ function Swatch() {
       <main className="page-wrap flex flex-col gap-8 pt-6 pb-24">
         <div className="flex flex-col gap-3">
           <p className="font-pe-display text-2xl font-semibold tracking-tight">The swatch.</p>
-          <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-[var(--r-ink-2)]">
+          <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-ink-2">
             A lookup table, not a spec: find the component, read its whole variant × state surface
             at once, copy the import path — the rulings behind any of it live on{" "}
-            <Link to="/design-system" className="text-[var(--r-nav)] hover:underline">
+            <Link to="/design-system" className="text-nav hover:underline">
               /design-system
             </Link>
             .
           </p>
-          <div className="flex flex-col gap-1.5 border-y border-[var(--r-line)] py-2">
+          <div className="flex flex-col gap-1.5 border-y border-line py-2">
             <Jump group="lang" files={LANG_FILES} />
             <Jump group="ui" files={UI_FILES} />
           </div>
@@ -331,9 +331,9 @@ function Swatch() {
 
 function GroupHead({ title, note }: { title: string; note: string }) {
   return (
-    <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
+    <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
       <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
-      <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
+      <span className="min-w-0 flex-1 text-[11.5px] text-ink-2">{note}</span>
     </div>
   );
 }
@@ -418,7 +418,7 @@ function LangGroup() {
           <AddressingBar
             name="family"
             sentence={
-              <span className="t-label text-[var(--r-ink-2)]">editing profiles/door.pea.json</span>
+              <span className="t-label text-ink-2">editing profiles/door.pea.json</span>
             }
             facts={
               <FactChip tone="caution" title="Unsaved draft — two edits not on disk.">
@@ -694,7 +694,7 @@ function LangGroup() {
         <div className="flex flex-col">
           {OUTCOME_SPECS.map((o) => (
             <div key={o.kind} className="flex items-baseline gap-3">
-              <span className="face-mono t-caption w-16 shrink-0 text-[var(--r-ink-mute)]">
+              <span className="face-mono t-caption w-16 shrink-0 text-ink-mute">
                 {o.kind}
               </span>
               <OutcomeLine kind={o.kind} label={o.label} />
@@ -715,7 +715,7 @@ function LangGroup() {
             help={<HelpTip>What this section shows and how to read it.</HelpTip>}
             aside={<FactChip title="Rows currently in scope.">214 rows</FactChip>}
           >
-            <p className="t-label text-[var(--r-ink-2)]">section content sits unenclosed.</p>
+            <p className="t-label text-ink-2">section content sits unenclosed.</p>
             <Provenance>read 2026-08-16 14:02 · 3 sessions · sheets truncated at 10</Provenance>
           </Section>
         </div>
@@ -1087,7 +1087,7 @@ function UiGroup() {
                     </Button>
                   }
                 >
-                  <div className="p-2 text-[11px] text-[var(--r-ink-2)]">body</div>
+                  <div className="p-2 text-[11px] text-ink-2">body</div>
                 </Pane>
               </Bound>
             </Spec>
@@ -1161,7 +1161,7 @@ function UiGroup() {
                 minWidth={110}
                 header={<span className="face-mono t-caption">header</span>}
               >
-                <div className="p-2 text-[11px] text-[var(--r-ink-2)]">body</div>
+                <div className="p-2 text-[11px] text-ink-2">body</div>
               </SidePane>
               <div className="flex-1" />
             </Bound>
@@ -1176,7 +1176,7 @@ function UiGroup() {
                 minWidth={110}
                 header={<span className="face-mono t-caption">header</span>}
               >
-                <div className="p-2 text-[11px] text-[var(--r-ink-2)]">body</div>
+                <div className="p-2 text-[11px] text-ink-2">body</div>
               </SidePane>
               <div className="flex-1" />
             </Bound>

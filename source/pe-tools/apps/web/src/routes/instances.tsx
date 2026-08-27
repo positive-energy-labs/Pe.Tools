@@ -248,7 +248,7 @@ function Page() {
         search: (w) => worldName(w).toLowerCase(),
         sort: (w) => (w.custody === "observed" ? "" : w.id),
         cell: (w) => (
-          <span className="t-value block truncate px-1.5 text-[var(--r-ink)]">
+          <span className="t-value block truncate px-1.5 text-ink">
             {w.custody === "observed" ? "your Revit" : <span className="face-mono">{w.id}</span>}
           </span>
         ),
@@ -273,7 +273,7 @@ function Page() {
         label: "lane · year · pid",
         title: "Machine identity of the process behind the world. Lane is payload SOURCE only.",
         cell: (w) => (
-          <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption block truncate px-1.5 text-ink-2">
             {worldSub(w)}
           </span>
         ),
@@ -289,7 +289,7 @@ function Page() {
           if (legs.length === 0)
             return (
               <span
-                className="t-caption block truncate px-1.5 italic text-[var(--r-ink-mute)]"
+                className="t-caption block truncate px-1.5 italic text-ink-mute"
                 title="No companion service file claims this session — an absence of evidence, not a dead host."
               >
                 no legs
@@ -300,7 +300,7 @@ function Page() {
               {legs.map((leg) => (
                 <span
                   key={`${leg.name}-${leg.pid}`}
-                  className="face-mono t-caption rounded-[var(--radius)] border border-[var(--r-line-2)] px-1"
+                  className="face-mono t-caption rounded-md border border-line-2 px-1"
                   style={{
                     color:
                       leg.state === "up"
@@ -331,7 +331,7 @@ function Page() {
             const active = documents.find((d) => d.isActive) ?? documents[0]!;
             return (
               <span
-                className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]"
+                className="face-mono t-caption block truncate px-1.5 text-ink-2"
                 title={documents
                   .map(
                     (d) =>
@@ -346,7 +346,7 @@ function Page() {
           }
           if (w.activeDocumentTitle)
             return (
-              <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
+              <span className="face-mono t-caption block truncate px-1.5 text-ink-2">
                 {w.activeDocumentTitle}
                 {w.openDocumentCount > 1 ? ` +${w.openDocumentCount - 1}` : ""}
               </span>
@@ -354,7 +354,7 @@ function Page() {
           if (w.session)
             return (
               <span
-                className="t-caption block truncate px-1.5 italic text-[var(--r-ink-mute)]"
+                className="t-caption block truncate px-1.5 italic text-ink-mute"
                 title="The bridge is connected and reports no open document — a state, not a zero."
               >
                 no open document
@@ -362,7 +362,7 @@ function Page() {
             );
           return (
             <span
-              className="t-caption block truncate px-1.5 italic text-[var(--r-ink-mute)]"
+              className="t-caption block truncate px-1.5 italic text-ink-mute"
               title="No bridge connection and no documents in the status row, so nothing is known about this world's documents."
             >
               nothing observed
@@ -383,7 +383,7 @@ function Page() {
             ? age(w.session.observedAtUnixMs, nowMs)
             : age(parseUtc(w.row?.observedAtUtc), nowMs);
           return (
-            <span className="face-mono t-caption block px-1.5 text-right text-[var(--r-ink-2)]">
+            <span className="face-mono t-caption block px-1.5 text-right text-ink-2">
               {seen ? `${seen} ago` : ""}
             </span>
           );
@@ -402,7 +402,7 @@ function Page() {
           if (w.custody !== "controlled")
             return (
               <span
-                className="t-caption block truncate px-1.5 text-right italic text-[var(--r-ink-mute)]"
+                className="t-caption block truncate px-1.5 text-right italic text-ink-mute"
                 title="pe-revit holds no receipt for this session, so it refuses every mutation on it. This page never starts or stops a session you own."
               >
                 yours — not managed here
@@ -458,9 +458,9 @@ function Page() {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--r-page)]">
+    <div className="min-h-screen bg-page">
       <div className="mx-auto flex min-h-[85vh] max-w-6xl gap-0 px-6 py-6">
-        <div className="flex min-w-0 flex-1 flex-col border-r border-[var(--r-line)] pr-5">
+        <div className="flex min-w-0 flex-1 flex-col border-r border-line pr-5">
           {/* declare a new world — the only way a session comes to exist from this surface.
               The payload is an explicit choice, same words as the CLI: `installed` is a
               project-less start; `dev` asks a source-linked host for its checkout's Pe.App. */}
@@ -470,13 +470,13 @@ function Page() {
             className="pb-4"
           >
             <label className="flex items-center gap-1.5">
-              <span className="t-caption t-upper text-[var(--r-ink-2)]">year</span>
+              <span className="t-caption t-upper text-ink-2">year</span>
               <select
                 value={startYear}
                 onChange={(e) => setStartYear(e.target.value)}
                 disabled={busy != null}
                 title="Which Revit year to boot. The session is registered under a minted id for this year."
-                className="face-mono t-caption cursor-pointer rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5 text-[var(--r-ink)]"
+                className="face-mono t-caption cursor-pointer rounded-md border border-line-2 bg-transparent px-1 py-0.5 text-ink"
               >
                 {YEARS.map((y) => (
                   <option key={y} value={y}>
@@ -486,13 +486,13 @@ function Page() {
               </select>
             </label>
             <label className="flex items-center gap-1.5">
-              <span className="t-caption t-upper text-[var(--r-ink-2)]">payload</span>
+              <span className="t-caption t-upper text-ink-2">payload</span>
               <select
                 value={startLane}
                 onChange={(e) => setStartLane(e.target.value as "installed" | "dev")}
                 disabled={busy != null}
                 title="installed: the product on this machine (a project-less start, the end-user case). dev: this checkout's Pe.App, built by the host first — refused on a host that has no checkout."
-                className="face-mono t-caption cursor-pointer rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5 text-[var(--r-ink)]"
+                className="face-mono t-caption cursor-pointer rounded-md border border-line-2 bg-transparent px-1 py-0.5 text-ink"
               >
                 <option value="installed">installed</option>
                 <option value="dev">dev (this checkout)</option>
@@ -504,7 +504,7 @@ function Page() {
               disabled={busy != null}
               placeholder="document (optional)"
               title="A document title or path to open as the session comes up. Leave it empty to start with no document."
-              className="face-mono t-caption w-52 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5 text-[var(--r-ink)] placeholder:text-[var(--r-ink-mute)]"
+              className="face-mono t-caption w-52 rounded-md border border-line-2 bg-transparent px-1 py-0.5 text-ink placeholder:text-ink-mute"
             />
             {/* A stopped row still owns its id, so the honest verb here is `restart`, not
                 `start` — the swap the SDK's own `fix:` names. The
@@ -579,7 +579,7 @@ function Page() {
           {graveyard.length ? (
             <div className="mt-8">
               <div className="flex items-center gap-1.5 pb-2">
-                <span className="t-caption t-upper text-[var(--r-ink-2)]">graveyard</span>
+                <span className="t-caption t-upper text-ink-2">graveyard</span>
                 <HelpTip>
                   The registry&apos;s recent tail — sessions that stopped, crashed, or were never
                   launched, newest first. `pe-revit session status --all` lists them all and
@@ -591,12 +591,12 @@ function Page() {
                   {graveyard.map((world) => {
                     const died = age(parseUtc(world.row?.stoppedAtUtc), nowMs);
                     return (
-                      <tr key={world.id} className="border-t border-[var(--r-line)]">
+                      <tr key={world.id} className="border-t border-line">
                         <td className="py-2 pr-4">
-                          <div className="face-mono t-value italic text-[var(--r-ink-mute)]">
+                          <div className="face-mono t-value italic text-ink-mute">
                             {world.id}
                           </div>
-                          <span className="face-mono t-caption italic text-[var(--r-ink-mute)]">
+                          <span className="face-mono t-caption italic text-ink-mute">
                             {yearLabel(world.year) ?? "?"} · was pid {world.pid ?? "?"}
                           </span>
                         </td>
@@ -605,7 +605,7 @@ function Page() {
                               dropped/muted-italic styling the dead identity cells wear (ruled
                               2026-08-16: "instances' crash payload un-muted"). */}
                           <span
-                            className="face-mono t-caption block truncate text-[var(--r-ink-2)]"
+                            className="face-mono t-caption block truncate text-ink-2"
                             title={world.row?.failureDetail ?? world.row?.detail ?? undefined}
                           >
                             {world.row?.failureCode ??
@@ -615,7 +615,7 @@ function Page() {
                           </span>
                         </td>
                         <td className="py-2 pr-4">
-                          <span className="face-mono t-caption italic text-[var(--r-ink-mute)]">
+                          <span className="face-mono t-caption italic text-ink-mute">
                             {died ? `died ${died} ago` : (world.row?.state ?? "gone")}
                           </span>
                         </td>
@@ -649,7 +649,7 @@ function Page() {
           <div className="flex w-72 flex-col pl-5">
             <div className="flex items-baseline justify-between pb-2">
               <span className="flex items-center gap-1.5">
-                <span className="t-caption t-upper text-[var(--r-ink-2)]">ledger</span>
+                <span className="t-caption t-upper text-ink-2">ledger</span>
                 <HelpTip>
                   The honest record of this tab: bridge-observed world events merged with the
                   actions you took here, oldest first. Pea&apos;s actions arrive through the same
@@ -660,7 +660,7 @@ function Page() {
                 type="button"
                 onClick={() => setLedgerOpen(false)}
                 title="Collapse the ledger to its rail — nothing is lost; events keep accumulating."
-                className="t-caption cursor-pointer rounded-[var(--radius)] border border-[var(--r-line-2)] px-1 text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                className="t-caption cursor-pointer rounded-md border border-line-2 px-1 text-ink-2 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
               >
                 ›
               </button>
@@ -675,9 +675,9 @@ function Page() {
                 </EmptyState>
               ) : null}
               {ledger.map((e, idx) => (
-                <div key={idx} className="border-t border-[var(--r-line)] py-1.5">
+                <div key={idx} className="border-t border-line py-1.5">
                   <span
-                    className={`face-mono t-caption ${e.actor === "bridge" ? "text-[var(--r-ink-2)]" : "text-[var(--r-ink)]"}`}
+                    className={`face-mono t-caption ${e.actor === "bridge" ? "text-ink-2" : "text-ink"}`}
                     title={
                       e.actor === "bridge"
                         ? "Observed by the bridge — a world changed underneath this tab."
@@ -686,8 +686,8 @@ function Page() {
                   >
                     {e.actor}
                   </span>
-                  <div className="t-label text-[var(--r-ink)]">{e.label}</div>
-                  <span className="face-mono t-caption text-[var(--r-ink-2)]">
+                  <div className="t-label text-ink">{e.label}</div>
+                  <span className="face-mono t-caption text-ink-2">
                     {(() => {
                       const s = Math.max(0, Math.round((nowMs - e.atMs) / 1000));
                       return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`;
@@ -702,9 +702,9 @@ function Page() {
             type="button"
             onClick={() => setLedgerOpen(true)}
             title="Open the ledger — bridge-observed world events merged with your own actions from this tab."
-            className="ml-2 flex w-6 cursor-pointer flex-col items-center gap-2 self-stretch rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent py-2 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+            className="ml-2 flex w-6 cursor-pointer flex-col items-center gap-2 self-stretch rounded-md border border-line-2 bg-transparent py-2 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
           >
-            <span className="t-caption t-upper text-[var(--r-ink-2)] [writing-mode:vertical-rl]">
+            <span className="t-caption t-upper text-ink-2 [writing-mode:vertical-rl]">
               ledger · {ledger.length}
             </span>
           </button>

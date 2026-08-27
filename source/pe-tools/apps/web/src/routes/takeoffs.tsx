@@ -320,7 +320,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
         <input
           name="dir"
           placeholder={`add a folder — e.g. ${DEFAULT_ARTIFACT_DIR}`}
-          className="face-mono t-caption w-full border-t border-[var(--r-line-2)] bg-transparent px-1 py-0.5 text-[var(--r-ink)] outline-none"
+          className="face-mono t-caption w-full border-t border-line-2 bg-transparent px-1 py-0.5 text-ink outline-none"
         />
       </form>
     ) : null;
@@ -442,11 +442,11 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
         tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
         name, system tag) — re-adopt to edit. legends are ignored.
       </p>
-      <div className="mt-2 max-h-96 overflow-y-auto rounded-[var(--radius)] border border-border">
+      <div className="mt-2 max-h-96 overflow-y-auto rounded-md border border-border">
         {(listed ?? []).map((r) => (
           <div
             key={r.region.elementId}
-            className="flex items-center gap-2 border-b border-[var(--r-line)] px-2 py-1 last:border-b-0"
+            className="flex items-center gap-2 border-b border-line px-2 py-1 last:border-b-0"
           >
             <input
               type="checkbox"
@@ -470,13 +470,13 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
               value={r.name}
               placeholder="zone name"
               onChange={(e) => patchRow(r.region.elementId, { name: e.target.value })}
-              className="face-mono t-value h-6 min-w-0 flex-1 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
+              className="face-mono t-value h-6 min-w-0 flex-1 rounded-md border border-border bg-transparent px-1.5 outline-none focus:border-ring"
             />
             <input
               value={r.systemTag}
               placeholder="system tag"
               onChange={(e) => patchRow(r.region.elementId, { systemTag: e.target.value })}
-              className="face-mono t-value h-6 w-24 shrink-0 rounded-[var(--radius)] border border-border bg-transparent px-1.5 outline-none focus:border-ring"
+              className="face-mono t-value h-6 w-24 shrink-0 rounded-md border border-border bg-transparent px-1.5 outline-none focus:border-ring"
             />
             {r.region.role === "zoning-region" && (
               <FactChip

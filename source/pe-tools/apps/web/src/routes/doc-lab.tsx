@@ -84,7 +84,7 @@ function DocLabRoute() {
         ) : (
           // RULED not-an-empty-state (fit reviews, 2026-08-16): a hover readout at rest is
           // idle chrome, not a missing scope — plain muted text, no story/exit ceremony.
-          <span className="t-label text-[var(--r-ink-mute)]">
+          <span className="t-label text-ink-mute">
             nothing focused — hover a block, image, or page region; click to pin
           </span>
         )}

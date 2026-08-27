@@ -238,14 +238,14 @@ function SettingsRoute() {
           : `Write ${stagedCount} staged value${stagedCount === 1 ? "" : "s"} into the settings file on disk — the only verb here that leaves the page.`;
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-[var(--r-page)]">
+    <main className="flex h-screen flex-col overflow-hidden bg-page">
       {/* ── THE HEAD — a Section-style form head, deliberately NOT the AddressingBar (fit
           reviews, ruled 2026-08-16: the five-slot rule binds TABLE/WORKSPACE routes only; a
           form route addresses through its pickers, so the pickers ARE the sentence). The two
           header rows this route used to pay — an inert mono path in the sentence slot plus a
           second strip of exiled pickers — collapse into this one row. ── */}
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--r-line)] px-3 py-1.5">
-        <h1 className="t-label t-upper text-[var(--r-ink-2)]">settings</h1>
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-3 py-1.5">
+        <h1 className="t-label t-upper text-ink-2">settings</h1>
         <div className="flex flex-wrap items-center gap-1.5">
           <Picker
             id="workspace"
@@ -470,9 +470,9 @@ function SettingsRoute() {
               </ArtifactFrame>
               {proposalRows.length > 0 ? (
                 <div className="pt-4">
-                  <div className="t-label t-upper pb-1.5 text-[var(--r-ink-2)]">open proposals</div>
+                  <div className="t-label t-upper pb-1.5 text-ink-2">open proposals</div>
                   <ArtifactFrame>
-                    <div className="divide-y divide-[var(--r-line)]">
+                    <div className="divide-y divide-line">
                       {proposalRows.map((row) => (
                         <FieldRow
                           key={row.path}
@@ -506,7 +506,7 @@ function SettingsRoute() {
           ) : snapshot ? (
             rows.length > 0 ? (
               <ArtifactFrame>
-                <div className="divide-y divide-[var(--r-line)]">
+                <div className="divide-y divide-line">
                   {rows.map((row) => (
                     <FieldRow
                       key={row.path}
@@ -628,7 +628,7 @@ function FieldRow({
           MasterTable, so the gutter is a fixed slot at the row's left edge — a count in the
           caution ink when a review decision is owed, blank otherwise. Locate-only. */}
       <span
-        className="face-mono t-caption w-3 shrink-0 text-center text-[var(--r-caution)]"
+        className="face-mono t-caption w-3 shrink-0 text-center text-caution"
         title={
           attention
             ? `${row.path} was flagged for attention — a review decision is owed here; save refuses while it stands`
@@ -638,7 +638,7 @@ function FieldRow({
         {attention ? 1 : null}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="face-mono t-label truncate text-[var(--r-ink-2)]">{row.path}</div>
+        <div className="face-mono t-label truncate text-ink-2">{row.path}</div>
         <StateCell
           className="face-mono t-value"
           value={display(shown)}

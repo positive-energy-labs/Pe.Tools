@@ -97,10 +97,10 @@ function FacetFilterSpecimen() {
         <ComboboxTrigger
           aria-label="category filter"
           className={cn(
-            "face-mono t-value flex h-5 w-32 items-center justify-between gap-0.5 rounded-[var(--radius)] border bg-transparent px-1 font-normal outline-none",
+            "face-mono t-value flex h-5 w-32 items-center justify-between gap-0.5 rounded-md border bg-transparent px-1 font-normal outline-none",
             selected.value
               ? "border-primary/40 bg-primary/[0.06] text-foreground"
-              : "border-[var(--r-line)] text-muted-foreground",
+              : "border-line text-muted-foreground",
           )}
         >
           <span className="truncate normal-case">{selected.label}</span>
@@ -108,7 +108,7 @@ function FacetFilterSpecimen() {
       </div>
       <ComboboxContent
         anchor={anchorRef}
-        className="[--popup-min-width:11rem] rounded-[var(--radius)]"
+        className="[--popup-min-width:11rem] rounded-md"
       >
         <ComboboxInput placeholder="filter values…" />
         <ComboboxEmpty>No matching values</ComboboxEmpty>
@@ -299,10 +299,10 @@ function PopoverHarness() {
   return (
     /* The grid represents the viewport positions. The control panel lives in the centre cell so
        the browser can compare it with the edge positions. */
-    <div className="fixed inset-0 grid grid-cols-3 grid-rows-3 gap-2 bg-[var(--r-page)] p-2 text-[13px] text-[var(--r-ink)]">
+    <div className="fixed inset-0 grid grid-cols-3 grid-rows-3 gap-2 bg-page p-2 text-[13px] text-ink">
       {POSITIONS.map((p) => (
         <div key={p.id} className={cn("relative flex min-h-0 min-w-0", p.cls)}>
-          <span className="face-mono t-caption pointer-events-none absolute top-0 left-0 tracking-[0.09em] text-[var(--r-ink-mute)] uppercase">
+          <span className="face-mono t-caption pointer-events-none absolute top-0 left-0 tracking-[0.09em] text-ink-mute uppercase">
             {p.id}
           </span>
           {p.id === "centre" ? (
@@ -321,9 +321,9 @@ function PopoverHarness() {
 
 function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) => void }) {
   return (
-    <div className="max-w-[34rem] min-w-0 border border-[var(--r-line)] bg-[var(--r-artifact)] p-3 [--r-on:var(--r-artifact)]">
+    <div className="max-w-[34rem] min-w-0 border border-line bg-artifact p-3 [--r-on:var(--r-artifact)]">
       <div className="flex flex-wrap items-baseline gap-2 pb-2">
-        <Link to="/design-system" className="text-[11px] text-[var(--r-nav)] hover:underline">
+        <Link to="/design-system" className="text-[11px] text-nav hover:underline">
           ← design system
         </Link>
         <span className="font-pe-display text-[13px] font-semibold">popover position harness</span>
@@ -333,7 +333,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
         <ThemeToggle />
       </div>
 
-      <div className="flex flex-wrap gap-1 border-t border-[var(--r-line)] pt-2">
+      <div className="flex flex-wrap gap-1 border-t border-line pt-2">
         {SPECIMENS.map((s) => (
           <button
             key={s.id}
@@ -341,10 +341,10 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
             onClick={() => onPick(s.id)}
             title={`Mount ${s.name} at all nine positions`}
             className={cn(
-              "border px-1.5 py-0.5 font-[family-name:var(--font-pe-mono)] text-[10px]",
+              "border px-1.5 py-0.5 font-pe-mono text-[10px]",
               s.id === specimen.id
-                ? "border-[var(--r-line-2)] bg-[var(--r-select)] text-[var(--r-ink)]"
-                : "border-[var(--r-line)] text-[var(--r-ink-2)]",
+                ? "border-line-2 bg-select text-ink"
+                : "border-line text-ink-2",
             )}
           >
             {s.name}
@@ -353,23 +353,23 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
       </div>
 
       <div className="flex flex-col gap-1.5 pt-2.5">
-        <span className="text-[10px] text-[var(--r-ink-mute)]">
+        <span className="text-[10px] text-ink-mute">
           consumers: {specimen.consumers}
         </span>
-        <span className="font-[family-name:var(--font-pe-mono)] text-[10px] text-[var(--r-ink-2)]">
+        <span className="font-pe-mono text-[10px] text-ink-2">
           shape: {specimen.shape}
         </span>
         {specimen.defects.map((d) => (
           <p
             key={d}
-            className="border-l border-dashed border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]"
+            className="border-l border-dashed border-line-2 pl-2 font-pe-mono text-[10px] leading-relaxed text-ink-2"
           >
-            <span className="text-[var(--r-caution)]">testimony · </span>
+            <span className="text-caution">testimony · </span>
             {d}
           </p>
         ))}
-        <p className="border-l border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]">
-          <span className="text-[var(--r-alarm)]">the source headline · </span>
+        <p className="border-l border-line-2 pl-2 font-pe-mono text-[10px] leading-relaxed text-ink-2">
+          <span className="text-alarm">the source headline · </span>
           Combobox now composes <code>min(available, max(anchor, caller))</code> from its shared CSS
           class; callers encode wider requests as <code>--popup-min-width</code>, so
           <code>11rem</code>, <code>14rem</code>, and <code>13rem</code> do not collide with the
@@ -377,7 +377,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
           ceiling. Select and Combobox also consume the same canonical popup surface; Base UI
           positioning and browser sizing remain pending observation.
         </p>
-        <p className="pt-1 text-[10px] leading-relaxed text-[var(--r-ink-mute)]">
+        <p className="pt-1 text-[10px] leading-relaxed text-ink-mute">
           Open the same specimen at all nine positions and compare. The harness does not claim
           browser correction; each specimen is mounted exactly as its consumer mounts it. Fixed
           source laws are labeled above; the remaining flip, clamp, alignment, and content

@@ -332,7 +332,7 @@ function NamePicker({
       <ComboboxChips
         ref={anchor}
         title={title}
-        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-[var(--radius)] border-[var(--r-line-2)] bg-transparent py-0.5 t-label"
+        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-md border-line-2 bg-transparent py-0.5 t-label"
       >
         {collapsed ? (
           <span
@@ -343,7 +343,7 @@ function NamePicker({
           </span>
         ) : (
           values.map((name) => (
-            <ComboboxChip key={name} className="face-mono rounded-[var(--radius)] t-label">
+            <ComboboxChip key={name} className="face-mono rounded-md t-label">
               {name}
             </ComboboxChip>
           ))
@@ -355,10 +355,10 @@ function NamePicker({
         />
         <ComboboxTrigger />
       </ComboboxChips>
-      <ComboboxContent anchor={anchor} className="rounded-[var(--radius)]">
+      <ComboboxContent anchor={anchor} className="rounded-md">
         {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
             "you typed a string that matched nothing" — plain muted text, no story/exit. */}
-        <ComboboxEmpty className="face-mono t-label text-[var(--r-ink-mute)]">
+        <ComboboxEmpty className="face-mono t-label text-ink-mute">
           no matches
         </ComboboxEmpty>
         <ComboboxList>
@@ -774,9 +774,9 @@ function FamiliesRoute() {
                  "derived" role to move it to, so it drops to the ink ladder
                  and separates from a project binding by italic rather than by hue. */
               className={cn(
-                unresolved && "text-[var(--r-ink-mute)]/50",
-                scopeOf === "ProjectBindingOnly" && "text-[var(--r-ink-mute)] italic",
-                row.formulas[col.key] === "Present" && "text-[var(--r-ink-2)]",
+                unresolved && "text-ink-mute/50",
+                scopeOf === "ProjectBindingOnly" && "text-ink-mute italic",
+                row.formulas[col.key] === "Present" && "text-ink-2",
               )}
             />
           );
@@ -910,7 +910,7 @@ function FamiliesRoute() {
   );
 
   return (
-    <main className="flex h-screen flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
+    <main className="flex h-screen flex-col bg-page text-ink">
       {/* ── ONE head rail (lang AddressingBar — families #11's five-slot rule, adopted).
              `apply` is THE page-blast verb — the only blue on the row, the one write that
              leaves the page. `plan` and `project → profile` are host READS that act on the
@@ -975,7 +975,7 @@ function FamiliesRoute() {
       />
 
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-4 py-1.5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
         <SectionLabel>
           <span title="Which families the table loads at all. Scope is a DRAFT until you apply it — the matrix op is the expensive one, so it never fires on a click.">
             scope
@@ -989,11 +989,11 @@ function FamiliesRoute() {
           <SelectTrigger
             aria-label="placement filter"
             title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-            className="face-mono h-6 w-32 shrink-0 rounded-[var(--radius)] border-[var(--r-line-2)] px-1.5 t-label"
+            className="face-mono h-6 w-32 shrink-0 rounded-md border-line-2 px-1.5 t-label"
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-[var(--radius)]">
+          <SelectContent className="rounded-md">
             {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
               <SelectItem
                 key={value}
@@ -1089,7 +1089,7 @@ function FamiliesRoute() {
       </div>
 
       {error && (
-        <div className="border-b border-[var(--r-line)] px-4 py-1.5">
+        <div className="border-b border-line px-4 py-1.5">
           {/* The kind is DERIVED, never remembered: an apply the op refused is the model
               disagreeing (alarm); anything else that threw is a busy or broken bridge, which
               is not (caution). `useVerb` funnels both into one string, so the discriminator
@@ -1107,7 +1107,7 @@ function FamiliesRoute() {
         </div>
       )}
       {plan && plan.diagnostics.length > 0 && (
-        <div className="border-b border-[var(--r-line)] px-4 py-1.5">
+        <div className="border-b border-line px-4 py-1.5">
           <SectionLabel>
             <span title="Diagnostics are reported at PROFILE level, not per family, and a single one blocks the whole apply lane. Fix the profile document, then re-plan.">
               plan diagnostics
@@ -1131,7 +1131,7 @@ function FamiliesRoute() {
 
       {/* ── decision queue: the plan as a lens over the scope ────────────────────────────── */}
       {plan && (
-        <div className="max-h-56 shrink-0 overflow-auto border-b border-[var(--r-line)] px-4 py-2">
+        <div className="max-h-56 shrink-0 overflow-auto border-b border-line px-4 py-2">
           <div className="flex items-center gap-2">
             <SectionLabel>
               <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
@@ -1151,7 +1151,7 @@ function FamiliesRoute() {
                 const flag = familyFlag(entry);
                 const excluded = excludedIds.has(entry.familyId);
                 return (
-                  <tr key={entry.familyId} className="border-b border-[var(--r-line)]">
+                  <tr key={entry.familyId} className="border-b border-line">
                     <td className="w-8 py-0.5">
                       <button
                         type="button"
@@ -1193,7 +1193,7 @@ function FamiliesRoute() {
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
                     <td
-                      className="face-mono w-64 truncate py-0.5 t-caption text-[var(--r-ink-mute)]"
+                      className="face-mono w-64 truncate py-0.5 t-caption text-ink-mute"
                       title={flag ?? ""}
                     >
                       {flag ?? ""}
@@ -1204,7 +1204,7 @@ function FamiliesRoute() {
               {outsideProfile.map((family) => (
                 <tr
                   key={`outside-${family.familyId}`}
-                  className="border-b border-[var(--r-line)] opacity-60"
+                  className="border-b border-line opacity-60"
                 >
                   <td className="w-8 py-0.5 text-center">
                     <span className="face-mono t-value text-muted-foreground">✕</span>
@@ -1237,7 +1237,7 @@ function FamiliesRoute() {
 
       {/* ── receipts ─────────────────────────────────────────────────────────────────────── */}
       {applyData && (
-        <div className="max-h-48 shrink-0 overflow-auto border-b border-[var(--r-line)] px-4 py-2">
+        <div className="max-h-48 shrink-0 overflow-auto border-b border-line px-4 py-2">
           <div className="flex items-center gap-2">
             <SectionLabel>
               <span title="What apply actually did, per family, as the op reported it. Receipts are the fleet lane's trust layer — the counts here are the evidence, not the plan's promise.">
@@ -1257,7 +1257,7 @@ function FamiliesRoute() {
           <table className="mt-1 w-full border-collapse">
             <tbody>
               {applyData.receipts.map((entry) => (
-                <tr key={entry.familyId} className="border-b border-[var(--r-line)]">
+                <tr key={entry.familyId} className="border-b border-line">
                   <td className="face-mono w-56 truncate py-0.5 t-label">
                     {entry.familyName ?? `element ${entry.familyId}`}
                   </td>
@@ -1332,7 +1332,7 @@ function FamiliesRoute() {
 
       {/* ── projection: a lazily-rendered document, copyable ─────────────────────────────── */}
       {projection && (
-        <details className="shrink-0 border-b border-[var(--r-line)] px-4 py-2" open>
+        <details className="shrink-0 border-b border-line px-4 py-2" open>
           <summary className="cursor-pointer">
             <SectionLabel>
               <span title="Each picked family read back out of the model as profile JSON. Nothing is written anywhere — copy it into a profile document if you want to keep it.">
@@ -1387,7 +1387,7 @@ function FamiliesRoute() {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-[var(--r-line)] p-2 t-caption text-muted-foreground">
+                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-line p-2 t-caption text-muted-foreground">
                   {entry.profileJson}
                 </pre>
               )}
