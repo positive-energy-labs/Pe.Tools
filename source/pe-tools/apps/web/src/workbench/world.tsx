@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import type { WorkbenchContextBreakdown, WorkbenchContextItem } from "@pe/agent-contracts";
+import type { ContextBreakdown, ContextItem } from "./chat-state";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
 import { Switcher } from "#/components/lang/switcher";
@@ -51,7 +51,7 @@ const PLAIN_CAP: Record<string, string> = {
  * The chat store owns the baseline so route remounts do not reset page memory.
  */
 export function useCacheView(
-  breakdown: WorkbenchContextBreakdown | undefined,
+  breakdown: ContextBreakdown | undefined,
   userTurns: number,
 ): CacheView {
   const { store } = useWorkbench();
@@ -125,7 +125,7 @@ function CacheBadge({ state }: { state: CacheState }) {
  * The world lane: a relative-load bar (no window %, meaningless under observational memory)
  * over the request-ordered layers, each expandable to its named contents.
  */
-const PILL_LABEL: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
+const PILL_LABEL: Record<NonNullable<ContextItem["state"]>, string> = {
   in: "in context",
   "on-demand": "on demand",
   off: "not loaded",
@@ -135,7 +135,7 @@ const PILL_LABEL: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
 // nothing. The old dashed "on demand" edge is gone: dashed means seam (a stand-in), and an
 // on-demand skill is real, just not loaded.
 const PILL_BASE = "rounded-sm border-[0.5px] px-[5px] py-px t-caption face-mono whitespace-nowrap";
-const PILL_TONE: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
+const PILL_TONE: Record<NonNullable<ContextItem["state"]>, string> = {
   in: "text-[var(--r-ink-2)] border-[var(--r-line-2)]",
   "on-demand": "text-[var(--r-ink-2)] border-[var(--r-line-2)]",
   off: "text-[var(--r-ink-mute)] border-[var(--r-line)]",
@@ -161,7 +161,7 @@ export function WorldLane({
   cache,
   sendNumber,
 }: {
-  breakdown: WorkbenchContextBreakdown | undefined;
+  breakdown: ContextBreakdown | undefined;
   cache: CacheView;
   sendNumber?: number;
 }) {
@@ -374,7 +374,7 @@ function ItemRow({
   onToggle,
   blast,
 }: {
-  item: WorkbenchContextItem;
+  item: ContextItem;
   open: boolean;
   onToggle: () => void;
   blast: Blast | null;
@@ -475,7 +475,7 @@ function BudgetBar({
   cache,
   className = BAR,
 }: {
-  breakdown: WorkbenchContextBreakdown;
+  breakdown: ContextBreakdown;
   cache: CacheView;
   /** Override the bar shell — composer ribbon passes a flush, thin progress-bar shape. */
   className?: string;
@@ -543,7 +543,7 @@ function ContextBudgetBar({
   breakdown,
   cache,
 }: {
-  breakdown: WorkbenchContextBreakdown;
+  breakdown: ContextBreakdown;
   cache: CacheView;
 }) {
   const mw = breakdown.memoryWindows;
@@ -606,7 +606,7 @@ export function ContextRibbon({
   cache,
   onOpenWorld,
 }: {
-  breakdown: WorkbenchContextBreakdown | undefined;
+  breakdown: ContextBreakdown | undefined;
   cache: CacheView;
   onOpenWorld?: () => void;
 }) {

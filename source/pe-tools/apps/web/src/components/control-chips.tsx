@@ -11,7 +11,7 @@ import {
   useComboboxAnchor,
 } from "#/components/ui/combobox";
 import { useWorkbench } from "#/workbench/provider";
-import type { WorkbenchAccessLevel } from "@pe/agent-contracts";
+import { ACCESS_LEVELS, type AccessLevel } from "#/workbench/chat-state";
 
 interface PickerOption {
   id: string;
@@ -21,27 +21,23 @@ interface PickerOption {
 
 /** Model + access pickers — Combobox-backed chips replacing the hand-rolled Picker. */
 export function ControlChips() {
-  const { debug, setModel, setAccessLevel } = useWorkbench();
-  const { models, access } = debug.state;
-  const modelLabel = models.currentModelId
-    ? (models.availableModels.find((item) => item.id === models.currentModelId)?.displayName ??
-      models.currentModelId)
+  const { chat, setModel, setAccessLevel } = useWorkbench();
+  const { models, access } = chat;
+  const modelLabel = models.currentId
+    ? (models.available.find((item) => item.id === models.currentId)?.modelName ?? models.currentId)
     : "model";
-  const accessLabel =
-    access.availableAccessLevels.find((item) => item.id === access.currentAccessLevel)?.name ??
-    access.currentAccessLevel ??
-    "access";
+  const accessLabel = ACCESS_LEVELS.find((item) => item.id === access)?.name ?? access;
 
   return (
     <>
       <Picker
         title="Model"
         label={modelLabel}
-        activeId={models.currentModelId}
+        activeId={models.currentId}
         searchable
-        options={models.availableModels.map((item) => ({
+        options={models.available.map((item) => ({
           id: item.id,
-          name: item.displayName ?? item.id,
+          name: item.modelName ?? item.id,
           hint: item.provider,
         }))}
         onPick={(id) => void setModel(id)}
@@ -49,13 +45,13 @@ export function ControlChips() {
       <Picker
         title="Access"
         label={accessLabel}
-        activeId={access.currentAccessLevel}
-        options={access.availableAccessLevels.map((item) => ({
+        activeId={access}
+        options={ACCESS_LEVELS.map((item) => ({
           id: item.id,
           name: item.name,
           hint: item.description,
         }))}
-        onPick={(id) => void setAccessLevel(id as WorkbenchAccessLevel)}
+        onPick={(id) => void setAccessLevel(id as AccessLevel)}
       />
     </>
   );

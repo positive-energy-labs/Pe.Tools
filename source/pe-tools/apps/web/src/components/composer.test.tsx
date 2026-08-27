@@ -2,7 +2,7 @@
 import { RegistryContext } from "@effect/atom-react";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { createWorkbenchState } from "@pe/agent-contracts";
+import { emptyChatState } from "#/workbench/chat-state";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 const workbench = vi.hoisted(() => ({ value: undefined as unknown }));
@@ -24,7 +24,7 @@ test("/fork dispatches the native provider verb", () => {
   const forkThread = vi.fn(async () => undefined);
   workbench.value = {
     store,
-    debug: { state: createWorkbenchState() },
+    chat: emptyChatState(),
     sendPrompt: vi.fn(async () => undefined),
     cancel: vi.fn(),
     newThread: vi.fn(),

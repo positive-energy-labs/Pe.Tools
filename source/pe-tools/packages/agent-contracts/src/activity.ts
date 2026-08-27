@@ -7,7 +7,6 @@
  * render "pea is <gerund>" from a live status and "failed <gerund>" from a
  * failed one — a single gerund string is the whole grammar.
  */
-import type { WorkbenchToolCall } from "./contracts.ts";
 
 export type SentenceVerb =
   | "working"
@@ -125,48 +124,4 @@ export function actionLabel(toolName: string, args: unknown, running: boolean): 
               ? "Apply"
               : (command ?? "Command");
   return running ? `${action} in progress` : action;
-}
-
-/** Total map from a tool call to its activity. Unknown tools fall back to "working". */
-export function deriveActivity(call: WorkbenchToolCall): Activity {
-  const args = parseArgs(call.rawInput);
-  switch (call.title) {
-    case "pe_status":
-    case "pe_logs":
-    case "route_state_read":
-      return { verb: "looking", gerund: "looking around" };
-    case "capture_view":
-    case "read_image":
-      return { verb: "looking", gerund: "looking at", target: str(args, "viewName") ?? "a view" };
-    case "host_operation_search":
-      return {
-        verb: "searching",
-        gerund: "searching for a capability",
-        target: str(args, "query"),
-      };
-    case "revit_api_docs_search":
-    case "revit_api_docs_fetch":
-      return { verb: "reading docs", gerund: "reading the Revit API docs" };
-    case "script_bootstrap":
-    case "script_execute":
-      return { verb: "scripting", gerund: "scripting" };
-    case "request_access":
-      return { verb: "asking", gerund: "asking for access" };
-    case "route_state_apply":
-      return { verb: "suggesting", gerund: "suggesting", target: str(args, "route") };
-    case "route_command": {
-      const command = str(args, "command");
-      const route = str(args, "route");
-      if (command === "open") return { verb: "navigating", gerund: "opening", target: route };
-      if (command === "apply" || command === "push" || command === "save")
-        return { verb: "editing", gerund: "editing", target: route };
-      return { verb: "looking", gerund: "looking at", target: route };
-    }
-    case "host_operation_call": {
-      const key = str(args, "key");
-      return key ? deriveOpActivity(key) : { verb: "working", gerund: "working" };
-    }
-    default:
-      return { verb: "working", gerund: "working", target: call.target };
-  }
 }

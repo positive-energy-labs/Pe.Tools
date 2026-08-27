@@ -7,11 +7,11 @@ import {
 } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
-import type { WorkbenchState } from "@pe/agent-contracts";
 import { Button } from "#/components/ui/button";
 import { ControlChips } from "#/components/control-chips";
 import { Textarea } from "#/components/ui/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
+import { selectSkillCommands } from "#/workbench/chat-state";
 import type { Mode } from "#/workbench/depth";
 
 interface SlashCommand {
@@ -36,7 +36,7 @@ export function Composer({
   /** Rendered flush at the top edge of the box — the inline budget/progress bar. */
   topBar?: ReactNode;
 }) {
-  const { store, debug, sendPrompt, cancel, isRunning, operationError, newThread, forkThread } =
+  const { store, chat, sendPrompt, cancel, isRunning, operationError, newThread, forkThread } =
     useWorkbench();
   const { text, attachments } = useAtomValue(store.atoms.draft);
   const setText = (value: string) =>
@@ -53,9 +53,11 @@ export function Composer({
   const commands = useMemo<SlashCommand[]>(
     () => [
       ...BUILTIN_COMMANDS,
-      ...readSkillCommands(debug.state).map((skill): SlashCommand => ({ ...skill, kind: "skill" })),
+      ...selectSkillCommands(chat.inspect).map(
+        (skill): SlashCommand => ({ ...skill, kind: "skill" }),
+      ),
     ],
-    [debug.state],
+    [chat.inspect],
   );
   const slash = text.startsWith("/") ? text.slice(1).split(/\s+/)[0]!.toLowerCase() : undefined;
   const matches =
@@ -243,23 +245,6 @@ export function Composer({
       </div>
     </form>
   );
-}
-
-/** Skill catalog published by the runtime via `agent.info.metadata.commands`. */
-function readSkillCommands(state: WorkbenchState): { name: string; description: string }[] {
-  const commands = state.agent.info?.metadata?.commands;
-  if (!Array.isArray(commands)) return [];
-  return commands.flatMap((entry) => {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return [];
-    const record = entry as Record<string, unknown>;
-    if (typeof record.name !== "string") return [];
-    return [
-      {
-        name: record.name,
-        description: typeof record.description === "string" ? record.description : "skill",
-      },
-    ];
-  });
 }
 
 async function readAttachment(file: File): Promise<WorkbenchAttachment> {

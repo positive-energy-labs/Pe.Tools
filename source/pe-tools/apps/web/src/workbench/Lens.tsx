@@ -1,26 +1,26 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import {
-  toolTitle,
-  type WorkbenchObservationMemoryEntry,
-  type WorkbenchState,
-  type WorkbenchToolCall,
-} from "@pe/agent-contracts";
+import { toolTitle } from "@pe/agent-contracts";
 import { ThreadPrimitive, type ThreadMessageLike } from "@assistant-ui/react";
 import { modeDepth, type Mode } from "./depth";
 import { Moments, useThreadMessages } from "./aui";
 import { RouteChatPluginDock } from "./route-chat-plugins";
 import { useCacheView, WorldLane } from "./world";
-import { useToolIo } from "./tool-io";
 import { useWorkbench } from "./provider";
 import { SidePane } from "#/components/ui/side-pane";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { EmptyState } from "#/components/lang/empty";
-import { FactChip } from "#/components/lang/chip";
 import { TargetWorld, useChatTarget } from "#/components/chat-target";
 import { chipDescriptor, laneVar } from "#/host/target-ui";
 import type { WorldEvent } from "#/host/use-target";
-import { imageSource } from "./adapter";
+import {
+  imageSource,
+  selectBreakdown,
+  selectToolCalls,
+  stringify,
+  type ChatState,
+  type ToolCall,
+} from "./chat-state";
 import {
   lensScrollIntent,
   nextTailFollowState,
@@ -66,9 +66,7 @@ interface Moment {
 
 interface TraceCell {
   key: string;
-  kind: "tool" | "memory";
-  toolCall?: WorkbenchToolCall;
-  memory?: WorkbenchObservationMemoryEntry;
+  call: ToolCall;
   parentId?: string;
 }
 
@@ -84,7 +82,7 @@ export function Lens({
   sideOpen = true,
   onSideOpenChange,
 }: {
-  state: WorkbenchState;
+  state: ChatState;
   mode: Mode;
   initialTurn?: number;
   scrollKey?: string;
@@ -102,8 +100,10 @@ export function Lens({
 }) {
   const messages = useThreadMessages();
   const moments = toMoments(messages);
-  const traceCells = buildTraceCells(state, mode);
-  const breakdown = state.inspector.contextBreakdown;
+  const traceCells = buildTraceCells(state);
+  // Memoized on `state`: `useCacheView` keys an effect on this object's identity, so a fresh
+  // breakdown per render (the Lens re-renders on every moment mount) is an infinite setState loop.
+  const breakdown = useMemo(() => selectBreakdown(state), [state]);
   const userTurns = moments.reduce(
     (count, moment) => (moment.role === "user" ? count + 1 : count),
     0,
@@ -641,7 +641,7 @@ export function Lens({
                   const cell = traceCells.find((c) => c.key === inspectKey);
                   return cell ? (
                     <div className="lens-inspect">
-                      <TraceCellBody cell={cell} />
+                      <ToolCellBody call={cell.call} />
                     </div>
                   ) : null;
                 })()}
@@ -662,23 +662,18 @@ export function Lens({
   );
 }
 
-function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" | "trace" }) {
+function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "trace" }) {
   const [open, setOpen] = useState(false);
-  const plan = state.plans.entries;
-  const systemPrompt = state.inspector.systemPrompt;
+  const plan = state.display.tasks ?? [];
+  const systemPrompt = state.inspect.systemPrompt;
   const showContext = depth !== "read";
 
   // The context-window breakdown moved to the World lane (single home). This strip keeps the
-  // plan, the resolved system prompt, and injected-context entries.
-  if (
-    plan.length === 0 &&
-    !(showContext && (systemPrompt || state.inspector.contextEntries.length))
-  ) {
-    return null;
-  }
+  // plan and the resolved system prompt.
+  if (plan.length === 0 && !(showContext && systemPrompt?.content)) return null;
 
-  // Machine-operated state pea maintains (the plan, the resolved prompt, injections) — each
-  // block is an ArtifactFrame per the border budget; the rows inside are plain content.
+  // Machine-operated state pea maintains (the plan, the resolved prompt) — each block is an
+  // ArtifactFrame per the border budget; the rows inside are plain content.
   return (
     <div className="mt-[14px] mr-6 ml-[34px] grid gap-2">
       {plan.length > 0 ? (
@@ -713,7 +708,7 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
         </ArtifactFrame>
       ) : null}
 
-      {showContext && systemPrompt ? (
+      {showContext && systemPrompt?.content ? (
         <ArtifactFrame
           head={
             <button
@@ -734,21 +729,6 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
           ) : null}
         </ArtifactFrame>
       ) : null}
-
-      {showContext && state.inspector.contextEntries.length > 0 ? (
-        <ArtifactFrame
-          head={<span className="t-label t-upper text-[var(--r-ink-2)]">Context injected</span>}
-        >
-          {state.inspector.contextEntries.map((entry) => (
-            <div className={`${PLAN_ITEM} text-[var(--r-ink-2)]`} key={entry.id}>
-              <FactChip title="Injected by the harness into pea's context this session">
-                ctx
-              </FactChip>
-              <span>{entry.title}</span>
-            </div>
-          ))}
-        </ArtifactFrame>
-      ) : null}
     </div>
   );
 }
@@ -767,78 +747,37 @@ function TraceCellView({
 }) {
   return (
     <div data-key={cell.key} className="lens-cell" ref={registerRef}>
-      <CellHeader cell={cell} />
+      <CellHeader call={cell.call} />
     </div>
   );
 }
 
-function CellHeader({ cell }: { cell: TraceCell }) {
-  if (cell.kind === "tool" && cell.toolCall) {
-    const call = cell.toolCall;
-    const duration = toolDuration(call);
-    return (
-      <div className="h">
-        <span className="h-title">{toolTitle(call.title)}</span>
-        {call.status || duration ? (
-          <span className="h-meta">
-            {call.status ? (
-              <span className="t-label face-mono" style={{ color: statusColor(call.status) }}>
-                {call.status.replace("_", " ")}
-              </span>
-            ) : null}
-            {duration ? <span className="t-value face-mono">{duration}</span> : null}
-          </span>
-        ) : null}
-      </div>
-    );
-  }
-  if (cell.kind === "memory" && cell.memory) {
-    const entry = cell.memory;
-    return (
-      <div className="h">
-        <span className="h-title">{entry.kind}</span>
-        {entry.status ? (
-          <span className="h-meta">
-            <span className="t-label face-mono">{entry.status}</span>
-          </span>
-        ) : null}
-      </div>
-    );
-  }
-  return null;
+function CellHeader({ call }: { call: ToolCall }) {
+  return (
+    <div className="h">
+      <span className="h-title">{toolTitle(call.title)}</span>
+      <span className="h-meta">
+        <span className="t-label face-mono" style={{ color: statusColor(call.status) }}>
+          {call.status.replace("_", " ")}
+        </span>
+      </span>
+    </div>
+  );
 }
 
-/** Inspect-window body: full prettified I/O for the focal/hovered cell. */
-function TraceCellBody({ cell }: { cell: TraceCell }) {
-  if (cell.kind === "tool" && cell.toolCall) {
-    return <ToolCellBody call={cell.toolCall} />;
-  }
-  if (cell.kind === "memory" && cell.memory) {
-    const entry = cell.memory;
-    return (
-      <>
-        <CellHeader cell={cell} />
-        <pre>{stringify(entry.raw ?? entry.summary ?? entry.title ?? entry.id)}</pre>
-      </>
-    );
-  }
-  return null;
-}
-
-/** Tool inspect body. Raw I/O is read via useToolIo (already reduced onto the call). */
-function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
-  const io = useToolIo(call);
-  const input = io?.rawInput ?? call.rawInput;
-  const output = io?.rawOutput ?? call.rawOutput ?? call.content;
-  const error = io?.error ?? call.error;
+/** Inspect-window body: full prettified I/O for the focal/hovered tool. */
+function ToolCellBody({ call }: { call: ToolCall }) {
+  const input = call.args;
+  const output = call.result;
+  const error = call.error;
   const images = toolImages(output);
   return (
     <>
-      <CellHeader cell={{ key: `tool:${call.id}`, kind: "tool", toolCall: call }} />
+      <CellHeader call={call} />
       {input !== undefined ? (
         <>
           <div className="io-label t-label face-mono">in</div>
-          <pre>{stringify(input)}</pre>
+          <pre>{stringify(input, 2)}</pre>
         </>
       ) : null}
       {images.length > 0 ? (
@@ -846,7 +785,7 @@ function ToolCellBody({ call }: { call: WorkbenchToolCall }) {
       ) : output !== undefined ? (
         <>
           <div className="io-label t-label face-mono">out</div>
-          <pre>{stringify(output)}</pre>
+          <pre>{stringify(output, 2)}</pre>
         </>
       ) : null}
       {error ? <pre className="io-error">{error}</pre> : null}
@@ -894,34 +833,13 @@ function toMoments(messages: ThreadMessageLike[]): Moment[] {
   });
 }
 
-/** Trace-lane cards: every tool call, plus timeline memory entries in trace depth. */
-function buildTraceCells(state: WorkbenchState, mode: Mode): TraceCell[] {
-  const lastAssistantId = [...state.transcript.messages]
-    .reverse()
-    .find((message) => message.role === "assistant")?.id;
-  const cells: TraceCell[] = state.tools.calls.map((call) => ({
+/** Trace-lane cards: one per tool call, anchored to the message that emitted it. */
+function buildTraceCells(state: ChatState): TraceCell[] {
+  return selectToolCalls(state).map((call) => ({
     key: `tool:${call.id}`,
-    kind: "tool",
-    toolCall: call,
-    parentId: call.parentMessageId ?? call.provenance?.messageId ?? lastAssistantId,
+    call,
+    parentId: call.parentMessageId,
   }));
-  if (mode !== "threads") {
-    for (const entry of state.memory.entries) {
-      if (!isTimelineMemoryEntry(entry)) continue;
-      cells.push({ key: `memory:${entry.id}`, kind: "memory", memory: entry });
-    }
-  }
-  return cells;
-}
-
-function isTimelineMemoryEntry(entry: WorkbenchObservationMemoryEntry): boolean {
-  if (entry.status !== "activated") return true;
-  const text = `${entry.id} ${entry.title ?? ""} ${entry.summary ?? ""}`.toLowerCase();
-  return !(
-    text.includes("config") ||
-    text.includes("configured") ||
-    text.includes("configuration")
-  );
 }
 
 /* Band numbers show the SEMANTIC exchange turn (Moment.turn — increments per user send), not the
@@ -953,15 +871,13 @@ function formatTime(date?: Date): string | undefined {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-// Telemetry metadata for a tool trace row: status hue + a human duration. Both feed the hybrid
-// header's right-aligned mono cluster. Hues ride the outcome mapping (design-lang.css):
-// landed → done, failed → caution (a busy bridge is NOT the model disagreeing),
-// in flight → ink-2 (busy), pending → ink-mute (not started).
+// Status hue for a tool trace row, feeding the hybrid header's right-aligned mono cluster.
+// Hues ride the outcome mapping (design-lang.css): landed → done, failed → caution (a busy
+// bridge is NOT the model disagreeing), in flight → ink-2 (busy).
 const TOOL_STATUS_COLOR: Record<string, string> = {
   completed: "var(--r-done)",
   failed: "var(--r-caution)",
   in_progress: "var(--r-ink-2)",
-  pending: "var(--r-ink-mute)",
 };
 
 function statusColor(status: string): string {
@@ -978,23 +894,3 @@ const TARGET_RAIL_COLOR: Record<string, string> = {
   dangling: "var(--r-alarm)",
   muted: "var(--r-ink-mute)",
 };
-
-function toolDuration(call: WorkbenchToolCall): string | undefined {
-  const start = call.startedAt;
-  const end = call.completedAt ?? call.updatedAt;
-  if (!start || !end) return undefined;
-  const ms = Date.parse(end) - Date.parse(start);
-  // 0 = hydrate backfill artifact (persisted parts share one createdAt): unknown, not measured.
-  if (!Number.isFinite(ms) || ms <= 0) return undefined;
-  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
-}
-
-function stringify(value: unknown): string {
-  if (value === undefined || value === null) return "";
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return "[unserializable value]";
-  }
-}
