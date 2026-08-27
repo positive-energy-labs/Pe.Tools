@@ -165,9 +165,11 @@ function Spec({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col items-start gap-1", className)}>
-      <div className="flex min-h-6 items-center">{children}</div>
-      <span className="face-mono t-caption whitespace-nowrap text-[var(--r-ink-mute)]">{cap}</span>
+    <div className={cn("flex min-w-0 max-w-full flex-col items-start gap-1", className)}>
+      <div className="flex min-h-6 min-w-0 max-w-full items-center">{children}</div>
+      <span className="face-mono t-caption block max-w-full overflow-x-auto whitespace-nowrap text-[var(--r-ink-mute)]">
+        {cap}
+      </span>
     </div>
   );
 }
@@ -184,7 +186,7 @@ function Grid<R extends string, C extends string>({
 }) {
   return (
     <div
-      className="inline-grid items-center gap-x-4 gap-y-1.5"
+      className="inline-grid max-w-full items-center gap-x-4 gap-y-1.5 overflow-x-auto"
       style={{ gridTemplateColumns: `auto repeat(${cols.length}, auto)` }}
     >
       <span />
@@ -553,7 +555,7 @@ function LangGroup() {
         <Lane>
           {CELL_BY_STATE.map(({ state, props }) => (
             <Spec key={`card-${state}`} cap={`${state} · scale=card`}>
-              <StateCell {...props} />
+              <StateCell {...props} className="block max-w-full" />
             </Spec>
           ))}
         </Lane>
