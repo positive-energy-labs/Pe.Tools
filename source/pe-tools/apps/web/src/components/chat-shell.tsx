@@ -159,14 +159,14 @@ function Surface({
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
       <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
-        <header className="flex items-center justify-between gap-4 border-b border-[var(--r-line)] px-5 py-2.5">
+        <header className="flex items-center justify-between gap-4 border-b border-line px-5 py-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
             {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
                 your call is owed (caution), error = a bridge/run error (caution — NOT the
                 alarm), idle = muted. */}
             <span
               title={chrome.status}
-              className="size-2 shrink-0 rounded-full data-[s=error]:bg-[var(--r-caution)] data-[s=idle]:bg-[var(--r-ink-mute)] data-[s=running]:bg-[var(--r-pea)] data-[s=waiting]:bg-[var(--r-caution)]"
+              className="size-2 shrink-0 rounded-full data-[s=error]:bg-caution data-[s=idle]:bg-ink-mute data-[s=running]:bg-pea data-[s=waiting]:bg-caution"
               data-s={chrome.status}
             />
             <span className="truncate text-sm font-semibold">{chrome.threadLabel}</span>
@@ -179,7 +179,7 @@ function Surface({
 
         <div aria-live="polite" className="min-h-0 px-5">
           {readOnly ? (
-            <div className="flex items-center gap-3 border-b border-[var(--r-line)] bg-[var(--r-recess)]/50 py-1.5 t-label">
+            <div className="flex items-center gap-3 border-b border-line bg-recess/50 py-1.5 t-label">
               <span>This thread is open in another tab — read-only here.</span>
               {/* page-scoped act (moves the write lock between tabs; nothing leaves the page) */}
               <Verb
@@ -190,8 +190,8 @@ function Surface({
             </div>
           ) : statusLine ? (
             <div
-              className={`border-b border-[var(--r-line)] py-1.5 t-label ${
-                debug.error || operationError ? "text-[var(--r-caution)]" : "text-[var(--r-ink-2)]"
+              className={`border-b border-line py-1.5 t-label ${
+                debug.error || operationError ? "text-caution" : "text-ink-2"
               }`}
             >
               {statusLine}

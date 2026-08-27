@@ -151,7 +151,7 @@ function CommandItem({
         // FILL, never a hue (the select rung), plus a neutral ink left rule as the locate
         // mark — the rule keeps keyboard nav visible without spending the commit blue on
         // something that is not a write.
-        "group/command-item relative flex min-h-7 cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-1 text-[13px] outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-[var(--r-ink)] data-selected:bg-[var(--r-select)] data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-muted-foreground",
+        "group/command-item relative flex min-h-7 cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-1 text-[13px] outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-ink data-selected:bg-select data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-muted-foreground",
         className,
       )}
       {...props}

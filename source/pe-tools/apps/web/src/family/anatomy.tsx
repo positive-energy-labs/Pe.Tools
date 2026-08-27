@@ -268,7 +268,7 @@ export function AnatomyDrawing({
       {views}
       <div className="min-w-0 flex-1 overflow-y-auto p-2">
         <p
-          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-ink-2"
           title="The profile's own constituent list. Hovering one lights both the shape and the table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it in the doc pane's lower half, where the half of it no parameter can drive — direction, system type, where its frame sits — is edited."
         >
           constituents · {typeName}
@@ -296,17 +296,17 @@ export function AnatomyDrawing({
                 // Selection is a FILL, not a hue: the open constituent sits in the selection rung,
                 // the hovered one wears a hairline. Neither is a state of the model.
                 inspecting === part.slug
-                  ? "border-[var(--r-line-2)] bg-[var(--r-select)] text-[var(--r-ink)]"
+                  ? "border-line-2 bg-select text-ink"
                   : focusedParts.has(part.slug)
-                    ? "border-[var(--r-line-2)] text-[var(--r-ink)]"
-                    : "border-transparent text-[var(--r-ink)]",
+                    ? "border-line-2 text-ink"
+                    : "border-transparent text-ink",
               )}
             >
-              <span className="text-[var(--r-ink-2)]">{part.kind} </span>
+              <span className="text-ink-2">{part.kind} </span>
               <span className="min-w-0 truncate">{part.slug}</span>
               {unbound > 0 && (
                 <span
-                  className="ml-auto shrink-0 t-caption text-[var(--r-caution)]"
+                  className="ml-auto shrink-0 t-caption text-caution"
                   title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
                 >
                   {unbound}⚠
@@ -381,7 +381,7 @@ function FixtureViews({
           <svg
             key={view.key}
             viewBox={`0 0 ${BOX} ${BOX}`}
-            className="h-full border-r border-[var(--r-line)]"
+            className="h-full border-r border-line"
             role="img"
             aria-label={`family ${view.key} view`}
           >
@@ -791,7 +791,7 @@ function ModelViews({
             <svg
               key={view.key}
               viewBox={`0 0 ${BOX} ${BOX}`}
-              className="h-full border-r border-[var(--r-line)]"
+              className="h-full border-r border-line"
               role="img"
               aria-label={`family ${view.key} view`}
             >
@@ -991,20 +991,20 @@ function ModelViews({
       </div>
 
       {(unplottablePlanes.length > 0 || partialSolids.length > 0) && (
-        <div className="shrink-0 border-t border-[var(--r-line)] px-2 py-1">
+        <div className="shrink-0 border-t border-line px-2 py-1">
           {partialSolids.map((geo) => (
-            <p key={geo.slug} className="face-mono t-caption text-[var(--r-ink-2)]">
+            <p key={geo.slug} className="face-mono t-caption text-ink-2">
               ─ ─ solid {geo.slug} · {world.source.profile.solids[geo.slug] ?? geo.kind}{" "}
-              <span className="text-[var(--r-ink-mute)]">
+              <span className="text-ink-mute">
                 (a dimension does not resolve to a number at this type — named rather than drawn at
                 a guess)
               </span>
             </p>
           ))}
           {unplottablePlanes.map((plane) => (
-            <p key={plane.slug} className="face-mono t-caption text-[var(--r-ink-2)]">
+            <p key={plane.slug} className="face-mono t-caption text-ink-2">
               ─ ─ plane {plane.slug} · {plane.text}{" "}
-              <span className="text-[var(--r-ink-mute)]">
+              <span className="text-ink-mute">
                 {plane.offset == null
                   ? "(formula-driven — no resolvable offset, so it is named rather than drawn at a guess)"
                   : "(off a datum this drawing does not recognise)"}

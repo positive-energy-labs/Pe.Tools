@@ -39,11 +39,11 @@ function vizFor(name: string): VizIndex {
 }
 
 function MonoAside({ children }: { children: ReactNode }) {
-  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+  return <span className="face-mono t-caption text-ink-2">{children}</span>;
 }
 
 function Dash() {
-  return <span className="text-[var(--r-ink-mute)]">—</span>;
+  return <span className="text-ink-mute">—</span>;
 }
 
 /** Truncation/limit line from the shared RevitDataResultPage shape, if present. */
@@ -747,7 +747,7 @@ function ConceptEvidenceView({ data }: OpViewProps) {
             label={conceptName}
             aside={<MonoAside>{candidates.length} candidates</MonoAside>}
           >
-            <div className="rounded-[var(--radius)] border border-[var(--r-line)]">
+            <div className="rounded-md border border-line">
               {candidates.map((candidate, i) => {
                 const identity = asRecord(candidate.identity);
                 const confidence = asString(candidate.confidence);
@@ -758,9 +758,9 @@ function ConceptEvidenceView({ data }: OpViewProps) {
                 return (
                   <div
                     key={asString(identity?.key) ?? `${i}`}
-                    className={`flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${i > 0 ? "border-t border-[var(--r-line)]" : ""}`}
+                    className={`flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${i > 0 ? "border-t border-line" : ""}`}
                   >
-                    <span className="face-mono t-value w-6 shrink-0 text-right text-[var(--r-ink-2)]">
+                    <span className="face-mono t-value w-6 shrink-0 text-right text-ink-2">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -779,9 +779,7 @@ function ConceptEvidenceView({ data }: OpViewProps) {
                         <MonoAside>score {asNumber(candidate.score)?.toFixed(2) ?? "?"}</MonoAside>
                       </div>
                       {reasons.length > 0 && (
-                        <p className="t-label mt-0.5 text-[var(--r-ink-2)]">
-                          {reasons.join(" · ")}
-                        </p>
+                        <p className="t-label mt-0.5 text-ink-2">{reasons.join(" · ")}</p>
                       )}
                       <MonoAside>
                         {asNumber(facts.bindingCount) ?? 0} bindings ·{" "}
@@ -793,7 +791,7 @@ function ConceptEvidenceView({ data }: OpViewProps) {
                 );
               })}
               {candidates.length === 0 && (
-                <div className="t-label px-2 py-4 text-center italic text-[var(--r-ink-mute)]">
+                <div className="t-label px-2 py-4 text-center italic text-ink-mute">
                   no candidates
                 </div>
               )}

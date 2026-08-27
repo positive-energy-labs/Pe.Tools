@@ -29,17 +29,15 @@ export function FamilyChatPlugin({ toolName, args, sessionState, running }: Rout
         {/* freshness rides the squiggle family's colours: fresh → done, stale → caution */}
         {evidence ? (
           <span
-            className={`t-label face-mono ${
-              evidenceFresh ? "text-[var(--r-done)]" : "text-[var(--r-caution)]"
-            }`}
+            className={`t-label face-mono ${evidenceFresh ? "text-done" : "text-caution"}`}
             title={`Evidence from ${evidence.from.origin} of ${evidence.from.familyName} at ${evidence.from.capturedAt}`}
           >
             evidence · {evidence.from.origin} · {evidenceFresh ? "fresh" : "stale"}
           </span>
         ) : (
-          <span className="t-label text-[var(--r-ink-mute)]">no evidence yet</span>
+          <span className="t-label text-ink-mute">no evidence yet</span>
         )}
-        <Link className="ml-auto text-[var(--r-nav)] hover:underline" to="/family">
+        <Link className="ml-auto text-nav hover:underline" to="/family">
           Open workspace
         </Link>
       </div>

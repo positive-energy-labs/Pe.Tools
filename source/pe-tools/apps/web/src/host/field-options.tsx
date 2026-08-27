@@ -167,7 +167,7 @@ export function FieldOptionMultiSelect({
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
-      <span className="t-caption text-[var(--r-ink-2)]">
+      <span className="t-caption text-ink-2">
         {values.length === 0
           ? "All elements in the category"
           : `${values.length} specific element(s)`}

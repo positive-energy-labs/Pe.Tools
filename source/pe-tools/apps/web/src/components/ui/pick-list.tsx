@@ -137,7 +137,7 @@ export function PickList({
                       // Selection is a FILL, never a hue: the select rung plus a neutral
                       // ink locate mark. No weight — chrome never buys weight.
                       active
-                        ? "border-[var(--r-ink)] bg-[var(--r-select)] text-foreground"
+                        ? "border-ink bg-select text-foreground"
                         : "border-transparent text-foreground",
                       cursored && !active && "bg-muted",
                       disabled && "opacity-50",

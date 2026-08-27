@@ -219,7 +219,7 @@ function ParameterLinksChatPlugin({
         <Metric value={evaluation?.issues.length ?? 0} label="issues" issue />
         {/* nav is blue TEXT — the legal half of the blue budget */}
         <Link
-          className="ml-auto text-[var(--r-nav)] hover:underline"
+          className="ml-auto text-nav hover:underline"
           to="/chat"
           search={(previous) => ({ ...previous, plugin: "parameter-links" })}
         >
@@ -259,12 +259,12 @@ function ParameterLinksReview({
   const profile = document?.draftProfile ?? document?.profile;
   const evaluation = document?.evaluation;
   return (
-    <div className="mt-1.5 w-full border-t border-[var(--r-line-2)] pt-1.5">
+    <div className="mt-1.5 w-full border-t border-line-2 pt-1.5">
       <div className="max-h-64 space-y-1 overflow-y-auto">
         {profile?.definitions.map((definition) => (
-          <div key={definition.id} className="border-b border-[var(--r-line)] py-1 last:border-0">
-            <div className="t-value text-[var(--r-ink)]">{definition.id}</div>
-            <div className="t-caption face-mono text-[var(--r-ink-2)]">
+          <div key={definition.id} className="border-b border-line py-1 last:border-0">
+            <div className="t-value text-ink">{definition.id}</div>
+            <div className="t-caption face-mono text-ink-2">
               {definition.relationship} · {definition.reducer} · category{" "}
               {definition.sourceCategoryId}
             </div>
@@ -275,10 +275,10 @@ function ParameterLinksReview({
           .slice(0, 5)
           .map((write) => (
             <div key={`${write.assignmentId}:${write.targetElementUniqueId}`} className="py-1">
-              <div className="truncate t-value text-[var(--r-ink)]">
+              <div className="truncate t-value text-ink">
                 {write.targetElementName ?? write.targetElementId} · {write.targetParameter.name}
               </div>
-              <div className="truncate t-caption face-mono text-[var(--r-ink-2)] tabular-nums">
+              <div className="truncate t-caption face-mono text-ink-2 tabular-nums">
                 {displayParameterLinkValue(write.currentValue)} →{" "}
                 {displayParameterLinkValue(write.proposedValue)}
                 {write.overrideApplied ? " (override)" : ""}
@@ -289,16 +289,14 @@ function ParameterLinksReview({
         {evaluation?.issues.slice(0, 4).map((issue, index) => (
           <div
             key={`${issue.code}:${issue.assignmentId ?? index}`}
-            className={
-              issue.severity === "error" ? "text-[var(--r-alarm)]" : "text-[var(--r-ink-2)]"
-            }
+            className={issue.severity === "error" ? "text-alarm" : "text-ink-2"}
           >
             <span className="face-mono">{issue.code}</span>: {issue.message}
           </div>
         ))}
       </div>
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-        <span className="min-w-0 flex-1 truncate t-caption text-[var(--r-ink-2)]">
+        <span className="min-w-0 flex-1 truncate t-caption text-ink-2">
           {error ??
             (errors > 0
               ? `${errors} blocking error${errors === 1 ? "" : "s"}`
@@ -396,7 +394,7 @@ function FamilyTypesChatPlugin({
             const { paramName, typeName } = splitCellKey(key);
             return (
               <>
-                {paramName} <span className="text-[var(--r-ink-2)]">· {typeName}</span>
+                {paramName} <span className="text-ink-2">· {typeName}</span>
               </>
             );
           }}
@@ -447,12 +445,12 @@ export function InlineRoutePlugin({
     <ArtifactFrame
       head={
         <div className="flex w-full items-baseline justify-between gap-3">
-          <span className="t-label t-upper text-[var(--r-ink-2)]">{title}</span>
-          <span className="t-caption face-mono text-[var(--r-ink-2)]">{action}</span>
+          <span className="t-label t-upper text-ink-2">{title}</span>
+          <span className="t-caption face-mono text-ink-2">{action}</span>
         </div>
       }
     >
-      <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-2 t-label text-[var(--r-ink-2)]">
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 px-2.5 py-2 t-label text-ink-2">
         {children}
       </div>
     </ArtifactFrame>
@@ -471,9 +469,7 @@ export function Metric({
   // A non-zero issue count is attention owed — caution, never the alarm.
   return (
     <span
-      className={`inline-flex items-baseline gap-1 ${
-        issue && value > 0 ? "text-[var(--r-caution)]" : ""
-      }`}
+      className={`inline-flex items-baseline gap-1 ${issue && value > 0 ? "text-caution" : ""}`}
     >
       <span className="t-value face-mono">{value}</span>
       <span className="t-caption face-mono">{label}</span>

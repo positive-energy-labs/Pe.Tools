@@ -54,7 +54,7 @@ function obs(observedAtUtc: string | undefined, fallbackMs: number): string {
 }
 
 function MonoAside({ children }: { children: ReactNode }) {
-  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+  return <span className="face-mono t-caption text-ink-2">{children}</span>;
 }
 
 /** Stat band cell: mono value over a quiet sans label. `warn` is the only state a
@@ -72,13 +72,13 @@ function Stat({
 }) {
   return (
     <div
-      className="min-w-[64px] border-r border-[var(--r-line)] px-3 py-1.5"
+      className="min-w-[64px] border-r border-line px-3 py-1.5"
       title={warn ? warnTitle : undefined}
     >
       <div className="face-mono t-value" style={warn ? { color: "var(--r-caution)" } : undefined}>
         {value ?? "∅"}
       </div>
-      <div className="t-caption text-[var(--r-ink-2)]">{label}</div>
+      <div className="t-caption text-ink-2">{label}</div>
     </div>
   );
 }
@@ -134,13 +134,13 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   return (
     <div className="flex flex-col gap-5">
       {/* document hero: identity + discipline + levels, first 200px answers the question */}
-      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)] px-3 py-2">
+      <div className="min-w-0 rounded-md border border-line-2 px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-2">
           <span className="t-value min-w-0 truncate font-medium" title={path || undefined}>
             {doc ? text(doc.title) : "no active document"}
           </span>
           {doc && (
-            <span className="face-mono t-caption text-[var(--r-ink-2)]">
+            <span className="face-mono t-caption text-ink-2">
               {doc.isFamilyDocument === true
                 ? "family"
                 : isTemplateFile
@@ -183,7 +183,7 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
         </div>
         {levels.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <span className="t-label text-[var(--r-ink-2)]">{levels.length} levels</span>
+            <span className="t-label text-ink-2">{levels.length} levels</span>
             {levels.map((level, i) => (
               <MonoAside key={i}>
                 {text(level.name)} @ {(asNumber(level.elevationFeet) ?? 0).toFixed(1)}ft
@@ -194,7 +194,7 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
       </div>
 
       {/* stat band: true project totals + family totals */}
-      <div className="flex flex-wrap rounded-[var(--radius)] border border-[var(--r-line)]">
+      <div className="flex flex-wrap rounded-md border border-line">
         <Stat label="views" value={text(totals.viewCount)} />
         <Stat label="sheets" value={text(totals.sheetCount)} />
         <Stat label="schedules" value={text(totals.scheduleCount)} />
@@ -336,7 +336,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           no active view reported
         </EmptyState>
       ) : (
-        <div className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)] px-3 py-2">
+        <div className="min-w-0 rounded-md border border-line-2 px-3 py-2">
           <div className="flex min-w-0 flex-wrap items-baseline gap-2">
             <span className="t-value min-w-0 truncate font-medium" title={text(activeView.title)}>
               {text(activeView.title)}
@@ -453,12 +453,12 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           )}
           {notInspected.length > 0 && (
             <details>
-              <summary className="face-mono t-caption cursor-pointer select-none text-[var(--r-ink-2)]">
+              <summary className="face-mono t-caption cursor-pointer select-none text-ink-2">
                 {notInspected.length} things this packet did NOT inspect
               </summary>
               <ul className="mt-1 flex flex-col gap-1 pl-3">
                 {notInspected.map((item, i) => (
-                  <li key={i} className="t-label leading-snug text-[var(--r-ink-2)]">
+                  <li key={i} className="t-label leading-snug text-ink-2">
                     {item}
                   </li>
                 ))}

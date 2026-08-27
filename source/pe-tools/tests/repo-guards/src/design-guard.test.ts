@@ -177,6 +177,31 @@ const literalClassTexts = (
   return texts;
 };
 
+const literalAuthoringTexts = (source: import("typescript").SourceFile) => {
+  const nodes = new Map<string, import("typescript").Node>();
+  const collect = (node: import("typescript").Node | undefined) => {
+    if (!node) return;
+    if (isStringLiteral(node) || isNoSubstitutionTemplateLiteral(node)) {
+      nodes.set(`${node.pos}:${node.end}`, node);
+      return;
+    }
+    if (isTemplateExpression(node)) {
+      nodes.set(`${node.head.pos}:${node.head.end}`, node.head);
+      for (const span of node.templateSpans) {
+        nodes.set(`${span.literal.pos}:${span.literal.end}`, span.literal);
+        collect(span.expression);
+      }
+      return;
+    }
+    forEachChild(node, collect);
+  };
+  collect(source);
+  return [...nodes.values()].map((node) => ({
+    text: (node as unknown as { text: string }).text,
+    index: node.getStart(source),
+  }));
+};
+
 const MOUNTED_ROUTE_FILES = (() => {
   const mounted = new Set<string>();
   const routeTree = createSourceFile(
@@ -229,8 +254,6 @@ const routeArbitrary = (): Offence[] => {
             }
           }
         }
-        if (isJsxElement(node)) for (const child of node.children) visit(child);
-        return;
       }
       forEachChild(node, visit);
     };
@@ -239,9 +262,37 @@ const routeArbitrary = (): Offence[] => {
   return offences;
 };
 
+const semanticRawUtilityRe =
+  /(?:^|\s)((?:[^\s:]+:)*!?((?:bg|text|border|divide|ring|outline|fill|stroke)(?:-[A-Za-z0-9_-]+)*-\[var\(--r-(?:page|artifact|recess|select|ink|ink-2|ink-mute|line|line-2|pea|pea-ink|alarm|caution|done|commit|on-commit|nav)\)\](?:\/[^\s]+)?|rounded-\[var\(--radius\)\]|font-\[family-name:var\(--font-pe-(?:mono|display)\)\]))(?=\s|$)/g;
+
+const semanticRawUtilities = (): Offence[] => {
+  const offences: Offence[] = [];
+  for (const file of FILES.filter((entry) => /\.tsx?$/.test(entry.rel))) {
+    const source = createSourceFile(file.rel, file.text, ScriptTarget.Latest, true, ScriptKind.TSX);
+    for (const literal of literalAuthoringTexts(source)) {
+      semanticRawUtilityRe.lastIndex = 0;
+      for (const match of literal.text.matchAll(semanticRawUtilityRe)) {
+        offences.push({
+          rel: file.rel,
+          line: lineOf(file.text, literal.index + (match.index ?? 0)),
+          match: match[1],
+        });
+      }
+    }
+  }
+  return offences;
+};
+
 // ── hard zeros ───────────────────────────────────────────────────────────────────────────────
 
 describe("design guard — hard zeros", () => {
+  it("no eligible PE semantic token arbitrary utilities remain in production literals", () => {
+    expect(
+      semanticRawUtilities(),
+      "Use the existing literal semantic Tailwind role in class attributes and class builders",
+    ).toEqual([]);
+  });
+
   it("no dead shim token is consumed (the alias shim reads zero lines, forever)", () => {
     const re =
       /var\(--(?:st-|act-|cat-|pe-blue|pe-green|paper|mist|basalt|slate|lens-ink-2|clay|kiln|lichen|fail|user|pea-tint|pea-line|line-soft)/g;
@@ -358,6 +409,19 @@ describe("design guard — foundation topology", () => {
     };
     visit(source);
     expect(literalClassTexts(initializer)).toEqual(["p-[1px] ", " h-[3px]", "m-[2px]", ""]);
+  });
+
+  it("sees class-builder literals inside JSX prop descendants once", () => {
+    const source = createSourceFile(
+      "nested-prop-regression.tsx",
+      '<Panel sentence={<span className={cn("text-[var(--r-ink)]")} />} />',
+      ScriptTarget.Latest,
+      true,
+      ScriptKind.TSX,
+    );
+    expect(literalAuthoringTexts(source).map((literal) => literal.text)).toEqual([
+      "text-[var(--r-ink)]",
+    ]);
   });
 
   it("keeps CSS declarations inside the explicit foundation seams", () => {

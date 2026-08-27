@@ -25,8 +25,8 @@ export function extOf(path: string): string | undefined {
 export function DocGroup({ label, aside }: { label: string; aside?: string }) {
   return (
     <div className="flex items-baseline gap-2 px-2 pb-0.5 pt-1.5">
-      <span className="t-caption t-upper text-[var(--r-ink-2)]">{label}</span>
-      {aside ? <span className="t-caption face-mono text-[var(--r-ink-2)]">{aside}</span> : null}
+      <span className="t-caption t-upper text-ink-2">{label}</span>
+      {aside ? <span className="t-caption face-mono text-ink-2">{aside}</span> : null}
     </div>
   );
 }
@@ -56,8 +56,8 @@ export function DocRow({
       reason={`Pick document ${label}.`}
       disabled={disabled}
       onClick={onPick}
-      className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-[var(--r-line)] px-2 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] disabled:opacity-40 disabled:italic ${
-        selected ? "bg-[var(--r-select)] [--r-on:var(--r-select)]" : ""
+      className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-line px-2 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] disabled:opacity-40 disabled:italic ${
+        selected ? "bg-select [--r-on:var(--r-select)]" : ""
       }`}
     >
       {ext ? (
@@ -72,20 +72,18 @@ export function DocRow({
         </span>
       ) : null}
       <span className="min-w-0 flex-1">
-        <span className="block truncate t-label text-[var(--r-ink)]">{label}</span>
+        <span className="block truncate t-label text-ink">{label}</span>
         {sub ? (
           <span
             className={`block truncate t-caption face-mono ${
-              subTone === "active" ? "text-[var(--r-ink)]" : "text-[var(--r-ink-2)]"
+              subTone === "active" ? "text-ink" : "text-ink-2"
             }`}
           >
             {sub}
           </span>
         ) : null}
       </span>
-      {selected ? (
-        <span className="t-caption face-mono shrink-0 text-[var(--r-ink)]">◉</span>
-      ) : null}
+      {selected ? <span className="t-caption face-mono shrink-0 text-ink">◉</span> : null}
     </Verb>
   );
 }

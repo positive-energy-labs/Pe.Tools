@@ -130,7 +130,7 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
           aria-label="View change details"
           className={cn(
             "t-caption t-upper inline-flex items-center rounded-[2px] border px-1.5 py-0.5 font-semibold",
-            "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]",
+            "border-caution/30 bg-caution/10 text-caution",
             // Compact buys tighter padding only — the tier already IS the small size.
             compact && "px-1 py-0",
           )}
@@ -183,7 +183,7 @@ export function FieldMessages({
     <div
       className={cn(
         "rounded-[2px] border px-3 py-2 text-xs",
-        "border-[var(--r-alarm)]/30 bg-[var(--r-alarm)]/10 text-[var(--r-alarm)]",
+        "border-alarm/30 bg-alarm/10 text-alarm",
         compact && "t-label px-2 py-1.5",
       )}
     >
@@ -207,11 +207,9 @@ function OptionMetadataChip({
     <span
       className={cn(
         "t-caption inline-flex max-w-full items-center truncate rounded-[2px] border px-1.5 py-0.5 font-medium",
-        tone === "neutral" && "border-[var(--r-line)] bg-muted/40 text-[var(--r-ink-mute)]",
-        tone === "warning" &&
-          "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]",
-        tone === "danger" &&
-          "border-[var(--r-alarm)]/30 bg-[var(--r-alarm)]/10 text-[var(--r-alarm)]",
+        tone === "neutral" && "border-line bg-muted/40 text-ink-mute",
+        tone === "warning" && "border-caution/30 bg-caution/10 text-caution",
+        tone === "danger" && "border-alarm/30 bg-alarm/10 text-alarm",
       )}
     >
       {children}
@@ -261,7 +259,7 @@ function RequiredBadge() {
   return (
     <span
       aria-label="Required"
-      className="t-caption t-upper inline-flex items-center rounded-[2px] bg-[var(--r-alarm)]/10 px-1.5 py-0.5 font-semibold text-[var(--r-alarm)]"
+      className="t-caption t-upper inline-flex items-center rounded-[2px] bg-alarm/10 px-1.5 py-0.5 font-semibold text-alarm"
     >
       Required
     </span>

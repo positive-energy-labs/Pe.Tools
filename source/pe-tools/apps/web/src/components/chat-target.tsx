@@ -45,14 +45,14 @@ export function TargetWorld() {
   const { selector, resolution, sessions, worldLog, pin } = useChatTarget();
   const chip = chipDescriptor(resolution);
   return (
-    <div className="border-b-[0.5px] border-[var(--r-line)] px-3 py-3">
+    <div className="border-b-[0.5px] border-line px-3 py-3">
       <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="t-label t-upper text-[var(--r-ink-2)]">Target</span>
-        <span className="t-caption face-mono text-[var(--r-ink-2)]">{chip.tone}</span>
+        <span className="t-label t-upper text-ink-2">Target</span>
+        <span className="t-caption face-mono text-ink-2">{chip.tone}</span>
       </div>
 
       {/* raw resolution — provenance, not decoration */}
-      <div className="mb-2 break-all t-caption face-mono leading-[1.5] text-[var(--r-ink-2)]">
+      <div className="mb-2 break-all t-caption face-mono leading-[1.5] text-ink-2">
         {resolutionReadout(resolution)}
       </div>
 
@@ -67,7 +67,7 @@ export function TargetWorld() {
             onClick={() => pin(mintSelector(s, sessions))}
             // The resolved session is a SELECTION — the selection fill, never a hue.
             className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${
-              isResolved ? "bg-[var(--r-select)] [--r-on:var(--r-select)]" : ""
+              isResolved ? "bg-select [--r-on:var(--r-select)]" : ""
             }`}
           >
             <span className="inline-flex min-w-0 items-center gap-2">
@@ -75,11 +75,11 @@ export function TargetWorld() {
                 tone={isResolved ? (selector === "" ? "implicit" : "pinned") : "muted"}
                 lane={s.lane}
               />
-              <span className="truncate t-value text-[var(--r-ink)]">{sessionLabel(s)}</span>
+              <span className="truncate t-value text-ink">{sessionLabel(s)}</span>
               {/* A session that reported no lane gets no badge — "not reported" rendered honestly. */}
               {s.lane ? <LaneBadge lane={s.lane} /> : null}
             </span>
-            <span className="whitespace-nowrap t-caption face-mono text-[var(--r-ink-2)]">
+            <span className="whitespace-nowrap t-caption face-mono text-ink-2">
               pid {s.processId}
             </span>
           </Verb>
@@ -95,7 +95,7 @@ export function TargetWorld() {
       ) : null}
 
       {worldLog.length > 0 ? (
-        <div className="mt-2 border-t-[0.5px] border-[var(--r-line)] pt-1.5">
+        <div className="mt-2 border-t-[0.5px] border-line pt-1.5">
           {worldLog.slice(-5).map((event, i) => (
             <WorldLogLine key={`${event.atMs}-${i}`} event={event} />
           ))}
@@ -111,7 +111,7 @@ function WorldLogLine({ event }: { event: WorldEvent }) {
     minute: "2-digit",
   });
   return (
-    <div className="flex items-baseline gap-2 py-0.5 t-caption face-mono text-[var(--r-ink-2)]">
+    <div className="flex items-baseline gap-2 py-0.5 t-caption face-mono text-ink-2">
       <span className="opacity-70">{time}</span>
       <span className="truncate">{event.label}</span>
     </div>

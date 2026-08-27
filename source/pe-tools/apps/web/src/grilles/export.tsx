@@ -48,7 +48,7 @@ export function ExportSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-auto bg-[var(--r-page)] text-[var(--r-ink)]">
+    <div className="fixed inset-0 z-50 overflow-auto bg-page text-ink">
       <style>{`@media print {
         body * { visibility: hidden; }
         #grille-export-sheet, #grille-export-sheet * { visibility: visible; }
@@ -59,20 +59,20 @@ export function ExportSheet({
         className="no-print flex items-center gap-3 border-b px-3 py-2"
         style={{ borderColor: "var(--r-line)" }}
       >
-        <span className="face-mono t-label t-upper text-[var(--r-ink-mute)]">export sheet</span>
-        <span className="face-mono t-label text-[var(--r-ink-2)]">
+        <span className="face-mono t-label t-upper text-ink-mute">export sheet</span>
+        <span className="face-mono t-label text-ink-2">
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
         <Verb
           label="print / save PDF"
           reason="Print the export sheet or save it as a PDF."
-          className="face-mono ml-auto t-label text-[var(--r-nav)]"
+          className="face-mono ml-auto t-label text-nav"
           onClick={() => window.print()}
         />
         <Verb
           label="close"
           reason="Close the export sheet and return to the grille profiles."
-          className="face-mono t-label text-[var(--r-nav)]"
+          className="face-mono t-label text-nav"
           onClick={onClose}
         />
       </div>
@@ -84,7 +84,7 @@ export function ExportSheet({
           style={{ borderColor: "var(--r-ink)" }}
         >
           <div>
-            <div className="t-label t-upper text-[var(--r-ink-mute)]">
+            <div className="t-label t-upper text-ink-mute">
               Positive Energy · custom wood floor grille
             </div>
             <input
@@ -94,14 +94,14 @@ export function ExportSheet({
               onChange={(e) => onProject(e.target.value)}
             />
           </div>
-          <div className="text-right text-[var(--r-ink-2)]">
+          <div className="text-right text-ink-2">
             <div>{new Date().toISOString().slice(0, 10)}</div>
             <div>free area per PE calculator · all dims inches</div>
           </div>
         </div>
 
         {rows.length === 0 && (
-          <p className="face-mono py-8 t-value text-[var(--r-ink-2)]">
+          <p className="face-mono py-8 t-value text-ink-2">
             nothing on the sheet — tick rows in the table first
           </p>
         )}
@@ -118,14 +118,14 @@ export function ExportSheet({
                   {frac(r.boardLength)} × {frac(r.boardWidth)} · {r.openings} × {frac(r.opening)}″
                   openings · {frac(r.rib)}″ ribs
                 </span>
-                <span className="ml-auto text-[var(--r-ink-2)]">
-                  free area <b className="text-[var(--r-ink)]">{pct(r.freeArea)}</b> ·{" "}
+                <span className="ml-auto text-ink-2">
+                  free area <b className="text-ink">{pct(r.freeArea)}</b> ·{" "}
                   {r.actualFreeArea.toFixed(1)} in²
                 </span>
                 <Verb
                   label=".svg"
                   reason="Save this grille drawing as a standalone SVG."
-                  className="no-print text-[var(--r-nav)]"
+                  className="no-print text-nav"
                   onClick={() => downloadSvg(r.id)}
                 />
               </figcaption>

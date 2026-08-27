@@ -146,7 +146,7 @@ export function EvaluationView({
                     className={
                       write.changed
                         ? "t-value max-w-[14rem] truncate px-2 py-1 text-foreground"
-                        : "t-value max-w-[14rem] truncate px-2 py-1 text-[var(--r-ink-mute)]"
+                        : "t-value max-w-[14rem] truncate px-2 py-1 text-ink-mute"
                     }
                   >
                     {write.targetElementName ?? write.targetElementId}
@@ -155,15 +155,15 @@ export function EvaluationView({
                     className={
                       write.changed
                         ? "t-value px-2 py-1 text-muted-foreground"
-                        : "t-value px-2 py-1 text-[var(--r-ink-mute)]"
+                        : "t-value px-2 py-1 text-ink-mute"
                     }
                   >
                     {write.targetParameter.name ?? write.targetParameter.kind}
                   </td>
-                  <td className="t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]">
+                  <td className="t-value face-mono px-2 py-1 text-ink-mute">
                     {displayParameterLinkValue(write.currentValue)}
                   </td>
-                  <td className="t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]">
+                  <td className="t-value face-mono px-2 py-1 text-ink-mute">
                     {displayParameterLinkValue(write.linkedValue)}
                   </td>
                   {/* A changed result is a PENDING write — unsaved until apply — so it takes
@@ -172,7 +172,7 @@ export function EvaluationView({
                     className={
                       write.changed
                         ? "t-value face-mono px-2 py-1 font-bold text-foreground"
-                        : "t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]"
+                        : "t-value face-mono px-2 py-1 text-ink-mute"
                     }
                   >
                     {displayParameterLinkValue(write.proposedValue)}

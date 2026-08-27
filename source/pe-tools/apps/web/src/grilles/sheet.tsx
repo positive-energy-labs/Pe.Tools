@@ -52,9 +52,7 @@ const read = (
   right: true,
   sort,
   cell: (r) => (
-    <span className={`face-mono t-value ${bold ? "text-[var(--r-ink)]" : "text-[var(--r-ink-2)]"}`}>
-      {cell(r)}
-    </span>
+    <span className={`face-mono t-value ${bold ? "text-ink" : "text-ink-2"}`}>{cell(r)}</span>
   ),
 });
 
@@ -162,7 +160,7 @@ export function Sheet({
         <Verb
           label="+ profile"
           reason="Add a grille profile copied from the active row."
-          className="face-mono t-label text-[var(--r-nav)]"
+          className="face-mono t-label text-nav"
           onClick={add}
         />
       }

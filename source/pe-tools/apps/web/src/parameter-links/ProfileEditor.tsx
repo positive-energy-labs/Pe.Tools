@@ -380,7 +380,7 @@ function DefinitionCard({
                     />
                     enabled
                   </label>
-                  <span className="t-caption face-mono truncate text-[var(--r-ink-mute)]">
+                  <span className="t-caption face-mono truncate text-ink-mute">
                     {assignment.id}
                   </span>
                   <Verb
@@ -458,7 +458,7 @@ function Enum<T extends string>({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value as T)}
-      className="t-value h-7 w-full rounded-[var(--radius)] border border-input bg-transparent px-2 outline-none focus-visible:outline-1 focus-visible:outline-[var(--r-line-2)] disabled:italic disabled:text-[var(--r-ink-mute)]"
+      className="t-value h-7 w-full rounded-md border border-input bg-transparent px-2 outline-none focus-visible:outline-1 focus-visible:outline-line-2 disabled:italic disabled:text-ink-mute"
     >
       {options.map((option) => (
         <option key={option} value={option}>

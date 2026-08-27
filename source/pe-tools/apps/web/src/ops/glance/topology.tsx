@@ -94,16 +94,16 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
   const agent = asRecord(host.agentRuntime);
   const disconnectReason = asString(host.disconnectReason);
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-[var(--radius)] border border-[var(--r-line-2)] px-3 py-2.5">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-md border border-line-2 px-3 py-2.5">
       <div className="flex items-center gap-1.5">
         <LiveDot tone={connected ? "pinned" : "dangling"} lane={lane} />
         <span className="t-value font-medium">host</span>
         {lane ? <LaneBadge lane={lane} /> : null}
       </div>
-      <div className="face-mono t-caption text-[var(--r-ink-2)]" title={exePath}>
+      <div className="face-mono t-caption text-ink-2" title={exePath}>
         {text(host.runtimeIdentity) || "∅"} · pid {text(host.processId) || "∅"}
       </div>
-      <div className="face-mono t-caption text-[var(--r-ink-2)]">
+      <div className="face-mono t-caption text-ink-2">
         contracts host v{text(host.hostContractVersion) || "?"} · bridge v
         {text(host.bridgeContractVersion) || "?"} · {text(host.bridgePath) || "∅"}
       </div>
@@ -138,15 +138,15 @@ function DocumentLeaf({ doc }: { doc: Record<string, unknown> }) {
     <div className="flex min-w-0 items-baseline gap-1.5 py-0.5">
       {/* the active mark is neutral ink (R13a's locate mark) — never a hue. */}
       <span
-        className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "bg-[var(--r-ink)]" : "bg-[var(--r-line-2)]"}`}
+        className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "bg-ink" : "bg-line-2"}`}
       />
       <span
-        className={`t-value min-w-0 truncate ${isActive ? "font-medium" : "text-[var(--r-ink-2)]"}`}
+        className={`t-value min-w-0 truncate ${isActive ? "font-medium" : "text-ink-2"}`}
         title={text(doc.path) || text(doc.title)}
       >
         {text(doc.title) || "∅"}
       </span>
-      <span className="face-mono t-caption shrink-0 text-[var(--r-ink-2)]">
+      <span className="face-mono t-caption shrink-0 text-ink-2">
         {doc.isFamilyDocument === true ? "rfa" : "rvt"}
       </span>
       {isActive && <FactChip title="this document has focus in Revit">active</FactChip>}
@@ -168,7 +168,7 @@ function SessionNode({
   const openCount = asNumber(session.openDocumentCount);
   return (
     <div
-      className={`flex min-w-0 flex-col gap-1 rounded-[var(--radius)] border px-3 py-2 ${connected ? "border-[var(--r-line)]" : "border-[var(--r-line)] opacity-60"}`}
+      className={`flex min-w-0 flex-col gap-1 rounded-md border px-3 py-2 ${connected ? "border-line" : "border-line opacity-60"}`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <LiveDot tone={connected ? "implicit" : "muted"} lane={lane} />
@@ -192,21 +192,21 @@ function SessionNode({
           </FactChip>
         )}
       </div>
-      <div className="face-mono t-caption text-[var(--r-ink-2)]">
+      <div className="face-mono t-caption text-ink-2">
         pid {text(session.processId) || "∅"} · Revit {text(session.revitVersion) || "?"} ·{" "}
         {text(session.runtimeFramework) || "?"}
         {openCount !== undefined && ` · ${openCount} doc${openCount === 1 ? "" : "s"}`}
       </div>
 
       {/* document leaves — staged fetch, graceful in every state */}
-      <div className="mt-0.5 flex flex-col border-l border-[var(--r-line)] pl-2.5">
+      <div className="mt-0.5 flex flex-col border-l border-line pl-2.5">
         {!connected && (
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption text-ink-2">
             not queried — last reported doc: {asString(session.activeDocumentTitle) ?? "∅"}
           </span>
         )}
         {connected && (!docFetch || docFetch.state === "loading") && (
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">fetching documents…</span>
+          <span className="face-mono t-caption text-ink-2">fetching documents…</span>
         )}
         {connected && docFetch?.state === "skipped" && (
           <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
@@ -219,7 +219,7 @@ function SessionNode({
           </span>
         )}
         {connected && docFetch?.state === "ok" && docFetch.docs.length === 0 && (
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">no documents open</span>
+          <span className="face-mono t-caption text-ink-2">no documents open</span>
         )}
         {connected &&
           docFetch?.state === "ok" &&
@@ -272,7 +272,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
         </div>
 
         {/* trunk + session lanes */}
-        <div className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 border-l border-[var(--r-line)] py-1">
+        <div className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 border-l border-line py-1">
           {sessions.length === 0 ? (
             <div className="pl-5">
               <EmptyState story="scope" exit="start a Revit process with the bridge add-in loaded">
@@ -287,7 +287,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
                   {/* branch tick from trunk to session */}
                   <span
                     aria-hidden
-                    className="absolute left-0 top-4 inline-block w-5 border-t border-[var(--r-line)]"
+                    className="absolute left-0 top-4 inline-block w-5 border-t border-line"
                   />
                   <SessionNode session={session} docFetch={id ? docFetches[id] : undefined} />
                 </div>

@@ -192,7 +192,7 @@ function ZoneStateBar({
     return (
       <span
         className={cn(
-          "inline-block h-2.5 w-10 shrink-0 rounded-[1px] border border-[var(--r-line-2)]",
+          "inline-block h-2.5 w-10 shrink-0 rounded-[1px] border border-line-2",
           className,
         )}
         title={`${zone.zone.key} — not partitioned: no rooms have been materialized yet`}
@@ -319,7 +319,7 @@ function ManualJField({
       digits={0}
       integer
       min={0}
-      className={room.data === null ? "text-[var(--r-ink-mute)]" : undefined}
+      className={room.data === null ? "text-ink-mute" : undefined}
       onCommit={(v) => onPatch({ [field]: v })}
     />
   );
@@ -363,16 +363,14 @@ function RoomNameCell({
       className={cn(
         "flex min-w-0 items-center",
         entity.hovered && "[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
-        entity.selected && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+        entity.selected && "bg-select [--r-on:var(--r-select)]",
       )}
     >
       <div className="min-w-0 flex-1">
         <TextCell value={row.room.name} onCommit={onCommit} className="text-left" />
       </div>
       {entity.dirty && (
-        <span
-          className={cn("face-mono t-caption pr-1", entity.conflict && "text-[var(--r-caution)]")}
-        >
+        <span className={cn("face-mono t-caption pr-1", entity.conflict && "text-caution")}>
           {entity.conflict ? "conflict" : "staged"}
         </span>
       )}
@@ -839,7 +837,7 @@ export function Atlas({ store }: AtlasProps) {
                         // the ground ladder's fourth rung. The old `bg-primary/[0.08]` spent the
                         // one filled blue — reserved for writes that leave the page — on "what is lit".
                         className={cn(
-                          "flex items-baseline gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
+                          "flex items-baseline gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-muted",
                           on && "bg-accent",
                         )}
                       >
@@ -879,7 +877,7 @@ export function Atlas({ store }: AtlasProps) {
                   if (zs.length === 0) return null;
                   return (
                     <div key={lane.label}>
-                      <div className="t-caption t-upper sticky top-0 z-10 border-y border-[var(--r-line)] bg-muted px-2 py-0.5 text-muted-foreground">
+                      <div className="t-caption t-upper sticky top-0 z-10 border-y border-line bg-muted px-2 py-0.5 text-muted-foreground">
                         {lane.label} · {zs.length}
                       </div>
                       <ul>
@@ -899,7 +897,7 @@ export function Atlas({ store }: AtlasProps) {
                                     : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
                                 }
                                 className={cn(
-                                  "flex w-full items-center gap-1.5 border-b border-[var(--r-line)] px-2 py-1 text-left hover:bg-muted",
+                                  "flex w-full items-center gap-1.5 border-b border-line px-2 py-1 text-left hover:bg-muted",
                                   on && "bg-accent",
                                   off && "opacity-55",
                                 )}
@@ -947,15 +945,15 @@ export function Atlas({ store }: AtlasProps) {
                         onClick={() => setLevel(lane.label)}
                         title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
                         className={cn(
-                          "face-mono t-value rounded-[var(--radius)] border px-2 py-0.5",
+                          "face-mono t-value rounded-md border px-2 py-0.5",
                           lane.label === level
-                            ? "border-[var(--r-line-2)] bg-accent"
+                            ? "border-line-2 bg-accent"
                             : "border-transparent text-muted-foreground hover:bg-muted",
                         )}
                       >
                         {lane.label}
                         <span className="ml-1 opacity-60">{zs.length}</span>
-                        {calls > 0 && <span className="ml-1 text-[var(--r-alarm)]">·{calls}</span>}
+                        {calls > 0 && <span className="ml-1 text-alarm">·{calls}</span>}
                       </button>
                     );
                   })}
@@ -965,7 +963,7 @@ export function Atlas({ store }: AtlasProps) {
                     onClick={() => setStatsOpen(!statsOpen)}
                     title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
                     className={cn(
-                      "face-mono t-value ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5",
+                      "face-mono t-value ml-2 rounded-md border border-line-2 px-1.5 py-0.5",
                       statsOpen ? "bg-accent" : "text-muted-foreground hover:bg-muted",
                     )}
                   >
@@ -979,7 +977,7 @@ export function Atlas({ store }: AtlasProps) {
                         ? "collapse the plan — give the table the full height"
                         : "show the plan"
                     }
-                    className="face-mono t-value rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
+                    className="face-mono t-value rounded-md border border-line-2 px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
                   >
                     {planOpen ? "▴ hide plan" : "▾ show plan"}
                   </button>
@@ -1069,10 +1067,7 @@ export function Atlas({ store }: AtlasProps) {
                       <>
                         {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
                         {scopeCalls > 0 && (
-                          <span className="text-[var(--r-alarm)]">
-                            {" "}
-                            · {scopeCalls} needing a call
-                          </span>
+                          <span className="text-alarm"> · {scopeCalls} needing a call</span>
                         )}
                         <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
                         {/* The fields-mode control lives HERE, not in the room panel — the panel
@@ -1090,7 +1085,7 @@ export function Atlas({ store }: AtlasProps) {
                               ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
                               : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
                           }
-                          className="ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
+                          className="ml-2 rounded-md border border-line-2 px-1.5 py-px text-muted-foreground hover:bg-muted"
                         >
                           fields: {fieldsMode}
                         </button>
@@ -1427,7 +1422,7 @@ function LevelStats({
   const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));
 
   return (
-    <div className="absolute top-2 right-2 z-20 w-64 rounded-[var(--radius)] border border-border bg-background/95 px-2 py-1.5 shadow-sm backdrop-blur">
+    <div className="absolute top-2 right-2 z-20 w-64 rounded-md border border-border bg-background/95 px-2 py-1.5 shadow-sm backdrop-blur">
       <div className="mb-1 flex items-baseline gap-1.5">
         <span className="t-label t-upper text-muted-foreground">{level} — level totals</span>
         <button
@@ -1458,7 +1453,7 @@ function LevelStats({
         {unpartitionedSqft > 0 && (
           <span
             title={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}
-            className="border border-[var(--r-line-2)]"
+            className="border border-line-2"
             style={{ width: `${(unpartitionedSqft / Math.max(totalArea, 1)) * 100}%` }}
           />
         )}
@@ -1477,7 +1472,7 @@ function LevelStats({
         <StatLine
           label="calls"
           value={calls === 0 ? "none open" : `${calls} rooms need a human`}
-          tone={calls > 0 ? "text-[var(--r-alarm)]" : "text-[var(--r-done)]"}
+          tone={calls > 0 ? "text-alarm" : "text-done"}
         />
         <StatLine label="held" value={`${fmtNum(held, 0)} sf residue`} />
         <StatLine
@@ -1487,7 +1482,7 @@ function LevelStats({
               ? "closed — every declared foot accounted"
               : `${fmtNum(residual, 0)} sf unaccounted`
           }
-          tone={Math.abs(residual) < 1 ? "text-[var(--r-done)]" : "text-[var(--r-alarm)]"}
+          tone={Math.abs(residual) < 1 ? "text-done" : "text-alarm"}
         />
       </div>
     </div>
@@ -1562,10 +1557,10 @@ function ZoneCard({
       data-dirty={entity.dirty || undefined}
       data-conflict={entity.conflict || undefined}
       className={cn(
-        "absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur",
-        entity.hovered && "ring-1 ring-[var(--r-line-2)]",
-        entity.selected && "border-[var(--r-line-2)]",
-        entity.conflict && "border-[var(--r-caution)]",
+        "absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-md border border-border bg-background/95 shadow-sm backdrop-blur",
+        entity.hovered && "ring-1 ring-line-2",
+        entity.selected && "border-line-2",
+        entity.conflict && "border-caution",
       )}
     >
       <div className="flex items-center gap-1.5 px-2 py-1.5">
@@ -1714,7 +1709,7 @@ function RoomPanel({
       meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
       bodyClassName="p-0"
     >
-      <div className="divide-y divide-[var(--r-line)]">
+      <div className="divide-y divide-line">
         <div className="px-2.5 py-2">
           <h2 className="font-pe-display text-base leading-tight font-semibold tracking-tight">
             {room.name}
@@ -1722,10 +1717,7 @@ function RoomPanel({
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
             <StateDot {...stateMeta(state)} />
             <span
-              className={cn(
-                "face-mono t-value",
-                state === "call" ? "text-[var(--r-alarm)]" : undefined,
-              )}
+              className={cn("face-mono t-value", state === "call" ? "text-alarm" : undefined)}
               title={STATE_META[state].note}
             >
               {STATE_META[state].label}
@@ -1743,7 +1735,7 @@ function RoomPanel({
               <span className="face-mono t-value pr-1.5 text-right text-muted-foreground">
                 ceil ft
               </span>
-              <span className="rounded-[1px] border border-[var(--r-line)]">
+              <span className="rounded-[1px] border border-line">
                 <NumberCell
                   value={room.ceilingFt}
                   digits={1}
@@ -1756,7 +1748,7 @@ function RoomPanel({
                   <span className="face-mono t-value pr-1.5 text-right text-muted-foreground">
                     {mj.label}
                   </span>
-                  <span className="rounded-[1px] border border-[var(--r-line)]">
+                  <span className="rounded-[1px] border border-line">
                     <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
                 </Fragment>
@@ -1771,7 +1763,7 @@ function RoomPanel({
             <ul className="space-y-2">
               {open.map((flag) => (
                 <li key={flag}>
-                  <p className="face-mono t-value text-[var(--r-alarm)]">{flag}</p>
+                  <p className="face-mono t-value text-alarm">{flag}</p>
                   <p className="face-mono t-value text-muted-foreground">
                     {FLAG_MEANING[flag] ?? "no blurb"}
                   </p>
@@ -1871,7 +1863,7 @@ function RoomPanel({
 
         <div className="space-y-1 px-2.5 py-2">
           <p className="t-label t-upper text-muted-foreground">addressable</p>
-          <p className="face-mono t-value rounded-[var(--radius)] border border-[var(--r-line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
+          <p className="face-mono t-value rounded-md border border-line bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
             {url}
           </p>
         </div>
@@ -1914,7 +1906,7 @@ function ZonePeek({
 
   return (
     <div>
-      <div className="h-52 border-b border-[var(--r-line)] bg-card">
+      <div className="h-52 border-b border-line bg-card">
         <svg
           viewBox={`0 0 ${viewport.width} ${viewport.height}`}
           preserveAspectRatio="xMidYMid meet"

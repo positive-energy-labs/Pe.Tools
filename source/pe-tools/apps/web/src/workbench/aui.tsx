@@ -183,7 +183,7 @@ function TurnTag({ id }: { id: string }) {
   return (
     <button
       type="button"
-      className="t-label face-mono cursor-pointer border-0 bg-transparent p-0 text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
+      className="t-label face-mono cursor-pointer border-0 bg-transparent p-0 text-ink-2 hover:text-ink"
       title={`Center turn ${turn} on the focal axis`}
       onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
     >
@@ -200,7 +200,7 @@ function MomentTime() {
   );
   if (!at) return null;
   return (
-    <span className="t-caption face-mono ml-auto font-normal normal-case text-[var(--r-ink-2)]">
+    <span className="t-caption face-mono ml-auto font-normal normal-case text-ink-2">
       {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
     </span>
   );
@@ -232,7 +232,7 @@ function UserMoment() {
     <MomentSection id={id} role="user">
       {/* Role attribution: sans small-caps head (heads are sans by law). "you" is NEUTRAL INK —
           the user has no identity hue; position + this label carry authorship (workbench ruling). */}
-      <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-[var(--r-ink-2)]">
+      <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-ink-2">
         <TurnTag id={id} />
         <span>you</span>
         {/* lens-fork kept as CSS: visibility is driven by `.lens-moment:hover` (geometry element) */}
@@ -252,7 +252,7 @@ function UserMoment() {
             key={src}
             src={src}
             alt="attachment"
-            className="max-h-64 rounded-sm border-[0.5px] border-[var(--r-line-2)] object-contain"
+            className="max-h-64 rounded-sm border-[0.5px] border-line-2 object-contain"
           />
         ))}
         {/* Hard block, not a speech bubble — the radius law. Right alignment + a NEUTRAL ink
@@ -284,7 +284,7 @@ function AssistantMoment() {
   return (
     <MomentSection id={id} role="assistant">
       {/* pea's name wears the agent identity at TEXT weight (--r-pea-ink). */}
-      <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-[var(--r-pea-ink)]">
+      <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-pea-ink">
         <TurnTag id={id} />
         <span>pea</span>
         <MomentTime />
@@ -324,8 +324,7 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
   }
   render(): ReactNode {
     // A render fault is an ERROR (caution), not the model disagreeing (alarm).
-    if (this.state.error)
-      return <div className="t-prose text-[var(--r-caution)]">{this.state.error}</div>;
+    if (this.state.error) return <div className="t-prose text-caution">{this.state.error}</div>;
     return this.props.children;
   }
 }
@@ -345,9 +344,9 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   // Reasoning is quiet secondary prose behind a neutral disclosure — the old viz-hue rail
   // (kiln/lichen) spent taxonomy colours on chrome. Chrome buys no weight, no hue.
   return (
-    <div className="border-l-2 border-[var(--r-line-2)]">
+    <div className="border-l-2 border-line-2">
       <button
-        className="inline-flex items-center gap-[5px] bg-transparent px-1.5 py-px t-label text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
+        className="inline-flex items-center gap-[5px] bg-transparent px-1.5 py-px t-label text-ink-2 hover:text-ink"
         type="button"
         title="Pea's chain of thought for this turn — collapsed so the spine stays calm"
         onClick={() => setOpen((value) => !value)}
@@ -356,7 +355,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
         <span>Thought process</span>
       </button>
       {open ? (
-        <div className="mt-1 mb-0.5 ml-2 border-l border-[var(--r-line)] pl-[9px] t-prose whitespace-pre-wrap text-[var(--r-ink-2)]">
+        <div className="mt-1 mb-0.5 ml-2 border-l border-line pl-[9px] t-prose whitespace-pre-wrap text-ink-2">
           {text}
         </div>
       ) : null}
@@ -399,11 +398,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         {/* outcome mapping: error → caution, in flight → busy ink-2, landed → done */}
         <span
           className={`t-label face-mono ml-auto ${
-            isError
-              ? "text-[var(--r-caution)]"
-              : status?.type === "running"
-                ? "text-[var(--r-ink-2)]"
-                : "text-[var(--r-done)]"
+            isError ? "text-caution" : status?.type === "running" ? "text-ink-2" : "text-done"
           }`}
         >
           {isError ? "err" : status?.type === "running" ? "run" : "ok"}

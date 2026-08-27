@@ -349,7 +349,7 @@ function PaneResizeHandle({
     >
       <span
         className={cn(
-          "bg-[var(--r-line-2)] group-hover:bg-[var(--r-ink-2)] group-focus-visible:bg-[var(--r-ink-2)]",
+          "bg-line-2 group-hover:bg-ink-2 group-focus-visible:bg-ink-2",
           axis === "horizontal" ? "h-8 w-px" : "h-px w-8",
         )}
       />

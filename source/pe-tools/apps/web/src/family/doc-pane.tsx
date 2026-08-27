@@ -48,16 +48,16 @@ export function SpecText({
                literally the ground ladder's selection rung, so the law is structural here. */
             className={cn(
               "rounded-[2px] border p-2",
-              lit ? "border-[var(--r-line-2)] bg-[var(--r-select)]" : "border-[var(--r-line)]",
+              lit ? "border-line-2 bg-select" : "border-line",
             )}
           >
-            <div className="face-mono flex items-baseline justify-between t-caption text-[var(--r-ink-2)]">
+            <div className="face-mono flex items-baseline justify-between t-caption text-ink-2">
               <span>
                 {block.id} · p{block.page}
               </span>
               <span>{block.kind}</span>
             </div>
-            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption leading-snug text-[var(--r-ink)]">
+            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption leading-snug text-ink">
               {block.md}
             </pre>
           </div>
@@ -129,10 +129,10 @@ export function SpecSheet({
           const blocks = spec.blocks.filter((block) => block.page === page);
           return (
             <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
-              <div className="face-mono mb-0.5 t-caption text-[var(--r-ink-2)]">page {page}</div>
+              <div className="face-mono mb-0.5 t-caption text-ink-2">page {page}</div>
               <svg
                 viewBox="0 0 100 130"
-                className="block w-full border border-[var(--r-line-2)] bg-[var(--r-page)]"
+                className="block w-full border border-line-2 bg-page"
                 role="img"
                 aria-label={`stand-in page ${page}`}
               >
@@ -270,14 +270,14 @@ export function ProposalCard({
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
-      <div className="face-mono t-caption text-[var(--r-ink-2)]">{target}</div>
-      <div className="face-mono t-label text-[var(--r-pea-ink)]">
+      <div className="face-mono t-caption text-ink-2">{target}</div>
+      <div className="face-mono t-label text-pea-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 t-caption leading-snug text-[var(--r-ink)]">{proposal.note}</p>
+      <p className="mt-0.5 t-caption leading-snug text-ink">{proposal.note}</p>
       {blockMd && (
         <p
-          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink-2)]"
+          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-ink-2"
           title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}

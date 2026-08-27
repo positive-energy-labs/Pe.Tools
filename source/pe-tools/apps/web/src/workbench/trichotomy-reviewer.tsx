@@ -121,23 +121,23 @@ export function CellTrichotomyReviewer({
     });
 
   return (
-    <div className="mt-1.5 w-full border-t border-[var(--r-line-2)]">
+    <div className="mt-1.5 w-full border-t border-line-2">
       <div className="max-h-64 overflow-y-auto">
         {items.map(([key, cell]) => {
           const staged = cell.staged != null;
           return (
             <div
               key={key}
-              className="flex min-h-12 items-center gap-2 border-b border-[var(--r-line)] py-1.5 last:border-b-0"
+              className="flex min-h-12 items-center gap-2 border-b border-line py-1.5 last:border-b-0"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate t-value text-[var(--r-ink)]">{renderLabel(key, cell)}</div>
-                <div className="truncate text-[var(--r-ink-2)]">
+                <div className="truncate t-value text-ink">{renderLabel(key, cell)}</div>
+                <div className="truncate text-ink-2">
                   {renderValue(staged ? cell.staged?.value : cell.proposal?.value, key, cell)}
                 </div>
                 {/* pea's confidence/note ride the proposal — agent testimony at text weight */}
                 {!staged && (cell.proposal?.confidence || cell.proposal?.note) ? (
-                  <div className="truncate t-caption text-[var(--r-pea-ink)]">
+                  <div className="truncate t-caption text-pea-ink">
                     {[cell.proposal.confidence, cell.proposal.note].filter(Boolean).join(" · ")}
                   </div>
                 ) : null}
@@ -174,7 +174,7 @@ export function CellTrichotomyReviewer({
       </div>
 
       <div className="flex items-center justify-between gap-2 pt-1.5">
-        <span className="min-w-0 truncate t-caption text-[var(--r-ink-2)]">
+        <span className="min-w-0 truncate t-caption text-ink-2">
           {error ??
             (summary.attention > 0
               ? `${summary.attention} value${summary.attention === 1 ? " needs" : "s need"} review`

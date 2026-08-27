@@ -102,8 +102,8 @@ export function CellSelect({
         if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
       }}
       className={cn(
-        "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-[var(--r-select)]",
-        invalid && "bg-[color-mix(in_srgb,var(--r-alarm)_10%,var(--r-on))] text-[var(--r-alarm)]",
+        "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-select",
+        invalid && "bg-[color-mix(in_srgb,var(--r-alarm)_10%,var(--r-on))] text-alarm",
         className,
       )}
     >
@@ -160,11 +160,7 @@ export function VerdictCell({ verdict }: { verdict: Verdict }) {
   return (
     <span className="face-mono t-value block truncate px-1.5" title={verdict.note}>
       <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
-      <span
-        className={verdict.tone === "alarm" ? "text-[var(--r-alarm)]" : "text-[var(--r-ink-2)]"}
-      >
-        {verdict.word}
-      </span>
+      <span className={verdict.tone === "alarm" ? "text-alarm" : "text-ink-2"}>{verdict.word}</span>
     </span>
   );
 }

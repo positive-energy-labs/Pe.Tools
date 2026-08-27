@@ -96,9 +96,9 @@ function fmtTok(tokens: number): string {
 const CACHE_BASE = "rounded-sm border-[0.5px] px-[5px] py-px t-caption face-mono whitespace-nowrap";
 const CACHE_TONE = {
   cached:
-    "text-[var(--r-done)] border-[color-mix(in_srgb,var(--r-done)_50%,transparent)] bg-[color-mix(in_srgb,var(--r-done)_12%,transparent)]",
+    "text-done border-[color-mix(in_srgb,var(--r-done)_50%,transparent)] bg-[color-mix(in_srgb,var(--r-done)_12%,transparent)]",
   reproc:
-    "text-[var(--r-caution)] border-[color-mix(in_srgb,var(--r-caution)_55%,transparent)] bg-[color-mix(in_srgb,var(--r-caution)_10%,transparent)]",
+    "text-caution border-[color-mix(in_srgb,var(--r-caution)_55%,transparent)] bg-[color-mix(in_srgb,var(--r-caution)_10%,transparent)]",
 } as const;
 
 function CacheBadge({ state }: { state: CacheState }) {
@@ -128,9 +128,9 @@ const PILL_LABEL: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
 // on-demand skill is real, just not loaded.
 const PILL_BASE = "rounded-sm border-[0.5px] px-[5px] py-px t-caption face-mono whitespace-nowrap";
 const PILL_TONE: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
-  in: "text-[var(--r-ink-2)] border-[var(--r-line-2)]",
-  "on-demand": "text-[var(--r-ink-2)] border-[var(--r-line-2)]",
-  off: "text-[var(--r-ink-mute)] border-[var(--r-line)]",
+  in: "text-ink-2 border-line-2",
+  "on-demand": "text-ink-2 border-line-2",
+  off: "text-ink-mute border-line",
 };
 // Delta blast badge — cost severity is the caution family, never the alarm (a cache miss is
 // not the model disagreeing). prefix = whole context reprocessed (caution) · system = partial
@@ -138,9 +138,9 @@ const PILL_TONE: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
 const BLAST_BASE = "rounded-sm border-[0.5px] px-1 t-caption face-mono whitespace-nowrap";
 const BLAST_TONE: Record<Blast, string> = {
   prefix:
-    "text-[var(--r-caution)] border-[color-mix(in_srgb,var(--r-caution)_50%,transparent)] bg-[color-mix(in_srgb,var(--r-caution)_8%,transparent)]",
-  system: "text-[var(--r-ink-2)] border-[var(--r-line-2)]",
-  free: "text-[var(--r-done)] border-[color-mix(in_srgb,var(--r-done)_50%,transparent)] bg-[color-mix(in_srgb,var(--r-done)_10%,transparent)]",
+    "text-caution border-[color-mix(in_srgb,var(--r-caution)_50%,transparent)] bg-[color-mix(in_srgb,var(--r-caution)_8%,transparent)]",
+  system: "text-ink-2 border-line-2",
+  free: "text-done border-[color-mix(in_srgb,var(--r-done)_50%,transparent)] bg-[color-mix(in_srgb,var(--r-done)_10%,transparent)]",
 };
 
 // Row chrome shared by every layer row; grid-cols differ by density (see WorldLane).
@@ -193,10 +193,8 @@ export function WorldLane({
 
   return (
     <div className="flex min-h-0 flex-col [font-variant-numeric:tabular-nums]">
-      <div className="sticky top-0 z-[2] flex items-center gap-2.5 border-b-[0.5px] border-[var(--r-line)] bg-[var(--r-artifact)] [--r-on:var(--r-artifact)] px-3.5 pt-3 pb-2.5">
-        <h2 className="t-label t-upper m-0 text-[var(--r-ink-2)]">
-          What the agent sends the model
-        </h2>
+      <div className="sticky top-0 z-[2] flex items-center gap-2.5 border-b-[0.5px] border-line bg-artifact [--r-on:var(--r-artifact)] px-3.5 pt-3 pb-2.5">
+        <h2 className="t-label t-upper m-0 text-ink-2">What the agent sends the model</h2>
         <div className="ml-auto flex items-center gap-1.5">
           {/* mode = a fill, never a hue — the lang Switcher replaces the hand-rolled dial */}
           <Switcher
@@ -219,7 +217,7 @@ export function WorldLane({
           {/* Δ is a mode toggle too: pressed = the selection fill, never a hue. */}
           <button
             type="button"
-            className="h-6 w-[26px] cursor-pointer rounded-sm border-[0.5px] border-[var(--r-line-2)] bg-transparent text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] aria-pressed:bg-[var(--r-select)] aria-pressed:text-[var(--r-ink)] disabled:cursor-default disabled:italic disabled:opacity-40"
+            className="h-6 w-[26px] cursor-pointer rounded-sm border-[0.5px] border-line-2 bg-transparent text-ink-2 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] aria-pressed:bg-select aria-pressed:text-ink disabled:cursor-default disabled:italic disabled:opacity-40"
             aria-pressed={diff}
             onClick={() => setDiff((value) => !value)}
             title={
@@ -237,7 +235,7 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="flex flex-wrap items-center gap-[7px] px-3.5 pt-[7px] t-caption text-[var(--r-ink-2)]">
+        <div className="flex flex-wrap items-center gap-[7px] px-3.5 pt-[7px] t-caption text-ink-2">
           {sendNumber ? (
             <FactChip title="This breakdown was captured at the last user send; streaming pushes within the turn do not advance it">
               snapshot @ send #{sendNumber}
@@ -248,19 +246,19 @@ export function WorldLane({
       ) : null}
 
       {inspect && cache.hasBaseline ? (
-        <div className="mx-3.5 mt-2.5 grid gap-1.5 rounded-sm border-[0.5px] border-[var(--r-line)] bg-[var(--r-page)] [--r-on:var(--r-page)] px-3 py-2.5 t-label">
+        <div className="mx-3.5 mt-2.5 grid gap-1.5 rounded-sm border-[0.5px] border-line bg-page [--r-on:var(--r-page)] px-3 py-2.5 t-label">
           <div className="flex items-center gap-[7px] t-caption face-mono [font-variant-numeric:tabular-nums]">
-            <span className="size-[9px] flex-none rounded-[2px] bg-[var(--r-done)]" />
+            <span className="size-[9px] flex-none rounded-[2px] bg-done" />
             cache-read · 0.1×
-            <span className="ml-auto text-[var(--r-ink-2)]">{fmtTok(totals.cached)}</span>
+            <span className="ml-auto text-ink-2">{fmtTok(totals.cached)}</span>
           </div>
           <div className="flex items-center gap-[7px] t-caption face-mono [font-variant-numeric:tabular-nums]">
-            <span className="size-[9px] flex-none rounded-[2px] bg-[var(--r-caution)] [background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,0.4)_0_2px,transparent_2px_4px)]" />
+            <span className="size-[9px] flex-none rounded-[2px] bg-caution [background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,0.4)_0_2px,transparent_2px_4px)]" />
             reprocessed · 1×
-            <span className="ml-auto text-[var(--r-ink-2)]">{fmtTok(totals.reprocessed)}</span>
+            <span className="ml-auto text-ink-2">{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
-            <div className="rounded-sm border-[0.5px] border-[color-mix(in_srgb,var(--r-caution)_40%,transparent)] bg-[color-mix(in_srgb,var(--r-caution)_8%,transparent)] px-2 py-1.5 t-caption leading-[1.45] text-[var(--r-caution)]">
+            <div className="rounded-sm border-[0.5px] border-[color-mix(in_srgb,var(--r-caution)_40%,transparent)] bg-[color-mix(in_srgb,var(--r-caution)_8%,transparent)] px-2 py-1.5 t-caption leading-[1.45] text-caution">
               Δ this send: {whySentence(layers, cache, totals.reprocessed)}
             </div>
           ) : null}
@@ -269,7 +267,7 @@ export function WorldLane({
 
       {inspect && breakdown ? <ContextBudgetBar breakdown={breakdown} cache={cache} /> : null}
 
-      <div className="mt-2.5 border-t-[0.5px] border-[var(--r-line)]">
+      <div className="mt-2.5 border-t-[0.5px] border-line">
         {layers.map((layer) => {
           const isOpen = open.has(layer.id);
           const changed = diff && cache.changed.has(layer.id);
@@ -277,7 +275,7 @@ export function WorldLane({
           return (
             <div
               className={cn(
-                "border-b-[0.5px] border-[var(--r-line)]",
+                "border-b-[0.5px] border-line",
                 changed &&
                   "[background:linear-gradient(var(--r-artifact),color-mix(in_srgb,var(--r-caution)_8%,transparent))]",
               )}
@@ -292,41 +290,34 @@ export function WorldLane({
                 onClick={() => toggle(layer.id)}
               >
                 <span className="size-[9px] rounded-[2px]" style={{ background: tone(layer.id) }} />
-                <span className="t-value text-[var(--r-ink)]">
+                <span className="t-value text-ink">
                   {layer.label}
                   {inspect ? (
-                    <span className="ml-1.5 t-caption face-mono text-[var(--r-ink-2)]">
-                      pos {layer.rank}
-                    </span>
+                    <span className="ml-1.5 t-caption face-mono text-ink-2">pos {layer.rank}</span>
                   ) : null}
                 </span>
                 {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
                 {inspect ? (
-                  <span className="t-value face-mono text-[var(--r-ink-2)]">
-                    {fmtTok(layer.tokens)}
-                  </span>
+                  <span className="t-value face-mono text-ink-2">{fmtTok(layer.tokens)}</span>
                 ) : null}
                 {inspect ? (
-                  <span className="min-w-[30px] text-right t-value face-mono text-[var(--r-ink-2)]">
+                  <span className="min-w-[30px] text-right t-value face-mono text-ink-2">
                     {((layer.tokens / used) * 100).toFixed(0)}%
                   </span>
                 ) : null}
                 <span
-                  className={cn(
-                    "t-label text-[var(--r-ink-2)] transition-transform",
-                    isOpen && "rotate-90",
-                  )}
+                  className={cn("t-label text-ink-2 transition-transform", isOpen && "rotate-90")}
                 >
                   ▸
                 </span>
               </button>
               {isOpen ? (
                 <div className="pt-0 pr-3.5 pb-[11px] pl-[31px]">
-                  <p className="mt-0 mb-1.5 t-label leading-[1.5] text-[var(--r-ink-2)]">
+                  <p className="mt-0 mb-1.5 t-label leading-[1.5] text-ink-2">
                     {PLAIN_CAP[layer.id] ?? layer.label}
                   </p>
                   {inspect && changed ? (
-                    <p className="mt-0 mb-1.5 t-caption face-mono leading-[1.45] text-[var(--r-caution)]">
+                    <p className="mt-0 mb-1.5 t-caption face-mono leading-[1.45] text-caution">
                       ⚡ changed this send → {BLAST_LABEL[blast]}. {driftHint(blast)}
                     </p>
                   ) : null}
@@ -351,7 +342,7 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="px-3.5 pt-[11px] pb-4 t-caption leading-[1.5] text-[var(--r-ink-2)]">
+        <div className="px-3.5 pt-[11px] pb-4 t-caption leading-[1.5] text-ink-2">
           cache state <span className={cn(CACHE_BASE, CACHE_TONE.cached)}>≈ inferred</span> from a
           frontend snapshot diff — the provider only reports aggregate cache totals.
         </div>
@@ -376,11 +367,9 @@ function ItemRow({
   return (
     <li
       className={cn(
-        "overflow-hidden rounded-sm border-[0.5px] bg-[var(--r-page)] [--r-on:var(--r-page)]",
+        "overflow-hidden rounded-sm border-[0.5px] bg-page [--r-on:var(--r-page)]",
         // delta layers tint their item borders caution
-        blast
-          ? "border-[color-mix(in_srgb,var(--r-caution)_45%,transparent)]"
-          : "border-[var(--r-line)]",
+        blast ? "border-[color-mix(in_srgb,var(--r-caution)_45%,transparent)]" : "border-line",
       )}
     >
       <button
@@ -390,11 +379,11 @@ function ItemRow({
         onClick={() => hasBody && onToggle()}
       >
         <span className="min-w-0 flex-1">
-          <span className="block overflow-hidden text-ellipsis whitespace-nowrap t-value text-[var(--r-ink)]">
+          <span className="block overflow-hidden text-ellipsis whitespace-nowrap t-value text-ink">
             {item.name}
           </span>
           {item.src ? (
-            <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap t-caption face-mono text-[var(--r-ink-2)]">
+            <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap t-caption face-mono text-ink-2">
               {item.src}
             </span>
           ) : null}
@@ -409,22 +398,17 @@ function ItemRow({
             </span>
           ) : null}
           {item.tokens != null ? (
-            <span className="t-value face-mono text-[var(--r-ink-2)]">{fmtTok(item.tokens)}</span>
+            <span className="t-value face-mono text-ink-2">{fmtTok(item.tokens)}</span>
           ) : null}
           {hasBody ? (
-            <span
-              className={cn(
-                "t-caption text-[var(--r-ink-2)] transition-transform",
-                open && "rotate-90",
-              )}
-            >
+            <span className={cn("t-caption text-ink-2 transition-transform", open && "rotate-90")}>
               ▸
             </span>
           ) : null}
         </span>
       </button>
       {open && hasBody ? (
-        <pre className="m-0 max-h-[220px] overflow-auto border-t-[0.5px] border-[var(--r-line)] bg-[var(--r-recess)] [--r-on:var(--r-recess)] px-[9px] py-2 t-caption face-mono leading-[1.5] break-words whitespace-pre-wrap text-[var(--r-ink-2)]">
+        <pre className="m-0 max-h-[220px] overflow-auto border-t-[0.5px] border-line bg-recess [--r-on:var(--r-recess)] px-[9px] py-2 t-caption face-mono leading-[1.5] break-words whitespace-pre-wrap text-ink-2">
           {item.body}
         </pre>
       ) : null}
@@ -457,11 +441,11 @@ function whySentence(layers: Layer[], cache: CacheView, reprocessed: number): st
 // separators. Prefix layers are solid token-width segments; each OM window is threshold-wide with
 // a tinted live fill and plain-paper headroom, its right edge a thin hairline threshold tick.
 const BAR =
-  "relative flex h-[13px] items-stretch overflow-hidden rounded-sm border-[0.5px] border-[var(--r-line-2)] bg-[var(--r-page)]";
-const BAR_WIN = "relative min-w-[2px] border-l-[0.5px] border-[var(--r-line)]";
+  "relative flex h-[13px] items-stretch overflow-hidden rounded-sm border-[0.5px] border-line-2 bg-page";
+const BAR_WIN = "relative min-w-[2px] border-l-[0.5px] border-line";
 const BAR_FILL = "absolute inset-y-0 left-0";
 // Threshold tick: thin neutral hairline at the window's right edge (reflect / observe trigger).
-const BAR_TRIG = "absolute inset-y-0 right-0 w-0 border-r-[0.5px] border-[var(--r-line-2)]";
+const BAR_TRIG = "absolute inset-y-0 right-0 w-0 border-r-[0.5px] border-line-2";
 
 function BudgetBar({
   breakdown,
@@ -486,11 +470,11 @@ function BudgetBar({
   return (
     <span className={className}>
       <span
-        className="min-w-px border-r-[0.5px] border-[var(--r-line)]"
+        className="min-w-px border-r-[0.5px] border-line"
         style={{ flexGrow: tools, background: tint("tools") }}
       />
       <span
-        className="min-w-px border-r-[0.5px] border-[var(--r-line)]"
+        className="min-w-px border-r-[0.5px] border-line"
         style={{ flexGrow: system, background: tint("system-prompt") }}
       />
       <span className={BAR_WIN} style={{ flexGrow: obsCap }}>
@@ -502,7 +486,7 @@ function BudgetBar({
             caution hairline (dashed is reserved for seam). */}
         {mw.reflectionFloor ? (
           <span
-            className="absolute inset-y-0 w-0 border-r-[0.5px] border-[var(--r-caution)] opacity-65"
+            className="absolute inset-y-0 w-0 border-r-[0.5px] border-caution opacity-65"
             style={{ left: fill(mw.reflectionFloor, obsCap) }}
           />
         ) : null}
@@ -519,7 +503,7 @@ function BudgetBar({
           ink and SOLID (it was dashed blue: two law violations in one stroke). */}
       {horizon !== null ? (
         <span
-          className="pointer-events-none absolute -inset-y-0.5 w-0 border-r-[1.5px] border-[var(--r-ink)] opacity-70"
+          className="pointer-events-none absolute -inset-y-0.5 w-0 border-r-[1.5px] border-ink opacity-70"
           style={{ left: `${horizon}%` }}
         />
       ) : null}
@@ -553,15 +537,15 @@ function ContextBudgetBar({
 
   return (
     <div className="mx-3.5 mt-3">
-      <div className="mb-1.5 flex justify-between t-label text-[var(--r-ink-2)] [font-variant-numeric:tabular-nums]">
-        <span className="t-label t-upper text-[var(--r-ink-2)]">Context budget</span>
+      <div className="mb-1.5 flex justify-between t-label text-ink-2 [font-variant-numeric:tabular-nums]">
+        <span className="t-label t-upper text-ink-2">Context budget</span>
         <span className="t-value face-mono">
           {fmtTok(inContext)} / {fmtTok(budget)} · OM windows
         </span>
       </div>
       <BudgetBar breakdown={breakdown} cache={cache} />
       {/* trigger labels: machine-measured thresholds — mono, secondary ink */}
-      <div className="relative mt-px h-[14px] t-caption face-mono text-[var(--r-ink-2)]">
+      <div className="relative mt-px h-[14px] t-caption face-mono text-ink-2">
         <span
           className="absolute -translate-x-1/2 whitespace-nowrap"
           style={{ left: `${reflectAt}%` }}
@@ -641,22 +625,22 @@ export function ContextRibbon({
       <BudgetBar
         breakdown={breakdown}
         cache={cache}
-        className="relative flex h-1.5 items-stretch overflow-hidden bg-[var(--r-recess)]"
+        className="relative flex h-1.5 items-stretch overflow-hidden bg-recess"
       />
-      <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] rounded-sm border-[0.5px] border-[var(--r-line-2)] bg-[var(--r-page)] [--r-on:var(--r-page)] px-2.5 py-2 t-label text-[var(--r-ink-2)] group-hover/ribbon:flex group-focus-visible/ribbon:flex">
+      <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] rounded-sm border-[0.5px] border-line-2 bg-page [--r-on:var(--r-page)] px-2.5 py-2 t-label text-ink-2 group-hover/ribbon:flex group-focus-visible/ribbon:flex">
         {rows.map((row) => (
           <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
             <span className="size-2 flex-none rounded-[2px]" style={{ background: tone(row.id) }} />
             {row.label}
             {/* an active compaction is BUSY — neutral ink, not blue */}
-            {row.active ? <span className="ml-1 text-[var(--r-ink-2)]">⟲</span> : null}
-            <span className="ml-auto t-value face-mono text-[var(--r-ink-2)]">
+            {row.active ? <span className="ml-1 text-ink-2">⟲</span> : null}
+            <span className="ml-auto t-value face-mono text-ink-2">
               {fmtTok(row.tok)}
               {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
             </span>
           </span>
         ))}
-        <span className="mt-0.5 t-caption text-[var(--r-ink-2)]">
+        <span className="mt-0.5 t-caption text-ink-2">
           {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
         </span>
       </span>

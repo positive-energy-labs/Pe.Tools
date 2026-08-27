@@ -304,11 +304,11 @@ function ParameterRows({
   return (
     <div className="mt-2">
       <div className="t-label t-upper mb-1">{label}</div>
-      <div className="rounded-[var(--radius)] border border-[var(--r-line)]">
+      <div className="rounded-md border border-line">
         {params.map((p) => (
           <div
             key={p.identity.key}
-            className="flex items-baseline justify-between gap-3 border-b border-[var(--r-line)] px-2 py-1"
+            className="flex items-baseline justify-between gap-3 border-b border-line px-2 py-1"
           >
             <span className="t-value min-w-0 truncate" title={p.name}>
               {p.name}
@@ -335,17 +335,17 @@ function ElementCard({ entry }: { entry: RevitDetailElements.Res.ElementContextE
   const grouped = instanceParams.length > 0 || typeParams.length > 0;
 
   return (
-    <div className="rounded-[var(--radius)] border border-[var(--r-line-2)] p-2">
+    <div className="rounded-md border border-line-2 p-2">
       <div className="flex flex-wrap items-center gap-2">
         {entry.categoryName && <VizChip viz={1}>{entry.categoryName}</VizChip>}
         <span className="t-value font-medium">{entry.name}</span>
         {entry.familyName && (
-          <span className="t-label text-[var(--r-ink-2)]">
+          <span className="t-label text-ink-2">
             {entry.familyName}
             {entry.typeName ? ` : ${entry.typeName}` : ""}
           </span>
         )}
-        <span className="face-mono t-caption ml-auto text-[var(--r-ink-2)]">{entry.elementId}</span>
+        <span className="face-mono t-caption ml-auto text-ink-2">{entry.elementId}</span>
       </div>
       {(entry.levelName || entry.mark) && (
         <div className="mt-1.5">
@@ -455,7 +455,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       cell: (w) => (
         <span title={w.targetElementUniqueId}>
           {w.targetElementName ?? w.targetElementId}{" "}
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">{w.targetElementId}</span>
+          <span className="face-mono t-caption text-ink-2">{w.targetElementId}</span>
         </span>
       ),
     },
@@ -465,10 +465,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       header: "source",
       cell: (w) => {
         const def = defs.get(w.definitionId);
-        if (!def)
-          return (
-            <span className="face-mono t-caption text-[var(--r-ink-2)]">{w.definitionId}</span>
-          );
+        if (!def) return <span className="face-mono t-caption text-ink-2">{w.definitionId}</span>;
         return `${def.sourceParameter.name ?? def.sourceParameter.identity?.name ?? "?"} (${def.relationship}, ${def.reducer})`;
       },
     },
@@ -573,7 +570,7 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
       cell: (p) => (
         <span title={p.definition.identity.key}>
           {p.definition.identity.name}{" "}
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption text-ink-2">
             {p.definition.isInstance == null ? "" : p.definition.isInstance ? "inst" : "type"}
           </span>
         </span>
@@ -590,7 +587,7 @@ function FamilyMatrix({ family }: { family: RevitMatrixLoadedFamilies.Res.Family
           /* DERIVED is not a state (R4): a formula value rides the ink ladder; the
              formula itself is one hover away. */
           <span
-            className={hasFormula ? "text-[var(--r-ink-2)]" : undefined}
+            className={hasFormula ? "text-ink-2" : undefined}
             title={hasFormula && p.formula ? `= ${p.formula}` : undefined}
           >
             {value ?? "∅"}
@@ -675,9 +672,7 @@ function ParameterCoverageView({ data }: OpViewProps) {
           <div className="mb-1 flex items-baseline gap-2">
             <span className="t-value font-medium">{entry.identity.name}</span>
             {entry.categoryName && <VizChip viz={1}>{entry.categoryName}</VizChip>}
-            <span className="face-mono t-caption text-[var(--r-ink-2)]">
-              {entry.elementCount} elements
-            </span>
+            <span className="face-mono t-caption text-ink-2">{entry.elementCount} elements</span>
           </div>
           {entry.elementCount > 0 ? (
             <CoverageBar
@@ -727,7 +722,7 @@ function ScheduleCoverageView({ data }: OpViewProps) {
       <Section
         label="schedule coverage"
         aside={
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption text-ink-2">
             {res.scheduleCount} schedules considered
           </span>
         }
@@ -791,7 +786,7 @@ function FamilyEditorSnapshotView({ data }: OpViewProps) {
       cell: (p) => (
         <span title={p.identity?.key}>
           {p.name}{" "}
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption text-ink-2">
             {p.isInstance ? "inst" : "type"}
             {p.isShared ? " · shared" : ""}
             {p.isReadOnly ? " · ro" : ""}
@@ -804,18 +799,14 @@ function FamilyEditorSnapshotView({ data }: OpViewProps) {
       header: "formula",
       cell: (p) =>
         /* derived rides the ink ladder (R4); the ƒ-ish "=" prefix is the route's word. */
-        p.formula ? (
-          <span className="face-mono t-value text-[var(--r-ink-2)]">= {p.formula}</span>
-        ) : (
-          ""
-        ),
+        p.formula ? <span className="face-mono t-value text-ink-2">= {p.formula}</span> : "",
     },
     ...typeNames.map((typeName) => ({
       key: `t:${typeName}`,
       header:
         typeName === res.currentTypeName ? (
           <span>
-            {typeName} <span className="face-mono t-caption text-[var(--r-ink-2)]">current</span>
+            {typeName} <span className="face-mono t-caption text-ink-2">current</span>
           </span>
         ) : (
           typeName
@@ -883,9 +874,9 @@ function FamilyModelView({ data }: OpViewProps) {
       )}
       {ev.diagnostics.length > 0 ? (
         <Section label="diagnostics">
-          <div className="rounded-[var(--radius)] border border-[var(--r-line)]">
+          <div className="rounded-md border border-line">
             {ev.diagnostics.map((d, i) => (
-              <div key={i} className="border-b border-[var(--r-line)] px-2 py-1">
+              <div key={i} className="border-b border-line px-2 py-1">
                 <span
                   className="face-mono t-caption"
                   style={{

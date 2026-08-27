@@ -585,7 +585,7 @@ export function Lens({
               {moments.length === 0 ? (
                 <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
                   {/* Pea's name wears the agent identity — never blue (design-lang law). */}
-                  <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-[var(--r-pea)]">
+                  <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-pea">
                     Pea
                   </h1>
                   <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
@@ -613,7 +613,7 @@ export function Lens({
             onOpenChange={onSideOpenChange}
             onWidthChange={onSideResize}
             header={sideHead}
-            className="lens-side-pane col-start-1 sticky top-0 border-r-[0.5px] bg-[var(--r-artifact)] [--r-on:var(--r-artifact)]"
+            className="lens-side-pane col-start-1 sticky top-0 border-r-[0.5px] bg-artifact [--r-on:var(--r-artifact)]"
           >
             {mode === "trace" ? (
               <div className="lens-trace-frame">
@@ -677,14 +677,14 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
   return (
     <div className="mt-[14px] mr-6 ml-[34px] grid gap-2">
       {plan.length > 0 ? (
-        <ArtifactFrame head={<span className="t-label t-upper text-[var(--r-ink-2)]">Plan</span>}>
+        <ArtifactFrame head={<span className="t-label t-upper text-ink-2">Plan</span>}>
           {plan.map((entry) => (
             <div
               className={`${PLAN_ITEM} ${
                 entry.status === "completed"
-                  ? "text-[var(--r-ink-2)]"
+                  ? "text-ink-2"
                   : entry.status === "pending"
-                    ? "text-[var(--r-ink-mute)]"
+                    ? "text-ink-mute"
                     : ""
               }`}
               key={entry.id}
@@ -694,10 +694,10 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
               <span
                 className={
                   entry.status === "completed"
-                    ? "text-[var(--r-done)]"
+                    ? "text-done"
                     : entry.status === "in_progress"
-                      ? "text-[var(--r-ink-2)]"
-                      : "text-[var(--r-ink-mute)]"
+                      ? "text-ink-2"
+                      : "text-ink-mute"
                 }
               >
                 {entry.status === "completed" ? "✓" : entry.status === "in_progress" ? "▸" : "○"}
@@ -712,7 +712,7 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
         <ArtifactFrame
           head={
             <button
-              className="flex w-full cursor-pointer items-center justify-between border-0 bg-transparent p-0 t-label t-upper text-[var(--r-ink-2)]"
+              className="flex w-full cursor-pointer items-center justify-between border-0 bg-transparent p-0 t-label t-upper text-ink-2"
               type="button"
               title="Show or hide the resolved system prompt pea started with"
               onClick={() => setOpen((value) => !value)}
@@ -723,7 +723,7 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
           }
         >
           {open ? (
-            <pre className="m-0 t-label face-mono px-[9px] py-2 leading-[1.5] break-words whitespace-pre-wrap text-[var(--r-ink-2)]">
+            <pre className="m-0 t-label face-mono px-[9px] py-2 leading-[1.5] break-words whitespace-pre-wrap text-ink-2">
               {systemPrompt.content}
             </pre>
           ) : null}
@@ -731,11 +731,9 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
       ) : null}
 
       {showContext && state.inspector.contextEntries.length > 0 ? (
-        <ArtifactFrame
-          head={<span className="t-label t-upper text-[var(--r-ink-2)]">Context injected</span>}
-        >
+        <ArtifactFrame head={<span className="t-label t-upper text-ink-2">Context injected</span>}>
           {state.inspector.contextEntries.map((entry) => (
-            <div className={`${PLAN_ITEM} text-[var(--r-ink-2)]`} key={entry.id}>
+            <div className={`${PLAN_ITEM} text-ink-2`} key={entry.id}>
               <FactChip title="Injected by the harness into pea's context this session">
                 ctx
               </FactChip>
@@ -749,8 +747,7 @@ function ContextStrip({ state, depth }: { state: WorkbenchState; depth: "read" |
 }
 
 // Plan/context row chrome inside a ContextStrip ArtifactFrame.
-const PLAN_ITEM =
-  "flex gap-[9px] border-b-[0.5px] border-[var(--r-line)] px-3 py-1.5 t-prose last:border-b-0";
+const PLAN_ITEM = "flex gap-[9px] border-b-[0.5px] border-line px-3 py-1.5 t-prose last:border-b-0";
 
 /** Trace-lane row: header strip ONLY (fixed height). Bodies render in the inspect window. */
 function TraceCellView({
