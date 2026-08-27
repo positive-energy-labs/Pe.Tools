@@ -87,7 +87,7 @@ export function createSettingsStore(deps: {
   Reflect.set(runtime.layer, "keepAlive", false);
   const lane: Lane = "read";
 
-  const liveWriter = docWriter(settingsRouteState, deps.scope);
+  const liveWriter = docWriter(settingsRouteState, deps.scope, deps.registry);
   const apply = deps.apply ?? liveWriter.apply;
   const command = deps.command ?? liveWriter.command;
   const settingsSlice = owned("slice/settings", deps.slice ?? docAtom(settingsRouteState, deps.scope));

@@ -116,6 +116,20 @@ describe("targeting world", () => {
       expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
   });
 
+  it("renders a malformed world without a session or SDK row", () => {
+    expect(
+      worldFeed([
+        {
+          id: "orphan",
+          custody: "observed",
+          phase: "ready",
+          pid: 77,
+          openDocumentCount: 0,
+        },
+      ]).options,
+    ).toMatchObject([{ id: "session:Revit 77", label: "Revit 77" }]);
+  });
+
   it("refuses every lifecycle verb for an observed world before HTTP", async () => {
     const request = vi.spyOn(globalThis, "fetch");
     const observed: WorldFacts = {

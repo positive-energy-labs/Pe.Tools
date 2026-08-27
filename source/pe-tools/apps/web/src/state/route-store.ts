@@ -218,6 +218,7 @@ export interface Scope {
 
 export interface Slice<D> {
   doc: D | null;
+  revision: number | null;
   hydrated: boolean;
   connected: boolean | null;
   error: string | null;
@@ -226,7 +227,7 @@ export interface Slice<D> {
 
 const peInfoSchema = z.object({ controllerId: z.string(), resourceId: z.string() });
 type WireMessage =
-  | { kind: "doc"; doc: unknown }
+  | { kind: "doc"; doc: unknown; revision: number }
   | { kind: "pea"; active: boolean }
   | { kind: "connected"; value: boolean };
 
@@ -259,6 +260,7 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
   const { spec, scope } = key;
   const initial: Slice<RouteDocOf<typeof spec>> = {
     doc: null,
+    revision: null,
     hydrated: false,
     connected: null,
     error: null,
@@ -278,9 +280,13 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
               .session(info.resourceId);
             const hydrated = await fetch(routeUrl(spec.route, "read", scope));
             if (!hydrated.ok) throw Error(`route workspace read ${hydrated.status}`);
-            const payload = (await hydrated.json()) as { doc?: unknown };
-            if ("doc" in payload)
-              Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
+            const payload = (await hydrated.json()) as { doc?: unknown; revision?: unknown };
+            if ("doc" in payload && Number.isInteger(payload.revision))
+              Queue.offerUnsafe(queue, {
+                kind: "doc",
+                doc: payload.doc ?? null,
+                revision: payload.revision as number,
+              });
             const unsubscribeSession = await session.subscribe({
               onEvent: (raw: unknown) => {
                 const event = parseWireEvent(raw);
@@ -296,9 +302,13 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
             events.onerror = () => Queue.offerUnsafe(queue, { kind: "connected", value: false });
             events.onmessage = (raw) => {
               try {
-                const payload = JSON.parse(raw.data) as { doc?: unknown };
-                if ("doc" in payload)
-                  Queue.offerUnsafe(queue, { kind: "doc", doc: payload.doc ?? null });
+                const payload = JSON.parse(raw.data) as { doc?: unknown; revision?: unknown };
+                if ("doc" in payload && Number.isInteger(payload.revision))
+                  Queue.offerUnsafe(queue, {
+                    kind: "doc",
+                    doc: payload.doc ?? null,
+                    revision: payload.revision as number,
+                  });
               } catch {
                 // The next valid snapshot remains authoritative.
               }
@@ -323,6 +333,7 @@ const routeAtom = Atom.family((key: RouteAtomKey) => {
               : {
                   ...state,
                   doc: parseRouteDoc(message.doc, spec),
+                  revision: message.revision,
                   hydrated: true,
                 },
       ),
@@ -337,7 +348,12 @@ export function docAtom<S extends RouteStateSpec<any>>(
   return routeAtom(new RouteAtomKey(spec, scope));
 }
 
-export function docWriter<S extends RouteStateSpec<any>>(spec: S, scope: Scope) {
+export function docWriter<S extends RouteStateSpec<any>>(
+  spec: S,
+  scope: Scope,
+  registry: AtomRegistry.AtomRegistry,
+) {
+  const slice = docAtom(spec, scope);
   const write = async (
     operation: "apply" | "command",
     body: Record<string, unknown>,
@@ -359,7 +375,15 @@ export function docWriter<S extends RouteStateSpec<any>>(spec: S, scope: Scope) 
     }
   };
   return {
-    apply: (patches: RouteStatePatch[]) => write("apply", { patches }),
+    apply: (patches: RouteStatePatch[]) => {
+      const current = registry.get(slice);
+      if (!AsyncResult.isSuccess(current) || current.value.revision === null)
+        return Promise.resolve<RouteStateWriteResult>({
+          ok: false,
+          error: "route document is not hydrated",
+        });
+      return write("apply", { patches, expectedRevision: current.value.revision });
+    },
     command: (name: keyof S["commands"] & string, input?: unknown) =>
       write("command", { command: name, input: input ?? {} }),
   };

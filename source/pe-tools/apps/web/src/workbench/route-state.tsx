@@ -70,7 +70,7 @@ function createRouteStateStore<TSchema extends z.ZodType>(
   scope: Scope,
 ) {
   const core = createRouteStoreCore(`card/${spec.route}`, registry);
-  const writer = docWriter(spec, scope);
+  const writer = docWriter(spec, scope, registry);
   const lastCommand = core.owned("page/last-command", Atom.make<LastCommand>(null));
   const run = (verb: string, write: () => Promise<RouteStateWriteResult>) =>
     core.runVerb(verb, async () => {

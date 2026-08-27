@@ -59,6 +59,7 @@ const createStore = (
     Atom.make(
       AsyncResult.success({
         doc: initial,
+        revision: 0,
         hydrated: true,
         connected: true,
         error: null,
@@ -71,6 +72,7 @@ const createStore = (
       publishedSlice as Atom.Writable<AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>>,
       AsyncResult.success({
         doc: document,
+        revision: 0,
         hydrated: true,
         connected: true,
         error: null,
@@ -286,6 +288,7 @@ describe("takeoff route store", () => {
       AsyncResult.success(
         {
           doc: { bindings: {}, snapshot, staged: [] },
+          revision: 0,
           hydrated: true,
           connected: true,
           error: null,
@@ -349,6 +352,7 @@ describe("takeoff route store", () => {
           },
           staged: [],
         },
+        revision: 0,
         hydrated: true,
         connected: true,
         error: null,
@@ -396,6 +400,7 @@ describe("takeoff route store", () => {
           },
           staged: [],
         },
+        revision: 0,
         hydrated: true,
         connected: true,
         error: null,
@@ -515,6 +520,7 @@ describe("takeoff route store", () => {
           snapshot: h.snapshot,
           staged: [],
         },
+        revision: 0,
         hydrated: true,
         connected: true,
         error: null,
@@ -770,6 +776,7 @@ describe("takeoff route store", () => {
     const slice = Atom.make(
       AsyncResult.success({
         doc: { bindings: {}, snapshot: fixture, staged: [] },
+        revision: 0,
         hydrated: true,
         connected: true,
         error: null,

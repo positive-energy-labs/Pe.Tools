@@ -39,6 +39,7 @@ const routeStatePatchSchema = z.object({
 });
 const routeStateApplyBodySchema = z.object({
   patches: z.array(routeStatePatchSchema),
+  expectedRevision: z.number().optional(),
 });
 const routeStateCommandBodySchema = z.object({
   command: z.string(),
@@ -204,7 +205,13 @@ export async function buildAgentControllerApp(
       }
       try {
         return c.json(
-          await routeWorkspace.apply(scope, c.req.param("route"), actor, parsed.data.patches),
+          await routeWorkspace.apply(
+            scope,
+            c.req.param("route"),
+            actor,
+            parsed.data.patches,
+            parsed.data.expectedRevision,
+          ),
         );
       } catch (error) {
         return c.json({ ok: false, error: errorMessage(error) }, 403);

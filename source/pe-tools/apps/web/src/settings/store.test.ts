@@ -32,6 +32,7 @@ function make() {
     get(changed);
     return AsyncResult.success({
       doc: document,
+      revision: 0,
       hydrated: true,
       connected: true,
       error: null,

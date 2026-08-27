@@ -73,6 +73,7 @@ function make(
     slice: Atom.make(
       AsyncResult.success({
         doc: routeDocument,
+        revision: options.hydrated === false ? null : 0,
         hydrated: options.hydrated ?? true,
         connected: true,
         error: null,

@@ -11,8 +11,10 @@ import { inspectAtomRegistry } from "./atom-inspect";
 import {
   createRouteStoreCore,
   docAtom,
+  docWriter,
   feed,
   hostRead,
+  type Slice,
   unbound,
   VerbRefused,
 } from "./route-store";
@@ -176,5 +178,49 @@ describe("route store kit", () => {
     expect(docAtom(spec, { documentAddress: address("C:\\Models\\Two.rvt") })).not.toBe(
       docAtom(spec, { documentAddress: address("C:\\Models\\One.rvt") }),
     );
+  });
+
+  it("sends the hydrated slice revision with every apply", async () => {
+    const schema = z.object({ value: z.string() });
+    const spec = {
+      route: "test-route",
+      title: "Test",
+      description: "Test",
+      schema,
+      agentWriteMask: [],
+      commands: {},
+    } satisfies RouteStateSpec<typeof schema>;
+    let current: AsyncResult.AsyncResult<
+      Slice<z.infer<typeof schema>>,
+      Error
+    > = AsyncResult.initial();
+    const registry = { get: () => current } as unknown as AtomRegistry.AtomRegistry;
+    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const writer = docWriter(spec, { documentAddress: address("C:\\Models\\One.rvt") }, registry);
+
+    await expect(writer.apply([{ path: ["value"], value: "next" }])).resolves.toMatchObject({
+      ok: false,
+      error: "route document is not hydrated",
+    });
+    expect(request).not.toHaveBeenCalled();
+    current = AsyncResult.success({
+      doc: { value: "before" },
+      revision: 7,
+      hydrated: true,
+      connected: true,
+      error: null,
+      peaActive: false,
+    });
+    await writer.apply([{ path: ["value"], value: "next" }]);
+
+    expect(JSON.parse(request.mock.calls[0]![1]!.body as string)).toEqual({
+      patches: [{ path: ["value"], value: "next" }],
+      expectedRevision: 7,
+    });
   });
 });

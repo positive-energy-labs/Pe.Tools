@@ -37,7 +37,7 @@ export function createOpsStore(deps: {
 }) {
   const core = createRouteStoreCore("ops", deps.registry);
   const { registry, owned, write, runVerb } = core;
-  const writer = docWriter(opsRouteState, deps.scope);
+  const writer = docWriter(opsRouteState, deps.scope, deps.registry);
   const apply = deps.apply ?? writer.apply;
   const call = deps.call ?? callHostDynamic;
   const now = deps.now ?? (() => new Date());

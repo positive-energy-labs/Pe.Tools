@@ -11,6 +11,7 @@ import {
 
 import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions, type SessionFacts } from "#/host/target";
+import { appAtomRegistry } from "#/state/registry";
 import { docWriter, type Scope } from "#/state/route-store";
 
 export const FAMILY_MODULE = { moduleKey: "FamilyFoundry", rootKey: "models" };
@@ -34,8 +35,8 @@ export interface FamilyHost {
 }
 
 export function createLiveFamilyHost(scope: Scope): FamilyHost {
-  const settings = docWriter(settingsRouteState, scope);
-  const family = docWriter(familyRouteState, scope);
+  const settings = docWriter(settingsRouteState, scope, appAtomRegistry);
+  const family = docWriter(familyRouteState, scope, appAtomRegistry);
   return {
     async sessions() {
       return fromBridgeSessions((await callHostRpc("bridge.sessions.list", undefined)).sessions);

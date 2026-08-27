@@ -105,13 +105,14 @@ export class RouteWorkspace {
     route: string,
     actor: RouteWorkspaceActor,
     patches: RouteWorkspacePatch[],
+    expectedRevision?: number,
   ): Promise<RouteWorkspaceApplyResult> {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
 
     return this.#serialized(scope, route, async () => {
       const envelope = await this.#load(scope, registration.spec);
-      const landed = applyPatches(registration.spec, envelope, actor, patches);
+      const landed = applyPatches(registration.spec, envelope, actor, patches, expectedRevision);
       if (!landed.ok) {
         await this.#publish({
           type: "route_workspace",

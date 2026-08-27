@@ -1,3 +1,4 @@
+using System.Reflection;
 using Pe.Revit.Operations;
 using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.HostContracts.SettingsStorage;
@@ -6,6 +7,11 @@ namespace Pe.Revit.Tests;
 
 [TestFixture]
 public sealed class OpRegistryTests {
+    private sealed class BrokenAssembly : Assembly {
+        public override Type[] GetTypes() =>
+            throw new ReflectionTypeLoadException(Array.Empty<Type?>(), Array.Empty<Exception?>());
+    }
+
     [Op(
         "test.registry.probe",
         Does = "Prove attributed handlers are discovered.",
@@ -42,6 +48,11 @@ public sealed class OpRegistryTests {
         Assert.That(OpRegistry.TryGet("test.family-document", out var familyOp), Is.True);
         Assert.That(familyOp.Definition.Needs, Is.EqualTo(OpNeeds.FamilyDocument));
         Assert.That(familyOp.Thread, Is.EqualTo(OpThread.Revit));
+    }
+
+    [Test]
+    public void Registration_does_not_hide_incomplete_type_discovery() {
+        Assert.Throws<ReflectionTypeLoadException>(() => OpRegistry.RegisterFrom(new BrokenAssembly()));
     }
 
     [Test]

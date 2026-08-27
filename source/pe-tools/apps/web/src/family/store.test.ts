@@ -51,6 +51,7 @@ const registries: AtomRegistry.AtomRegistry[] = [];
 afterEach(() => registries.splice(0).forEach((registry) => registry.dispose()));
 const slice = <D>(doc: D) => ({
   doc,
+  revision: 0,
   hydrated: true,
   connected: null,
   error: null,

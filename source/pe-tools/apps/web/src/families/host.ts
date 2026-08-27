@@ -8,6 +8,7 @@ import {
 import { callHostRpc } from "#/host/client";
 import { FF_PROFILE_MODULE, type FfProjectData } from "#/host/familyfoundry";
 import { fromBridgeSessions, type SessionFacts } from "#/host/target";
+import { appAtomRegistry } from "#/state/registry";
 import { docWriter, type Scope } from "#/state/route-store";
 
 export type FamiliesDraft = {
@@ -28,7 +29,7 @@ export interface FamiliesHost {
 }
 
 export function createLiveFamiliesHost(scope: Scope): FamiliesHost {
-  const writer = docWriter(familiesRouteState, scope);
+  const writer = docWriter(familiesRouteState, scope, appAtomRegistry);
   return {
     async sessions() {
       return fromBridgeSessions((await callHostRpc("bridge.sessions.list", undefined)).sessions);

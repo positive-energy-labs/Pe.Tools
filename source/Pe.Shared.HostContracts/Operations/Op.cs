@@ -121,6 +121,14 @@ public static class OpRegistry {
         AppDomain.CurrentDomain.GetAssemblies()
             .Where(assembly => !assembly.IsDynamic)
             .Where(assembly => assembly.GetName().Name?.StartsWith("Pe.", StringComparison.Ordinal) == true)
+            // A type can only declare [Op] methods when its assembly directly references this
+            // contract assembly. Avoid reflecting across unrelated feature assemblies: optional
+            // feature dependencies need not load merely because the host bridge reconnects.
+            .Where(assembly => ReferenceEquals(assembly, typeof(OpRegistry).Assembly)
+                || assembly.GetReferencedAssemblies().Any(reference =>
+                    string.Equals(reference.Name,
+                        typeof(OpRegistry).Assembly.GetName().Name,
+                        StringComparison.Ordinal)))
             .ToArray()
     );
 
@@ -148,7 +156,7 @@ public static class OpRegistry {
     private static Dictionary<string, Op> Discover(IEnumerable<Assembly> assemblies, object? target) {
         var discovered = new Dictionary<string, Op>(StringComparer.Ordinal);
         foreach (var assembly in assemblies) {
-            foreach (var type in EnumerateTypes(assembly)) {
+            foreach (var type in assembly.GetTypes()) {
                 foreach (var method in type.GetMethods(
                              BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)) {
                     var attribute = GetOpAttribute(method);
@@ -173,14 +181,6 @@ public static class OpRegistry {
         if (discovered.TryGetValue(op.Key, out var existing) && !existing.SameHandler(op))
             throw new InvalidOperationException($"Bridge op '{op.Key}' is registered twice with different handlers.");
         discovered[op.Key] = op;
-    }
-
-    private static IEnumerable<Type> EnumerateTypes(Assembly assembly) {
-        try {
-            return assembly.GetTypes();
-        } catch (ReflectionTypeLoadException exception) {
-            return exception.Types.Where(type => type != null).Cast<Type>();
-        }
     }
 
     private static OpAttribute? GetOpAttribute(MethodInfo method) {

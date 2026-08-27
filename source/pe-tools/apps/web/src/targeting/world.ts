@@ -53,7 +53,7 @@ const worldLabel = (
 ) => world.session?.sdkSessionId ?? world.row?.id ?? `Revit ${world.pid ?? 0}`;
 
 const worldOption = (world: WorldFacts, sessions: readonly SessionFacts[]): WorldOption => ({
-  id: world.session ? mintSelector(world.session, sessions) : `session:${world.row!.id}`,
+  id: world.session ? mintSelector(world.session, sessions) : `session:${worldLabel(world)}`,
   label: worldLabel(world),
   sub: world.custody,
   world,

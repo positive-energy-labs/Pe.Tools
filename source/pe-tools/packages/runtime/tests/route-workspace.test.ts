@@ -164,6 +164,20 @@ test("apply and command serialize without losing either update", async () => {
   });
 });
 
+test("apply refuses a revision that moved", async () => {
+  const { store } = memoryStore();
+  const module = workspace(store);
+  const revision = (await module.read(documentA, "test-route"))!.revision;
+
+  expect(
+    await module.apply(documentA, "test-route", "human", [{ path: ["count"], value: 1 }], revision),
+  ).toMatchObject({ ok: true });
+  expect(
+    await module.apply(documentA, "test-route", "human", [{ path: ["count"], value: 2 }], revision),
+  ).toMatchObject({ ok: false, error: "the document moved to r1" });
+  expect((await module.read(documentA, "test-route"))?.doc).toMatchObject({ count: 1 });
+});
+
 test("an abandoned external mutation becomes outcomeUnknown and recovery clears it", async () => {
   const { store } = memoryStore();
   const started = deferred<void>();
