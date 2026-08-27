@@ -10,6 +10,7 @@ import {
   type RouteStatePatch,
   type RouteStateSpec,
   type RouteStateWriteResult,
+  type RouteWriteKind,
 } from "@pe/agent-contracts";
 
 export type { RouteStatePatch, RouteStateWriteResult } from "@pe/agent-contracts";
@@ -29,6 +30,7 @@ export interface RouteStateHandle<T> {
   peaActive: boolean;
   connected: boolean | null;
   error: string | null;
+  failureKind: RouteWriteKind | null;
   busy: string | null;
   lastCommand: LastCommand;
 }
@@ -61,6 +63,7 @@ export function useRouteState<TSchema extends z.ZodType>(
             () => "wire failed",
           )
         : (wire?.error ?? null)),
+    failureKind: failure?.kind ?? (wireFailure || wire?.error ? "error" : null),
     busy: busy?.id ?? null,
     lastCommand,
   };

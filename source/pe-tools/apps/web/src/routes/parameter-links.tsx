@@ -285,7 +285,7 @@ function ParameterLinksWorkspace({
           ) : outcome ? (
             <OutcomeLine kind={outcome.kind} label={outcome.text} />
           ) : route.error ? (
-            <OutcomeLine kind="error" label={route.error} />
+            <OutcomeLine kind={route.failureKind ?? "error"} label={route.error} />
           ) : null}
         </div>
       )}
