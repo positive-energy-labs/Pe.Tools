@@ -103,9 +103,7 @@ function DesignSystem() {
         <div className="page-wrap flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
             <span className="t-title font-pe-display">Design system</span>
-            <span className="t-caption t-upper text-ink-mute">
-              the language, catalogued
-            </span>
+            <span className="t-caption t-upper text-ink-mute">the language, catalogued</span>
             <Link to="/" className="t-label text-nav hover:underline">
               ← tools
             </Link>
@@ -616,9 +614,7 @@ function Tokens() {
               />
               <span className="face-mono t-caption truncate">{t.token}</span>
               <span className="t-label min-w-0 text-ink-2">{t.means}</span>
-              <span className="t-caption col-span-3 text-ink-mute sm:col-span-1">
-                {t.modes}
-              </span>
+              <span className="t-caption col-span-3 text-ink-mute sm:col-span-1">{t.modes}</span>
             </div>
           ))}
         </div>
@@ -1134,9 +1130,7 @@ function RealTable() {
         width: "w-24",
         facet: (r) => r.scope,
         cell: (r) => (
-          <span className="face-mono t-caption block px-1.5 py-1 text-ink-2">
-            {r.scope}
-          </span>
+          <span className="face-mono t-caption block px-1.5 py-1 text-ink-2">{r.scope}</span>
         ),
       },
       {
@@ -1161,9 +1155,7 @@ function RealTable() {
         right: true,
         sort: (r) => r.ageMin ?? Number.MAX_SAFE_INTEGER,
         cell: (r) => (
-          <span className="face-mono t-caption block px-1.5 py-1 text-ink-2">
-            {ageText(r)}
-          </span>
+          <span className="face-mono t-caption block px-1.5 py-1 text-ink-2">{ageText(r)}</span>
         ),
       },
     ],
@@ -1274,9 +1266,7 @@ function RealTable() {
       </ArtifactFrame>
 
       <div className="flex flex-col gap-1.5 pt-1">
-        <span className="t-caption t-upper text-ink">
-          what MasterTable cannot express
-        </span>
+        <span className="t-caption t-upper text-ink">what MasterTable cannot express</span>
         <GapNote>
           <strong>the clause&apos;s residue.</strong> The cell-state clause (ruled 2026-08-16)
           discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome —

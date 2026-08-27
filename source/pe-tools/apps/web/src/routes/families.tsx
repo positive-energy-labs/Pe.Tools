@@ -358,9 +358,7 @@ function NamePicker({
       <ComboboxContent anchor={anchor} className="rounded-md">
         {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
             "you typed a string that matched nothing" — plain muted text, no story/exit. */}
-        <ComboboxEmpty className="face-mono t-label text-ink-mute">
-          no matches
-        </ComboboxEmpty>
+        <ComboboxEmpty className="face-mono t-label text-ink-mute">no matches</ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
             <ComboboxItem key={name} value={name} className="face-mono pr-7 t-label">
@@ -1202,10 +1200,7 @@ function FamiliesRoute() {
                 );
               })}
               {outsideProfile.map((family) => (
-                <tr
-                  key={`outside-${family.familyId}`}
-                  className="border-b border-line opacity-60"
-                >
+                <tr key={`outside-${family.familyId}`} className="border-b border-line opacity-60">
                   <td className="w-8 py-0.5 text-center">
                     <span className="face-mono t-value text-muted-foreground">✕</span>
                   </td>

@@ -197,9 +197,7 @@ function Grid<R extends string, C extends string>({
       ))}
       {rows.map((r) => (
         <Fragment key={r}>
-          <span className="face-mono t-caption whitespace-nowrap text-ink-mute">
-            {r}
-          </span>
+          <span className="face-mono t-caption whitespace-nowrap text-ink-mute">{r}</span>
           {cols.map((c) => (
             <span key={c} className="flex min-w-0 items-center">
               {cell(r, c)}
@@ -417,9 +415,7 @@ function LangGroup() {
         <Bound className="w-full max-w-2xl">
           <AddressingBar
             name="family"
-            sentence={
-              <span className="t-label text-ink-2">editing profiles/door.pea.json</span>
-            }
+            sentence={<span className="t-label text-ink-2">editing profiles/door.pea.json</span>}
             facts={
               <FactChip tone="caution" title="Unsaved draft — two edits not on disk.">
                 unsaved draft · 2
@@ -694,9 +690,7 @@ function LangGroup() {
         <div className="flex flex-col">
           {OUTCOME_SPECS.map((o) => (
             <div key={o.kind} className="flex items-baseline gap-3">
-              <span className="face-mono t-caption w-16 shrink-0 text-ink-mute">
-                {o.kind}
-              </span>
+              <span className="face-mono t-caption w-16 shrink-0 text-ink-mute">{o.kind}</span>
               <OutcomeLine kind={o.kind} label={o.label} />
             </div>
           ))}

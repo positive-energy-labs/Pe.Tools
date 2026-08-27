@@ -106,11 +106,10 @@ function ProposalFlow() {
         <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-ink-2">
           Accept, deny or undo anything in pea&apos;s card and watch the row below it move. Both
           surfaces render every value through one function, so the card cannot teach a mark the
-          table does not draw.{" "}
-          <strong className="font-normal text-ink">Connected Load</strong> is the
-          crucible the design-lang round never forced: pea proposes a value <em>and</em> the model
-          disagrees with what is on record — two marks on one cell, which precedence asserts and
-          nothing had ever proven.
+          table does not draw. <strong className="font-normal text-ink">Connected Load</strong> is
+          the crucible the design-lang round never forced: pea proposes a value <em>and</em> the
+          model disagrees with what is on record — two marks on one cell, which precedence asserts
+          and nothing had ever proven.
         </p>
 
         {/* ── scale 1 · pea's card, inline in the thread ───────────────────────────────── */}

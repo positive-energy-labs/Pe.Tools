@@ -316,11 +316,14 @@
   --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
 }
 
-@theme inline {
-  --font-sans: "Open Sans", system-ui, -apple-system, sans-serif;
+@theme {
   --font-pe: "Open Sans", system-ui, -apple-system, sans-serif;
   --font-pe-display: "Spectral", Georgia, "Times New Roman", serif;
   --font-pe-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+}
+
+@theme inline {
+  --font-sans: "Open Sans", system-ui, -apple-system, sans-serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);

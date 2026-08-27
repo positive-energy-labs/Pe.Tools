@@ -257,9 +257,7 @@ function OpsPlayground() {
                         <div className="t-value min-w-0 truncate font-medium">
                           {glance.displayName}
                         </div>
-                        <div className="face-mono t-caption truncate text-ink-2">
-                          {glance.key}
-                        </div>
+                        <div className="face-mono t-caption truncate text-ink-2">{glance.key}</div>
                       </button>
                     </li>
                   );
@@ -271,9 +269,7 @@ function OpsPlayground() {
             <section key={domain}>
               <h2 className="t-label t-upper sticky top-0 z-10 bg-page px-3 pb-1 pt-3 text-ink-2">
                 {domain}
-                <span className="face-mono t-caption ml-1.5 text-ink-2">
-                  {members.length}
-                </span>
+                <span className="face-mono t-caption ml-1.5 text-ink-2">{members.length}</span>
               </h2>
               <ul className="px-1">
                 {members.map((op) => {
@@ -314,9 +310,7 @@ function OpsPlayground() {
                             />
                           )}
                         </div>
-                        <div className="face-mono t-caption truncate text-ink-2">
-                          {op.key}
-                        </div>
+                        <div className="face-mono t-caption truncate text-ink-2">{op.key}</div>
                       </button>
                     </li>
                   );
@@ -356,15 +350,11 @@ function OpsPlayground() {
                   synthetic
                 </FactChip>
               </div>
-              <p className="face-mono t-caption mt-0.5 text-ink-2">
-                {selectedGlance.key}
-              </p>
+              <p className="face-mono t-caption mt-0.5 text-ink-2">{selectedGlance.key}</p>
               <p className="t-prose mt-1 max-w-2xl text-ink-2">{selectedGlance.blurb}</p>
               {selectedGlance.contractNote && (
                 <p className="t-label mt-1 max-w-2xl text-ink-2">
-                  <span className="face-mono t-caption t-upper mr-1 text-ink-2">
-                    contract
-                  </span>
+                  <span className="face-mono t-caption t-upper mr-1 text-ink-2">contract</span>
                   {selectedGlance.contractNote}
                 </p>
               )}
@@ -421,9 +411,7 @@ function OpsPlayground() {
               </div>
               <p className="face-mono t-caption mt-0.5 text-ink-2">{selected.key}</p>
               {selected.description && (
-                <p className="t-prose mt-1 max-w-2xl text-ink-2">
-                  {selected.description}
-                </p>
+                <p className="t-prose mt-1 max-w-2xl text-ink-2">{selected.description}</p>
               )}
             </header>
 
@@ -824,10 +812,7 @@ function ProjectedOutput({ value }: { value: unknown }) {
           <thead className="sticky top-0 bg-recess [--r-on:var(--r-recess)]">
             <tr>
               {columns.map((column) => (
-                <th
-                  key={column}
-                  className="face-mono t-label border-b border-line-2 px-2 py-1"
-                >
+                <th key={column} className="face-mono t-label border-b border-line-2 px-2 py-1">
                   {column}
                 </th>
               ))}

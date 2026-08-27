@@ -593,9 +593,7 @@ function Page() {
                     return (
                       <tr key={world.id} className="border-t border-line">
                         <td className="py-2 pr-4">
-                          <div className="face-mono t-value italic text-ink-mute">
-                            {world.id}
-                          </div>
+                          <div className="face-mono t-value italic text-ink-mute">{world.id}</div>
                           <span className="face-mono t-caption italic text-ink-mute">
                             {yearLabel(world.year) ?? "?"} · was pid {world.pid ?? "?"}
                           </span>

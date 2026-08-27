@@ -159,9 +159,7 @@ function GrillesRoute() {
   return (
     <main className="flex h-full min-h-0 flex-col">
       <header className="flex flex-wrap items-baseline gap-2 border-b border-line px-3 py-2">
-        <span className="face-mono t-label t-upper text-ink-mute">
-          wood floor grille
-        </span>
+        <span className="face-mono t-label t-upper text-ink-mute">wood floor grille</span>
         <span className="t-value text-ink">free area calculator</span>
         <FactChip
           tone="caution"

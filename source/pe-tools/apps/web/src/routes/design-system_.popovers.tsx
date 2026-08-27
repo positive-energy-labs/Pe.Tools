@@ -106,10 +106,7 @@ function FacetFilterSpecimen() {
           <span className="truncate normal-case">{selected.label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent
-        anchor={anchorRef}
-        className="[--popup-min-width:11rem] rounded-md"
-      >
+      <ComboboxContent anchor={anchorRef} className="[--popup-min-width:11rem] rounded-md">
         <ComboboxInput placeholder="filter values…" />
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>
@@ -342,9 +339,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
             title={`Mount ${s.name} at all nine positions`}
             className={cn(
               "border px-1.5 py-0.5 font-pe-mono text-[10px]",
-              s.id === specimen.id
-                ? "border-line-2 bg-select text-ink"
-                : "border-line text-ink-2",
+              s.id === specimen.id ? "border-line-2 bg-select text-ink" : "border-line text-ink-2",
             )}
           >
             {s.name}
@@ -353,12 +348,8 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
       </div>
 
       <div className="flex flex-col gap-1.5 pt-2.5">
-        <span className="text-[10px] text-ink-mute">
-          consumers: {specimen.consumers}
-        </span>
-        <span className="font-pe-mono text-[10px] text-ink-2">
-          shape: {specimen.shape}
-        </span>
+        <span className="text-[10px] text-ink-mute">consumers: {specimen.consumers}</span>
+        <span className="font-pe-mono text-[10px] text-ink-2">shape: {specimen.shape}</span>
         {specimen.defects.map((d) => (
           <p
             key={d}

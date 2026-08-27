@@ -320,11 +320,7 @@ function App() {
               {"satellites" in tool && (
                 <p className="t-caption face-mono flex flex-wrap gap-x-2 px-1 text-muted-foreground">
                   {tool.satellites.map((satellite) => (
-                    <Link
-                      key={satellite.to}
-                      to={satellite.to}
-                      className="text-nav hover:underline"
-                    >
+                    <Link key={satellite.to} to={satellite.to} className="text-nav hover:underline">
                       /{satellite.label}
                     </Link>
                   ))}
