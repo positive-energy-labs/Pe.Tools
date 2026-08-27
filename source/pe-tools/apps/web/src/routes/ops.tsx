@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import {
@@ -453,24 +452,19 @@ function OpsPlayground() {
                 <h2 className="t-label t-upper text-[var(--r-ink-2)]">Request</h2>
                 <div className="flex gap-1">
                   {selected.requestExamples?.map((ex) => (
-                    <Button
+                    <Verb
                       key={ex.name}
-                      variant="ghost"
-                      size="xs"
                       onClick={() => setRequestSeed(ex.json, requestSchema)}
-                      title={ex.description}
-                    >
-                      {ex.name}
-                    </Button>
+                      label={ex.name}
+                      reason={ex.description}
+                    />
                   ))}
                   {requestSchema && (
-                    <Button
-                      variant="outline"
-                      size="xs"
+                    <Verb
+                      label={mode === "form" ? "Raw JSON" : "Form"}
                       onClick={() => setMode(mode === "form" ? "raw" : "form")}
-                    >
-                      {mode === "form" ? "Raw JSON" : "Form"}
-                    </Button>
+                      reason={`Switch the request editor to ${mode === "form" ? "raw JSON" : "form"}.`}
+                    />
                   )}
                 </div>
               </summary>
