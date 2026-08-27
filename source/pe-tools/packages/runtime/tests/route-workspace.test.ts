@@ -409,7 +409,7 @@ test("non-JSON and oversized results complete once but cannot replay", async () 
 
     const first = await w.cmd("human", "external", {}, 0, "request-large");
     expect(first).toMatchObject({ ok: true, revision: 0 });
-    if (typeof completed === "string") expect(first.result).toBe(completed);
+    if (typeof completed === "string") expect(first).toMatchObject({ result: completed });
     else expect(first).not.toHaveProperty("result");
     expect(await w.cmd("human", "external", {}, 99, "request-large")).toMatchObject({
       ok: false,
