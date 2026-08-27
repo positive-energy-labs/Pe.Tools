@@ -44,10 +44,10 @@ function FamilyReviewProto() {
     <div className="flex h-full min-h-0 flex-col">
       <header
         className="flex flex-col gap-1 border-b px-3 py-2"
-        style={{ borderColor: "var(--r-line)" }}
+        style={{ borderColor: "var(--pe-line)" }}
       >
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-label tracking-wide text-[var(--r-ink-mute)]">
+          <span className="face-mono t-label tracking-wide text-[var(--pe-ink-mute)]">
             FAMILY REVIEW
           </span>
           <span className="t-value">
@@ -57,7 +57,7 @@ function FamilyReviewProto() {
 
         {/* READS FROM — one run, one year, one lane, and a document named per family in the pane. */}
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-caption text-[var(--r-ink-mute)]">reads from</span>
+          <span className="face-mono t-caption text-[var(--pe-ink-mute)]">reads from</span>
           <FactChip
             tone="caution"
             dashed
@@ -81,7 +81,7 @@ function FamilyReviewProto() {
 
         {/* WRITES TO — nothing, and the two open questions that is standing in for. */}
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-caption text-[var(--r-ink-mute)]">writes to</span>
+          <span className="face-mono t-caption text-[var(--pe-ink-mute)]">writes to</span>
           <FactChip
             tone="alarm"
             title="Nothing. Not the family.json, not the document above, not any other document this json has been materialized into. A family.json may be materialized into many documents across many years and NOTHING here can sync them — that is out of scope by law, not by omission."

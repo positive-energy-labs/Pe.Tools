@@ -50,7 +50,7 @@ function issueLine(issue: { severity: string; code: string; message: string }): 
   return (
     <span
       className="face-mono t-caption"
-      style={{ color: issue.severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)" }}
+      style={{ color: issue.severity === "Info" ? "var(--pe-ink-2)" : "var(--pe-caution)" }}
     >
       {issue.severity.toLowerCase()} {issue.code}: {issue.message}
     </span>
@@ -182,7 +182,7 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
         width={w}
         height={h}
         fill="none"
-        stroke="var(--r-line-2)"
+        stroke="var(--pe-line-2)"
         strokeWidth={0.75}
         vectorEffect="non-scaling-stroke"
       />
@@ -315,7 +315,7 @@ function ParameterRows({
             </span>
             <span
               className="face-mono t-value shrink-0 text-right"
-              style={{ color: !p.found || p.isBlank ? "var(--r-caution)" : undefined }}
+              style={{ color: !p.found || p.isBlank ? "var(--pe-caution)" : undefined }}
               title={p.rawValue ?? undefined}
             >
               {!p.found ? "not found" : p.isBlank ? "blank" : (p.displayValue ?? p.value ?? "∅")}
@@ -481,7 +481,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       numeric: true,
       cell: (w) => (
         /* a proposed value that would change is STAGED, i.e. unsaved — caution ink. */
-        <span style={{ color: w.changed ? "var(--r-caution)" : undefined }}>
+        <span style={{ color: w.changed ? "var(--pe-caution)" : undefined }}>
           {linkValueText(w.proposedValue)}
         </span>
       ),
@@ -492,7 +492,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       cell: (w) => {
         const issue = issueByTarget.get(w.targetElementUniqueId);
         return issue ? (
-          <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+          <span className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
             {issue.code}
           </span>
         ) : (
@@ -542,7 +542,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       {issues
         .filter((i) => !i.targetElementUniqueId)
         .map((issue, i) => (
-          <span key={i} className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+          <span key={i} className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
             {issue.severity} {issue.code}: {issue.message}
           </span>
         ))}
@@ -882,8 +882,8 @@ function FamilyModelView({ data }: OpViewProps) {
                   style={{
                     color:
                       d.provenance === "Unresolved" || d.provenance === "Inferred"
-                        ? "var(--r-caution)"
-                        : "var(--r-ink-2)",
+                        ? "var(--pe-caution)"
+                        : "var(--pe-ink-2)",
                   }}
                 >
                   {d.code} @ {d.path}

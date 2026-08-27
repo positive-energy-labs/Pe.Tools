@@ -255,7 +255,7 @@ function Delta({
   }
   const good = goodWhenUp ? value > 0 : value < 0;
   return (
-    <span className="tabular-nums" style={{ color: good ? "var(--r-done)" : "var(--r-caution)" }}>
+    <span className="tabular-nums" style={{ color: good ? "var(--pe-done)" : "var(--pe-caution)" }}>
       {value > 0 ? "+" : ""}
       {fmtNum(value, digits)}
       {suffix}
@@ -382,7 +382,7 @@ export function ZonePanel(props: {
       if (!live) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.fillStyle = designColor("--r-page");
+      ctx.fillStyle = designColor("--pe-page");
       ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
       if (plan) {
         paintPlan(
@@ -497,7 +497,7 @@ export function ZonePanel(props: {
                 <path
                   d={d}
                   fill={residue ? "none" : tone.fill}
-                  stroke={hot || flagged ? "var(--r-alarm)" : (residue?.outline.color ?? "none")}
+                  stroke={hot || flagged ? "var(--pe-alarm)" : (residue?.outline.color ?? "none")}
                   strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
                   pointerEvents="all"
                   style={{ cursor: stagedItem ? "crosshair" : "default" }}
@@ -551,7 +551,7 @@ export function ZonePanel(props: {
                 <path
                   d={d}
                   fill={held ? tone.fill : "none"}
-                  stroke={hot || flagged ? "var(--r-alarm)" : (residue?.outline.color ?? "none")}
+                  stroke={hot || flagged ? "var(--pe-alarm)" : (residue?.outline.color ?? "none")}
                   strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
                   pointerEvents="all"
                   style={{ cursor: stagedItem ? "crosshair" : "default" }}
@@ -611,8 +611,8 @@ export function ZonePanel(props: {
           style={{
             left: Math.min(hover.x + 10, maxW - 90),
             top: Math.min(hover.y + 12, maxH - 22),
-            borderColor: hover.flagged ? "var(--r-alarm)" : "var(--r-line-2)",
-            color: hover.flagged ? "var(--r-alarm)" : "var(--foreground)",
+            borderColor: hover.flagged ? "var(--pe-alarm)" : "var(--pe-line-2)",
+            color: hover.flagged ? "var(--pe-alarm)" : "var(--foreground)",
             borderRadius: 2,
           }}
         >
@@ -705,7 +705,7 @@ const STAT_ROWS: StatRow[] = [
   {
     label: "verdict",
     value: (z) => (
-      <span style={{ color: z.triage.verdict === "solve" ? "var(--r-done)" : "var(--r-caution)" }}>
+      <span style={{ color: z.triage.verdict === "solve" ? "var(--pe-done)" : "var(--pe-caution)" }}>
         {z.triage.verdict}
         <span className="text-muted-foreground"> · {z.triage.reason}</span>
       </span>
@@ -781,7 +781,7 @@ function ZoneCard(props: {
   return (
     <div
       className="flex min-w-0 flex-col gap-1.5 border bg-background p-2"
-      style={{ borderColor: "var(--r-line-2)", borderRadius: 2 }}
+      style={{ borderColor: "var(--pe-line-2)", borderRadius: 2 }}
     >
       <div className="flex items-baseline gap-2">
         <span className="face-mono t-caption t-value font-semibold" title={name}>
@@ -970,7 +970,7 @@ function RunStrip(props: {
             key={entry.id}
             className="flex shrink-0 items-stretch overflow-hidden border"
             style={{
-              borderColor: isCur || isPrev ? "var(--r-ink-2)" : "var(--r-line-2)",
+              borderColor: isCur || isPrev ? "var(--pe-ink-2)" : "var(--pe-line-2)",
               borderRadius: 2,
               background: isCur ? "var(--secondary)" : "transparent",
             }}
@@ -988,7 +988,7 @@ function RunStrip(props: {
               <span className="face-mono t-caption leading-3 text-muted-foreground">
                 {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
                 {typeof meta?.zoneFilter === "string" ? (
-                  <span style={{ color: "var(--r-caution)" }} title={partialTitle(meta.zoneFilter)}>
+                  <span style={{ color: "var(--pe-caution)" }} title={partialTitle(meta.zoneFilter)}>
                     {" "}
                     · partial
                   </span>
@@ -1002,9 +1002,9 @@ function RunStrip(props: {
               disabled={isCur}
               className="border-l px-1.5 t-caption"
               style={{
-                borderColor: "var(--r-line-2)",
+                borderColor: "var(--pe-line-2)",
                 background: isPrev ? "var(--secondary)" : "transparent",
-                color: isCur ? "var(--r-line-2)" : isPrev ? "var(--foreground)" : "var(--r-ink-2)",
+                color: isCur ? "var(--pe-line-2)" : isPrev ? "var(--foreground)" : "var(--pe-ink-2)",
               }}
             >
               {isPrev ? "A✕" : "A"}
@@ -1610,7 +1610,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
           "Input zone boundary. Always a hairline dash; status never changes its stroke.",
         )}
       </div>
-      <span className="mt-0.5 border-t pt-1 t-caption" style={{ borderColor: "var(--r-line-2)" }}>
+      <span className="mt-0.5 border-t pt-1 t-caption" style={{ borderColor: "var(--pe-line-2)" }}>
         solid dark = received · pale translucent = invented
         {props.underlay ? "" : " · underlay hidden"}
       </span>
@@ -1879,7 +1879,7 @@ function PlanDock(props: {
     <div className="flex size-full min-h-0 flex-col">
       <div
         className="flex shrink-0 items-center gap-2 border-b px-2 py-1"
-        style={{ borderColor: "var(--r-line-2)" }}
+        style={{ borderColor: "var(--pe-line-2)" }}
       >
         <div className="flex gap-0.5">
           {levels.map((l) => (
@@ -1908,7 +1908,7 @@ function PlanDock(props: {
                 ? "bg-secondary text-secondary-foreground"
                 : "text-muted-foreground hover:bg-muted",
             )}
-            style={{ borderColor: "var(--r-line-2)" }}
+            style={{ borderColor: "var(--pe-line-2)" }}
           />
           <Verb
             label="stats"
@@ -1920,7 +1920,7 @@ function PlanDock(props: {
                 ? "bg-secondary text-secondary-foreground"
                 : "text-muted-foreground hover:bg-muted",
             )}
-            style={{ borderColor: "var(--r-line-2)" }}
+            style={{ borderColor: "var(--pe-line-2)" }}
           />
           <span className="face-mono t-caption text-muted-foreground">
             drag = pan · wheel = zoom · click zone = highlight · esc = clear
@@ -1947,7 +1947,7 @@ function PlanDock(props: {
             ) : null}
             <div
               className={cn("flex flex-1", comparing && "border-l")}
-              style={comparing ? { borderColor: "var(--r-line-2)" } : undefined}
+              style={comparing ? { borderColor: "var(--pe-line-2)" } : undefined}
             >
               <PlanPane
                 runId={curId}
@@ -2454,7 +2454,7 @@ function LedgerDock(props: {
   const optionSets = new Set(runs.map((r) => r.meta?.optionsHash ?? "?")).size;
 
   return (
-    <div className="shrink-0 border-t" style={{ borderColor: "var(--r-line-2)" }}>
+    <div className="shrink-0 border-t" style={{ borderColor: "var(--pe-line-2)" }}>
       <Verb
         label={`ledger · ${runs.length} runs · ${optionSets} option sets · ${open ? "collapse" : "expand"}`}
         reason={
@@ -2472,7 +2472,7 @@ function LedgerDock(props: {
           {pool && (
             <div
               className="face-mono t-caption shrink-0 truncate border-b px-3 py-1 text-muted-foreground"
-              style={{ borderColor: "var(--r-line-2)" }}
+              style={{ borderColor: "var(--pe-line-2)" }}
               title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
             >
               pool {pool}
@@ -2802,7 +2802,7 @@ export default function RunBrowser() {
 
   if (error) {
     return (
-      <div className="face-mono t-caption p-8 t-prose" style={{ color: "var(--r-caution)" }}>
+      <div className="face-mono t-caption p-8 t-prose" style={{ color: "var(--pe-caution)" }}>
         run pool unavailable: {error}
       </div>
     );
@@ -2939,7 +2939,7 @@ export default function RunBrowser() {
               >
                 <div
                   className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-background px-4 py-1"
-                  style={{ borderColor: "var(--r-line-2)" }}
+                  style={{ borderColor: "var(--pe-line-2)" }}
                 >
                   <h2 className="face-mono t-caption t-value font-semibold uppercase tracking-wide">
                     {level}
@@ -3049,14 +3049,14 @@ export default function RunBrowser() {
     <div className="flex h-dvh min-h-0 flex-col bg-background text-foreground">
       <header
         className="flex shrink-0 flex-col gap-1.5 border-b px-4 py-2"
-        style={{ borderColor: "var(--r-line-2)" }}
+        style={{ borderColor: "var(--pe-line-2)" }}
       >
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="face-mono t-caption t-prose font-semibold">runs</h1>
           {linkNote && (
             <span
               className="face-mono t-caption t-label"
-              style={{ color: "var(--r-caution)" }}
+              style={{ color: "var(--pe-caution)" }}
               title="The URL's deep link could not be fully applied."
             >
               {linkNote}
@@ -3130,7 +3130,7 @@ export default function RunBrowser() {
                   ? "bg-secondary text-secondary-foreground"
                   : "border text-muted-foreground",
               )}
-              style={underlay ? undefined : { borderColor: "var(--r-line-2)" }}
+              style={underlay ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
             <Verb
               label="changed only"
@@ -3147,7 +3147,7 @@ export default function RunBrowser() {
                   ? "bg-secondary text-secondary-foreground"
                   : "border text-muted-foreground disabled:opacity-40",
               )}
-              style={changedOnly && comparing ? undefined : { borderColor: "var(--r-line-2)" }}
+              style={changedOnly && comparing ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
           </span>
         </div>

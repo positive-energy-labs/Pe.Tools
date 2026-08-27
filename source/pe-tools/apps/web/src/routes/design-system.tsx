@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /design-system — THE INDEX. The design language, stated and demonstrated.
  *
  * THE INDEX LAW (ruled 2026-08-16): **nothing exists on this page unless it
@@ -172,7 +172,7 @@ const ORDERED_SPECIMENS = [...ORDER_SPECIMENS].sort(
 const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   {
     name: "one alarm",
-    text: "--r-alarm means the model disagrees. Nothing else in the product may wear it — not an error, not a warning, not a destructive verb. A busy bridge gets caution, because a busy bridge is not the model disagreeing.",
+    text: "--pe-alarm means the model disagrees. Nothing else in the product may wear it — not an error, not a warning, not a destructive verb. A busy bridge gets caution, because a busy bridge is not the model disagreeing.",
     demo: <StateCell value="1.75 in" agree="drift" modelValue="1.375 in" />,
   },
   {
@@ -204,7 +204,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   },
   {
     name: "selection is a fill",
-    text: "Selection, focus and hover buy no hue, ever. Selection is literally the fourth rung of the ground ladder (--r-select); hover is one neutral ink veil identical on every control. The law is structural, not remembered.",
+    text: "Selection, focus and hover buy no hue, ever. Selection is literally the fourth rung of the ground ladder (--pe-select); hover is one neutral ink veil identical on every control. The law is structural, not remembered.",
     demo: (
       <span className="flex items-center gap-2">
         <span className="t-label bg-select px-2 py-1">selected row</span>
@@ -417,22 +417,22 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     asks: "what surface is this sitting on?",
     tokens: [
       {
-        token: "--r-page",
+        token: "--pe-page",
         means: "the page itself; prose and page chrome",
         modes: "L .985 ↔ .185 — one hue (88°) in both modes",
       },
       {
-        token: "--r-artifact",
+        token: "--pe-artifact",
         means: "the machine-operated object: table, card, strip",
         modes: "one lightness step off the page, both modes",
       },
       {
-        token: "--r-recess",
+        token: "--pe-recess",
         means: "set INTO an artifact: head/foot bands, the key",
         modes: "same step size again — the ladder is even",
       },
       {
-        token: "--r-select",
+        token: "--pe-select",
         means: "selection + focus fill. never a hue",
         modes: "rung 4; the no-hue law made structural",
       },
@@ -443,17 +443,17 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     asks: "how loud is this text allowed to be?",
     tokens: [
       {
-        token: "--r-ink",
+        token: "--pe-ink",
         means: "primary text: values, labels, prose",
         modes: "inverted pair on the ground's own hue",
       },
       {
-        token: "--r-ink-2",
+        token: "--pe-ink-2",
         means: "annotations, footlines, captions, counts",
         modes: "light value sits AT the meaning band's lightness",
       },
       {
-        token: "--r-ink-mute",
+        token: "--pe-ink-mute",
         means: "locked · dropped · the 'never checked' squiggle",
         modes: "near-achromatic; ~0 drift and ~0 ΔL across modes",
       },
@@ -464,12 +464,12 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     asks: "is this a seam, or a box?",
     tokens: [
       {
-        token: "--r-line",
+        token: "--pe-line",
         means: "quiet: row rules, the artifact frame's inset edge",
         modes: "ink @12% ↔ @14% — derived, so it rides the hue free",
       },
       {
-        token: "--r-line-2",
+        token: "--pe-line-2",
         means: "firm: seams, citation underline, chip edge, focus",
         modes: "ink @22% ↔ @26%",
       },
@@ -480,42 +480,42 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     asks: "what fact is this hue standing for?",
     tokens: [
       {
-        token: "--r-pea",
+        token: "--pe-pea",
         means: "pea's MARK: proposal ring, corner fold, card edge",
         modes: "the display rung — band lightness stepped 0.08 toward its ground",
       },
       {
-        token: "--r-pea-ink",
+        token: "--pe-pea-ink",
         means: "pea at ink weight: pea's text, the wash source",
         modes: "on-band, both modes; h158 unmoved",
       },
       {
-        token: "--r-alarm",
+        token: "--pe-alarm",
         means: "THE one alarm: drift, refusal, the ghost value",
         modes: "the one legislated off-band token (+35% chroma), both modes",
       },
       {
-        token: "--r-caution",
+        token: "--pe-caution",
         means: "stale · unverified · unsaved · partial · error",
         modes: "on-band; 2.8× the incumbent kiln's chroma",
       },
       {
-        token: "--r-done",
+        token: "--pe-done",
         means: "it landed: receipts, the post-commit sentence",
         modes: "on-band; 25° from pea — adjacent, not equal",
       },
       {
-        token: "--r-commit",
+        token: "--pe-commit",
         means: "the only filled blue: writes beyond the page",
         modes: "PE blue's exact hue, band-quantized",
       },
       {
-        token: "--r-on-commit",
+        token: "--pe-on-commit",
         means: "text/icon sitting on a commit fill",
-        modes: "= --r-page. no pure white or black exists in the set",
+        modes: "= --pe-page. no pure white or black exists in the set",
       },
       {
-        token: "--r-nav",
+        token: "--pe-nav",
         means: "nav as blue TEXT — back · forward · out",
         modes: "byte-identical to commit; the job carries the difference",
       },
@@ -586,7 +586,7 @@ function Tokens() {
       note="eighteen, and every one of them is oklch(L C h) off a declared band — src/pe-base.css is the one place a colour is decided"
     >
       <p className="t-prose max-w-[80ch] text-ink-2">
-        <code className="face-mono t-label">--r-*</code> is canon. The old{" "}
+        <code className="face-mono t-label">--pe-*</code> is canon. The old{" "}
         <code className="face-mono t-label">--act-*</code> /{" "}
         <code className="face-mono t-label">--st-*</code> /{" "}
         <code className="face-mono t-label">--cat-*</code> role vocabulary in{" "}
@@ -659,7 +659,7 @@ function ArtifactFrameBlock() {
         <>
           The language&apos;s one enclosure: a ground shift plus a quiet inset hairline. No radius,
           no shadow — round 1 ruled that fills separate and outline borders do not. Optional
-          recessed head and foot bands re-declare <code className="face-mono t-label">--r-on</code>,
+          recessed head and foot bands re-declare <code className="face-mono t-label">--pe-on</code>,
           so every wash a child mixes lands on the ground it is actually standing on.
         </>
       }

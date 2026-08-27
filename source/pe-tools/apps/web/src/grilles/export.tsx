@@ -29,7 +29,7 @@ export function ExportSheet({
     const clone = svg.cloneNode(true) as SVGSVGElement;
     // bake the tokens: a standalone file has no pe-base.css
     const cs = getComputedStyle(svg);
-    const colors = ["--r-ink", "--r-ink-2", "--r-page", "--r-alarm"].map((token) => {
+    const colors = ["--pe-ink", "--pe-ink-2", "--pe-page", "--pe-alarm"].map((token) => {
       const value = cs.getPropertyValue(token).trim();
       if (!value || value.includes("var("))
         throw new Error(`required design token unavailable: ${token}`);
@@ -57,7 +57,7 @@ export function ExportSheet({
       }`}</style>
       <div
         className="no-print flex items-center gap-3 border-b px-3 py-2"
-        style={{ borderColor: "var(--r-line)" }}
+        style={{ borderColor: "var(--pe-line)" }}
       >
         <span className="face-mono t-label t-upper text-ink-mute">export sheet</span>
         <span className="face-mono t-label text-ink-2">
@@ -81,7 +81,7 @@ export function ExportSheet({
         {/* title block */}
         <div
           className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 t-label"
-          style={{ borderColor: "var(--r-ink)" }}
+          style={{ borderColor: "var(--pe-ink)" }}
         >
           <div>
             <div className="t-label t-upper text-ink-mute">

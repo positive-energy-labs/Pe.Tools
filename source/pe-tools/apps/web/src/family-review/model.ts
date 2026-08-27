@@ -131,12 +131,12 @@ export const AGREEMENT_LABEL: Record<Agreement, string> = {
 /** Every agreement's meaning-band role token. `agrees` is deliberately quiet: the board's job is
  *  to make disagreement findable, and a page of green ticks hides the one that is not. */
 export const AGREEMENT_TONE: Record<Agreement, string> = {
-  agrees: "var(--r-ink-mute)",
-  differs: "var(--r-alarm)",
-  "authored-only": "var(--r-caution)",
-  "revit-only": "var(--r-caution)",
-  refused: "var(--r-alarm)",
-  unread: "var(--r-ink-mute)",
+  agrees: "var(--pe-ink-mute)",
+  differs: "var(--pe-alarm)",
+  "authored-only": "var(--pe-caution)",
+  "revit-only": "var(--pe-caution)",
+  refused: "var(--pe-alarm)",
+  unread: "var(--pe-ink-mute)",
 };
 
 export type RowKind =

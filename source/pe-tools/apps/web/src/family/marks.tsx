@@ -16,7 +16,7 @@
  *      this route's notch is a button that brings the proposal card into the sidebar. Until
  *      the primitive grows a locate hook, migrating the fold would delete the affordance.
  *
- * The roles are the REAL ones (`--r-pea`, `--r-pea-ink`, `--r-caution`), so when those two gaps
+ * The roles are the REAL ones (`--pe-pea`, `--pe-pea-ink`, `--pe-caution`), so when those two gaps
  * close the migration here is still a deletion, not a redesign.
  *
  * What `ProposedCell` deliberately does NOT do is capture the cell. The child is whatever the
@@ -54,8 +54,8 @@ export function ProposedCell({
    * A string means "saving would write here", and the string itself says what. It renders as a
    * 4px caution square in the BOTTOM-LEFT corner: diagonally opposite pea's fold, so the two can
    * never overlap, never touch, and never be read as one mark. Caution because a pending write is
-   * a WARNING (it is about to change the file), not a drift (`--r-alarm`, which means the model
-   * disagrees) and not a commitment (`--r-commit`, which belongs to the verb).
+   * a WARNING (it is about to change the file), not a drift (`--pe-alarm`, which means the model
+   * disagrees) and not a commitment (`--pe-commit`, which belongs to the verb).
    */
   unsaved?: string | null;
   children: React.ReactNode;
@@ -66,7 +66,7 @@ export function ProposedCell({
   return (
     <span
       className="relative flex min-h-7 w-full items-center"
-      style={first ? { boxShadow: "inset 0 -1.5px 0 0 var(--r-pea)" } : undefined}
+      style={first ? { boxShadow: "inset 0 -1.5px 0 0 var(--pe-pea)" } : undefined}
     >
       {children}
       {unsaved && (

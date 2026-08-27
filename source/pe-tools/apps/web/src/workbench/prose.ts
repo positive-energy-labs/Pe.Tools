@@ -2,7 +2,7 @@
  * Shared prose styling for assistant markdown. Lives apart from aui.tsx so the
  * design-system showcase can render the EXACT chat/markdown look without pulling in
  * the workbench runtime. assistant-ui renders markdown to HTML but doesn't style it,
- * so we use the Tailwind typography plugin (`prose`) tuned to the `--r-*` canon: flat sans
+ * so we use the Tailwind typography plugin (`prose`) tuned to the `--pe-*` canon: flat sans
  * headings, nav-blue links (links ARE navigation text), square inline-code chips on the
  * artifact ground, backtick pseudo-content stripped.
  *
@@ -12,7 +12,7 @@
  */
 export const PROSE_CLASS = [
   "prose prose-sm max-w-none leading-normal text-ink",
-  "[--tw-prose-body:var(--r-ink)] [--tw-prose-headings:var(--r-ink)] [--tw-prose-bold:var(--r-ink)] [--tw-prose-links:var(--r-nav)] [--tw-prose-bullets:var(--r-ink-2)] [--tw-prose-counters:var(--r-ink-2)] [--tw-prose-quotes:var(--r-ink-2)] [--tw-prose-quote-borders:var(--r-line-2)] [--tw-prose-hr:var(--r-line-2)] [--tw-prose-captions:var(--r-ink-2)] [--tw-prose-code:var(--r-ink)] [--tw-prose-th-borders:var(--r-line-2)] [--tw-prose-td-borders:var(--r-line)]",
+  "[--tw-prose-body:var(--pe-ink)] [--tw-prose-headings:var(--pe-ink)] [--tw-prose-bold:var(--pe-ink)] [--tw-prose-links:var(--pe-nav)] [--tw-prose-bullets:var(--pe-ink-2)] [--tw-prose-counters:var(--pe-ink-2)] [--tw-prose-quotes:var(--pe-ink-2)] [--tw-prose-quote-borders:var(--pe-line-2)] [--tw-prose-hr:var(--pe-line-2)] [--tw-prose-captions:var(--pe-ink-2)] [--tw-prose-code:var(--pe-ink)] [--tw-prose-th-borders:var(--pe-line-2)] [--tw-prose-td-borders:var(--pe-line)]",
   "prose-p:my-0 prose-p:mb-[0.45em] last:prose-p:mb-0",
   // Flat heading hierarchy inside answers: chat turns are dense working content, so headings keep
   // the body face and size — weight and spacing carry the structure. (Spectral is a page-title

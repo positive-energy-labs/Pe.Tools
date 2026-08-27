@@ -11,25 +11,25 @@
  * no Tailwind-only rules or component ownership.
  */
 :root {
-  --r-page: #fdfaf2;
-  --r-artifact: #f1eee6;
-  --r-recess: #e4e1d9;
-  --r-select: #d9d6ce;
-  --r-ink: #38352d;
-  --r-ink-2: #5f5a4e;
-  --r-ink-mute: #888682;
-  --r-line: color-mix(in srgb, #38352d 12%, transparent);
-  --r-line-2: color-mix(in srgb, #38352d 22%, transparent);
-  --r-pea: #42815e;
-  --r-pea-ink: #296948;
-  --r-alarm: #8e4120;
-  --r-caution: #77531b;
-  --r-done: #486531;
-  --r-commit: #325e88;
-  --r-on-commit: #fdfaf2;
-  --r-nav: #325e88;
-  --r-on: var(--r-page);
-  --r-veil: color-mix(in srgb, var(--r-ink) 10%, transparent);
+  --pe-page: #fdfaf2;
+  --pe-artifact: #f1eee6;
+  --pe-recess: #e4e1d9;
+  --pe-select: #d9d6ce;
+  --pe-ink: #38352d;
+  --pe-ink-2: #5f5a4e;
+  --pe-ink-mute: #888682;
+  --pe-line: color-mix(in srgb, #38352d 12%, transparent);
+  --pe-line-2: color-mix(in srgb, #38352d 22%, transparent);
+  --pe-pea: #42815e;
+  --pe-pea-ink: #296948;
+  --pe-alarm: #8e4120;
+  --pe-caution: #77531b;
+  --pe-done: #486531;
+  --pe-commit: #325e88;
+  --pe-on-commit: #fdfaf2;
+  --pe-nav: #325e88;
+  --pe-on: var(--pe-page);
+  --pe-veil: color-mix(in srgb, var(--pe-ink) 10%, transparent);
   --viz-1: oklch(0.47 0.085 249.5);
   --viz-2: oklch(0.47 0.085 155);
   --viz-3: oklch(0.47 0.045 230);
@@ -37,25 +37,25 @@
   --viz-5: oklch(0.47 0.085 58);
   --viz-6: oklch(0.47 0.055 85);
 
-  --background: var(--r-page);
-  --foreground: var(--r-ink);
-  --card: var(--r-artifact);
-  --card-foreground: var(--r-ink);
-  --popover: var(--r-artifact);
-  --popover-foreground: var(--r-ink);
-  --primary: var(--r-commit);
-  --primary-foreground: var(--r-on-commit);
-  --secondary: var(--r-recess);
-  --secondary-foreground: var(--r-ink);
-  --muted: var(--r-recess);
-  --muted-foreground: var(--r-ink-2);
-  --accent: var(--r-select);
-  --accent-foreground: var(--r-ink);
-  --destructive: var(--r-alarm);
-  --destructive-foreground: var(--r-on-commit);
-  --border: var(--r-line);
-  --input: var(--r-line);
-  --ring: var(--r-line-2);
+  --background: var(--pe-page);
+  --foreground: var(--pe-ink);
+  --card: var(--pe-artifact);
+  --card-foreground: var(--pe-ink);
+  --popover: var(--pe-artifact);
+  --popover-foreground: var(--pe-ink);
+  --primary: var(--pe-commit);
+  --primary-foreground: var(--pe-on-commit);
+  --secondary: var(--pe-recess);
+  --secondary-foreground: var(--pe-ink);
+  --muted: var(--pe-recess);
+  --muted-foreground: var(--pe-ink-2);
+  --accent: var(--pe-select);
+  --accent-foreground: var(--pe-ink);
+  --destructive: var(--pe-alarm);
+  --destructive-foreground: var(--pe-on-commit);
+  --border: var(--pe-line);
+  --input: var(--pe-line);
+  --ring: var(--pe-line-2);
   --radius: 0.125rem;
   --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
   --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
@@ -63,23 +63,23 @@
 }
 
 .dark {
-  --r-page: #15120d;
-  --r-artifact: #1e1c16;
-  --r-recess: #27251f;
-  --r-select: #33302a;
-  --r-ink: #eeebe2;
-  --r-ink-2: #c1bcae;
-  --r-ink-mute: #868481;
-  --r-line: color-mix(in srgb, #eeebe2 14%, transparent);
-  --r-line-2: color-mix(in srgb, #eeebe2 26%, transparent);
-  --r-pea: #74b48f;
-  --r-pea-ink: #8dcda7;
-  --r-alarm: #fba381;
-  --r-caution: #ddb47e;
-  --r-done: #a7c890;
-  --r-commit: #92c1f1;
-  --r-on-commit: #15120d;
-  --r-nav: #92c1f1;
+  --pe-page: #15120d;
+  --pe-artifact: #1e1c16;
+  --pe-recess: #27251f;
+  --pe-select: #33302a;
+  --pe-ink: #eeebe2;
+  --pe-ink-2: #c1bcae;
+  --pe-ink-mute: #868481;
+  --pe-line: color-mix(in srgb, #eeebe2 14%, transparent);
+  --pe-line-2: color-mix(in srgb, #eeebe2 26%, transparent);
+  --pe-pea: #74b48f;
+  --pe-pea-ink: #8dcda7;
+  --pe-alarm: #fba381;
+  --pe-caution: #ddb47e;
+  --pe-done: #a7c890;
+  --pe-commit: #92c1f1;
+  --pe-on-commit: #15120d;
+  --pe-nav: #92c1f1;
   --viz-1: oklch(0.795 0.085 249.5);
   --viz-2: oklch(0.795 0.085 155);
   --viz-3: oklch(0.795 0.045 230);
@@ -131,7 +131,7 @@
   }
 
   [data-pe] :where(:focus-visible) {
-    outline: 2px solid var(--r-ink);
+    outline: 2px solid var(--pe-ink);
     outline-offset: 2px;
   }
 

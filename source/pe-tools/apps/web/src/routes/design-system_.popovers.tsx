@@ -232,7 +232,7 @@ const SPECIMENS: readonly Specimen[] = [
       "FIXED IN SOURCE — caller intent is now `[--popup-min-width:14rem]`; shared CSS composes it with the anchor floor and viewport ceiling while permitting content growth. Browser readability remains pending.",
       'BROWSER CHECK — with `align="end"`, does the popup remain right-aligned for this chip at each viewport position? Keep this caller alignment rather than forcing a global alignment.',
       "same private-function problem: `Picker` is internal to control-chips.tsx.",
-      "the trigger is a shadcn ghost Button on `--muted-foreground` while the facet filter is a bare `ComboboxTrigger` on `--r-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
+      "the trigger is a shadcn ghost Button on `--muted-foreground` while the facet filter is a bare `ComboboxTrigger` on `--pe-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
     ],
     render: () => <PickerChipSpecimen />,
   },
@@ -243,7 +243,7 @@ const SPECIMENS: readonly Specimen[] = [
       "routes/settings.tsx, routes/ops.tsx (bridge session + scalar fields), routes/families.tsx",
     shape: "Base UI Select — positions against the SELECTED ITEM, not the trigger",
     defects: [
-      "FIXED IN SOURCE — Select and Combobox now share the same artifact ground, radius, ring, ink, and `--r-on` contract; both retain their Base UI width behavior and caller alignment/overflow choices.",
+      "FIXED IN SOURCE — Select and Combobox now share the same artifact ground, radius, ring, ink, and `--pe-on` contract; both retain their Base UI width behavior and caller alignment/overflow choices.",
       "BROWSER CHECK — at the bottom-left corner, where does the selected-item positioner place the popup, and does it remain within the available viewport without unintended overlap? This wave preserves the Base UI positioning contract.",
       "FIXED IN SOURCE — Select no longer uses the old `--popover`/`--border` vocabulary; visual retint and contrast still require the browser gate.",
     ],
@@ -269,7 +269,7 @@ const SPECIMENS: readonly Specimen[] = [
     defects: [
       "BROWSER CHECK — while the popup is open, what happens to its position when adding chips changes the anchor width, especially at the bottom edge?",
       "FIXED IN SOURCE — chips and unanchored inputs now use the same width law. BROWSER CHECK — does the chip anchor reposition the open popup as chip count changes?",
-      "FIXED — the trailing count line spent `--lichen`, a raw palette hue from the old vocabulary; it now sits on `--r-ink-2` (and the old cat-lichen identity lives on only as `--viz-4`).",
+      "FIXED — the trailing count line spent `--lichen`, a raw palette hue from the old vocabulary; it now sits on `--pe-ink-2` (and the old cat-lichen identity lives on only as `--viz-4`).",
     ],
     render: () => <FieldMultiSpecimen />,
   },
@@ -318,7 +318,7 @@ function PopoverHarness() {
 
 function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) => void }) {
   return (
-    <div className="max-w-136 min-w-0 border border-line bg-artifact p-3 [--r-on:var(--r-artifact)]">
+    <div className="max-w-136 min-w-0 border border-line bg-artifact p-3 [--pe-on:var(--pe-artifact)]">
       <div className="flex flex-wrap items-baseline gap-2 pb-2">
         <Link to="/design-system" className="text-[11px] text-nav hover:underline">
           ← design system

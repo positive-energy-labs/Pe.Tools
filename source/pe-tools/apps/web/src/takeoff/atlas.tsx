@@ -100,15 +100,15 @@ const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
 // ── Room state — the one progress vocabulary ────────────────────────────────
 //
 // Derived from the room's own facts, never from its zone's stage label. Four states, spent on the
-// design language's MEANING BAND (`--r-*`) rather than the viz ladder: the old `--cat-*` spends
+// design language's MEANING BAND (`--pe-*`) rather than the viz ladder: the old `--cat-*` spends
 // were taxonomy colours carrying state, which is exactly the violation the route passes exist to
 // fix. The mapping is an argument, not a convenience:
-//   call      → --r-alarm     the one alarm: a person is required, because the model or the
+//   call      → --pe-alarm     the one alarm: a person is required, because the model or the
 //                             detector disagrees with what is recorded.
-//   unreviewed→ --r-ink-mute  the "never checked" rank — nothing has been entered here at all.
-//   data      → --r-caution   unsaved: the Manual J numbers exist only in this session's overlay
+//   unreviewed→ --pe-ink-mute  the "never checked" rank — nothing has been entered here at all.
+//   data      → --pe-caution   unsaved: the Manual J numbers exist only in this session's overlay
 //                             until a sync moves them into the .r10.
-//   synced    → --r-done      it landed.
+//   synced    → --pe-done      it landed.
 //
 // NOTE: these four are a
 // row-level PIPELINE VERDICT, not the cell grammar's state axes — the column rides the table's
@@ -160,16 +160,16 @@ const STAGE_BLURB: Record<Stage, string> = {
 };
 
 /**
- * SELECTION AND FOCUS ARE A FILL, NEVER A HUE. The plan used `--primary` (= `--r-commit`, the one
+ * SELECTION AND FOCUS ARE A FILL, NEVER A HUE. The plan used `--primary` (= `--pe-commit`, the one
  * filled blue, reserved for writes that leave the page) as its cursor mark, which spent the commit
- * colour on "where am I". The legal fill — `--r-select` — is a page-adjacent ground and disappears
+ * colour on "where am I". The legal fill — `--pe-select` — is a page-adjacent ground and disappears
  * as an SVG stroke over the designer's own zone colours, so the cursor is drawn in NEUTRAL INK
  * instead: no hue bought, and still the highest-contrast mark on the plan.
  */
-const CURSOR_INK = "var(--r-ink)";
+const CURSOR_INK = "var(--pe-ink)";
 
 /** Held residue and the "no boundary" fallback both mean "nothing real is here". */
-const ABSENT_INK = "var(--r-ink-mute)";
+const ABSENT_INK = "var(--pe-ink-mute)";
 
 /**
  * Per-zone progress, derived: one equal segment per room, coloured by that room's own state. A
@@ -299,7 +299,7 @@ const hostReason = (live: boolean, busy: string | null, does: string, onFixture:
  *  element, so fallback, constraints, never-muting, and patch construction exist once.
  *
  *  A room with no Manual J data is the NEVER rung (R2): nothing was ever entered, so the value
- *  sits in `--r-ink-mute` — the grammar's own treatment, replacing the route-invented
+ *  sits in `--pe-ink-mute` — the grammar's own treatment, replacing the route-invented
  *  `opacity-50`. JUDGED during the adoption pass: the column STAYS on `NumberCell` rather than
  *  the editable `StateCell`, because `onCommit(text: string)` would re-implement the numeric
  *  contract (`parseCell`'s integer/min refusal, `inputMode="decimal"`, the right-aligned fmt)
@@ -362,8 +362,8 @@ function RoomNameCell({
       title={state.join(" · ") || undefined}
       className={cn(
         "flex min-w-0 items-center",
-        entity.hovered && "[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
-        entity.selected && "bg-select [--r-on:var(--r-select)]",
+        entity.hovered && "[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]",
+        entity.selected && "bg-select [--pe-on:var(--pe-select)]",
       )}
     >
       <div className="min-w-0 flex-1">
@@ -833,7 +833,7 @@ export function Atlas({ store }: AtlasProps) {
                           setZoneKey(null);
                           setCursor(null);
                         }}
-                        // Selection is a FILL, never a hue: `bg-accent` resolves to `--r-select`,
+                        // Selection is a FILL, never a hue: `bg-accent` resolves to `--pe-select`,
                         // the ground ladder's fourth rung. The old `bg-primary/[0.08]` spent the
                         // one filled blue — reserved for writes that leave the page — on "what is lit".
                         className={cn(

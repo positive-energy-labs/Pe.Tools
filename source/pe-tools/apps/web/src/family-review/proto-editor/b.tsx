@@ -87,7 +87,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
   return (
     <div className="flex min-h-0 flex-1">
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-        <p className="t-caption mb-2 max-w-[640px] text-[var(--r-caution)]">
+        <p className="t-caption mb-2 max-w-[640px] text-[var(--pe-caution)]">
           This drawing is `/family`&apos;s v1 evaluator: every solid is centred on the family centre
           planes and sits on Bottom, and a solid&apos;s `frame` is NOT applied. Frames, planes and
           connectors resolve for real. Fidelity is not this round&apos;s question — pointing is.
@@ -102,8 +102,8 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                   height={SIZE}
                   viewBox={`0 0 ${SIZE} ${SIZE}`}
                   style={{
-                    background: "var(--r-page)",
-                    border: "0.5px solid var(--r-line)",
+                    background: "var(--pe-page)",
+                    border: "0.5px solid var(--pe-line)",
                     borderRadius: 2,
                   }}
                   role="img"
@@ -123,7 +123,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                           y1={vertical ? 0 : at}
                           x2={vertical ? at : SIZE}
                           y2={vertical ? SIZE : at}
-                          stroke={selected === id ? "var(--r-ink)" : "var(--r-line-2)"}
+                          stroke={selected === id ? "var(--pe-ink)" : "var(--pe-line-2)"}
                           strokeWidth={selected === id ? 1.4 : 0.75}
                         />
                         <text
@@ -131,7 +131,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                           y={vertical ? 12 : at - 3}
                           className="face-mono"
                           fontSize={10}
-                          fill="var(--r-ink-mute)"
+                          fill="var(--pe-ink-mute)"
                         >
                           {plane.slug}
                         </text>
@@ -150,9 +150,9 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                       fill: geo.isVoid
                         ? "none"
                         : on
-                          ? "var(--r-select)"
-                          : "color-mix(in srgb, var(--r-ink) 10%, transparent)",
-                      stroke: on ? "var(--r-ink)" : "var(--r-ink-2)",
+                          ? "var(--pe-select)"
+                          : "color-mix(in srgb, var(--pe-ink) 10%, transparent)",
+                      stroke: on ? "var(--pe-ink)" : "var(--pe-ink-2)",
                       strokeWidth: on ? 1.6 : 1,
                       strokeDasharray: geo.isVoid ? "4 3" : undefined,
                     };
@@ -192,7 +192,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                             y1={mark.y1}
                             x2={mark.x2}
                             y2={mark.y2}
-                            stroke="var(--r-nav)"
+                            stroke="var(--pe-nav)"
                             strokeWidth={1}
                           />
                           <text
@@ -201,7 +201,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                             textAnchor="middle"
                             className="face-mono"
                             fontSize={10}
-                            fill="var(--r-nav)"
+                            fill="var(--pe-nav)"
                           >
                             {mark.label}
                           </text>
@@ -225,7 +225,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                           y1={cy}
                           x2={cx + 5}
                           y2={cy}
-                          stroke={on ? "var(--r-ink)" : "var(--r-ink-2)"}
+                          stroke={on ? "var(--pe-ink)" : "var(--pe-ink-2)"}
                           strokeWidth={on ? 1.6 : 1}
                         />
                         <line
@@ -233,7 +233,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                           y1={cy - 5}
                           x2={cx}
                           y2={cy + 5}
-                          stroke={on ? "var(--r-ink)" : "var(--r-ink-2)"}
+                          stroke={on ? "var(--pe-ink)" : "var(--pe-ink-2)"}
                           strokeWidth={on ? 1.6 : 1}
                         />
                       </Hit>
@@ -265,7 +265,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                     );
                   })}
                 </svg>
-                <figcaption className="t-caption text-[var(--r-ink-mute)]">{view.name}</figcaption>
+                <figcaption className="t-caption text-[var(--pe-ink-mute)]">{view.name}</figcaption>
               </figure>
             );
           })}
@@ -275,18 +275,18 @@ export function ParadigmB({ editor }: { editor: Editor }) {
       {/* the one small editor for the thing that drives what you clicked */}
       <div
         className="min-h-0 w-80 shrink-0 overflow-auto border-l px-3 py-3"
-        style={{ borderColor: "var(--r-line)" }}
+        style={{ borderColor: "var(--pe-line)" }}
       >
         {node == null ? (
-          <p className="t-caption text-[var(--r-ink-mute)]">
+          <p className="t-caption text-[var(--pe-ink-mute)]">
             Click a solid, a plane, a frame or a connector in the drawing.
           </p>
         ) : (
           <>
-            <div className="face-mono t-value text-[var(--r-ink)]">{node.id}</div>
-            <div className="t-caption mb-2 text-[var(--r-ink-mute)]">{node.detail}</div>
+            <div className="face-mono t-value text-[var(--pe-ink)]">{node.id}</div>
+            <div className="t-caption mb-2 text-[var(--pe-ink-mute)]">{node.detail}</div>
             {fields.length === 0 ? (
-              <p className="t-caption text-[var(--r-ink-mute)]">
+              <p className="t-caption text-[var(--pe-ink-mute)]">
                 stock datum — the template owns it, nothing here is authored
               </p>
             ) : (
@@ -294,7 +294,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                 <tbody>
                   {fields.map((field) => (
                     <tr key={field.key}>
-                      <td className="face-mono t-label w-24 py-0.5 align-baseline text-[var(--r-ink-mute)]">
+                      <td className="face-mono t-label w-24 py-0.5 align-baseline text-[var(--pe-ink-mute)]">
                         {field.key}
                       </td>
                       <td className="py-0.5 align-baseline">
@@ -316,7 +316,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                           />
                         )}
                       </td>
-                      <td className="face-mono t-caption py-0.5 pl-1 align-baseline text-[var(--r-ink-mute)]">
+                      <td className="face-mono t-caption py-0.5 pl-1 align-baseline text-[var(--pe-ink-mute)]">
                         {nodeValue(editor.model, editor.typeName, field.value) ?? ""}
                       </td>
                     </tr>
@@ -372,7 +372,7 @@ function ConnectorMark({
   scale: number;
   on: boolean;
 }) {
-  const stroke = on ? "var(--r-ink)" : "var(--r-ink-2)";
+  const stroke = on ? "var(--pe-ink)" : "var(--pe-ink-2)";
   const width = on ? 1.6 : 1;
   const axis = AXIS_VECTOR[conn.normal] ?? [0, 0, 1];
   const index: Record<Axis, 0 | 1 | 2> = { x: 0, y: 1, z: 2 };
@@ -391,7 +391,7 @@ function ConnectorMark({
         strokeWidth={width}
       />
       <circle cx={x} cy={y} r={Math.max(2, half)} fill="none" stroke={stroke} strokeWidth={width} />
-      <text x={x + 6} y={y - 4} className="face-mono" fontSize={10} fill="var(--r-ink-mute)">
+      <text x={x + 6} y={y - 4} className="face-mono" fontSize={10} fill="var(--pe-ink-mute)">
         {conn.slug}
       </text>
     </>

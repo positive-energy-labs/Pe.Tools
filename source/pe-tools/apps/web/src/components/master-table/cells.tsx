@@ -103,7 +103,7 @@ export function CellSelect({
       }}
       className={cn(
         "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-select",
-        invalid && "bg-[color-mix(in_srgb,var(--r-alarm)_10%,var(--r-on))] text-alarm",
+        invalid && "bg-[color-mix(in_srgb,var(--pe-alarm)_10%,var(--pe-on))] text-alarm",
         className,
       )}
     >
@@ -146,11 +146,11 @@ export function StateDot({ tone, dim }: { tone: VerdictTone; dim?: boolean }) {
 }
 
 export const VERDICT_INK: Record<VerdictTone, string> = {
-  alarm: "var(--r-alarm)",
-  caution: "var(--r-caution)",
-  done: "var(--r-done)",
-  ink: "var(--r-ink-2)",
-  mute: "var(--r-ink-mute)",
+  alarm: "var(--pe-alarm)",
+  caution: "var(--pe-caution)",
+  done: "var(--pe-done)",
+  ink: "var(--pe-ink-2)",
+  mute: "var(--pe-ink-mute)",
 };
 
 /** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The

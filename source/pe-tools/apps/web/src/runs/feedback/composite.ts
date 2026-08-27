@@ -44,8 +44,8 @@ import {
 
 import { flagLabel, type StagedItem } from "./staging";
 
-const TEXT = "--r-ink";
-const MUTED = "--r-ink-2";
+const TEXT = "--pe-ink";
+const MUTED = "--pe-ink-2";
 
 const PANEL_W = 1024;
 const PANEL_H = 768;
@@ -190,7 +190,7 @@ async function paintPanelTile(
   tile.height = PANEL_H;
   const tctx = tile.getContext("2d");
   if (!tctx) throw new Error("2d context unavailable");
-  tctx.fillStyle = designColor("--r-page");
+  tctx.fillStyle = designColor("--pe-page");
   tctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
   const inner = document.createElement("canvas");
@@ -198,7 +198,7 @@ async function paintPanelTile(
   inner.height = vp.heightPx;
   const ctx = inner.getContext("2d");
   if (!ctx) throw new Error("2d context unavailable");
-  ctx.fillStyle = designColor("--r-page");
+  ctx.fillStyle = designColor("--pe-page");
   ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
   const [geom, plan] = await Promise.all([
@@ -252,7 +252,7 @@ function missingTile(label: string): HTMLCanvasElement {
   tile.width = PANEL_W;
   tile.height = PANEL_H;
   const ctx = tile.getContext("2d")!;
-  ctx.fillStyle = designColor("--r-recess");
+  ctx.fillStyle = designColor("--pe-recess");
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
   ctx.fillStyle = designColor(MUTED);
   ctx.font = FONT;
@@ -319,7 +319,7 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
   out.width = w;
   out.height = h;
   const ctx = out.getContext("2d")!;
-  ctx.fillStyle = designColor("--r-page");
+  ctx.fillStyle = designColor("--pe-page");
   ctx.fillRect(0, 0, w, h);
 
   ctx.font = FONT;
@@ -333,7 +333,7 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
       GAP - 2,
     );
     ctx.drawImage(tile, x, GAP + 14);
-    ctx.strokeStyle = designColor("--r-line-2");
+    ctx.strokeStyle = designColor("--pe-line-2");
     ctx.strokeRect(x + 0.5, GAP + 14.5, PANEL_W - 1, PANEL_H - 1);
   });
 
@@ -358,7 +358,7 @@ export function stitchSheet(canvases: HTMLCanvasElement[], header: string): HTML
   out.width = w;
   out.height = h;
   const ctx = out.getContext("2d")!;
-  ctx.fillStyle = designColor("--r-page");
+  ctx.fillStyle = designColor("--pe-page");
   ctx.fillRect(0, 0, w, h);
   ctx.font = FONT;
   ctx.textBaseline = "top";

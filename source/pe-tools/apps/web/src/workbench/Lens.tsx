@@ -111,7 +111,7 @@ export function Lens({
   // the world-mode target section; one hook, so all three stay one resolution.
   const chatTarget = useChatTarget();
   const targetTone = chipDescriptor(chatTarget.resolution).tone;
-  const targetRailColor = TARGET_RAIL_COLOR[targetTone] ?? "var(--r-ink-mute)";
+  const targetRailColor = TARGET_RAIL_COLOR[targetTone] ?? "var(--pe-ink-mute)";
 
   const frameRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -548,7 +548,7 @@ export function Lens({
                         // their lane's taxonomy hue (viz ladder via laneVar).
                         background:
                           event.kind === "session-gone"
-                            ? "var(--r-caution)"
+                            ? "var(--pe-caution)"
                             : laneVar(
                                 chatTarget.sessions.find((s) => s.sessionId === event.sessionId)
                                   ?.lane ?? "installed",
@@ -613,7 +613,7 @@ export function Lens({
             onOpenChange={onSideOpenChange}
             onWidthChange={onSideResize}
             header={sideHead}
-            className="lens-side-pane col-start-1 sticky top-0 border-r-[0.5px] bg-artifact [--r-on:var(--r-artifact)]"
+            className="lens-side-pane col-start-1 sticky top-0 border-r-[0.5px] bg-artifact [--pe-on:var(--pe-artifact)]"
           >
             {mode === "trace" ? (
               <div className="lens-trace-frame">
@@ -950,25 +950,25 @@ function formatTime(date?: Date): string | undefined {
 // landed → done, failed → caution (a busy bridge is NOT the model disagreeing),
 // in flight → ink-2 (busy), pending → ink-mute (not started).
 const TOOL_STATUS_COLOR: Record<string, string> = {
-  completed: "var(--r-done)",
-  failed: "var(--r-caution)",
-  in_progress: "var(--r-ink-2)",
-  pending: "var(--r-ink-mute)",
+  completed: "var(--pe-done)",
+  failed: "var(--pe-caution)",
+  in_progress: "var(--pe-ink-2)",
+  pending: "var(--pe-ink-mute)",
 };
 
 function statusColor(status: string): string {
-  return TOOL_STATUS_COLOR[status] ?? "var(--r-ink-2)";
+  return TOOL_STATUS_COLOR[status] ?? "var(--pe-ink-2)";
 }
 
 // The mapdial's world rail: the target tone as a meaning role. Healthy bindings (pinned or
 // implicit) read as done; ambiguity is caution; a dangling pin claims a world that is gone —
 // the claim disagrees with reality, which is the drift family's top rank (the one alarm).
 const TARGET_RAIL_COLOR: Record<string, string> = {
-  pinned: "var(--r-done)",
-  implicit: "var(--r-done)",
-  ambiguous: "var(--r-caution)",
-  dangling: "var(--r-alarm)",
-  muted: "var(--r-ink-mute)",
+  pinned: "var(--pe-done)",
+  implicit: "var(--pe-done)",
+  ambiguous: "var(--pe-caution)",
+  dangling: "var(--pe-alarm)",
+  muted: "var(--pe-ink-mute)",
 };
 
 function toolDuration(call: WorkbenchToolCall): string | undefined {

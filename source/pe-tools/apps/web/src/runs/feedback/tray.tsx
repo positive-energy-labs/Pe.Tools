@@ -24,7 +24,7 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
   return (
     <div
       className="flex flex-col gap-1 border-b px-2 py-1.5"
-      style={{ borderColor: "var(--r-line-2)" }}
+      style={{ borderColor: "var(--pe-line-2)" }}
     >
       <div className="flex items-baseline gap-2">
         <Verb
@@ -62,7 +62,7 @@ export function Tray(props: {
     <div className="flex size-full min-h-0 flex-col bg-background">
       <div
         className="flex h-8 shrink-0 items-center gap-2 border-b px-2"
-        style={{ borderColor: "var(--r-line-2)" }}
+        style={{ borderColor: "var(--pe-line-2)" }}
       >
         <span className="t-label t-upper text-muted-foreground">staging</span>
         <span className="face-mono t-caption t-label text-muted-foreground">
@@ -85,7 +85,7 @@ export function Tray(props: {
                   ? "bg-secondary text-secondary-foreground"
                   : "border text-muted-foreground hover:text-foreground",
               )}
-              style={props.review ? undefined : { borderColor: "var(--r-line-2)" }}
+              style={props.review ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
           )}
           {items.length > 0 && (
@@ -101,7 +101,7 @@ export function Tray(props: {
       {loadedSet && (
         <div
           className="face-mono t-caption shrink-0 truncate border-b px-2 py-1 text-muted-foreground"
-          style={{ borderColor: "var(--r-line-2)" }}
+          style={{ borderColor: "var(--pe-line-2)" }}
           title="This staging was rehydrated from an export manifest — it is editable; exporting mints a NEW stamp, the loaded set is never overwritten."
         >
           loaded from set {loadedSet}
@@ -122,7 +122,7 @@ export function Tray(props: {
       </div>
       <div
         className="flex flex-col gap-1.5 border-t px-2 py-2"
-        style={{ borderColor: "var(--r-line-2)" }}
+        style={{ borderColor: "var(--pe-line-2)" }}
       >
         <ExportVerbs items={items} pool={props.pool} />
         <ExportStatus />

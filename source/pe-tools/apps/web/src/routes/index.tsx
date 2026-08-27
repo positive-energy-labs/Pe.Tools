@@ -303,7 +303,7 @@ function App() {
             <div key={tool.to} className="flex flex-col gap-1.5">
               <Card
                 render={<Link to={tool.to} />}
-                className="group flex flex-1 flex-col gap-3 p-5 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                className="group flex flex-1 flex-col gap-3 p-5 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
               >
                 <div className="flex items-center justify-between">
                   <span className="inline-flex size-9 items-center justify-center rounded-md bg-recess text-foreground">

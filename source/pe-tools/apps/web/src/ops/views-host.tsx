@@ -85,7 +85,7 @@ function HostStatusView({ data }: OpViewProps) {
       />
       {!connected && disconnectReason && (
         <Provenance>
-          <span style={{ color: "var(--r-caution)" }}>disconnect: {disconnectReason}</span>
+          <span style={{ color: "var(--pe-caution)" }}>disconnect: {disconnectReason}</span>
         </Provenance>
       )}
       {agentRuntime && agentRuntime.available !== true && (
@@ -212,8 +212,8 @@ const LOG_TIMESTAMP = /^(\[?\d{4}-\d{2}-\d{2}[T ][\d:.,]+(?:Z|[+-]\d{2}:?\d{2})?
 /** error/warn lines go caution — a log line is never the model disagreeing, so no
  * alarm is spent; the word in the line carries the rank. */
 function logLineColor(line: string): string | undefined {
-  if (/\b(error|err|fatal)\b/i.test(line)) return "var(--r-caution)";
-  if (/\bwarn(ing)?\b/i.test(line)) return "var(--r-caution)";
+  if (/\b(error|err|fatal)\b/i.test(line)) return "var(--pe-caution)";
+  if (/\bwarn(ing)?\b/i.test(line)) return "var(--pe-caution)";
   return undefined;
 }
 

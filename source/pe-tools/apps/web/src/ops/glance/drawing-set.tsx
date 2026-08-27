@@ -113,11 +113,11 @@ function Thumbnail({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex min-w-0 flex-col gap-1 rounded-md border p-1.5 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${selected ? "border-line-2" : "border-line"}`}
-      /* selection is a fill, never a hue — the select rung, with --r-on re-declared. */
+      className={`flex min-w-0 flex-col gap-1 rounded-md border p-1.5 text-left hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] ${selected ? "border-line-2" : "border-line"}`}
+      /* selection is a fill, never a hue — the select rung, with --pe-on re-declared. */
       style={
         selected
-          ? ({ background: "var(--r-select)", "--r-on": "var(--r-select)" } as React.CSSProperties)
+          ? ({ background: "var(--pe-select)", "--pe-on": "var(--pe-select)" } as React.CSSProperties)
           : undefined
       }
       title={

@@ -342,7 +342,7 @@ function PaneResizeHandle({
       onDoubleClick={onReset}
       className={cn(
         // Hover buys no hue (the one hover law): the gutter lifts with the neutral veil.
-        "group z-20 flex touch-none items-center justify-center bg-muted/50 outline-none hover:bg-[var(--r-veil)] focus-visible:bg-[var(--r-veil)]",
+        "group z-20 flex touch-none items-center justify-center bg-muted/50 outline-none hover:bg-[var(--pe-veil)] focus-visible:bg-[var(--pe-veil)]",
         axis === "horizontal" ? "h-full w-2 cursor-col-resize" : "h-2 w-full cursor-row-resize",
         className,
       )}

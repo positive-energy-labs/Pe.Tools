@@ -15,9 +15,9 @@
  *                        --pea-tint --pea-line --line-soft). The GROUND FLIP ruling: the old
  *                        vocabulary has ZERO consumers and never grows one back — the
  *                        old vocabulary is deleted, so consuming it is consuming nothing.
- *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --r-line /
- *                        --r-line-2 (pe-base.css); the bare names died with the Lens
- *                        vocabulary. (The regex is literal, so var(--r-line) never matches.)
+ *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --pe-line /
+ *                        --pe-line-2 (pe-base.css); the bare names died with the Lens
+ *                        vocabulary. (The regex is literal, so var(--pe-line) never matches.)
  *  3. tele classes       tele / tele-label / section-label as class words. The TYPE TIERS
  *                        ruling: tier x face x case replaced
  *                        the tele bundles, deleted 2026-08-16. Comments are stripped first;
@@ -307,7 +307,7 @@ const isSemanticRawUtility = (rawToken: string) => {
     .replace(/^!/, "");
   const utility = stripVariantPrefix(token).replace(/^!/, "").replace(/!$/, "");
   const color =
-    /^(?:bg|text|border|divide|ring|outline|fill|stroke)(?:-[A-Za-z0-9_-]+)*-(\[(?:[A-Za-z][A-Za-z0-9_-]*:)?var\(--r-([a-z0-9-]+)\)\]|\(--r-([a-z0-9-]+)\))(?:\/[^\s]+)?$/.exec(
+    /^(?:bg|text|border|divide|ring|outline|fill|stroke)(?:-[A-Za-z0-9_-]+)*-(\[(?:[A-Za-z][A-Za-z0-9_-]*:)?var\(--pe-([a-z0-9-]+)\)\]|\(--pe-([a-z0-9-]+)\))(?:\/[^\s]+)?$/.exec(
       utility,
     );
   if (color && semanticRoles.has(color[2] ?? color[3])) return true;
@@ -319,24 +319,24 @@ const semanticRawUtilityTokens = (text: string) =>
   text.split(/\s+/).filter((token) => token && isSemanticRawUtility(token));
 
 const semanticRawUtilityMatrix = [
-  ["bg-[var(--r-page)]", true],
-  ["data-[s=idle]:bg-[var(--r-page)]", true],
-  ["[&:not(:first-child)]:bg-[var(--r-page)]", true],
-  ["border-r-[var(--r-line)]/50", true],
-  ["!bg-[var(--r-page)]", true],
-  ["bg-[var(--r-page)]!", true],
-  ["bg-[color:var(--r-page)]", true],
-  ["bg-(--r-page)", true],
+  ["bg-[var(--pe-page)]", true],
+  ["data-[s=idle]:bg-[var(--pe-page)]", true],
+  ["[&:not(:first-child)]:bg-[var(--pe-page)]", true],
+  ["border-r-[var(--pe-line)]/50", true],
+  ["!bg-[var(--pe-page)]", true],
+  ["bg-[var(--pe-page)]!", true],
+  ["bg-[color:var(--pe-page)]", true],
+  ["bg-(--pe-page)", true],
   ["rounded-[var(--radius)]", true],
   ["hover:rounded-(--radius)!", true],
   ["font-[family-name:var(--font-pe-mono)]", true],
-  ['Use "bg-[var(--r-page)]" here.', true],
-  ["Use (bg-[var(--r-page)]) here.", true],
-  ["var(--r-page)", false],
-  ["color: var(--r-page)", false],
-  ["[--r-on:var(--r-page)]", false],
-  ["hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]", false],
-  ["w-[var(--r-page)]", false],
+  ['Use "bg-[var(--pe-page)]" here.', true],
+  ["Use (bg-[var(--pe-page)]) here.", true],
+  ["var(--pe-page)", false],
+  ["color: var(--pe-page)", false],
+  ["[--pe-on:var(--pe-page)]", false],
+  ["hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]", false],
+  ["w-[var(--pe-page)]", false],
 ] as const;
 
 const semanticRawUtilities = (): Offence[] => {
@@ -378,16 +378,16 @@ describe("design guard — hard zeros", () => {
     const offences = scan(FILES, re);
     expect(
       offences.length,
-      `Deleted token vocabulary consumed — these were removed at zero consumers; use the --r-* canon (pe-base.css):\n${report(offences)}`,
+      `Deleted token vocabulary consumed — these were removed at zero consumers; use the --pe-* canon (pe-base.css):\n${report(offences)}`,
     ).toBe(0);
   });
 
-  it("no bare var(--line) / var(--line-2) — the canon hairlines are --r-line / --r-line-2", () => {
+  it("no bare var(--line) / var(--line-2) — the canon hairlines are --pe-line / --pe-line-2", () => {
     const re = /var\(--line(?:-2)?\s*[,)]/g;
     const offences = scan(FILES, re);
     expect(
       offences.length,
-      `Bare hairline tokens — use var(--r-line) / var(--r-line-2):\n${report(offences)}`,
+      `Bare hairline tokens — use var(--pe-line) / var(--pe-line-2):\n${report(offences)}`,
     ).toBe(0);
   });
 
@@ -414,7 +414,7 @@ describe("design guard — hard zeros", () => {
     );
     expect(
       offences.length,
-      `Colour literals outside the canon — name a --r-* / --viz-* role instead:\n${report(offences)}`,
+      `Colour literals outside the canon — name a --pe-* / --viz-* role instead:\n${report(offences)}`,
     ).toBe(0);
   });
 
@@ -533,7 +533,7 @@ describe("design guard — foundation topology", () => {
     expect(baseLayer![1]).toContain("line-height: 1.5;");
     expect(baseLayer![1]).toContain("font: inherit;");
     expect(baseLayer![1]).toContain("font-family: var(--font-mono);");
-    expect(baseLayer![1]).toContain("outline: 2px solid var(--r-ink);");
+    expect(baseLayer![1]).toContain("outline: 2px solid var(--pe-ink);");
     expect(baseLayer![1]).toContain("color-scheme: light;");
     expect(baseLayer![1]).toContain("[data-pe].dark");
     expect(baseLayer![1]).not.toContain("\\");
@@ -547,7 +547,7 @@ describe("design guard — foundation topology", () => {
     expect(base).toBeDefined();
     const mutated = base!.text.replace(
       "font: inherit;",
-      "font: inherit;\n    padding: 2rem;\n    background: var(--r-commit);\n    border-radius: 999px;",
+      "font: inherit;\n    padding: 2rem;\n    background: var(--pe-commit);\n    border-radius: 999px;",
     );
     const layer = /@layer base\s*\{([\s\S]*?)\n\}\s*\n\[data-pe\] \.page-wrap/.exec(
       stripComments(mutated),
@@ -563,7 +563,7 @@ describe("design guard — foundation topology", () => {
 
     const escaped = base!.text.replace(
       "font: inherit;",
-      "font: inherit;\n    padd\\69ng: 2rem;\n    back\\67round: var(--r-commit);\n    border-rad\\69us: 999px;",
+      "font: inherit;\n    padd\\69ng: 2rem;\n    back\\67round: var(--pe-commit);\n    border-rad\\69us: 999px;",
     );
     const escapedLayer = /@layer base\s*\{([\s\S]*?)\n\}\s*\n\[data-pe\] \.page-wrap/.exec(
       stripComments(escaped),
@@ -617,13 +617,13 @@ describe("design guard — foundation topology", () => {
   it("sees class-builder literals inside JSX prop descendants once", () => {
     const source = createSourceFile(
       "nested-prop-regression.tsx",
-      '<Panel sentence={<span className={cn("text-[var(--r-ink)]")} />} />',
+      '<Panel sentence={<span className={cn("text-[var(--pe-ink)]")} />} />',
       ScriptTarget.Latest,
       true,
       ScriptKind.TSX,
     );
     expect(literalAuthoringTexts(source).map((literal) => literal.text)).toEqual([
-      "text-[var(--r-ink)]",
+      "text-[var(--pe-ink)]",
     ]);
   });
 

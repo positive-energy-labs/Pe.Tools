@@ -31,7 +31,7 @@ import { endpoints, pathOf, sharedPrefix, type Link, type Product } from "#/targ
 /** Second-look caption: direction · liveness, small and mute. Hover on the noun says more. */
 function Caption({ link }: { link: Link }) {
   return (
-    <span className="face-mono t-caption" style={{ color: "var(--r-ink-mute)", lineHeight: 1 }}>
+    <span className="face-mono t-caption" style={{ color: "var(--pe-ink-mute)", lineHeight: 1 }}>
       {link.dir}
       {link.liveness ? ` · ${link.liveness}` : ""}
     </span>
@@ -54,7 +54,7 @@ export function SentenceView({ product }: { product: Product }) {
   return (
     <div className="px-2">
       <div className="flex items-center gap-2 pb-1">
-        <span className="t-caption t-upper" style={{ color: "var(--r-ink-2)" }}>
+        <span className="t-caption t-upper" style={{ color: "var(--pe-ink-2)" }}>
           proto · input
         </span>
         <Switcher
@@ -84,7 +84,7 @@ export function SentenceView({ product }: { product: Product }) {
       <ArtifactFrame
         head={
           <>
-            <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
+            <span className="t-label t-upper" style={{ color: "var(--pe-ink)" }}>
               {product.name}
             </span>
             <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
@@ -93,7 +93,7 @@ export function SentenceView({ product }: { product: Product }) {
                   className="inline-flex items-baseline gap-1.5"
                   style={{ whiteSpace: "nowrap" }}
                 >
-                  <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+                  <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
                     {prefix[0]!.joiner}
                   </span>
                   <PathInput
@@ -118,12 +118,12 @@ export function SentenceView({ product }: { product: Product }) {
                   >
                     <Caption link={e} />
                     <span className="inline-flex items-baseline gap-1.5">
-                      <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+                      <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
                         {e.joiner}
                       </span>
                       {chain.length === 0 ? (
                         // the endpoint IS in the prefix (takeoffs' rvt): a back-reference
-                        <span className="face-mono t-label" style={{ color: "var(--r-ink-2)" }}>
+                        <span className="face-mono t-label" style={{ color: "var(--pe-ink-2)" }}>
                           {e.key}
                         </span>
                       ) : (
@@ -147,7 +147,7 @@ export function SentenceView({ product }: { product: Product }) {
           <>
             <PaneStrip product={product} b={b} />
             {runner.last ? (
-              <span className="face-mono t-caption" style={{ color: "var(--r-done)" }}>
+              <span className="face-mono t-caption" style={{ color: "var(--pe-done)" }}>
                 ran {runner.last.verb}
               </span>
             ) : (
@@ -173,7 +173,7 @@ export function SentenceView({ product }: { product: Product }) {
             );
           })}
           {note ? (
-            <span className="t-caption pl-2" style={{ color: "var(--r-pea-ink)" }}>
+            <span className="t-caption pl-2" style={{ color: "var(--pe-pea-ink)" }}>
               pea · {note}
             </span>
           ) : null}

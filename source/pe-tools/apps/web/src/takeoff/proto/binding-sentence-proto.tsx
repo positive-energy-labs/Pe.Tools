@@ -163,15 +163,15 @@ function ProtoSlot({
       style={{
         padding: 0,
         cursor: "pointer",
-        background: open ? "var(--r-select)" : "transparent",
+        background: open ? "var(--pe-select)" : "transparent",
         border: "none",
-        borderBottom: `0.5px solid ${bound ? "var(--r-ink)" : "var(--r-caution)"}`,
+        borderBottom: `0.5px solid ${bound ? "var(--pe-ink)" : "var(--pe-caution)"}`,
         borderRadius: 0,
-        color: bound ? "var(--r-ink)" : "var(--r-caution)",
+        color: bound ? "var(--pe-ink)" : "var(--pe-caution)",
         whiteSpace: "nowrap",
       }}
     >
-      {g ? <span style={{ color: "var(--r-ink-2)" }}>{g} </span> : null}
+      {g ? <span style={{ color: "var(--pe-ink-2)" }}>{g} </span> : null}
       {binding.noun ?? binding.placeholder}
     </button>
   );
@@ -179,7 +179,7 @@ function ProtoSlot({
 
 function Joiner({ children }: { children: React.ReactNode }) {
   return (
-    <span className="face-mono t-label" style={{ color: "var(--r-ink-2)", whiteSpace: "nowrap" }}>
+    <span className="face-mono t-label" style={{ color: "var(--pe-ink-2)", whiteSpace: "nowrap" }}>
       {children}
     </span>
   );
@@ -199,13 +199,13 @@ function ProtoPopover({
     <div
       className="absolute left-0 top-full z-40 mt-1 max-h-72 w-80 overflow-y-auto px-2 py-1"
       style={{
-        border: "0.5px solid var(--r-line-2)",
-        background: "var(--r-page)",
+        border: "0.5px solid var(--pe-line-2)",
+        background: "var(--pe-page)",
         borderRadius: 2,
-        boxShadow: "0 2px 8px color-mix(in srgb, var(--r-ink) 8%, transparent)",
+        boxShadow: "0 2px 8px color-mix(in srgb, var(--pe-ink) 8%, transparent)",
       }}
     >
-      <div className="t-caption t-upper pb-0.5" style={{ color: "var(--r-ink-2)" }}>
+      <div className="t-caption t-upper pb-0.5" style={{ color: "var(--pe-ink-2)" }}>
         {binding.direction} — {binding.joiner} {binding.placeholder}
       </div>
       <input
@@ -215,9 +215,9 @@ function ProtoPopover({
         className="face-mono t-caption mt-1 w-full px-1.5 py-0.5"
         style={{
           borderRadius: 2,
-          border: "0.5px solid var(--r-line-2)",
+          border: "0.5px solid var(--pe-line-2)",
           background: "transparent",
-          color: "var(--r-ink)",
+          color: "var(--pe-ink)",
           outline: "none",
         }}
       />
@@ -225,21 +225,21 @@ function ProtoPopover({
         <div
           key={o.id}
           className="py-1"
-          style={{ cursor: "pointer", borderTop: "0.5px solid var(--r-line)" }}
+          style={{ cursor: "pointer", borderTop: "0.5px solid var(--pe-line)" }}
           onClick={() => onPick(o.id, o.label)}
         >
-          <span className="face-mono t-caption" style={{ color: "var(--r-ink)" }}>
+          <span className="face-mono t-caption" style={{ color: "var(--pe-ink)" }}>
             {o.label}
           </span>{" "}
           {o.sub ? (
-            <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+            <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
               {o.sub}
             </span>
           ) : null}
         </div>
       ))}
       {shown.length === 0 ? (
-        <div className="face-mono t-caption py-1" style={{ color: "var(--r-ink-2)" }}>
+        <div className="face-mono t-caption py-1" style={{ color: "var(--pe-ink-2)" }}>
           {binding.empty}
         </div>
       ) : null}
@@ -254,7 +254,7 @@ function SentenceA({ bindings, openSlot, toggle, onPick }: VariantProps) {
     <div className="relative inline-block min-w-0 flex-1 basis-72">
       <div
         className="flex h-7 items-center overflow-hidden px-2"
-        style={{ border: "0.5px solid var(--r-line-2)", borderRadius: 2 }}
+        style={{ border: "0.5px solid var(--pe-line-2)", borderRadius: 2 }}
       >
         <span className="flex items-baseline gap-1 truncate" style={{ whiteSpace: "nowrap" }}>
           {bindings.map((b) => (
@@ -305,7 +305,7 @@ function SentenceB({ bindings, openSlot, toggle, onPick }: VariantProps) {
     <div className="relative inline-block min-w-0 flex-1 basis-72">
       <div
         className="flex h-7 items-center gap-2 overflow-hidden px-2"
-        style={{ border: "0.5px solid var(--r-line-2)", borderRadius: 2 }}
+        style={{ border: "0.5px solid var(--pe-line-2)", borderRadius: 2 }}
       >
         {group("editing", by("subject"))}
         {group("· reads:", by("reads"))}
@@ -331,7 +331,7 @@ function SentenceC({ bindings, openSlot, toggle, onPick }: VariantProps) {
     <div className="relative inline-block min-w-0 flex-1 basis-72">
       <div
         className="flex h-7 items-center overflow-hidden px-2"
-        style={{ border: "0.5px solid var(--r-line-2)", borderRadius: 2 }}
+        style={{ border: "0.5px solid var(--pe-line-2)", borderRadius: 2 }}
       >
         <span className="flex items-baseline gap-1 truncate" style={{ whiteSpace: "nowrap" }}>
           {inline.map((b) => (
@@ -351,7 +351,7 @@ function SentenceC({ bindings, openSlot, toggle, onPick }: VariantProps) {
           <span
             key={b.key}
             className="flex items-baseline gap-1 px-1.5"
-            style={{ border: "0.5px solid var(--r-line-2)", borderRadius: 2 }}
+            style={{ border: "0.5px solid var(--pe-line-2)", borderRadius: 2 }}
           >
             <ProtoSlot binding={b} glyph open={openSlot === b.key} onToggle={() => toggle(b.key)} />
           </span>
@@ -423,7 +423,7 @@ export function BindingHeadProto({
     <div
       ref={rootRef}
       className="relative z-40 px-2 pt-2 pb-1"
-      style={{ background: "var(--r-page)", borderBottom: "0.5px solid var(--r-line-2)" }}
+      style={{ background: "var(--pe-page)", borderBottom: "0.5px solid var(--pe-line-2)" }}
     >
       <AddressingBar
         name="takeoffs"
@@ -437,7 +437,7 @@ export function BindingHeadProto({
           )
         }
         seam={
-          <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+          <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
             proto · picks are local, nothing writes
           </span>
         }

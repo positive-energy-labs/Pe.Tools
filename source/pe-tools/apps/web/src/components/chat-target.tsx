@@ -66,8 +66,8 @@ export function TargetWorld() {
             key={s.sessionId}
             onClick={() => pin(mintSelector(s, sessions))}
             // The resolved session is a SELECTION — the selection fill, never a hue.
-            className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${
-              isResolved ? "bg-select [--r-on:var(--r-select)]" : ""
+            className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] ${
+              isResolved ? "bg-select [--pe-on:var(--pe-select)]" : ""
             }`}
           >
             <span className="inline-flex min-w-0 items-center gap-2">

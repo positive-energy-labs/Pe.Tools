@@ -43,8 +43,8 @@ function Demand({ product, k, b }: { product: Product; k: string; b: Bindings })
       className="face-mono t-caption"
       title={`${k}: ${b.labelOf(link) ?? "unbound"}${isSeam(link) ? ` — seam, needs ${link.needs}` : ""}`}
       style={{
-        color: bound ? "var(--r-ink)" : "var(--r-caution)",
-        borderBottom: isSeam(link) ? "1px dashed var(--r-caution)" : "1px solid transparent",
+        color: bound ? "var(--pe-ink)" : "var(--pe-caution)",
+        borderBottom: isSeam(link) ? "1px dashed var(--pe-caution)" : "1px solid transparent",
       }}
     >
       {k}
@@ -72,7 +72,7 @@ export function BoardView({ product }: { product: Product }) {
         style={{
           gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
           minHeight: 34,
-          borderTop: i === 0 ? undefined : "1px solid var(--r-line-2)",
+          borderTop: i === 0 ? undefined : "1px solid var(--pe-line-2)",
         }}
       >
         <span>
@@ -87,7 +87,7 @@ export function BoardView({ product }: { product: Product }) {
         </span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           {v.demands.length === 0 ? (
-            <span className="face-mono t-caption" style={{ color: "var(--r-ink-mute)" }}>
+            <span className="face-mono t-caption" style={{ color: "var(--pe-ink-mute)" }}>
               —
             </span>
           ) : (
@@ -97,7 +97,7 @@ export function BoardView({ product }: { product: Product }) {
         <span
           className="face-mono t-caption text-right"
           style={{
-            color: can.ok ? "var(--r-ink-mute)" : "var(--r-ink-2)",
+            color: can.ok ? "var(--pe-ink-mute)" : "var(--pe-ink-2)",
             fontStyle: can.ok ? undefined : "italic",
           }}
         >
@@ -113,7 +113,7 @@ export function BoardView({ product }: { product: Product }) {
               className="block h-full"
               style={{
                 width: "25%",
-                background: "var(--r-ink)",
+                background: "var(--pe-ink)",
                 animation: "tb-run 1s linear infinite",
               }}
             />
@@ -129,7 +129,7 @@ export function BoardView({ product }: { product: Product }) {
       <ArtifactFrame
         head={
           <>
-            <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
+            <span className="t-label t-upper" style={{ color: "var(--pe-ink)" }}>
               {product.name}
             </span>
             <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-1">
@@ -156,7 +156,7 @@ export function BoardView({ product }: { product: Product }) {
                   >
                     <span
                       className="face-mono t-caption t-upper"
-                      style={{ color: "var(--r-ink-mute)" }}
+                      style={{ color: "var(--pe-ink-mute)" }}
                     >
                       {e.dir}
                     </span>
@@ -179,7 +179,7 @@ export function BoardView({ product }: { product: Product }) {
             <PaneStrip product={product} b={b} />
             <span
               className="face-mono t-caption"
-              style={{ color: runner.last ? "var(--r-done)" : "var(--r-ink-mute)" }}
+              style={{ color: runner.last ? "var(--pe-done)" : "var(--pe-ink-mute)" }}
             >
               {runner.last ? `ran ${runner.last.verb}` : "idle"}
             </span>
@@ -192,7 +192,7 @@ export function BoardView({ product }: { product: Product }) {
           style={{
             gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
             columnGap: "1rem",
-            color: "var(--r-ink-mute)",
+            color: "var(--pe-ink-mute)",
           }}
         >
           <span>verb</span>
@@ -200,7 +200,7 @@ export function BoardView({ product }: { product: Product }) {
           <span className="text-right">state</span>
         </div>
         <div
-          style={{ borderTop: "1px solid var(--r-ink)", borderBottom: "1px solid var(--r-ink)" }}
+          style={{ borderTop: "1px solid var(--pe-ink)", borderBottom: "1px solid var(--pe-ink)" }}
         >
           {verbs.map(row)}
         </div>

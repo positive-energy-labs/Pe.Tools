@@ -6,10 +6,10 @@ import { cn } from "#/lib/utils";
  * migration (2026-08-16 ops pass): the Revit Project Browser tree, the schedule grid,
  * and the label/value palette. Everything else this file used to export (Chip, OpSection,
  * Provenance, MonoNote, EmptyState, CoverageBar, CatHue/catVar) dissolved onto
- * `components/lang/*` and the `--r-*` canon.
+ * `components/lang/*` and the `--pe-*` canon.
  *
  * These stay ops-owned because their shape is Revit-familiar, not because their colours
- * are: every colour below is a `--r-*` role or the viz ladder. No `--cat-*`, no `--line*`,
+ * are: every colour below is a `--pe-*` role or the viz ladder. No `--cat-*`, no `--line*`,
  * no Lens tokens.
  */
 
@@ -64,7 +64,7 @@ export function VizChip({
 export type KVTone = "caution";
 
 const KV_TONE: Record<KVTone, string> = {
-  caution: "var(--r-caution)",
+  caution: "var(--pe-caution)",
 };
 
 /** Label/value pairs; values are machine-measured so they read mono. */
@@ -130,7 +130,7 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
         role={hasChildren ? "button" : undefined}
         onClick={hasChildren ? () => setOpen(!open) : undefined}
         className={cn(
-          "flex min-w-0 items-center gap-1 pr-2 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
+          "flex min-w-0 items-center gap-1 pr-2 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]",
           dense ? "py-px" : "py-0.5",
           hasChildren && "cursor-pointer select-none",
         )}
@@ -176,11 +176,11 @@ export type Column<Row> = {
   width?: number | string;
 };
 
-/** The head band shifts the ground, so `--r-on` is re-declared on the same rule
+/** The head band shifts the ground, so `--pe-on` is re-declared on the same rule
  * (the design-lang plumbing convention). */
 const RECESS_GROUND = {
-  background: "var(--r-recess)",
-  "--r-on": "var(--r-recess)",
+  background: "var(--pe-recess)",
+  "--pe-on": "var(--pe-recess)",
 } as CSSProperties;
 
 /** Readonly grid, Revit-schedule flavored: optional centered title band, recessed
@@ -228,7 +228,7 @@ export function DataTable<Row>({
             {rows.map((row, index) => (
               <tr
                 key={rowKey(row, index)}
-                className="hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                className="hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
               >
                 {columns.map((col) => (
                   <td

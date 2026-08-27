@@ -29,7 +29,7 @@ export function ExportVerbs(props: {
           ? "border-transparent bg-primary text-primary-foreground"
           : "text-muted-foreground hover:text-foreground",
       )}
-      style={{ borderColor: primary ? undefined : "var(--r-line-2)", borderRadius: 2 }}
+      style={{ borderColor: primary ? undefined : "var(--pe-line-2)", borderRadius: 2 }}
     />
   );
   return (
@@ -67,7 +67,7 @@ export function ExportStatus(props: { className?: string }) {
     return (
       <div
         className={cn("face-mono t-caption", props.className)}
-        style={{ color: "var(--r-alarm)" }}
+        style={{ color: "var(--pe-alarm)" }}
       >
         export failed: {exportError}
       </div>
@@ -102,12 +102,12 @@ export function ExportStatus(props: { className?: string }) {
       >
         ?set={lastExport.stamp}
       </a>
-      {lastExport.warning && <span style={{ color: "var(--r-alarm)" }}>{lastExport.warning}</span>}
+      {lastExport.warning && <span style={{ color: "var(--pe-alarm)" }}>{lastExport.warning}</span>}
       <details>
         <summary className="cursor-pointer">view the clip block</summary>
         <pre
           className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5"
-          style={{ borderColor: "var(--r-line-2)", borderRadius: 2 }}
+          style={{ borderColor: "var(--pe-line-2)", borderRadius: 2 }}
         >
           {lastExport.text}
         </pre>
@@ -136,7 +136,7 @@ export function FlagChips(props: { item: StagedItem }) {
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
           className="face-mono t-caption border px-1"
-          style={{ borderColor: "var(--r-alarm)", color: "var(--r-alarm)", borderRadius: 2 }}
+          style={{ borderColor: "var(--pe-alarm)", color: "var(--pe-alarm)", borderRadius: 2 }}
         >
           ⚑ {flagLabel(el)} ✕
         </button>
@@ -164,7 +164,7 @@ export function NoteInput(props: {
       "face-mono t-caption w-full border bg-background px-1.5 py-0.5 t-label placeholder:text-muted-foreground/50",
       props.className,
     ),
-    style: { borderColor: "var(--r-line-2)", borderRadius: 2 },
+    style: { borderColor: "var(--pe-line-2)", borderRadius: 2 },
   };
   return props.multiline ? (
     <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} />

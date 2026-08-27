@@ -403,7 +403,7 @@ function LangGroup() {
     <section className="flex flex-col gap-3">
       <GroupHead
         title="lang"
-        note="the design language itself — every component here runs on --r-* tokens only"
+        note="the design language itself — every component here runs on --pe-* tokens only"
       />
 
       <Block

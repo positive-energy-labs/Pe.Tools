@@ -415,7 +415,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
    * aimed at that exact cell — including an empty commit, which hands the type back to inheriting
    * and is just as much a decision. There is no verdict left to give: pea argued for a number and
    * you wrote a different one, so accept and deny both became meaningless. The card settles muted,
-   * never on `--r-done` — nothing of pea's was adopted.
+   * never on `--pe-done` — nothing of pea's was adopted.
    */
   const sever = (next: Draft, param: string, typeName: string | null) => {
     for (const entry of world.proposals) {
@@ -894,7 +894,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
                 ? `One open proposal on ${row.name} — ${where}. Click to bring its card into view in the doc sidebar, where accept and deny sit beside the spec text. Nothing pops over the table.`
                 : `${open.length} open proposals on ${row.name}, at different types — ${where}. The row is contested more than once; the corner folds in the cells say WHICH cells. Click to bring the cards into view.`
             }
-            /* Pea's identity, never the commit colour: a MARK takes `--r-pea` (the display rung),
+            /* Pea's identity, never the commit colour: a MARK takes `--pe-pea` (the display rung),
                a counted chip is text and takes pea's ink. */
             className={cn(
               "face-mono flex items-center justify-center",
@@ -1050,7 +1050,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
     group: "PROFILE",
     width: "w-28",
     right: options.align === "right",
-    /* The column on stage is lit by a FILL, never a hue — `--r-select` is literally the ground
+    /* The column on stage is lit by a FILL, never a hue — `--pe-select` is literally the ground
        ladder's selection rung, so the law cannot be broken here by accident. */
     headerClassName: options.header && stageType === typeName ? "bg-select" : undefined,
     header: options.header ? (
@@ -1170,9 +1170,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       // squiggle law: drift outranks the citation, because a cell that is both is more urgently
       // the first. The citation spends no meaning colour; it is a hairline.
       const underline = drifted
-        ? "underline decoration-[var(--r-alarm)] decoration-dotted underline-offset-[3px]"
+        ? "underline decoration-[var(--pe-alarm)] decoration-dotted underline-offset-[3px]"
         : grounded
-          ? "underline decoration-[var(--r-line-2)] decoration-dotted underline-offset-[3px]"
+          ? "underline decoration-[var(--pe-line-2)] decoration-dotted underline-offset-[3px]"
           : undefined;
       const groundedNote = grounded
         ? ` Grounded in ${(world.grounding[row.name] ?? []).join(", ")} of ${world.spec?.fileName ?? "the spec"} — the hairline underline is that citation, and it stays put in every overlay unless drift outranks it.`
@@ -1621,7 +1621,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         ? focusedParts.has(row.slug ?? "")
         : focusedParams.has(row.name) || pinnedParam === row.name;
     return cn(
-      row.kind === "ghost" && "bg-[color-mix(in_srgb,var(--r-caution)_6%,transparent)]",
+      row.kind === "ghost" && "bg-[color-mix(in_srgb,var(--pe-caution)_6%,transparent)]",
       // The hairline is drawn on whichever ghost is first IN VISIBLE ORDER, not on whichever one
       // the fixture happened to list first — sorting reorders the ghosts among themselves, and a
       // section rule that stayed on a row in the middle of the section would be drawing a boundary

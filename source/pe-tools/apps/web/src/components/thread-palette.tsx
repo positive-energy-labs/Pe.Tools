@@ -63,8 +63,8 @@ export function ThreadList({
               // The open thread is a SELECTION — the selection fill, never a hue or a frame.
               className={`group/row flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 t-prose ${
                 active
-                  ? "bg-select [--r-on:var(--r-select)]"
-                  : "hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                  ? "bg-select [--pe-on:var(--pe-select)]"
+                  : "hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
               }`}
               onClick={() => onSelect(thread.id)}
             >
@@ -87,7 +87,7 @@ export function ThreadList({
               <button
                 type="button"
                 title="Delete thread"
-                className="hidden shrink-0 rounded-sm p-0.5 text-ink-2 group-hover/row:inline hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                className="hidden shrink-0 rounded-sm p-0.5 text-ink-2 group-hover/row:inline hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete(thread.id);
@@ -112,7 +112,7 @@ export function ThreadList({
         <button
           type="button"
           title="Start a new thread — the current one stays in the list"
-          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
           onClick={onNew}
         >
           <Plus className="size-4" />
@@ -121,7 +121,7 @@ export function ThreadList({
         <button
           type="button"
           title="Search every thread by title or folder (⌘K)"
-          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink-2 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink-2 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
           onClick={onSearch}
         >
           <Search className="size-3.5" />
@@ -219,7 +219,7 @@ export function ThreadPalette({
                 <button
                   type="button"
                   title="Delete thread"
-                  className="shrink-0 rounded-sm p-0.5 text-ink-2 opacity-0 transition-opacity group-hover/row:opacity-100 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] data-selected:opacity-100"
+                  className="shrink-0 rounded-sm p-0.5 text-ink-2 opacity-0 transition-opacity group-hover/row:opacity-100 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] data-selected:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();
                     onDelete(thread.id);

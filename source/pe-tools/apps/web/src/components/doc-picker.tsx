@@ -56,16 +56,16 @@ export function DocRow({
       reason={`Pick document ${label}.`}
       disabled={disabled}
       onClick={onPick}
-      className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-line px-2 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] disabled:opacity-40 disabled:italic ${
-        selected ? "bg-select [--r-on:var(--r-select)]" : ""
+      className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-line px-2 py-1 text-left hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] disabled:opacity-40 disabled:italic ${
+        selected ? "bg-select [--pe-on:var(--pe-select)]" : ""
       }`}
     >
       {ext ? (
         <span
           className="t-caption face-mono shrink-0 rounded-[2px] border-[0.5px] px-1"
           style={{
-            borderColor: EXT_COLOR[ext] ?? "var(--r-line-2)",
-            color: EXT_COLOR[ext] ?? "var(--r-ink-2)",
+            borderColor: EXT_COLOR[ext] ?? "var(--pe-line-2)",
+            color: EXT_COLOR[ext] ?? "var(--pe-ink-2)",
           }}
         >
           {ext}

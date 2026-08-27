@@ -87,10 +87,10 @@ export function ParadigmA({ editor }: { editor: Editor }) {
       style={{
         background: "transparent",
         border: "none",
-        borderBottom: "0.5px solid var(--r-line-2)",
+        borderBottom: "0.5px solid var(--pe-line-2)",
         borderRadius: 0,
         cursor: "pointer",
-        color: "var(--r-nav)",
+        color: "var(--pe-nav)",
         padding: 0,
       }}
     >
@@ -103,14 +103,14 @@ export function ParadigmA({ editor }: { editor: Editor }) {
       {/* the index — every datum in the document, with its blast radius */}
       <nav
         className="min-h-0 w-64 shrink-0 overflow-auto border-r px-2 py-2"
-        style={{ borderColor: "var(--r-line)" }}
+        style={{ borderColor: "var(--pe-line)" }}
       >
         {RAIL_ORDER.map((kind) => {
           const group = graph.nodes.filter((entry) => entry.kind === kind);
           if (group.length === 0) return null;
           return (
             <div key={kind} className="mb-3">
-              <div className="t-caption t-upper mb-1 text-[var(--r-ink-mute)]">
+              <div className="t-caption t-upper mb-1 text-[var(--pe-ink-mute)]">
                 {RAIL_LABEL[kind]}
               </div>
               {group.map((entry) => (
@@ -129,26 +129,26 @@ export function ParadigmA({ editor }: { editor: Editor }) {
 
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
         {node == null ? (
-          <p className="t-prose text-[var(--r-ink-2)]">
+          <p className="t-prose text-[var(--pe-ink-2)]">
             {anchor} is not in the document — pick a datum on the left.
           </p>
         ) : (
           <>
             <header className="mb-3">
               <div className="flex items-baseline gap-2">
-                <span className="face-mono t-title text-[var(--r-ink)]">{node.label}</span>
-                <span className="t-label text-[var(--r-ink-mute)]">{RAIL_LABEL[node.kind]}</span>
+                <span className="face-mono t-title text-[var(--pe-ink)]">{node.label}</span>
+                <span className="t-label text-[var(--pe-ink-mute)]">{RAIL_LABEL[node.kind]}</span>
                 {nodeValue(editor.model, editor.typeName, node.id) != null ? (
-                  <span className="face-mono t-value text-[var(--r-ink-2)]">
+                  <span className="face-mono t-value text-[var(--pe-ink-2)]">
                     = {nodeValue(editor.model, editor.typeName, node.id)}
                   </span>
                 ) : null}
               </div>
-              <div className="face-mono t-caption text-[var(--r-ink-mute)]">
+              <div className="face-mono t-caption text-[var(--pe-ink-mute)]">
                 {node.id} · {node.detail}
               </div>
               {overriddenBy(editor.model, node.id).length > 0 ? (
-                <div className="t-caption mt-0.5 text-[var(--r-caution)]">
+                <div className="t-caption mt-0.5 text-[var(--pe-caution)]">
                   overridden by type: {overriddenBy(editor.model, node.id).join(" · ")}
                 </div>
               ) : null}
@@ -156,11 +156,11 @@ export function ParadigmA({ editor }: { editor: Editor }) {
 
             {/* ── DEFINED FROM ─────────────────────────────────────────────────────────────── */}
             <section className="mb-4">
-              <div className="t-label t-upper mb-1 text-[var(--r-ink-2)]">
+              <div className="t-label t-upper mb-1 text-[var(--pe-ink-2)]">
                 defined from — {from.length} reference{from.length === 1 ? "" : "s"}
               </div>
               {fields.length === 0 ? (
-                <p className="t-caption text-[var(--r-ink-mute)]">
+                <p className="t-caption text-[var(--pe-ink-mute)]">
                   stock datum — the template owns it, nothing here is authored
                 </p>
               ) : (
@@ -168,7 +168,7 @@ export function ParadigmA({ editor }: { editor: Editor }) {
                   <tbody>
                     {fields.map((field) => (
                       <tr key={field.key}>
-                        <td className="face-mono t-label w-28 py-0.5 align-baseline text-[var(--r-ink-mute)]">
+                        <td className="face-mono t-label w-28 py-0.5 align-baseline text-[var(--pe-ink-mute)]">
                           {field.key}
                         </td>
                         <td className="py-0.5 align-baseline">
@@ -195,7 +195,7 @@ export function ParadigmA({ editor }: { editor: Editor }) {
                             <Walk id={field.value} label="→ open" />
                           ) : null}
                         </td>
-                        <td className="face-mono t-caption py-0.5 pl-2 align-baseline text-[var(--r-ink-mute)]">
+                        <td className="face-mono t-caption py-0.5 pl-2 align-baseline text-[var(--pe-ink-mute)]">
                           {nodeValue(editor.model, editor.typeName, field.value) ?? ""}
                         </td>
                       </tr>
@@ -207,11 +207,11 @@ export function ParadigmA({ editor }: { editor: Editor }) {
 
             {/* ── DEFINED OFF IT ───────────────────────────────────────────────────────────── */}
             <section className="mb-4">
-              <div className="t-label t-upper mb-1 text-[var(--r-ink-2)]">
+              <div className="t-label t-upper mb-1 text-[var(--pe-ink-2)]">
                 defined off it — {off.length} dependent{off.length === 1 ? "" : "s"}
               </div>
               {off.length === 0 ? (
-                <p className="t-caption text-[var(--r-ink-mute)]">
+                <p className="t-caption text-[var(--pe-ink-mute)]">
                   nothing reads this — changing it moves nothing else in the document
                 </p>
               ) : (
@@ -219,7 +219,7 @@ export function ParadigmA({ editor }: { editor: Editor }) {
                   {off.map((edge) => (
                     <li key={`${edge.from}/${edge.field}`} className="flex items-baseline gap-2">
                       <Walk id={edge.from} label={edge.from} />
-                      <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+                      <span className="face-mono t-caption text-[var(--pe-ink-mute)]">
                         · {edge.field}
                         {edge.to === anchor ? "" : ` (via ${edge.to})`}
                       </span>
@@ -231,9 +231,9 @@ export function ParadigmA({ editor }: { editor: Editor }) {
               {slot != null && off.length > 0 ? (
                 <div
                   className="mt-2 flex flex-wrap items-baseline gap-2 border-t pt-2"
-                  style={{ borderColor: "var(--r-line)" }}
+                  style={{ borderColor: "var(--pe-line)" }}
                 >
-                  <span className="t-caption text-[var(--r-ink-2)]">
+                  <span className="t-caption text-[var(--pe-ink-2)]">
                     re-anchor all of them onto
                   </span>
                   <RefToken
@@ -262,10 +262,10 @@ export function ParadigmA({ editor }: { editor: Editor }) {
             {/* ── WHERE THE NUMBER COMES FROM ──────────────────────────────────────────────── */}
             {chains.length > 0 ? (
               <section>
-                <div className="t-label t-upper mb-1 text-[var(--r-ink-2)]">comes from</div>
+                <div className="t-label t-upper mb-1 text-[var(--pe-ink-2)]">comes from</div>
                 <ul className="space-y-0.5">
                   {chains.map((chain) => (
-                    <li key={chain.join(">")} className="face-mono t-caption text-[var(--r-ink-2)]">
+                    <li key={chain.join(">")} className="face-mono t-caption text-[var(--pe-ink-2)]">
                       {chain.join("  ←  ")}
                     </li>
                   ))}
@@ -297,14 +297,14 @@ function RailRow({
       onClick={onPick}
       className="flex w-full items-baseline justify-between gap-2 px-1 py-0.5 text-left"
       style={{
-        background: current ? "var(--r-select)" : "transparent",
+        background: current ? "var(--pe-select)" : "transparent",
         border: "none",
         borderRadius: 2,
         cursor: "pointer",
       }}
     >
-      <span className="face-mono t-label truncate text-[var(--r-ink)]">{node.label}</span>
-      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{count > 0 ? count : ""}</span>
+      <span className="face-mono t-label truncate text-[var(--pe-ink)]">{node.label}</span>
+      <span className="face-mono t-caption text-[var(--pe-ink-mute)]">{count > 0 ? count : ""}</span>
     </button>
   );
 }

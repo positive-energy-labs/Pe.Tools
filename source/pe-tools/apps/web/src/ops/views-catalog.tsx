@@ -72,7 +72,7 @@ function IssuesNote({ data }: { data: Record<string, unknown> }) {
           <div key={`${asString(issue.code) ?? "issue"}-${i}`}>
             <span
               className="face-mono t-caption"
-              style={{ color: severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)" }}
+              style={{ color: severity === "Info" ? "var(--pe-ink-2)" : "var(--pe-caution)" }}
             >
               {severity.toLowerCase()} {asString(issue.code)}: {asString(issue.message)}
             </span>
@@ -758,7 +758,7 @@ function ConceptEvidenceView({ data }: OpViewProps) {
                 return (
                   <div
                     key={asString(identity?.key) ?? `${i}`}
-                    className={`flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${i > 0 ? "border-t border-line" : ""}`}
+                    className={`flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] ${i > 0 ? "border-t border-line" : ""}`}
                   >
                     <span className="face-mono t-value w-6 shrink-0 text-right text-ink-2">
                       {i + 1}

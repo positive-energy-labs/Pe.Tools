@@ -123,7 +123,7 @@ function ProposalFlow() {
               <div key={i} className="flex gap-3 pb-2.5">
                 <span
                   className="w-8 shrink-0 pt-0.5 font-pe-mono text-[10px] tracking-[0.09em] uppercase"
-                  style={{ color: m.who === "pea" ? "var(--r-pea-ink)" : "var(--r-ink-2)" }}
+                  style={{ color: m.who === "pea" ? "var(--pe-pea-ink)" : "var(--pe-ink-2)" }}
                 >
                   {m.who}
                 </span>

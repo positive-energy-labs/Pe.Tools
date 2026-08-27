@@ -34,7 +34,7 @@
  * may wear a meaning role. Material is plain ink; connectors keep their taxonomy hue; the void's
  * dash is the one legal dash AMONG PARTS (declared volume with no material behind it) — the datum
  * crosshair and the room point's leader are annotation, not parts; that distinction still needs a
- * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--r-select` fill and
+ * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--pe-select` fill and
  * an ink stroke, exactly as the table's focused row does.
  */
 import { useMemo } from "react";
@@ -357,11 +357,11 @@ function FixtureViews({
     .filter((name) => name !== typeName)
     .map((name) => ({ typeName: name, parts: buildParts(world, draft, name) }));
 
-  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--r-select)" : "transparent");
-  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--r-ink)" : "var(--r-ink-2)");
+  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--pe-select)" : "transparent");
+  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--pe-ink)" : "var(--pe-ink-2)");
   /** Connectors are a KIND, not a state — the one legitimate viz spend on this page. */
   const connectorStroke = (slug: string) =>
-    focusedParts.has(slug) ? "var(--r-ink)" : "var(--viz-4)";
+    focusedParts.has(slug) ? "var(--pe-ink)" : "var(--viz-4)";
   const hover = (slug: string) => hoverProps(slug, onFocus, onInspect);
 
   return (
@@ -394,7 +394,7 @@ function FixtureViews({
                 y1={Y(0)}
                 x2={BOX - M}
                 y2={Y(0)}
-                stroke="var(--r-line-2)"
+                stroke="var(--pe-line-2)"
                 strokeWidth={0.5}
               />
             ) : (
@@ -404,7 +404,7 @@ function FixtureViews({
                   y1={Y(0)}
                   x2={BOX - M}
                   y2={Y(0)}
-                  stroke="var(--r-line)"
+                  stroke="var(--pe-line)"
                   strokeWidth={0.5}
                   strokeDasharray="2 4"
                 />
@@ -413,7 +413,7 @@ function FixtureViews({
                   y1={M}
                   x2={X(0)}
                   y2={BOX - M}
-                  stroke="var(--r-line)"
+                  stroke="var(--pe-line)"
                   strokeWidth={0.5}
                   strokeDasharray="2 4"
                 />
@@ -430,7 +430,7 @@ function FixtureViews({
                 .map((part) => {
                   const shared = {
                     fill: "none",
-                    stroke: "var(--r-line-2)",
+                    stroke: "var(--pe-line-2)",
                     strokeWidth: 0.75,
                     opacity: 0.5,
                     pointerEvents: "none" as const,
@@ -468,8 +468,8 @@ function FixtureViews({
                   fill: part.isVoid ? "none" : partFill(part.slug),
                   stroke: part.isVoid
                     ? active
-                      ? "var(--r-ink)"
-                      : "var(--r-line-2)"
+                      ? "var(--pe-ink)"
+                      : "var(--pe-line-2)"
                     : partStroke(part.slug),
                   strokeWidth: 0.8,
                   strokeDasharray: part.isVoid ? "3 2" : undefined,
@@ -574,7 +574,7 @@ function FixtureViews({
               x={M}
               y={BOX - 5}
               fontSize={7}
-              fill="var(--r-ink-2)"
+              fill="var(--pe-ink-2)"
               className="face-mono uppercase"
             >
               {view.label}
@@ -631,10 +631,10 @@ function ModelViews({
   const span = Math.max(...AXES.map((axis) => bounds[axis][1] - bounds[axis][0]));
   const scale = (BOX - 2 * M) / span;
 
-  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--r-select)" : "transparent");
-  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--r-ink)" : "var(--r-ink-2)");
+  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--pe-select)" : "transparent");
+  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--pe-ink)" : "var(--pe-ink-2)");
   const connectorStroke = (slug: string) =>
-    focusedParts.has(slug) ? "var(--r-ink)" : "var(--viz-4)";
+    focusedParts.has(slug) ? "var(--pe-ink)" : "var(--viz-4)";
   const hover = (slug: string) => hoverProps(slug, onFocus, onInspect);
 
   /** What the drawing cannot place, said in words below it rather than drawn at a guess. */
@@ -804,7 +804,7 @@ function ModelViews({
                   y1={Y(0)}
                   x2={BOX - M}
                   y2={Y(0)}
-                  stroke="var(--r-line-2)"
+                  stroke="var(--pe-line-2)"
                   strokeWidth={0.5}
                 />
               ) : (
@@ -814,7 +814,7 @@ function ModelViews({
                     y1={Y(0)}
                     x2={BOX - M}
                     y2={Y(0)}
-                    stroke="var(--r-line)"
+                    stroke="var(--pe-line)"
                     strokeWidth={0.5}
                     strokeDasharray="2 4"
                   />
@@ -823,7 +823,7 @@ function ModelViews({
                     y1={M}
                     x2={X(0)}
                     y2={BOX - M}
-                    stroke="var(--r-line)"
+                    stroke="var(--pe-line)"
                     strokeWidth={0.5}
                     strokeDasharray="2 4"
                   />
@@ -837,7 +837,7 @@ function ModelViews({
                   .map((geo) => {
                     const shared = {
                       fill: "none",
-                      stroke: "var(--r-line-2)",
+                      stroke: "var(--pe-line-2)",
                       strokeWidth: 0.75,
                       opacity: 0.5,
                       pointerEvents: "none" as const,
@@ -875,8 +875,8 @@ function ModelViews({
                   fill: geo.isVoid ? "none" : partFill(geo.slug),
                   stroke: geo.isVoid
                     ? active
-                      ? "var(--r-ink)"
-                      : "var(--r-line-2)"
+                      ? "var(--pe-ink)"
+                      : "var(--pe-line-2)"
                     : partStroke(geo.slug),
                   strokeWidth: 0.8,
                   strokeDasharray: geo.isVoid ? "3 2" : undefined,
@@ -903,7 +903,7 @@ function ModelViews({
                 if (plane.axis !== view.u && plane.axis !== view.v) return null;
                 const param = plane.param;
                 const lit = param != null && focusedParams.has(param);
-                const stroke = lit ? "var(--r-ink)" : "var(--r-line-2)";
+                const stroke = lit ? "var(--pe-ink)" : "var(--pe-line-2)";
                 const line =
                   plane.axis === view.u
                     ? { x1: X(plane.offset), y1: M, x2: X(plane.offset), y2: BOX - M }
@@ -925,7 +925,7 @@ function ModelViews({
                       x={plane.axis === view.u ? line.x1 + 2 : M + 1}
                       y={plane.axis === view.u ? M + 6 : line.y1 - 2}
                       fontSize={6}
-                      fill={lit ? "var(--r-ink)" : "var(--r-ink-2)"}
+                      fill={lit ? "var(--pe-ink)" : "var(--pe-ink-2)"}
                       className="face-mono"
                     >
                       {plane.slug} {plane.text}
@@ -941,7 +941,7 @@ function ModelViews({
                 const v = frame.pos[view.v];
                 if (u == null || v == null) return null;
                 return (
-                  <g key={frame.slug} stroke="var(--r-ink-2)" strokeWidth={0.6}>
+                  <g key={frame.slug} stroke="var(--pe-ink-2)" strokeWidth={0.6}>
                     <title>{`frame ${frame.slug} — its origin, where the document's plane and face references intersect. Facing ${frame.normal}. Whatever sits on this frame is placed here.`}</title>
                     <line x1={X(u) - 2.5} y1={Y(v)} x2={X(u) + 2.5} y2={Y(v)} />
                     <line x1={X(u)} y1={Y(v) - 2.5} x2={X(u)} y2={Y(v) + 2.5} />
@@ -980,7 +980,7 @@ function ModelViews({
                 x={M}
                 y={BOX - 5}
                 fontSize={7}
-                fill="var(--r-ink-2)"
+                fill="var(--pe-ink-2)"
                 className="face-mono uppercase"
               >
                 {view.label}

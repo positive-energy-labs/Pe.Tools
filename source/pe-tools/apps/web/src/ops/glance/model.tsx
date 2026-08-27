@@ -75,7 +75,7 @@ function Stat({
       className="min-w-[64px] border-r border-line px-3 py-1.5"
       title={warn ? warnTitle : undefined}
     >
-      <div className="face-mono t-value" style={warn ? { color: "var(--r-caution)" } : undefined}>
+      <div className="face-mono t-value" style={warn ? { color: "var(--pe-caution)" } : undefined}>
         {value ?? "∅"}
       </div>
       <div className="t-caption text-ink-2">{label}</div>
@@ -358,7 +358,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
                 key={i}
                 className="face-mono t-caption"
                 style={{
-                  color: p.isActiveSheet === true ? "var(--r-ink)" : "var(--r-ink-2)",
+                  color: p.isActiveSheet === true ? "var(--pe-ink)" : "var(--pe-ink-2)",
                 }}
                 title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
               >
@@ -422,7 +422,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           ) : (
             <ul className="flex flex-col gap-1">
               {confidenceWarnings.map((warning, i) => (
-                <li key={i} className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+                <li key={i} className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
                   {warning}
                 </li>
               ))}
@@ -434,7 +434,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             <div>
               <div
                 className="face-mono t-caption t-upper mb-1"
-                style={{ color: "var(--r-caution)" }}
+                style={{ color: "var(--pe-caution)" }}
               >
                 api limitations (verbatim)
               </div>
@@ -443,7 +443,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
                   <li
                     key={i}
                     className="t-label leading-snug"
-                    style={{ color: "var(--r-caution)" }}
+                    style={{ color: "var(--pe-caution)" }}
                   >
                     {limitation}
                   </li>

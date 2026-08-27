@@ -537,7 +537,7 @@ function PendingStrip({
             >
               <button
                 type="button"
-                className="flex min-w-0 shrink-0 items-baseline gap-1.5 rounded-md px-0.5 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                className="flex min-w-0 shrink-0 items-baseline gap-1.5 rounded-md px-0.5 text-left hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
                 title="Highlight this cell's row in the grid and scroll it into view."
                 onClick={() => locate(key)}
               >

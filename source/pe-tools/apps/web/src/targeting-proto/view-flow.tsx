@@ -11,7 +11,7 @@
  *
  * Arrows carry PROGRESS: a quiet shaft at rest; in flight the shaft goes ink and a dot
  * travels along it in the data direction (opacity/motion only — dashed stays the seam slot);
- * `--r-done` for 800ms after landing. Detached = gap + hollow connectors.
+ * `--pe-done` for 800ms after landing. Detached = gap + hollow connectors.
  * Throwaway with the round.
  */
 import { useEffect, useState } from "react";
@@ -50,7 +50,7 @@ function Arrow({
   detached: boolean;
 }) {
   const color =
-    flight === "live" ? "var(--r-ink)" : flight === "done" ? "var(--r-done)" : "var(--r-line-2)";
+    flight === "live" ? "var(--pe-ink)" : flight === "done" ? "var(--pe-done)" : "var(--pe-line-2)";
   const w = flight === "rest" ? 1 : 1.5;
   const x1 = 4;
   const x2 = GUTTER - 4;
@@ -72,7 +72,7 @@ function Arrow({
         cx={gap - 6}
         cy={MID}
         r={2.5}
-        fill="var(--r-artifact)"
+        fill="var(--pe-artifact)"
         stroke={color}
         strokeWidth={w}
       />
@@ -80,7 +80,7 @@ function Arrow({
         cx={gap + 6}
         cy={MID}
         r={2.5}
-        fill="var(--r-artifact)"
+        fill="var(--pe-artifact)"
         stroke={color}
         strokeWidth={w}
       />
@@ -97,7 +97,7 @@ function Arrow({
       {dir !== "in" ? head(x2, 1) : null}
       {dir !== "out" ? head(x1, -1) : null}
       {flight === "live" ? (
-        <circle r={2.5} cy={MID} fill="var(--r-ink)">
+        <circle r={2.5} cy={MID} fill="var(--pe-ink)">
           <animate
             attributeName="cx"
             values={`${from};${to}`}
@@ -138,15 +138,15 @@ function Node({
     <div
       className="flex min-w-0 flex-col px-2 py-1"
       style={{
-        background: "var(--r-artifact)",
-        boxShadow: `inset 0 0 0 1px ${seam ? "var(--r-caution)" : "var(--r-line)"}`,
+        background: "var(--pe-artifact)",
+        boxShadow: `inset 0 0 0 1px ${seam ? "var(--pe-caution)" : "var(--pe-line)"}`,
         borderStyle: seam ? "dashed" : undefined,
-        border: seam ? "1px dashed var(--r-caution)" : undefined,
+        border: seam ? "1px dashed var(--pe-caution)" : undefined,
         alignItems: side === "left" ? "flex-end" : "flex-start",
         minWidth: 140,
       }}
     >
-      <span className="face-mono t-caption" style={{ color: "var(--r-ink-mute)", lineHeight: 1.2 }}>
+      <span className="face-mono t-caption" style={{ color: "var(--pe-ink-mute)", lineHeight: 1.2 }}>
         {link.dir}
         {link.liveness ? ` · ${link.liveness}` : ""}
       </span>
@@ -202,7 +202,7 @@ export function FlowView({ product }: { product: Product }) {
     <div
       className={`flex min-w-0 flex-col justify-center gap-1.5 ${side === "left" ? "items-end" : "items-start"}`}
     >
-      <span className="face-mono t-caption t-upper px-1" style={{ color: "var(--r-ink-mute)" }}>
+      <span className="face-mono t-caption t-upper px-1" style={{ color: "var(--pe-ink-mute)" }}>
         {side === "left" ? "reads" : "writes · syncs"}
       </span>
       {links.length > 0 ? (
@@ -218,7 +218,7 @@ export function FlowView({ product }: { product: Product }) {
           />
         ))
       ) : (
-        <span className="face-mono t-caption px-1" style={{ color: "var(--r-ink-mute)" }}>
+        <span className="face-mono t-caption px-1" style={{ color: "var(--pe-ink-mute)" }}>
           {side === "left" ? "no read-only source" : "nothing leaves the subject"}
         </span>
       )}
@@ -235,12 +235,12 @@ export function FlowView({ product }: { product: Product }) {
         <ArtifactFrame
           head={
             <>
-              <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
+              <span className="t-label t-upper" style={{ color: "var(--pe-ink)" }}>
                 {product.name}
               </span>
               {prefix.length > 0 ? (
                 <span className="inline-flex items-baseline gap-1.5">
-                  <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+                  <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
                     {prefix[0]!.joiner}
                   </span>
                   <PathInput
@@ -263,7 +263,7 @@ export function FlowView({ product }: { product: Product }) {
               <PaneStrip product={product} b={b} />
               <span
                 className="face-mono t-caption"
-                style={{ color: runner.last ? "var(--r-done)" : "var(--r-ink-mute)" }}
+                style={{ color: runner.last ? "var(--pe-done)" : "var(--pe-ink-mute)" }}
               >
                 {runner.last ? `ran ${runner.last.verb}` : "idle"}
               </span>
@@ -273,7 +273,7 @@ export function FlowView({ product }: { product: Product }) {
           {/* THE SUBJECT — inside the page: what this page operates on */}
           <div className="flex flex-wrap items-end gap-x-4 gap-y-1 px-2.5 py-1.5">
             {subjects.length === 0 ? (
-              <span className="face-mono t-caption" style={{ color: "var(--r-ink-mute)" }}>
+              <span className="face-mono t-caption" style={{ color: "var(--pe-ink-mute)" }}>
                 no subject — this page operates on nothing it can write back to
               </span>
             ) : (
@@ -288,17 +288,17 @@ export function FlowView({ product }: { product: Product }) {
                   >
                     <span
                       className="face-mono t-caption"
-                      style={{ color: "var(--r-ink-mute)", lineHeight: 1.2 }}
+                      style={{ color: "var(--pe-ink-mute)", lineHeight: 1.2 }}
                     >
                       subject · {s.dir}
                       {s.liveness ? ` · ${s.liveness}` : ""}
                     </span>
                     <span className="inline-flex items-baseline gap-1.5">
-                      <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+                      <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
                         {s.joiner}
                       </span>
                       {chain.length === 0 ? (
-                        <span className="face-mono t-label" style={{ color: "var(--r-ink-2)" }}>
+                        <span className="face-mono t-label" style={{ color: "var(--pe-ink-2)" }}>
                           {s.key}
                         </span>
                       ) : (
@@ -333,7 +333,7 @@ export function FlowView({ product }: { product: Product }) {
               );
             })}
             {note ? (
-              <span className="t-caption pl-2" style={{ color: "var(--r-pea-ink)" }}>
+              <span className="t-caption pl-2" style={{ color: "var(--pe-pea-ink)" }}>
                 pea · {note}
               </span>
             ) : null}

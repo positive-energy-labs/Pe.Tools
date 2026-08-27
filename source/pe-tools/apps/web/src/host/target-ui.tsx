@@ -7,8 +7,8 @@ import { selectorLabel, type Lane, type SessionFacts, type TargetResolution } fr
  *
  * Colour (2026-08-16 shared-chrome pass): lanes are TAXONOMY — they spend the viz ladder
  * (label carries the meaning; colour only speeds it up). Resolution states spend meaning
- * roles: a resolved live connection is `--r-done` (the /instances phase verdict precedent),
- * ambiguity and a dangling pin are `--r-caution` (attention/stale — a busy or stale target
+ * roles: a resolved live connection is `--pe-done` (the /instances phase verdict precedent),
+ * ambiguity and a dangling pin are `--pe-caution` (attention/stale — a busy or stale target
  * is not the model disagreeing), and "nothing there" is a hairline. No blue: pinned-by-you
  * is authorship, and authorship never buys the commit hue.
  */
@@ -63,16 +63,16 @@ export function chipDescriptor(r: TargetResolution): {
 export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: Lane | null }) {
   const color =
     tone === "pinned"
-      ? "var(--r-done)"
+      ? "var(--pe-done)"
       : tone === "implicit"
         ? lane
           ? laneVar(lane)
-          : "var(--r-ink-2)"
+          : "var(--pe-ink-2)"
         : tone === "ambiguous"
-          ? "var(--r-caution)"
+          ? "var(--pe-caution)"
           : tone === "dangling"
-            ? "var(--r-caution)"
-            : "var(--r-line-2)";
+            ? "var(--pe-caution)"
+            : "var(--pe-line-2)";
   return (
     <span
       className="inline-block shrink-0"

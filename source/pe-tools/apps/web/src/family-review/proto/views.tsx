@@ -50,12 +50,12 @@ function BoxMark({
   project: Projector;
   outline: boolean;
 }) {
-  const stroke = outline ? "var(--r-ink-mute)" : box.isSolid ? "var(--r-ink)" : "var(--r-ink-2)";
+  const stroke = outline ? "var(--pe-ink-mute)" : box.isSolid ? "var(--pe-ink)" : "var(--pe-ink-2)";
   const common = {
     fill: outline
       ? "none"
       : box.isSolid
-        ? "color-mix(in srgb, var(--r-ink) 12%, transparent)"
+        ? "color-mix(in srgb, var(--pe-ink) 12%, transparent)"
         : "none",
     stroke,
     strokeWidth: outline ? 0.8 : 1.3,
@@ -116,7 +116,7 @@ export function ViewPanel({
             y1={vertical ? 0 : at}
             x2={vertical ? at : size}
             y2={vertical ? size : at}
-            stroke={muted ? "var(--r-line)" : "var(--r-line-2)"}
+            stroke={muted ? "var(--pe-line)" : "var(--pe-line-2)"}
             strokeWidth={0.75}
             strokeDasharray="2 3"
           />
@@ -125,7 +125,7 @@ export function ViewPanel({
               x={vertical ? at + 2 : 3}
               y={vertical ? size - 4 : at - 2}
               fontSize={7}
-              fill="var(--r-ink-mute)"
+              fill="var(--pe-ink-mute)"
             >
               {plane.key}
             </text>
@@ -152,12 +152,12 @@ export function ViewPanel({
         y={0}
         width={size}
         height={size}
-        fill="var(--r-artifact)"
-        stroke="var(--r-line)"
+        fill="var(--pe-artifact)"
+        stroke="var(--pe-line)"
       />
       <g clipPath={`url(#${clip})`}>
-        <line x1={0} y1={project.v(0)} x2={size} y2={project.v(0)} stroke="var(--r-line)" />
-        <line x1={project.h(0)} y1={0} x2={project.h(0)} y2={size} stroke="var(--r-line)" />
+        <line x1={0} y1={project.v(0)} x2={size} y2={project.v(0)} stroke="var(--pe-line)" />
+        <line x1={project.h(0)} y1={0} x2={project.h(0)} y2={size} stroke="var(--pe-line)" />
         {planeTraces(ink, false)}
         {ghost ? planeTraces(ghost, true) : null}
         {ghost?.boxes.map((box) => (
@@ -223,7 +223,7 @@ export function Triptych({
             ghost={ghost}
             labelPlanes={labelPlanes}
           />
-          <figcaption className="face-mono t-caption text-[var(--r-ink-mute)]">
+          <figcaption className="face-mono t-caption text-[var(--pe-ink-mute)]">
             {captions === "short" ? view.title : `${view.title} · ${view.axes}`}
           </figcaption>
         </figure>
@@ -239,7 +239,7 @@ export function ScaleNote({ halfSpan, size }: { halfSpan: number; size: number }
     [1 / 12, 0.25, 0.5, 1, 2, 5, 10].filter((feet) => feet * scale <= size / 3).pop() ?? 1 / 12;
   const label = step < 1 ? `${Math.round(step * 12)}″` : `${step}′`;
   return (
-    <div className="flex items-center gap-1.5 face-mono t-caption text-[var(--r-ink-2)]">
+    <div className="flex items-center gap-1.5 face-mono t-caption text-[var(--pe-ink-2)]">
       <svg width={step * scale + 2} height={9}>
         <line
           x1={1}

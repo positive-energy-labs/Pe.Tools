@@ -61,10 +61,10 @@ function FamilyEditorProto() {
     <div className="flex h-full min-h-0 flex-col">
       <header
         className="flex flex-wrap items-baseline gap-2 border-b px-3 py-2"
-        style={{ borderColor: "var(--r-line)" }}
+        style={{ borderColor: "var(--pe-line)" }}
       >
-        <span className="face-mono t-label t-upper text-[var(--r-ink-mute)]">family editor</span>
-        <span className="t-value text-[var(--r-ink)]">{editor.model.family.name}</span>
+        <span className="face-mono t-label t-upper text-[var(--pe-ink-mute)]">family editor</span>
+        <span className="t-value text-[var(--pe-ink)]">{editor.model.family.name}</span>
         <TypeStage editor={editor} />
         <FactChip
           tone="caution"

@@ -124,7 +124,7 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
         )}
       </div>
       {disconnectReason && (
-        <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+        <span className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
           {disconnectReason}
         </span>
       )}
@@ -209,12 +209,12 @@ function SessionNode({
           <span className="face-mono t-caption text-ink-2">fetching documents…</span>
         )}
         {connected && docFetch?.state === "skipped" && (
-          <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+          <span className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
             not fetched — over the {DOC_FETCH_BOUND}-session bound
           </span>
         )}
         {connected && docFetch?.state === "error" && (
-          <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+          <span className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
             documents unreachable: {docFetch.error}
           </span>
         )}
@@ -230,7 +230,7 @@ function SessionNode({
           docFetch?.state === "ok" &&
           !docFetch.hasActive &&
           docFetch.docs.length > 0 && (
-            <span className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+            <span className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
               no active document — open but none focused
             </span>
           )}

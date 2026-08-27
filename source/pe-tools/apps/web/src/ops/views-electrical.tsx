@@ -42,7 +42,7 @@ function IssuesNote({ data }: { data: Rec }) {
           <span
             key={i}
             className="face-mono t-caption"
-            style={{ color: severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)" }}
+            style={{ color: severity === "Info" ? "var(--pe-ink-2)" : "var(--pe-caution)" }}
           >
             {severity.toLowerCase()}: {asString(issue.code)} — {asString(issue.message)}
           </span>
@@ -546,11 +546,11 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
   const panelName = asString(entry.panelName) ?? asString(entry.scheduleName) ?? "(unnamed panel)";
   return (
     <article className="min-w-0 rounded-md border border-line-2">
-      {/* the head band is a recessed ground shift — --r-on re-declared with it. */}
+      {/* the head band is a recessed ground shift — --pe-on re-declared with it. */}
       <div
         className="flex items-baseline justify-between gap-2 border-b border-line-2 px-2 py-1.5"
         style={
-          { background: "var(--r-recess)", "--r-on": "var(--r-recess)" } as React.CSSProperties
+          { background: "var(--pe-recess)", "--pe-on": "var(--pe-recess)" } as React.CSSProperties
         }
       >
         <h3 className="face-mono t-value truncate" title={panelName}>

@@ -14,7 +14,7 @@
  *   is the cell grammar at its largest scale: same fill-separates-not-borders move.
  * - THE STRIP CARRIES STATE, so it KEEPS its frame under the border budget. It draws its own
  *   `ArtifactFrame`; do not wrap it in a second one.
- * - `--r-on` IS RE-DECLARED to the strip's own tinted fill (lang.css), which is what gives the
+ * - `--pe-on` IS RE-DECLARED to the strip's own tinted fill (lang.css), which is what gives the
  *   act verbs inside a resting shape against the ground they actually stand on. Round 2's note-4
  *   defect was exactly this: `cancel` and `re-plan` mixed against the artifact token computed to
  *   1.006 and 1.026 against their real ground, and in dark `cancel` was literally not there.

@@ -27,7 +27,7 @@ const pageKey = (page: number) => `p${page}`;
 
 /** The one hover veil, as an arbitrary-property class (design-lang hover law: a neutral ink
  * veil composited as a background-image over whatever fill is already there — no hue). */
-const VEIL_HOVER = "hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]";
+const VEIL_HOVER = "hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]";
 
 /**
  * Grounded-document view with up to three scroll-synced lanes: markdown blocks,
@@ -39,10 +39,10 @@ const VEIL_HOVER = "hover:[background-image:linear-gradient(var(--r-veil),var(--
  * Purely presentational over a GroundedDocEngine — embed it anywhere and drive
  * focus externally via engine.hoverBlock(id, "external").
  *
- * COLOUR CONTRACT (design-lang): focus/selection is the `--r-select` fill in the
+ * COLOUR CONTRACT (design-lang): focus/selection is the `--pe-select` fill in the
  * markdown lane; over page imagery — where a fill cannot separate — the locate
- * mark is `--r-ink` (R13a). An APPROXIMATE grounding is a distrusted value and
- * wears `--r-caution`; extracted-image regions are a KIND, not a state, and wear
+ * mark is `--pe-ink` (R13a). An APPROXIMATE grounding is a distrusted value and
+ * wears `--pe-caution`; extracted-image regions are a KIND, not a state, and wear
  * `--viz-4`. Dashed edges are not spent here at all — none of these is a seam.
  */
 export function GroundedDocView({

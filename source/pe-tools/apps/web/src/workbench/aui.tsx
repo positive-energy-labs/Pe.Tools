@@ -259,7 +259,7 @@ function UserMoment() {
             wash are the scan cue for "my turns": fills separate, and no hue is bought (the
             "you" identity ruling). No border — plain prose is never enclosed. */}
         {text ? (
-          <div className="rounded-sm bg-[color-mix(in_srgb,var(--r-ink)_6%,transparent)] px-3 py-2 text-sm leading-normal">
+          <div className="rounded-sm bg-[color-mix(in_srgb,var(--pe-ink)_6%,transparent)] px-3 py-2 text-sm leading-normal">
             {text}
           </div>
         ) : null}
@@ -283,7 +283,7 @@ function AssistantMoment() {
   if (!hasContent && !running) return null;
   return (
     <MomentSection id={id} role="assistant">
-      {/* pea's name wears the agent identity at TEXT weight (--r-pea-ink). */}
+      {/* pea's name wears the agent identity at TEXT weight (--pe-pea-ink). */}
       <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-pea-ink">
         <TurnTag id={id} />
         <span>pea</span>

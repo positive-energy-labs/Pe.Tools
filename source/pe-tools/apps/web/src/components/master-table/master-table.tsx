@@ -393,7 +393,7 @@ export function MasterTable<Row extends RowData>({
             onChange={(event) => updateState((state) => ({ ...state, query: event.target.value }))}
             placeholder={searchPlaceholder}
             title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-            className="face-mono t-value h-6 w-44 rounded-md border border-line-2 bg-transparent px-1.5 outline-none focus:border-line-2 focus:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+            className="face-mono t-value h-6 w-44 rounded-md border border-line-2 bg-transparent px-1.5 outline-none focus:border-line-2 focus:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
           />
         )}
         {/* The search box says how much it cut, right where the typing happens. */}
@@ -442,7 +442,7 @@ export function MasterTable<Row extends RowData>({
             type="button"
             onClick={() => updateState((state) => ({ ...state, filters: {} }))}
             title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
-            className="t-label rounded-md px-1 text-ink-2 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+            className="t-label rounded-md px-1 text-ink-2 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
           >
             clear column filters
           </button>
@@ -464,7 +464,7 @@ export function MasterTable<Row extends RowData>({
                     rowSpan={table.getHeaderGroups().length}
                     style={{ top: 0, width: GUTTER_PX, minWidth: GUTTER_PX }}
                     title="Rows marked in this gutter owe a person a decision — the mark's own title says what."
-                    className="sticky left-0 z-20 border-b border-line bg-recess p-0 [--r-on:var(--r-recess)]"
+                    className="sticky left-0 z-20 border-b border-line bg-recess p-0 [--pe-on:var(--pe-recess)]"
                   />
                 )}
                 {headerGroup.headers.map((header) => {
@@ -498,7 +498,7 @@ export function MasterTable<Row extends RowData>({
                       colSpan={header.colSpan}
                       rowSpan={header.rowSpan}
                       style={{ top: stickyTop(rowIndex) }}
-                      className="t-caption t-upper sticky z-10 whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-px text-left text-ink-2 [--r-on:var(--r-recess)] first:border-l-0"
+                      className="t-caption t-upper sticky z-10 whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-px text-left text-ink-2 [--pe-on:var(--pe-recess)] first:border-l-0"
                     >
                       <table.FlexRender header={header} />
                     </th>
@@ -521,10 +521,10 @@ export function MasterTable<Row extends RowData>({
                   activeRowRef={activeRowRef}
                   className={cn(
                     // THE HOVER LAW: the one neutral veil, composited over whatever fill the row
-                    // carries. THE SELECTION LAW: the active row is a fill (--r-select), never a
-                    // hue, and re-declares --r-on so cell washes land on the right ground.
-                    "h-7 scroll-mt-12 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
-                    activeKey === key && "bg-select [--r-on:var(--r-select)]",
+                    // carries. THE SELECTION LAW: the active row is a fill (--pe-select), never a
+                    // hue, and re-declares --pe-on so cell washes land on the right ground.
+                    "h-7 scroll-mt-12 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]",
+                    activeKey === key && "bg-select [--pe-on:var(--pe-select)]",
                     rowClassName?.(tableRow.original),
                   )}
                   onRowClick={onRowClick}
@@ -538,12 +538,12 @@ export function MasterTable<Row extends RowData>({
                           data-master-gutter=""
                           title={owed?.title}
                           style={{ width: GUTTER_PX, minWidth: GUTTER_PX }}
-                          className="sticky left-0 z-[5] border-b border-line bg-[var(--r-on)] p-0 text-center align-middle"
+                          className="sticky left-0 z-[5] border-b border-line bg-[var(--pe-on)] p-0 text-center align-middle"
                         >
                           {owed && (
                             <span
                               className="face-mono t-caption"
-                              style={{ color: `var(--r-${owed.tone ?? "caution"})` }}
+                              style={{ color: `var(--pe-${owed.tone ?? "caution"})` }}
                             >
                               {owed.count}
                             </span>
@@ -591,12 +591,12 @@ export function MasterTable<Row extends RowData>({
                             style={column.lock ? { left: gutter ? GUTTER_PX : 0 } : undefined}
                             className={cn(
                               // Focus is a firm hairline; selection is the select fill. Locked
-                              // columns sit on --r-on — the ground of whatever contains the table.
+                              // columns sit on --pe-on — the ground of whatever contains the table.
                               "border-b border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
-                              selection & 2 && "bg-select [--r-on:var(--r-select)]",
+                              selection & 2 && "bg-select [--pe-on:var(--pe-select)]",
                               column.right && "text-right",
                               column.width,
-                              column.lock && "sticky z-[5] bg-[var(--r-on)]",
+                              column.lock && "sticky z-[5] bg-[var(--pe-on)]",
                             )}
                           >
                             <CellNavigationProvider
@@ -656,7 +656,7 @@ export function MasterTable<Row extends RowData>({
             if (!focused || !cellState) return null;
             const facts = cellFactsText(cellState);
             return (
-              <div className="face-mono t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line bg-recess px-2 whitespace-nowrap [--r-on:var(--r-recess)]">
+              <div className="face-mono t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line bg-recess px-2 whitespace-nowrap [--pe-on:var(--pe-recess)]">
                 <span className="dl-tag shrink-0 text-ink">
                   {column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}
                 </span>
@@ -704,7 +704,7 @@ function LeafHeader<Row>({
       rowSpan={rowSpan}
       style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
       className={cn(
-        "sticky z-10 align-top whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-1 font-normal [--r-on:var(--r-recess)] first:border-l-0",
+        "sticky z-10 align-top whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-1 font-normal [--pe-on:var(--pe-recess)] first:border-l-0",
         column.right ? "text-right" : "text-left",
         column.width,
         column.lock && "z-20",

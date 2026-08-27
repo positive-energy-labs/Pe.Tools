@@ -97,7 +97,7 @@ function IssueLines({ issues }: { issues: unknown }) {
           key={i}
           className="face-mono t-caption"
           style={{
-            color: issue.severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)",
+            color: issue.severity === "Info" ? "var(--pe-ink-2)" : "var(--pe-caution)",
           }}
         >
           {text(issue.severity)} {text(issue.code)}: {text(issue.message)}
@@ -204,7 +204,7 @@ function ContextSummaryView({ data }: OpViewProps) {
                 key={i}
                 className="face-mono t-caption"
                 style={{
-                  color: p.isActiveSheet === true ? "var(--r-ink)" : "var(--r-ink-2)",
+                  color: p.isActiveSheet === true ? "var(--pe-ink)" : "var(--pe-ink-2)",
                 }}
                 title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
               >
@@ -278,7 +278,7 @@ function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
          re-declares the ground it shifted. */
       style={
         isActive
-          ? ({ background: "var(--r-select)", "--r-on": "var(--r-select)" } as React.CSSProperties)
+          ? ({ background: "var(--pe-select)", "--pe-on": "var(--pe-select)" } as React.CSSProperties)
           : undefined
       }
     >
@@ -393,7 +393,7 @@ function VisibleSummaryView({ data, request }: OpViewProps) {
         return (
           <span
             className="face-mono t-caption"
-            style={{ color: complete ? "var(--r-ink-2)" : "var(--r-caution)" }}
+            style={{ color: complete ? "var(--pe-ink-2)" : "var(--pe-caution)" }}
             title={complete ? undefined : "returned element set is incomplete"}
           >
             {ids.join(" ")}
@@ -686,7 +686,7 @@ function ViewRenderingStateView({ data }: OpViewProps) {
       <Section label="evidence limits">
         {confidenceWarnings.map((warning, i) => (
           <Provenance key={`w${i}`}>
-            <span style={{ color: "var(--r-caution)" }}>confidence: {warning}</span>
+            <span style={{ color: "var(--pe-caution)" }}>confidence: {warning}</span>
           </Provenance>
         ))}
         {notInspected.map((item, i) => (
@@ -724,13 +724,13 @@ function ScoreBar({ score, max, muted }: { score: number; max: number; muted: bo
           className="block h-full rounded-[1px]"
           style={{
             width: `${frac * 100}%`,
-            background: muted ? "var(--r-ink-mute)" : "var(--viz-1)",
+            background: muted ? "var(--pe-ink-mute)" : "var(--viz-1)",
           }}
         />
       </span>
       <span
         className="face-mono t-caption"
-        style={{ color: muted ? "var(--r-ink-mute)" : undefined }}
+        style={{ color: muted ? "var(--pe-ink-mute)" : undefined }}
       >
         {score}
       </span>
@@ -762,10 +762,10 @@ function ResolveReferencesView({ data }: OpViewProps) {
             style={{
               color:
                 candidateCount === 1
-                  ? "var(--r-done)"
+                  ? "var(--pe-done)"
                   : candidateCount === 0
-                    ? "var(--r-caution)"
-                    : "var(--r-caution)",
+                    ? "var(--pe-caution)"
+                    : "var(--pe-caution)",
             }}
           >
             {candidateCount === 0
@@ -795,7 +795,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
             /* rank is carried by order, the #n gutter and the score bar (grayscale law).
                The edge mark only locates: ink for the leader (R13a's neutral locate mark),
                caution for a demoted candidate in an ambiguous set. */
-            const edge = top ? "var(--r-ink)" : ambiguous ? "var(--r-caution)" : "transparent";
+            const edge = top ? "var(--pe-ink)" : ambiguous ? "var(--pe-caution)" : "transparent";
             return (
               <div
                 key={handle ? `${handleId(handle)}-${i}` : i}
