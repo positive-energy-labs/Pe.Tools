@@ -474,7 +474,11 @@ describe("design guard — foundation topology", () => {
     expect(text).not.toMatch(
       /@import\b|tailwindcss|tw-animate|url\(|<script\b|animation(?:-name)?\s*:/i,
     );
-    const selectors = [...text.matchAll(/(?:^|})\s*([^{}]+)\{/gm)]
+    const baseLayer = /@layer base\s*\{([\s\S]*?)\n\}\s*\n\[data-pe\] \.page-wrap/.exec(text);
+    expect(baseLayer, "pe-base defaults must remain inside native @layer base").toBeTruthy();
+    expect((text.match(/@layer base\b/g) ?? []).length).toBe(1);
+    expect(baseLayer![1]).toContain("[data-pe] pre code");
+    const selectors = [...text.replace(/@layer base\s*\{/, "").matchAll(/(?:^|})\s*([^{}]+)\{/gm)]
       .flatMap((match) => match[1].split(","))
       .map((selector) => selector.trim())
       .filter(Boolean);

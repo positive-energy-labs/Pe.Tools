@@ -82,54 +82,56 @@
 }
 
 /* Native projections consumed by app components; Tailwind names remain in design-lang.css. */
-[data-pe],
-[data-pe] * {
-  border-color: var(--border);
-  outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
-}
+@layer base {
+  [data-pe],
+  [data-pe] * {
+    border-color: var(--border);
+    outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
+  }
 
-[data-pe],
-[data-pe] body,
-[data-pe] #app {
-  min-height: 100%;
-}
+  [data-pe],
+  [data-pe] body,
+  [data-pe] #app {
+    min-height: 100%;
+  }
 
-[data-pe] {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--foreground) 25%, transparent) transparent;
-}
+  [data-pe] {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--foreground) 25%, transparent) transparent;
+  }
 
-[data-pe] body {
-  margin: 0;
-  background-color: var(--background);
-  color: var(--foreground);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  [data-pe] body {
+    margin: 0;
+    background-color: var(--background);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-[data-pe] a {
-  color: var(--primary);
-  text-underline-offset: 2px;
-}
+  [data-pe] a {
+    color: var(--primary);
+    text-underline-offset: 2px;
+  }
 
-[data-pe] a:hover {
-  text-decoration: underline;
-}
+  [data-pe] a:hover {
+    text-decoration: underline;
+  }
 
-[data-pe] code {
-  font-size: 0.9em;
-  border: 1px solid var(--border);
-  background: var(--muted);
-  border-radius: 0.375rem;
-  padding: 0.0625rem 0.375rem;
-}
+  [data-pe] code {
+    font-size: 0.9em;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    border-radius: 0.375rem;
+    padding: 0.0625rem 0.375rem;
+  }
 
-[data-pe] pre code {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
+  [data-pe] pre code {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+  }
 }
 
 [data-pe] .page-wrap {
