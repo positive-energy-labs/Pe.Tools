@@ -583,17 +583,17 @@ function Tokens() {
     <Section
       index="02"
       label="tokens"
-      note="eighteen, and every one of them is oklch(L C h) off a declared band — src/design-lang.css is the one place a colour is decided"
+      note="eighteen, and every one of them is oklch(L C h) off a declared band — src/pe-base.css is the one place a colour is decided"
     >
       <p className="t-prose max-w-[80ch] text-ink-2">
         <code className="face-mono t-label">--r-*</code> is canon. The old{" "}
         <code className="face-mono t-label">--act-*</code> /{" "}
         <code className="face-mono t-label">--st-*</code> /{" "}
         <code className="face-mono t-label">--cat-*</code> role vocabulary in{" "}
-        <code className="face-mono t-label">styles.css</code> is superseded but still live: every
-        unmigrated route still runs on it, and the two coexist until the per-route crusade lands the
-        last one. Swatches below are read off <code className="face-mono t-label">:root</code> at
-        render and re-read when you flip the theme — this table cannot drift from the stylesheet.
+        <code className="face-mono t-label">styles.css</code> was superseded and is deleted; no
+        compatibility alias remains. Swatches below are read off{" "}
+        <code className="face-mono t-label">:root</code> at render and re-read when you flip the
+        theme — this table cannot drift from the stylesheet.
       </p>
 
       {TOKEN_GROUPS.map((g) => (
@@ -623,8 +623,8 @@ function Tokens() {
       <GapNote>
         the swatch reads a resolved value for every token except the two hairlines, which are
         declared as <code>color-mix()</code> and read back unresolved. Nothing is wrong with the
-        colour; the ledger of computed contrast lives in the header of{" "}
-        <code>src/design-lang.css</code> because no component can compute it.
+        colour; the ledger of computed contrast lives in the header of <code>src/pe-base.css</code>{" "}
+        because no component can compute it.
       </GapNote>
     </Section>
   );

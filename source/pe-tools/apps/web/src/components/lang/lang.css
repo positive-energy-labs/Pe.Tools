@@ -2,7 +2,7 @@
    components/lang — THE DESIGN-LANGUAGE PRIMITIVES, one stylesheet.
    =============================================================================================
 
-   Every colour below is `var(--r-…)` from `src/design-lang.css`. There is not one colour
+   Every colour below is `var(--r-…)` from `src/pe-base.css`. There is not one colour
    literal in this file, on purpose: a literal would be invariant against the token layer and
    would quietly un-decide a colour the palette round already decided. That invariance is the
    exact defect round 2 found in canon `Button`/`Chip`, and
@@ -40,7 +40,7 @@
 
 /* ── THE ARTIFACT FRAME · artifact-frame.tsx ───────────────────────────────────────────────
    One ground shift plus one quiet inset hairline. No radius, no shadow. See the border-budget
-   block in design-lang.css for WHAT is allowed to wear one. */
+   block in the design-system canon for WHAT is allowed to wear one. */
 
 .dl-artifact {
   background: var(--r-artifact);

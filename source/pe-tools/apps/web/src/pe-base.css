@@ -4,6 +4,7 @@
  * no Tailwind-only rules or component ownership.
  */
 :root {
+  color-scheme: light;
   --r-page: #fdfaf2;
   --r-artifact: #f1eee6;
   --r-recess: #e4e1d9;
@@ -56,6 +57,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --r-page: #15120d;
   --r-artifact: #1e1c16;
   --r-recess: #27251f;
@@ -104,8 +106,23 @@
     margin: 0;
     background-color: var(--background);
     color: var(--foreground);
+    font-family: var(--font-body);
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  [data-pe] :where(button, input, select, textarea) {
+    font: inherit;
+  }
+
+  [data-pe] :where(code, pre, kbd, samp) {
+    font-family: var(--font-mono);
+  }
+
+  [data-pe] :where(:focus-visible) {
+    outline: 2px solid var(--r-ink);
+    outline-offset: 2px;
   }
 
   [data-pe] a {

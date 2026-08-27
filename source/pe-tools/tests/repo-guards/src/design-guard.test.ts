@@ -16,15 +16,15 @@
  *                        shim in styles.css reads ZERO lines and never grows one back — the
  *                        old vocabulary is deleted, so consuming it is consuming nothing.
  *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --r-line /
- *                        --r-line-2 (design-lang.css); the bare names died with the Lens
+ *                        --r-line-2 (pe-base.css); the bare names died with the Lens
  *                        vocabulary. (The regex is literal, so var(--r-line) never matches.)
  *  3. tele classes       tele / tele-label / section-label as class words. The TYPE TIERS
  *                        ruling: tier x face x case replaced
  *                        the tele bundles, deleted 2026-08-16. Comments are stripped first;
  *                        lang's `dl-section-label` is a different word and stays legal.
- *  4. hex literals       #rrggbb / #rrggbbaa outside design-lang.css. THE LAW in the canon
+ *  4. hex literals       #rrggbb / #rrggbbaa outside pe-base.css. THE LAW in the canon
  *                        header: "no component, no route, and no CSS file downstream may name
- *                        a colour literal" — a colour is a one-line edit in design-lang.css.
+ *                        a colour literal" — a colour is a one-line edit in pe-base.css.
  *  5. sub-10px type      text-[Npx] with N < 10. The 10px floor from the type-tier ruling
  *                        (ops enforced it on itself; the flagship pass finished the job).
  *
@@ -378,7 +378,7 @@ describe("design guard — hard zeros", () => {
     const offences = scan(FILES, re);
     expect(
       offences.length,
-      `Dead shim tokens consumed — these were deleted at zero consumers; use the --r-* canon (design-lang.css):\n${report(offences)}`,
+      `Dead shim tokens consumed — these were deleted at zero consumers; use the --r-* canon (pe-base.css):\n${report(offences)}`,
     ).toBe(0);
   });
 
@@ -406,7 +406,7 @@ describe("design guard — hard zeros", () => {
     ).toBe(0);
   });
 
-  it("no hex colour literal outside design-lang.css (a colour is a one-line edit there)", () => {
+  it("no hex colour literal outside pe-base.css (a colour is a one-line edit there)", () => {
     const re = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b/g;
     const offences = scan(
       FILES.filter((f) => f.rel !== "pe-base.css"),
@@ -478,12 +478,20 @@ describe("design guard — foundation topology", () => {
     expect(baseLayer, "pe-base defaults must remain inside native @layer base").toBeTruthy();
     expect((text.match(/@layer base\b/g) ?? []).length).toBe(1);
     expect(baseLayer![1]).toContain("[data-pe] pre code");
-    const selectors = [...text.replace(/@layer base\s*\{/, "").matchAll(/(?:^|})\s*([^{}]+)\{/gm)]
+    expect(baseLayer![1]).toContain("font-family: var(--font-body);");
+    expect(baseLayer![1]).toContain("line-height: 1.5;");
+    expect(baseLayer![1]).toContain("font: inherit;");
+    expect(baseLayer![1]).toContain("font-family: var(--font-mono);");
+    expect(baseLayer![1]).toContain("outline: 2px solid var(--r-ink);");
+    const selectorText = text
+      .replace(/@layer base\s*\{/, "")
+      .replace(/:where\(([^)]*)\)/g, (_, inner: string) => `:where(${inner.replaceAll(",", "|")})`);
+    const selectors = [...selectorText.matchAll(/(?:^|})\s*([^{}]+)\{/gm)]
       .flatMap((match) => match[1].split(","))
       .map((selector) => selector.trim())
       .filter(Boolean);
     const allowed =
-      /^(?::root|\.dark|\[data-pe\](?: \*| body| #app| a(:hover)?| code| pre code| \.page-wrap)?)$/;
+      /^(?::root|\.dark|\[data-pe\](?: \*| body| #app| a(:hover)?| code| pre code| \.page-wrap| :where\(button\| input\| select\| textarea\)| :where\(code\| pre\| kbd\| samp\)| :where\(:focus-visible\))?)$/;
     expect(selectors.filter((selector) => !allowed.test(selector))).toEqual([]);
   });
 

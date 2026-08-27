@@ -246,8 +246,8 @@ say where options come from.
 
 ## 5 · Colour and type
 
-Full rules in the header of `apps/web/src/design-lang.css` — the one place a colour of the
-language is decided — rendered live in `/design-system` §02. (`COLOR-ROLES.md` is the
+Raw colour authority is `apps/web/src/pe-base.css`; Tailwind vocabulary and projections live in
+`apps/web/src/design-lang.css`, rendered live in `/design-system` §02. (`COLOR-ROLES.md` is the
 superseded ancestor — deleted, git history only.) Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
 components consume role tokens rather than raw palette. Deliberately alien prototype chrome, such as
 a variant switcher, is exempt — it must not read as part of the design under review.

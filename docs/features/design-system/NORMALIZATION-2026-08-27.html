@@ -11,6 +11,7 @@
  * no Tailwind-only rules or component ownership.
  */
 :root {
+  color-scheme: light;
   --r-page: #fdfaf2;
   --r-artifact: #f1eee6;
   --r-recess: #e4e1d9;
@@ -63,6 +64,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --r-page: #15120d;
   --r-artifact: #1e1c16;
   --r-recess: #27251f;
@@ -111,8 +113,23 @@
     margin: 0;
     background-color: var(--background);
     color: var(--foreground);
+    font-family: var(--font-body);
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  [data-pe] :where(button, input, select, textarea) {
+    font: inherit;
+  }
+
+  [data-pe] :where(code, pre, kbd, samp) {
+    font-family: var(--font-mono);
+  }
+
+  [data-pe] :where(:focus-visible) {
+    outline: 2px solid var(--r-ink);
+    outline-offset: 2px;
   }
 
   [data-pe] a {
@@ -157,7 +174,6 @@
       [data-pe] h2 { margin: 0; font-size: clamp(1.35rem, 3vw, 2.2rem); }
       [data-pe] h3 { margin-bottom: 0.35rem; }
       [data-pe] p { max-width: 70ch; }
-      [data-pe] a:focus-visible, [data-pe] button:focus-visible { outline: 0.18rem solid var(--r-pea); outline-offset: 0.15rem; }
       [data-pe] nav { margin: 1rem 0 2rem; font-family: var(--font-mono); font-size: 0.8rem; }
       [data-pe] .eyebrow, [data-pe] .mono, [data-pe] th, [data-pe] .metric-label { font-family: var(--font-mono); }
       [data-pe] .eyebrow, [data-pe] .metric-label { color: var(--r-pea-ink); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -202,7 +218,7 @@
           <div class="metric"><span class="metric-label">spacing substitutions</span><strong>19</strong><small>18 removed by the old counter; one variant was missed</small></div>
           <div class="metric"><span class="metric-label">route arbitrary</span><strong>348 → 57</strong><small>honest guarded frontier; 57 remains</small></div>
           <div class="metric"><span class="metric-label">raw semantic frontier</span><strong>0</strong><small>source-wide deprecated spelling hard zero</small></div>
-          <div class="metric"><span class="metric-label">goal chain net</span><strong>+319</strong><small>75 files · +1971 / −1652 from 00af0d5 at final staged scope</small></div>
+          <div class="metric"><span class="metric-label">goal chain net</span><strong>+384</strong><small>78 files · +2055 / −1671 from 00af0d5 at final settled scope</small></div>
         </div>
         <table>
           <caption>Goal commits from base <code>00af0d5</code></caption>
@@ -228,6 +244,22 @@
             <tr><td>web <code>vp check</code> / build</td><td class="pass">PASS</td><td>unqualified formatter/check and isolated client/SSR build</td></tr>
             <tr><td>generated route tree</td><td class="pass">UNCHANGED</td><td>20,786 bytes; SHA-256 <code>D5D7A4C666BCD4BB1853B8D3543EEBB94C37CDCF51FDE959CDA0532210D58428</code></td></tr>
             <tr><td>tracked status</td><td class="pass">CLEAN</td><td>generated noise restored; explicit owned paths only</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="browser-proof" aria-labelledby="browser-proof-title">
+        <div class="section-head"><h2 id="browser-proof-title">Browser proof</h2><p>observed locally at desktop 1280px</p></div>
+        <table>
+          <thead><tr><th scope="col">surface</th><th scope="col">result</th><th scope="col">observed evidence</th></tr></thead>
+          <tbody>
+            <tr><td>isolated probe</td><td class="pass">PASS</td><td>local server; one local stylesheet, zero scripts, no console/network errors; semantic <code>main</code>/<code>nav</code>/labelled region and an accessible labelled native button</td></tr>
+            <tr><td>light computed styles</td><td class="pass">PASS</td><td>body <code>rgb(253,250,242)</code> / <code>rgb(56,53,45)</code>; link <code>rgb(50,94,136)</code>; root roles present; inline code/recess treatment, 1080px page-wrap, and no horizontal overflow</td></tr>
+            <tr><td>dark computed styles</td><td class="pass">PASS</td><td>body <code>rgb(21,18,13)</code> / <code>rgb(238,235,226)</code>; link <code>rgb(146,193,241)</code>; dark page/ink/commit roles present</td></tr>
+            <tr><td>opt-in boundary</td><td class="pass">PASS</td><td>removing <code>data-pe</code> removed background/ink/link/code/page-wrap defaults: transparent/black/UA blue/transparent/full width</td></tr>
+            <tr><td>app <code>/design-system</code></td><td class="pass">PASS</td><td>1280px render retained <code>data-pe</code>, Open Sans body, semantic content, and no horizontal overflow; ThemeToggle cycled Auto → Light → Dark with exact ground/ink changes; Tab reached the focus-visible shipping “apply to Revit” button</td></tr>
+            <tr><td>host boundary</td><td class="warn">LIMITED</td><td><code>/events</code> returned 500 because the host backend was absent; this proves the web/UI interaction lane, not host connectivity</td></tr>
+            <tr><td>report inspection</td><td class="pass">PASS</td><td>visually inspected at 1280×800 and 600×844; hierarchy and wrapping held. Exact 390px mobile was not claimed because T3 resize timed out and Windows headless has a narrow-window floor. Print remains source-only until separately proved.</td></tr>
           </tbody>
         </table>
       </section>

@@ -7,7 +7,7 @@
  * - OUTCOME RECEIPTS READ AS COLOURED MONO TEXT, not left bars — round 1 measured that vertical
  *   bars were simply not understood.
  * - EVERY KIND REUSES A MEANING ROLE ALREADY IN THE CONTRACT. No outcome gets a hue of its own,
- *   and the mapping is documented once, in design-lang.css, next to the tokens it spends:
+ *   and the mapping is documented once, in pe-base.css, next to the tokens it spends:
  *     busy → ink-2 · receipt → done · refused → alarm · dropped → ink-mute (+italic) ·
  *     advisory → ink-2 · partial → caution · error → caution
  *   Two of those are arguments, not conveniences: a plan-hash REFUSAL is the model disagreeing,

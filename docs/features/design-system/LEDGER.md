@@ -1,7 +1,7 @@
 # design-system ledger
 
-The one-system design cluster: the design LANGUAGE (`--r-*` tokens in `src/design-lang.css`,
-grammar in `components/lang/`), the `/design-system` route and its satellites, the shared
+The one-system design cluster: the design LANGUAGE (`--r-*` tokens in `src/pe-base.css`,
+Tailwind grammar/projections in `src/design-lang.css`, and component grammar in `components/lang/`), the `/design-system` route and its satellites, the shared
 PRIMITIVES in `apps/web/src`, the front door (`/`), and the document lab (`/doc-lab`).
 
 **This ledger is the single owner of every cross-route design-language and primitive gap.** Route
@@ -18,7 +18,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ### The language
 
-- 2026-08-16 — The design language is settled (base 2, rounds 1–2); `--r-*` tokens are canon in `src/design-lang.css`, grammar in `components/lang/`. Standing law: nothing exists on `/design-system` unless it is a real component with a real consumer (no shims — a workaround is noise that hides a gap).
+- 2026-08-16 — The design language is settled (base 2, rounds 1–2); `--r-*` tokens are canon in `src/pe-base.css`, Tailwind grammar/projections in `src/design-lang.css`, and component grammar in `components/lang/`. Standing law: nothing exists on `/design-system` unless it is a real component with a real consumer (no shims — a workaround is noise that hides a gap).
 - 2026-08-16 — Stretching the system and migrating components/routes are one paired exercise; every migration is a probe and every gap is recorded, never worked around.
 - 2026-08-16 — Round-1 winner: **e (cell states)**, on whole-page legibility. Two load-bearing mechanisms: one cell grammar everywhere (chat card / table cell / arming strip = same treatment at three scales), and tasteful fills over outline borders (border scarcity is what made the arming strip read as ceremony).
 - 2026-08-16 — Round-2 winner: **p3 (wholistic bands)** — every role on shared OKLCH lightness/chroma bands so the palette reads as one system, with the alarm alone off-band (the one-alarm law made physical). Cross-mode strategy is sibling renderings: per-role light|dark pair, identical meaning map, lightness free, hue within a named tolerance.
@@ -82,13 +82,13 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 ### Enforcement
 
 - 2026-08-16 — the design-guard test IS the lint: the web app has no CI, so token discipline holds by assertion in `vp test` (the `ready` lane), not by review. Five hard zeros + five ratchets against `design-guard.baseline.json`; baselines may only fall, and a count _below_ baseline also fails so the ratchet cannot silently slacken. Full rationale — including the ground-flip ruling and every gate's why — lives in the test header (`apps/web/src/design-guard.test.ts`); a grammar or vocabulary change lands as ruling + code + guard update in one commit. **Do not restate the gates in prose; they are executable.**
-- 2026-08-16 — The one-system sweep CLOSED against its own census: forked `Verb` components 5→0, `--st-*`/`--act-*` consumers 6 files→0, hex literals outside `design-lang.css`→0, `tele`/`tele-label`/`section-label` 152 uses / 15 files→0 (bundles deleted), sub-10px `text-[Npx]`→0, raw palette refs outside ui ~640 / 50 files→0, ALIAS SHIM meter ~40 lines→0, `ui/verb`/`ui/chip`/`ui/switcher` deleted — each now a hard zero in `design-guard.test.ts`. (Full table was `docs/design/DESIGN-SWEEP.md`, git history.)
+- 2026-08-16 — The one-system sweep CLOSED against its own census: forked `Verb` components 5→0, `--st-*`/`--act-*` consumers 6 files→0, hex literals outside `pe-base.css`→0, `tele`/`tele-label`/`section-label` 152 uses / 15 files→0 (bundles deleted), sub-10px `text-[Npx]`→0, raw palette refs outside ui ~640 / 50 files→0, ALIAS SHIM meter ~40 lines→0, `ui/verb`/`ui/chip`/`ui/switcher` deleted — each now a hard zero in `design-guard.test.ts`. (Full table was `docs/design/DESIGN-SWEEP.md`, git history.)
 - 2026-08-16 — Tails that closed ratcheted rather than zero: `text-[Npx]` 381 / 12 sizes → 41 / 9 files (32 of them design-system exhibit chrome, all ≥10px); raw `<button>` outside ui+lang 137 / 37 files → 56 / 22; `ui/button` importers/JSX 22 / 64 → 12 / 24; `useVerb` 2 sites + 11 hand-rolls → 5 sites with the hand-rolled idiom gone from routes; takeoffs moved off its hand-rolled modal onto `ui/dialog` and production gained its first two confirmation dialogs.
 - 2026-08-16 — Sweep working rules, kept for later crusades: local commits with explicit paths only (concurrent agents clobbered each other's staged index twice), and important decisions are answered by prototypes or real code, never prose.
 
 ### The `/design-system` route and its catalogue
 
-- 2026-08-16 — the `/design-lang` proto route and `src/design-lang/*` were deleted once they had served as the validation record; the losing rivals survive only on snapshot branch `proto/design-lang-base2-round2`, and palette values are single-homed in `src/design-lang.css`.
+- 2026-08-16 — the `/design-lang` proto route and `src/design-lang/*` were deleted once they had served as the validation record; the losing rivals survive only on snapshot branch `proto/design-lang-base2-round2`, and palette values are single-homed in `src/pe-base.css`.
 - 2026-08-16 — satellite demos are deliberately mocked (fixture data, null identities, no host calls) and say so. This is not a gap to discharge: satellites exist to show complicated cases a real route cannot reach.
 - 2026-08-16 — shadcn exhibits with zero product consumers are evicted from the index rather than catalogued: the index documents components with a proven consumer, so an un-consumed component is either given one (and re-admitted with the consumer named) or deleted.
 - 2026-08-16 — the per-route crusade runs BEFORE satellite work, deliberately: catalogue entries must be backed by real consumers, so satellites are explicitly not blockers.
@@ -131,7 +131,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 - 2026-08-15 — The second consumer is the only evidence a seam is real. A docblock naming three futures, a passing test, and an ADR line are all consumers that were _described_, not consumers that _arrived_.
 - 2026-08-15 — Authoring test for any new seam: not "can I name a future user?" (always answerable) but "what makes this obviously wrong if the future never comes?" Code with no tripwire doesn't fail — it accumulates, compiles, and passes.
 - 2026-08-15 — Undiscoverable is the leading indicator of dead: every route deleted in the wave was unreachable from the index `TOOLS` list. Reachability from the front door tracks liveness better than any timestamp.
-- 2026-08-16 — Sweep governance for a route pass: `components/lang/*`, `components/master-table/*`, `design-lang.css` tokens and the state-model axes are NOT changed by a route pass. Where the language cannot say something, leave the code honest and write the gap down here. Gaps become numbered findings, never unilateral language changes.
+- 2026-08-16 — Sweep governance for a route pass: `components/lang/*`, `components/master-table/*`, `pe-base.css` raw tokens, `design-lang.css` projections, and the state-model axes are NOT changed by a route pass. Where the language cannot say something, leave the code honest and write the gap down here. Gaps become numbered findings, never unilateral language changes.
 
 ## Tried & rejected
 
