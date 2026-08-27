@@ -21,6 +21,7 @@ import {
   docAtom,
   docWriter,
   expectRouteWrite,
+  refuse,
   feed,
   hostRead,
   type Scope,
@@ -195,7 +196,7 @@ export function createFamiliesStore(deps: {
         async () => {
           const value = registry.get(draft);
           if (!value.categories.length || !value.families.length)
-            throw Error("scope needs at least one category and family");
+            refuse("scope needs at least one category and family");
           registry.set(applied, {
             categoryNames: [...value.categories],
             familyNames: [...value.families],
@@ -240,7 +241,7 @@ export function createFamiliesStore(deps: {
         async () => {
           const path = registry.get(profilePath);
           const scope = registry.get(applied);
-          if (!path || !scope) throw Error("plan needs a profile and applied scope");
+          if (!path || !scope) refuse("plan needs a profile and applied scope");
           await bindDocument(registry.get(target));
           return expectRouteWrite(await writer.command("plan", { profilePath: path, scope }));
         },
@@ -252,7 +253,7 @@ export function createFamiliesStore(deps: {
         "apply",
         async () => {
           const current = registry.get(plan);
-          if (!current) throw Error("apply needs a plan");
+          if (!current) refuse("apply needs a plan");
           await bindDocument(registry.get(target));
           return expectRouteWrite(
             await writer.command("apply", { expectedPlanHash: current.planHash }),
@@ -274,7 +275,7 @@ export function createFamiliesStore(deps: {
     project() {
       return runVerb("project", async () => {
         const ids = [...registry.get(pickedIds)];
-        if (!ids.length) throw Error("project needs picked families");
+        if (!ids.length) refuse("project needs picked families");
         const result = await deps.host.project(registry.get(target), ids);
         registry.set(projection, result);
         return `projected ${result.projections.length} families`;

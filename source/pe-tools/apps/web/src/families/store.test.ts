@@ -145,6 +145,20 @@ describe("families route store", () => {
     });
   });
 
+  it("types an empty-scope refusal as refused, not error", async () => {
+    const { registry, store } = make();
+    store.actions.setDraft({ placement: "AllLoaded", categories: [], families: [] });
+
+    await expect(store.actions.applyScope()).rejects.toThrow(
+      "scope needs at least one category and family",
+    );
+
+    expect(registry.get(store.atoms.failure)).toMatchObject({
+      kind: "refused",
+      verb: "apply-scope",
+    });
+  });
+
   it("refuses apply while plan runs", async () => {
     let release!: (value: RouteStateWriteResult) => void;
     const testFixture = fixture();

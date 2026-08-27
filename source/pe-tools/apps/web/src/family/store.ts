@@ -37,6 +37,7 @@ import {
   docAtom,
   docWriter,
   expectRouteWrite,
+  refuse,
   feed,
   hostRead,
   unbound,
@@ -302,7 +303,7 @@ export function createFamilyStore(deps: {
         return `saved ${current.document.relativePath} - ${patches.length} field${patches.length === 1 ? "" : "s"} written`;
       }
       const refusal = buildRefusal();
-      if (refusal) throw Error(refusal);
+      if (refusal) refuse(refusal);
       const current = registry.get(lane).document!;
       const result = expectRouteWrite(
         await writers.familyCommand("build_evidence", {

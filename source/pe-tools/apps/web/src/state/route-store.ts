@@ -57,6 +57,11 @@ export function failuresNote(result: { result?: unknown }, noun: string): string
   }`;
 }
 
+/** Refuse from inside a verb: the store stamps `kind:"refused"`, not `error`. */
+export function refuse(error: string): never {
+  throw new RouteWriteFailure({ ok: false, kind: "refused", error, hint: "" });
+}
+
 /** What a caught cause reports: a typed route refusal keeps its kind, anything else is an error. */
 export const verbFailure = (verb: string, cause: unknown): VerbFailure => ({
   kind: cause instanceof RouteWriteFailure ? cause.result.kind : "error",
