@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useAtomValue } from "@effect/atom-react";
 
 import { FactChip } from "#/components/lang/chip";
-import { OutcomeLine } from "#/components/lang/outcome";
+import { VerbLane } from "#/components/verb-lane";
 import { FAMILIES_PRODUCT, type FamiliesSlot } from "#/families/product";
 import type { FamiliesStore } from "#/families/store";
 import { useFleet } from "#/host/fleet";
@@ -21,8 +21,6 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
   const plan = useAtomValue(store.atoms.plan);
   const picker = useAtomValue(store.atoms.picker);
   const busy = useAtomValue(store.atoms.busy);
-  const failure = useAtomValue(store.atoms.failure);
-  const receipt = useAtomValue(store.atoms.receipt);
   const fleet = useFleet();
   const feeds = {
     world: worldTrunk.feed(fleet),
@@ -108,17 +106,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
           </FactChip>
         ) : undefined
       }
-      receipt={
-        failure ? (
-          <OutcomeLine
-            kind={failure.kind}
-            label={`${failure.verb} failed`}
-            says={failure.message}
-          />
-        ) : receipt ? (
-          <OutcomeLine kind="receipt" label={receipt.text} />
-        ) : undefined
-      }
+      receipt={<VerbLane atoms={store.atoms} />}
     />
   );
 }

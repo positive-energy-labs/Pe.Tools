@@ -122,6 +122,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { VerbLane } from "#/components/verb-lane";
 import { Verb } from "#/components/lang/verb";
 import {
   ReadCell,
@@ -534,7 +535,6 @@ export function FamilyWorkspace({
   /** null → unarmed. Carries the token the plan was armed against — the plan hash a drift cites. */
   const armedBuild = useAtomValue(store.atoms.armedBuild);
   const building = busy?.id === "build";
-  const failure = useAtomValue(store.atoms.failure);
   /** A latched unknown outcome. Host failures stay on the core's failure channel. */
   const buildFacts = useAtomValue(store.atoms.buildFacts);
   const buildOutcome = useAtomValue(store.atoms.buildOutcome);
@@ -2101,7 +2101,6 @@ export function FamilyWorkspace({
   );
 
   const picker = useAtomValue(store.atoms.picker);
-  const receipt = useAtomValue(store.atoms.receipt);
   const fleet = useFleet();
   const feeds = {
     world: worldTrunk.feed(fleet),
@@ -2150,27 +2149,24 @@ export function FamilyWorkspace({
         b={bindings}
         runner={runner}
         receipt={
-          failure != null ? (
-            <OutcomeLine
-              kind={failure.kind}
-              label={`${failure.verb} failed`}
-              says={failure.message}
-            />
-          ) : lane.parseError != null ? (
-            <OutcomeLine
-              kind="error"
-              label="the open document will not parse"
-              says={`${snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
-            />
-          ) : requestedFamily != null ? (
-            <OutcomeLine
-              kind="advisory"
-              label={`?family=${requestedFamily} ignored`}
-              says="this surface opens an authored family.json, not a placed element — pick the profile"
-            />
-          ) : receipt != null ? (
-            <OutcomeLine kind="receipt" label={receipt.text} />
-          ) : undefined
+          <VerbLane
+            atoms={store.atoms}
+            standing={
+              lane.parseError != null ? (
+                <OutcomeLine
+                  kind="error"
+                  label="the open document will not parse"
+                  says={`${snapshot?.documentId.relativePath ?? "it"} — ${lane.parseError}. The page below is the declared fixture, not your file.`}
+                />
+              ) : requestedFamily != null ? (
+                <OutcomeLine
+                  kind="advisory"
+                  label={`?family=${requestedFamily} ignored`}
+                  says="this surface opens an authored family.json, not a placed element — pick the profile"
+                />
+              ) : undefined
+            }
+          />
         }
         aside={
           <>
