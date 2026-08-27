@@ -51,8 +51,11 @@ export interface RouteStatePatch {
   value?: unknown;
 }
 
+export type RouteWriteKind = "error" | "refused" | "advisory" | "partial";
+
 export interface RouteStateWriteResult {
   ok: boolean;
+  kind?: RouteWriteKind;
   code?: import("./route-doc.ts").RouteRefusalCode;
   revision?: number;
   error?: string;

@@ -56,7 +56,7 @@ describe("route document machine", () => {
   it("types stale revisions and canonicalizes object-key order", () => {
     expect(
       applyPatches(spec, envelope(), "human", [{ path: ["staged"], value: [] }], 1),
-    ).toMatchObject({ ok: false, code: "stale_revision" });
+    ).toMatchObject({ ok: false, kind: "refused", code: "stale_revision" });
     expect(canonicalRouteInput({ b: 2, nested: { z: 1, a: 2 }, a: 1 })).toBe(
       canonicalRouteInput({ a: 1, nested: { a: 2, z: 1 }, b: 2 }),
     );

@@ -212,6 +212,7 @@ test("an abandoned external mutation becomes outcomeUnknown and recovery clears 
     await restarted.command(documentA, "test-route", "human", "external", {}, 0, "crash-1"),
   ).toMatchObject({
     ok: false,
+    kind: "refused",
     error: expect.stringContaining("blocked"),
   });
   expect(await restarted.command(documentA, "test-route", "human", "recover", {}, 0)).toMatchObject(
@@ -349,6 +350,7 @@ test("stale commands never invoke and successful writes return landed revisions"
   ).toMatchObject({ ok: true, revision: 1 });
   expect(await module.command(documentA, "test-route", "agent", "increment", {}, 0)).toMatchObject({
     ok: false,
+    kind: "refused",
     code: "stale_revision",
   });
   expect(increment).not.toHaveBeenCalled();
@@ -367,12 +369,21 @@ test("non-JSON and oversized results complete once but cannot replay", async () 
     const external = vi.fn(async () => completed);
     const module = workspace(store, { registration: registration({ external }) });
 
-    expect(
-      await module.command(documentA, "test-route", "human", "external", {}, 0, "request-large"),
-    ).toMatchObject({ ok: true, revision: 0 });
+    const first = await module.command(
+      documentA,
+      "test-route",
+      "human",
+      "external",
+      {},
+      0,
+      "request-large",
+    );
+    expect(first).toMatchObject({ ok: true, revision: 0 });
+    if (typeof completed === "string") expect(first.result).toBe(completed);
+    else expect(first).not.toHaveProperty("result");
     expect(
       await module.command(documentA, "test-route", "human", "external", {}, 99, "request-large"),
-    ).toMatchObject({ ok: false, code: "replay_unavailable" });
+    ).toMatchObject({ ok: false, kind: "refused", code: "replay_unavailable" });
     expect(external).toHaveBeenCalledOnce();
   }
 });

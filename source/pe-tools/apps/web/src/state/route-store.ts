@@ -12,6 +12,7 @@ import {
   type RouteStatePatch,
   type RouteStateSpec,
   type RouteStateWriteResult,
+  type RouteWriteKind,
 } from "@pe/agent-contracts";
 
 import { inspectAtomRegistry } from "#/state/atom-inspect";
@@ -19,7 +20,7 @@ import { fetchPeInfo } from "#/host/info";
 import type { Option } from "#/targeting/model";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
-type VerbFailure = { kind: "busy" | "host"; verb: string; message: string };
+type VerbFailure = { kind: RouteWriteKind; verb: string; message: string };
 export type VerbReceipt = { verb: string; text: string; at: number };
 export class VerbRefused extends Error {
   readonly name = "VerbRefused";
@@ -27,6 +28,25 @@ export class VerbRefused extends Error {
   constructor(readonly verb: string) {
     super(`${verb} refused; another verb is running`);
   }
+}
+
+export class RouteWriteFailure extends Error {
+  readonly name = "RouteWriteFailure";
+
+  constructor(
+    readonly result: RouteStateWriteResult,
+    fallback: string,
+  ) {
+    super([result.error, result.hint].filter(Boolean).join(": ") || fallback);
+  }
+}
+
+export function expectRouteWrite(
+  result: RouteStateWriteResult,
+  fallback: string,
+): RouteStateWriteResult {
+  if (!result.ok) throw new RouteWriteFailure(result, fallback);
+  return result;
 }
 
 export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomRegistry) {
@@ -71,7 +91,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     if (inFlight) {
       const error = new VerbRefused(id);
       const refused = {
-        kind: "busy",
+        kind: "refused",
         verb: id,
         message: error.message,
       } as const;
@@ -94,7 +114,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
       const value = await work();
       if (typeof value === "object" && value !== null && "ok" in value && value.ok === false) {
         const result = value as RouteStateWriteResult;
-        throw Error([result.error, result.hint].filter(Boolean).join(": ") || `${id} failed`);
+        throw new RouteWriteFailure(result, `${id} failed`);
       }
       const text =
         typeof value === "string"
@@ -111,7 +131,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
       return value;
     } catch (cause) {
       const hostFailure = {
-        kind: "host",
+        kind: cause instanceof RouteWriteFailure ? (cause.result.kind ?? "error") : "error",
         verb: id,
         message: cause instanceof Error ? cause.message : String(cause),
       } as const;
@@ -379,14 +399,20 @@ export function docWriter<S extends RouteStateSpec<any>>(
         .json()
         .catch(() => null)) as RouteStateWriteResult | null) ?? {
         ok: false,
+        kind: "error",
         error: `${operation} failed (${response.status})`,
       };
       if (result.ok && Number.isInteger(result.revision))
         lastWrittenRevision = Math.max(lastWrittenRevision ?? -1, result.revision!);
-      else if (result.code === "stale_revision") registry.set(routeConflictAtom, true);
+      else if (result.kind === "refused" && result.code === "stale_revision")
+        registry.set(routeConflictAtom, true);
       return result;
     } catch (cause) {
-      return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
+      return {
+        ok: false,
+        kind: "error",
+        error: cause instanceof Error ? cause.message : String(cause),
+      };
     }
   };
   const writeRevision = (explicit?: number): number | null => {
@@ -400,6 +426,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
       if (revision === null)
         return Promise.resolve<RouteStateWriteResult>({
           ok: false,
+          kind: "refused",
           error: "route document is not hydrated",
         });
       return write("apply", { patches, expectedRevision: revision });
@@ -409,6 +436,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
       if (revision === null)
         return Promise.resolve<RouteStateWriteResult>({
           ok: false,
+          kind: "refused",
           error: "route document is not hydrated",
         });
       return write("command", {

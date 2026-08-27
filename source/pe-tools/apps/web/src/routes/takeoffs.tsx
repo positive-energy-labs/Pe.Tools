@@ -444,10 +444,10 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
         )}
       </div>
 
-      {/* A failed host call is an ERROR, not a seam — caution, deliberately not the alarm. */}
+      {/* Consumed writes spend their structured kind; untyped host failures remain errors. */}
       {failure && (
         <div className="absolute bottom-2 left-1/2 z-40 max-w-2xl -translate-x-1/2 bg-background px-2 py-1 shadow-md">
-          <OutcomeLine kind="error" label={failure.message} />
+          <OutcomeLine kind={failure.kind} label={failure.message} />
           <Verb
             label="dismiss"
             onClick={() => store.actions.clearFailure()}

@@ -156,11 +156,11 @@ export async function buildAgentControllerApp(
     app.post(`${prefix}/:route/apply`, async (c) => {
       const scope = parseRouteWorkspaceScope(c);
       if (typeof scope === "string")
-        return c.json({ ok: false, error: "route scope is required", hint: scope }, 400);
+        return c.json({ ok: false, kind: "error", error: "route scope is required", hint: scope }, 400);
       const parsed = routeStateApplyBodySchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return c.json(
-          { ok: false, error: "invalid body", hint: "expected { patches, expectedRevision }" },
+          { ok: false, kind: "error", error: "invalid body", hint: "expected { patches, expectedRevision }" },
           400,
         );
       }
@@ -175,18 +175,19 @@ export async function buildAgentControllerApp(
           ),
         );
       } catch (error) {
-        return c.json({ ok: false, error: errorMessage(error) }, 403);
+        return c.json({ ok: false, kind: "error", error: errorMessage(error) }, 403);
       }
     });
     app.post(`${prefix}/:route/command`, async (c) => {
       const scope = parseRouteWorkspaceScope(c);
       if (typeof scope === "string")
-        return c.json({ ok: false, error: "route scope is required", hint: scope }, 400);
+        return c.json({ ok: false, kind: "error", error: "route scope is required", hint: scope }, 400);
       const parsed = routeStateCommandBodySchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return c.json(
           {
             ok: false,
+            kind: "error",
             error: "invalid body",
             hint: "expected { command, input?, expectedRevision, requestId? }",
           },
@@ -206,7 +207,7 @@ export async function buildAgentControllerApp(
           ),
         );
       } catch (error) {
-        return c.json({ ok: false, error: errorMessage(error) }, 403);
+        return c.json({ ok: false, kind: "error", error: errorMessage(error) }, 403);
       }
     });
   };

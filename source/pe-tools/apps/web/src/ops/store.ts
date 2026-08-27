@@ -110,7 +110,7 @@ export function createOpsStore(deps: {
     } catch (cause) {
       write(verb, "failure", () =>
         registry.set(core.failure, {
-          kind: "host",
+          kind: "error",
           verb,
           message: cause instanceof Error ? cause.message : String(cause),
         }),

@@ -20,6 +20,7 @@ import {
   createRouteStoreCore,
   docAtom,
   docWriter,
+  expectRouteWrite,
   feed,
   hostRead,
   type Scope,
@@ -150,10 +151,6 @@ export function createFamiliesStore(deps: {
         typeof next === "function" ? (next as (value: A) => A)(previous) : next,
       ),
     );
-  const expectOk = (result: RouteStateWriteResult, fallback: string) => {
-    if (!result.ok) throw Error(result.hint ?? result.error ?? fallback);
-    return result;
-  };
   const bindDocument = async (nextTarget: string) => {
     const doc = registry.get(document);
     const patches: RouteStatePatch[] = [];
@@ -164,7 +161,7 @@ export function createFamiliesStore(deps: {
             ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
             : undefined,
       });
-    return patches.length ? expectOk(await writer.apply(patches), "bind failed") : { ok: true };
+    return patches.length ? expectRouteWrite(await writer.apply(patches), "bind failed") : { ok: true };
   };
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,
@@ -213,7 +210,7 @@ export function createFamiliesStore(deps: {
       return runVerb(
         "profile",
         async () =>
-          expectOk(
+          expectRouteWrite(
             await writer.apply([
               { path: ["profilePath"], value: nextProfile },
               { path: ["plan"], value: null },
@@ -231,7 +228,7 @@ export function createFamiliesStore(deps: {
         async () => {
           const next = new Set(registry.get(excludedIds));
           if (!next.delete(id)) next.add(id);
-          return expectOk(
+          return expectRouteWrite(
             await writer.apply([{ path: ["excludedIds"], value: [...next] }]),
             "exclude failed",
           );
@@ -247,7 +244,7 @@ export function createFamiliesStore(deps: {
           const scope = registry.get(applied);
           if (!path || !scope) throw Error("plan needs a profile and applied scope");
           await bindDocument(registry.get(target));
-          return expectOk(
+          return expectRouteWrite(
             await writer.command("plan", { profilePath: path, scope }),
             "plan failed",
           );
@@ -262,7 +259,7 @@ export function createFamiliesStore(deps: {
           const current = registry.get(plan);
           if (!current) throw Error("apply needs a plan");
           await bindDocument(registry.get(target));
-          return expectOk(
+          return expectRouteWrite(
             await writer.command("apply", { expectedPlanHash: current.planHash }),
             "apply failed",
           );

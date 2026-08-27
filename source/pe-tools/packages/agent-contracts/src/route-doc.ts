@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { RouteStateCommandSpec, RouteStateSpec } from "./route-state.ts";
+import type { RouteStateCommandSpec, RouteStateSpec, RouteWriteKind } from "./route-state.ts";
 
 export interface ExternalOperation {
   command: string;
@@ -30,6 +30,7 @@ export type RoutePatch = { path: (string | number)[]; value?: unknown };
 export type RouteActor = "agent" | "human";
 export type RouteRefusal = {
   ok: false;
+  kind?: RouteWriteKind;
   error: string;
   hint: string;
   code?: RouteRefusalCode;
@@ -56,6 +57,7 @@ export function applyPatches<S extends z.ZodType>(
     if (forbidden)
       return {
         ok: false,
+        kind: "refused",
         error: `patch path ${formatPath(forbidden.path)} is not agent-writable`,
         hint: `the agent write mask allows only ${spec.agentWriteMask
           .map(formatPath)
@@ -69,6 +71,7 @@ export function applyPatches<S extends z.ZodType>(
   } catch (error) {
     return {
       ok: false,
+      kind: "error",
       error: message(error),
       hint: "patch paths must address plain document keys.",
     };
@@ -84,6 +87,7 @@ export function checkRevision(
     ? null
     : {
         ok: false,
+        kind: "refused",
         code: "stale_revision",
         error: `the document moved to r${envelope.revision}`,
         hint: "re-read before patching.",
@@ -108,12 +112,14 @@ export function guardCommand<S extends z.ZodType>(
   if (!command)
     return {
       ok: false,
+      kind: "error",
       error: `unknown command '${name}'`,
       hint: `available commands: ${Object.keys(spec.commands).join(", ") || "(none)"}.`,
     };
   if (command.actor === "human" && actor !== "human")
     return {
       ok: false,
+      kind: "refused",
       error: `command '${name}' is human-only`,
       hint: "a human must run this command from the browser UI.",
     };
@@ -121,12 +127,14 @@ export function guardCommand<S extends z.ZodType>(
   if (!parsed.success)
     return {
       ok: false,
+      kind: "error",
       error: `invalid input for command '${name}'`,
       hint: formatZodError(parsed.error),
     };
   if (envelope.outcomeUnknown && command.mutatesExternal && !command.recoversExternal)
     return {
       ok: false,
+      kind: "refused",
       error: `command '${name}' is blocked because a prior external outcome is unknown`,
       hint: "run a recovery command successfully before another external mutation.",
     };
@@ -142,6 +150,7 @@ export function commitDoc<S extends z.ZodType>(
   if (!parsed.success)
     return {
       ok: false,
+      kind: "error",
       error: "the patched document is invalid",
       hint: formatZodError(parsed.error),
     };

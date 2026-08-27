@@ -211,7 +211,7 @@ describe("ops route store", () => {
     ).resolves.toBeUndefined();
 
     expect(registry.get(store.atoms.failure)).toMatchObject({
-      kind: "host",
+      kind: "error",
       verb: "set-bindings",
       message: "binding write failed",
     });

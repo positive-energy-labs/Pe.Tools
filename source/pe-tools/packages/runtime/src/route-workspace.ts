@@ -12,6 +12,7 @@ import {
   type RouteEnvelope,
   type RoutePatch,
   type RouteRefusalCode,
+  type RouteWriteKind,
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 
@@ -50,6 +51,7 @@ export interface RouteWorkspaceOptions {
 
 export interface RouteWorkspaceApplyResult {
   ok: boolean;
+  kind?: RouteWriteKind;
   code?: RouteRefusalCode;
   revision?: number;
   doc?: unknown;
@@ -59,6 +61,7 @@ export interface RouteWorkspaceApplyResult {
 
 export interface RouteWorkspaceCommandResult {
   ok: boolean;
+  kind?: RouteWriteKind;
   code?: RouteRefusalCode;
   revision?: number;
   result?: unknown;
@@ -176,6 +179,7 @@ export class RouteWorkspace {
         error: string,
         hint: string,
         code?: RouteRefusalCode,
+        kind: RouteWriteKind = "error",
       ): Promise<RouteWorkspaceCommandResult> => {
         await this.#publish({
           type: "route_workspace",
@@ -188,7 +192,7 @@ export class RouteWorkspace {
           ok: false,
           error,
         });
-        return { ok: false, error, hint, code };
+        return { ok: false, kind, error, hint, code };
       };
       let inputDigest: string | undefined;
       if (requestId) {
@@ -204,12 +208,14 @@ export class RouteWorkspace {
               `request id '${requestId}' was already used for another command or input`,
               "mint a new request id for a different command request.",
               "request_id_conflict",
+              "refused",
             );
           if (!receipt.replayable)
             return fail(
               `request id '${requestId}' completed but its result is unavailable for replay`,
               "re-read the document before continuing.",
               "replay_unavailable",
+              "refused",
             );
           return {
             ok: true,
@@ -219,9 +225,9 @@ export class RouteWorkspace {
         }
       }
       const stale = checkRevision(envelope, expectedRevision);
-      if (stale) return fail(stale.error, stale.hint, stale.code);
+      if (stale) return fail(stale.error, stale.hint, stale.code, stale.kind);
       const guarded = guardCommand(spec, envelope, actor, command, input);
-      if (!guarded.ok) return fail(guarded.error, guarded.hint, guarded.code);
+      if (!guarded.ok) return fail(guarded.error, guarded.hint, guarded.code, guarded.kind);
       if (guarded.command.mutatesExternal && !requestId)
         return fail(
           `command '${command}' requires a request id`,
@@ -258,7 +264,7 @@ export class RouteWorkspace {
         let returned = result;
         if (guarded.command.mutatesExternal) {
           const normalized = normalizeReceiptResult(result);
-          returned = normalized.replayable ? normalized.result : undefined;
+          returned = normalized.returned;
           // ponytail: receipts never evict; revisit only if a high-frequency external command ships.
           envelope.receipts = {
             ...envelope.receipts,
@@ -267,7 +273,7 @@ export class RouteWorkspace {
               inputDigest: inputDigest!,
               completedAt: new Date().toISOString(),
               revision: envelope.revision,
-              ...normalized,
+              ...normalized.receipt,
             },
           };
         }
@@ -284,7 +290,11 @@ export class RouteWorkspace {
           revision: envelope.revision,
           ok: true,
         });
-        return { ok: true, revision: envelope.revision, result: returned };
+        return {
+          ok: true,
+          revision: envelope.revision,
+          ...(returned === undefined ? {} : { result: returned }),
+        };
       } catch (error) {
         const errorMessage = message(error);
         if (guarded.command.mutatesExternal) {
@@ -413,17 +423,19 @@ function parseReceipts(value: unknown, route: string): Record<string, CommandRec
   return receipts;
 }
 
-function normalizeReceiptResult(result: unknown): Pick<CommandReceipt, "replayable" | "result"> {
+function normalizeReceiptResult(result: unknown): {
+  returned?: unknown;
+  receipt: Pick<CommandReceipt, "replayable" | "result">;
+} {
   try {
     const serialized = JSON.stringify(result);
-    if (
-      serialized === undefined ||
-      new TextEncoder().encode(serialized).byteLength > RECEIPT_RESULT_MAX_BYTES
-    )
-      return { replayable: false };
-    return { replayable: true, result: JSON.parse(serialized) };
+    if (serialized === undefined) return { receipt: { replayable: false } };
+    const returned = JSON.parse(serialized);
+    return new TextEncoder().encode(serialized).byteLength > RECEIPT_RESULT_MAX_BYTES
+      ? { returned, receipt: { replayable: false } }
+      : { returned, receipt: { replayable: true, result: returned } };
   } catch {
-    return { replayable: false };
+    return { receipt: { replayable: false } };
   }
 }
 
@@ -460,9 +472,10 @@ function summarizeDoc(doc: unknown): unknown {
   );
 }
 
-function unknownRoute(route: string): { ok: false; error: string; hint: string } {
+function unknownRoute(route: string): RouteWorkspaceApplyResult {
   return {
     ok: false,
+    kind: "error",
     error: `unknown route '${route}'`,
     hint: "list the registered routes before addressing one.",
   };

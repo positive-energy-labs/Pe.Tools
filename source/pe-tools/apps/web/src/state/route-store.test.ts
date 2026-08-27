@@ -62,7 +62,7 @@ describe("route store kit", () => {
     await Promise.resolve();
 
     await expect(core.runVerb("second", async () => "no")).rejects.toBeInstanceOf(VerbRefused);
-    expect(registry.get(core.failure)).toMatchObject({ kind: "busy", verb: "second" });
+    expect(registry.get(core.failure)).toMatchObject({ kind: "refused", verb: "second" });
     finish();
     await expect(first).resolves.toBe("done");
     expect(registry.get(core.receipt)).toMatchObject({ verb: "first", text: "done" });
@@ -75,10 +75,11 @@ describe("route store kit", () => {
     await expect(core.runVerb("bad", async () => Promise.reject(hostError))).rejects.toBe(
       hostError,
     );
-    expect(registry.get(core.failure)).toMatchObject({ kind: "host", message: "host broke" });
+    expect(registry.get(core.failure)).toMatchObject({ kind: "error", message: "host broke" });
     await expect(
       core.runVerb("write", async () => ({
         ok: false,
+        kind: "refused" as const,
         error: "the patched document is invalid",
         hint: "snapshot.world.zones.43.zone.color: expected string",
       })),
@@ -86,7 +87,7 @@ describe("route store kit", () => {
       "the patched document is invalid: snapshot.world.zones.43.zone.color: expected string",
     );
     expect(registry.get(core.failure)).toMatchObject({
-      kind: "host",
+      kind: "refused",
       verb: "write",
       message:
         "the patched document is invalid: snapshot.world.zones.43.zone.color: expected string",
@@ -216,8 +217,10 @@ describe("route store kit", () => {
       .mockResolvedValueOnce(response({ ok: true, revision: 8 }))
       .mockResolvedValueOnce(response({ ok: true, revision: 9 }))
       .mockResolvedValueOnce(response({ ok: true, revision: 10 }))
-      .mockResolvedValueOnce(response({ ok: false, code: "request_id_conflict" }))
-      .mockResolvedValueOnce(response({ ok: false, code: "stale_revision" }));
+      .mockResolvedValueOnce(
+        response({ ok: false, kind: "refused", code: "request_id_conflict" }),
+      )
+      .mockResolvedValueOnce(response({ ok: false, kind: "refused", code: "stale_revision" }));
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
       "00000000-0000-4000-8000-000000000005",
     );
@@ -231,6 +234,7 @@ describe("route store kit", () => {
 
     await expect(writer.apply([{ path: ["value"], value: "next" }])).resolves.toMatchObject({
       ok: false,
+      kind: "refused",
       error: "route document is not hydrated",
     });
     expect(request).not.toHaveBeenCalled();

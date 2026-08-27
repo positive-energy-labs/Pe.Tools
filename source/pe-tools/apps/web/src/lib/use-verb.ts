@@ -6,6 +6,7 @@
  * route busy forever.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { RouteWriteKind } from "@pe/agent-contracts";
 
 /** What the Sentence's receipt slot eats: what happened, and when it happened. */
 export interface VerbReceipt {
@@ -18,18 +19,16 @@ export interface VerbReceipt {
  * is `refused` (the one alarm), a success path with something to say is `advisory`, and a
  * write that landed some items while the rest stay staged is `partial` (caution — staged is
  * unsaved; added at the fit-review sitting, the schedule-grid audit's one-line fix). */
-export type VerbFailKind = "error" | "refused" | "advisory" | "partial";
-
 export function useVerb() {
   const [busy, setBusy] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
-  const [outcome, setOutcome] = useState<{ kind: VerbFailKind; text: string } | null>(null);
+  const [outcome, setOutcome] = useState<{ kind: RouteWriteKind; text: string } | null>(null);
   const [receipt, setReceipt] = useState<VerbReceipt | null>(null);
   const inFlight = useRef(false);
 
   /** Carry the OutcomeKind with the text, so no consumer has to sniff a payload to know
    * which lane its failure belongs in. */
-  const fail = useCallback((kind: VerbFailKind, text: string | null) => {
+  const fail = useCallback((kind: RouteWriteKind, text: string | null) => {
     setOutcome(text === null ? null : { kind, text });
   }, []);
 

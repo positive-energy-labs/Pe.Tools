@@ -89,7 +89,10 @@ function ScheduleGridWorkspace({ documentAddress }: { documentAddress: import("@
     void verb.run(label, async () => {
       setPartial(null);
       const result = await command(kind, input);
-      if (!result.ok) throw new Error(result.error ?? result.hint ?? `${label} failed.`);
+      if (!result.ok) {
+        verb.fail(result.kind ?? "error", result.error ?? result.hint ?? `${label} failed.`);
+        return;
+      }
       const failureNote = pushFailureNote(result.result);
       if (failureNote != null) {
         setPartial(failureNote);

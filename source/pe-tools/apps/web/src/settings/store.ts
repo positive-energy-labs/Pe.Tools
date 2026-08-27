@@ -17,6 +17,7 @@ import {
   createRouteStoreCore,
   docAtom,
   docWriter,
+  expectRouteWrite,
   feed,
   hostRead,
   unbound,
@@ -255,13 +256,6 @@ export function createSettingsStore(deps: {
         typeof next === "function" ? (next as (value: A) => A)(previous) : next,
       ),
     );
-  const expect = <T extends { ok: boolean; error?: string; hint?: string }>(
-    result: T,
-    fallback: string,
-  ) => {
-    if (!result.ok) throw Error(result.hint ?? result.error ?? fallback);
-    return result;
-  };
   const pending = new Map<string, PendingStage>();
   let lastApply = Promise.resolve();
   const flush = (name: string) => {
@@ -277,12 +271,12 @@ export function createSettingsStore(deps: {
       .catch(() => undefined)
       .then(async () => {
         try {
-          expect(await apply([patch]), `staging ${name} failed`);
+          expectRouteWrite(await apply([patch]), `staging ${name} failed`);
           item.resolve();
         } catch (cause) {
           write("stage", "failure", () =>
             registry.set(core.failure, {
-              kind: "host",
+              kind: "error",
               verb: "stage",
               message: cause instanceof Error ? cause.message : String(cause),
             }),
@@ -322,7 +316,7 @@ export function createSettingsStore(deps: {
       },
       { path: ["documentId"], value: documentId },
     ];
-    expect(await apply(patches), "bind failed");
+    expectRouteWrite(await apply(patches), "bind failed");
     return target ? `bound ${target}` : "unbound settings file";
   };
   const bindPickedDocument = async (target: string | null) => {
@@ -347,7 +341,7 @@ export function createSettingsStore(deps: {
     stage: (name: string, value: unknown) => write("stage", name, () => stage(name, value)),
     apply: (patches: RouteStatePatch[]) =>
       write("apply", "slice/fields", async () =>
-        expect(await apply(patches), "field update failed"),
+        expectRouteWrite(await apply(patches), "field update failed"),
       ),
     open: () =>
       runVerb(
@@ -373,7 +367,7 @@ export function createSettingsStore(deps: {
               rootKey,
               relativePath: file.relativePath,
             });
-          expect(
+          expectRouteWrite(
             await command("open", {
               documentId: { moduleKey, rootKey, relativePath: file.relativePath },
             }),
@@ -387,7 +381,7 @@ export function createSettingsStore(deps: {
       runVerb(
         "refresh",
         async () => {
-          expect(await command("refresh"), "re-read failed");
+          expectRouteWrite(await command("refresh"), "re-read failed");
           return "re-read settings";
         },
         ["settings", "settings.schema"],
@@ -396,7 +390,7 @@ export function createSettingsStore(deps: {
       runVerb(
         "validate",
         async () => {
-          expect(await command("validate", { includeProposals: false }), "validate failed");
+          expectRouteWrite(await command("validate", { includeProposals: false }), "validate failed");
           return "validated settings";
         },
         ["settings"],
@@ -406,7 +400,7 @@ export function createSettingsStore(deps: {
         "save",
         async () => {
           await flushPending();
-          expect(await command("save"), "save failed");
+          expectRouteWrite(await command("save"), "save failed");
           return "saved settings";
         },
         ["settings"],

@@ -16,7 +16,7 @@ import type { z } from "zod";
 
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { createRouteStoreCore, docAtom, docWriter } from "#/state/route-store";
+import { createRouteStoreCore, docAtom, docWriter, expectRouteWrite } from "#/state/route-store";
 import { useRouteStore } from "#/state/use-route-store";
 import type { ChatPageStore } from "./store";
 import type { ChatPluginRoute } from "./route-chat-plugins";
@@ -116,9 +116,7 @@ function createRoutePaneStore(chat: ChatPageStore, spec: RouteStateSpec<z.ZodTyp
     atoms: { search: searchState },
     actions: {
       apply: (patches: RouteStatePatch[]) => core.runVerb("apply", async () => {
-        const result = await writer.apply(patches);
-        if (!result.ok) throw Error(result.hint ?? result.error ?? "route update failed");
-        return result;
+        return expectRouteWrite(await writer.apply(patches), "route update failed");
       }, [spec.route]),
     },
     dispose: core.dispose,

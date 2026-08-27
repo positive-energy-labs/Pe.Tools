@@ -36,6 +36,7 @@ import {
   createRouteStoreCore,
   docAtom,
   docWriter,
+  expectRouteWrite,
   feed,
   hostRead,
   unbound,
@@ -237,13 +238,6 @@ export function createFamilyStore(deps: {
     { immediate: true },
   );
 
-  const expect = <T extends { ok: boolean; error?: string; hint?: string }>(
-    result: T,
-    fallback: string,
-  ): T => {
-    if (!result.ok) throw Error(result.hint ?? result.error ?? fallback);
-    return result;
-  };
   const buildFacts = Atom.make((get): BuildFacts => {
     const current = get(lane);
     return {
@@ -276,14 +270,14 @@ export function createFamilyStore(deps: {
   const writer = {
     async command(name: CommandName, input: unknown) {
       if (name === "open") {
-        expect(
+        expectRouteWrite(
           await writers.settingsCommand("open", input as Record<string, unknown>),
           "open failed",
         );
         return "opened";
       }
       if (name === "capture") {
-        expect(
+        expectRouteWrite(
           await writers.familyCommand(
             "capture_evidence",
             input as Record<string, unknown> | undefined,
@@ -307,14 +301,14 @@ export function createFamilyStore(deps: {
         );
         if (!patches.length)
           return `Nothing to write - every value already matches ${current.document.relativePath}.`;
-        expect(await writers.settingsApply(patches), "the document rejected it");
-        expect(await writers.settingsCommand("save"), "save failed");
+        expectRouteWrite(await writers.settingsApply(patches), "the document rejected it");
+        expectRouteWrite(await writers.settingsCommand("save"), "save failed");
         return `saved ${current.document.relativePath} - ${patches.length} field${patches.length === 1 ? "" : "s"} written`;
       }
       const refusal = buildRefusal();
       if (refusal) throw Error(refusal);
       const current = registry.get(lane).document!;
-      const result = expect(
+      const result = expectRouteWrite(
         await writers.familyCommand("build_evidence", {
           documentId: { ...FAMILY_MODULE, relativePath: current.relativePath },
         }),
@@ -337,7 +331,7 @@ export function createFamilyStore(deps: {
   };
   const buildOutcome = Atom.make((get): BuildRefusal | null => {
     const failure = get(core.failure);
-    if (failure?.kind === "host" && failure.verb === "build")
+    if (failure?.kind === "error" && failure.verb === "build")
       return { code: "host", says: failure.message };
     const receipt = get(core.receipt);
     return receipt?.verb === "build" && receipt.text === BUILD_OUTCOME_UNKNOWN
@@ -388,7 +382,7 @@ export function createFamilyStore(deps: {
       return runVerb(
         "open",
         async () => {
-          expect(
+          expectRouteWrite(
             await writers.familyApply([
               {
                 path: ["bindings", "profile"],
@@ -408,7 +402,7 @@ export function createFamilyStore(deps: {
       return runVerb(
         "bind",
         async () => {
-          expect(
+          expectRouteWrite(
             await writers.familyApply([
               {
                 path: ["bindings", "world"],

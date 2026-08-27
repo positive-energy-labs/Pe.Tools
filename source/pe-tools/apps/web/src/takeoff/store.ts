@@ -22,6 +22,7 @@ import {
   createRouteStoreCore,
   docAtom,
   docWriter,
+  expectRouteWrite,
   feed,
   hostRead,
   unbound,
@@ -525,7 +526,7 @@ export function createTakeoffStore(deps: {
             views.value,
             async (snapshot) => {
               const result = await takeoffsWriter.apply([{ path: ["snapshot"], value: snapshot }]);
-              if (!result.ok) throw Error(result.error ?? "snapshot write failed");
+              expectRouteWrite(result, "snapshot write failed");
             },
           ),
         );

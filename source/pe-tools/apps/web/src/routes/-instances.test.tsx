@@ -41,6 +41,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
       useSearch: () => ({ target: "", stage: "declare" as const }),
     }),
     useNavigate: () => () => Promise.resolve(),
+    useSearch: () => ({}),
   };
 });
 
