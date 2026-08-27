@@ -71,7 +71,14 @@ type Store = { state: FbState; listeners: Set<() => void> };
 
 const g = globalThis as { __peRunsFeedback?: Store };
 const store: Store = (g.__peRunsFeedback ??= {
-  state: { items: [], hoverFlag: null, loadedSet: null, exporting: null, lastExport: null, exportError: null },
+  state: {
+    items: [],
+    hoverFlag: null,
+    loadedSet: null,
+    exporting: null,
+    lastExport: null,
+    exportError: null,
+  },
   listeners: new Set(),
 });
 
@@ -86,7 +93,11 @@ function subscribe(l: () => void): () => void {
 }
 
 export function useFb(): FbState {
-  return useSyncExternalStore(subscribe, () => store.state, () => store.state);
+  return useSyncExternalStore(
+    subscribe,
+    () => store.state,
+    () => store.state,
+  );
 }
 
 export const fb = {
@@ -118,7 +129,10 @@ export const fb = {
     emit({
       items: store.state.items.map((i) =>
         i.key === key
-          ? { ...i, flags: i.flags.includes(el) ? i.flags.filter((f) => f !== el) : [...i.flags, el] }
+          ? {
+              ...i,
+              flags: i.flags.includes(el) ? i.flags.filter((f) => f !== el) : [...i.flags, el],
+            }
           : i,
       ),
     });

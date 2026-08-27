@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FactChip } from "#/components/lang/chip";
+import { Verb as VerbButton } from "#/components/lang/verb";
 
 import {
   demandedKeys,
@@ -100,7 +101,8 @@ export function useBindings(product: Product): Bindings {
       if (link.multi) {
         setMulti((prev) => {
           const next = new Set(prev[link.key] ?? []);
-          next.has(id) ? next.delete(id) : next.add(id);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
           return { ...prev, [link.key]: next };
         });
         return;
@@ -136,7 +138,8 @@ export function useBindings(product: Product): Bindings {
         for (const p of picks)
           if (p.link.multi) {
             const set = new Set(next[p.link.key] ?? []);
-            set.has(p.id) ? set.delete(p.id) : set.add(p.id);
+            if (set.has(p.id)) set.delete(p.id);
+            else set.add(p.id);
             next[p.link.key] = set;
           }
         return next;
@@ -328,26 +331,16 @@ function OptionList({
         opts.map((o) => {
           const on = b.isPicked(link, o.id);
           return (
-            <button
+            <VerbButton
               key={o.id}
-              type="button"
+              label={`${link.multi ? (on ? "☑ " : "☐ ") : ""}${o.label}${o.sub && !compact ? ` ${o.sub}` : ""}`}
+              reason={`Pick ${o.label}.`}
               onClick={() => {
                 b.pick(link, o.id);
                 onPicked?.();
               }}
               className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-              style={{ background: on ? "var(--r-select)" : undefined }}
-            >
-              {link.multi ? <span className="face-mono t-caption">{on ? "☑" : "☐"}</span> : null}
-              <span className="t-value" style={{ color: "var(--r-ink)" }}>
-                {o.label}
-              </span>
-              {o.sub && !compact ? (
-                <span className="t-caption" style={{ color: "var(--r-ink-2)" }}>
-                  {o.sub}
-                </span>
-              ) : null}
-            </button>
+            />
           );
         })
       )}
@@ -431,7 +424,6 @@ export function PathInput({
         style={{ borderBottom: "1px solid var(--r-line-2)" }}
       >
         {chain.map((l, i) => {
-          const on = l.key === seg;
           const lab = b.labelOf(l);
           return (
             <span key={l.key} className="inline-flex items-baseline gap-1">
@@ -440,19 +432,12 @@ export function PathInput({
                   ›
                 </span>
               ) : null}
-              <button
-                type="button"
+              <VerbButton
+                label={lab ?? l.placeholder}
+                reason={`Select ${lab ?? l.placeholder}.`}
                 onClick={() => setSeg(l.key)}
                 className="face-mono t-caption"
-                style={{
-                  padding: "0 3px",
-                  background: on ? "var(--r-select)" : "transparent",
-                  color: lab == null ? "var(--r-caution)" : "var(--r-ink)",
-                  borderBottom: on ? "1px solid var(--r-ink)" : "1px solid transparent",
-                }}
-              >
-                {lab ?? l.placeholder}
-              </button>
+              />
             </span>
           );
         })}
@@ -535,12 +520,12 @@ export function PathInput({
             const picked = p.every((x) => b.isPicked(x.link, x.opt.id));
             const last = p[p.length - 1]!;
             return (
-              <button
+              <VerbButton
                 key={text}
-                type="button"
+                label={`${last.link.multi ? (picked ? "☑ " : "☐ ") : ""}${text}`}
+                reason={`Pick path ${text}.`}
                 onClick={() => b.pickPath(p.map((x) => ({ link: x.link, id: x.opt.id })))}
                 className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                style={{ background: picked ? "var(--r-select)" : undefined }}
               >
                 {last.link.multi ? (
                   <span className="face-mono t-caption">{picked ? "☑" : "☐"}</span>
@@ -562,7 +547,7 @@ export function PathInput({
                     {last.opt.sub}
                   </span>
                 ) : null}
-              </button>
+              </VerbButton>
             );
           })
         )}
@@ -573,10 +558,10 @@ export function PathInput({
   return (
     <span ref={ref} className="relative inline-flex items-baseline">
       <style>{PULSE_CSS}</style>
-      <button
-        type="button"
+      <VerbButton
+        label={closedText}
+        reason={title}
         onClick={() => b.setOpen(open ? null : slot)}
-        title={title}
         className={showAll ? "face-mono t-caption" : "face-mono t-label"}
         style={{
           padding: 0,
@@ -589,7 +574,7 @@ export function PathInput({
         }}
       >
         {closedText}
-      </button>
+      </VerbButton>
       {open ? (
         <span
           className="absolute left-0 top-full z-40 mt-1 block overflow-hidden"
@@ -675,10 +660,8 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
       {product.panes.map((p) => {
         const st = paneState(product, p, b);
         return (
-          <button
+          <span
             key={p.key}
-            type="button"
-            disabled={!st.ok}
             title={st.reason}
             className="face-mono t-caption"
             style={{
@@ -690,7 +673,7 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
             }}
           >
             {p.label}
-          </button>
+          </span>
         );
       })}
     </span>

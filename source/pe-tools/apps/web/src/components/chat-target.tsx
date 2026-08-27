@@ -1,6 +1,7 @@
 import { getRouteApi } from "@tanstack/react-router";
 
 import { EmptyState } from "#/components/lang/empty";
+import { Verb } from "#/components/lang/verb";
 import { mintSelector, sessionLabel, type TargetSelector } from "#/host/target";
 import { CHAT_CONSUMER, readScoped, scopeKey, type TargetScope } from "#/host/target-scope";
 import { chipDescriptor, LaneBadge, LiveDot, resolutionReadout } from "#/host/target-ui";
@@ -59,15 +60,15 @@ export function TargetWorld() {
         const isResolved =
           resolution.kind === "resolved" && resolution.session.sessionId === s.sessionId;
         return (
-          <button
+          <Verb
+            label={sessionLabel(s)}
+            reason="Pin the chat to this session."
             key={s.sessionId}
-            type="button"
             onClick={() => pin(mintSelector(s, sessions))}
             // The resolved session is a SELECTION — the selection fill, never a hue.
             className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${
               isResolved ? "bg-[var(--r-select)] [--r-on:var(--r-select)]" : ""
             }`}
-            title="pin the chat here"
           >
             <span className="inline-flex min-w-0 items-center gap-2">
               <LiveDot
@@ -81,7 +82,7 @@ export function TargetWorld() {
             <span className="whitespace-nowrap t-caption face-mono text-[var(--r-ink-2)]">
               pid {s.processId}
             </span>
-          </button>
+          </Verb>
         );
       })}
       {sessions.length === 0 ? (

@@ -9,6 +9,7 @@
 import type { SheetRow } from "./sheet";
 import { SpecDrawing } from "./spec-drawing";
 import { frac, pct } from "./math";
+import { Verb } from "#/components/lang/verb";
 
 export function ExportSheet({
   rows,
@@ -29,10 +30,10 @@ export function ExportSheet({
     // bake the tokens: a standalone file has no design-lang.css
     const cs = getComputedStyle(svg);
     for (const [k, v] of [
-      ["--r-ink", cs.getPropertyValue("--r-ink") || "#38352d"],
-      ["--r-ink-2", cs.getPropertyValue("--r-ink-2") || "#5f5a4e"],
-      ["--r-page", cs.getPropertyValue("--r-page") || "#fdfaf2"],
-      ["--r-alarm", cs.getPropertyValue("--r-alarm") || "#8e4120"],
+      ["--r-ink", cs.getPropertyValue("--r-ink") || "var(--r-ink)"],
+      ["--r-ink-2", cs.getPropertyValue("--r-ink-2") || "var(--r-ink-2)"],
+      ["--r-page", cs.getPropertyValue("--r-page") || "var(--r-page)"],
+      ["--r-alarm", cs.getPropertyValue("--r-alarm") || "var(--r-alarm)"],
     ])
       clone.setAttribute("style", `${clone.getAttribute("style") ?? ""};${k}:${v}`);
     const blob = new Blob([new XMLSerializer().serializeToString(clone)], {
@@ -58,29 +59,27 @@ export function ExportSheet({
         style={{ borderColor: "var(--r-line)" }}
       >
         <span className="face-mono t-label t-upper text-[var(--r-ink-mute)]">export sheet</span>
-        <span className="face-mono text-[11px] text-[var(--r-ink-2)]">
+        <span className="face-mono t-label text-[var(--r-ink-2)]">
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
-        <button
-          type="button"
-          className="face-mono ml-auto text-[11px] text-[var(--r-nav)]"
+        <Verb
+          label="print / save PDF"
+          reason="Print the export sheet or save it as a PDF."
+          className="face-mono ml-auto t-label text-[var(--r-nav)]"
           onClick={() => window.print()}
-        >
-          print / save PDF
-        </button>
-        <button
-          type="button"
-          className="face-mono text-[11px] text-[var(--r-nav)]"
+        />
+        <Verb
+          label="close"
+          reason="Close the export sheet and return to the grille profiles."
+          className="face-mono t-label text-[var(--r-nav)]"
           onClick={onClose}
-        >
-          close
-        </button>
+        />
       </div>
 
       <div id="grille-export-sheet" className="mx-auto max-w-[1100px] p-8">
         {/* title block */}
         <div
-          className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 text-[11px]"
+          className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 t-label"
           style={{ borderColor: "var(--r-ink)" }}
         >
           <div>
@@ -88,7 +87,7 @@ export function ExportSheet({
               Positive Energy · custom wood floor grille
             </div>
             <input
-              className="mt-1 w-full bg-transparent text-[16px] outline-none"
+              className="mt-1 w-full bg-transparent t-title outline-none"
               placeholder="project / location"
               value={project}
               onChange={(e) => onProject(e.target.value)}
@@ -101,7 +100,7 @@ export function ExportSheet({
         </div>
 
         {rows.length === 0 && (
-          <p className="face-mono py-8 text-[12px] text-[var(--r-ink-2)]">
+          <p className="face-mono py-8 t-value text-[var(--r-ink-2)]">
             nothing on the sheet — tick rows in the table first
           </p>
         )}
@@ -112,7 +111,7 @@ export function ExportSheet({
         >
           {rows.map((r, i) => (
             <figure key={r.id} id={`export-${r.id}`} className="min-w-0 break-inside-avoid">
-              <figcaption className="face-mono flex items-baseline gap-3 text-[11px]">
+              <figcaption className="face-mono flex items-baseline gap-3 t-label">
                 <b>G-{i + 1}</b>
                 <span>
                   {frac(r.boardLength)} × {frac(r.boardWidth)} · {r.openings} × {frac(r.opening)}″
@@ -122,13 +121,12 @@ export function ExportSheet({
                   free area <b className="text-[var(--r-ink)]">{pct(r.freeArea)}</b> ·{" "}
                   {r.actualFreeArea.toFixed(1)} in²
                 </span>
-                <button
-                  type="button"
+                <Verb
+                  label=".svg"
+                  reason="Save this grille drawing as a standalone SVG."
                   className="no-print text-[var(--r-nav)]"
                   onClick={() => downloadSvg(r.id)}
-                >
-                  .svg
-                </button>
+                />
               </figcaption>
               <div className="overflow-x-auto">
                 <SpecDrawing g={r} px={px} id={`-${r.id}`} />

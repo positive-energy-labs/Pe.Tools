@@ -1,3 +1,5 @@
+import { Verb } from "#/components/lang/verb";
+
 /**
  * DocPicker rows — the one visual vocabulary for picking a document, shared by every
  * mount (the sentence's doc slot, the .rvt/.rfa chips). The look is the poc/chip-a
@@ -49,8 +51,9 @@ export function DocRow({
   onPick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Verb
+      label={label}
+      reason={`Pick document ${label}.`}
       disabled={disabled}
       onClick={onPick}
       className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-[var(--r-line)] px-2 py-1 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] disabled:opacity-40 disabled:italic ${
@@ -83,6 +86,6 @@ export function DocRow({
       {selected ? (
         <span className="t-caption face-mono shrink-0 text-[var(--r-ink)]">◉</span>
       ) : null}
-    </button>
+    </Verb>
   );
 }

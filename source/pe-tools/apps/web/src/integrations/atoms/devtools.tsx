@@ -9,6 +9,7 @@ import {
 } from "#/state/atom-inspect";
 
 import type { TanStackDevtoolsReactPlugin } from "@tanstack/react-devtools";
+import { Verb } from "#/components/lang/verb";
 
 const styles = `
 .atoms { box-sizing:border-box; display:grid; grid-template-rows:auto minmax(0,1fr); height:100%; padding:12px; overflow:auto; font:12px ui-monospace,monospace }
@@ -151,16 +152,23 @@ function AtomsPanel() {
                 {node.children.join(", ") || "none"}
               </p>
               <div className="actions">
-                <button onClick={() => inspector.refresh(node.id)}>Refresh</button>
+                <Verb
+                  label="Refresh"
+                  reason="Refresh the selected atom snapshot."
+                  onClick={() => inspector.refresh(node.id)}
+                />
                 <input
                   aria-label="New primitive value"
                   value={nextValue}
                   onChange={(event) => setNextValue(event.target.value)}
                   disabled={!node.writable}
                 />
-                <button disabled={!node.writable} onClick={() => inspector.set(node.id, nextValue)}>
-                  Set
-                </button>
+                <Verb
+                  label="Set"
+                  reason="Set the selected atom to the entered primitive value."
+                  disabled={!node.writable}
+                  onClick={() => inspector.set(node.id, nextValue)}
+                />
               </div>
             </>
           ) : (

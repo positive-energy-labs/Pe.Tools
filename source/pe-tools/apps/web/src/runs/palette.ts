@@ -34,14 +34,16 @@ export const LABEL = `rgba(${law.label.rgba.join(",")})`;
 export const LABEL_SIZE = law.label.sizePx;
 export const HELD_HATCH = law.candidate.status.held.hatch;
 
-export const PAPER = "#fff";
-export const MIST = "rgba(100,116,139,0.14)";
+export const PAPER = "var(--r-page)";
+export const MIST = "var(--r-select)";
+
+export function designColor(token: string): string {
+  if (typeof document === "undefined") return "transparent";
+  return getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+}
 
 export function alarmColor(): string {
-  if (typeof document === "undefined") return "#8e4120";
-  return (
-    getComputedStyle(document.documentElement).getPropertyValue("--r-alarm").trim() || "#8e4120"
-  );
+  return designColor("--r-alarm");
 }
 
 function hash(value: string): number {

@@ -7,6 +7,7 @@
 import { NumberCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
+import { Verb } from "#/components/lang/verb";
 
 import type { Grille, GrilleInput } from "./math";
 import { SHEET_ROWS, frac, pct, solve } from "./math";
@@ -158,9 +159,12 @@ export function Sheet({
           : null
       }
       summary={
-        <button type="button" className="face-mono t-label text-[var(--r-nav)]" onClick={add}>
-          + profile
-        </button>
+        <Verb
+          label="+ profile"
+          reason="Add a grille profile copied from the active row."
+          className="face-mono t-label text-[var(--r-nav)]"
+          onClick={add}
+        />
       }
     />
   );
