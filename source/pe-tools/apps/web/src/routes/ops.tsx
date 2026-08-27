@@ -7,6 +7,7 @@ import { FactChip, type FactTone } from "#/components/lang/chip";
 import { RouteDocument } from "#/workbench/route-document";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { VerbLane } from "#/components/verb-lane";
 import { Provenance } from "#/components/lang/section";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -91,7 +92,6 @@ function OpsPage({ store }: { store: OpsStore }) {
   const selectedGlanceKey = useAtomValue(store.atoms.selectedGlance);
   const result = useAtomValue(store.atoms.result);
   const busyState = useAtomValue(store.atoms.busy);
-  const failure = useAtomValue(store.atoms.failure);
   const hydrated = useAtomValue(store.atoms.hydrated);
   const selectedGlance = syntheticOps.find((glance) => glance.key === selectedGlanceKey);
   const currentIdentity = session
@@ -252,7 +252,7 @@ function OpsPage({ store }: { store: OpsStore }) {
           </EmptyState>
         )}
 
-        {failure ? <OutcomeLine kind={failure.kind} label={failure.message} /> : null}
+        <VerbLane atoms={store.atoms} />
         <Provenance>
           catalog = host.ops.catalog · selected live key is the route's one dynamic /call
         </Provenance>

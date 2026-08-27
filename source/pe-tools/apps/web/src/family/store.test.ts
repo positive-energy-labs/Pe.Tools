@@ -64,7 +64,7 @@ const fixture = () => {
   const calls: Array<{ op: string; input: unknown }> = [];
   const record = async (op: string, input: unknown): Promise<RouteStateWriteResult> => {
     calls.push({ op, input });
-    return { ok: true, result: {} };
+    return { ok: true, revision: 1, result: {} };
   };
   const host: FamilyHost = {
     sessions: async () =>
@@ -217,13 +217,13 @@ describe("family route store", () => {
   });
 
   it("refuses build while capture is running", async () => {
-    let release!: (value: { ok: true; result: {} }) => void;
+    let release!: (value: RouteStateWriteResult) => void;
     const testFixture = fixture();
     const writers = {
       ...testFixture.writers,
       familyCommand: (name: "capture_evidence" | "build_evidence", input?: unknown) =>
         name === "capture_evidence"
-          ? new Promise<{ ok: true; result: {} }>((resolve) => {
+          ? new Promise<RouteStateWriteResult>((resolve) => {
               release = resolve;
             })
           : testFixture.writers.familyCommand(name, input),
@@ -232,7 +232,7 @@ describe("family route store", () => {
     const capture = store.actions.capture();
     await tick();
     await expect(store.actions.build()).rejects.toThrow("another verb is running");
-    release({ ok: true, result: {} });
+    release({ ok: true, revision: 1, result: {} });
     await capture;
   });
 

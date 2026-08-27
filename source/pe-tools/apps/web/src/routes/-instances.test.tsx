@@ -41,6 +41,9 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
       useSearch: () => ({ target: "", stage: "declare" as const }),
     }),
     useNavigate: () => () => Promise.resolve(),
+    useRouter: () => ({ navigate: () => Promise.resolve() }),
+    useLocation: (options?: { select?: (location: { href: string }) => unknown }) =>
+      options?.select?.({ href: "/instances" }) ?? { href: "/instances" },
     useSearch: () => ({}),
   };
 });

@@ -400,9 +400,6 @@ export function createTakeoffStore(deps: {
   }).pipe(owned("stage"));
   const recentDirsAtom = Atom.make<readonly string[]>([]).pipe(Atom.autoDispose);
   const currentHoverAtom = Atom.make("").pipe(owned("page/hover"));
-  const busyAtom = core.busy;
-  const failureAtom = core.failure;
-  const receiptAtom = core.receipt;
   const zoneKeyAtom = Atom.make<AtlasPageState["zoneKey"]>(null).pipe(owned("page/atlas/zone-key"));
   const stageFilterAtom = Atom.make<AtlasPageState["stageFilter"]>(null).pipe(
     owned("page/atlas/stage-filter"),
@@ -527,7 +524,7 @@ export function createTakeoffStore(deps: {
             views.value,
             async (snapshot) => {
               const result = await takeoffsWriter.apply([{ path: ["snapshot"], value: snapshot }]);
-              expectRouteWrite(result, "snapshot write failed");
+              expectRouteWrite(result);
             },
           ),
         );
@@ -1061,7 +1058,7 @@ export function createTakeoffStore(deps: {
       });
     },
     clearFailure() {
-      write("clear-failure", "failure", () => registry.set(failureAtom, null));
+      write("clear-failure", "failure", () => registry.set(core.failure, null));
     },
     patchAdopt(view: string, elementId: number, patch: Partial<AdoptDraft>) {
       const key = `${view}:${elementId}`;
@@ -1277,9 +1274,7 @@ export function createTakeoffStore(deps: {
       adoptRows: adoptRowsAtom,
       r10: r10Result,
       entity: entityAtom,
-      busy: busyAtom,
-      failure: failureAtom,
-      receipt: receiptAtom,
+      ...core.verbAtoms,
     },
     actions,
     feeds,

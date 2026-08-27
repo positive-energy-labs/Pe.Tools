@@ -82,7 +82,7 @@ function make(
     ),
     apply: async (patches) => {
       writes.push(patches);
-      return options.applyResult ?? { ok: true };
+      return options.applyResult ?? { ok: true, revision: 1 };
     },
     call: calls,
     now: () => new Date("2026-08-25T01:02:03.000Z"),
@@ -200,7 +200,7 @@ describe("ops route store", () => {
 
   it("routes binding write failures to the store failure atom", async () => {
     const { registry, store } = make(document(), {
-      applyResult: { ok: false, error: "binding write failed" },
+      applyResult: { ok: false, kind: "error", error: "binding write failed", hint: "" },
     });
 
     await expect(
@@ -214,6 +214,28 @@ describe("ops route store", () => {
       kind: "error",
       verb: "set-bindings",
       message: "binding write failed",
+    });
+  });
+
+  it("keeps a stale-revision binding refusal typed as refused", async () => {
+    const { registry, store } = make(document(), {
+      applyResult: {
+        ok: false,
+        kind: "refused",
+        code: "stale_revision",
+        error: "the document moved",
+        hint: "re-read it before writing again.",
+      },
+    });
+
+    await store.actions.setBindings(
+      { bound: { world: "session:new", op: oldReceipt.opKey } },
+      { target: "new" },
+    );
+
+    expect(registry.get(store.atoms.failure)).toMatchObject({
+      kind: "refused",
+      verb: "set-bindings",
     });
   });
 });

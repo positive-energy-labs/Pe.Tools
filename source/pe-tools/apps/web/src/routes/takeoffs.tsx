@@ -8,6 +8,7 @@ import { address } from "@pe/agent-contracts";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { VerbLane } from "#/components/verb-lane";
 import { Verb } from "#/components/lang/verb";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
 import { fuseFleet, useFleet } from "#/host/fleet";
@@ -179,13 +180,11 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const world = useAtomValue(store.atoms.world);
   const busyState = useAtomValue(store.atoms.busy);
   const failure = useAtomValue(store.atoms.failure);
-  const receipt = useAtomValue(store.atoms.receipt);
   const panel = useAtomValue(store.atoms.panel);
   const targetingOpen = useAtomValue(store.atoms.targetingOpen);
   const targetingLevel = useAtomValue(store.atoms.targetingLevel);
   const targetingQuery = useAtomValue(store.atoms.targetingQuery);
   const busy = busyState?.id ?? null;
-  const busySeconds = busyState?.seconds ?? 0;
 
   const addDir = (d: string) => {
     const dirs = readDirs();
@@ -404,15 +403,16 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
             ) : undefined
           }
           receipt={
-            busy ? (
-              <OutcomeLine
-                kind="busy"
-                label={`${busy} · ${busySeconds}s`}
-                says="the host runs one transaction at a time"
-              />
-            ) : receipt ? (
-              <OutcomeLine kind="receipt" label={receipt.text} />
-            ) : undefined
+            <span className="flex items-center gap-2">
+              <VerbLane atoms={store.atoms} />
+              {failure ? (
+                <Verb
+                  label="dismiss"
+                  onClick={() => store.actions.clearFailure()}
+                  reason="Clears this error line. It does not retry — re-run the verb that failed."
+                />
+              ) : null}
+            </span>
           }
         />
       </div>
@@ -443,18 +443,6 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
           <Atlas store={store} />
         )}
       </div>
-
-      {/* Consumed writes spend their structured kind; untyped host failures remain errors. */}
-      {failure && (
-        <div className="absolute bottom-2 left-1/2 z-40 max-w-2xl -translate-x-1/2 bg-background px-2 py-1 shadow-md">
-          <OutcomeLine kind={failure.kind} label={failure.message} />
-          <Verb
-            label="dismiss"
-            onClick={() => store.actions.clearFailure()}
-            reason="Clears this error line. It does not retry — re-run the verb that failed."
-          />
-        </div>
-      )}
 
       {!live && (
         <div className="absolute right-2 bottom-2 z-40">

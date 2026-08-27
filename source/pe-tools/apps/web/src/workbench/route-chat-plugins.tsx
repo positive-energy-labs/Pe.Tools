@@ -214,7 +214,7 @@ function ParameterLinksChatPlugin({
         <ParameterLinksReview
           document={document}
           busy={routeState.busy}
-          error={routeState.error}
+          error={routeState.failure?.message ?? null}
           errors={errors.length}
           reviewed={sameParameterLinkProfile(profile, previewed)}
           onCommand={(name) => void command(name).catch(() => undefined)}

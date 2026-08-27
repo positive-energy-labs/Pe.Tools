@@ -15,6 +15,7 @@ import { StateCell } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { VerbLane } from "#/components/verb-lane";
 import { Verb } from "#/components/lang/verb";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { timeAgo } from "#/lib/utils";
@@ -69,7 +70,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const connected = useAtomValue(store.atoms.connected);
   const peaActive = useAtomValue(store.atoms.peaActive);
   const sliceError = useAtomValue(store.atoms.sliceError);
-  const failure = useAtomValue(store.atoms.failure);
   const busy = useAtomValue(store.atoms.busy);
   const rows = useMemo(
     () => (snapshot ? buildFieldRows(snapshot.rawContent, fields) : []),
@@ -177,8 +177,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
         <div className="mx-auto max-w-3xl space-y-3">
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
-          {busy ? <OutcomeLine kind="busy" label={`${busy.id} · ${busy.seconds}s`} /> : null}
-          {failure ? <OutcomeLine kind={failure.kind} label={failure.message} /> : null}
+          <VerbLane atoms={store.atoms} />
           {sliceError ? (
             <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
           ) : null}

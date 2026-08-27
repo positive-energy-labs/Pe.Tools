@@ -1,3 +1,4 @@
+import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { CheckCheck, List, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -14,8 +15,11 @@ import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
 import { callHostRpc } from "#/host/client";
 import { useHostOp } from "#/host/queries";
-import { useVerb } from "#/lib/use-verb";
 import { cn } from "#/lib/utils";
+import { appAtomRegistry } from "#/state/registry";
+import { createRouteStoreCore, fail } from "#/state/route-store";
+import { useRouteStore } from "#/state/use-route-store";
+import { VerbLane } from "#/components/verb-lane";
 
 /**
  * /data-tables — author synthetic data tables (revit.apply.schedule table lane).
@@ -52,10 +56,12 @@ function DataTablesRoute() {
   const tables = detail.data?.tables ?? [];
 
   const [draft, setDraft] = useState<Draft | null>(null);
-  const verb = useVerb();
+  const store = useRouteStore(() => createRouteStoreCore("data-tables", appAtomRegistry));
+  const busy = useAtomValue(store.busy)?.id ?? null;
+  const clearFailure = () => store.registry.set(store.failure, null);
 
   const openTable = (handle: TableHandle) => {
-    verb.setError(null);
+    clearFailure();
     setDraft({
       name: handle.name,
       isNew: false,
@@ -65,7 +71,7 @@ function DataTablesRoute() {
   };
 
   const newTable = () => {
-    verb.setError(null);
+    clearFailure();
     setDraft({
       name: "New Table",
       isNew: true,
@@ -75,24 +81,23 @@ function DataTablesRoute() {
   };
 
   const applyDraft = () =>
-    verb.run("apply", async () => {
-      if (!draft) return;
-      const result = await callHostRpc("revit.apply.schedule", {
-        table: {
-          name: draft.name,
-          columns: draft.columns,
-          rows: draft.rows,
-          pruneMissingRows: true,
-        },
-      });
-      setDraft((d) => (d ? { ...d, isNew: false } : d));
-      await detail.refetch();
-      if (result.warnings?.length) {
-        verb.fail("advisory", result.warnings.join(" · "));
-        return;
-      }
-      return `applied — ${draft.name} upserted (${draft.columns.length}×${draft.rows.length})`;
-    });
+    void store
+      .runVerb("apply", async () => {
+        if (!draft) return;
+        const result = await callHostRpc("revit.apply.schedule", {
+          table: {
+            name: draft.name,
+            columns: draft.columns,
+            rows: draft.rows,
+            pruneMissingRows: true,
+          },
+        });
+        setDraft((d) => (d ? { ...d, isNew: false } : d));
+        await detail.refetch();
+        if (result.warnings?.length) return fail(result.warnings.join(" · "), "advisory");
+        return `applied — ${draft.name} upserted (${draft.columns.length}×${draft.rows.length})`;
+      })
+      .catch(() => undefined);
 
   const applyReason = !draft
     ? "open or create a table first"
@@ -128,24 +133,16 @@ function DataTablesRoute() {
             tone="commit"
             label="apply to revit"
             icon={CheckCheck}
-            busy={verb.busy === "apply"}
+            busy={busy === "apply"}
             disabled={!draft || draft.name.trim().length === 0}
             onClick={() => void applyDraft()}
             reason={applyReason}
           />
         }
       />
-      {(verb.busy || verb.outcome || verb.receipt) && (
-        <div className="shrink-0 border-b border-border px-4 py-0.5">
-          {verb.busy ? (
-            <OutcomeLine kind="busy" label={`${verb.busy} · ${verb.seconds}s`} />
-          ) : verb.outcome ? (
-            <OutcomeLine kind={verb.outcome.kind} label={verb.outcome.text} />
-          ) : verb.receipt ? (
-            <OutcomeLine kind="receipt" label={verb.receipt.text} />
-          ) : null}
-        </div>
-      )}
+      <div className="shrink-0 border-b border-border empty:border-0">
+        <VerbLane atoms={store.verbAtoms} className="px-4 py-0.5" />
+      </div>
 
       <div className="flex min-h-0 flex-1">
         <SidePane

@@ -7,6 +7,7 @@ import type { FfPlanEntry, FfReceipt } from "@pe/agent-contracts";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { VerbLane } from "#/components/verb-lane";
 import { Verb } from "#/components/lang/verb";
 import { ReadCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -291,7 +292,6 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   const tableState = useAtomValue(store.atoms.table);
   const busyState = useAtomValue(store.atoms.busy);
   const busy = busyState?.id ?? null;
-  const failure = useAtomValue(store.atoms.failure);
   const categoryFeed = useAtomValue(store.feeds.category);
   const familyFeed = useAtomValue(store.feeds.family);
   const profileFeed = useAtomValue(store.feeds.profile);
@@ -798,15 +798,9 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         )}
       </div>
 
-      {failure && (
-        <div className="border-b border-[var(--r-line)] px-4 py-1.5">
-          <OutcomeLine
-            kind={failure.kind}
-            label={`${failure.verb} failed`}
-            says={failure.message}
-          />
-        </div>
-      )}
+      <div className="border-b border-[var(--r-line)] empty:border-0">
+        <VerbLane atoms={store.atoms} className="px-4 py-1.5" />
+      </div>
       {matrixIssue && (
         <div className="px-4 py-2">
           <HostIssuePanel issue={matrixIssue} compact />

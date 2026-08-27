@@ -5,6 +5,7 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
   address,
   type RouteStatePatch,
+  type RouteStateWriteResult,
   type SettingsDocumentId,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
@@ -24,7 +25,7 @@ afterEach(() => {
   registries.splice(0).forEach((registry) => registry.dispose());
 });
 
-function make() {
+function make(applyResult?: RouteStateWriteResult) {
   const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
   let document = structuredClone(fixtureDocument);
   const changed = Atom.make(0);
@@ -43,6 +44,7 @@ function make() {
   const opened: SettingsDocumentId[] = [];
   const apply = async (patches: RouteStatePatch[]) => {
     applied.push(patches);
+    if (applyResult) return applyResult;
     for (const patch of patches) {
       if (patch.path[0] === "bindings")
         document = {
@@ -56,14 +58,14 @@ function make() {
         };
     }
     registry.update(changed, (value) => value + 1);
-    return { ok: true as const, doc: document };
+    return { ok: true as const, revision: 1, doc: document };
   };
   const store = createSettingsStore({
     registry,
     scope: { documentAddress: address(`C:\\Models\\settings-${registries.length}.rvt`) },
     slice,
     apply,
-    command: async () => ({ ok: true }),
+    command: async () => ({ ok: true, revision: 1 }),
     host: {
       workspaces: async () => fixtureWorkspaces,
       tree: async () => fixtureFiles,
@@ -139,6 +141,20 @@ describe("settings route store", () => {
         { path: ["fields", "/IsItemized", "staged"], value: { value: false } },
       ]),
     );
+  });
+
+  it("keeps a stale-revision stage refusal typed as refused", async () => {
+    const { registry, store } = make({
+      ok: false,
+      kind: "refused",
+      code: "stale_revision",
+      error: "the document moved",
+      hint: "re-read it before staging again.",
+    });
+
+    await expect(store.actions.stage("/Name", "late")).rejects.toThrow("the document moved");
+
+    expect(registry.get(store.atoms.failure)).toMatchObject({ kind: "refused", verb: "stage" });
   });
 
   it("flushes the latest staged value before save", async () => {

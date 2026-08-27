@@ -51,7 +51,7 @@ const fixture = () => {
   const calls: Array<{ op: string; input: unknown }> = [];
   const ok = async (op: string, input: unknown): Promise<RouteStateWriteResult> => {
     calls.push({ op, input });
-    return { ok: true };
+    return { ok: true, revision: 1 };
   };
   const host: FamiliesHost = {
     sessions: async () =>
@@ -145,6 +145,20 @@ describe("families route store", () => {
     });
   });
 
+  it("types an empty-scope refusal as refused, not error", async () => {
+    const { registry, store } = make();
+    store.actions.setDraft({ placement: "AllLoaded", categories: [], families: [] });
+
+    await expect(store.actions.applyScope()).rejects.toThrow(
+      "scope needs at least one category and family",
+    );
+
+    expect(registry.get(store.atoms.failure)).toMatchObject({
+      kind: "refused",
+      verb: "apply-scope",
+    });
+  });
+
   it("refuses apply while plan runs", async () => {
     let release!: (value: RouteStateWriteResult) => void;
     const testFixture = fixture();
@@ -153,7 +167,7 @@ describe("families route store", () => {
         ? new Promise<RouteStateWriteResult>((resolve) => {
             release = resolve;
           })
-        : Promise.resolve({ ok: true, result: input });
+        : Promise.resolve({ ok: true, revision: 1, result: input });
     const { store } = make(testFixture);
     store.actions.setDraft({
       placement: "AllLoaded",
@@ -164,7 +178,7 @@ describe("families route store", () => {
     const planning = store.actions.plan();
     await tick();
     await expect(store.actions.applyFoundry()).rejects.toThrow("another verb is running");
-    release({ ok: true });
+    release({ ok: true, revision: 1 });
     await planning;
   });
 

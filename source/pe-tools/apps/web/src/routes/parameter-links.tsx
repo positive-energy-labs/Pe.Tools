@@ -9,7 +9,8 @@ import { AddressingBar } from "#/components/lang/addressing-bar";
 import { ArmingStrip } from "#/components/lang/arming-strip";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
-import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
+import { OutcomeLine } from "#/components/lang/outcome";
+import { VerbLane } from "#/components/verb-lane";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { SidePane } from "#/components/ui/side-pane";
 import { RouteDocument } from "#/workbench/route-document";
@@ -75,8 +76,7 @@ function ParameterLinksWorkspace({
   const connected = route.connected && bridgeConnected;
 
   const [rightOpen, setRightOpen] = useState(true);
-  const [busy, setBusy] = useState<CommandName | "save" | null>(null);
-  const [outcome, setOutcome] = useState<{ kind: OutcomeKind; text: string } | null>(null);
+  const busy = route.busy;
   const [previewed, setPreviewed] = useState<ParameterLinkProfile | null>(null);
   /** The arming reason — the strip's own gate: apply arms only once a reason is supplied. */
   const [writeReason, setWriteReason] = useState("");
@@ -121,7 +121,6 @@ function ParameterLinksWorkspace({
       );
       setLocalDraft(next);
       setPreviewed((prev) => (sameProfile(prev, next) ? prev : null));
-      setOutcome(null);
     },
     [hasUnsavedEdits, route.revision],
   );
@@ -133,15 +132,9 @@ function ParameterLinksWorkspace({
         [{ path: ["draftProfile"], value: profile }],
         draftBasisRef.current ?? undefined,
       );
-      if (!result.ok) {
-        setOutcome({
-          kind: result.kind ?? "error",
-          text: result.error ?? result.hint ?? "saving the draft failed",
-        });
-        return false;
-      }
+      if (!result.ok) return false;
       syncedRef.current = JSON.stringify(profile);
-      if (Number.isInteger(result.revision)) draftBasisRef.current = result.revision!;
+      draftBasisRef.current = result.revision;
       return true;
     },
     [route.apply],
@@ -149,46 +142,27 @@ function ParameterLinksWorkspace({
 
   const runCommand = useCallback(
     async (name: CommandName) => {
-      setBusy(name);
-      setOutcome(null);
-      try {
-        if (name === "refresh") {
-          const result = await route.command("refresh", {});
-          if (!result.ok)
-            setOutcome({
-              kind: result.kind ?? "error",
-              text: result.error ?? result.hint ?? "refresh failed",
-            });
-          return;
-        }
-        // preview/apply need the reviewed profile persisted first (the command guard
-        // rejects a profile that doesn't equal the stored draftProfile).
-        const profile = name === "apply" ? previewed : editing;
-        if (!profile) return;
-        if (name === "preview" && hasUnsavedEdits && !(await saveDraft(profile))) return;
-        const result = await route.command(name, { profile });
-        if (!result.ok) {
-          setOutcome({
-            kind: result.kind ?? "error",
-            text: result.error ?? result.hint ?? `${name} refused`,
-          });
-          return;
-        }
-        if (name === "preview") {
-          setPreviewed(profile);
-          setOutcome({ kind: "receipt", text: "preview landed — projection is current" });
-        } else {
-          setPreviewed(null);
-          setWriteReason(""); // the write landed; the strip disarms
-          setOutcome({ kind: "receipt", text: "applied — target parameters reconciled" });
-        }
-      } catch (caught) {
-        setOutcome({
-          kind: "error",
-          text: caught instanceof Error ? caught.message : `${name} failed`,
-        });
-      } finally {
-        setBusy(null);
+      if (name === "refresh") {
+        await route.command("refresh", {});
+        return;
+      }
+      // preview/apply need the reviewed profile persisted first (the command guard
+      // rejects a profile that doesn't equal the stored draftProfile).
+      const profile = name === "apply" ? previewed : editing;
+      if (!profile) return;
+      if (name === "preview" && hasUnsavedEdits && !(await saveDraft(profile))) return;
+      const result = await route.command(
+        name,
+        { profile },
+        name === "preview"
+          ? "preview landed — projection is current"
+          : "applied — target parameters reconciled",
+      );
+      if (!result.ok) return;
+      if (name === "preview") setPreviewed(profile);
+      else {
+        setPreviewed(null);
+        setWriteReason(""); // the write landed; the strip disarms
       }
     },
     [route.command, previewed, editing, hasUnsavedEdits, saveDraft],
@@ -280,17 +254,9 @@ function ParameterLinksWorkspace({
         // refusal) is the strip's payload and a second apply here would be a parallel path.
       />
 
-      {(busy || outcome || route.error) && (
-        <div className="shrink-0 border-b border-border px-4 py-0.5">
-          {busy ? (
-            <OutcomeLine kind="busy" label={busy} />
-          ) : outcome ? (
-            <OutcomeLine kind={outcome.kind} label={outcome.text} />
-          ) : route.error ? (
-            <OutcomeLine kind={route.failureKind ?? "error"} label={route.error} />
-          ) : null}
-        </div>
-      )}
+      <div className="shrink-0 border-b border-border empty:border-0">
+        <VerbLane atoms={route.atoms} className="px-4 py-0.5" />
+      </div>
 
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">

@@ -139,7 +139,7 @@ function createRoutePaneStore(
         core.runVerb(
           "apply",
           async () => {
-            return expectRouteWrite(await writer.apply(patches), "route update failed");
+            return expectRouteWrite(await writer.apply(patches));
           },
           [spec.route],
         ),

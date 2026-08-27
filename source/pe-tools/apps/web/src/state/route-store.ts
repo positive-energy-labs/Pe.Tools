@@ -20,7 +20,7 @@ import { fetchPeInfo } from "#/host/info";
 import type { Option } from "#/targeting/model";
 import { peUrl, resolveWorkbenchConfig } from "#/workbench/config";
 
-type VerbFailure = { kind: RouteWriteKind; verb: string; message: string };
+export type VerbFailure = { kind: RouteWriteKind; verb: string; message: string };
 export type VerbReceipt = { verb: string; text: string; at: number };
 export class VerbRefused extends Error {
   readonly name = "VerbRefused";
@@ -30,22 +30,47 @@ export class VerbRefused extends Error {
   }
 }
 
+export type RouteWriteRefusal = Extract<RouteStateWriteResult, { ok: false }>;
+type RouteWriteOk = Extract<RouteStateWriteResult, { ok: true }>;
+
+const note = (result: RouteWriteRefusal) => [result.error, result.hint].filter(Boolean).join(": ");
+
 export class RouteWriteFailure extends Error {
   readonly name = "RouteWriteFailure";
 
-  constructor(
-    readonly result: RouteStateWriteResult,
-    fallback: string,
-  ) {
-    super([result.error, result.hint].filter(Boolean).join(": ") || fallback);
+  constructor(readonly result: RouteWriteRefusal) {
+    super(note(result));
   }
 }
 
-export function expectRouteWrite(
-  result: RouteStateWriteResult,
-  fallback: string,
-): RouteStateWriteResult {
-  if (!result.ok) throw new RouteWriteFailure(result, fallback);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+/** A command result may report per-item failures beside an overall ok. */
+export function failuresNote(result: { result?: unknown }, noun: string): string | null {
+  const failures = isRecord(result.result) ? result.result.failures : undefined;
+  if (!Array.isArray(failures) || failures.length === 0) return null;
+  const first = failures[0] as { key?: string; error?: string };
+  const detail = [first?.key, first?.error].filter((part) => typeof part === "string").join(": ");
+  return `${failures.length} ${noun}${failures.length === 1 ? "" : "s"} failed${
+    detail ? `: ${detail}` : "."
+  }`;
+}
+
+/** Refuse from inside a verb: the store stamps `kind:"refused"`, not `error`. */
+export function refuse(error: string): never {
+  throw new RouteWriteFailure({ ok: false, kind: "refused", error, hint: "" });
+}
+
+/** What a caught cause reports: a typed route refusal keeps its kind, anything else is an error. */
+export const verbFailure = (verb: string, cause: unknown): VerbFailure => ({
+  kind: cause instanceof RouteWriteFailure ? cause.result.kind : "error",
+  verb,
+  message: cause instanceof Error ? cause.message : String(cause),
+});
+
+export function expectRouteWrite(result: RouteStateWriteResult): RouteWriteOk {
+  if (!result.ok) throw new RouteWriteFailure(result);
   return result;
 }
 
@@ -112,9 +137,12 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     );
     try {
       const value = await work();
-      if (typeof value === "object" && value !== null && "ok" in value && value.ok === false) {
-        const result = value as RouteStateWriteResult;
-        throw new RouteWriteFailure(result, `${id} failed`);
+      if (isRecord(value) && value.ok === false) {
+        const refusal = value as unknown as RouteWriteRefusal;
+        write(id, "failure", () =>
+          registry.set(failure, { kind: refusal.kind, verb: id, message: note(refusal) }),
+        );
+        return value;
       }
       const text =
         typeof value === "string"
@@ -130,12 +158,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
         write(id, `invalidate/${keys.join(",")}`, () => registry.set(invalidate, keys));
       return value;
     } catch (cause) {
-      const hostFailure = {
-        kind: cause instanceof RouteWriteFailure ? (cause.result.kind ?? "error") : "error",
-        verb: id,
-        message: cause instanceof Error ? cause.message : String(cause),
-      } as const;
-      write(id, "failure", () => registry.set(failure, hostFailure));
+      write(id, "failure", () => registry.set(failure, verbFailure(id, cause)));
       throw cause;
     } finally {
       if (busyTimer) clearInterval(busyTimer);
@@ -153,6 +176,8 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
     busy,
     failure,
     receipt,
+    /** The one busy/failure/receipt triple every store spreads onto its atoms. */
+    verbAtoms: { busy, failure, receipt },
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -378,6 +403,16 @@ export function docAtom<S extends RouteStateSpec<any>>(
   return routeAtom(new RouteAtomKey(spec, scope));
 }
 
+/** A refusal the browser itself produces; the server's refusals arrive typed already. */
+export const fail = (error: string, kind: RouteWriteKind, hint = ""): RouteWriteRefusal => ({
+  ok: false,
+  kind,
+  error,
+  hint,
+});
+
+const notHydrated = fail("route document is not hydrated", "refused");
+
 export function docWriter<S extends RouteStateSpec<any>>(
   spec: S,
   scope: Scope,
@@ -395,24 +430,14 @@ export function docWriter<S extends RouteStateSpec<any>>(
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      const result = ((await response
-        .json()
-        .catch(() => null)) as RouteStateWriteResult | null) ?? {
-        ok: false,
-        kind: "error",
-        error: `${operation} failed (${response.status})`,
-      };
-      if (result.ok && Number.isInteger(result.revision))
-        lastWrittenRevision = Math.max(lastWrittenRevision ?? -1, result.revision!);
-      else if (result.kind === "refused" && result.code === "stale_revision")
-        registry.set(routeConflictAtom, true);
+      const result =
+        ((await response.json().catch(() => null)) as RouteStateWriteResult | null) ??
+        fail(`${operation} failed (${response.status})`, "error");
+      if (result.ok) lastWrittenRevision = Math.max(lastWrittenRevision ?? -1, result.revision);
+      else if (result.code === "stale_revision") registry.set(routeConflictAtom, true);
       return result;
     } catch (cause) {
-      return {
-        ok: false,
-        kind: "error",
-        error: cause instanceof Error ? cause.message : String(cause),
-      };
+      return fail(cause instanceof Error ? cause.message : String(cause), "error");
     }
   };
   const writeRevision = (explicit?: number): number | null => {
@@ -423,22 +448,12 @@ export function docWriter<S extends RouteStateSpec<any>>(
   return {
     apply: (patches: RouteStatePatch[], expectedRevision?: number) => {
       const revision = writeRevision(expectedRevision);
-      if (revision === null)
-        return Promise.resolve<RouteStateWriteResult>({
-          ok: false,
-          kind: "refused",
-          error: "route document is not hydrated",
-        });
+      if (revision === null) return Promise.resolve(notHydrated);
       return write("apply", { patches, expectedRevision: revision });
     },
     command: (name: keyof S["commands"] & string, input?: unknown) => {
       const revision = writeRevision();
-      if (revision === null)
-        return Promise.resolve<RouteStateWriteResult>({
-          ok: false,
-          kind: "refused",
-          error: "route document is not hydrated",
-        });
+      if (revision === null) return Promise.resolve(notHydrated);
       return write("command", {
         command: name,
         input: input ?? {},
