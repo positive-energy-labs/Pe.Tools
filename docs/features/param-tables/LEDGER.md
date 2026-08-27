@@ -1,16 +1,16 @@
 # param-tables ledger
 
-Arbitrary engineering tables (Basis of Design, Figures of Merit) whose values are *linked to parameters on model elements*. Live effort — frontier and round records in [MAP.md](MAP.md).
+Arbitrary engineering tables (Basis of Design, Figures of Merit) whose values are *linked to parameters on model elements*. This ledger records the retired throwaway round and the durable decisions for its `/parameter-links` and `/data-tables` precedents.
 
 This ledger also owns its two precedent surfaces, folded in 2026-08-17: `/parameter-links` (the
 linkage vocabulary and the doc-owned profile) and `/data-tables` (authored synthetic tables).
 
 ## Decided
 
-- 2026-08-17 — The product exists because Revit can do neither half: arbitrary tables aren't a thing (the precedent is "SXL" schedules — Excel pasted into schedule *header cells*: unfilterable, unlinkable, silently stale), and a table value cannot drive a parameter (design facts are retyped into `PE_*` shared params on equipment, and they drift). The acceptance path in every variant is one demo: change heating EWT/LWT in the FOM and the 23 fan coils' `PE_M_PerfHeat_FluidEWT/LWT` update, visibly, in their schedule.
-- 2026-08-17 — Round 1 runs on a REAL fixture pulled live from ProjectA_Clone_Aug_11 (`apps/web/src/param-tables/proto/fixture.ts`), not a synthetic one, so honesty problems are forced rather than designed around: FC-1's type genuinely holds heating LWT 90 vs the authored 100, so most variants open with an at-rest drift mark before any edit, and the refused DVWHSA write leaves *residual drift* after apply — refusal is not absorption.
-- 2026-08-17 — Three fixture truths no variant may sand off: perf parameters live at **type** scope (one write fans out to sibling instances, and the far side of a bulk verb must be visible before it is enabled); formula-owned targets refuse **per target, with the reason**; and the table is also a **deliverable** that lands on sheet M001 as a print exhibit.
-- 2026-08-17 — Precedent vocabulary is inherited, not reinvented: `/parameter-links` owns profile / definition / assignment / relationship / reducer / evaluation / reconcile, evaluation-before-apply, per-issue refusals, and the freshness gate on Apply; `/data-tables` owns name + row-key upsert, txt/num columns, and prune-on-apply. Both of their known confusions (invisible draft/preview/apply state machine, no per-cell unsaved state, invisible destructive prune) are inputs to this round, not things to re-derive.
+- 2026-08-27 — The unlinked throwaway `/param-tables` round was retired unruled after import-graph proof found one closed prototype island with no shipping destination. No product surface or primitive was promoted.
+- 2026-08-27 — Historical evidence from the retired round: real project-a evidence opened with at-rest drift and left residual drift after a refused write; type-scoped writes fan out to sibling instances, so the far side of a bulk verb must be visible; formula-owned targets refuse per target with their reason; and the table was also a deliverable intended for sheet M001.
+- 2026-08-27 — Historical problem observation: Revit provides neither arbitrary authored tables nor a live table-value-to-parameter linkage. This remains an observation, not a promoted product surface.
+- 2026-08-17 — Precedent vocabulary is inherited, not reinvented: `/parameter-links` owns profile / definition / assignment / relationship / reducer / evaluation / reconcile, evaluation-before-apply, per-issue refusals, and the freshness gate on Apply; `/data-tables` owns name + row-key upsert, txt/num columns, and prune-on-apply. Their current ledgers own their remaining confusions and repair work.
 
 ### Linkage core (`/parameter-links`)
 
@@ -29,16 +29,13 @@ linkage vocabulary and the doc-owned profile) and `/data-tables` (authored synth
 
 ## Tried & rejected
 
-- 2026-08-17 — Layouts already discarded by their own audits: `/parameter-links`' definition-card UI (nothing in it says "table") and `/data-tables`' inert value cells (no linkage concept at all). Round 1 rebuilt from the fixture instead of extending either.
+- 2026-08-17 — Layouts already discarded by their own audits: `/parameter-links`' definition-card UI (nothing in it says "table") and `/data-tables`' inert value cells (no linkage concept at all). The throwaway round rebuilt from the fixture instead of extending either, then ended without a product ruling.
 - 2026-08-16 — (/parameter-links) A prose subline narrating the preview-freshness gate: it repeated the verb's own reason on the surface and failed the boundary test both ways. Removed; the gate now shows only as Apply's disabled state + title.
 - 2026-08-16 — (/parameter-links) Blue `--pe-blue` dot in a Δ column to mark changed projected writes: column deleted, replaced by bold-means-unsaved on the result cell.
 - 2026-08-16 — (/data-tables) `hover:text-destructive` on the row/column removers: spent the alarm hue on mere affordance; replaced by neutral ink plus a title reason.
 
 ## Owed
 
-- Round-1 verdicts are unruled — five variants (`/param-tables?variant=a..e`) are built, typecheck-clean and browser-verified, awaiting a kaitpw sitting. Nothing is settled law until a round rules it. See [MAP.md](MAP.md).
-- Design-language gaps the round proved by independent re-invention (8 items: no mark for a linked value, no fan-out/staged-writes preview primitive, no binding-status axis or station strip, no old→new staged-transition token, no pinned authored band or type-group header row, unruled cross-pane subscriber highlight, receipt surfaces beyond `OutcomeLine`, no cell-scale parameter picker). Route them into the design-system frontier once the round rules.
-- Host-op gap is binding: `revit.apply.schedule` writes header-cell text tables and `revit.apply.parameter-links` writes param links, but nothing writes "table + linkage" atomically, and nothing renders an authored grid as a *placeable* exhibit with live cells.
 - pin as test: `revit.apply.parameter-links` REFUSES when the reviewed profile carried through the route command no longer matches the live draft — a later agent patch must not be able to silently change a human-reviewed write.
 - (/data-tables) No axis says "this apply will *remove* N rows" — a queued destructive write has no grammar. Cheap local fix: derive `pruned = opened rows − draft rows` and label the verb "apply to revit · prunes N".
 - (/parameter-links) The local-draft/remote-draft/`syncedRef` co-edit reconcile is hand-rolled and route-local; no primitive owns "co-edited nested document". Root cause of the page-level-unsaved gap (design-system ledger, Owed).
