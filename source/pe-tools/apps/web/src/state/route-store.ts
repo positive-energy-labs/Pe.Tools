@@ -57,6 +57,13 @@ export function failuresNote(result: { result?: unknown }, noun: string): string
   }`;
 }
 
+/** What a caught cause reports: a typed route refusal keeps its kind, anything else is an error. */
+export const verbFailure = (verb: string, cause: unknown): VerbFailure => ({
+  kind: cause instanceof RouteWriteFailure ? cause.result.kind : "error",
+  verb,
+  message: cause instanceof Error ? cause.message : String(cause),
+});
+
 export function expectRouteWrite(result: RouteStateWriteResult): RouteWriteOk {
   if (!result.ok) throw new RouteWriteFailure(result);
   return result;
@@ -146,12 +153,7 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
         write(id, `invalidate/${keys.join(",")}`, () => registry.set(invalidate, keys));
       return value;
     } catch (cause) {
-      const hostFailure = {
-        kind: cause instanceof RouteWriteFailure ? cause.result.kind : "error",
-        verb: id,
-        message: cause instanceof Error ? cause.message : String(cause),
-      } as const;
-      write(id, "failure", () => registry.set(failure, hostFailure));
+      write(id, "failure", () => registry.set(failure, verbFailure(id, cause)));
       throw cause;
     } finally {
       if (busyTimer) clearInterval(busyTimer);

@@ -15,8 +15,10 @@ import {
   createRouteStoreCore,
   docAtom,
   docWriter,
+  expectRouteWrite,
   type Scope,
   type Slice,
+  verbFailure,
 } from "#/state/route-store";
 import type { BindingPatch } from "#/targeting/kit";
 import type { HostOperationCatalogEntry } from "#/ops/product";
@@ -78,10 +80,6 @@ export function createOpsStore(deps: {
         typeof next === "function" ? (next as (value: A) => A)(previous) : next,
       ),
     );
-  const expectOk = (value: RouteStateWriteResult) => {
-    if (!value.ok) throw Error(value.error);
-    return value;
-  };
   const persistBinding = async (
     verb: string,
     world: string,
@@ -106,15 +104,9 @@ export function createOpsStore(deps: {
           path: ["bindings", "op"],
           value: op ? { id: op, label: op, at: deps.scope.documentAddress } : undefined,
         });
-      if (patches.length) expectOk(await apply(patches));
+      if (patches.length) expectRouteWrite(await apply(patches));
     } catch (cause) {
-      write(verb, "failure", () =>
-        registry.set(core.failure, {
-          kind: "error",
-          verb,
-          message: cause instanceof Error ? cause.message : String(cause),
-        }),
-      );
+      write(verb, "failure", () => registry.set(core.failure, verbFailure(verb, cause)));
     }
   };
 
@@ -164,7 +156,7 @@ export function createOpsStore(deps: {
           target: input.target,
           observedAt: now().toISOString(),
         };
-        expectOk(await apply([{ path: ["receipt"], value: receipt }]));
+        expectRouteWrite(await apply([{ path: ["receipt"], value: receipt }]));
         registry.set(localResult, receipt);
         return `${input.opKey} · ${receipt.elapsedMs}ms`;
       });

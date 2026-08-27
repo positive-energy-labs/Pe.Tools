@@ -18,6 +18,7 @@ import {
   docAtom,
   docWriter,
   expectRouteWrite,
+  verbFailure,
   feed,
   hostRead,
   unbound,
@@ -283,11 +284,7 @@ export function createSettingsStore(deps: {
           item.resolve();
         } catch (cause) {
           write("stage", "failure", () =>
-            registry.set(core.failure, {
-              kind: "error",
-              verb: "stage",
-              message: cause instanceof Error ? cause.message : String(cause),
-            }),
+            registry.set(core.failure, verbFailure("stage", cause)),
           );
           item.reject(cause);
           throw cause;

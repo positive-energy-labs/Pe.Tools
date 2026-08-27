@@ -216,4 +216,26 @@ describe("ops route store", () => {
       message: "binding write failed",
     });
   });
+
+  it("keeps a stale-revision binding refusal typed as refused", async () => {
+    const { registry, store } = make(document(), {
+      applyResult: {
+        ok: false,
+        kind: "refused",
+        code: "stale_revision",
+        error: "the document moved",
+        hint: "re-read it before writing again.",
+      },
+    });
+
+    await store.actions.setBindings(
+      { bound: { world: "session:new", op: oldReceipt.opKey } },
+      { target: "new" },
+    );
+
+    expect(registry.get(store.atoms.failure)).toMatchObject({
+      kind: "refused",
+      verb: "set-bindings",
+    });
+  });
 });
