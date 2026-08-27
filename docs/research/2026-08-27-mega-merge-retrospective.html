@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mega-merge retrospective · 2026-08-27</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --paper: #f7f4ed;
+      --ink: #20211f;
+      --muted: #66685f;
+      --line: #d7d2c7;
+      --panel: #fffdf7;
+      --soft: #ece8de;
+      --green: #196c4b;
+      --green-bg: #e0f2e7;
+      --red: #a13c32;
+      --red-bg: #f8e4df;
+      --amber: #8c5b12;
+      --amber-bg: #f6ead1;
+      --blue: #2c5f93;
+      --blue-bg: #e1ebf5;
+      --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #171816;
+        --ink: #ecebe4;
+        --muted: #b0b0a7;
+        --line: #3a3b36;
+        --panel: #20211f;
+        --soft: #292a27;
+        --green: #83d7ae;
+        --green-bg: #183c2c;
+        --red: #f0a49a;
+        --red-bg: #4b2825;
+        --amber: #e8c06f;
+        --amber-bg: #493a20;
+        --blue: #9fc5eb;
+        --blue-bg: #24384d;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 56px 32px 96px; }
+    header { max-width: 900px; margin-bottom: 44px; }
+    h1 { margin: 0 0 12px; font-size: clamp(2.3rem, 6vw, 5.1rem); line-height: .94; letter-spacing: -.055em; }
+    h2 { margin: 64px 0 18px; font-size: 1.65rem; line-height: 1.15; letter-spacing: -.025em; }
+    h3 { margin: 28px 0 10px; font-size: 1.05rem; }
+    p { max-width: 78ch; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    code, .mono { font-family: var(--mono); font-size: .91em; }
+    .eyebrow { margin: 0 0 14px; color: var(--muted); font-family: var(--mono); font-size: .75rem; letter-spacing: .13em; text-transform: uppercase; }
+    .lede { font-size: 1.2rem; line-height: 1.45; max-width: 74ch; }
+    .meta { color: var(--muted); font-family: var(--mono); font-size: .78rem; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 0; }
+    nav a { border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; color: var(--muted); text-decoration: none; font-size: .78rem; }
+    nav a:hover { color: var(--ink); border-color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+    .card { grid-column: span 3; border-top: 2px solid var(--ink); padding: 14px 0 6px; }
+    .card.wide { grid-column: span 6; }
+    .card h3 { margin: 0 0 7px; }
+    .metric { display: block; margin: 2px 0; font-size: 2rem; font-weight: 700; letter-spacing: -.04em; }
+    .metric.good { color: var(--green); }
+    .metric.warn { color: var(--amber); }
+    .metric.bad { color: var(--red); }
+    .label { color: var(--muted); font-family: var(--mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
+    .panel { border: 1px solid var(--line); background: var(--panel); padding: 22px; border-radius: 9px; }
+    .callout { border-left: 4px solid var(--blue); padding: 10px 16px; background: var(--blue-bg); max-width: 88ch; }
+    .callout.good { border-color: var(--green); background: var(--green-bg); }
+    .callout.warn { border-color: var(--amber); background: var(--amber-bg); }
+    .callout.bad { border-color: var(--red); background: var(--red-bg); }
+    .table-wrap { overflow-x: auto; border-top: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; white-space: normal; }
+    th { color: var(--muted); font-family: var(--mono); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; }
+    td { font-family: var(--mono); font-size: .8rem; }
+    td.note { font-family: var(--sans); color: var(--muted); text-align: left; white-space: normal; min-width: 240px; }
+    .down { color: var(--green); }
+    .up { color: var(--amber); }
+    .flat { color: var(--muted); }
+    .tag { display: inline-block; border-radius: 999px; padding: 2px 8px; font-family: var(--mono); font-size: .67rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .tag.proven, .tag.adopt { color: var(--green); background: var(--green-bg); }
+    .tag.kill, .tag.red { color: var(--red); background: var(--red-bg); }
+    .tag.owed { color: var(--amber); background: var(--amber-bg); }
+    .tag.fixed { color: var(--blue); background: var(--blue-bg); }
+    ol.timeline { list-style: none; padding: 0; margin: 0; max-width: 900px; }
+    .timeline li { position: relative; padding: 0 0 24px 34px; border-left: 1px solid var(--line); margin-left: 7px; }
+    .timeline li::before { content: ""; position: absolute; left: -6px; top: 4px; width: 11px; height: 11px; border-radius: 50%; background: var(--paper); border: 2px solid var(--ink); }
+    .timeline strong { display: block; }
+    .timeline p { margin: 4px 0 0; color: var(--muted); }
+    .law { margin: 14px 0; padding: 18px 20px; border: 1px solid var(--line); background: var(--panel); }
+    .law blockquote { margin: 12px 0 0; padding-left: 16px; border-left: 3px solid var(--green); font-size: 1.03rem; }
+    .law p { margin: 7px 0; }
+    details { border-top: 1px solid var(--line); padding: 12px 0; max-width: 1000px; }
+    summary { cursor: pointer; font-weight: 650; }
+    ul.tight, ol.tight { max-width: 84ch; padding-left: 20px; }
+    ul.tight li, ol.tight li { margin: 7px 0; }
+    .rank { display: grid; grid-template-columns: 58px 1fr; gap: 14px; padding: 18px 0; border-top: 1px solid var(--line); max-width: 1000px; }
+    .rank > div:first-child { font-family: var(--mono); font-size: 1.25rem; font-weight: 700; }
+    .rank h3 { margin: 0 0 5px; }
+    .rank p { margin: 5px 0; }
+    footer { margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
+    @media (max-width: 800px) {
+      main { padding: 32px 18px 64px; }
+      .card, .card.wide { grid-column: span 6; }
+    }
+    @media (max-width: 520px) {
+      .card, .card.wide { grid-column: span 12; }
+    }
+    @media print {
+      :root { color-scheme: light; --paper: #fff; --panel: #fff; }
+      main { max-width: none; padding: 20px; }
+      nav { display: none; }
+      h2 { break-after: avoid; margin-top: 34px; }
+      table, .panel, .law, .rank { break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Pe.Tools · landed mega-merge · retrospective</p>
+    <h1>Less shadow.<br>More truth.</h1>
+    <p class="lede">The merge removed 5,812 lines of production TypeScript and 809 syntax decision points while adding 3,033 lines of tests. More important than the deletion: one typed write language now crosses route, store, HTTP, workspace, host, and DOM—and a real two-tab race proved that a losing edit is refused without disappearing.</p>
+    <p class="meta">baseline <code>1455d251</code> → landed <code>bf3473f7</code> · 323 files · 135 commits · generated 2026-08-27</p>
+    <nav aria-label="Report sections">
+      <a href="#verdict">Verdict</a><a href="#measure">Metrics</a><a href="#modules">Modules</a><a href="#entities">Entities</a><a href="#ideas">Ideas</a><a href="#proof">Proof</a><a href="#surface">Surface proposals</a><a href="#substrate">Substrate</a><a href="#sources">Sources</a>
+    </nav>
+  </header>
+
+  <section id="verdict">
+    <h2>Verdict</h2>
+    <div class="grid">
+      <article class="card"><span class="label">Production TS LOC</span><span class="metric good">−5,812</span><span>99,024 → 93,212 · −5.9%</span></article>
+      <article class="card"><span class="label">Decision points</span><span class="metric good">−809</span><span>11,074 → 10,265 · −7.3%</span></article>
+      <article class="card"><span class="label">Test TS LOC</span><span class="metric">+3,033</span><span>10,478 → 13,511 · +29.0%</span></article>
+      <article class="card"><span class="label">Largest function Cx</span><span class="metric good">75 → 60</span><span>syntax-derived cyclomatic proxy</span></article>
+      <article class="card"><span class="label">Exports</span><span class="metric good">−248</span><span>2,126 → 1,878 · less surface</span></article>
+      <article class="card"><span class="label">Test / prod LOC</span><span class="metric">14.5%</span><span>up from 10.6%</span></article>
+      <article class="card"><span class="label">Generated op keys</span><span class="metric">56 → 66</span><span>ten Takeoffs ops; 76 was false arithmetic</span></article>
+      <article class="card"><span class="label">Final proof</span><span class="metric good">ADOPT</span><span>exact-head browser + full <code>ready</code></span></article>
+    </div>
+    <p class="callout good"><strong>Big picture:</strong> this was not merely a merge. It replaced duplicated local authorities with named seams: native Mastra thread authority, a portable route document, per-route page stores, generated host contracts, and one outcome vocabulary. Net code fell even after substantially increasing tests.</p>
+    <p class="callout warn"><strong>Unfinished shape:</strong> complexity concentrated into two visible workspaces. <code>FamilyWorkspace</code> improved but remains the largest merged hotspot (2,050 function lines, Cx 60); the new <code>FamiliesWorkspace</code> is 868 function lines, Cx 41. The architecture is cleaner, but these are the next honest decomposition targets when product change forces them—not a cleanup project by themselves.</p>
+  </section>
+
+  <section id="measure">
+    <h2>What was measured</h2>
+    <div class="panel">
+      <p><strong>Comparison boundary.</strong> Git tree <code>1455d2517dfd7ab02c8d1fb28f36897b9445035b</code>, the user-owned main immediately before landing, against <code>bf3473f700d62acce8f1958a1d8c59d0a3970295</code>, the landed exact head.</p>
+      <p><strong>TypeScript.</strong> Physical lines, files, functions, imports, exports, and AST-derived decision points using the installed TypeScript 6.0.3 compiler. Function complexity is <code>1 + if/loop/case/catch/ternary/&&/||/??</code>; nested functions are counted separately. Production, tests, and generated sources are separate.</p>
+      <p><strong>C#.</strong> Physical lines and file counts by project. No C# complexity parser was introduced; claiming cross-language complexity from a different heuristic would be fake precision.</p>
+      <p><strong>Corpus.</strong> 150 run files across the review handoff, merge worktree proof receipts, original mega-merge handoff, and cleanroom report: 995,334 bytes / 12,750 lines / 69 reports / 77 prompts / 4 raw run outputs. Git history contributes 135 commits, including four integration merges.</p>
+      <p class="meta">The metric scripts and JSON outputs remain disposable under <code>.artifacts/runs/mega-merge-retrospective-20260827/</code>. They use no new dependency and do not enter the product.</p>
+    </div>
+  </section>
+
+  <section id="modules">
+    <h2>Module movement</h2>
+    <h3>TypeScript production</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Module</th><th>Files</th><th>LOC before</th><th>LOC after</th><th>Δ LOC</th><th>Decisions before</th><th>Decisions after</th><th>Δ decisions</th><th>Max Cx before</th><th>after</th></tr></thead>
+        <tbody>
+          <tr><td>apps/web</td><td>234 → 241</td><td>72,474</td><td>68,567</td><td class="down">−3,907</td><td>8,067</td><td>7,593</td><td class="down">−474</td><td>75</td><td class="down">60</td></tr>
+          <tr><td>packages/agent-contracts</td><td>16 → 20</td><td>5,124</td><td>3,336</td><td class="down">−1,788</td><td>527</td><td>149</td><td class="down">−378</td><td>31</td><td class="down">21</td></tr>
+          <tr><td>packages/runtime</td><td>32 → 23</td><td>4,165</td><td>3,816</td><td class="down">−349</td><td>491</td><td>480</td><td class="down">−11</td><td>23</td><td class="up">24</td></tr>
+          <tr><td>apps/pea</td><td>6 → 6</td><td>1,000</td><td>787</td><td class="down">−213</td><td>101</td><td>89</td><td class="down">−12</td><td>9</td><td>9</td></tr>
+          <tr><td>packages/mcps</td><td>26 → 28</td><td>5,727</td><td>6,014</td><td class="up">+287</td><td>682</td><td>738</td><td class="up">+56</td><td>14</td><td>14</td></tr>
+          <tr><td>apps/host</td><td>24 → 24</td><td>5,758</td><td>5,890</td><td class="up">+132</td><td>661</td><td>671</td><td class="up">+10</td><td>23</td><td>23</td></tr>
+          <tr><td>packages/host-contracts</td><td>10 → 10</td><td>3,013</td><td>3,039</td><td class="up">+26</td><td>203</td><td>203</td><td class="flat">0</td><td>19</td><td>19</td></tr>
+          <tr><td>packages/schema-core</td><td>13 → 13</td><td>1,717</td><td>1,717</td><td class="flat">0</td><td>342</td><td>342</td><td class="flat">0</td><td>27</td><td>27</td></tr>
+          <tr><td>workspace</td><td>1 → 1</td><td>46</td><td>46</td><td class="flat">0</td><td>0</td><td>0</td><td class="flat">0</td><td>0</td><td>0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The strongest deletion is at contract and projection boundaries, not business behavior: <code>agent-contracts</code> shed 35% of its LOC and 72% of its decision points. Runtime shrank nine files even while <code>pea-runtime.ts</code> absorbed native thread/session authority. Host and MCP growth is the small cost of carrying typed commands and their results end to end.</p>
+
+    <h3>TypeScript tests</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Module</th><th>Files before → after</th><th>LOC before</th><th>LOC after</th><th>Δ LOC</th><th>What changed</th></tr></thead>
+        <tbody>
+          <tr><td>apps/web</td><td>36 → 51</td><td>5,431</td><td>7,346</td><td class="up">+1,915</td><td class="note">Route stores, host gating, DOM outcomes, targeting, and workspace behavior.</td></tr>
+          <tr><td>packages/runtime</td><td>5 → 5</td><td>455</td><td>1,216</td><td class="up">+761</td><td class="note">Revision admission, receipts, replay, crash barrier, command outcomes.</td></tr>
+          <tr><td>tests/repo-guards</td><td>0 → 3</td><td>0</td><td>461</td><td class="up">+461</td><td class="note">One canonical design/docs guard package replacing duplicate copies.</td></tr>
+          <tr><td>apps/host</td><td>8 → 9</td><td>1,658</td><td>1,821</td><td class="up">+163</td><td class="note">No-Revit and capability boundaries.</td></tr>
+          <tr><td>apps/pea</td><td>1 → 1</td><td>361</td><td>388</td><td class="up">+27</td><td class="note">CLI/runtime coverage retained.</td></tr>
+          <tr><td>packages/host-contracts</td><td>3 → 3</td><td>338</td><td>351</td><td class="up">+13</td><td class="note">Generated catalog contract checks.</td></tr>
+          <tr><td>packages/agent-contracts</td><td>4 → 10</td><td>648</td><td>417</td><td class="down">−231</td><td class="note">More, smaller tests after shadow transcript/projection deletion.</td></tr>
+          <tr><td>packages/mcps</td><td>10 → 12</td><td>1,459</td><td>1,383</td><td class="down">−76</td><td class="note">Route-state tools added while older fixture bulk left.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>C# projects touched</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Project</th><th>Files before → after</th><th>LOC before</th><th>LOC after</th><th>Δ LOC</th><th>Reading</th></tr></thead>
+        <tbody>
+          <tr><td>Pe.Shared.HostContracts</td><td>19 → 17</td><td>3,113</td><td>1,827</td><td class="down">−1,286</td><td class="note">Handler-declared operation authority replaced registry/contract bulk.</td></tr>
+          <tr><td>Pe.Revit.Takeoff</td><td>30 → 30</td><td>12,084</td><td>11,890</td><td class="down">−194</td><td class="note">Ten operations promoted without ten parallel contract classes.</td></tr>
+          <tr><td>Pe.Revit.Global</td><td>37 → 37</td><td>6,950</td><td>6,879</td><td class="down">−71</td><td class="note">Bridge and document/session seams tightened.</td></tr>
+          <tr><td>Pe.Shared.RevitData</td><td>36 → 38</td><td>5,293</td><td>5,405</td><td class="up">+112</td><td class="note">Portable DTO language expanded.</td></tr>
+          <tr><td>Pe.Dev.Cli</td><td>3 → 3</td><td>753</td><td>792</td><td class="up">+39</td><td class="note">Offline catalog projection support.</td></tr>
+          <tr><td>Pe.Revit</td><td>38 → 40</td><td>3,707</td><td>3,728</td><td class="up">+21</td><td class="note">Small document-owned primitives.</td></tr>
+          <tr><td>Pe.Revit.SettingsRuntime</td><td>—</td><td>—</td><td>—</td><td class="up">+8</td><td class="note">Net diff only; total shape essentially stable.</td></tr>
+          <tr><td>Pe.Revit.Scripting</td><td>—</td><td>—</td><td>—</td><td class="up">+8</td><td class="note">Net diff only.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="entities">
+    <h2>Where the code actually moved</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Entity / file</th><th>LOC before</th><th>LOC after</th><th>Δ LOC</th><th>Decision Δ</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>routes/families.tsx</td><td>1,478</td><td>38</td><td class="down">−1,440</td><td class="down">−185</td><td class="note">Route became a shell; feature logic moved behind a named workspace.</td></tr>
+          <tr><td>agent-contracts/projection.ts</td><td>1,548</td><td>323</td><td class="down">−1,225</td><td class="down">−223</td><td class="note">Shadow projection authority collapsed.</td></tr>
+          <tr><td>families/workspace.tsx</td><td>0</td><td>1,136</td><td class="up">+1,136</td><td class="up">+136</td><td class="note">Named feature seam; also the clearest new hotspot.</td></tr>
+          <tr><td>targeting-proto/kit.tsx</td><td>713</td><td>0</td><td class="down">−713</td><td class="down">−126</td><td class="note">Prototype deleted after the targeting grammar landed.</td></tr>
+          <tr><td>targeting-proto/model.ts</td><td>645</td><td>0</td><td class="down">−645</td><td class="down">−22</td><td class="note">Second prototype authority deleted.</td></tr>
+          <tr><td>agent-contracts/contracts.ts</td><td>1,511</td><td>958</td><td class="down">−553</td><td class="down">−48</td><td class="note">Public contract surface narrowed.</td></tr>
+          <tr><td>takeoff/world.ts</td><td>542</td><td>74</td><td class="down">−468</td><td class="down">−77</td><td class="note">World logic reduced to the shared target/document shape.</td></tr>
+          <tr><td>family/store.ts</td><td>0</td><td>465</td><td class="up">+465</td><td class="up">+56</td><td class="note">Page memory and verbs gained an explicit owner.</td></tr>
+          <tr><td>settings/store.ts</td><td>0</td><td>459</td><td class="up">+459</td><td class="up">+61</td><td class="note">Settings adopted the route-store spine.</td></tr>
+          <tr><td>state/route-store.ts</td><td>0</td><td>450</td><td class="up">+450</td><td class="up">+62</td><td class="note">Shared substrate: reads, docs, verbs, receipts, typed outcomes.</td></tr>
+          <tr><td>takeoff/proto/binding-sentence-proto.tsx</td><td>448</td><td>0</td><td class="down">−448</td><td class="down">−34</td><td class="note">Rendered precedent folded into production.</td></tr>
+          <tr><td>components/sentence.tsx</td><td>436</td><td>0</td><td class="down">−436</td><td class="down">−39</td><td class="note">Second sentence implementation removed.</td></tr>
+          <tr><td>agent-contracts/raw-thread.ts</td><td>410</td><td>0</td><td class="down">−410</td><td class="down">−94</td><td class="note">Native Mastra thread authority won.</td></tr>
+          <tr><td>runtime/pea-runtime.ts</td><td>281</td><td>685</td><td class="up">+404</td><td class="up">+73</td><td class="note">Real thread-scoped runtime responsibility concentrated here.</td></tr>
+          <tr><td>routes/ops.tsx</td><td>1,000</td><td>598</td><td class="down">−402</td><td class="down">−63</td><td class="note">Generated/declared operation metadata replaced route ceremony.</td></tr>
+          <tr><td>routes/settings.tsx</td><td>798</td><td>398</td><td class="down">−400</td><td class="down">−79</td><td class="note">State moved to the store, view stayed local.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Web-area topology</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Area</th><th>LOC before</th><th>LOC after</th><th>Δ LOC</th><th>Decisions before</th><th>after</th><th>Reading</th></tr></thead>
+        <tbody>
+          <tr><td>targeting-proto</td><td>2,098</td><td>0</td><td class="down">−2,098</td><td>222</td><td>0</td><td class="note">Prototype retired.</td></tr>
+          <tr><td>routes/families</td><td>1,478</td><td>38</td><td class="down">−1,440</td><td>187</td><td>2</td><td class="note">Thin route achieved.</td></tr>
+          <tr><td>takeoff</td><td>7,453</td><td>6,171</td><td class="down">−1,282</td><td>608</td><td>508</td><td class="note">Prototype and shadow world removal.</td></tr>
+          <tr><td>components</td><td>6,571</td><td>5,957</td><td class="down">−614</td><td>578</td><td>504</td><td class="note">Duplicate sentence/UI machinery removed.</td></tr>
+          <tr><td>routes/settings</td><td>798</td><td>398</td><td class="down">−400</td><td>150</td><td>71</td><td class="note">Store-owned page memory.</td></tr>
+          <tr><td>routes/ops</td><td>1,000</td><td>598</td><td class="down">−402</td><td>170</td><td>107</td><td class="note">Contract-driven playground.</td></tr>
+          <tr><td>routes/instances</td><td>715</td><td>444</td><td class="down">−271</td><td>86</td><td>46</td><td class="note">Route ceremony reduced.</td></tr>
+          <tr><td>state</td><td>241</td><td>688</td><td class="up">+447</td><td>36</td><td>100</td><td class="note">Shared route-store and route-state ownership added.</td></tr>
+          <tr><td>targeting</td><td>1,111</td><td>1,547</td><td class="up">+436</td><td>175</td><td>222</td><td class="note">Production grammar absorbed the useful prototype.</td></tr>
+          <tr><td>settings</td><td>0</td><td>624</td><td class="up">+624</td><td>0</td><td>65</td><td class="note">Named feature directory.</td></tr>
+          <tr><td>families</td><td>0</td><td>1,777</td><td class="up">+1,777</td><td>0</td><td>192</td><td class="note">Named feature directory; route shell no longer owns it.</td></tr>
+          <tr><td>family</td><td>6,987</td><td>6,998</td><td class="up">+11</td><td>895</td><td>864</td><td class="note">Nearly LOC-neutral but 31 decisions lower; max Cx 71 → 60.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Remaining hotspots</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Function</th><th>File / area</th><th>Function lines</th><th>Cx</th><th>Disposition</th></tr></thead>
+        <tbody>
+          <tr><td>FamilyWorkspace</td><td>family/workspace.tsx</td><td>2,050</td><td>60</td><td class="note">Improved from Cx 71 / 2,266 lines, but still the largest product hotspot.</td></tr>
+          <tr><td>RunBrowser</td><td>runs/browser.tsx</td><td>725</td><td>47</td><td class="note">Mostly pre-existing and outside this merge's center.</td></tr>
+          <tr><td>FamiliesWorkspace</td><td>families/workspace.tsx</td><td>868</td><td>41</td><td class="note">New concentration. Split only at a stable product seam, not for a metric.</td></tr>
+          <tr><td>ParameterLinks route</td><td>routes/parameter-links.tsx</td><td>327</td><td>41</td><td class="note">Its direct adapter path exposed the final typed-refusal bug.</td></tr>
+          <tr><td>Takeoffs route</td><td>routes/takeoffs.tsx</td><td>334</td><td>39</td><td class="note">Canonical targeting adopter, still a dense route view.</td></tr>
+          <tr><td>runVerb</td><td>state/route-store.ts</td><td>61</td><td>17</td><td class="note">Shared high-leverage seam; complexity is bounded and extensively tested.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="ideas">
+    <h2>The ideas that survived contact with the code</h2>
+    <div class="grid">
+      <article class="card wide"><h3>1 · Native authority beats a local shadow</h3><p>Pea no longer maintains a second thread/transcript truth where Mastra already owns one. The stable identity is the native server session keyed by durable thread coordinates; assistant-ui renders it. Delete projection and wire layers before inventing synchronization between two authorities.</p></article>
+      <article class="card wide"><h3>2 · A route document is not page memory</h3><p>The portable document owns facts another participant must see: binding, snapshot, staged intent, revision, receipts. The route store owns local interaction: hover, sorting, pane state, busy state. This boundary makes human, agent, tab, and host collaboration possible without putting the React tree in charge.</p></article>
+      <article class="card wide"><h3>3 · Concurrency without locks</h3><p>Every external write carries the revision it was based on. Every external command also carries a client-minted request ID. The server serializes, refuses stale work, persists a canonical receipt, replays duplicate requests, and keeps an outcome-unknown crash barrier. A CRDT would be more machinery and less authority.</p></article>
+      <article class="card wide"><h3>4 · One outcome language, many route stores</h3><p>The routes do not need one global store. They need one typed grammar: busy, applied, refused, error, outcome unknown, plus the same icon, color, copy, receipt and placement rules. The critical constraint is that <code>kind</code> survives every adapter; flattening it into an <code>Error</code> destroys the visual language.</p></article>
+      <article class="card wide"><h3>5 · Commands are writes</h3><p>A command is not a side channel. It shares revision admission, idempotency, receipts, typed refusal and replay with patch application. Its success history is also custody: only a successful command may become <code>lastCommand</code> or arm the next destructive verb.</p></article>
+      <article class="card wide"><h3>6 · Generate authority; never count it by hand</h3><p>The true operation change was 56 → 66, exactly ten Takeoffs operations. The requested 66 → 76 double-counted the promotion. Catalog generation, key-set diffs, and drift gates are stronger than acceptance prose—and should produce the number themselves.</p></article>
+      <article class="card wide"><h3>7 · Thin routes are an architectural signal</h3><p><code>routes/families.tsx</code> fell from 1,478 to 38 lines. The useful shape is route shell → feature workspace/view → route store → portable document/host. Moving code alone is not victory, but it makes authority and hotspots legible enough to improve.</p></article>
+      <article class="card wide"><h3>8 · Proof must cross the user-visible seam</h3><p>Typecheck and deterministic suites were green while the real UI painted a stale-revision refusal as generic error and emitted an unhandled rejection. The browser race found what unit proof could not; the critic then found a destructive-arming regression the browser script did not ask about.</p></article>
+    </div>
+  </section>
+
+  <section id="proof">
+    <h2>How the verdict was earned</h2>
+    <ol class="timeline">
+      <li><strong>Pre-flight and ruled branch fixes</strong><p>Uncommitted Flow work was committed narrowly. REVIEW §3 fixes landed on their owning branches before integration. The first merge commit carried the §8 verdicts as ledger rows.</p></li>
+      <li><strong>Cleanroom merge</strong><p>Native thread/session authority and explicit capability denial landed. Critic KILLs forced compatibility and provider-error repairs before adoption.</p></li>
+      <li><strong>Route-workspace merge</strong><p>The first candidate was killed because two TanStack generators rewrote one tracked route tree differently and because five hard-zero design laws were silently weakened. Repair aligned generator custody and made the design debt explicit.</p></li>
+      <li><strong>Concurrency and typed outcomes</strong><p><code>expectedRevision</code>, <code>requestId</code>, durable receipts, replay, and outcome-unknown crossed contracts, runtime, HTTP, route stores and MCPs. A first critic caught both a red full web test and successful oversized results being discarded.</p></li>
+      <li><strong>All-route language pass</strong><p>Four bespoke flatteners were deleted for one carrying error/result seam. Seven route consumers received the same <code>RouteWriteKind</code> vocabulary.</p></li>
+      <li><strong>Real two-tab falsifier at <code>9f4c9db</code></strong><p>Tab A won at revision 0 → 1. Tab B correctly failed to overwrite—but the DOM said <code>data-kind="error"</code> and the promise rejection was unhandled. Deterministic green was insufficient.</p></li>
+      <li><strong>Root repair, then critic KILL</strong><p>Returning the original typed result fixed the DOM and rejection. The critic traced the altered control flow further: a refused preview now entered <code>lastCommand</code>, marked the profile reviewed, and armed Apply.</p></li>
+      <li><strong>One-line success-custody repair</strong><p><code>if (result.ok)</code> at the only <code>lastCommand</code> writer made the unsafe state unrepresentable for every consumer. The exact-head browser race then rendered <code>refused</code>, kept the losing draft, showed Changed elsewhere, preserved the winner, and recorded zero unhandled rejections.</p></li>
+      <li><strong>Exact-head closure</strong><p>Five TypeScript compiles, web 51 files / 325 tests, runtime 5 / 30, host 9 / 54 (+2 skipped), MCP 11 / 46 (+1), agent-contracts 10 / 21, guards 2 / 16, stable route generation, 66-op codegen, and full <code>pnpm ready</code>. Final Opus verdict: <span class="tag adopt">Adopt</span>.</p></li>
+    </ol>
+    <p class="callout bad"><strong>The essential falsifier:</strong> a correct server refusal is not sufficient. If an adapter erases its kind, the UI tells a different story. If a failure enters success history, the next action can become unsafe even though the refusal itself looks right.</p>
+    <p class="callout warn"><strong>Residual proof gap:</strong> the one-line <code>lastCommand</code> rule has no direct automated guard. Review found and repaired it; a roughly 10-line store test should pin “non-ok leaves lastCommand unchanged; ok records it.” This is a product gate, not a new framework.</p>
+  </section>
+
+  <section id="surface">
+    <h2>Proposed Surface Philosophy changes</h2>
+    <p><a href="../design/SURFACE-PHILOSOPHY.md">SURFACE-PHILOSOPHY.md</a> already says one vocabulary, refuse rather than act unreliably, silent refusal looks like a vanished edit, ceremony follows blast radius, and the visible model must be drivable outside the component tree. The merge proved four concise additions. Keep protocol mechanics in the <a href="../features/design-system/LEDGER.md">design-system ledger</a>; put only user-visible laws in the philosophy.</p>
+
+    <article class="law">
+      <span class="tag fixed">Add to §1 · State and vocabulary</span>
+      <h3>Typed outcomes are end-to-end language</h3>
+      <blockquote>One write has one kind from admission to receipt. Applied, refused, failed, and outcome unknown are different truths; no adapter may flatten them into “error.” The typed kind drives the words, icon, colour, and next available verb on every surface.</blockquote>
+      <p><strong>Why:</strong> the final browser falsifier existed solely because the store and server knew <code>refused</code> while the workspace adapter erased it.</p>
+    </article>
+
+    <article class="law">
+      <span class="tag fixed">Add to §3 · Honesty</span>
+      <h3>A refused write preserves the local draft</h3>
+      <blockquote>A conflict refuses the commit, not the user’s thought. Keep the local draft, show the newer shared facts, say “changed elsewhere,” and make re-read or retry explicit. Never silently overwrite either side.</blockquote>
+      <p><strong>Why:</strong> this is the concrete multi-tab form of the existing “silent refusal reads as an edit that vanished” law.</p>
+    </article>
+
+    <article class="law">
+      <span class="tag fixed">Add to §3 · Honesty</span>
+      <h3>Only success owns success history</h3>
+      <blockquote>A refused or failed command may explain and remain retryable, but it never becomes the last successful command, never satisfies review, and never arms a stronger verb.</blockquote>
+      <p><strong>Why:</strong> the Wave 14 critic proved that “what happened last” and “what succeeded last” are not interchangeable state.</p>
+    </article>
+
+    <article class="law">
+      <span class="tag fixed">Refine §7 · Route anatomy</span>
+      <h3>One document language, local page memory</h3>
+      <blockquote>A route renders one portable document and one typed write language. Shared facts and staged intent live in the document; hover, sorting, panes, and transient interaction stay local. The component tree renders both and owns neither.</blockquote>
+      <p><strong>Why:</strong> this preserves the existing rule that a route owns its world and host calls without accidentally demanding one global store for products with different commitment models.</p>
+    </article>
+
+    <h3>Design-system follow-through</h3>
+    <ul class="tight">
+      <li>Add a rendered stale-revision specimen to <code>/design-system</code>: two views at r0, one lands r1, the other retains its draft and renders <code>refused</code> plus Changed elsewhere.</li>
+      <li>Make the specimen assert all typed outcome kinds and next-verb availability. Once rendered, the philosophy can point to it and avoid procedural prose.</li>
+      <li>Close or rewrite ledger rows that still describe <code>refused</code> as a future vocabulary gap; it is now a shipped cross-route spine, while outcome attribution remains legitimately Owed.</li>
+      <li>Do not add a universal route store. The ledger already correctly rules shared vocabulary, not shared commitment state.</li>
+    </ul>
+  </section>
+
+  <section id="substrate">
+    <h2>Substrate and setup findings</h2>
+    <p><strong>Yes—there were significant non-GUI frictions.</strong> They cluster around proof custody and worktree dependency identity, not Revit itself. Three deserve substrate work; several others were repaired inside this merge and should not spawn a second system.</p>
+
+    <div class="rank">
+      <div>P0</div>
+      <div><h3>One reliable proof-receipt runner</h3><p>The final <code>pnpm ready</code> wrapper reached the last success line and returned terminal exit 0, but its <code>Start-Process</code> metadata serialized a blank child <code>ExitCode</code>. That forced forensic adjudication of <code>&amp;&amp;</code> semantics and raw logs.</p><p><strong>Smallest fix:</strong> one repo-owned PowerShell helper that starts a command, waits, then writes command, cwd, start/end, populated exit code, stdout/stderr paths, byte counts and SHA-256. Reuse it for long proof lanes; do not build a generic task engine.</p></div>
+    </div>
+    <div class="rank">
+      <div>P0</div>
+      <div><h3>Make operation deltas generated evidence</h3><p>The goal’s “66 → 76” wording blocked closure even though the authoritative catalog correctly moved 56 → 66. Ten operations were counted twice in prose.</p><p><strong>Smallest fix:</strong> extend the existing offline catalog check with <code>--base &lt;ref&gt;</code> (or a sibling script) that prints old count, new count, added keys and removed keys. Acceptance should cite that receipt, never handwritten arithmetic.</p></div>
+    </div>
+    <div class="rank">
+      <div>P1</div>
+      <div><h3>Worktree dependency wiring: create and verify</h3><p>A whole shared <code>node_modules</code> tree can make a sibling worktree resolve packages and fonts through the main checkout. The route-generator diagnosis also found two generator versions in the shared pnpm topology. The existing safe recipe—per-entry junctions, with <code>@pe/*</code> pointing into the current worktree—is correct but manual.</p><p><strong>Smallest fix:</strong> one <code>vp worktree wire</code> command (or script) that creates those junctions and a <code>--check</code> mode that rejects a whole-tree junction, escaped <code>@pe/*</code> realpaths, and mismatched generator realpaths.</p></div>
+    </div>
+    <div class="rank">
+      <div>P1</div>
+      <div><h3>Pin success custody with one deterministic test</h3><p>The only <code>lastCommand</code> writer is now correctly guarded, but no test proves it. This regression can arm a destructive verb, so the test belongs in the deterministic route-store lane.</p><p><strong>Smallest fix:</strong> one test: a refused command leaves <code>lastCommand</code> unchanged; a successful one records it. No browser harness and no new abstraction.</p></div>
+    </div>
+    <div class="rank">
+      <div>P2</div>
+      <div><h3>Promote the two-tab race only after it repeats</h3><p>The targeted browser lane was uniquely valuable, but full automation would add lifecycle and fixture machinery. Keep the current receipt recipe now. If a second concurrency feature needs it, promote the exact race into one repo-owned browser command.</p><p><strong>Trigger:</strong> another stale-write or request-replay change that cannot be certified below the browser seam.</p></div>
+    </div>
+
+    <h3>Already repaired—do not rebuild</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Friction</th><th>Status</th><th>What landed</th></tr></thead>
+        <tbody>
+          <tr><td>TanStack CLI and Vite plugin generated different route trees</td><td><span class="tag fixed">Fixed</span></td><td class="note">One generator realpath/version plus explicit Start footer; both writer orders now hash-identical.</td></tr>
+          <tr><td>Design/docs guards duplicated in web and repo root</td><td><span class="tag fixed">Fixed</span></td><td class="note">One canonical <code>tests/repo-guards</code> package; debt downgrades recorded rather than hidden.</td></tr>
+          <tr><td>Stale Host contracts pack entry</td><td><span class="tag fixed">Fixed</span></td><td class="note">Removed after the no-cache build exposed it.</td></tr>
+          <tr><td>Main advanced during the long-running sibling merge</td><td><span class="tag proven">Handled</span></td><td class="note">One explicit merge of current main; skill checker caught the duplicate trigger.</td></tr>
+          <tr><td>Herdr orchestration</td><td><span class="tag proven">Held</span></td><td class="note">One session preserved wave custody and durable receipts. No new Herdr substrate is justified by this run.</td></tr>
+          <tr><td>T3 snapshot capture unavailable in the final browser lane</td><td><span class="tag owed">External</span></td><td class="note">DOM evaluation and visible-text waits carried the claim. This is harness friction, not a Pe.Tools subsystem to recreate.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="callout"><strong>Rung recommendation:</strong> add the receipt runner and catalog delta to the deterministic/tooling substrate; add the <code>lastCommand</code> assertion to the existing route-store tests. Do not add a new Revit rung. Nothing in this merge required live Revit, and the final audit correctly leaves attached and installed-session behavior unproven.</p>
+  </section>
+
+  <section id="sources">
+    <h2>Provenance</h2>
+    <details open><summary>Primary exact-head receipts</summary>
+      <ul class="tight mono">
+        <li>.artifacts/handoffs/merge-review/final-opus-audit-bf3473f.md</li>
+        <li>.artifacts/handoffs/merge-review/landing-bf3473f.md</li>
+        <li>Pe.Tools-merge/.artifacts/handoffs/merge-review/two-tab-browser-proof-bf3473f.md</li>
+        <li>Pe.Tools-merge/.artifacts/handoffs/merge-review/final-ready-bf3473f.md</li>
+        <li>Pe.Tools-merge/.artifacts/handoffs/merge-review/final-browser-9f4c9db-falsifier.md</li>
+      </ul>
+    </details>
+    <details><summary>Design and wave evidence</summary>
+      <ul class="tight mono">
+        <li>.artifacts/handoffs/merge-review/sync.md</li>
+        <li>.artifacts/handoffs/merge-review/waves/route-write-state-census-opus.md</li>
+        <li>.artifacts/handoffs/merge-review/waves/routegen-diagnose-opus.md</li>
+        <li>.artifacts/handoffs/merge-review/waves/wave-4-opus.md and wave-4-repair-opus.md</li>
+        <li>.artifacts/handoffs/merge-review/waves/wave-5b-opus.md and wave-5b-repair-opus.md</li>
+        <li>.artifacts/handoffs/merge-review/waves/wave-14-opus.md and wave-15-opus.md</li>
+        <li><a href="../features/agent/pea-cleanroom.html">docs/features/agent/pea-cleanroom.html</a></li>
+        <li><a href="../design/SURFACE-PHILOSOPHY.md">docs/design/SURFACE-PHILOSOPHY.md</a></li>
+        <li><a href="../features/design-system/LEDGER.md">docs/features/design-system/LEDGER.md</a></li>
+        <li><a href="../ARCHITECTURE.md">docs/ARCHITECTURE.md</a> · <a href="../BUILD.md">docs/BUILD.md</a></li>
+      </ul>
+    </details>
+    <details><summary>Machine-readable retrospective evidence</summary>
+      <ul class="tight mono">
+        <li>.artifacts/runs/mega-merge-retrospective-20260827/metrics.json</li>
+        <li>.artifacts/runs/mega-merge-retrospective-20260827/artifact-index.json</li>
+        <li>.artifacts/runs/mega-merge-retrospective-20260827/analyze.mjs</li>
+        <li>.artifacts/runs/mega-merge-retrospective-20260827/index-artifacts.mjs</li>
+      </ul>
+    </details>
+    <details><summary>Evidence boundaries</summary>
+      <ul class="tight">
+        <li>Complexity figures cover TypeScript syntax only; C# is LOC/file census.</li>
+        <li>Physical LOC includes comments and blanks consistently at both refs.</li>
+        <li>The browser proof used real route UI, Host HTTP, SSE, and two tabs, but no Revit; Host reads used a synthetic bridge.</li>
+        <li>Attached Revit and installed-session lanes were outside scope and remain unproven.</li>
+        <li>Memory supplied continuity and prior-session reasoning; every current-state claim was checked against the landed tree or preserved receipts.</li>
+      </ul>
+    </details>
+  </section>
+
+  <footer>
+    <p>Prepared from the landed tree and its preserved proof corpus. No product code or design law was changed by this report; the philosophy edits above are proposals.</p>
+  </footer>
+</main>
+</body>
+</html>
