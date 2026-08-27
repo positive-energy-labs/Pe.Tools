@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
-import { VariantSwitcher } from "#/param-tables/proto/switcher";
+import { VariantSwitcher } from "#/proto/variant-switcher";
 import { sessionLabel, type SessionFacts, type TargetResolution } from "#/host/target";
 import type { ViewFacts } from "#/takeoff/model";
 import type { World } from "#/takeoff/world";

@@ -36,7 +36,7 @@ import { ParadigmB } from "#/family-review/proto-editor/b";
 import { ParadigmC } from "#/family-review/proto-editor/c";
 import { ParadigmD } from "#/family-review/proto-editor/composed";
 import { StatePanel, TypeStage, useEditor } from "#/family-review/proto-editor/shell";
-import { VariantSwitcher } from "#/param-tables/proto/switcher";
+import { VariantSwitcher } from "#/proto/variant-switcher";
 
 const PARADIGMS = [
   { key: "a", name: "Anchor-first — the relation graph, one node at a time" },

@@ -16,7 +16,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { FactChip } from "#/components/lang/chip";
-import { VariantSwitcher } from "#/param-tables/proto/switcher";
+import { VariantSwitcher } from "#/proto/variant-switcher";
 import { endpoints, PRODUCTS, seams } from "#/targeting-proto/model";
 import { BoardView } from "#/targeting-proto/view-board";
 import { FlowView } from "#/targeting-proto/view-flow";
