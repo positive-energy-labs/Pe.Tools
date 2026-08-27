@@ -14,6 +14,7 @@ import {
   docWriter,
   feed,
   hostRead,
+  routeConflictAtom,
   type Slice,
   unbound,
   VerbRefused,
@@ -71,7 +72,9 @@ describe("route store kit", () => {
     );
 
     const hostError = Error("host broke");
-    await expect(core.runVerb("bad", async () => Promise.reject(hostError))).rejects.toBe(hostError);
+    await expect(core.runVerb("bad", async () => Promise.reject(hostError))).rejects.toBe(
+      hostError,
+    );
     expect(registry.get(core.failure)).toMatchObject({ kind: "host", message: "host broke" });
     await expect(
       core.runVerb("write", async () => ({
@@ -85,7 +88,8 @@ describe("route store kit", () => {
     expect(registry.get(core.failure)).toMatchObject({
       kind: "host",
       verb: "write",
-      message: "the patched document is invalid: snapshot.world.zones.43.zone.color: expected string",
+      message:
+        "the patched document is invalid: snapshot.world.zones.43.zone.color: expected string",
     });
     expect(registry.get(core.receipt)).toBeNull();
     core.dispose();
@@ -180,7 +184,7 @@ describe("route store kit", () => {
     );
   });
 
-  it("sends the hydrated slice revision with every apply", async () => {
+  it("carries revisions and external ids, advances successful writes, and types conflicts", async () => {
     const schema = z.object({ value: z.string() });
     const spec = {
       route: "test-route",
@@ -188,7 +192,15 @@ describe("route store kit", () => {
       description: "Test",
       schema,
       agentWriteMask: [],
-      commands: {},
+      commands: {
+        local: { description: "Local", actor: "any", input: z.object({}) },
+        external: {
+          description: "External",
+          actor: "human",
+          input: z.object({}),
+          mutatesExternal: true,
+        },
+      },
     } satisfies RouteStateSpec<typeof schema>;
     const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
     const core = createRouteStoreCore("test-writer", registry);
@@ -198,11 +210,16 @@ describe("route store kit", () => {
         AsyncResult.initial(),
       ),
     );
-    const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const response = (body: unknown) => Response.json(body);
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(response({ ok: true, revision: 8 }))
+      .mockResolvedValueOnce(response({ ok: true, revision: 9 }))
+      .mockResolvedValueOnce(response({ ok: true, revision: 10 }))
+      .mockResolvedValueOnce(response({ ok: false, code: "request_id_conflict" }))
+      .mockResolvedValueOnce(response({ ok: false, code: "stale_revision" }));
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "00000000-0000-4000-8000-000000000005",
     );
     const writer = docWriter(
       spec,
@@ -210,6 +227,7 @@ describe("route store kit", () => {
       registry,
       slice,
     );
+    registry.set(routeConflictAtom, false);
 
     await expect(writer.apply([{ path: ["value"], value: "next" }])).resolves.toMatchObject({
       ok: false,
@@ -228,11 +246,37 @@ describe("route store kit", () => {
       }),
     );
     await writer.apply([{ path: ["value"], value: "next" }]);
+    await writer.command("local", {});
+    await writer.command("external", {});
+    await writer.command("local", {});
+    expect(registry.get(routeConflictAtom)).toBe(false);
+    await writer.apply([{ path: ["value"], value: "draft" }], 3);
 
     expect(JSON.parse(request.mock.calls[0]![1]!.body as string)).toEqual({
       patches: [{ path: ["value"], value: "next" }],
       expectedRevision: 7,
     });
+    expect(JSON.parse(request.mock.calls[1]![1]!.body as string)).toEqual({
+      command: "local",
+      input: {},
+      expectedRevision: 8,
+    });
+    expect(JSON.parse(request.mock.calls[2]![1]!.body as string)).toEqual({
+      command: "external",
+      input: {},
+      expectedRevision: 9,
+      requestId: "00000000-0000-4000-8000-000000000005",
+    });
+    expect(JSON.parse(request.mock.calls[3]![1]!.body as string)).toEqual({
+      command: "local",
+      input: {},
+      expectedRevision: 10,
+    });
+    expect(JSON.parse(request.mock.calls[4]![1]!.body as string)).toEqual({
+      patches: [{ path: ["value"], value: "draft" }],
+      expectedRevision: 3,
+    });
+    expect(registry.get(routeConflictAtom)).toBe(true);
     core.dispose();
     registry.dispose();
   });

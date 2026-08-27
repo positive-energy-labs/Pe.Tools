@@ -1,19 +1,22 @@
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
-import { RegistryContext } from "@effect/atom-react";
+import { RegistryContext, useAtomSet, useAtomValue } from "@effect/atom-react";
 
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
+import { Verb } from "../components/lang/verb";
 import { useHostLiveInvalidation } from "../host/live";
 import { inspectAtomRegistry } from "../state/atom-inspect";
 import { appAtomRegistry } from "../state/registry";
+import { routeConflictAtom } from "../state/route-store";
 import { routeDocumentSearch } from "../workbench/route-document";
 
 import appCss from "../styles.css?url";
 
 import type { QueryClient } from "@tanstack/react-query";
 
-if (import.meta.env.DEV) Object.assign(globalThis, { __PE_INSPECT__: inspectAtomRegistry(appAtomRegistry) });
+if (import.meta.env.DEV)
+  Object.assign(globalThis, { __PE_INSPECT__: inspectAtomRegistry(appAtomRegistry) });
 
 interface MyRouterContext {
   queryClient: QueryClient;
@@ -62,6 +65,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-accent selection:text-accent-foreground">
         <RegistryContext.Provider value={appAtomRegistry}>
           {children}
+          <RouteConflictBanner />
           <TanStackDevtools
             config={{
               position: "bottom-right",
@@ -78,5 +82,29 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <Scripts />
       </body>
     </html>
+  );
+}
+
+export function RouteConflictBanner() {
+  const changed = useAtomValue(routeConflictAtom);
+  const dismiss = useAtomSet(routeConflictAtom);
+  if (!changed) return null;
+  return (
+    <aside
+      role="status"
+      aria-live="polite"
+      className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-3 border-b border-[var(--r-caution)] bg-[var(--r-page)] px-4 py-2 text-[var(--r-ink)] shadow-sm"
+    >
+      <strong className="t-label">Changed elsewhere</strong>
+      <span className="t-value">
+        Your edit did not land. Review the current document and retry.
+      </span>
+      <Verb
+        label="dismiss"
+        reason="Dismiss this conflict notice."
+        className="t-label text-[var(--r-nav)] hover:underline"
+        onClick={() => dismiss(false)}
+      />
+    </aside>
   );
 }

@@ -12,15 +12,17 @@ import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { SidePane } from "#/components/ui/side-pane";
-import {
-  RouteDocumentEmpty,
-  RouteDocumentSurface,
-  useRouteDocumentAddress,
-} from "#/workbench/route-document";
+import { RouteDocument } from "#/workbench/route-document";
 import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
-import { canApply, errorIssueCount, isDraftDirty, sameProfile } from "#/parameter-links/model";
+import {
+  canApply,
+  errorIssueCount,
+  isDraftDirty,
+  retainDraftBasis,
+  sameProfile,
+} from "#/parameter-links/model";
 import { useRouteState } from "#/workbench/route-state";
 
 /**
@@ -54,13 +56,7 @@ function profileHash(profile: ParameterLinkProfile | null): string {
 }
 
 function ParameterLinksRoute() {
-  const documentAddress = useRouteDocumentAddress();
-  if (!documentAddress) return <RouteDocumentEmpty />;
-  return (
-    <RouteDocumentSurface at={documentAddress}>
-      <ParameterLinksWorkspace documentAddress={documentAddress} />
-    </RouteDocumentSurface>
-  );
+  return <RouteDocument>{(at) => <ParameterLinksWorkspace documentAddress={at} />}</RouteDocument>;
 }
 
 function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import("@pe/agent-contracts").Address }) {
@@ -90,6 +86,7 @@ function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import(
    */
   const [localDraft, setLocalDraft] = useState<ParameterLinkProfile | null>(remoteDraft);
   const syncedRef = useRef<string | null>(null);
+  const draftBasisRef = useRef<number | null>(route.revision);
 
   useEffect(() => {
     const remoteJson = JSON.stringify(remoteDraft ?? null);
@@ -99,8 +96,9 @@ function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import(
     if (localDraft == null || noUnsavedEdits) {
       if (localJson !== remoteJson) setLocalDraft(remoteDraft ?? null);
       syncedRef.current = remoteJson;
+      draftBasisRef.current = route.revision;
     }
-  }, [remoteDraft, localDraft]);
+  }, [remoteDraft, localDraft, route.revision]);
 
   const editing = localDraft ?? stored;
   const hasUnsavedEdits = !sameProfile(localDraft, remoteDraft) && localDraft != null;
@@ -110,16 +108,27 @@ function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import(
   const draftDirty = isDraftDirty(document);
 
   // Editing invalidates a prior preview — the freshness gate re-locks Apply.
-  const onDraftChange = useCallback((next: ParameterLinkProfile) => {
-    setLocalDraft(next);
-    setPreviewed((prev) => (sameProfile(prev, next) ? prev : null));
-    setOutcome(null);
-  }, []);
+  const onDraftChange = useCallback(
+    (next: ParameterLinkProfile) => {
+      draftBasisRef.current = retainDraftBasis(
+        draftBasisRef.current,
+        hasUnsavedEdits,
+        route.revision,
+      );
+      setLocalDraft(next);
+      setPreviewed((prev) => (sameProfile(prev, next) ? prev : null));
+      setOutcome(null);
+    },
+    [hasUnsavedEdits, route.revision],
+  );
 
   /** Persist the local draft to the shared document (human actor, unmasked). */
   const saveDraft = useCallback(
     async (profile: ParameterLinkProfile): Promise<boolean> => {
-      const result = await route.apply([{ path: ["draftProfile"], value: profile }]);
+      const result = await route.apply(
+        [{ path: ["draftProfile"], value: profile }],
+        draftBasisRef.current ?? undefined,
+      );
       if (!result.ok) {
         setOutcome({
           kind: "error",
@@ -128,6 +137,7 @@ function ParameterLinksWorkspace({ documentAddress }: { documentAddress: import(
         return false;
       }
       syncedRef.current = JSON.stringify(profile);
+      if (Number.isInteger(result.revision)) draftBasisRef.current = result.revision!;
       return true;
     },
     [route.apply],

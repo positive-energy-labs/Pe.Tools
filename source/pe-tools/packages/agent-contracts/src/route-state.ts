@@ -53,6 +53,8 @@ export interface RouteStatePatch {
 
 export interface RouteStateWriteResult {
   ok: boolean;
+  code?: import("./route-doc.ts").RouteRefusalCode;
+  revision?: number;
   error?: string;
   hint?: string;
   doc?: unknown;

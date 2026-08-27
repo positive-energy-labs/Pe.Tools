@@ -25,11 +25,7 @@ import { createSettingsStore, type SettingsStore } from "#/settings/store";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
-import {
-  RouteDocumentEmpty,
-  RouteDocumentSurface,
-  useRouteDocumentAddress,
-} from "#/workbench/route-document";
+import { RouteDocument } from "#/workbench/route-document";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 
 export const Route = createFileRoute("/settings")({
@@ -41,12 +37,8 @@ export const Route = createFileRoute("/settings")({
 });
 
 function SettingsRoute() {
-  const documentAddress = useRouteDocumentAddress();
-  if (!documentAddress) return <RouteDocumentEmpty />;
   return (
-    <RouteDocumentSurface at={documentAddress}>
-      <SettingsStoreOwner key={documentAddress} documentAddress={documentAddress} />
-    </RouteDocumentSurface>
+    <RouteDocument>{(at) => <SettingsStoreOwner key={at} documentAddress={at} />}</RouteDocument>
   );
 }
 

@@ -12,7 +12,7 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 - 2026-08-26 — Route-doc identity is `(route, Address)`, and `?thread` is only a view; route docs are facts about an rvt/rfa.
 - 2026-08-26 — Thread-keyed route docs are orphaned with no migration.
-- 2026-08-26 — Route-doc concurrency uses no locks or sync engine: apply and commands require `expectedRevision` end to end, external commands use client `requestId` idempotency, and the UI shows an open-in-another-tab cue plus a changed-elsewhere banner. Add an optimistic overlay only after measured latency demands it.
+- 2026-08-26 — Route-doc concurrency uses no locks or sync engine: apply and commands require `expectedRevision` end to end, external commands use client `requestId` idempotency, and the UI shows an open-in-another-tab cue plus a changed-elsewhere banner; `requestId` covers retransmission, receipts are non-evicting per envelope, and `outcomeUnknown` remains the crash barrier. Add an optimistic overlay only after measured latency demands it.
 - 2026-08-26 — Flow stays as the targeting manifest's second projection, and its strobe stays removed.
 - 2026-08-26 — The route-document machine owns no product meaning: `agent-contracts/route-doc.ts` exports the pure `applyPatches`, `guardCommand`, and `commitDoc` functions; `RouteWorkspace` is only their persistence, serialization, crash-barrier, and publication shell.
 - 2026-08-26 — J7 resolves the 2026-08-25 second-temporal-holder Owed line: route bindings live only in the route document; `/takeoffs` has no `searchAtom`, `SearchPort`, `setSearch`, `patchSearch`, or CSV URL codec.

@@ -90,6 +90,15 @@ export function RouteDocumentSurface({ at, children }: { at: Address; children: 
   );
 }
 
+export function RouteDocument({ children }: { children: (at: Address) => ReactNode }) {
+  const at = useRouteDocumentAddress();
+  return at ? (
+    <RouteDocumentSurface at={at}>{children(at)}</RouteDocumentSurface>
+  ) : (
+    <RouteDocumentEmpty />
+  );
+}
+
 export function RouteDocumentEmpty() {
   const { sessions } = useFleet();
   const choices = routeDocumentChoices(sessions);

@@ -100,12 +100,14 @@ export const routeStateApply = createTool({
         }),
       )
       .min(1),
+    expectedRevision: z.number().int().nonnegative(),
   }),
   execute: async (input) => {
     return postJson(
       scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`, input.doc),
       {
         patches: input.patches,
+        expectedRevision: input.expectedRevision,
       },
     );
   },
@@ -120,13 +122,16 @@ export const routeCommand = createTool({
     doc: addressSchema,
     command: z.string(),
     input: z.unknown().optional(),
+    expectedRevision: z.number().int().nonnegative(),
   }),
-  execute: async (input) => {
+  execute: async (input, context) => {
     return postJson(
       scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, input.doc),
       {
         command: input.command,
         input: coerceJsonObject(input.input),
+        expectedRevision: input.expectedRevision,
+        requestId: requestIdentity(context),
       },
     );
   },
@@ -154,6 +159,17 @@ function missingDocument(action: string) {
     isError: true,
     content: `Cannot ${action} without a Revit document address.`,
   };
+}
+
+function requestIdentity(context: {
+  agent?: { toolCallId?: string };
+  mcp?: { extra?: { requestId?: string | number } };
+}): string {
+  const agentId = context.agent?.toolCallId?.trim();
+  if (agentId) return agentId;
+  const mcpId = context.mcp?.extra?.requestId;
+  if (mcpId !== undefined && String(mcpId).trim()) return String(mcpId);
+  return crypto.randomUUID();
 }
 
 function message(error: unknown): string {

@@ -224,6 +224,8 @@ export interface Slice<D> {
   peaActive: boolean;
 }
 
+export const routeConflictAtom = Atom.make(false).pipe(Atom.withLabel("app/route-conflict"));
+
 type WireMessage =
   | { kind: "doc"; doc: unknown; revision: number }
   | { kind: "pea"; active: boolean }
@@ -362,6 +364,7 @@ export function docWriter<S extends RouteStateSpec<any>>(
   registry: AtomRegistry.AtomRegistry,
   slice: Atom.Atom<AsyncResult.AsyncResult<Slice<RouteDocOf<S>>, Error>>,
 ) {
+  let lastWrittenRevision: number | null = null;
   const write = async (
     operation: "apply" | "command",
     body: Record<string, unknown>,
@@ -372,27 +375,48 @@ export function docWriter<S extends RouteStateSpec<any>>(
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      return (
-        ((await response.json().catch(() => null)) as RouteStateWriteResult | null) ?? {
-          ok: false,
-          error: `${operation} failed (${response.status})`,
-        }
-      );
+      const result = ((await response
+        .json()
+        .catch(() => null)) as RouteStateWriteResult | null) ?? {
+        ok: false,
+        error: `${operation} failed (${response.status})`,
+      };
+      if (result.ok && Number.isInteger(result.revision))
+        lastWrittenRevision = Math.max(lastWrittenRevision ?? -1, result.revision!);
+      else if (result.code === "stale_revision") registry.set(routeConflictAtom, true);
+      return result;
     } catch (cause) {
       return { ok: false, error: cause instanceof Error ? cause.message : String(cause) };
     }
   };
+  const writeRevision = (explicit?: number): number | null => {
+    const current = registry.get(slice);
+    if (!AsyncResult.isSuccess(current) || current.value.revision === null) return null;
+    return explicit ?? Math.max(current.value.revision, lastWrittenRevision ?? -1);
+  };
   return {
-    apply: (patches: RouteStatePatch[]) => {
-      const current = registry.get(slice);
-      if (!AsyncResult.isSuccess(current) || current.value.revision === null)
+    apply: (patches: RouteStatePatch[], expectedRevision?: number) => {
+      const revision = writeRevision(expectedRevision);
+      if (revision === null)
         return Promise.resolve<RouteStateWriteResult>({
           ok: false,
           error: "route document is not hydrated",
         });
-      return write("apply", { patches, expectedRevision: current.value.revision });
+      return write("apply", { patches, expectedRevision: revision });
     },
-    command: (name: keyof S["commands"] & string, input?: unknown) =>
-      write("command", { command: name, input: input ?? {} }),
+    command: (name: keyof S["commands"] & string, input?: unknown) => {
+      const revision = writeRevision();
+      if (revision === null)
+        return Promise.resolve<RouteStateWriteResult>({
+          ok: false,
+          error: "route document is not hydrated",
+        });
+      return write("command", {
+        command: name,
+        input: input ?? {},
+        expectedRevision: revision,
+        ...(spec.commands[name]?.mutatesExternal ? { requestId: crypto.randomUUID() } : {}),
+      });
+    },
   };
 }

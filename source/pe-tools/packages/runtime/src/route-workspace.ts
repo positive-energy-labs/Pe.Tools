@@ -1,13 +1,17 @@
 import { z } from "zod";
 import {
   applyPatches,
+  canonicalRouteInput,
+  checkRevision,
   commitDoc,
   guardCommand,
+  type CommandReceipt,
   type ExternalOperation,
   type Address,
   type RouteActor,
   type RouteEnvelope,
   type RoutePatch,
+  type RouteRefusalCode,
 } from "@pe/agent-contracts";
 import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 
@@ -46,6 +50,8 @@ export interface RouteWorkspaceOptions {
 
 export interface RouteWorkspaceApplyResult {
   ok: boolean;
+  code?: RouteRefusalCode;
+  revision?: number;
   doc?: unknown;
   error?: string;
   hint?: string;
@@ -53,12 +59,16 @@ export interface RouteWorkspaceApplyResult {
 
 export interface RouteWorkspaceCommandResult {
   ok: boolean;
+  code?: RouteRefusalCode;
+  revision?: number;
   result?: unknown;
   error?: string;
   hint?: string;
 }
 
 const ENVELOPE_VERSION = 1;
+// ponytail: fixed cap keeps every envelope read small; revisit only when a real command needs larger replay results.
+export const RECEIPT_RESULT_MAX_BYTES = 8 * 1024;
 /** Store, order, crash barrier, and publication shell around the pure route-document machine. */
 export class RouteWorkspace {
   readonly #registry = new Map<string, RouteWorkspaceRegistration>();
@@ -105,7 +115,7 @@ export class RouteWorkspace {
     route: string,
     actor: RouteWorkspaceActor,
     patches: RouteWorkspacePatch[],
-    expectedRevision?: number,
+    expectedRevision: number,
   ): Promise<RouteWorkspaceApplyResult> {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
@@ -139,7 +149,11 @@ export class RouteWorkspace {
         patchCount: patches.length,
         ok: true,
       });
-      return { ok: true, doc: summarizeDoc(landed.envelope.doc) };
+      return {
+        ok: true,
+        revision: landed.envelope.revision,
+        doc: summarizeDoc(landed.envelope.doc),
+      };
     });
   }
 
@@ -149,6 +163,8 @@ export class RouteWorkspace {
     actor: RouteWorkspaceActor,
     command: string,
     input: unknown,
+    expectedRevision: number,
+    requestId?: string,
   ): Promise<RouteWorkspaceCommandResult> {
     const registration = this.#registry.get(route);
     if (!registration) return unknownRoute(route);
@@ -156,7 +172,11 @@ export class RouteWorkspace {
 
     return this.#serialized(scope, route, async () => {
       let envelope = await this.#load(scope, spec);
-      const fail = async (error: string, hint: string): Promise<RouteWorkspaceCommandResult> => {
+      const fail = async (
+        error: string,
+        hint: string,
+        code?: RouteRefusalCode,
+      ): Promise<RouteWorkspaceCommandResult> => {
         await this.#publish({
           type: "route_workspace",
           scope,
@@ -168,10 +188,45 @@ export class RouteWorkspace {
           ok: false,
           error,
         });
-        return { ok: false, error, hint };
+        return { ok: false, error, hint, code };
       };
+      let inputDigest: string | undefined;
+      if (requestId) {
+        try {
+          inputDigest = canonicalRouteInput(input);
+        } catch (error) {
+          return fail(message(error), "command input must be JSON.");
+        }
+        const receipt = envelope.receipts?.[requestId];
+        if (receipt) {
+          if (receipt.command !== command || receipt.inputDigest !== inputDigest)
+            return fail(
+              `request id '${requestId}' was already used for another command or input`,
+              "mint a new request id for a different command request.",
+              "request_id_conflict",
+            );
+          if (!receipt.replayable)
+            return fail(
+              `request id '${requestId}' completed but its result is unavailable for replay`,
+              "re-read the document before continuing.",
+              "replay_unavailable",
+            );
+          return {
+            ok: true,
+            revision: receipt.revision,
+            result: structuredClone(receipt.result),
+          };
+        }
+      }
+      const stale = checkRevision(envelope, expectedRevision);
+      if (stale) return fail(stale.error, stale.hint, stale.code);
       const guarded = guardCommand(spec, envelope, actor, command, input);
-      if (!guarded.ok) return fail(guarded.error, guarded.hint);
+      if (!guarded.ok) return fail(guarded.error, guarded.hint, guarded.code);
+      if (guarded.command.mutatesExternal && !requestId)
+        return fail(
+          `command '${command}' requires a request id`,
+          "retry with one stable client request id.",
+        );
       const handler = handlers[command];
       if (!handler)
         return fail(
@@ -200,6 +255,22 @@ export class RouteWorkspace {
         if (committed) envelope = committed;
         delete envelope.inFlight;
         if (guarded.command.recoversExternal) delete envelope.outcomeUnknown;
+        let returned = result;
+        if (guarded.command.mutatesExternal) {
+          const normalized = normalizeReceiptResult(result);
+          returned = normalized.replayable ? normalized.result : undefined;
+          // ponytail: receipts never evict; revisit only if a high-frequency external command ships.
+          envelope.receipts = {
+            ...envelope.receipts,
+            [requestId!]: {
+              command,
+              inputDigest: inputDigest!,
+              completedAt: new Date().toISOString(),
+              revision: envelope.revision,
+              ...normalized,
+            },
+          };
+        }
         if (committed || guarded.command.mutatesExternal || guarded.command.recoversExternal)
           await this.#persist(scope, route, envelope);
 
@@ -213,7 +284,7 @@ export class RouteWorkspace {
           revision: envelope.revision,
           ok: true,
         });
-        return { ok: true, result };
+        return { ok: true, revision: envelope.revision, result: returned };
       } catch (error) {
         const errorMessage = message(error);
         if (guarded.command.mutatesExternal) {
@@ -305,6 +376,7 @@ function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnve
     doc: doc.data,
     inFlight: parseExternalOperation(raw.inFlight),
     outcomeUnknown: parseExternalOperation(raw.outcomeUnknown),
+    receipts: parseReceipts(raw.receipts, spec.route),
   };
 }
 
@@ -312,6 +384,47 @@ function parseExternalOperation(value: unknown): ExternalOperation | undefined {
   if (!isRecord(value) || typeof value.command !== "string" || typeof value.startedAt !== "string")
     return undefined;
   return { command: value.command, startedAt: value.startedAt };
+}
+
+function parseReceipts(value: unknown, route: string): Record<string, CommandReceipt> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new Error(`invalid persisted receipts for route '${route}'`);
+  const receipts: Record<string, CommandReceipt> = {};
+  for (const [requestId, raw] of Object.entries(value)) {
+    if (
+      !isRecord(raw) ||
+      typeof raw.command !== "string" ||
+      typeof raw.inputDigest !== "string" ||
+      typeof raw.completedAt !== "string" ||
+      !Number.isInteger(raw.revision) ||
+      typeof raw.replayable !== "boolean" ||
+      (raw.replayable && !("result" in raw))
+    )
+      throw new Error(`invalid persisted receipt '${requestId}' for route '${route}'`);
+    receipts[requestId] = {
+      command: raw.command,
+      inputDigest: raw.inputDigest,
+      completedAt: raw.completedAt,
+      revision: raw.revision as number,
+      replayable: raw.replayable,
+      ...(raw.replayable ? { result: structuredClone(raw.result) } : {}),
+    };
+  }
+  return receipts;
+}
+
+function normalizeReceiptResult(result: unknown): Pick<CommandReceipt, "replayable" | "result"> {
+  try {
+    const serialized = JSON.stringify(result);
+    if (
+      serialized === undefined ||
+      new TextEncoder().encode(serialized).byteLength > RECEIPT_RESULT_MAX_BYTES
+    )
+      return { replayable: false };
+    return { replayable: true, result: JSON.parse(serialized) };
+  } catch {
+    return { replayable: false };
+  }
 }
 
 function describeCommands(spec: RouteStateSpec<z.ZodType>) {

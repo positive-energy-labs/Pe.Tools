@@ -6,17 +6,34 @@ export interface ExternalOperation {
   startedAt: string;
 }
 
+export type RouteRefusalCode = "stale_revision" | "request_id_conflict" | "replay_unavailable";
+
+export interface CommandReceipt {
+  command: string;
+  inputDigest: string;
+  completedAt: string;
+  revision: number;
+  replayable: boolean;
+  result?: unknown;
+}
+
 export interface RouteEnvelope<D> {
   version: 1;
   revision: number;
   doc: D;
   inFlight?: ExternalOperation;
   outcomeUnknown?: ExternalOperation;
+  receipts?: Record<string, CommandReceipt>;
 }
 
 export type RoutePatch = { path: (string | number)[]; value?: unknown };
 export type RouteActor = "agent" | "human";
-export type RouteRefusal = { ok: false; error: string; hint: string };
+export type RouteRefusal = {
+  ok: false;
+  error: string;
+  hint: string;
+  code?: RouteRefusalCode;
+};
 export type RouteLanded<D> = {
   ok: true;
   envelope: RouteEnvelope<D>;
@@ -30,14 +47,10 @@ export function applyPatches<S extends z.ZodType>(
   envelope: RouteEnvelope<z.infer<S>>,
   actor: RouteActor,
   patches: readonly RoutePatch[],
-  expectedRevision?: number,
+  expectedRevision: number,
 ): RouteLanded<z.infer<S>> | RouteRefusal {
-  if (expectedRevision !== undefined && expectedRevision !== envelope.revision)
-    return {
-      ok: false,
-      error: `the document moved to r${envelope.revision}`,
-      hint: "re-read before patching.",
-    };
+  const stale = checkRevision(envelope, expectedRevision);
+  if (stale) return stale;
   if (actor === "agent") {
     const forbidden = patches.find((patch) => !isMaskAllowed(spec.agentWriteMask, patch.path));
     if (forbidden)
@@ -63,15 +76,34 @@ export function applyPatches<S extends z.ZodType>(
   return commitDoc(spec, envelope, draft);
 }
 
+export function checkRevision(
+  envelope: Pick<RouteEnvelope<unknown>, "revision">,
+  expectedRevision: number,
+): RouteRefusal | null {
+  return expectedRevision === envelope.revision
+    ? null
+    : {
+        ok: false,
+        code: "stale_revision",
+        error: `the document moved to r${envelope.revision}`,
+        hint: "re-read before patching.",
+      };
+}
+
+/** Stable JSON for comparing the raw command input across retransmissions. */
+export function canonicalRouteInput(input: unknown): string {
+  const serialized = JSON.stringify(sortJson(input ?? {}));
+  if (serialized === undefined) throw new TypeError("command input is not JSON");
+  return serialized;
+}
+
 export function guardCommand<S extends z.ZodType>(
   spec: RouteStateSpec<S>,
   envelope: RouteEnvelope<z.infer<S>>,
   actor: RouteActor,
   name: string,
   input: unknown,
-):
-  | { ok: true; input: unknown; command: RouteStateCommandSpec }
-  | RouteRefusal {
+): { ok: true; input: unknown; command: RouteStateCommandSpec } | RouteRefusal {
   const command = spec.commands[name];
   if (!command)
     return {
@@ -156,6 +188,16 @@ function formatZodError(error: z.ZodError): string {
       issue.path.length ? `${issue.path.join(".")}: ${issue.message}` : issue.message,
     )
     .join("; ");
+}
+
+function sortJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJson);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, sortJson(value[key])]),
+  );
 }
 
 function message(error: unknown): string {

@@ -34,7 +34,7 @@ function withHostCall(route: (key: string, request: unknown) => unknown): {
 }
 
 function emptyDoc(): ScheduleGridDocument {
-  return { binding: { target: null }, snapshot: null, cells: {}, pushedAt: null };
+  return { snapshot: null, cells: {}, pushedAt: null };
 }
 
 function ctxFor(document: ScheduleGridDocument) {

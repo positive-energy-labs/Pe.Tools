@@ -38,6 +38,15 @@ export function sameProfile(
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
+/** Keep the revision where a local draft first diverged until that draft lands or is replaced. */
+export function retainDraftBasis(
+  basis: number | null,
+  hasUnsavedEdits: boolean,
+  revision: number | null,
+): number | null {
+  return hasUnsavedEdits ? basis : revision;
+}
+
 /** The draft diverges from what Revit stored — the workspace shows an unsaved-draft badge. */
 export function isDraftDirty(document: ParameterLinksDocument | null): boolean {
   const draft = document?.draftProfile;

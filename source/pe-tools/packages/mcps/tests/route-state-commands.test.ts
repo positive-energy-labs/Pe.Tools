@@ -15,7 +15,6 @@ import {
 
 test("family types push rejects staged cells that still need review before calling Revit", async () => {
   const document: FamilyTypesDocument = {
-    binding: { target: null },
     snapshot: null,
     doc: null,
     pushedAt: null,
@@ -81,7 +80,6 @@ function reviewedProfile(): ParameterLinkProfile {
 test("parameter links apply rejects a reviewed profile after the draft changes", async () => {
   const reviewed: ParameterLinkProfile = reviewedProfile();
   const document: ParameterLinksDocument = {
-    binding: { target: null },
     profile: null,
     draftProfile: {
       ...reviewed,

@@ -29,11 +29,7 @@ import {
 } from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
 import { TargetingHead } from "#/targeting/head";
-import {
-  RouteDocumentEmpty,
-  RouteDocumentSurface,
-  useRouteDocumentAddress,
-} from "#/workbench/route-document";
+import { RouteDocument } from "#/workbench/route-document";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
 import { documentTrunk, worldTrunk } from "#/targeting/world";
@@ -83,9 +79,7 @@ export function TakeoffsRoute() {
   const { source } = Route.useSearch();
   const fixtureAddress = address("C:\\Fixtures\\project-a Residence.rvt");
   return source === "fixture" ? (
-    <RouteDocumentSurface at={fixtureAddress}>
-      <TakeoffsStoreOwner source="fixture" documentAddress={fixtureAddress} />
-    </RouteDocumentSurface>
+    <TakeoffsStoreOwner source="fixture" documentAddress={fixtureAddress} />
   ) : (
     <LiveTakeoffsRoute />
   );
@@ -117,16 +111,10 @@ export function LiveTakeoffsRoute() {
 }
 
 function LiveTakeoffsDocumentRoute() {
-  const documentAddress = useRouteDocumentAddress();
-  if (!documentAddress) return <RouteDocumentEmpty />;
   return (
-    <RouteDocumentSurface at={documentAddress}>
-      <TakeoffsStoreOwner
-        key={`live:${documentAddress}`}
-        source="live"
-        documentAddress={documentAddress}
-      />
-    </RouteDocumentSurface>
+    <RouteDocument>
+      {(at) => <TakeoffsStoreOwner key={`live:${at}`} source="live" documentAddress={at} />}
+    </RouteDocument>
   );
 }
 

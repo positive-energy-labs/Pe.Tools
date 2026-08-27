@@ -10,6 +10,7 @@ import {
   errorIssueCount,
   isDraftDirty,
   parseUniqueIds,
+  retainDraftBasis,
   removeDefinition,
   sameProfile,
   updateAssignment,
@@ -123,4 +124,9 @@ test("sameProfile is null-safe structural equality", () => {
   expect(sameProfile(null, null)).toBe(true);
   expect(sameProfile(profile(), structuredClone(profile()))).toBe(true);
   expect(sameProfile(profile(), addDefinition(profile()))).toBe(false);
+});
+
+test("an unsaved draft keeps the revision it was based on", () => {
+  expect(retainDraftBasis(4, true, 5)).toBe(4);
+  expect(retainDraftBasis(4, false, 5)).toBe(5);
 });

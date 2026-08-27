@@ -3,11 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createLiveFamiliesHost } from "#/families/host";
 import { createFamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
-import {
-  RouteDocumentEmpty,
-  RouteDocumentSurface,
-  useRouteDocumentAddress,
-} from "#/workbench/route-document";
+import { RouteDocument } from "#/workbench/route-document";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 
@@ -22,12 +18,8 @@ export const Route = createFileRoute("/families")({
 });
 
 function FamiliesRoute() {
-  const documentAddress = useRouteDocumentAddress();
-  if (!documentAddress) return <RouteDocumentEmpty />;
   return (
-    <RouteDocumentSurface at={documentAddress}>
-      <FamiliesStoreOwner key={documentAddress} documentAddress={documentAddress} />
-    </RouteDocumentSurface>
+    <RouteDocument>{(at) => <FamiliesStoreOwner key={at} documentAddress={at} />}</RouteDocument>
   );
 }
 

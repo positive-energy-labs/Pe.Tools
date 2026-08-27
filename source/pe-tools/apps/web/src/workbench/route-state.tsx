@@ -22,8 +22,9 @@ type LastCommand = { command: string; input?: unknown } | null;
 
 export interface RouteStateHandle<T> {
   slice: T | null;
+  revision: number | null;
   hydrated: boolean;
-  apply: (patches: RouteStatePatch[]) => Promise<RouteStateWriteResult>;
+  apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<RouteStateWriteResult>;
   command: (command: string, input?: unknown) => Promise<RouteStateWriteResult>;
   peaActive: boolean;
   connected: boolean | null;
@@ -46,6 +47,7 @@ export function useRouteState<TSchema extends z.ZodType>(
 
   return {
     slice: wire?.doc ?? null,
+    revision: wire?.revision ?? null,
     hydrated: wire?.hydrated ?? false,
     apply: store.apply,
     command: store.command,
@@ -86,7 +88,8 @@ function createRouteStateStore<TSchema extends z.ZodType>(
     busy: core.busy,
     failure: core.failure,
     lastCommand,
-    apply: (patches: RouteStatePatch[]) => run("apply", () => writer.apply(patches)),
+    apply: (patches: RouteStatePatch[], expectedRevision?: number) =>
+      run("apply", () => writer.apply(patches, expectedRevision)),
     command: async (command: string, input?: unknown) => {
       const result = await run(command, () =>
         writer.command(command as keyof TSchema & string, input),

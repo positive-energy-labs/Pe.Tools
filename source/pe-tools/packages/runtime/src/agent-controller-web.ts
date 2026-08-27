@@ -19,11 +19,13 @@ const routeStatePatchSchema = z.object({
 });
 const routeStateApplyBodySchema = z.object({
   patches: z.array(routeStatePatchSchema),
-  expectedRevision: z.number().optional(),
+  expectedRevision: z.number().int().nonnegative(),
 });
 const routeStateCommandBodySchema = z.object({
   command: z.string(),
   input: z.unknown().optional(),
+  expectedRevision: z.number().int().nonnegative(),
+  requestId: z.string().trim().min(1).optional(),
 });
 
 /** The minimal shape we serve: an AgentController + its session, on a Mastra. */
@@ -56,10 +58,7 @@ function requireServableRuntime(value: unknown): ServableRuntime {
  * config.id). Controllers from mastracode's `createMastraCode` use an internal
  * Mastra that doesn't list them, so we wrap them on a fresh Mastra under `label`.
  */
-function resolveServingTarget(
-  runtime: ServableRuntime,
-  label: string,
-): Mastra {
+function resolveServingTarget(runtime: ServableRuntime, label: string): Mastra {
   const existing = runtime.mastra ?? runtime.controller.getMastra();
   if (existing) {
     for (const value of Object.values(existing.listAgentControllers())) {
@@ -160,7 +159,10 @@ export async function buildAgentControllerApp(
         return c.json({ ok: false, error: "route scope is required", hint: scope }, 400);
       const parsed = routeStateApplyBodySchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
-        return c.json({ ok: false, error: "invalid body", hint: "expected { patches }" }, 400);
+        return c.json(
+          { ok: false, error: "invalid body", hint: "expected { patches, expectedRevision }" },
+          400,
+        );
       }
       try {
         return c.json(
@@ -183,7 +185,11 @@ export async function buildAgentControllerApp(
       const parsed = routeStateCommandBodySchema.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) {
         return c.json(
-          { ok: false, error: "invalid body", hint: "expected { command, input? }" },
+          {
+            ok: false,
+            error: "invalid body",
+            hint: "expected { command, input?, expectedRevision, requestId? }",
+          },
           400,
         );
       }
@@ -195,6 +201,8 @@ export async function buildAgentControllerApp(
             actor,
             parsed.data.command,
             parsed.data.input,
+            parsed.data.expectedRevision,
+            parsed.data.requestId,
           ),
         );
       } catch (error) {
