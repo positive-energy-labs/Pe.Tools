@@ -196,7 +196,7 @@ export const withMastraDegrade = <R>(
 
 /**
  * Mount the tenant's Hono app at its ABSOLUTE existing paths (no prefix strip) so the browser
- * contract (`/api` MastraClient prefix, `/pe/info` handshake) is untouched. `fromWebHandler`
+ * contract (`/api` MastraClient prefix, `/pe/*` extras) is untouched. `fromWebHandler`
  * bridges the current `HttpServerRequest` to a web `Request` and streams the `Response` back
  * (SSE passes through unbuffered). The same handler effect serves both path families.
  */

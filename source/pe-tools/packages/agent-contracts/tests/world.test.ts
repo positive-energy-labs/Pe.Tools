@@ -13,7 +13,7 @@ const info = {
   },
 } as const;
 
-test("/pe/info round-trips exactly and rejects malformed wire data", () => {
+test("PeInfo round-trips exactly and rejects malformed wire data", () => {
   expect(peInfoSchema.parse(JSON.parse(JSON.stringify(info)))).toEqual(info);
   expect(() => peInfoSchema.parse({ ...info, extra: true })).toThrow();
   expect(() => peInfoSchema.parse({ ...info, capabilities: {} })).toThrow();

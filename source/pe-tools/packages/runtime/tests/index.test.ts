@@ -54,7 +54,7 @@ test("runtime controller close closes injected storage", async () => {
   expect(storageCloseCount).toBe(1);
 });
 
-test("web boot exposes identity without materializing a session or CORS", async () => {
+test("web boot does not materialize a session or enable CORS", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "pea-app-"));
   const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
   process.env.PE_TOOLS_STATE_DIR = await mkdtemp(path.join(os.tmpdir(), "pea-app-state-"));
@@ -68,20 +68,9 @@ test("web boot exposes identity without materializing a session or CORS", async 
     });
     expect(runtime.session).toBeUndefined();
     const app = await buildAgentControllerApp({ runtime, label: "pea" });
-    const response = await app.fetch(new Request("http://local/pe/info"));
+    const response = await app.fetch(new Request("http://local/pe/inspect"));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      controllerId: "pea",
-      resourceId: runtime.resourceId,
-      capabilities: { revit: false },
-      world: {
-        id: runtime.resourceId,
-        root: path.resolve(workspaceRoot),
-        storage: { kind: "local-unversioned" },
-        isolation: "none",
-      },
-    });
     expect(runtime.world.root).toBe(path.resolve(workspaceRoot));
     expect(Object.isFrozen(runtime.capabilities)).toBe(true);
     expect(response.headers.get("access-control-allow-origin")).toBeNull();

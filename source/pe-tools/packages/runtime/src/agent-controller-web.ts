@@ -6,7 +6,6 @@ import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { peInfoSchema, type PeInfo, type PeaWorldDescriptor } from "@pe/agent-contracts";
 import {
   RouteWorkspace,
   type RouteWorkspaceRegistration,
@@ -32,8 +31,6 @@ const routeStateCommandBodySchema = z.object({
 export interface ServableRuntime {
   controller: AgentController;
   resourceId?: string;
-  capabilities: PeInfo["capabilities"];
-  world: PeaWorldDescriptor;
   session?: Session;
   mastra?: Mastra;
   /** The controller's storage, shared with the wrap Mastra so thread routes resolve. */
@@ -44,15 +41,12 @@ export interface ServableRuntime {
   close?: () => Promise<void> | void;
 }
 
-/** Connection handshake the SPA reads to learn which controller/session to drive. */
 function requireServableRuntime(value: unknown): ServableRuntime {
   const runtime = value as Partial<ServableRuntime> | undefined;
   if (!(runtime?.controller instanceof AgentController)) {
     throw new Error("Runtime agent-controller web requires an AgentController.");
   }
   if (!runtime.resourceId) throw new Error("Runtime agent-controller web requires resourceId.");
-  if (!runtime.capabilities) throw new Error("Runtime agent-controller web requires capabilities.");
-  if (!runtime.world) throw new Error("Runtime agent-controller web requires world.");
   return runtime as ServableRuntime;
 }
 
@@ -66,18 +60,17 @@ function requireServableRuntime(value: unknown): ServableRuntime {
 function resolveServingTarget(
   runtime: ServableRuntime,
   label: string,
-): { mastra: Mastra; controllerId: string } {
+): Mastra {
   const existing = runtime.mastra ?? runtime.controller.getMastra();
   if (existing) {
-    for (const [key, value] of Object.entries(existing.listAgentControllers())) {
-      if (value === runtime.controller) return { mastra: existing, controllerId: key };
+    for (const value of Object.values(existing.listAgentControllers())) {
+      if (value === runtime.controller) return existing;
     }
   }
-  const mastra = new Mastra({
+  return new Mastra({
     agentControllers: { [label]: runtime.controller },
     ...(runtime.storage ? { storage: runtime.storage as never } : {}),
   });
-  return { mastra, controllerId: label };
 }
 
 export interface BuildAgentControllerAppOptions {
@@ -101,18 +94,10 @@ export async function buildAgentControllerApp(
   options: BuildAgentControllerAppOptions,
 ): Promise<Hono> {
   const runtime = requireServableRuntime(options.runtime);
-  const { mastra, controllerId } = resolveServingTarget(runtime, options.label);
-  const info = peInfoSchema.parse({
-    controllerId,
-    resourceId: runtime.resourceId!,
-    capabilities: runtime.capabilities,
-    world: runtime.world,
-  });
+  const mastra = resolveServingTarget(runtime, options.label);
+  const resourceId = runtime.resourceId!;
 
   const app = new Hono();
-  // Handshake: the SPA fetches this to learn which controller/session to drive
-  // over the native @mastra/server agent-controller routes (mounted under /api).
-  app.get("/pe/info", (c) => c.json(info));
   // Pe-owned transparency: resolved system prompt, final tool list, skills, OM
   // config — captured on pea's agent (InputProcessor + model wrap), surfaced here
   // because native display-state doesn't carry them. Composition, not a core fork.
@@ -129,13 +114,13 @@ export async function buildAgentControllerApp(
   const routeWorkspace = new RouteWorkspace({
     registrations,
     store: threadState!,
-    resourceId: info.resourceId,
+    resourceId,
     authorizeThread: async (threadId) => {
-      const thread = await memoryStore!.getThreadById({ threadId, resourceId: info.resourceId });
-      return thread?.resourceId === info.resourceId;
+      const thread = await memoryStore!.getThreadById({ threadId, resourceId });
+      return thread?.resourceId === resourceId;
     },
     appendThreadEvent: (event) =>
-      appendRouteWorkspaceThreadEvent(runtime, memoryStore!, info.resourceId, event),
+      appendRouteWorkspaceThreadEvent(runtime, memoryStore!, resourceId, event),
   });
 
   // Discovery is deliberately unscoped and shallow. Every document read/write must name

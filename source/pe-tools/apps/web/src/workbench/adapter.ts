@@ -163,7 +163,7 @@ export function applyAgentControllerEvent(
     case "agent_end":
       // A suspended run is paused for HITL. Every terminal outcome clears projected running state.
       if (event.reason === "suspended") return state;
-      return event.reason === "error" ? endRunWithError(state) : endRun(state);
+      return event.reason === "error" ? endRunWithError(state, "Run failed.") : endRun(state);
     case "message_start":
     case "message_update":
       return applyMessage(state, event.message, "streaming");
@@ -606,7 +606,7 @@ function endRun(state: WorkbenchState): WorkbenchState {
   };
 }
 
-function endRunWithError(state: WorkbenchState, message?: string): WorkbenchState {
+function endRunWithError(state: WorkbenchState, message: string): WorkbenchState {
   const ended = endRun(state);
   return pushError(ended, ended.uiStatus.errors.length > 0 ? undefined : message);
 }

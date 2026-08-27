@@ -91,7 +91,7 @@ test("mastra init defect degrades to 503 without taking the host down", async ()
     expect((statusBody.world as { id?: string }).id).toBe(statusBody.resourceId);
 
     // (3) an agent route answers 503 (degraded), not a crash and not a 200.
-    const agent = await fetch(`${base}/pe/info`);
+    const agent = await fetch(`${base}/pe/inspect`);
     expect(agent.status).toBe(503);
     expect((await agent.json()) as { error?: string }).toMatchObject({
       error: "Agent runtime unavailable on this host.",

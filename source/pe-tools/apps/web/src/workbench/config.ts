@@ -27,7 +27,7 @@ export function workbenchUrl(
   return url.toString();
 }
 
-/** Pe handshake / transparency endpoints: `/pe/info`, `/pe/inspect`. The
+/** Pe transparency endpoints such as `/pe/inspect`. The
  * native @mastra/server routes are driven by `@mastra/client-js` (MastraClient), not these helpers. */
 export function peUrl(config: WorkbenchEndpointConfig, path: string): string {
   return workbenchUrl(config, `/pe${path}`);
