@@ -178,7 +178,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
         <div className="mx-auto max-w-3xl space-y-3">
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           {busy ? <OutcomeLine kind="busy" label={`${busy.id} · ${busy.seconds}s`} /> : null}
-          {failure ? <OutcomeLine kind="error" label={failure.message} /> : null}
+          {failure ? <OutcomeLine kind={failure.kind} label={failure.message} /> : null}
           {sliceError ? (
             <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
           ) : null}

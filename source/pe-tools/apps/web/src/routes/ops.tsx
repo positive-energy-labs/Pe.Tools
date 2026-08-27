@@ -252,7 +252,7 @@ function OpsPage({ store }: { store: OpsStore }) {
           </EmptyState>
         )}
 
-        {failure ? <OutcomeLine kind="error" label={failure.message} /> : null}
+        {failure ? <OutcomeLine kind={failure.kind} label={failure.message} /> : null}
         <Provenance>
           catalog = host.ops.catalog · selected live key is the route's one dynamic /call
         </Provenance>
