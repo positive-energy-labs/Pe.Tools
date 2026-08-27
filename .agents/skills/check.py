@@ -138,6 +138,30 @@ def main():
         if code:
             fail(d, 'code fence(s) in a portable stance (%s); mechanics belong in a slot' % ', '.join(sorted(set(code))))
 
+    # 5b. Parlance: a row pins a figure's alias to one canonical word. A row with no alias is a
+    #     definition, not a pin; a word owned by two stances or by the Lexicon belongs in the Lexicon only.
+    lexicon = set()
+    if idx:
+        lex = re.search(r'^## Lexicon\n(.*?)(?=\n## )', idx[2], re.S | re.M)
+        if lex:
+            lexicon = {m.group(1).lower() for m in re.finditer(r'^\| \*\*([^*|]+)\*\*', lex.group(1), re.M)}
+    parlance_owner = {}
+    for d, (kind, name, text) in sorted(skills.items()):
+        sec = re.search(r'^## Parlance\n(.*?)(?=\n#|\Z)', text, re.S | re.M)
+        if not sec:
+            continue
+        for word, pins in re.findall(r'^\| ([^|]+?) \| ([^|]*?) \|$', sec.group(1), re.M):
+            if word in ('Word', '---'):
+                continue
+            w = word.strip().lower()
+            if not pins.strip():
+                fail(d, 'Parlance %r has no alias; a row pins a figure word or it is cut' % w)
+            if w in lexicon:
+                fail(d, 'Parlance %r is a Lexicon word; pin its alias in the Lexicon row instead' % w)
+            if w in parlance_owner:
+                fail(d, 'Parlance %r is also in %s; a shared word lives in the Lexicon' % (w, parlance_owner[w]))
+            parlance_owner[w] = name
+
     # 6. the client mirror is a junction, never a copy that can drift
     mirror = os.path.join(os.path.dirname(os.path.dirname(HERE)), '.claude', 'skills')
     if not os.path.exists(mirror):
