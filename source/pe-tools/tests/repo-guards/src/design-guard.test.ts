@@ -536,6 +536,7 @@ describe("design guard — foundation topology", () => {
     expect(baseLayer![1]).toContain("outline: 2px solid var(--r-ink);");
     expect(baseLayer![1]).toContain("color-scheme: light;");
     expect(baseLayer![1]).toContain("[data-pe].dark");
+    expect(baseLayer![1]).not.toContain("\\");
     expect(text).not.toMatch(/(?:^|\n)\s*:root\s*\{[^}]*color-scheme:/);
     expect(text).not.toMatch(/(?:^|\n)\s*\.dark\s*\{[^}]*color-scheme:/);
     expect(basePropertyViolations(baseLayer![1])).toEqual([]);
@@ -559,6 +560,17 @@ describe("design guard — foundation topology", () => {
         "[data-pe] :where(button, input, select, textarea) -> border-radius",
       ]),
     );
+
+    const escaped = base!.text.replace(
+      "font: inherit;",
+      "font: inherit;\n    padd\\69ng: 2rem;\n    back\\67round: var(--r-commit);\n    border-rad\\69us: 999px;",
+    );
+    const escapedLayer = /@layer base\s*\{([\s\S]*?)\n\}\s*\n\[data-pe\] \.page-wrap/.exec(
+      stripComments(escaped),
+    );
+    expect(escapedLayer).toBeTruthy();
+    expect(basePropertyViolations(escapedLayer![1])).toEqual([]);
+    expect(() => expect(escapedLayer![1]).not.toContain("\\")).toThrow();
   });
 
   it("keeps PE raw authority in pe-base and embeds that exact source in the report", () => {
