@@ -142,7 +142,7 @@ const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, ()
 );
 
 const noRevitHostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
-  Effect.flatMap(getHostStatus({ connected: false }), Response.json),
+  Effect.flatMap(getHostStatus({ connected: false }, { revit: false }), Response.json),
 );
 
 const emptyNotFound = Effect.succeed(Response.empty({ status: 404 }));

@@ -153,11 +153,12 @@ test("a terminal stream error ends projected running state", () => {
       args: {},
       suspendPayload: {},
     },
+    { type: "error", error: new Error("Provider quota exhausted.") },
     { type: "agent_end", reason: "error" },
   ]);
 
   expect(state.uiStatus.overall.status).toBe("error");
-  expect(state.uiStatus.errors).toEqual(["Run failed."]);
+  expect(state.uiStatus.errors).toEqual(["Provider quota exhausted."]);
   expect(state.approvals.requests[0]?.status).toBe("canceled");
 });
 

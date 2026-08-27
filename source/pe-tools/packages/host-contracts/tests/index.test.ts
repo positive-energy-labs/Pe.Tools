@@ -21,6 +21,17 @@ const packageJson = JSON.parse(
 ) as {
   exports?: Record<string, unknown>;
 };
+const hostPeInfo = {
+  capabilities: { revit: false },
+  controllerId: "pea",
+  resourceId: "pea:test",
+  world: {
+    id: "pea:test",
+    root: "C:\\repo",
+    storage: { kind: "local-unversioned" },
+    isolation: "none",
+  },
+} as const;
 
 test("checked-in typegen keys cover bridge ops and exclude TS-only ops", () => {
   const keys = new Set<string>(hostOpKeys);
@@ -52,6 +63,7 @@ test("does not ship the legacy plain TypeGen DTO projection", () => {
 test("exports generic operation request and response typing", () => {
   const noRequest = {} satisfies HostOpRequest<"host.status">;
   const status = {
+    ...hostPeInfo,
     bridgeContractVersion: 0,
     bridgeIsConnected: false,
     bridgePath: "/api/bridge",
@@ -168,6 +180,7 @@ test("settings open-with-module schema decodes C# module/schema context", () => 
 
 test("exports TS-only admin operation schemas", () => {
   const decoded = Schema.decodeUnknownSync(tsOnlyOperationSchemas["host.status"].response)({
+    ...hostPeInfo,
     bridgeContractVersion: 19,
     bridgeIsConnected: false,
     bridgePath: "/api/bridge",

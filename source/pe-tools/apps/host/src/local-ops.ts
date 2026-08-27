@@ -23,7 +23,8 @@ import {
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "./bridge.ts";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
-import { hostOwnership } from "./host-ownership.ts";
+import { resolvePeaWorld, type PeaRuntimeCapabilities } from "@pe/runtime/pea";
+import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
 import { productSettingsRootPath } from "./product-paths.ts";
 export {
   discoverSettingsTree,
@@ -54,20 +55,28 @@ type LocalOpContext = {
   ) => Effect.Effect<unknown, unknown>;
 };
 
-export function getHostStatus(bridge: BridgeSessionView) {
+export function getHostStatus(
+  bridge: BridgeSessionView,
+  capabilities: PeaRuntimeCapabilities = hostCapabilities,
+) {
+  const world = resolvePeaWorld();
   return Effect.succeed({
     agentRuntime: agentRuntimeStatus,
     bridgeContractVersion: BRIDGE_CONTRACT_VERSION,
     bridgeIsConnected: bridge.connected,
     bridgePath: BRIDGE_PATH,
+    capabilities,
+    controllerId: "pea",
     disconnectReason: null,
     hostContractVersion: HOST_CONTRACT_VERSION,
     executablePath: hostOwnership.executablePath,
     lane: hostOwnership.lane,
     processId: hostOwnership.processId,
+    resourceId: world.id,
     runtimeIdentity: RUNTIME_IDENTITY,
     serviceName: hostOwnership.serviceName,
     sourceRoot: hostOwnership.sourceRoot,
+    world,
   } satisfies HostProbeData);
 }
 

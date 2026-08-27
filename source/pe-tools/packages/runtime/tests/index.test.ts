@@ -275,7 +275,7 @@ test(
 );
 
 test(
-  "Pea runtime offers 14 default product tools and the exact seven without Revit",
+  "Pea runtime defaults closed and offers Revit tools only when asserted",
   async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "pea-capabilities-"));
     const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
@@ -293,7 +293,8 @@ test(
 
     try {
       for (const [name, capabilities, expected] of [
-        ["default", undefined, productToolNames],
+        ["default", undefined, noRevitToolNames],
+        ["revit", { revit: true } as const, productToolNames],
         ["no-revit", { revit: false } as const, noRevitToolNames],
       ] as const) {
         const runtime = await createPeaRuntime({

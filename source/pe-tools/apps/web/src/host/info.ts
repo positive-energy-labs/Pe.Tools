@@ -1,13 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
 import { peInfoSchema } from "@pe/agent-contracts";
 
-import { peUrl, resolveWorkbenchConfig, type WorkbenchEndpointConfig } from "#/workbench/config";
+import {
+  resolveWorkbenchConfig,
+  workbenchUrl,
+  type WorkbenchEndpointConfig,
+} from "#/workbench/config";
 
 export async function fetchPeInfo(config: WorkbenchEndpointConfig) {
-  const url = peUrl(config, "/info");
+  const url = workbenchUrl(config, "/host/status");
   const response = await fetch(url, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
-  return peInfoSchema.parse(await response.json());
+  const status = (await response.json()) as Record<string, unknown>;
+  return peInfoSchema.parse({
+    controllerId: status.controllerId,
+    resourceId: status.resourceId,
+    capabilities: status.capabilities,
+    world: status.world,
+  });
 }
 
 export function usePeInfo(config: WorkbenchEndpointConfig = resolveWorkbenchConfig()) {

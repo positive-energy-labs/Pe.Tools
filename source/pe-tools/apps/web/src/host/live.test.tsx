@@ -66,7 +66,7 @@ test("opens host events only after PeInfo confirms Revit", async () => {
 });
 
 test("live Takeoffs does not open Revit wires before literal capability true", async () => {
-  const fetchMock = vi.fn(async () =>
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
     Response.json({
       controllerId: "pea",
       resourceId: "local",
@@ -93,10 +93,15 @@ test("live Takeoffs does not open Revit wires before literal capability true", a
 
   await waitFor(() => expect(document.body.textContent).toContain("Revit unavailable"));
   expect(fetchMock).toHaveBeenCalledOnce();
+  const requestedUrls = fetchMock.mock.calls.map(([url]) =>
+    typeof url === "string" ? url : url instanceof URL ? url.href : url.url,
+  );
+  expect(requestedUrls[0]).toContain("/host/status");
+  expect(requestedUrls.some((url) => new URL(url).pathname === "/sessions")).toBe(false);
   expect(eventSource).not.toHaveBeenCalled();
 });
 
-test("PeInfo has one loader and one-shot query failure", async () => {
+test("PeInfo reads host status with one-shot query failure", async () => {
   const fetchMock = vi.fn(async () => new Response(null, { status: 503, statusText: "Down" }));
   vi.stubGlobal("fetch", fetchMock);
   let error: Error | null = null;

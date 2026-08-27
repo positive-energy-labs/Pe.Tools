@@ -104,11 +104,22 @@ export interface PeaRuntimeCapabilities {
   readonly revit: boolean;
 }
 
+export function resolvePeaWorld(workspaceRoot = resolvePeaProductHomePath()) {
+  const root = path.resolve(workspaceRoot);
+  return {
+    id: `pea:${Buffer.from(root).toString("base64url")}`,
+    root,
+    storage: { kind: "local-unversioned" },
+    isolation: "none",
+  } as const satisfies PeaWorldDescriptor;
+}
+
 export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise<PeaRuntimeHandle> {
   const productHomePath = resolvePeaProductHomePath();
-  const workspaceRoot = path.resolve(options.workspaceRoot ?? productHomePath);
+  const world = resolvePeaWorld(options.workspaceRoot ?? productHomePath);
+  const workspaceRoot = world.root;
   const workspaceKey = resolveWorkspaceKey(options.workspaceKey);
-  const capabilities = Object.freeze({ revit: options.capabilities?.revit ?? true });
+  const capabilities = Object.freeze({ revit: options.capabilities?.revit ?? false });
   const productTools = selectPeaProductTools(capabilities);
   configurePeaProductToolContext({ hostBaseUrl: options.hostBaseUrl, workspaceKey });
 
@@ -136,13 +147,7 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     cwd: workspaceRoot,
     workspaceRoot,
   };
-  const resourceId = `pea:${Buffer.from(workspaceRoot).toString("base64url")}`;
-  const world = {
-    id: resourceId,
-    root: workspaceRoot,
-    storage: { kind: "local-unversioned" },
-    isolation: "none",
-  } as const satisfies PeaWorldDescriptor;
+  const resourceId = world.id;
   let controller: AgentController<PeaRuntimeState> | undefined;
   let policy: PeaControllerPolicy | undefined;
 
@@ -578,9 +583,9 @@ function createPeaAgent(
 }
 
 function selectPeaProductTools(
-  capabilities: PeaRuntimeCapabilities | undefined,
+  capabilities: PeaRuntimeCapabilities,
 ): Partial<typeof peaProductTools> {
-  if (capabilities?.revit !== false) return peaProductTools;
+  if (capabilities.revit) return peaProductTools;
   return Object.fromEntries(
     Object.entries(peaProductTools).filter(
       ([name]) =>
