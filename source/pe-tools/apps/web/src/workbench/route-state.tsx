@@ -24,6 +24,7 @@ import {
   type Scope,
   type VerbFailure,
 } from "#/state/route-store";
+import type { VerbAtoms } from "#/components/verb-lane";
 import { useRouteStore } from "#/state/use-route-store";
 
 type LastCommand = { command: string; input?: unknown } | null;
@@ -33,11 +34,13 @@ export interface RouteStateHandle<T> {
   revision: number | null;
   hydrated: boolean;
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<RouteStateWriteResult>;
-  command: (command: string, input?: unknown) => Promise<RouteStateWriteResult>;
+  /** `receipt` becomes the verb's receipt text when the command lands. */
+  command: (command: string, input?: unknown, receipt?: string) => Promise<RouteStateWriteResult>;
   peaActive: boolean;
   connected: boolean | null;
   failure: VerbFailure | null;
   busy: string | null;
+  atoms: VerbAtoms;
   lastCommand: LastCommand;
 }
 
@@ -47,8 +50,8 @@ export function useRouteState<TSchema extends z.ZodType>(
 ): RouteStateHandle<z.infer<TSchema>> {
   const store = useRouteStore(() => createRouteStateStore(appAtomRegistry, spec, scope));
   const wireResult = useAtomValue(store.slice);
-  const busy = useAtomValue(store.busy);
-  const failure = useAtomValue(store.failure);
+  const busy = useAtomValue(store.atoms.busy);
+  const failure = useAtomValue(store.atoms.failure);
   const lastCommand = useAtomValue(store.lastCommand);
   const wire = AsyncResult.isSuccess(wireResult) ? wireResult.value : null;
   const wireFailure = AsyncResult.isFailure(wireResult) ? wireResult.cause : null;
@@ -69,6 +72,7 @@ export function useRouteState<TSchema extends z.ZodType>(
     connected: wireFailure ? false : (wire?.connected ?? null),
     failure: failure ?? (wireError ? { kind: "error", verb: "wire", message: wireError } : null),
     busy: busy?.id ?? null,
+    atoms: store.atoms,
     lastCommand,
   };
 }
@@ -83,23 +87,25 @@ function createRouteStateStore<TSchema extends z.ZodType>(
   const writer = docWriter(spec, scope, registry, slice);
   const lastCommand = core.owned("page/last-command", Atom.make<LastCommand>(null));
   /** A command that lands with per-item failures is a `partial`, not a success. */
-  const run = (verb: string, write: () => Promise<RouteStateWriteResult>) =>
-    core.runVerb(verb, async (): Promise<RouteStateWriteResult> => {
+  const run = (verb: string, write: () => Promise<RouteStateWriteResult>, receipt?: string) =>
+    core.runVerb(verb, async (): Promise<RouteStateWriteResult & { text?: string }> => {
       const result = await write();
       const partial = result.ok ? failuresNote(result, "value") : null;
-      return partial ? fail(partial, "partial") : result;
+      if (partial) return fail(partial, "partial");
+      return receipt ? { ...result, text: receipt } : result;
     }, [spec.route]);
   return {
     registry,
     slice,
-    busy: core.busy,
-    failure: core.failure,
+    atoms: core.verbAtoms,
     lastCommand,
     apply: (patches: RouteStatePatch[], expectedRevision?: number) =>
       run("apply", () => writer.apply(patches, expectedRevision)),
-    command: async (command: string, input?: unknown) => {
-      const result = await run(command, () =>
-        writer.command(command as keyof TSchema & string, input),
+    command: async (command: string, input?: unknown, receipt?: string) => {
+      const result = await run(
+        command,
+        () => writer.command(command as keyof TSchema & string, input),
+        receipt,
       );
       if (result.ok) registry.set(lastCommand, { command, input });
       return result;

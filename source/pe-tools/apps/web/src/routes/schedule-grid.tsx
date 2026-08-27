@@ -21,8 +21,7 @@ import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
 import { RouteDocument } from "#/workbench/route-document";
 import { ValueDiff } from "#/components/ui/value-diff";
-import { useVerb } from "#/lib/use-verb";
-import { failuresNote } from "#/state/route-store";
+import { VerbLane } from "#/components/verb-lane";
 import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
 
@@ -61,7 +60,7 @@ function ScheduleGridWorkspace({
 }: {
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
-  const { slice, hydrated, apply, command, peaActive, connected } = useRouteState(
+  const { slice, hydrated, apply, command, peaActive, connected, busy, atoms } = useRouteState(
     scheduleGridRouteState,
     { documentAddress },
   );
@@ -70,8 +69,6 @@ function ScheduleGridWorkspace({
   const catalog = document?.catalog ?? null;
   const cells = document?.cells ?? {};
 
-  const verb = useVerb();
-  const [partial, setPartial] = useState<string | null>(null);
   const [activeRow, setActiveRow] = useState<string | null>(null);
 
   const staged = Object.entries(cells).filter(([, cell]) => cell.staged != null);
@@ -85,28 +82,13 @@ function ScheduleGridWorkspace({
   );
   const pushable = stagedCount > 0 && attention === 0;
 
-  /** One in-flight command; a push's per-cell failures surface as a `partial` outcome —
-   * the failed cells stay staged, which is exactly what the caution kind says. */
+  /** One in-flight command: the store serializes it and owns the busy/failure/receipt lane.
+   * A push's per-cell failures land there as a `partial` — the failed cells stay staged. */
   const runCommand = (
-    label: string,
     kind: "catalog" | "refresh" | "push",
     input: Record<string, unknown> = {},
     receipt?: string,
-  ) =>
-    void verb.run(label, async () => {
-      setPartial(null);
-      const result = await command(kind, input);
-      if (!result.ok) {
-        verb.fail(result.kind, result.error);
-        return;
-      }
-      const failureNote = failuresNote(result, "cell");
-      if (failureNote != null) {
-        setPartial(failureNote);
-        return;
-      }
-      return receipt;
-    });
+  ) => void command(kind, input, receipt);
 
   const stageValue = (key: string, value: string) =>
     void apply([
@@ -310,12 +292,11 @@ function ScheduleGridWorkspace({
           <Verb
             tone="commit"
             label={`push ${stagedCount} to Revit`}
-            busy={verb.busy === "push"}
-            disabled={!pushable || verb.busy != null}
+            busy={busy === "push"}
+            disabled={!pushable || busy != null}
             reason={pushReason}
             onClick={() =>
               runCommand(
-                "push",
                 "push",
                 {},
                 `pushed ${stagedCount} cell${stagedCount === 1 ? "" : "s"} to Revit`,
@@ -345,10 +326,10 @@ function ScheduleGridWorkspace({
               </span>
               <Verb
                 label="re-list"
-                busy={verb.busy === "re-list"}
-                disabled={verb.busy != null}
+                busy={busy === "catalog"}
+                disabled={busy != null}
                 reason="Read the document's schedule list from Revit again. A read — nothing is written."
-                onClick={() => runCommand("re-list", "catalog")}
+                onClick={() => runCommand("catalog")}
               />
             </div>
           }
@@ -363,10 +344,10 @@ function ScheduleGridWorkspace({
               </EmptyState>
               <Verb
                 label="list schedules"
-                busy={verb.busy === "list schedules"}
-                disabled={verb.busy != null}
+                busy={busy === "catalog"}
+                disabled={busy != null}
                 reason="Reads every schedule in the document so you (or pea) can open any of them. A read — nothing is written."
-                onClick={() => runCommand("list schedules", "catalog")}
+                onClick={() => runCommand("catalog")}
               />
             </div>
           ) : (
@@ -380,9 +361,9 @@ function ScheduleGridWorkspace({
                 hint: `id ${entry.scheduleId}${entry.isPlacedOnSheet ? " · placed on sheet" : ""}`,
               }))}
               activeId={snapshot ? String(snapshot.scheduleId) : null}
-              onPick={(id) => runCommand("open", "refresh", { scheduleId: Number(id) })}
+              onPick={(id) => runCommand("refresh", { scheduleId: Number(id) })}
               placeholder="Filter schedules…"
-              disabled={verb.busy != null}
+              disabled={busy != null}
               emptyNote="No schedules in the document."
               className="h-full"
             />
@@ -394,29 +375,16 @@ function ScheduleGridWorkspace({
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-3 py-1">
             <Verb
               label="re-read"
-              busy={verb.busy === "re-read"}
-              disabled={!snapshot || verb.busy != null}
+              busy={busy === "refresh"}
+              disabled={!snapshot || busy != null}
               reason={
                 snapshot
                   ? `Read “${snapshot.scheduleName}” from Revit again — replaces this snapshot; proposals and staged cells stay.`
                   : "No schedule is open — pick one from the rail."
               }
-              onClick={() => runCommand("re-read", "refresh", { scheduleId: snapshot?.scheduleId })}
+              onClick={() => runCommand("refresh", { scheduleId: snapshot?.scheduleId })}
             />
-            {verb.busy ? (
-              <OutcomeLine kind="busy" label={`${verb.busy} — ${verb.seconds}s`} />
-            ) : null}
-            {verb.outcome ? (
-              <OutcomeLine kind={verb.outcome.kind} label={verb.outcome.text} />
-            ) : partial != null ? (
-              <OutcomeLine
-                kind="partial"
-                label={partial}
-                says="failed cells stay staged — fix and push again"
-              />
-            ) : verb.receipt ? (
-              <OutcomeLine kind="receipt" label={verb.receipt.text} />
-            ) : null}
+            <VerbLane atoms={atoms} />
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col">
