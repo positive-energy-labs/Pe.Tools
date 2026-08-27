@@ -195,7 +195,9 @@ export const worldTrunk = {
     if (source.isLoading && source.worlds.length === 0)
       return { options: null, state: "loading", lane: "live", stale: false };
     return {
-      options: source.worlds.map((world) => worldOption(world, source.sessions)),
+      options: source.worlds
+        .filter((world) => world.session || world.row)
+        .map((world) => worldOption(world, source.sessions)),
       state: "ready",
       lane: "live",
       stale: source.stale,

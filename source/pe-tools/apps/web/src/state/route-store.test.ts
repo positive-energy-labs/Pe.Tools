@@ -190,37 +190,50 @@ describe("route store kit", () => {
       agentWriteMask: [],
       commands: {},
     } satisfies RouteStateSpec<typeof schema>;
-    let current: AsyncResult.AsyncResult<
-      Slice<z.infer<typeof schema>>,
-      Error
-    > = AsyncResult.initial();
-    const registry = { get: () => current } as unknown as AtomRegistry.AtomRegistry;
+    const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+    const core = createRouteStoreCore("test-writer", registry);
+    const slice = core.owned(
+      "slice/document",
+      Atom.make<AsyncResult.AsyncResult<Slice<z.infer<typeof schema>>, Error>>(
+        AsyncResult.initial(),
+      ),
+    );
     const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
     );
-    const writer = docWriter(spec, { documentAddress: address("C:\\Models\\One.rvt") }, registry);
+    const writer = docWriter(
+      spec,
+      { documentAddress: address("C:\\Models\\One.rvt") },
+      registry,
+      slice,
+    );
 
     await expect(writer.apply([{ path: ["value"], value: "next" }])).resolves.toMatchObject({
       ok: false,
       error: "route document is not hydrated",
     });
     expect(request).not.toHaveBeenCalled();
-    current = AsyncResult.success({
-      doc: { value: "before" },
-      revision: 7,
-      hydrated: true,
-      connected: true,
-      error: null,
-      peaActive: false,
-    });
+    registry.set(
+      slice,
+      AsyncResult.success({
+        doc: { value: "before" },
+        revision: 7,
+        hydrated: true,
+        connected: true,
+        error: null,
+        peaActive: false,
+      }),
+    );
     await writer.apply([{ path: ["value"], value: "next" }]);
 
     expect(JSON.parse(request.mock.calls[0]![1]!.body as string)).toEqual({
       patches: [{ path: ["value"], value: "next" }],
       expectedRevision: 7,
     });
+    core.dispose();
+    registry.dispose();
   });
 });

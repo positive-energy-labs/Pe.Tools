@@ -352,8 +352,8 @@ export function docWriter<S extends RouteStateSpec<any>>(
   spec: S,
   scope: Scope,
   registry: AtomRegistry.AtomRegistry,
+  slice: Atom.Atom<AsyncResult.AsyncResult<Slice<RouteDocOf<S>>, Error>>,
 ) {
-  const slice = docAtom(spec, scope);
   const write = async (
     operation: "apply" | "command",
     body: Record<string, unknown>,

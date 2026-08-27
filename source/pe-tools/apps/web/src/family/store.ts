@@ -8,6 +8,8 @@ import {
   here,
   settingsRouteState,
   type FamilyDocument,
+  type RouteStatePatch,
+  type RouteStateWriteResult,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
 
@@ -33,6 +35,7 @@ import { documentAddress, resolveTarget } from "#/host/target";
 import {
   createRouteStoreCore,
   docAtom,
+  docWriter,
   feed,
   hostRead,
   unbound,
@@ -56,6 +59,15 @@ export function createFamilyStore(deps: {
   scope: Scope;
   host: FamilyHost;
   slices?: FamilySlices;
+  writers?: {
+    settingsApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
+    settingsCommand(name: "open" | "save", input?: unknown): Promise<RouteStateWriteResult>;
+    familyApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
+    familyCommand(
+      name: "capture_evidence" | "build_evidence",
+      input?: unknown,
+    ): Promise<RouteStateWriteResult>;
+  };
 }) {
   const core = createRouteStoreCore("family", deps.registry);
   const { registry, owned, write, runVerb } = core;
@@ -71,6 +83,14 @@ export function createFamilyStore(deps: {
     "slice/family",
     deps.slices?.family ?? docAtom(familyRouteState, deps.scope),
   );
+  const settingsWriter = docWriter(settingsRouteState, deps.scope, deps.registry, settingsSlice);
+  const familyWriter = docWriter(familyRouteState, deps.scope, deps.registry, familySlice);
+  const writers = deps.writers ?? {
+    settingsApply: settingsWriter.apply,
+    settingsCommand: settingsWriter.command,
+    familyApply: familyWriter.apply,
+    familyCommand: familyWriter.command,
+  };
   const settingsDoc = Atom.make((get): SettingsRouteDocument | null => {
     const result = get(settingsSlice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
@@ -257,14 +277,14 @@ export function createFamilyStore(deps: {
     async command(name: CommandName, input: unknown) {
       if (name === "open") {
         expect(
-          await deps.host.settingsCommand("open", input as Record<string, unknown>),
+          await writers.settingsCommand("open", input as Record<string, unknown>),
           "open failed",
         );
         return "opened";
       }
       if (name === "capture") {
         expect(
-          await deps.host.familyCommand(
+          await writers.familyCommand(
             "capture_evidence",
             input as Record<string, unknown> | undefined,
           ),
@@ -287,15 +307,15 @@ export function createFamilyStore(deps: {
         );
         if (!patches.length)
           return `Nothing to write - every value already matches ${current.document.relativePath}.`;
-        expect(await deps.host.settingsApply(patches), "the document rejected it");
-        expect(await deps.host.settingsCommand("save"), "save failed");
+        expect(await writers.settingsApply(patches), "the document rejected it");
+        expect(await writers.settingsCommand("save"), "save failed");
         return `saved ${current.document.relativePath} - ${patches.length} field${patches.length === 1 ? "" : "s"} written`;
       }
       const refusal = buildRefusal();
       if (refusal) throw Error(refusal);
       const current = registry.get(lane).document!;
       const result = expect(
-        await deps.host.familyCommand("build_evidence", {
+        await writers.familyCommand("build_evidence", {
           documentId: { ...FAMILY_MODULE, relativePath: current.relativePath },
         }),
         "build failed",
@@ -369,7 +389,7 @@ export function createFamilyStore(deps: {
         "open",
         async () => {
           expect(
-            await deps.host.familyApply([
+            await writers.familyApply([
               {
                 path: ["bindings", "profile"],
                 value: { id: relativePath, label: relativePath, at: deps.scope.documentAddress },
@@ -389,7 +409,7 @@ export function createFamilyStore(deps: {
         "bind",
         async () => {
           expect(
-            await deps.host.familyApply([
+            await writers.familyApply([
               {
                 path: ["bindings", "world"],
                 value: nextTarget
@@ -405,7 +425,7 @@ export function createFamilyStore(deps: {
       );
     },
     setStage(stage: "author" | "evidence") {
-      return deps.host.familyApply([{ path: ["stage"], value: stage }]);
+      return writers.familyApply([{ path: ["stage"], value: stage }]);
     },
   };
   return {

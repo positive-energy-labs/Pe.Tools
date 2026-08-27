@@ -1,8 +1,4 @@
 import {
-  familyRouteState,
-  settingsRouteState,
-  type RouteStatePatch,
-  type RouteStateWriteResult,
   type FamilyDocument,
   type SettingsDocumentId,
   type SettingsFieldState,
@@ -11,8 +7,6 @@ import {
 
 import { callHostRpc } from "#/host/client";
 import { fromBridgeSessions, type SessionFacts } from "#/host/target";
-import { appAtomRegistry } from "#/state/registry";
-import { docWriter, type Scope } from "#/state/route-store";
 
 export const FAMILY_MODULE = { moduleKey: "FamilyFoundry", rootKey: "models" };
 export type FieldState = SettingsFieldState;
@@ -22,21 +16,9 @@ export interface FamilyHost {
   sessions(): Promise<SessionFacts[]>;
   profile(target: string): Promise<string[]>;
   settings(documentId: SettingsDocumentId): Promise<SettingsSnapshot>;
-  settingsApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  settingsCommand(
-    name: "open" | "save",
-    input?: Record<string, unknown>,
-  ): Promise<RouteStateWriteResult>;
-  familyApply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  familyCommand(
-    name: "capture_evidence" | "build_evidence",
-    input?: Record<string, unknown>,
-  ): Promise<RouteStateWriteResult>;
 }
 
-export function createLiveFamilyHost(scope: Scope): FamilyHost {
-  const settings = docWriter(settingsRouteState, scope, appAtomRegistry);
-  const family = docWriter(familyRouteState, scope, appAtomRegistry);
+export function createLiveFamilyHost(): FamilyHost {
   return {
     async sessions() {
       return fromBridgeSessions((await callHostRpc("bridge.sessions.list", undefined)).sessions);
@@ -80,9 +62,5 @@ export function createLiveFamilyHost(scope: Scope): FamilyHost {
         },
       };
     },
-    settingsApply: settings.apply,
-    settingsCommand: settings.command,
-    familyApply: family.apply,
-    familyCommand: family.command,
   };
 }

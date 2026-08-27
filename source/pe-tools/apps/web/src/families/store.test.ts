@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import { address, type FamiliesRouteDocument, type RouteStateWriteResult } from "@pe/agent-contracts";
+import {
+  address,
+  type FamiliesRouteDocument,
+  type RouteStatePatch,
+  type RouteStateWriteResult,
+} from "@pe/agent-contracts";
 
 import type { FamiliesHost } from "#/families/host";
 import { createFamiliesStore } from "#/families/store";
@@ -63,12 +68,14 @@ const fixture = () => {
     categories: async () => [],
     families: async () => [],
     profiles: async () => [],
-    apply: (patches) => ok("apply", patches),
-    command: (name, input) => ok(name, input ?? {}),
     project: async () => ({ projections: [], diagnostics: [] }),
     openPath: async () => ({}),
   };
-  return { host, calls };
+  const writer = {
+    apply: (patches: RouteStatePatch[]) => ok("apply", patches),
+    command: (name: "plan" | "apply", input?: unknown) => ok(name, input ?? {}),
+  };
+  return { host, writer, calls };
 };
 const make = (
   testFixture = fixture(),
@@ -90,6 +97,7 @@ const make = (
       scope: { documentAddress: address("C:\\Models\\Test.rvt") },
       host: testFixture.host,
       slice: docSlice,
+      writer: testFixture.writer,
     }),
   };
 };
@@ -140,7 +148,7 @@ describe("families route store", () => {
   it("refuses apply while plan runs", async () => {
     let release!: (value: RouteStateWriteResult) => void;
     const testFixture = fixture();
-    testFixture.host.command = (name, input) =>
+    testFixture.writer.command = (name, input) =>
       name === "plan"
         ? new Promise<RouteStateWriteResult>((resolve) => {
             release = resolve;

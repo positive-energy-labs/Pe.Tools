@@ -42,7 +42,7 @@ function FamilyStoreOwner({
     return createFamilyStore({
       registry: appAtomRegistry,
       scope,
-      host: createLiveFamilyHost(scope),
+      host: createLiveFamilyHost(),
     });
   });
   return <FamilyWorkspace store={store} />;

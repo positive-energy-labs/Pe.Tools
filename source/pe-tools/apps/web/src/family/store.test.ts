@@ -5,6 +5,7 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import {
   address,
   type FamilyDocument,
+  type RouteStatePatch,
   type RouteStateWriteResult,
   type SettingsRouteDocument,
 } from "@pe/agent-contracts";
@@ -84,12 +85,16 @@ const fixture = () => {
       rawContent: JSON.stringify(MODEL),
       validation: { isValid: true, issues: [] },
     }),
-    settingsApply: (patches) => record("settings.apply", patches),
-    settingsCommand: (name, input) => record(`settings.${name}`, input ?? {}),
-    familyApply: (patches) => record("family.apply", patches),
-    familyCommand: (name, input) => record(`family.${name}`, input ?? {}),
   };
-  return { host, calls };
+  const writers = {
+    settingsApply: (patches: RouteStatePatch[]) => record("settings.apply", patches),
+    settingsCommand: (name: "open" | "save", input?: unknown) =>
+      record(`settings.${name}`, input ?? {}),
+    familyApply: (patches: RouteStatePatch[]) => record("family.apply", patches),
+    familyCommand: (name: "capture_evidence" | "build_evidence", input?: unknown) =>
+      record(`family.${name}`, input ?? {}),
+  };
+  return { host, writers, calls };
 };
 const make = (
   testFixture = fixture(),
@@ -111,6 +116,7 @@ const make = (
       scope: { documentAddress: address("C:\\Models\\Test.rfa") },
       host: testFixture.host,
       slices: { settings: settingsSlice, family: familySlice },
+      writers: testFixture.writers,
     }),
   };
 };
@@ -211,19 +217,19 @@ describe("family route store", () => {
   it("refuses build while capture is running", async () => {
     let release!: (value: { ok: true; result: {} }) => void;
     const testFixture = fixture();
-    const host: FamilyHost = {
-      ...testFixture.host,
+    const writers = {
+      ...testFixture.writers,
       familyCommand: (
         name: "capture_evidence" | "build_evidence",
-        input?: Record<string, unknown>,
+        input?: unknown,
       ) =>
         name === "capture_evidence"
           ? new Promise<{ ok: true; result: {} }>((resolve) => {
               release = resolve;
             })
-          : testFixture.host.familyCommand(name, input),
+          : testFixture.writers.familyCommand(name, input),
     };
-    const { store } = make({ ...testFixture, host });
+    const { store } = make({ ...testFixture, writers });
     const capture = store.actions.capture();
     await tick();
     await expect(store.actions.build()).rejects.toThrow("another verb is running");
@@ -233,13 +239,13 @@ describe("family route store", () => {
 
   it("records a failed open only on the core failure channel", async () => {
     const testFixture = fixture();
-    const host: FamilyHost = {
-      ...testFixture.host,
+    const writers = {
+      ...testFixture.writers,
       settingsCommand: async () => {
         throw Error("open refused");
       },
     };
-    const { registry, store } = make({ ...testFixture, host });
+    const { registry, store } = make({ ...testFixture, writers });
     await expect(store.actions.open("picked.family.json")).rejects.toThrow("open refused");
     expect(registry.get(store.atoms.failure)).toMatchObject({
       verb: "open",

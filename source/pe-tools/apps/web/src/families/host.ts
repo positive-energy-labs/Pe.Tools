@@ -1,15 +1,8 @@
-import {
-  familiesRouteState,
-  type AppliedScope,
-  type RouteStatePatch,
-  type RouteStateWriteResult,
-} from "@pe/agent-contracts";
+import { type AppliedScope } from "@pe/agent-contracts";
 
 import { callHostRpc } from "#/host/client";
 import { FF_PROFILE_MODULE, type FfProjectData } from "#/host/familyfoundry";
 import { fromBridgeSessions, type SessionFacts } from "#/host/target";
-import { appAtomRegistry } from "#/state/registry";
-import { docWriter, type Scope } from "#/state/route-store";
 
 export type FamiliesDraft = {
   placement: AppliedScope["placementScope"];
@@ -22,14 +15,11 @@ export interface FamiliesHost {
   categories(target: string): Promise<string[]>;
   families(target: string, draft: FamiliesDraft): Promise<string[]>;
   profiles(): Promise<string[]>;
-  apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
-  command(name: "plan" | "apply", input?: Record<string, unknown>): Promise<RouteStateWriteResult>;
   project(target: string, familyIds: number[]): Promise<FfProjectData>;
   openPath(target: string, path: string): Promise<unknown>;
 }
 
-export function createLiveFamiliesHost(scope: Scope): FamiliesHost {
-  const writer = docWriter(familiesRouteState, scope, appAtomRegistry);
+export function createLiveFamiliesHost(): FamiliesHost {
   return {
     async sessions() {
       return fromBridgeSessions((await callHostRpc("bridge.sessions.list", undefined)).sessions);
@@ -81,8 +71,6 @@ export function createLiveFamiliesHost(scope: Scope): FamiliesHost {
         .map((entry) => entry.relativePath)
         .sort((a, b) => a.localeCompare(b));
     },
-    apply: writer.apply,
-    command: writer.command,
     project: (target, familyIds) =>
       callHostRpc(
         "familyfoundry.project",

@@ -29,7 +29,7 @@ function FamiliesStoreOwner({ documentAddress }: { documentAddress: import("@pe/
     return createFamiliesStore({
       registry: appAtomRegistry,
       scope,
-      host: createLiveFamiliesHost(scope),
+      host: createLiveFamiliesHost(),
     });
   });
   return <FamiliesWorkspace store={store} />;

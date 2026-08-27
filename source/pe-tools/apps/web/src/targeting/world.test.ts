@@ -89,6 +89,13 @@ describe("targeting world", () => {
         session: installed,
         row: { id: "installed-25" } as WorldFacts["row"],
       },
+      {
+        id: "orphan",
+        custody: "observed",
+        phase: "ready",
+        pid: 99,
+        openDocumentCount: 0,
+      },
     ];
 
     const sessions = [controlled, observed, installed];
@@ -114,20 +121,6 @@ describe("targeting world", () => {
     });
     for (const option of result.options ?? [])
       expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
-  });
-
-  it("renders a malformed world without a session or SDK row", () => {
-    expect(
-      worldFeed([
-        {
-          id: "orphan",
-          custody: "observed",
-          phase: "ready",
-          pid: 77,
-          openDocumentCount: 0,
-        },
-      ]).options,
-    ).toMatchObject([{ id: "session:Revit 77", label: "Revit 77" }]);
   });
 
   it("refuses every lifecycle verb for an observed world before HTTP", async () => {

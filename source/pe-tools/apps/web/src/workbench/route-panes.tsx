@@ -105,7 +105,7 @@ function createRoutePaneStore(chat: ChatStore, spec: RouteStateSpec<z.ZodType>, 
       );
     },
   };
-  const writer = docWriter(spec, scope, chat.registry);
+  const writer = docWriter(spec, scope, chat.registry, slice);
   return {
     registry: chat.registry,
     spec,

@@ -37,11 +37,11 @@ export function createOpsStore(deps: {
 }) {
   const core = createRouteStoreCore("ops", deps.registry);
   const { registry, owned, write, runVerb } = core;
-  const writer = docWriter(opsRouteState, deps.scope, deps.registry);
+  const slice = owned("slice/ops", deps.slice ?? docAtom(opsRouteState, deps.scope));
+  const writer = docWriter(opsRouteState, deps.scope, deps.registry, slice);
   const apply = deps.apply ?? writer.apply;
   const call = deps.call ?? callHostDynamic;
   const now = deps.now ?? (() => new Date());
-  const slice = owned("slice/ops", deps.slice ?? docAtom(opsRouteState, deps.scope));
   const document = Atom.make((get): OpsRouteDocument | null => {
     const result = get(slice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;

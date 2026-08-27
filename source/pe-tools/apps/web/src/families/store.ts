@@ -19,6 +19,7 @@ import type { FamiliesDraft, FamiliesHost } from "#/families/host";
 import {
   createRouteStoreCore,
   docAtom,
+  docWriter,
   feed,
   hostRead,
   type Scope,
@@ -34,6 +35,10 @@ export function createFamiliesStore(deps: {
   scope: Scope;
   host: FamiliesHost;
   slice?: FamiliesSlice;
+  writer?: {
+    apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
+    command(name: "plan" | "apply", input?: unknown): Promise<RouteStateWriteResult>;
+  };
 }) {
   const core = createRouteStoreCore("families", deps.registry);
   const { registry, owned, write, runVerb } = core;
@@ -42,6 +47,7 @@ export function createFamiliesStore(deps: {
   Reflect.set(runtime.layer, "keepAlive", false);
 
   const slice = owned("slice/families", deps.slice ?? docAtom(familiesRouteState, deps.scope));
+  const writer = deps.writer ?? docWriter(familiesRouteState, deps.scope, deps.registry, slice);
   const document = Atom.make((get): FamiliesRouteDocument | null => {
     const result = get(slice);
     return AsyncResult.isSuccess(result) ? result.value.doc : null;
@@ -158,7 +164,7 @@ export function createFamiliesStore(deps: {
             ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
             : undefined,
       });
-    return patches.length ? expectOk(await deps.host.apply(patches), "bind failed") : { ok: true };
+    return patches.length ? expectOk(await writer.apply(patches), "bind failed") : { ok: true };
   };
   const unsubscribeFamilies = registry.subscribe(
     familyFeed,
@@ -208,7 +214,7 @@ export function createFamiliesStore(deps: {
         "profile",
         async () =>
           expectOk(
-            await deps.host.apply([
+            await writer.apply([
               { path: ["profilePath"], value: nextProfile },
               { path: ["plan"], value: null },
               { path: ["excludedIds"], value: [] },
@@ -226,7 +232,7 @@ export function createFamiliesStore(deps: {
           const next = new Set(registry.get(excludedIds));
           if (!next.delete(id)) next.add(id);
           return expectOk(
-            await deps.host.apply([{ path: ["excludedIds"], value: [...next] }]),
+            await writer.apply([{ path: ["excludedIds"], value: [...next] }]),
             "exclude failed",
           );
         },
@@ -242,7 +248,7 @@ export function createFamiliesStore(deps: {
           if (!path || !scope) throw Error("plan needs a profile and applied scope");
           await bindDocument(registry.get(target));
           return expectOk(
-            await deps.host.command("plan", { profilePath: path, scope }),
+            await writer.command("plan", { profilePath: path, scope }),
             "plan failed",
           );
         },
@@ -257,7 +263,7 @@ export function createFamiliesStore(deps: {
           if (!current) throw Error("apply needs a plan");
           await bindDocument(registry.get(target));
           return expectOk(
-            await deps.host.command("apply", { expectedPlanHash: current.planHash }),
+            await writer.command("apply", { expectedPlanHash: current.planHash }),
             "apply failed",
           );
         },
