@@ -1422,7 +1422,7 @@ function LevelStats({
   const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));
 
   return (
-    <div className="absolute top-2 right-2 z-20 w-64 rounded-md border border-line bg-page/95 px-2 py-1.5 shadow-sm backdrop-blur">
+    <div className="absolute top-2 right-2 z-20 w-64 rounded-md border border-line bg-page/95 px-2 py-1.5 backdrop-blur">
       <div className="mb-1 flex items-baseline gap-1.5">
         <span className="t-label t-upper text-ink-2">{level} — level totals</span>
         <button
@@ -1557,7 +1557,7 @@ function ZoneCard({
       data-dirty={entity.dirty || undefined}
       data-conflict={entity.conflict || undefined}
       className={cn(
-        "absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-md border border-line bg-page/95 shadow-sm backdrop-blur",
+        "absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-md border border-line bg-page/95 backdrop-blur",
         entity.hovered && "ring-1 ring-line-2",
         entity.selected && "border-line-2",
         entity.conflict && "border-caution",

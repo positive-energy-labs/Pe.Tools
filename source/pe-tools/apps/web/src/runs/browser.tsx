@@ -607,7 +607,7 @@ export function ZonePanel(props: {
       {/* Instant id popover — replaces the slow native tooltip on these elements. */}
       {hover && (
         <div
-          className="face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-page/95 px-1.5 py-0.5 shadow-sm"
+          className="face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-page/95 px-1.5 py-0.5"
           style={{
             left: Math.min(hover.x + 10, maxW - 90),
             top: Math.min(hover.y + 12, maxH - 22),
@@ -1544,7 +1544,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
   );
   return (
     <div
-      className="face-mono t-caption absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-page/95 px-2 py-1.5 text-ink-2 shadow-sm"
+      className="face-mono t-caption absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-page/95 px-2 py-1.5 text-ink-2"
       style={{ borderRadius: 2 }}
     >
       <span className="flex items-baseline">
@@ -1647,7 +1647,7 @@ function LevelStatsFloater(props: {
   if (!b) return null;
   return (
     <div
-      className="face-mono t-caption absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-page/95 px-2 py-1.5 t-label shadow-sm"
+      className="face-mono t-caption absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-page/95 px-2 py-1.5 t-label"
       style={{ borderRadius: 2 }}
     >
       <span className="flex items-baseline t-caption font-semibold uppercase tracking-wide text-ink-2">
@@ -1727,7 +1727,7 @@ function ZonePeekFloater(props: {
   const knobs = adaptedKnobs(b);
   return (
     <div
-      className="face-mono t-caption pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 border bg-page/95 p-2 t-label shadow-sm"
+      className="face-mono t-caption pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 border bg-page/95 p-2 t-label"
       style={{ borderRadius: 2 }}
     >
       <div className="mb-1 flex flex-col items-center">

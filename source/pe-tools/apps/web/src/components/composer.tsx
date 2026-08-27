@@ -216,7 +216,7 @@ export function Composer({
             value={text}
             onChange={(event) => setText(event.currentTarget.value)}
             onKeyDown={onKeyDown}
-            className="max-h-48 min-h-9 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+            className="max-h-48 min-h-9 resize-none border-0 bg-transparent focus-visible:ring-0 dark:bg-transparent"
           />
           {/* Control row: attachments + session controls (model/access) left, send right. */}
           <div className="flex items-center gap-1 pt-1">

@@ -27,8 +27,13 @@
  *                        a colour literal" — a colour is a one-line edit in base.css.
  *  5. sub-10px type      text-[Npx] with N < 10. The 10px floor from the type-tier ruling
  *                        (ops enforced it on itself; the flagship pass finished the job).
+ *  6. shadows            shadow-* utilities. Depth is ground shift plus hairline.
+ *  7. shadcn aliases     the 19 retired custom-property and utility names.
+ *  8. legacy prefix      any --r- string. House custom properties use --pe-*.
  *
  * ── RATCHET (count may only fall; baselines in design-guard.baseline.json) ─────────────────
+ *  appArbitrary      literal arbitrary Tailwind utilities across production TSX.
+ *  routeRoleColor    role colour utilities in shipping route files.
  *  textPx           any text-[Npx]: off-tier type. The tier system (t-* classes) is the scale;
  *                   the remaining spends are exhibit chrome + a few audited sites.
  *  rawButton        <button> outside components/mechanism + components/lang: verbs come from
@@ -53,14 +58,13 @@
  *  not a ratchet. Update src/design-guard.baseline.json in the same commit as the win.
  * =============================================================================================
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createSourceFile,
   forEachChild,
   isIdentifier,
-  isImportDeclaration,
   isJsxAttribute,
   isJsxElement,
   isJsxExpression,
@@ -90,7 +94,8 @@ const collectCss = (dir: string, relBase: string, out: Entry[]): Entry[] => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const rel = relBase === "" ? e.name : `${relBase}/${e.name}`;
     if (e.isDirectory()) {
-      if (!SKIP_DIRS.has(e.name)) collectCss(join(dir, e.name), rel, out);
+      if (!SKIP_DIRS.has(e.name) && !e.name.startsWith("proto"))
+        collectCss(join(dir, e.name), rel, out);
       continue;
     }
     if (SKIP_FILES.has(e.name)) continue;
@@ -115,7 +120,6 @@ const collectCode = (dir: string, relBase: string, out: Entry[]): Entry[] => {
 
 const CSS_FILES = collectCss(ROOT, "", []);
 const FILES: Entry[] = [...collectCode(ROOT, "", []), ...CSS_FILES];
-const ROUTE_TREE_TEXT = readFileSync(join(ROOT, "routeTree.gen.ts"), "utf8");
 
 const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;
 
@@ -206,32 +210,9 @@ const literalAuthoringTexts = (source: import("typescript").SourceFile) => {
   }));
 };
 
-const MOUNTED_ROUTE_FILES = (() => {
-  const mounted = new Set<string>();
-  const routeTree = createSourceFile(
-    "routeTree.gen.ts",
-    ROUTE_TREE_TEXT,
-    ScriptTarget.Latest,
-    true,
-    ScriptKind.TS,
-  );
-  const visit = (node: import("typescript").Node) => {
-    if (isImportDeclaration(node) && isStringLiteral(node.moduleSpecifier)) {
-      const specifier = node.moduleSpecifier.text;
-      if (specifier.startsWith("./routes/")) {
-        const rel = `${specifier.slice(2)}.tsx`;
-        if (!rel.endsWith("-proto.tsx") && existsSync(resolve(ROOT, rel))) mounted.add(rel);
-      }
-    }
-    forEachChild(node, visit);
-  };
-  visit(routeTree);
-  return mounted;
-})();
-
-const routeArbitrary = (): Offence[] => {
+const appArbitrary = (): Offence[] => {
   const offences: Offence[] = [];
-  for (const f of FILES.filter((file) => MOUNTED_ROUTE_FILES.has(file.rel))) {
+  for (const f of FILES.filter((file) => file.rel.endsWith(".tsx"))) {
     const sf = createSourceFile(f.rel, f.text, ScriptTarget.Latest, true, ScriptKind.TSX);
     const visit = (node: import("typescript").Node) => {
       if (isJsxElement(node) || isJsxSelfClosingElement(node)) {
@@ -246,7 +227,7 @@ const routeArbitrary = (): Offence[] => {
           )
             continue;
           for (const text of literalClassTexts(attribute.initializer)) {
-            for (const match of routeArbitraryTokens(text)) {
+            for (const match of arbitraryUtilityTokens(text)) {
               offences.push({
                 rel: f.rel,
                 line: lineOf(f.text, node.getStart(sf)),
@@ -263,7 +244,7 @@ const routeArbitrary = (): Offence[] => {
   return offences;
 };
 
-const routeArbitraryTokens = (text: string) => {
+const arbitraryUtilityTokens = (text: string) => {
   const re =
     /(?:^|\s)((?:(?:[^\s:]+|\[[^\]]+\]):)*(?:text|bg|border|rounded|ring|shadow|p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|space-[xy]|w|h|min-w|max-w|min-h|max-h|leading|tracking|font|top|right|bottom|left|inset|translate-x|translate-y|opacity|z)-\[[^\s\]]+\])/g;
   return [...text.matchAll(re)].map((match) => match[1]);
@@ -288,6 +269,41 @@ const semanticRoles = new Set([
   "on-commit",
   "nav",
 ]);
+
+const colorUtilityPrefix =
+  "(?:bg|text|border(?:-[xysetrbl])?|divide|ring|outline|fill|stroke|caret|decoration|from|via|to|ring-offset)";
+const roleNames = [...semanticRoles].sort((a, b) => b.length - a.length).join("|");
+const roleColorUtilityRe = new RegExp(
+  `(?<![-\\w])${colorUtilityPrefix}-(?:${roleNames})(?![-\\w])`,
+  "g",
+);
+const shadcnAliasNames = [
+  "background",
+  "foreground",
+  "card",
+  "card-foreground",
+  "popover",
+  "popover-foreground",
+  "primary",
+  "primary-foreground",
+  "secondary",
+  "secondary-foreground",
+  "muted",
+  "muted-foreground",
+  "accent",
+  "accent-foreground",
+  "destructive",
+  "destructive-foreground",
+  "border",
+  "input",
+  "ring",
+]
+  .sort((a, b) => b.length - a.length)
+  .join("|");
+const shadcnAliasRe = new RegExp(
+  `--(?:color-)?(?:${shadcnAliasNames})(?![-\\w])|(?<![-\\w])${colorUtilityPrefix}-(?:${shadcnAliasNames})(?![-\\w])`,
+  "g",
+);
 
 const stripVariantPrefix = (token: string) => {
   let brackets = 0;
@@ -407,7 +423,7 @@ describe("design guard — hard zeros", () => {
   });
 
   it("no hex colour literal outside base.css (a colour is a one-line edit there)", () => {
-    const re = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b/g;
+    const re = /(?<![0-9a-fA-F])#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?)\b/g;
     const offences = scan(
       FILES.filter((f) => f.rel !== "base.css"),
       re,
@@ -422,6 +438,21 @@ describe("design guard — hard zeros", () => {
     const re = /text-\[[0-9]px\]/g;
     const offences = scan(FILES, re);
     expect(offences.length, `Type below the 10px floor:\n${report(offences)}`).toBe(0);
+  });
+
+  it("no shadow utilities (depth is ground shift plus hairline)", () => {
+    const offences = scan(FILES, /(?<![-\w])shadow-[^\s"'<>]+/g);
+    expect(offences.length, `Shadow utilities:\n${report(offences)}`).toBe(0);
+  });
+
+  it("no shadcn colour aliases", () => {
+    const offences = scan(FILES, shadcnAliasRe);
+    expect(offences.length, `Shadcn colour aliases:\n${report(offences)}`).toBe(0);
+  });
+
+  it("no legacy --r- custom-property spelling", () => {
+    const offences = scan(FILES, /--r-/g);
+    expect(offences.length, `Legacy --r- spelling:\n${report(offences)}`).toBe(0);
   });
 });
 
@@ -526,7 +557,7 @@ describe("design guard — foundation topology", () => {
       /@import\b|tailwindcss|tw-animate|url\(|<script\b|animation(?:-name)?\s*:/i,
     );
     const baseLayer = /@layer base\s*\{([\s\S]*?)\n\}\s*\n\[data-pe\] \.page-wrap/.exec(text);
-    expect(baseLayer, "pe-base defaults must remain inside native @layer base").toBeTruthy();
+    expect(baseLayer, "base.css defaults must remain inside native @layer base").toBeTruthy();
     expect((text.match(/@layer base\b/g) ?? []).length).toBe(1);
     expect(baseLayer![1]).toContain("[data-pe] pre code");
     expect(baseLayer![1]).toContain("font-family: var(--font-body);");
@@ -573,7 +604,7 @@ describe("design guard — foundation topology", () => {
     expect(() => expect(escapedLayer![1]).not.toContain("\\")).toThrow();
   });
 
-  it("keeps PE raw authority in pe-base and embeds that exact source in the report", () => {
+  it("keeps PE raw authority in base.css and embeds that exact source in the report", () => {
     const base = CSS_FILES.find((file) => file.rel === "base.css");
     const lang = CSS_FILES.find((file) => file.rel === "design-lang.css");
     expect(base).toBeDefined();
@@ -582,17 +613,22 @@ describe("design guard — foundation topology", () => {
     expect(lang!.text).not.toContain("[data-pe]");
     const reportText = readFileSync(REPORT, "utf8");
     const embedded = /<style id="pe-base">([\s\S]*?)<\/style>/.exec(reportText);
-    expect(embedded, "report must contain the exact pe-base embedding").toBeTruthy();
+    expect(embedded, "report must contain the exact base.css embedding").toBeTruthy();
     expect(embedded![1]).toBe(base!.text);
   });
 
-  it("uses only route sources mounted by routeTree.gen.ts", () => {
-    expect(MOUNTED_ROUTE_FILES.has("routes/index.tsx")).toBe(true);
-    expect(MOUNTED_ROUTE_FILES.has("routes/__wave1b-unmounted.tsx")).toBe(false);
+  it("exempts prototype directories and *-proto.tsx files", () => {
+    expect(
+      FILES.filter(
+        (file) =>
+          file.rel.split("/").some((part) => part.startsWith("proto")) ||
+          file.rel.endsWith("-proto.tsx"),
+      ),
+    ).toEqual([]);
   });
 
   it("counts variant-prefixed arbitrary route utilities", () => {
-    expect(routeArbitraryTokens("sm:max-w-[44rem]")).toEqual(["sm:max-w-[44rem]"]);
+    expect(arbitraryUtilityTokens("sm:max-w-[44rem]")).toEqual(["sm:max-w-[44rem]"]);
   });
 
   it("collects template substitution literals exactly once", () => {
@@ -673,8 +709,18 @@ const ratchet = (name: string, offences: Offence[]) => {
 };
 
 describe("design guard — ratchets (baselines may only fall)", () => {
-  it("routeArbitrary — literal arbitrary Tailwind utilities in shipping routes", () => {
-    ratchet("routeArbitrary", routeArbitrary());
+  it("appArbitrary — literal arbitrary Tailwind utilities across the app", () => {
+    ratchet("appArbitrary", appArbitrary());
+  });
+
+  it("routeRoleColor — role colour utilities in shipping routes", () => {
+    ratchet(
+      "routeRoleColor",
+      scan(
+        FILES.filter((file) => file.rel.startsWith("routes/")),
+        roleColorUtilityRe,
+      ),
+    );
   });
 
   it("textPx — arbitrary text-[Npx] off the tier ladder", () => {

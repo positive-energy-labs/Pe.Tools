@@ -112,7 +112,7 @@
 .mapdial-band .num {
   position: absolute;
   /* band is 8px at right:14px of the 64px lane; 12px inset leaves ~38px of leftward room —
-     enough for "#999" in 12px mono without clipping at the lane's overflow:hidden edge. */
+     enough for a 3-digit --pe-ink-2 readout in 12px mono without clipping at the lane's overflow:hidden edge. */
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
