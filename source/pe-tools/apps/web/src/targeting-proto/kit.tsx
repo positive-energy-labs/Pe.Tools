@@ -14,10 +14,18 @@
  * second look = the small mute caption (direction · liveness); hover = full path + needs.
  * The in-flight mark is an OPACITY pulse — dashed stays the seam slot (R13b).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button as ChoicePrimitive } from "@base-ui/react/button";
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { FactChip } from "#/components/lang/chip";
-import { Verb as VerbButton } from "#/components/lang/verb";
 
 import {
   demandedKeys,
@@ -31,6 +39,36 @@ import {
   type Stage,
   type Verb,
 } from "#/targeting-proto/model";
+
+function Choice({
+  children,
+  reason,
+  selected,
+  busy,
+  onClick,
+  className,
+  style,
+}: {
+  children: ReactNode;
+  reason: string;
+  selected?: boolean;
+  busy?: boolean;
+  onClick: () => void;
+  className?: string;
+  style?: ChoicePrimitive.Props["style"];
+}) {
+  const props: ChoicePrimitive.Props = {
+    type: "button",
+    "aria-pressed": selected,
+    "aria-busy": busy || undefined,
+    title: reason,
+    onClick,
+    className,
+    style,
+    children,
+  };
+  return createElement(ChoicePrimitive, props);
+}
 
 /* ------------------------------------------------------------------ bindings */
 
@@ -331,16 +369,27 @@ function OptionList({
         opts.map((o) => {
           const on = b.isPicked(link, o.id);
           return (
-            <VerbButton
+            <Choice
               key={o.id}
-              label={`${link.multi ? (on ? "☑ " : "☐ ") : ""}${o.label}${o.sub && !compact ? ` ${o.sub}` : ""}`}
+              selected={on}
               reason={`Pick ${o.label}.`}
               onClick={() => {
                 b.pick(link, o.id);
                 onPicked?.();
               }}
               className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-            />
+              style={{ background: on ? "var(--r-select)" : undefined }}
+            >
+              {link.multi ? <span className="face-mono t-caption">{on ? "☑" : "☐"}</span> : null}
+              <span className="t-value" style={{ color: "var(--r-ink)" }}>
+                {o.label}
+              </span>
+              {o.sub && !compact ? (
+                <span className="t-caption" style={{ color: "var(--r-ink-2)" }}>
+                  {o.sub}
+                </span>
+              ) : null}
+            </Choice>
           );
         })
       )}
@@ -424,6 +473,7 @@ export function PathInput({
         style={{ borderBottom: "1px solid var(--r-line-2)" }}
       >
         {chain.map((l, i) => {
+          const on = l.key === seg;
           const lab = b.labelOf(l);
           return (
             <span key={l.key} className="inline-flex items-baseline gap-1">
@@ -432,12 +482,20 @@ export function PathInput({
                   ›
                 </span>
               ) : null}
-              <VerbButton
-                label={lab ?? l.placeholder}
+              <Choice
+                selected={on}
                 reason={`Select ${lab ?? l.placeholder}.`}
                 onClick={() => setSeg(l.key)}
                 className="face-mono t-caption"
-              />
+                style={{
+                  padding: "0 3px",
+                  background: on ? "var(--r-select)" : "transparent",
+                  color: lab == null ? "var(--r-caution)" : "var(--r-ink)",
+                  borderBottom: on ? "1px solid var(--r-ink)" : "1px solid transparent",
+                }}
+              >
+                {lab ?? l.placeholder}
+              </Choice>
             </span>
           );
         })}
@@ -520,12 +578,13 @@ export function PathInput({
             const picked = p.every((x) => b.isPicked(x.link, x.opt.id));
             const last = p[p.length - 1]!;
             return (
-              <VerbButton
+              <Choice
                 key={text}
-                label={`${last.link.multi ? (picked ? "☑ " : "☐ ") : ""}${text}`}
+                selected={picked}
                 reason={`Pick path ${text}.`}
                 onClick={() => b.pickPath(p.map((x) => ({ link: x.link, id: x.opt.id })))}
                 className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
+                style={{ background: picked ? "var(--r-select)" : undefined }}
               >
                 {last.link.multi ? (
                   <span className="face-mono t-caption">{picked ? "☑" : "☐"}</span>
@@ -547,7 +606,7 @@ export function PathInput({
                     {last.opt.sub}
                   </span>
                 ) : null}
-              </VerbButton>
+              </Choice>
             );
           })
         )}
@@ -558,8 +617,9 @@ export function PathInput({
   return (
     <span ref={ref} className="relative inline-flex items-baseline">
       <style>{PULSE_CSS}</style>
-      <VerbButton
-        label={closedText}
+      <Choice
+        selected={open}
+        busy={lit}
         reason={title}
         onClick={() => b.setOpen(open ? null : slot)}
         className={showAll ? "face-mono t-caption" : "face-mono t-label"}
@@ -574,7 +634,7 @@ export function PathInput({
         }}
       >
         {closedText}
-      </VerbButton>
+      </Choice>
       {open ? (
         <span
           className="absolute left-0 top-full z-40 mt-1 block overflow-hidden"
@@ -663,6 +723,7 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
           <span
             key={p.key}
             title={st.reason}
+            aria-disabled={!st.ok}
             className="face-mono t-caption"
             style={{
               padding: 0,

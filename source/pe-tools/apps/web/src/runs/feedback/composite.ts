@@ -22,6 +22,7 @@ import {
   type ResidueKind,
   SEAL_DOOR,
   SEAL_RUN,
+  ZONE_DASH,
   ZONE_STROKE,
   ZONE_WIDTH,
 } from "../palette";
@@ -158,7 +159,7 @@ function overlaySvg(
     }
   }
   parts.push(
-    `<path d="${ringPath(vp, zone.ZoneLoops as [number, number][][])}" fill="none" stroke="${ZONE_STROKE}" stroke-width="${ZONE_WIDTH}"/>`,
+    `<path d="${ringPath(vp, zone.ZoneLoops as [number, number][][])}" fill="none" stroke="${ZONE_STROKE}" stroke-width="${ZONE_WIDTH}" stroke-dasharray="${ZONE_DASH}"/>`,
   );
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${vp.widthPx}" height="${vp.heightPx}" viewBox="0 0 ${vp.widthPx} ${vp.heightPx}"><defs>${defs.join("")}</defs>${parts.join("")}</svg>`;
 }

@@ -41,7 +41,7 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
           label="✕"
           reason="Remove this item from the staged set."
           onClick={() => fb.unstage(item.key)}
-          className="face-mono t-caption ml-auto t-caption text-muted-foreground hover:text-foreground"
+          className="face-mono t-caption ml-auto text-muted-foreground hover:text-foreground"
         />
       </div>
       <FlagChips item={item} />
@@ -80,7 +80,7 @@ export function Tray(props: {
               onClick={props.onToggleReview}
               tone={props.review ? "commit" : "act"}
               className={cn(
-                "face-mono t-caption rounded-[2px] px-1.5 py-0.5 t-caption",
+                "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
                 props.review
                   ? "bg-secondary text-secondary-foreground"
                   : "border text-muted-foreground hover:text-foreground",
@@ -93,14 +93,14 @@ export function Tray(props: {
               label="clear"
               reason="Unstage everything."
               onClick={() => fb.clear()}
-              className="face-mono t-caption t-caption text-muted-foreground hover:text-foreground"
+              className="face-mono t-caption text-muted-foreground hover:text-foreground"
             />
           )}
         </span>
       </div>
       {loadedSet && (
         <div
-          className="face-mono t-caption shrink-0 truncate border-b px-2 py-1 t-caption text-muted-foreground"
+          className="face-mono t-caption shrink-0 truncate border-b px-2 py-1 text-muted-foreground"
           style={{ borderColor: "var(--r-line-2)" }}
           title="This staging was rehydrated from an export manifest — it is editable; exporting mints a NEW stamp, the loaded set is never overwritten."
         >

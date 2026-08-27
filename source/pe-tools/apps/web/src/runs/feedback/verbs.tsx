@@ -58,7 +58,7 @@ export function ExportStatus(props: { className?: string }) {
   const { exporting, lastExport, exportError } = useFb();
   if (exporting) {
     return (
-      <div className={cn("face-mono t-caption t-caption text-muted-foreground", props.className)}>
+      <div className={cn("face-mono t-caption text-muted-foreground", props.className)}>
         compositing + writing export…
       </div>
     );
@@ -66,7 +66,7 @@ export function ExportStatus(props: { className?: string }) {
   if (exportError) {
     return (
       <div
-        className={cn("face-mono t-caption t-caption", props.className)}
+        className={cn("face-mono t-caption", props.className)}
         style={{ color: "var(--r-alarm)" }}
       >
         export failed: {exportError}
@@ -77,7 +77,7 @@ export function ExportStatus(props: { className?: string }) {
   return (
     <div
       className={cn(
-        "face-mono t-caption flex flex-col gap-0.5 t-caption text-muted-foreground",
+        "face-mono t-caption flex flex-col gap-0.5 text-muted-foreground",
         props.className,
       )}
     >
@@ -120,7 +120,7 @@ export function ExportStatus(props: { className?: string }) {
 export function FlagChips(props: { item: StagedItem }) {
   if (props.item.flags.length === 0) {
     return (
-      <span className="face-mono t-caption t-caption text-muted-foreground/60">
+      <span className="face-mono t-caption text-muted-foreground/60">
         no flags — click rooms/residues on the staged B panel
       </span>
     );
@@ -135,7 +135,7 @@ export function FlagChips(props: { item: StagedItem }) {
           onMouseEnter={() => fb.setHoverFlag(`${props.item.key}::${el}`)}
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
-          className="face-mono t-caption border px-1 t-caption"
+          className="face-mono t-caption border px-1"
           style={{ borderColor: "var(--r-alarm)", color: "var(--r-alarm)", borderRadius: 2 }}
         >
           ⚑ {flagLabel(el)} ✕

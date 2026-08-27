@@ -67,7 +67,6 @@ interface VerbBase {
    * as a small quiet line beside the verb.
    */
   reason: string;
-  title?: string;
   disabled?: boolean;
   /** In flight. Inert, but not a refusal — no reason line renders. */
   busy?: boolean;
@@ -90,7 +89,7 @@ export type VerbProps =
     });
 
 export function Verb(props: VerbProps) {
-  const { label, onClick, reason, title, disabled, busy, className, style, children } = props;
+  const { label, onClick, reason, disabled, busy, className, style, children } = props;
   // Narrow on `props.tone`, not on the defaulted local — the discriminant is what carries
   // `direction` into scope.
   const Icon = props.tone === "nav" ? NAV_ICON[props.direction] : props.icon;
@@ -105,11 +104,11 @@ export function Verb(props: VerbProps) {
         data-tone={tone}
         disabled={inert}
         onClick={onClick}
-        title={title ?? reason}
+        title={reason}
         style={style}
       >
         {Icon != null ? <Icon /> : null}
-        {children ?? (busy === true ? `${label}…` : label)}
+        {busy === true ? `${label}…` : (children ?? label)}
       </button>
       {/* THE UN-GAGGED COMMIT (fit reviews, ruled 2026-08-16): only a disabled commit verb says
           its reason on the surface; busy is not a refusal and every other tone keeps the title. */}

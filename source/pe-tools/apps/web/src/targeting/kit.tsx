@@ -14,10 +14,10 @@
  * small mute caption (direction · liveness · freshness); hover = full path + needs.
  * The in-flight mark is an OPACITY pulse — dashed stays the seam slot.
  */
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Button as ChoicePrimitive } from "@base-ui/react/button";
+import { createElement, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { FactChip } from "#/components/lang/chip";
-import { Verb as VerbButton } from "#/components/lang/verb";
 
 import {
   demandedKeys,
@@ -37,6 +37,39 @@ import {
   type Stage,
   type Verb,
 } from "#/targeting/model";
+
+function Choice({
+  children,
+  reason,
+  selected,
+  busy,
+  disabled,
+  onClick,
+  className,
+  style,
+}: {
+  children: ReactNode;
+  reason: string;
+  selected?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  className?: string;
+  style?: ChoicePrimitive.Props["style"];
+}) {
+  const props: ChoicePrimitive.Props = {
+    type: "button",
+    "aria-pressed": selected,
+    "aria-busy": busy || undefined,
+    disabled,
+    title: reason,
+    onClick,
+    className,
+    style,
+    children,
+  };
+  return createElement(ChoicePrimitive, props);
+}
 
 /* ------------------------------------------------------------------ bindings */
 
@@ -314,7 +347,9 @@ export function Picker({
 
   const lit = runner?.active.has(link.key) ?? false;
   const feed = b.feeds[link.key];
+  const broken = feed?.state === "stale" || feed?.state === "error";
   const leafLabel = b.labelOf(link);
+  const caution = !p.complete || broken;
   // incomplete: only the next placeholder prints; the caution colour says "not through yet"
   // and the title carries where it stopped (kaitpw, round 7 verdict)
   const closedText = p.complete ? (leafLabel ?? link.placeholder) : p.next!.placeholder;
@@ -351,16 +386,28 @@ export function Picker({
   return (
     <span ref={ref} className="relative inline-flex items-baseline">
       <style>{PULSE_CSS}</style>
-      <VerbButton
-        label={closedText}
+      <Choice
+        selected={open}
+        busy={lit}
+        disabled={inert}
         reason={title}
         onClick={() => {
           if (!open) setLevel(link.key);
           b.setOpen(open ? null : slot);
         }}
-        disabled={inert}
         className="face-mono t-label"
-      />
+        style={{
+          padding: 0,
+          cursor: inert ? "not-allowed" : "pointer",
+          background: open ? "var(--r-select)" : "transparent",
+          borderBottom: `1px solid ${caution ? "var(--r-caution)" : "var(--r-ink)"}`,
+          color: caution ? "var(--r-caution)" : "var(--r-ink)",
+          whiteSpace: "nowrap",
+          animation: lit ? "tp-pulse 0.9s ease-in-out infinite" : undefined,
+        }}
+      >
+        {closedText}
+      </Choice>
       {open ? (
         <span className="absolute left-0 top-full z-40 mt-1 block overflow-hidden" style={POP}>
           {/* crumbs — the trunk, one segment per level; the current level is underlined */}
@@ -369,6 +416,7 @@ export function Picker({
             style={{ borderBottom: "1px solid var(--r-line-2)" }}
           >
             {chain.map((l, i) => {
+              const on = l.key === level;
               const lab = b.labelOf(l);
               return (
                 <span key={l.key} className="inline-flex items-baseline gap-1">
@@ -377,12 +425,20 @@ export function Picker({
                       ›
                     </span>
                   ) : null}
-                  <VerbButton
-                    label={lab ?? l.placeholder}
+                  <Choice
+                    selected={on}
                     reason={`Select ${lab ?? l.placeholder}.`}
                     onClick={() => (setLevel(l.key), setQ(""))}
                     className="face-mono t-caption"
-                  />
+                    style={{
+                      padding: "0 3px",
+                      background: on ? "var(--r-select)" : "transparent",
+                      color: lab == null ? "var(--r-caution)" : "var(--r-ink)",
+                      borderBottom: on ? "1px solid var(--r-ink)" : "1px solid transparent",
+                    }}
+                  >
+                    {lab ?? l.placeholder}
+                  </Choice>
                 </span>
               );
             })}
@@ -433,16 +489,29 @@ export function Picker({
               hits.map((o) => {
                 const on = b.isPicked(cur, o.id);
                 return (
-                  <VerbButton
+                  <Choice
                     key={o.id}
-                    label={`${cur.multi ? (on ? "☑ " : "☐ ") : ""}${o.label}${o.sub ? ` ${o.sub}` : ""}`}
+                    selected={on}
                     reason={`Pick ${o.label}.`}
                     onClick={() => {
                       b.pick(cur, o.id);
                       advance();
                     }}
                     className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                  />
+                    style={{ background: on ? "var(--r-select)" : undefined }}
+                  >
+                    {cur.multi ? (
+                      <span className="face-mono t-caption">{on ? "☑" : "☐"}</span>
+                    ) : null}
+                    <span className="t-value" style={{ color: "var(--r-ink)" }}>
+                      {o.label}
+                    </span>
+                    {o.sub ? (
+                      <span className="t-caption" style={{ color: "var(--r-ink-2)" }}>
+                        {o.sub}
+                      </span>
+                    ) : null}
+                  </Choice>
                 );
               })
             )}
@@ -455,9 +524,9 @@ export function Picker({
                   {b.labelOf(cur)} › {below!.key}
                 </div>
                 {belowHits.map((o) => (
-                  <VerbButton
+                  <Choice
                     key={`below:${o.id}`}
-                    label={`${below!.multi ? (b.isPicked(below!, o.id) ? "☑ " : "☐ ") : ""}${o.label}${o.sub ? ` ${o.sub}` : ""}`}
+                    selected={b.isPicked(below!, o.id)}
                     reason={`Pick ${o.label}.`}
                     onClick={() => {
                       b.pick(below!, o.id);
@@ -467,7 +536,24 @@ export function Picker({
                       setQ("");
                     }}
                     className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                  />
+                    style={{
+                      background: b.isPicked(below!, o.id) ? "var(--r-select)" : undefined,
+                    }}
+                  >
+                    {below!.multi ? (
+                      <span className="face-mono t-caption">
+                        {b.isPicked(below!, o.id) ? "☑" : "☐"}
+                      </span>
+                    ) : null}
+                    <span className="t-value" style={{ color: "var(--r-ink)" }}>
+                      {o.label}
+                    </span>
+                    {o.sub ? (
+                      <span className="t-caption" style={{ color: "var(--r-ink-2)" }}>
+                        {o.sub}
+                      </span>
+                    ) : null}
+                  </Choice>
                 ))}
               </>
             ) : null}
@@ -558,11 +644,13 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
           <span
             key={p.key}
             title={st.reason}
+            aria-disabled={!st.ok}
             className="face-mono t-caption"
             style={{
               color: st.ok ? "var(--r-ink)" : "var(--r-ink-mute)",
               fontStyle: st.ok ? undefined : "italic",
               borderBottom: st.ok ? "1px solid var(--r-line-2)" : "1px solid transparent",
+              cursor: st.ok ? "default" : "not-allowed",
             }}
           >
             {p.label}

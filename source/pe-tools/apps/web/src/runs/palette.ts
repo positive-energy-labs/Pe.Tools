@@ -39,7 +39,9 @@ export const MIST = "var(--r-select)";
 
 export function designColor(token: string): string {
   if (typeof document === "undefined") return "transparent";
-  return getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+  const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+  if (!value || value.includes("var(")) throw new Error(`design token unavailable: ${token}`);
+  return value;
 }
 
 export function alarmColor(): string {

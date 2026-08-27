@@ -29,12 +29,13 @@ export function ExportSheet({
     const clone = svg.cloneNode(true) as SVGSVGElement;
     // bake the tokens: a standalone file has no design-lang.css
     const cs = getComputedStyle(svg);
-    for (const [k, v] of [
-      ["--r-ink", cs.getPropertyValue("--r-ink") || "var(--r-ink)"],
-      ["--r-ink-2", cs.getPropertyValue("--r-ink-2") || "var(--r-ink-2)"],
-      ["--r-page", cs.getPropertyValue("--r-page") || "var(--r-page)"],
-      ["--r-alarm", cs.getPropertyValue("--r-alarm") || "var(--r-alarm)"],
-    ])
+    const colors = ["--r-ink", "--r-ink-2", "--r-page", "--r-alarm"].map((token) => {
+      const value = cs.getPropertyValue(token).trim();
+      if (!value || value.includes("var("))
+        throw new Error(`required design token unavailable: ${token}`);
+      return [token, value] as const;
+    });
+    for (const [k, v] of colors)
       clone.setAttribute("style", `${clone.getAttribute("style") ?? ""};${k}:${v}`);
     const blob = new Blob([new XMLSerializer().serializeToString(clone)], {
       type: "image/svg+xml",

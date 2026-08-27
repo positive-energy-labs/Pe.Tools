@@ -48,6 +48,7 @@ import { type Lens, Tray, TrayCollapsed } from "./feedback/tray";
 import {
   candidateTone,
   CLOSE_M,
+  designColor,
   HELD_HATCH,
   INK_M,
   LABEL,
@@ -381,7 +382,7 @@ export function ZonePanel(props: {
       if (!live) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.fillStyle = PAPER;
+      ctx.fillStyle = designColor("--r-page");
       ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
       if (plan) {
         paintPlan(
@@ -599,14 +600,14 @@ export function ZonePanel(props: {
         </svg>
       </div>
       {plan === null ? (
-        <div className="face-mono t-caption absolute bottom-1 left-1 border bg-background/90 px-1 t-caption text-muted-foreground">
+        <div className="face-mono t-caption absolute bottom-1 left-1 border bg-background/90 px-1 text-muted-foreground">
           plan unavailable in this package
         </div>
       ) : null}
       {/* Instant id popover — replaces the slow native tooltip on these elements. */}
       {hover && (
         <div
-          className="face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-background/95 px-1.5 py-0.5 t-caption shadow-sm"
+          className="face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-background/95 px-1.5 py-0.5 shadow-sm"
           style={{
             left: Math.min(hover.x + 10, maxW - 90),
             top: Math.min(hover.y + 12, maxH - 22),
@@ -659,7 +660,7 @@ function StageButton(props: {
           label={`⚑${otherPairs.length}≠`}
           reason={`This zone is staged under ${otherPairs.length} other A/B pair${otherPairs.length === 1 ? "" : "s"} (pinned at stage time; the lens is only a view). Click to swing the lens to the pinned pair.`}
           onClick={() => props.onSwing(otherPairs[0]!)}
-          className="face-mono t-caption shrink-0 t-caption"
+          className="face-mono t-caption shrink-0"
         />
       )}
       <Verb
@@ -681,7 +682,7 @@ function StageButton(props: {
             b: props.b,
           })
         }
-        className="face-mono t-caption shrink-0 border px-1.5 t-caption"
+        className="face-mono t-caption shrink-0 border px-1.5"
       />
     </>
   );
@@ -828,7 +829,7 @@ function ZoneCard(props: {
               tone={props.highlighted ? "commit" : "act"}
               onClick={() => props.onToggleHighlight(locatable)}
               className={cn(
-                "face-mono t-caption shrink-0 border px-1.5 t-caption",
+                "face-mono t-caption shrink-0 border px-1.5",
                 props.highlighted
                   ? "bg-secondary text-secondary-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -979,13 +980,12 @@ function RunStrip(props: {
               reason={`Select ${entry.id} as the current run.`}
               onClick={() => onPickCur(entry.id)}
               className="flex flex-col items-start px-2 py-1 text-left"
-              title={`${entry.id} — click to make this the CURRENT run (B).`}
             >
               <span className="face-mono t-caption t-value leading-4">
                 {isCur ? <b>B · </b> : null}
                 {meta?.label ?? entry.id.slice(0, 15)}
               </span>
-              <span className="face-mono t-caption t-caption leading-3 text-muted-foreground">
+              <span className="face-mono t-caption leading-3 text-muted-foreground">
                 {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
                 {typeof meta?.zoneFilter === "string" ? (
                   <span style={{ color: "var(--r-caution)" }} title={partialTitle(meta.zoneFilter)}>
@@ -1006,11 +1006,6 @@ function RunStrip(props: {
                 background: isPrev ? "var(--secondary)" : "transparent",
                 color: isCur ? "var(--r-line-2)" : isPrev ? "var(--foreground)" : "var(--r-ink-2)",
               }}
-              title={
-                isPrev
-                  ? "This is the baseline (A) — click to clear it."
-                  : "Compare against this run as baseline (A)."
-              }
             >
               {isPrev ? "A✕" : "A"}
             </Verb>
@@ -1482,7 +1477,7 @@ function PlanPane(props: {
         </div>
       )}
       {data && !data.plan ? (
-        <div className="face-mono t-caption absolute bottom-2 left-2 border bg-background/90 px-1.5 py-0.5 t-caption text-muted-foreground">
+        <div className="face-mono t-caption absolute bottom-2 left-2 border bg-background/90 px-1.5 py-0.5 text-muted-foreground">
           plan unavailable in this package
         </div>
       ) : null}
@@ -1549,7 +1544,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
   );
   return (
     <div
-      className="face-mono t-caption absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-background/95 px-2 py-1.5 t-caption text-muted-foreground shadow-sm"
+      className="face-mono t-caption absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-background/95 px-2 py-1.5 text-muted-foreground shadow-sm"
       style={{ borderRadius: 2 }}
     >
       <span className="flex items-baseline">
@@ -1908,7 +1903,7 @@ function PlanDock(props: {
             reason="Show or hide the key."
             onClick={() => setShowKey((v) => !v)}
             className={cn(
-              "face-mono t-caption rounded-[2px] border px-1.5 py-0.5 t-caption",
+              "face-mono t-caption rounded-[2px] border px-1.5 py-0.5",
               showKey
                 ? "bg-secondary text-secondary-foreground"
                 : "text-muted-foreground hover:bg-muted",
@@ -1920,14 +1915,14 @@ function PlanDock(props: {
             reason="Show or hide the level statistics."
             onClick={() => setShowStats((v) => !v)}
             className={cn(
-              "face-mono t-caption rounded-[2px] border px-1.5 py-0.5 t-caption",
+              "face-mono t-caption rounded-[2px] border px-1.5 py-0.5",
               showStats
                 ? "bg-secondary text-secondary-foreground"
                 : "text-muted-foreground hover:bg-muted",
             )}
             style={{ borderColor: "var(--r-line-2)" }}
           />
-          <span className="face-mono t-caption t-caption text-muted-foreground">
+          <span className="face-mono t-caption text-muted-foreground">
             drag = pan · wheel = zoom · click zone = highlight · esc = clear
           </span>
         </span>
@@ -2098,7 +2093,7 @@ function scoreCell(row: RunRow, value: number | null): ReactNode {
   if (row.scores === null) {
     return (
       <span
-        className="face-mono t-caption block px-1.5 text-right t-caption text-muted-foreground"
+        className="face-mono t-caption block px-1.5 text-right text-muted-foreground"
         title={NO_SCORES_TITLE}
       >
         no scores
@@ -2476,7 +2471,7 @@ function LedgerDock(props: {
               at?" is never an inference from the run labels. */}
           {pool && (
             <div
-              className="face-mono t-caption shrink-0 truncate border-b px-3 py-1 t-caption text-muted-foreground"
+              className="face-mono t-caption shrink-0 truncate border-b px-3 py-1 text-muted-foreground"
               style={{ borderColor: "var(--r-line-2)" }}
               title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
             >
@@ -2835,7 +2830,7 @@ export default function RunBrowser() {
         </p>
         {pool && (
           <p
-            className="face-mono t-caption break-all t-caption text-muted-foreground"
+            className="face-mono t-caption break-all text-muted-foreground"
             title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
           >
             pool {pool}
@@ -2874,7 +2869,7 @@ export default function RunBrowser() {
               label="x exit review"
               reason="Back to the normal sheet."
               onClick={() => setReview(false)}
-              className="face-mono t-caption ml-auto border px-1.5 py-0.5 t-caption text-muted-foreground hover:text-foreground"
+              className="face-mono t-caption ml-auto border px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
             />
           </div>
           {stagedItems.length === 0 && (
@@ -2901,7 +2896,7 @@ export default function RunBrowser() {
                     label="x unstage"
                     reason="Remove this item from the staged set."
                     onClick={() => fb.unstage(item.key)}
-                    className="face-mono t-caption ml-auto t-caption text-muted-foreground hover:text-foreground"
+                    className="face-mono t-caption ml-auto text-muted-foreground hover:text-foreground"
                   />
                 </div>
                 <ZoneCard
@@ -3115,14 +3110,14 @@ export default function RunBrowser() {
                     : "Restore the default baseline: the current run's chronological predecessor."
                 }
                 onClick={() => setBaseline(null)}
-                className="face-mono t-caption border px-1.5 py-0.5 t-caption text-muted-foreground hover:text-foreground"
+                className="face-mono t-caption border px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
               />
             ) : (
               <Verb
                 label="A: auto"
                 reason="Restore the default baseline: the current run's chronological predecessor."
                 onClick={() => setBaseline("auto")}
-                className="face-mono t-caption border px-1.5 py-0.5 t-caption text-muted-foreground hover:text-foreground"
+                className="face-mono t-caption border px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
               />
             )}
             <Verb
@@ -3130,7 +3125,7 @@ export default function RunBrowser() {
               reason="Show or hide the solver evidence layer."
               onClick={() => setUnderlay((u) => !u)}
               className={cn(
-                "face-mono t-caption rounded-[2px] px-1.5 py-0.5 t-caption",
+                "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
                 underlay
                   ? "bg-secondary text-secondary-foreground"
                   : "border text-muted-foreground",
@@ -3147,7 +3142,7 @@ export default function RunBrowser() {
               onClick={() => setChangedOnly((c) => !c)}
               disabled={!comparing}
               className={cn(
-                "face-mono t-caption rounded-[2px] px-1.5 py-0.5 t-caption",
+                "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
                 changedOnly && comparing
                   ? "bg-secondary text-secondary-foreground"
                   : "border text-muted-foreground disabled:opacity-40",
