@@ -1,18 +1,6 @@
-/**
- * The three universal route-state tools — pea's side of every collaborative web route.
- *
- * These replace the six family_sheet_* tools with a per-route-agnostic trio. They are
- * THIN HTTP CLIENTS to the RouteWorkspace endpoints on the host
- * (`/pe/route-state...`), always acting as `actor:"agent"`. The trust contract is
- * enforced server-side by the route's write mask and human-only command gate — not
- * here — so the same tools work identically from an in-pea run and over stdio.
- *
- * On error they return the endpoint's `hint` text verbatim: pre/post-action hints are
- * how the agent learns what it may write and how to correct an invalid proposal.
- */
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
-import { addressSchema } from "@pe/agent-contracts";
+import { addressSchema, message } from "@pe/agent-contracts";
 
 import { coerceJsonObject } from "../shared/coerce.ts";
 import { resolveHostBaseUrl } from "../shared/host-config.ts";
@@ -22,36 +10,21 @@ function dispatcherBaseUrl(): string {
   return base.endsWith("/") ? base.slice(0, -1) : base;
 }
 
-async function getJson(path: string): Promise<unknown> {
-  // Discovery can fail (no running dev host for this worktree); that failure is the hint.
+// The server enforces trust, and endpoint hints return verbatim so Pea can correct a proposal.
+async function call(path: string, body?: unknown): Promise<unknown> {
   let base = "";
   try {
     base = dispatcherBaseUrl();
-    const response = await fetch(`${base}${path}`);
-    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok) {
-      return { isError: true, content: hintOf(payload) ?? `request failed (${response.status})` };
-    }
-    return payload;
-  } catch (error) {
-    return {
-      isError: true,
-      content: base
-        ? `Couldn't reach RouteWorkspace at ${base} (${message(error)}). Is the host running?`
-        : message(error),
-    };
-  }
-}
-
-async function postJson(path: string, body: unknown): Promise<unknown> {
-  let base = "";
-  try {
-    base = dispatcherBaseUrl();
-    const response = await fetch(`${base}${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const response = await fetch(
+      `${base}${path}`,
+      body === undefined
+        ? undefined
+        : {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          },
+    );
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok || payload.ok === false) {
       return { isError: true, content: hintOf(payload) ?? `request failed (${response.status})` };
@@ -61,7 +34,7 @@ async function postJson(path: string, body: unknown): Promise<unknown> {
     return {
       isError: true,
       content: base
-        ? `Couldn't reach RouteWorkspace at ${base} (${message(error)}).`
+        ? `Couldn't reach RouteWorkspace at ${base} (${message(error)}).${body === undefined ? " Is the host running?" : ""}`
         : message(error),
     };
   }
@@ -79,9 +52,13 @@ export const routeStateRead = createTool({
     doc: addressSchema.optional().describe("Revit document address; required with route."),
   }),
   execute: async (input) => {
-    if (!input.route) return getJson("/pe/route-state");
-    if (!input.doc) return missingDocument("read route-state detail");
-    return getJson(scopedPath(`/pe/route-state/${encodeURIComponent(input.route)}`, input.doc));
+    if (!input.route) return call("/pe/route-state");
+    if (!input.doc)
+      return {
+        isError: true,
+        content: "Cannot read route-state detail without a Revit document address.",
+      };
+    return call(scopedPath(`/pe/route-state/${encodeURIComponent(input.route)}`, input.doc));
   },
 });
 
@@ -103,7 +80,7 @@ export const routeStateApply = createTool({
     expectedRevision: z.number().int().nonnegative(),
   }),
   execute: async (input) => {
-    return postJson(
+    return call(
       scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/apply`, input.doc),
       {
         patches: input.patches,
@@ -125,7 +102,7 @@ export const routeCommand = createTool({
     expectedRevision: z.number().int().nonnegative(),
   }),
   execute: async (input, context) => {
-    return postJson(
+    return call(
       scopedPath(`/pe/agent/route-state/${encodeURIComponent(input.route)}/command`, input.doc),
       {
         command: input.command,
@@ -154,13 +131,6 @@ function scopedPath(path: string, doc: string): string {
   return `${path}?doc=${encodeURIComponent(doc)}`;
 }
 
-function missingDocument(action: string) {
-  return {
-    isError: true,
-    content: `Cannot ${action} without a Revit document address.`,
-  };
-}
-
 function requestIdentity(context: {
   agent?: { toolCallId?: string };
   mcp?: { extra?: { requestId?: string | number } };
@@ -170,8 +140,4 @@ function requestIdentity(context: {
   const mcpId = context.mcp?.extra?.requestId;
   if (mcpId !== undefined && String(mcpId).trim()) return String(mcpId);
   return crypto.randomUUID();
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

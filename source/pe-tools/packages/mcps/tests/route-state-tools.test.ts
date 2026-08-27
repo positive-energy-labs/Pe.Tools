@@ -1,4 +1,4 @@
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 
 import { routeCommand, routeStateApply, routeStateRead } from "../src/pea/route-state.ts";
 
@@ -9,11 +9,9 @@ type ExecutableTool = {
 test("route-state tools keep discovery shallow and scope detail and writes to a document", async () => {
   // Explicit override: this test asserts URL routing, not host discovery (which requires a live
   // service file and would correctly fail without a running worktree host).
-  const originalBaseUrl = process.env.PE_TOOLS_HOST_BASE_URL;
-  process.env.PE_TOOLS_HOST_BASE_URL = "http://127.0.0.1:9";
-  const originalFetch = globalThis.fetch;
+  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", "http://127.0.0.1:9");
   const calls: Array<{ method: string; url: URL; body?: unknown }> = [];
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
     calls.push({
       method: init?.method ?? "GET",
@@ -25,7 +23,7 @@ test("route-state tools keep discovery shallow and scope detail and writes to a 
         ? [{ route: "family-types", title: "Family Types", description: "Review values." }]
         : { ok: true },
     );
-  }) as typeof globalThis.fetch;
+  });
 
   const doc = "C:\\Models\\projectA.rvt";
 
@@ -90,9 +88,8 @@ test("route-state tools keep discovery shallow and scope detail and writes to a 
     expect(calls).toHaveLength(6);
     expect(JSON.stringify(discovery)).not.toContain('"key"');
   } finally {
-    globalThis.fetch = originalFetch;
-    if (originalBaseUrl === undefined) delete process.env.PE_TOOLS_HOST_BASE_URL;
-    else process.env.PE_TOOLS_HOST_BASE_URL = originalBaseUrl;
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   }
 });
 
