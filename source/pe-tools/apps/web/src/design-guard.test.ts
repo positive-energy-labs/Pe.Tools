@@ -7,7 +7,7 @@
  * token discipline that held by review during the sweep now holds by assertion. It encodes the
  * census gates driven to zero in the one-system design sweep (closed 2026-08-16; see the
  * Enforcement lines in docs/features/design-system/LEDGER.md). It walks src/**\/*.{ts,tsx,css} once with plain
- * regexes — no dependencies, no AST.
+ * regexes; the route ratchet uses TypeScript AST plus a narrow utility regex.
  *
  * ── HARD ZERO (any occurrence fails) ────────────────────────────────────────────────────────
  *  1. dead-shim tokens   var(--st-* --act-* --cat-* --pe-blue* --pe-green --paper* --mist
@@ -56,6 +56,19 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  createSourceFile,
+  forEachChild,
+  isIdentifier,
+  isJsxAttribute,
+  isJsxElement,
+  isJsxExpression,
+  isJsxSelfClosingElement,
+  isNoSubstitutionTemplateLiteral,
+  isStringLiteral,
+  ScriptKind,
+  ScriptTarget,
+} from "typescript";
 import { describe, expect, it } from "vite-plus/test";
 
 // ── the walk ─────────────────────────────────────────────────────────────────────────────────
@@ -113,6 +126,66 @@ const stripComments = (text: string): string =>
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
     .replace(/(^|[^:])\/\/[^\n]*/gm, (m, pre: string) => pre + " ".repeat(m.length - pre.length));
 
+const CSS_SEAMS = new Set([
+  "styles.css",
+  "design-lang.css",
+  "design-defaults.css",
+  "components/lang/lang.css",
+  "workbench/lens.css",
+  "settings-panes/json-editor.css",
+  "family-review/proto-editor/composed.css",
+]);
+
+const literalClassTexts = (
+  initializer: import("typescript").JsxAttribute["initializer"],
+): string[] => {
+  if (!initializer) return [];
+  if (isStringLiteral(initializer) || isNoSubstitutionTemplateLiteral(initializer))
+    return [initializer.getText()];
+  return isJsxExpression(initializer) && initializer.expression ? [initializer.getText()] : [];
+};
+
+const routeArbitrary = (): Offence[] => {
+  const re =
+    /(?:^|\s)((?:text|bg|border|rounded|ring|shadow|p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|space-[xy]|w|h|min-w|max-w|min-h|max-h|leading|tracking|font|top|right|bottom|left|inset|translate-x|translate-y|opacity|z)-\[[^\s\]]+\])/g;
+  const offences: Offence[] = [];
+  for (const f of FILES.filter(
+    (file) => /^routes\/.*\.tsx$/.test(file.rel) && !file.rel.endsWith("-proto.tsx"),
+  )) {
+    const sf = createSourceFile(f.rel, f.text, ScriptTarget.Latest, true, ScriptKind.TSX);
+    const visit = (node: import("typescript").Node) => {
+      if (isJsxElement(node) || isJsxSelfClosingElement(node)) {
+        const attributes = isJsxElement(node)
+          ? node.openingElement.attributes.properties
+          : node.attributes.properties;
+        for (const attribute of attributes) {
+          if (
+            !isJsxAttribute(attribute) ||
+            !isIdentifier(attribute.name) ||
+            (attribute.name.text !== "className" && attribute.name.text !== "class")
+          )
+            continue;
+          for (const text of literalClassTexts(attribute.initializer)) {
+            for (const match of text.matchAll(re)) {
+              offences.push({
+                rel: f.rel,
+                line: lineOf(f.text, node.getStart(sf)),
+                match: match[1],
+              });
+            }
+            re.lastIndex = 0;
+          }
+        }
+        if (isJsxElement(node)) for (const child of node.children) visit(child);
+        return;
+      }
+      forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return offences;
+};
+
 // ── hard zeros ───────────────────────────────────────────────────────────────────────────────
 
 describe("design guard — hard zeros", () => {
@@ -169,6 +242,28 @@ describe("design guard — hard zeros", () => {
   });
 });
 
+describe("design guard — foundation topology", () => {
+  it("keeps styles.css as the app entry and import order", () => {
+    const entry = FILES.find((file) => file.rel === "styles.css");
+    expect(entry, "styles.css must be collected").toBeDefined();
+    const declarations = stripComments(entry!.text)
+      .replace(/@import\s+(?:url\([^)]*\)|["'][^"']+["']);/g, "")
+      .replace(/@plugin\s+["'][^"']+["'];/g, "")
+      .trim();
+    expect(declarations, "styles.css may contain imports and build plugins only").toBe("");
+  });
+
+  it("keeps CSS declarations inside the explicit foundation seams", () => {
+    const declarationRe = /(?<![-\w])[-a-zA-Z][\w-]*\s*:\s*[^;{}]+;/g;
+    const outside = FILES.filter(
+      (file) => file.rel.endsWith(".css") && !CSS_SEAMS.has(file.rel),
+    ).map((file) => ({ ...file, text: stripComments(file.text) }));
+    expect(scan(outside, declarationRe), "CSS declarations outside the foundation seams").toEqual(
+      [],
+    );
+  });
+});
+
 // ── ratchets ─────────────────────────────────────────────────────────────────────────────────
 
 type Baseline = Record<string, number>;
@@ -203,6 +298,10 @@ const ratchet = (name: string, offences: Offence[]) => {
 };
 
 describe("design guard — ratchets (baselines may only fall)", () => {
+  it("routeArbitrary — literal arbitrary Tailwind utilities in shipping routes", () => {
+    ratchet("routeArbitrary", routeArbitrary());
+  });
+
   it("textPx — arbitrary text-[Npx] off the tier ladder", () => {
     ratchet("textPx", scan(FILES, /text-\[\d+px\]/g));
   });

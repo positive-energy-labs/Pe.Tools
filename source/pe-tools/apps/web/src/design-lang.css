@@ -286,3 +286,129 @@
   --viz-5: oklch(0.795 0.085 58);
   --viz-6: oklch(0.795 0.055 85);
 }
+
+@custom-variant dark (&:is(.dark *));
+
+/* The shadcn names remain live projections while their consumers remain. */
+:root {
+  --background: var(--r-page);
+  --foreground: var(--r-ink);
+  --card: var(--r-artifact);
+  --card-foreground: var(--r-ink);
+  --popover: var(--r-artifact);
+  --popover-foreground: var(--r-ink);
+  --primary: var(--r-commit);
+  --primary-foreground: var(--r-on-commit);
+  --secondary: var(--r-recess);
+  --secondary-foreground: var(--r-ink);
+  --muted: var(--r-recess);
+  --muted-foreground: var(--r-ink-2);
+  --accent: var(--r-select);
+  --accent-foreground: var(--r-ink);
+  --destructive: var(--r-alarm);
+  --destructive-foreground: var(--r-on-commit);
+  --border: var(--r-line);
+  --input: var(--r-line);
+  --ring: var(--r-line-2);
+  --radius: 0.125rem;
+  --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
+  --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
+  --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
+}
+
+@theme inline {
+  --font-sans: "Open Sans", system-ui, -apple-system, sans-serif;
+  --font-pe: "Open Sans", system-ui, -apple-system, sans-serif;
+  --font-pe-display: "Spectral", Georgia, "Times New Roman", serif;
+  --font-pe-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-page: var(--r-page);
+  --color-artifact: var(--r-artifact);
+  --color-recess: var(--r-recess);
+  --color-select: var(--r-select);
+  --color-ink: var(--r-ink);
+  --color-ink-2: var(--r-ink-2);
+  --color-ink-mute: var(--r-ink-mute);
+  --color-line: var(--r-line);
+  --color-line-2: var(--r-line-2);
+  --color-pea: var(--r-pea);
+  --color-pea-ink: var(--r-pea-ink);
+  --color-alarm: var(--r-alarm);
+  --color-caution: var(--r-caution);
+  --color-done: var(--r-done);
+  --color-commit: var(--r-commit);
+  --color-on-commit: var(--r-on-commit);
+  --color-nav: var(--r-nav);
+
+  --color-viz-1: var(--viz-1);
+  --color-viz-2: var(--viz-2);
+  --color-viz-3: var(--viz-3);
+  --color-viz-4: var(--viz-4);
+  --color-viz-5: var(--viz-5);
+  --color-viz-6: var(--viz-6);
+
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* PE type system: tier × face × case. */
+@utility t-caption {
+  font-size: 10px;
+  line-height: 1.4;
+}
+@utility t-label {
+  font-size: 11px;
+  line-height: 1.4;
+}
+@utility t-value {
+  font-size: 12px;
+  line-height: 1.45;
+}
+@utility t-prose {
+  font-size: 13px;
+  line-height: 1.6;
+}
+@utility t-title {
+  font-size: 16px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+@utility t-display {
+  font-size: 40px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+@utility face-mono {
+  font-family: var(--font-pe-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+@utility t-upper {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
