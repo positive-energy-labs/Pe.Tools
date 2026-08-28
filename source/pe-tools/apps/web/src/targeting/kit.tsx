@@ -37,6 +37,7 @@ import {
   type Stage,
   type Verb,
 } from "#/targeting/model";
+import { cn } from "#/lib/utils";
 
 function Choice({
   children,
@@ -298,12 +299,7 @@ export function freshnessWord(b: Bindings, link: Link): string | null {
 /** The ONE in-flight mark. Opacity only — dashed stays the seam slot. */
 export const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
 
-const POP: React.CSSProperties = {
-  border: "1px solid var(--pe-line-2)",
-  background: "var(--pe-page)",
-  boxShadow: "0 2px 8px color-mix(in srgb, var(--pe-ink) 8%, transparent)",
-  minWidth: 320,
-};
+const POP_CLASS = "min-w-80 border border-line-2 bg-page";
 
 /**
  * ONE PICKER PER TERMINAL. Closed: the leaf label when the chain is picked through, else
@@ -395,13 +391,14 @@ export function Picker({
           if (!open) setLevel(link.key);
           b.setOpen(open ? null : slot);
         }}
-        className="face-mono t-label"
+        className={cn(
+          "face-mono t-label border-b",
+          open ? "bg-select" : "bg-transparent",
+          caution ? "border-caution text-caution" : "border-ink text-ink",
+        )}
         style={{
           padding: 0,
           cursor: inert ? "not-allowed" : "pointer",
-          background: open ? "var(--pe-select)" : "transparent",
-          borderBottom: `1px solid ${caution ? "var(--pe-caution)" : "var(--pe-ink)"}`,
-          color: caution ? "var(--pe-caution)" : "var(--pe-ink)",
           whiteSpace: "nowrap",
           animation: lit ? "tp-pulse 0.9s ease-in-out infinite" : undefined,
         }}
@@ -409,32 +406,26 @@ export function Picker({
         {closedText}
       </Choice>
       {open ? (
-        <span className="absolute left-0 top-full z-40 mt-1 block overflow-hidden" style={POP}>
+        <span className={`absolute left-0 top-full z-40 mt-1 block overflow-hidden ${POP_CLASS}`}>
           {/* crumbs — the trunk, one segment per level; the current level is underlined */}
-          <div
-            className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"
-            style={{ borderBottom: "1px solid var(--pe-line-2)" }}
-          >
+          <div className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1 border-b border-b-line-2">
             {chain.map((l, i) => {
               const on = l.key === level;
               const lab = b.labelOf(l);
               return (
                 <span key={l.key} className="inline-flex items-baseline gap-1">
-                  {i > 0 ? (
-                    <span className="face-mono t-caption" style={{ color: "var(--pe-ink-mute)" }}>
-                      ›
-                    </span>
-                  ) : null}
+                  {i > 0 ? <span className="face-mono t-caption text-ink-mute">›</span> : null}
                   <Choice
                     selected={on}
                     reason={`Select ${lab ?? l.placeholder}.`}
                     onClick={() => (setLevel(l.key), setQ(""))}
-                    className="face-mono t-caption"
+                    className={cn(
+                      "face-mono t-caption border-b",
+                      on ? "border-ink bg-select" : "border-transparent bg-transparent",
+                      lab == null ? "text-caution" : "text-ink",
+                    )}
                     style={{
                       padding: "0 3px",
-                      background: on ? "var(--pe-select)" : "transparent",
-                      color: lab == null ? "var(--pe-caution)" : "var(--pe-ink)",
-                      borderBottom: on ? "1px solid var(--pe-ink)" : "1px solid transparent",
                     }}
                   >
                     {lab ?? l.placeholder}
@@ -456,25 +447,22 @@ export function Picker({
               if (e.key === "Escape") b.setOpen(null);
             }}
             placeholder={`search ${cur.key}${opts ? ` · ${opts.length}` : ""}`}
-            className="t-value w-full px-2 py-1"
+            className="t-value w-full px-2 py-1 bg-transparent border-b border-b-line-2 text-ink"
             style={{
-              background: "transparent",
-              borderBottom: "1px solid var(--pe-line-2)",
               outline: "none",
-              color: "var(--pe-ink)",
             }}
           />
           <div className="max-h-64 overflow-y-auto py-1">
             {opts === null ? (
-              <div className="t-caption px-2 py-1" style={{ color: "var(--pe-caution)" }}>
+              <div className="t-caption px-2 py-1 text-caution">
                 no legal options — needs {cur.needs}
               </div>
             ) : curFeed?.state === "error" ? (
-              <div className="t-caption px-2 py-1" style={{ color: "var(--pe-caution)" }}>
+              <div className="t-caption px-2 py-1 text-caution">
                 {curFeed.note ?? "read failed"}
               </div>
             ) : opts.length === 0 ? (
-              <div className="t-caption px-2 py-1" style={{ color: "var(--pe-ink-2)" }}>
+              <div className="t-caption px-2 py-1 text-ink-2">
                 {curFeed?.state === "loading"
                   ? "reading…"
                   : cur.parent && b.bound[cur.parent] == null
@@ -482,9 +470,7 @@ export function Picker({
                     : cur.needs}
               </div>
             ) : hits.length === 0 ? (
-              <div className="t-caption px-2 py-1" style={{ color: "var(--pe-ink-2)" }}>
-                no match
-              </div>
+              <div className="t-caption px-2 py-1 text-ink-2">no match</div>
             ) : (
               hits.map((o) => {
                 const on = b.isPicked(cur, o.id);
@@ -497,30 +483,24 @@ export function Picker({
                       b.pick(cur, o.id);
                       advance();
                     }}
-                    className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                    style={{ background: on ? "var(--pe-select)" : undefined }}
+                    className={cn(
+                      "flex w-full items-baseline gap-2 px-2 py-0.5 text-left",
+                      on && "bg-select",
+                    )}
+                    style={{ background: undefined }}
                   >
                     {cur.multi ? (
                       <span className="face-mono t-caption">{on ? "☑" : "☐"}</span>
                     ) : null}
-                    <span className="t-value" style={{ color: "var(--pe-ink)" }}>
-                      {o.label}
-                    </span>
-                    {o.sub ? (
-                      <span className="t-caption" style={{ color: "var(--pe-ink-2)" }}>
-                        {o.sub}
-                      </span>
-                    ) : null}
+                    <span className="t-value text-ink">{o.label}</span>
+                    {o.sub ? <span className="t-caption text-ink-2">{o.sub}</span> : null}
                   </Choice>
                 );
               })
             )}
             {belowHits.length > 0 ? (
               <>
-                <div
-                  className="face-mono t-caption t-upper px-2 pt-1.5"
-                  style={{ color: "var(--pe-ink-mute)", borderTop: "1px solid var(--pe-line-2)" }}
-                >
+                <div className="face-mono t-caption t-upper px-2 pt-1.5 text-ink-mute border-t border-t-line-2">
                   {b.labelOf(cur)} › {below!.key}
                 </div>
                 {belowHits.map((o) => (
@@ -535,9 +515,12 @@ export function Picker({
                       else if (!below!.multi) b.setOpen(null);
                       setQ("");
                     }}
-                    className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
+                    className={cn(
+                      "flex w-full items-baseline gap-2 px-2 py-0.5 text-left",
+                      b.isPicked(below!, o.id) && "bg-select",
+                    )}
                     style={{
-                      background: b.isPicked(below!, o.id) ? "var(--pe-select)" : undefined,
+                      background: undefined,
                     }}
                   >
                     {below!.multi ? (
@@ -545,14 +528,8 @@ export function Picker({
                         {b.isPicked(below!, o.id) ? "☑" : "☐"}
                       </span>
                     ) : null}
-                    <span className="t-value" style={{ color: "var(--pe-ink)" }}>
-                      {o.label}
-                    </span>
-                    {o.sub ? (
-                      <span className="t-caption" style={{ color: "var(--pe-ink-2)" }}>
-                        {o.sub}
-                      </span>
-                    ) : null}
+                    <span className="t-value text-ink">{o.label}</span>
+                    {o.sub ? <span className="t-caption text-ink-2">{o.sub}</span> : null}
                   </Choice>
                 ))}
               </>
@@ -583,9 +560,8 @@ export function StageStrip({
 }) {
   return (
     <div
-      className="flex items-stretch"
+      className="flex items-stretch border-t border-t-ink border-b border-b-line-2"
       role="tablist"
-      style={{ borderTop: "1px solid var(--pe-ink)", borderBottom: "1px solid var(--pe-line-2)" }}
     >
       {product.stages.map((s, i) => {
         const ready = s.verbs.filter((v) => runner.canRun(v).ok).length;
@@ -603,20 +579,18 @@ export function StageStrip({
                 return c.ok ? `${v.label}: ready` : `${v.label}: ${c.reason}`;
               })
               .join(" · ")}`}
-            className="face-mono t-caption t-upper flex items-baseline gap-2 px-2.5 py-1"
-            style={{
-              borderLeft: i > 0 ? "1px solid var(--pe-line-2)" : undefined,
-              background: on ? "var(--pe-select)" : "transparent",
-              boxShadow: on ? "inset 0 -2px 0 var(--pe-ink)" : undefined,
-              color: on ? "var(--pe-ink)" : "var(--pe-ink-2)",
-            }}
+            className={cn(
+              "face-mono t-caption t-upper flex items-baseline gap-2 px-2.5 py-1",
+              i > 0 && "border-l border-line-2",
+              on ? "border-b-2 border-b-ink bg-select text-ink" : "bg-transparent text-ink-2",
+            )}
           >
             <span>{s.label}</span>
             {meter ? (
               <span
+                className={cn(ready === 0 ? "text-ink-mute" : "text-ink")}
                 style={{
                   fontVariantNumeric: "tabular-nums",
-                  color: ready === 0 ? "var(--pe-ink-mute)" : "var(--pe-ink)",
                 }}
               >
                 {ready}/{s.verbs.length}
@@ -635,9 +609,7 @@ export function StageStrip({
 export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
   return (
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="face-mono t-caption t-upper" style={{ color: "var(--pe-ink-mute)" }}>
-        panes
-      </span>
+      <span className="face-mono t-caption t-upper text-ink-mute">panes</span>
       {product.panes.map((p) => {
         const st = paneState(product, p, b);
         return (
@@ -645,11 +617,12 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
             key={p.key}
             title={st.reason}
             aria-disabled={!st.ok}
-            className="face-mono t-caption"
+            className={cn(
+              "face-mono t-caption border-b",
+              st.ok ? "border-line-2 text-ink" : "border-transparent text-ink-mute",
+            )}
             style={{
-              color: st.ok ? "var(--pe-ink)" : "var(--pe-ink-mute)",
               fontStyle: st.ok ? undefined : "italic",
-              borderBottom: st.ok ? "1px solid var(--pe-line-2)" : "1px solid transparent",
               cursor: st.ok ? "default" : "not-allowed",
             }}
           >

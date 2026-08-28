@@ -14,6 +14,7 @@ import {
   asString,
   text,
 } from "#/ops/registry";
+import { cn } from "#/lib/utils";
 
 /**
  * Curated readonly views for the revit.context.* orientation ops and
@@ -95,10 +96,10 @@ function IssueLines({ issues }: { issues: unknown }) {
       {rows.map((issue, i) => (
         <span
           key={i}
-          className="face-mono t-caption"
-          style={{
-            color: issue.severity === "Info" ? "var(--pe-ink-2)" : "var(--pe-caution)",
-          }}
+          className={cn(
+            "face-mono t-caption",
+            issue.severity === "Info" ? "text-ink-2" : "text-caution",
+          )}
         >
           {text(issue.severity)} {text(issue.code)}: {text(issue.message)}
         </span>
@@ -202,10 +203,10 @@ function ContextSummaryView({ data }: OpViewProps) {
             {sheetPlacements.map((p, i) => (
               <span
                 key={i}
-                className="face-mono t-caption"
-                style={{
-                  color: p.isActiveSheet === true ? "var(--pe-ink)" : "var(--pe-ink-2)",
-                }}
+                className={cn(
+                  "face-mono t-caption",
+                  p.isActiveSheet === true ? "text-ink" : "text-ink-2",
+                )}
                 title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
               >
                 on {text(p.sheetNumber)} {text(p.sheetName)}
@@ -273,14 +274,9 @@ function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
   const isActive = doc.isActive === true;
   return (
     <div
-      className={`flex max-w-[18rem] min-w-0 flex-col gap-0.5 rounded-md border px-2.5 py-1.5 ${isActive ? "border-line-2" : "border-line"}`}
+      className={`flex max-w-[18rem] min-w-0 flex-col gap-0.5 rounded-md border px-2.5 py-1.5 ${isActive ? "on-select border-line-2" : "border-line"}`}
       /* selection is a fill, never a hue — the active tab takes the select rung and
          re-declares the ground it shifted. */
-      style={
-        isActive
-          ? ({ background: "var(--pe-select)", "--pe-on": "var(--pe-select)" } as React.CSSProperties)
-          : undefined
-      }
     >
       <div className="flex min-w-0 items-baseline gap-1.5">
         <span
@@ -392,8 +388,7 @@ function VisibleSummaryView({ data, request }: OpViewProps) {
         const complete = row.isReturnedElementSetComplete === true;
         return (
           <span
-            className="face-mono t-caption"
-            style={{ color: complete ? "var(--pe-ink-2)" : "var(--pe-caution)" }}
+            className={cn("face-mono t-caption", complete ? "text-ink-2" : "text-caution")}
             title={complete ? undefined : "returned element set is incomplete"}
           >
             {ids.join(" ")}
@@ -686,7 +681,7 @@ function ViewRenderingStateView({ data }: OpViewProps) {
       <Section label="evidence limits">
         {confidenceWarnings.map((warning, i) => (
           <Provenance key={`w${i}`}>
-            <span style={{ color: "var(--pe-caution)" }}>confidence: {warning}</span>
+            <span className="text-caution">confidence: {warning}</span>
           </Provenance>
         ))}
         {notInspected.map((item, i) => (
@@ -721,16 +716,16 @@ function ScoreBar({ score, max, muted }: { score: number; max: number; muted: bo
     >
       <span className="inline-block h-[3px] w-[72px] rounded-[1px] bg-line">
         <span
-          className="block h-full rounded-[1px]"
+          className={cn("block h-full rounded-[1px]", muted && "bg-ink-mute")}
           style={{
             width: `${frac * 100}%`,
-            background: muted ? "var(--pe-ink-mute)" : "var(--viz-1)",
+            background: "var(--viz-1)",
           }}
         />
       </span>
       <span
-        className="face-mono t-caption"
-        style={{ color: muted ? "var(--pe-ink-mute)" : undefined }}
+        className={cn("face-mono t-caption", muted && "text-ink-mute")}
+        style={{ color: undefined }}
       >
         {score}
       </span>
@@ -757,17 +752,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
           <span className="t-title min-w-0 font-medium leading-snug">
             “{text(res.referenceText)}”
           </span>
-          <span
-            className="face-mono t-caption"
-            style={{
-              color:
-                candidateCount === 1
-                  ? "var(--pe-done)"
-                  : candidateCount === 0
-                    ? "var(--pe-caution)"
-                    : "var(--pe-caution)",
-            }}
-          >
+          <span className="face-mono t-caption text-caution">
             {candidateCount === 0
               ? "no matches"
               : candidateCount === 1
@@ -795,12 +780,15 @@ function ResolveReferencesView({ data }: OpViewProps) {
             /* rank is carried by order, the #n gutter and the score bar (grayscale law).
                The edge mark only locates: ink for the leader (R13a's neutral locate mark),
                caution for a demoted candidate in an ambiguous set. */
-            const edge = top ? "var(--pe-ink)" : ambiguous ? "var(--pe-caution)" : "transparent";
+            const edgeClass = top
+              ? "border-l-ink"
+              : ambiguous
+                ? "border-l-caution"
+                : "border-l-transparent";
             return (
               <div
                 key={handle ? `${handleId(handle)}-${i}` : i}
-                className={`flex min-w-0 flex-col gap-1 border-l-2 px-2.5 py-2 ${i < candidates.length - 1 ? "border-b border-b-line" : ""}`}
-                style={{ borderLeftColor: edge }}
+                className={`flex min-w-0 flex-col gap-1 border-l-2 px-2.5 py-2 ${edgeClass} ${i < candidates.length - 1 ? "border-b border-b-line" : ""}`}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <span className="face-mono t-caption w-6 shrink-0 text-ink-2">#{i + 1}</span>

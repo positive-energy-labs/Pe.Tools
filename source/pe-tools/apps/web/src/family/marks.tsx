@@ -28,6 +28,7 @@
 import { StateCell, type StateCellProps } from "#/components/lang/cell";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import type { ProtoProposal } from "#/family/world";
+import { cn } from "#/lib/utils";
 
 /**
  * The editable `StateCell`, wired to whatever cell navigation surrounds it. Inside a MasterTable
@@ -65,8 +66,10 @@ export function ProposedCell({
 
   return (
     <span
-      className="relative flex min-h-7 w-full items-center"
-      style={first ? { boxShadow: "inset 0 -1.5px 0 0 var(--pe-pea)" } : undefined}
+      className={cn(
+        "relative flex min-h-7 w-full items-center",
+        first && "border-b-[1.5px] border-pea",
+      )}
     >
       {children}
       {unsaved && (

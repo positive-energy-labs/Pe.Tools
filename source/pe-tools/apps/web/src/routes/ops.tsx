@@ -249,9 +249,8 @@ function OpsPlayground() {
                         }}
                         className={cn(
                           "w-full rounded-[2px] px-2 py-1 text-left transition-colors",
-                          !active &&
-                            "hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]",
-                          active && "bg-select [--pe-on:var(--pe-select)]",
+                          !active && "hover:veil",
+                          active && "on-select",
                         )}
                       >
                         <div className="t-value min-w-0 truncate font-medium">
@@ -281,9 +280,8 @@ function OpsPlayground() {
                         onClick={() => select(op)}
                         className={cn(
                           "w-full rounded-[2px] px-2 py-1 text-left transition-colors",
-                          !active &&
-                            "hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]",
-                          active && "bg-select [--pe-on:var(--pe-select)]",
+                          !active && "hover:veil",
+                          active && "on-select",
                         )}
                       >
                         <div className="flex items-center gap-1.5">
@@ -809,7 +807,7 @@ function ProjectedOutput({ value }: { value: unknown }) {
       <h2 className="t-label t-upper mb-1 text-ink-2">{projection.title}</h2>
       <div className="max-h-96 overflow-auto rounded-md border border-line">
         <table className="t-value w-full text-left">
-          <thead className="sticky top-0 bg-recess [--pe-on:var(--pe-recess)]">
+          <thead className="sticky top-0 on-recess">
             <tr>
               {columns.map((column) => (
                 <th key={column} className="face-mono t-label border-b border-line-2 px-2 py-1">
@@ -839,7 +837,7 @@ function OutputBlock({ title, value }: { title: string; value: unknown }) {
   return (
     <div className="min-w-0">
       {title && <h2 className="t-label t-upper mb-1 text-ink-2">{title}</h2>}
-      <pre className="t-value max-h-128 overflow-auto rounded-md border border-line bg-recess [--pe-on:var(--pe-recess)] p-3">
+      <pre className="t-value max-h-128 overflow-auto rounded-md border border-line on-recess p-3">
         {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
       </pre>
     </div>

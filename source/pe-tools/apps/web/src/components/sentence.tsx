@@ -23,17 +23,18 @@ import { useEffect, useRef, useState } from "react";
 import { DocRow, extOf } from "#/components/doc-picker";
 import { useFleet, worldClause, worldName } from "#/host/fleet";
 import { mintSelector, resolveTarget, sessionLabel } from "#/host/target";
+import { cn } from "#/lib/utils";
 
 export type SentenceTone = "rest" | "active" | "awaiting" | "committed" | "failed";
 
 /** Meaning-role spends: pea's loop wears pea's identity; staged-awaiting-you and trouble are
  *  both caution (the words disambiguate — error is NOT the model disagreeing, so no alarm). */
-export const TONE_COLOR: Record<SentenceTone, string> = {
-  rest: "var(--pe-ink-2)",
-  active: "var(--pe-pea-ink)",
-  awaiting: "var(--pe-caution)",
-  committed: "var(--pe-done)",
-  failed: "var(--pe-caution)",
+export const TONE_CLASS: Record<SentenceTone, string> = {
+  rest: "text-ink-2",
+  active: "text-pea-ink",
+  awaiting: "text-caution",
+  committed: "text-done",
+  failed: "text-caution",
 };
 
 /** One option in a generic noun slot's picker. `sub` narrates observed cost/state, never a guess. */
@@ -107,16 +108,16 @@ function Slot({
         event.stopPropagation();
         onClick();
       }}
-      className="face-mono t-label"
+      className={cn(
+        "face-mono t-label border-b-[0.5px]",
+        open ? "bg-select" : "bg-transparent",
+        text ? "border-ink text-ink" : "border-caution text-caution",
+      )}
       style={{
         padding: 0,
         cursor: "pointer",
-        // selection/focus is a FILL, never a hue — the open picker takes the select rung.
-        background: open ? "var(--pe-select)" : "transparent",
         border: "none",
-        borderBottom: `0.5px solid ${text ? "var(--pe-ink)" : "var(--pe-caution)"}`,
         borderRadius: 0,
-        color: text ? "var(--pe-ink)" : "var(--pe-caution)",
         whiteSpace: "nowrap",
       }}
     >
@@ -128,12 +129,9 @@ function Slot({
 function Popover({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="absolute left-0 top-full z-30 mt-1 max-h-72 w-80 overflow-y-auto px-2 py-1"
+      className="absolute left-0 top-full z-30 mt-1 max-h-72 w-80 overflow-y-auto px-2 py-1 border-[0.5px] border-line-2 bg-page"
       style={{
-        border: "0.5px solid var(--pe-line-2)",
-        background: "var(--pe-page)",
         borderRadius: 2,
-        boxShadow: "0 2px 8px color-mix(in srgb, var(--pe-ink) 8%, transparent)",
       }}
     >
       {children}
@@ -188,10 +186,10 @@ export function Sentence({
     return (
       <div className="relative inline-block min-w-0 flex-1 basis-72">
         <div
-          className="flex h-7 items-center overflow-hidden px-2"
-          style={{ border: "0.5px solid var(--pe-line-2)", borderRadius: 2 }}
+          className="flex h-7 items-center overflow-hidden px-2 border-[0.5px] border-line-2"
+          style={{ borderRadius: 2 }}
         >
-          <span className="face-mono t-label truncate" style={{ color: TONE_COLOR.committed }}>
+          <span className={cn("face-mono t-label truncate", TONE_CLASS.committed)}>
             {receipt.text} · just now
           </span>
         </div>
@@ -202,15 +200,13 @@ export function Sentence({
   return (
     <div ref={rootRef} className="relative inline-block min-w-0 flex-1 basis-72">
       <div
-        className="flex h-7 items-center overflow-hidden px-2"
-        style={{ border: "0.5px solid var(--pe-line-2)", borderRadius: 2, opacity: busy ? 0.6 : 1 }}
+        className="flex h-7 items-center overflow-hidden px-2 border-[0.5px] border-line-2"
+        style={{ borderRadius: 2, opacity: busy ? 0.6 : 1 }}
       >
         <span className="flex items-baseline gap-1 truncate" style={{ whiteSpace: "nowrap" }}>
           {hasDocSlot && !documentLabel ? (
             <>
-              <span className="face-mono t-label" style={{ color: "var(--pe-ink-2)" }}>
-                nothing open —{" "}
-              </span>
+              <span className="face-mono t-label text-ink-2">nothing open — </span>
               <Slot
                 text={null}
                 placeholder="pick a document"
@@ -218,16 +214,13 @@ export function Sentence({
                 open={openSlot === "doc"}
                 onClick={() => setOpenSlot(openSlot === "doc" ? null : "doc")}
               />
-              <span className="face-mono t-label" style={{ color: "var(--pe-ink-2)" }}>
-                {" "}
-                to begin
-              </span>
+              <span className="face-mono t-label text-ink-2"> to begin</span>
             </>
           ) : (
             <>
               <span
-                className="face-mono t-label"
-                style={{ color: TONE_COLOR[prefixTone], transition: "color 0.6s" }}
+                className={cn("face-mono t-label", TONE_CLASS[prefixTone])}
+                style={{ transition: "color 0.6s" }}
               >
                 {prefix}{" "}
               </span>
@@ -249,9 +242,7 @@ export function Sentence({
               style={{ whiteSpace: "nowrap" }}
             >
               {slot.joiner ? (
-                <span className="face-mono t-label" style={{ color: "var(--pe-ink-2)" }}>
-                  {slot.joiner}
-                </span>
+                <span className="face-mono t-label text-ink-2">{slot.joiner}</span>
               ) : null}
               {slot.options ? (
                 <Slot
@@ -262,11 +253,7 @@ export function Sentence({
                   onClick={() => setOpenSlot(openSlot === slot.key ? null : slot.key)}
                 />
               ) : (
-                <span
-                  className="face-mono t-label"
-                  title={slot.title}
-                  style={{ color: "var(--pe-ink)" }}
-                >
+                <span className="face-mono t-label text-ink" title={slot.title}>
                   {slot.text ?? slot.placeholder}
                 </span>
               )}
@@ -274,15 +261,17 @@ export function Sentence({
           ))}
           <button
             type="button"
-            className="face-mono t-label"
+            className={cn(
+              "face-mono t-label",
+              openSlot === "world" ? "bg-select" : "bg-transparent",
+              resolution.kind === "resolved" ? "text-ink-2" : "text-caution",
+            )}
             title="The Revit world every call from this surface is sent to. Click to bind a different session, or to unbind and follow whichever session is the only one running."
             style={{
               padding: 0,
               cursor: "pointer",
-              background: openSlot === "world" ? "var(--pe-select)" : "transparent",
               border: "none",
               borderRadius: 0,
-              color: resolution.kind === "resolved" ? "var(--pe-ink-2)" : "var(--pe-caution)",
               whiteSpace: "nowrap",
             }}
             onClick={(event) => {
@@ -301,12 +290,9 @@ export function Sentence({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="filter documents"
-            className="face-mono t-caption mt-1 w-full px-1.5 py-0.5"
+            className="face-mono t-caption mt-1 w-full px-1.5 py-0.5 border-[0.5px] border-line-2 bg-transparent text-ink"
             style={{
               borderRadius: 2,
-              border: "0.5px solid var(--pe-line-2)",
-              background: "transparent",
-              color: "var(--pe-ink)",
               outline: "none",
             }}
           />
@@ -325,7 +311,7 @@ export function Sentence({
               />
             ))}
           {documents.length === 0 ? (
-            <div className="face-mono t-caption py-1" style={{ color: "var(--pe-ink-2)" }}>
+            <div className="face-mono t-caption py-1 text-ink-2">
               {documentsEmpty ??
                 "No documents yet — create one to give this surface something to edit."}
             </div>
@@ -340,12 +326,9 @@ export function Sentence({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={`filter ${slot.key}s`}
-              className="face-mono t-caption mt-1 w-full px-1.5 py-0.5"
+              className="face-mono t-caption mt-1 w-full px-1.5 py-0.5 border-[0.5px] border-line-2 bg-transparent text-ink"
               style={{
                 borderRadius: 2,
-                border: "0.5px solid var(--pe-line-2)",
-                background: "transparent",
-                color: "var(--pe-ink)",
                 outline: "none",
               }}
             />
@@ -365,7 +348,7 @@ export function Sentence({
                 />
               ))}
             {slot.options.length === 0 ? (
-              <div className="face-mono t-caption py-1" style={{ color: "var(--pe-ink-2)" }}>
+              <div className="face-mono t-caption py-1 text-ink-2">
                 {slot.empty ??
                   `No ${slot.key} to bind yet — nothing in the bound world offers one.`}
               </div>
@@ -377,54 +360,52 @@ export function Sentence({
       {openSlot === "world" ? (
         <Popover>
           {/* Section head: heads are SANS (small-caps tracked), never mono — the heads law. */}
-          <div className="t-caption t-upper pb-0.5" style={{ color: "var(--pe-ink-2)" }}>
+          <div className="t-caption t-upper pb-0.5 text-ink-2">
             bind — which world this surface speaks to
           </div>
           {sessions.map((session) => (
             <div
               key={session.sessionId}
-              className="py-1"
-              style={{ cursor: "pointer", borderTop: "0.5px solid var(--pe-line)" }}
+              className="py-1 border-t-[0.5px] border-t-line"
+              style={{ cursor: "pointer" }}
               onClick={() => {
                 onBind(mintSelector(session, sessions));
                 setOpenSlot(null);
               }}
             >
-              <span className="face-mono t-caption" style={{ color: "var(--pe-ink)" }}>
+              <span className="face-mono t-caption text-ink">
                 {worldName({
                   id: session.sdkSessionId ?? session.sessionId,
                   custody: session.custody,
                 })}
               </span>{" "}
-              <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
+              <span className="face-mono t-caption text-ink-2">
                 {sessionLabel(session)} · pid {session.processId}
               </span>
             </div>
           ))}
           {bootingWorlds.map((world) => (
-            <div key={world.id} className="py-1" style={{ borderTop: "0.5px solid var(--pe-line)" }}>
+            <div key={world.id} className="py-1 border-t-[0.5px] border-t-line">
               {/* Booting is registry testimony in flight — neutral ink, not caution
                   (the /instances phase verdict set the precedent). */}
-              <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
-                {world.id} — still booting
-              </span>
+              <span className="face-mono t-caption text-ink-2">{world.id} — still booting</span>
             </div>
           ))}
           {sessions.length === 0 && bootingWorlds.length === 0 ? (
-            <div className="face-mono t-caption py-1" style={{ color: "var(--pe-ink-2)" }}>
+            <div className="face-mono t-caption py-1 text-ink-2">
               no live worlds — start one from /instances
             </div>
           ) : null}
           {target ? (
             <div
-              className="py-1"
-              style={{ cursor: "pointer", borderTop: "0.5px solid var(--pe-line)" }}
+              className="py-1 border-t-[0.5px] border-t-line"
+              style={{ cursor: "pointer" }}
               onClick={() => {
                 onBind(null);
                 setOpenSlot(null);
               }}
             >
-              <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
+              <span className="face-mono t-caption text-ink-2">
                 unbind — follow the sole session
               </span>
             </div>

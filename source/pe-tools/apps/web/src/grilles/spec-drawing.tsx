@@ -11,6 +11,7 @@
 import { InchField } from "./field";
 import type { Grille, GrilleInput } from "./math";
 import { frac } from "./math";
+import { cn } from "#/lib/utils";
 
 const NAMES: Record<keyof GrilleInput, string> = {
   boardLength: "BOARD LENGTH",
@@ -65,6 +66,7 @@ export function SpecDrawing({
               int={int}
               value={g[key]}
               onChange={(v) => set({ [key]: v })}
+              className="bg-page"
               style={int ? { ...inp, width: 32 } : inp}
             />
           ),
@@ -76,8 +78,8 @@ export function SpecDrawing({
       width={width}
       height={height}
       viewBox={`${-M} ${-M} ${width} ${height}`}
-      className="face-mono"
-      style={{ color: "var(--pe-ink)", fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+      className="face-mono text-ink"
+      style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -88,7 +90,7 @@ export function SpecDrawing({
           patternUnits="userSpaceOnUse"
           patternTransform="rotate(45)"
         >
-          <line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" strokeWidth="0.6" />
+          <line className="stroke-current" x1="0" y1="0" x2="0" y2="6" strokeWidth="0.6" />
         </pattern>
         <marker
           id={arr}
@@ -99,33 +101,32 @@ export function SpecDrawing({
           markerHeight="8"
           orient="auto-start-reverse"
         >
-          <path d="M0 0 L10 5 L0 10 z" fill="currentColor" />
+          <path className="fill-current" d="M0 0 L10 5 L0 10 z" />
         </marker>
       </defs>
 
       {/* ── PLAN ── */}
-      <text x={0} y={-M + 10} fill="var(--pe-ink-2)">
+      <text className="fill-ink-2" x={0} y={-M + 10}>
         PLAN
       </text>
-      <rect width={L} height={W} fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <rect className="fill-none stroke-current" width={L} height={W} strokeWidth="1.2" />
       {slots.map((y, k) => (
         <rect
+          className={cn("fill-none", bad ? "stroke-alarm" : "stroke-current")}
           key={k}
           x={x0}
           y={y * PX}
           width={ol}
           height={g.opening * PX}
-          fill="none"
-          stroke={bad ? "var(--pe-alarm)" : "currentColor"}
           strokeWidth="0.8"
         />
       ))}
       <line
+        className="stroke-current"
         x1={-8}
         x2={L + 8}
         y1={W / 2}
         y2={W / 2}
-        stroke="currentColor"
         strokeWidth="0.5"
         strokeDasharray="12 3 2 3"
       />
@@ -144,7 +145,7 @@ export function SpecDrawing({
 
       {/* ── SECTION A-A, 2× ── */}
       <g transform={`translate(0 ${secY})`}>
-        <text x={0} y={-30} fill="var(--pe-ink-2)">
+        <text className="fill-ink-2" x={0} y={-30}>
           SECTION A-A · ACROSS WIDTH · 2×
         </text>
         {[
@@ -155,24 +156,23 @@ export function SpecDrawing({
           .filter(([a, b]) => b! > a! + 1e-9)
           .map(([a, b], k) => (
             <rect
+              className="stroke-current"
               key={k}
               x={a! * SX}
               y={0}
               width={(b! - a!) * SX}
               height={secH}
               fill={`url(#${hatch})`}
-              stroke="currentColor"
               strokeWidth="1"
             />
           ))}
         {bad && (
           <rect
+            className="fill-none stroke-alarm"
             x={(g.edgeBorder + g.middleAvailable) * SX}
             y={0}
             width={-g.slack * SX}
             height={secH}
-            fill="none"
-            stroke="var(--pe-alarm)"
             strokeDasharray="3 2"
           />
         )}
@@ -231,7 +231,6 @@ export function SpecDrawing({
 const inp: React.CSSProperties = {
   width: 44,
   fontSize: 10,
-  background: "var(--pe-page)",
   textAlign: "center",
 };
 
@@ -242,10 +241,9 @@ function Halo({ x, y, text, fs }: { x: number; y: number; text: string; fs: numb
       x={x}
       y={y}
       textAnchor="middle"
-      stroke="var(--pe-page)"
       strokeWidth={fs / 3}
-      fill="currentColor"
       fontSize={fs}
+      className="fill-current stroke-page"
       style={{ paintOrder: "stroke" }}
     >
       {text}
@@ -271,7 +269,7 @@ function Wit({ arr, fs, x1, x2, y, ext, label, small, value, children }: WitProp
   const w = small ? 48 : 52;
   const mid = (x1 + x2) / 2;
   return (
-    <g stroke="currentColor" strokeWidth="0.6">
+    <g className="stroke-current" strokeWidth="0.6">
       {ext && (
         <>
           <line
@@ -297,11 +295,10 @@ function Wit({ arr, fs, x1, x2, y, ext, label, small, value, children }: WitProp
       {value && <Halo x={mid} y={y + fs / 3} text={value} fs={fs} />}
       {label && (
         <text
+          className="fill-ink-2 stroke-none"
           x={mid}
           y={y - (value ? fs / 2 + 4 : 3)}
           textAnchor="middle"
-          stroke="none"
-          fill="var(--pe-ink-2)"
           fontSize={9}
         >
           {label}
@@ -334,7 +331,7 @@ function VWit({
 }) {
   const mid = (y1 + y2) / 2;
   return (
-    <g stroke="currentColor" strokeWidth="0.6">
+    <g className="stroke-current" strokeWidth="0.6">
       {ext && (
         <>
           <line y1={y1} y2={y1} x1={ext[1] + 2} x2={x + 4} />
@@ -352,11 +349,10 @@ function VWit({
           <Halo x={x - 4} y={mid - 2} text={value} fs={fs} />
           {label && (
             <text
+              className="fill-ink-2 stroke-none"
               x={x - 4}
               y={mid - fs - 2}
               textAnchor="middle"
-              stroke="none"
-              fill="var(--pe-ink-2)"
               fontSize={9}
             >
               {label}

@@ -11,8 +11,7 @@ const buttonVariants = cva(
         default: "bg-commit text-on-commit hover:bg-commit/80",
         outline:
           "border-line hover:bg-line/50 hover:text-ink aria-expanded:bg-recess aria-expanded:text-ink dark:bg-line/30",
-        secondary:
-          "bg-recess text-ink hover:bg-[color-mix(in_oklch,var(--pe-recess),var(--pe-ink)_5%)] aria-expanded:bg-recess aria-expanded:text-ink",
+        secondary: "bg-recess text-ink hover:veil aria-expanded:bg-recess aria-expanded:text-ink",
         ghost:
           "hover:bg-recess hover:text-ink aria-expanded:bg-recess aria-expanded:text-ink dark:hover:bg-recess/50",
         destructive:

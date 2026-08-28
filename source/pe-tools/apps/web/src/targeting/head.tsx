@@ -22,6 +22,7 @@ import {
   type Runner,
 } from "#/targeting/kit";
 import { terminals, type Link, type Product, type Verb } from "#/targeting/model";
+import { cn } from "#/lib/utils";
 
 const RUN_CSS =
   "@keyframes tb-run{from{transform:translateX(-100%)}to{transform:translateX(400%)}}";
@@ -32,8 +33,8 @@ function Caption({ b, link }: { b: Bindings; link: Link }) {
   const warn = f?.state === "stale" || f?.state === "error";
   return (
     <span
-      className="face-mono t-caption"
-      style={{ color: warn ? "var(--pe-caution)" : "var(--pe-ink-mute)", lineHeight: 1 }}
+      className={cn("face-mono t-caption", warn ? "text-caution" : "text-ink-mute")}
+      style={{ lineHeight: 1 }}
     >
       {link.dir}
       {link.liveness ? ` · ${link.liveness}` : ""}
@@ -50,12 +51,12 @@ function Demand({ product, k, b }: { product: Product; k: string; b: Bindings })
   const seam = b.feeds[k]?.options === null;
   return (
     <span
-      className="face-mono t-caption"
+      className={cn(
+        "face-mono t-caption border-b",
+        bound ? "text-ink" : "text-caution",
+        seam ? "seam-border border-caution" : "border-transparent",
+      )}
       title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${link.needs}` : ""}`}
-      style={{
-        color: bound ? "var(--pe-ink)" : "var(--pe-caution)",
-        borderBottom: seam ? "1px dashed var(--pe-caution)" : "1px solid transparent",
-      }}
     >
       {k}
       {bound ? "" : " ∅"}
@@ -110,27 +111,26 @@ export function TargetingHead({
     return (
       <div
         key={v.key}
-        className="relative grid items-center gap-x-4 px-2.5"
+        className={cn(
+          "relative grid items-center gap-x-4 px-2.5",
+          i > 0 && "border-t border-line-2",
+        )}
         style={{
           gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
           minHeight: 34,
-          borderTop: i === 0 ? undefined : "1px solid var(--pe-line-2)",
         }}
       >
         <span>{verbButton(v, runner)}</span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           {v.demands.length === 0 ? (
-            <span className="face-mono t-caption" style={{ color: "var(--pe-ink-mute)" }}>
-              —
-            </span>
+            <span className="face-mono t-caption text-ink-mute">—</span>
           ) : (
             v.demands.map((k) => <Demand key={k} product={product} k={k} b={b} />)
           )}
         </span>
         <span
-          className="face-mono t-caption text-right"
+          className={cn("face-mono t-caption text-right", can.ok ? "text-ink-mute" : "text-ink-2")}
           style={{
-            color: can.ok ? "var(--pe-ink-mute)" : "var(--pe-ink-2)",
             fontStyle: can.ok ? undefined : "italic",
           }}
         >
@@ -142,10 +142,9 @@ export function TargetingHead({
             style={{ left: 0, right: 0, bottom: -1, height: 2 }}
           >
             <span
-              className="block h-full"
+              className="block h-full bg-ink"
               style={{
                 width: "25%",
-                background: "var(--pe-ink)",
                 animation: "tb-run 1s linear infinite",
               }}
             />
@@ -165,8 +164,7 @@ export function TargetingHead({
           ? "Collapse the verbs back to one row"
           : "Expand the verbs: what each one needs and why it is or is not ready"
       }
-      className="face-mono t-caption px-2.5"
-      style={{ borderLeft: "1px solid var(--pe-line-2)", color: "var(--pe-ink-2)" }}
+      className="face-mono t-caption px-2.5 border-l border-l-line-2 text-ink-2"
     >
       {expanded ? "▴" : "▾"}
     </button>
@@ -176,9 +174,7 @@ export function TargetingHead({
     <ArtifactFrame
       head={
         <>
-          <span className="t-label t-upper" style={{ color: "var(--pe-ink)" }}>
-            {product.name}
-          </span>
+          <span className="t-label t-upper text-ink">{product.name}</span>
           <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
             {terminals(product).map((t) => {
               const dim = !b.demanded.has(t.key);
@@ -191,9 +187,7 @@ export function TargetingHead({
                 >
                   <Caption b={b} link={t} />
                   <span className="inline-flex items-baseline gap-1.5">
-                    <span className="face-mono t-caption" style={{ color: "var(--pe-ink-2)" }}>
-                      {t.joiner}
-                    </span>
+                    <span className="face-mono t-caption text-ink-2">{t.joiner}</span>
                     <Picker
                       product={product}
                       link={t}
@@ -223,27 +217,22 @@ export function TargetingHead({
       {expanded ? (
         <>
           <div
-            className="grid px-2.5 pt-1.5 pb-0.5 face-mono t-caption t-upper"
+            className="grid px-2.5 pt-1.5 pb-0.5 face-mono t-caption t-upper text-ink-mute"
             style={{
               gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
               columnGap: "1rem",
-              color: "var(--pe-ink-mute)",
             }}
           >
             <span>verb</span>
             <span>needs</span>
             <span className="text-right">state</span>
           </div>
-          <div style={{ borderBottom: "1px solid var(--pe-ink)" }}>{verbs.map(gridRow)}</div>
+          <div className="border-b border-b-ink">{verbs.map(gridRow)}</div>
         </>
       ) : (
         <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2">
           {verbs.map((v) => verbButton(v, runner))}
-          {note ? (
-            <span className="t-caption pl-2" style={{ color: "var(--pe-pea-ink)" }}>
-              pea · {note}
-            </span>
-          ) : null}
+          {note ? <span className="t-caption pl-2 text-pea-ink">pea · {note}</span> : null}
         </div>
       )}
     </ArtifactFrame>

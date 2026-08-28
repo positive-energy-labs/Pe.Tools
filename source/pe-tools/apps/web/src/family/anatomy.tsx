@@ -357,11 +357,11 @@ function FixtureViews({
     .filter((name) => name !== typeName)
     .map((name) => ({ typeName: name, parts: buildParts(world, draft, name) }));
 
-  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--pe-select)" : "transparent");
-  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--pe-ink)" : "var(--pe-ink-2)");
+  const partFill = (slug: string) => (focusedParts.has(slug) ? "fill-select" : "fill-transparent");
+  const partStroke = (slug: string) => (focusedParts.has(slug) ? "stroke-ink" : "stroke-ink-2");
   /** Connectors are a KIND, not a state — the one legitimate viz spend on this page. */
   const connectorStroke = (slug: string) =>
-    focusedParts.has(slug) ? "var(--pe-ink)" : "var(--viz-4)";
+    focusedParts.has(slug) ? "stroke-ink" : "stroke-viz-4";
   const hover = (slug: string) => hoverProps(slug, onFocus, onInspect);
 
   return (
@@ -390,30 +390,30 @@ function FixtureViews({
             {/* datum: elevations get a ground line, the plan gets the origin crosshair */}
             {view.v === "z" ? (
               <line
+                className="stroke-line-2"
                 x1={M}
                 y1={Y(0)}
                 x2={BOX - M}
                 y2={Y(0)}
-                stroke="var(--pe-line-2)"
                 strokeWidth={0.5}
               />
             ) : (
               <>
                 <line
+                  className="stroke-line"
                   x1={M}
                   y1={Y(0)}
                   x2={BOX - M}
                   y2={Y(0)}
-                  stroke="var(--pe-line)"
                   strokeWidth={0.5}
                   strokeDasharray="2 4"
                 />
                 <line
+                  className="stroke-line"
                   x1={X(0)}
                   y1={M}
                   x2={X(0)}
                   y2={BOX - M}
-                  stroke="var(--pe-line)"
                   strokeWidth={0.5}
                   strokeDasharray="2 4"
                 />
@@ -429,8 +429,7 @@ function FixtureViews({
                 )
                 .map((part) => {
                   const shared = {
-                    fill: "none",
-                    stroke: "var(--pe-line-2)",
+                    className: "fill-none stroke-line-2",
                     strokeWidth: 0.75,
                     opacity: 0.5,
                     pointerEvents: "none" as const,
@@ -465,12 +464,10 @@ function FixtureViews({
                 /* THE ONE LEGAL DASH AMONG PARTS: a void must never read as material. */
                 const shared = {
                   ...hover(part.slug),
-                  fill: part.isVoid ? "none" : partFill(part.slug),
-                  stroke: part.isVoid
-                    ? active
-                      ? "var(--pe-ink)"
-                      : "var(--pe-line-2)"
-                    : partStroke(part.slug),
+                  className: cn(
+                    part.isVoid ? "fill-none" : partFill(part.slug),
+                    part.isVoid ? (active ? "stroke-ink" : "stroke-line-2") : partStroke(part.slug),
+                  ),
                   strokeWidth: 0.8,
                   strokeDasharray: part.isVoid ? "3 2" : undefined,
                 };
@@ -494,7 +491,7 @@ function FixtureViews({
               }
 
               const prose = world.source.profile.connectors[part.slug] ?? "";
-              const stroke = connectorStroke(part.slug);
+              const strokeClass = connectorStroke(part.slug);
               const u = part.pos[view.u];
               const v = part.pos[view.v];
               const active = focusedParts.has(part.slug);
@@ -511,8 +508,7 @@ function FixtureViews({
                     cx={X(u)}
                     cy={Y(v)}
                     r={r}
-                    fill={partFill(part.slug)}
-                    stroke={stroke}
+                    className={cn(partFill(part.slug), strokeClass)}
                     strokeWidth={active ? 1.4 : 0.8}
                   >
                     <title>
@@ -533,27 +529,26 @@ function FixtureViews({
               const x1 = X(u + du * stubLen);
               const y1 = Y(v + dv * stubLen);
               return (
-                <g key={part.slug} {...hover(part.slug)}>
+                <g key={part.slug} {...hover(part.slug)} className={strokeClass}>
                   <title>
                     {`${part.slug} — ${prose}. The tick is the connection face; the line is the stub${part.stub != null ? `, ${part.stub}in deep` : ""}.`}
                   </title>
                   {/* a fat transparent hit line, so a 1px stub is still hoverable */}
-                  <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="transparent" strokeWidth={9} />
                   <line
+                    className="stroke-transparent"
                     x1={x0}
                     y1={y0}
                     x2={x1}
                     y2={y1}
-                    stroke={stroke}
-                    strokeWidth={active ? 1.6 : 1}
+                    strokeWidth={9}
                   />
+                  <line x1={x0} y1={y0} x2={x1} y2={y1} strokeWidth={active ? 1.6 : 1} />
                   {du !== 0 ? (
                     <line
                       x1={x1}
                       y1={Y(v - girth / 2 / SCALE)}
                       x2={x1}
                       y2={Y(v + girth / 2 / SCALE)}
-                      stroke={stroke}
                       strokeWidth={active ? 1.6 : 1}
                     />
                   ) : (
@@ -562,7 +557,6 @@ function FixtureViews({
                       y1={y1}
                       x2={X(u + girth / 2 / SCALE)}
                       y2={y1}
-                      stroke={stroke}
                       strokeWidth={active ? 1.6 : 1}
                     />
                   )}
@@ -570,13 +564,7 @@ function FixtureViews({
               );
             })}
 
-            <text
-              x={M}
-              y={BOX - 5}
-              fontSize={7}
-              fill="var(--pe-ink-2)"
-              className="face-mono uppercase"
-            >
+            <text x={M} y={BOX - 5} fontSize={7} className="face-mono uppercase fill-ink-2">
               {view.label}
             </text>
           </svg>
@@ -631,10 +619,10 @@ function ModelViews({
   const span = Math.max(...AXES.map((axis) => bounds[axis][1] - bounds[axis][0]));
   const scale = (BOX - 2 * M) / span;
 
-  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--pe-select)" : "transparent");
-  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--pe-ink)" : "var(--pe-ink-2)");
+  const partFill = (slug: string) => (focusedParts.has(slug) ? "fill-select" : "fill-transparent");
+  const partStroke = (slug: string) => (focusedParts.has(slug) ? "stroke-ink" : "stroke-ink-2");
   const connectorStroke = (slug: string) =>
-    focusedParts.has(slug) ? "var(--pe-ink)" : "var(--viz-4)";
+    focusedParts.has(slug) ? "stroke-ink" : "stroke-viz-4";
   const hover = (slug: string) => hoverProps(slug, onFocus, onInspect);
 
   /** What the drawing cannot place, said in words below it rather than drawn at a guess. */
@@ -685,7 +673,7 @@ function ModelViews({
             // invent — the connector simply does not appear in this view.
             if (u == null || v == null) return null;
             const active = focusedParts.has(conn.slug);
-            const stroke = connectorStroke(conn.slug);
+            const strokeClass = connectorStroke(conn.slug);
             const prose =
               world.source.profile.connectors[conn.slug] ?? `${conn.domain} · ${conn.shape}`;
 
@@ -699,8 +687,7 @@ function ModelViews({
                     cx={X(u)}
                     cy={Y(v)}
                     r={(conn.w / 2) * scale}
-                    fill={partFill(conn.slug)}
-                    stroke={stroke}
+                    className={cn(partFill(conn.slug), strokeClass)}
                     strokeWidth={active ? 1.4 : 0.8}
                   >
                     <title>{`${conn.slug} — ${prose}. Face-on in this view, ${conn.w}in across, drawn where its frame resolves.`}</title>
@@ -715,8 +702,7 @@ function ModelViews({
                     y={Y(v + conn.h / 2)}
                     width={conn.w * scale}
                     height={conn.h * scale}
-                    fill={partFill(conn.slug)}
-                    stroke={stroke}
+                    className={cn(partFill(conn.slug), strokeClass)}
                     strokeWidth={active ? 1.4 : 0.8}
                   >
                     <title>{`${conn.slug} — ${prose}. Face-on in this view, ${conn.w}×${conn.h}in, drawn where its frame resolves.`}</title>
@@ -729,8 +715,7 @@ function ModelViews({
                   cx={X(u)}
                   cy={Y(v)}
                   r={3}
-                  fill={partFill(conn.slug)}
-                  stroke={stroke}
+                  className={cn(partFill(conn.slug), strokeClass)}
                   strokeWidth={active ? 1.4 : 0.8}
                 >
                   <title>{`${conn.slug} — ${prose}. Face-on — its size dims do not resolve at this type, so the size here is a glyph, not a claim.`}</title>
@@ -750,27 +735,26 @@ function ModelViews({
             const x1 = X(u + du * stubLen);
             const y1 = Y(v + dv * stubLen);
             return (
-              <g key={conn.slug} {...hover(conn.slug)}>
+              <g key={conn.slug} {...hover(conn.slug)} className={strokeClass}>
                 <title>
                   {`${conn.slug} — ${prose}. The tick is the connection face; the line is the stub${conn.stub != null ? `, ${conn.stub}in ${conn.stubDir === "In" ? "into the family" : "standing off"}` : ""}.`}
                 </title>
                 {/* a fat transparent hit line, so a 1px stub is still hoverable */}
-                <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="transparent" strokeWidth={9} />
                 <line
+                  className="stroke-transparent"
                   x1={x0}
                   y1={y0}
                   x2={x1}
                   y2={y1}
-                  stroke={stroke}
-                  strokeWidth={active ? 1.6 : 1}
+                  strokeWidth={9}
                 />
+                <line x1={x0} y1={y0} x2={x1} y2={y1} strokeWidth={active ? 1.6 : 1} />
                 {du !== 0 ? (
                   <line
                     x1={x0}
                     y1={Y(v - girth / 2)}
                     x2={x0}
                     y2={Y(v + girth / 2)}
-                    stroke={stroke}
                     strokeWidth={active ? 1.6 : 1}
                   />
                 ) : (
@@ -779,7 +763,6 @@ function ModelViews({
                     y1={y0}
                     x2={X(u + girth / 2)}
                     y2={y0}
-                    stroke={stroke}
                     strokeWidth={active ? 1.6 : 1}
                   />
                 )}
@@ -800,30 +783,30 @@ function ModelViews({
               {/* datum: elevations get a ground line, the plan gets the origin crosshair */}
               {view.v === "z" ? (
                 <line
+                  className="stroke-line-2"
                   x1={M}
                   y1={Y(0)}
                   x2={BOX - M}
                   y2={Y(0)}
-                  stroke="var(--pe-line-2)"
                   strokeWidth={0.5}
                 />
               ) : (
                 <>
                   <line
+                    className="stroke-line"
                     x1={M}
                     y1={Y(0)}
                     x2={BOX - M}
                     y2={Y(0)}
-                    stroke="var(--pe-line)"
                     strokeWidth={0.5}
                     strokeDasharray="2 4"
                   />
                   <line
+                    className="stroke-line"
                     x1={X(0)}
                     y1={M}
                     x2={X(0)}
                     y2={BOX - M}
-                    stroke="var(--pe-line)"
                     strokeWidth={0.5}
                     strokeDasharray="2 4"
                   />
@@ -836,8 +819,7 @@ function ModelViews({
                   .filter((geo) => !geo.isVoid)
                   .map((geo) => {
                     const shared = {
-                      fill: "none",
-                      stroke: "var(--pe-line-2)",
+                      className: "fill-none stroke-line-2",
                       strokeWidth: 0.75,
                       opacity: 0.5,
                       pointerEvents: "none" as const,
@@ -872,12 +854,10 @@ function ModelViews({
                 /* THE ONE LEGAL DASH AMONG PARTS: a void must never read as material. */
                 const shared = {
                   ...hover(geo.slug),
-                  fill: geo.isVoid ? "none" : partFill(geo.slug),
-                  stroke: geo.isVoid
-                    ? active
-                      ? "var(--pe-ink)"
-                      : "var(--pe-line-2)"
-                    : partStroke(geo.slug),
+                  className: cn(
+                    geo.isVoid ? "fill-none" : partFill(geo.slug),
+                    geo.isVoid ? (active ? "stroke-ink" : "stroke-line-2") : partStroke(geo.slug),
+                  ),
                   strokeWidth: 0.8,
                   strokeDasharray: geo.isVoid ? "3 2" : undefined,
                 };
@@ -903,7 +883,7 @@ function ModelViews({
                 if (plane.axis !== view.u && plane.axis !== view.v) return null;
                 const param = plane.param;
                 const lit = param != null && focusedParams.has(param);
-                const stroke = lit ? "var(--pe-ink)" : "var(--pe-line-2)";
+                const strokeClass = lit ? "stroke-ink" : "stroke-line-2";
                 const line =
                   plane.axis === view.u
                     ? { x1: X(plane.offset), y1: M, x2: X(plane.offset), y2: BOX - M }
@@ -919,14 +899,13 @@ function ModelViews({
                         ? `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum, driven by ${param}. It is a dim the processor will create; hovering lights that parameter's row in the table.`
                         : `plane ${plane.slug} — a reference plane sitting ${plane.text} off its datum. No parameter drives it.`}
                     </title>
-                    <line {...line} stroke="transparent" strokeWidth={7} />
-                    <line {...line} stroke={stroke} strokeWidth={lit ? 1.2 : 0.6} />
+                    <line className="stroke-transparent" {...line} strokeWidth={7} />
+                    <line className={strokeClass} {...line} strokeWidth={lit ? 1.2 : 0.6} />
                     <text
                       x={plane.axis === view.u ? line.x1 + 2 : M + 1}
                       y={plane.axis === view.u ? M + 6 : line.y1 - 2}
                       fontSize={6}
-                      fill={lit ? "var(--pe-ink)" : "var(--pe-ink-2)"}
-                      className="face-mono"
+                      className={cn("face-mono", lit ? "fill-ink" : "fill-ink-2")}
                     >
                       {plane.slug} {plane.text}
                     </text>
@@ -941,7 +920,7 @@ function ModelViews({
                 const v = frame.pos[view.v];
                 if (u == null || v == null) return null;
                 return (
-                  <g key={frame.slug} stroke="var(--pe-ink-2)" strokeWidth={0.6}>
+                  <g className="stroke-ink-2" key={frame.slug} strokeWidth={0.6}>
                     <title>{`frame ${frame.slug} — its origin, where the document's plane and face references intersect. Facing ${frame.normal}. Whatever sits on this frame is placed here.`}</title>
                     <line x1={X(u) - 2.5} y1={Y(v)} x2={X(u) + 2.5} y2={Y(v)} />
                     <line x1={X(u)} y1={Y(v) - 2.5} x2={X(u)} y2={Y(v) + 2.5} />
@@ -976,13 +955,7 @@ function ModelViews({
                 </g>
               )}
 
-              <text
-                x={M}
-                y={BOX - 5}
-                fontSize={7}
-                fill="var(--pe-ink-2)"
-                className="face-mono uppercase"
-              >
+              <text x={M} y={BOX - 5} fontSize={7} className="face-mono uppercase fill-ink-2">
                 {view.label}
               </text>
             </svg>

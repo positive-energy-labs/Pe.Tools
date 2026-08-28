@@ -318,7 +318,7 @@ function PopoverHarness() {
 
 function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) => void }) {
   return (
-    <div className="max-w-136 min-w-0 border border-line bg-artifact p-3 [--pe-on:var(--pe-artifact)]">
+    <div className="on-artifact max-w-136 min-w-0 border border-line p-3">
       <div className="flex flex-wrap items-baseline gap-2 pb-2">
         <Link to="/design-system" className="text-[11px] text-nav hover:underline">
           ← design system

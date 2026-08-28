@@ -272,9 +272,7 @@ function App() {
         <div className="page-wrap flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-ink" />
-            <span className="t-value font-semibold tracking-tight text-ink">
-              Positive Energy
-            </span>
+            <span className="t-value font-semibold tracking-tight text-ink">Positive Energy</span>
           </div>
           <div className="flex items-center gap-3">
             <UpdateButton />
@@ -303,7 +301,7 @@ function App() {
             <div key={tool.to} className="flex flex-col gap-1.5">
               <Card
                 render={<Link to={tool.to} />}
-                className="group flex flex-1 flex-col gap-3 p-5 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
+                className="group flex flex-1 flex-col gap-3 p-5 hover:veil"
               >
                 <div className="flex items-center justify-between">
                   <span className="inline-flex size-9 items-center justify-center rounded-md bg-recess text-ink">

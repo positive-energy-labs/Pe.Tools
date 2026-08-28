@@ -39,6 +39,7 @@ import { FactChip as Chip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Verb } from "#/components/lang/verb";
 import { Pane, PaneSplit } from "#/components/mechanism/pane";
+import { token } from "#/lib/token";
 import { cn } from "#/lib/utils";
 
 import { hydrateFromSet } from "./feedback/hydrate";
@@ -48,13 +49,10 @@ import { type Lens, Tray, TrayCollapsed } from "./feedback/tray";
 import {
   candidateTone,
   CLOSE_M,
-  designColor,
   HELD_HATCH,
   INK_M,
   LABEL,
   LABEL_SIZE,
-  MIST,
-  PAPER,
   PLAN_LAW,
   RESIDUE_TREATMENT,
   type ResidueKind,
@@ -255,7 +253,7 @@ function Delta({
   }
   const good = goodWhenUp ? value > 0 : value < 0;
   return (
-    <span className="tabular-nums" style={{ color: good ? "var(--pe-done)" : "var(--pe-caution)" }}>
+    <span className={cn("tabular-nums", good ? "text-done" : "text-caution")}>
       {value > 0 ? "+" : ""}
       {fmtNum(value, digits)}
       {suffix}
@@ -382,7 +380,7 @@ export function ZonePanel(props: {
       if (!live) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.fillStyle = designColor("--pe-page");
+      ctx.fillStyle = token("page");
       ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
       if (plan) {
         paintPlan(
@@ -418,8 +416,8 @@ export function ZonePanel(props: {
   return (
     <div
       ref={hostRef}
-      className="relative shrink-0 overflow-hidden"
-      style={{ width: maxW, height: maxH, background: PAPER, borderRadius: 2 }}
+      className="relative shrink-0 overflow-hidden bg-page"
+      style={{ width: maxW, height: maxH, borderRadius: 2 }}
     >
       <div
         className="absolute"
@@ -496,10 +494,11 @@ export function ZonePanel(props: {
               <g key={room.id}>
                 <path
                   d={d}
-                  fill={residue ? "none" : tone.fill}
-                  stroke={hot || flagged ? "var(--pe-alarm)" : (residue?.outline.color ?? "none")}
+                  fill={tone.fill}
+                  stroke={residue?.outline.color ?? "none"}
                   strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
                   pointerEvents="all"
+                  className={cn(residue && "fill-none", hot || (flagged && "stroke-alarm"))}
                   style={{ cursor: stagedItem ? "crosshair" : "default" }}
                   onPointerMove={trackHover(`room ${room.id}`, flagged)}
                   onPointerLeave={() => setHover(null)}
@@ -550,10 +549,11 @@ export function ZonePanel(props: {
               <g key={res.id}>
                 <path
                   d={d}
-                  fill={held ? tone.fill : "none"}
-                  stroke={hot || flagged ? "var(--pe-alarm)" : (residue?.outline.color ?? "none")}
+                  fill={tone.fill}
+                  stroke={residue?.outline.color ?? "none"}
                   strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
                   pointerEvents="all"
+                  className={cn(!held && "fill-none", hot || (flagged && "stroke-alarm"))}
                   style={{ cursor: stagedItem ? "crosshair" : "default" }}
                   onPointerMove={trackHover(`residue ${res.id}`, flagged)}
                   onPointerLeave={() => setHover(null)}
@@ -591,8 +591,8 @@ export function ZonePanel(props: {
             );
           })}
           <path
+            className="fill-none"
             d={ringPath(vp, zone.ZoneLoops as [number, number][][])}
-            fill="none"
             stroke={ZONE_STROKE}
             strokeWidth={ZONE_WIDTH}
             strokeDasharray={ZONE_DASH}
@@ -607,12 +607,14 @@ export function ZonePanel(props: {
       {/* Instant id popover — replaces the slow native tooltip on these elements. */}
       {hover && (
         <div
-          className="face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-page/95 px-1.5 py-0.5"
+          className={cn(
+            "face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-page/95 px-1.5 py-0.5",
+            hover.flagged ? "border-alarm" : "border-line-2",
+            hover.flagged ? "text-alarm" : "text-ink",
+          )}
           style={{
             left: Math.min(hover.x + 10, maxW - 90),
             top: Math.min(hover.y + 12, maxH - 22),
-            borderColor: hover.flagged ? "var(--pe-alarm)" : "var(--pe-line-2)",
-            color: hover.flagged ? "var(--pe-alarm)" : "var(--pe-ink)",
             borderRadius: 2,
           }}
         >
@@ -705,7 +707,7 @@ const STAT_ROWS: StatRow[] = [
   {
     label: "verdict",
     value: (z) => (
-      <span style={{ color: z.triage.verdict === "solve" ? "var(--pe-done)" : "var(--pe-caution)" }}>
+      <span className={cn(z.triage.verdict === "solve" ? "text-done" : "text-caution")}>
         {z.triage.verdict}
         <span className="text-ink-2"> · {z.triage.reason}</span>
       </span>
@@ -780,8 +782,8 @@ function ZoneCard(props: {
 
   return (
     <div
-      className="flex min-w-0 flex-col gap-1.5 border bg-page p-2"
-      style={{ borderColor: "var(--pe-line-2)", borderRadius: 2 }}
+      className="flex min-w-0 flex-col gap-1.5 border bg-page p-2 border-line-2"
+      style={{ borderRadius: 2 }}
     >
       <div className="flex items-baseline gap-2">
         <span className="face-mono t-caption t-value font-semibold" title={name}>
@@ -830,9 +832,7 @@ function ZoneCard(props: {
               onClick={() => props.onToggleHighlight(locatable)}
               className={cn(
                 "face-mono t-caption shrink-0 border px-1.5",
-                props.highlighted
-                  ? "bg-recess text-ink"
-                  : "text-ink-2 hover:text-ink",
+                props.highlighted ? "bg-recess text-ink" : "text-ink-2 hover:text-ink",
               )}
             />
           ) : null}
@@ -968,11 +968,13 @@ function RunStrip(props: {
         return (
           <div
             key={entry.id}
-            className="flex shrink-0 items-stretch overflow-hidden border"
+            className={cn(
+              "flex shrink-0 items-stretch overflow-hidden border",
+              isCur || isPrev ? "border-ink-2" : "border-line-2",
+              isCur ? "bg-recess" : "bg-transparent",
+            )}
             style={{
-              borderColor: isCur || isPrev ? "var(--pe-ink-2)" : "var(--pe-line-2)",
               borderRadius: 2,
-              background: isCur ? "var(--pe-recess)" : "transparent",
             }}
           >
             <Verb
@@ -988,7 +990,7 @@ function RunStrip(props: {
               <span className="face-mono t-caption leading-3 text-ink-2">
                 {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
                 {typeof meta?.zoneFilter === "string" ? (
-                  <span style={{ color: "var(--pe-caution)" }} title={partialTitle(meta.zoneFilter)}>
+                  <span className="text-caution" title={partialTitle(meta.zoneFilter)}>
                     {" "}
                     · partial
                   </span>
@@ -1000,12 +1002,11 @@ function RunStrip(props: {
               reason={isPrev ? "Clear this baseline." : "Compare against this run as baseline."}
               onClick={() => onPickBaseline(entry.id)}
               disabled={isCur}
-              className="border-l px-1.5 t-caption"
-              style={{
-                borderColor: "var(--pe-line-2)",
-                background: isPrev ? "var(--pe-recess)" : "transparent",
-                color: isCur ? "var(--pe-line-2)" : isPrev ? "var(--pe-ink)" : "var(--pe-ink-2)",
-              }}
+              className={cn(
+                "border-l border-line-2 px-1.5 t-caption",
+                isPrev ? "bg-recess text-ink" : "bg-transparent text-ink-2",
+                isCur && "text-line-2",
+              )}
             >
               {isPrev ? "A✕" : "A"}
             </Verb>
@@ -1253,8 +1254,8 @@ function PlanPane(props: {
             <path
               d={d}
               fillRule="evenodd"
-              fill="none"
               stroke={treatment.outline.color}
+              className="fill-none"
               style={{ strokeWidth: `calc(var(--sw) * ${treatment.outline.widthPx}px)` }}
             />
             <path d={d} fillRule="evenodd" fill={`url(#${patternId})`} />
@@ -1285,8 +1286,9 @@ function PlanPane(props: {
             <path
               d={d}
               fillRule="evenodd"
-              fill={treatment ? "none" : tone.fill}
+              fill={tone.fill}
               stroke={treatment?.outline.color}
+              className={cn(treatment && "fill-none")}
               style={
                 treatment
                   ? { strokeWidth: `calc(var(--sw) * ${treatment.outline.widthPx}px)` }
@@ -1355,9 +1357,9 @@ function PlanPane(props: {
           <path
             d={d}
             fillRule="evenodd"
-            fill={lit ? MIST : "transparent"}
             stroke={ZONE_STROKE}
             strokeDasharray={ZONE_DASH}
+            className={cn(lit ? "fill-select" : "fill-transparent")}
             style={{ strokeWidth: `calc(var(--sw) * ${ZONE_WIDTH}px)`, cursor: "pointer" }}
             onPointerEnter={() => props.onHover(zone.Zone)}
             onPointerLeave={() => props.onHover(null)}
@@ -1398,8 +1400,8 @@ function PlanPane(props: {
   return (
     <div
       ref={hostRef}
-      className="relative flex-1 overflow-hidden"
-      style={{ background: PAPER, cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+      className="relative flex-1 overflow-hidden bg-page"
+      style={{ cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -1610,7 +1612,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
           "Input zone boundary. Always a hairline dash; status never changes its stroke.",
         )}
       </div>
-      <span className="mt-0.5 border-t pt-1 t-caption" style={{ borderColor: "var(--pe-line-2)" }}>
+      <span className="mt-0.5 border-t pt-1 t-caption border-line-2">
         solid dark = received · pale translucent = invented
         {props.underlay ? "" : " · underlay hidden"}
       </span>
@@ -1877,10 +1879,7 @@ function PlanDock(props: {
 
   return (
     <div className="flex size-full min-h-0 flex-col">
-      <div
-        className="flex shrink-0 items-center gap-2 border-b px-2 py-1"
-        style={{ borderColor: "var(--pe-line-2)" }}
-      >
+      <div className="flex shrink-0 items-center gap-2 border-b px-2 py-1 border-line-2">
         <div className="flex gap-0.5">
           {levels.map((l) => (
             <Verb
@@ -1890,9 +1889,7 @@ function PlanDock(props: {
               onClick={() => props.onPickLevel(l)}
               className={cn(
                 "face-mono t-caption rounded-[2px] px-2 py-0.5 t-label",
-                l === level
-                  ? "bg-recess text-ink"
-                  : "text-ink-2 hover:bg-recess",
+                l === level ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
               )}
             />
           ))}
@@ -1903,24 +1900,24 @@ function PlanDock(props: {
             reason="Show or hide the key."
             onClick={() => setShowKey((v) => !v)}
             className={cn(
-              "face-mono t-caption rounded-[2px] border px-1.5 py-0.5",
-              showKey
-                ? "bg-recess text-ink"
-                : "text-ink-2 hover:bg-recess",
+              cn(
+                "face-mono t-caption rounded-[2px] border px-1.5 py-0.5",
+                showKey ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
+              ),
+              "border-line-2",
             )}
-            style={{ borderColor: "var(--pe-line-2)" }}
           />
           <Verb
             label="stats"
             reason="Show or hide the level statistics."
             onClick={() => setShowStats((v) => !v)}
             className={cn(
-              "face-mono t-caption rounded-[2px] border px-1.5 py-0.5",
-              showStats
-                ? "bg-recess text-ink"
-                : "text-ink-2 hover:bg-recess",
+              cn(
+                "face-mono t-caption rounded-[2px] border px-1.5 py-0.5",
+                showStats ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
+              ),
+              "border-line-2",
             )}
-            style={{ borderColor: "var(--pe-line-2)" }}
           />
           <span className="face-mono t-caption text-ink-2">
             drag = pan · wheel = zoom · click zone = highlight · esc = clear
@@ -1945,10 +1942,7 @@ function PlanDock(props: {
                 onPick={onPick}
               />
             ) : null}
-            <div
-              className={cn("flex flex-1", comparing && "border-l")}
-              style={comparing ? { borderColor: "var(--pe-line-2)" } : undefined}
-            >
+            <div className={cn("flex flex-1", comparing && "border-l border-line-2")}>
               <PlanPane
                 runId={curId}
                 tag={comparing ? "B · current" : null}
@@ -2184,9 +2178,7 @@ function LedgerDock(props: {
         search: (row) => `${row.label ?? ""} ${row.hash} ${row.id}`,
         cell: (row) => (
           <span className="face-mono t-caption flex min-w-0 items-baseline gap-1.5 px-1.5">
-            <span
-              className={cn("truncate", row.label ? "text-ink" : "text-ink-2")}
-            >
+            <span className={cn("truncate", row.label ? "text-ink" : "text-ink-2")}>
               {runName(row)}
             </span>
             <span className="shrink-0 t-caption text-ink-2/70">{fmtTime(row.when)}</span>
@@ -2218,9 +2210,7 @@ function LedgerDock(props: {
         cell: (row) => {
           if (row.id === curId) {
             return (
-              <span className="face-mono t-caption block px-1.5 font-semibold text-ink">
-                B
-              </span>
+              <span className="face-mono t-caption block px-1.5 font-semibold text-ink">B</span>
             );
           }
           const isA = row.id === prevId;
@@ -2243,9 +2233,7 @@ function LedgerDock(props: {
               onClick={() => onPickBaseline(row.id)}
               className={cn(
                 "face-mono t-caption h-7 w-full px-1.5 text-left",
-                isA
-                  ? "font-semibold text-ink"
-                  : "text-ink-2/60 hover:text-ink-2",
+                isA ? "font-semibold text-ink" : "text-ink-2/60 hover:text-ink-2",
               )}
             />
           );
@@ -2454,7 +2442,7 @@ function LedgerDock(props: {
   const optionSets = new Set(runs.map((r) => r.meta?.optionsHash ?? "?")).size;
 
   return (
-    <div className="shrink-0 border-t" style={{ borderColor: "var(--pe-line-2)" }}>
+    <div className="shrink-0 border-t border-line-2">
       <Verb
         label={`ledger · ${runs.length} runs · ${optionSets} option sets · ${open ? "collapse" : "expand"}`}
         reason={
@@ -2471,8 +2459,7 @@ function LedgerDock(props: {
               at?" is never an inference from the run labels. */}
           {pool && (
             <div
-              className="face-mono t-caption shrink-0 truncate border-b px-3 py-1 text-ink-2"
-              style={{ borderColor: "var(--pe-line-2)" }}
+              className="face-mono t-caption shrink-0 truncate border-b px-3 py-1 text-ink-2 border-line-2"
               title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
             >
               pool {pool}
@@ -2802,15 +2789,13 @@ export default function RunBrowser() {
 
   if (error) {
     return (
-      <div className="face-mono t-caption p-8 t-prose" style={{ color: "var(--pe-caution)" }}>
+      <div className="face-mono t-caption p-8 t-prose text-caution">
         run pool unavailable: {error}
       </div>
     );
   }
   if (!runs) {
-    return (
-      <div className="face-mono t-caption p-8 t-prose text-ink-2">loading run pool…</div>
-    );
+    return <div className="face-mono t-caption p-8 t-prose text-ink-2">loading run pool…</div>;
   }
   // Empty pool is a SYSTEM story, not a filter story: nothing is hidden, nothing has been
   // captured. The page says which directory it watched and what fills it.
@@ -2937,10 +2922,7 @@ export default function RunBrowser() {
                   else sectionRefs.current.delete(level);
                 }}
               >
-                <div
-                  className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1"
-                  style={{ borderColor: "var(--pe-line-2)" }}
-                >
+                <div className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1 border-line-2">
                   <h2 className="face-mono t-caption t-value font-semibold uppercase tracking-wide">
                     {level}
                   </h2>
@@ -3047,16 +3029,12 @@ export default function RunBrowser() {
 
   return (
     <div className="flex h-dvh min-h-0 flex-col bg-page text-ink">
-      <header
-        className="flex shrink-0 flex-col gap-1.5 border-b px-4 py-2"
-        style={{ borderColor: "var(--pe-line-2)" }}
-      >
+      <header className="flex shrink-0 flex-col gap-1.5 border-b px-4 py-2 border-line-2">
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="face-mono t-caption t-prose font-semibold">runs</h1>
           {linkNote && (
             <span
-              className="face-mono t-caption t-label"
-              style={{ color: "var(--pe-caution)" }}
+              className="face-mono t-caption t-label text-caution"
               title="The URL's deep link could not be fully applied."
             >
               {linkNote}
@@ -3126,11 +3104,8 @@ export default function RunBrowser() {
               onClick={() => setUnderlay((u) => !u)}
               className={cn(
                 "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
-                underlay
-                  ? "bg-recess text-ink"
-                  : "border text-ink-2",
+                underlay ? "bg-recess text-ink" : "border border-line-2 text-ink-2",
               )}
-              style={underlay ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
             <Verb
               label="changed only"
@@ -3145,9 +3120,8 @@ export default function RunBrowser() {
                 "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
                 changedOnly && comparing
                   ? "bg-recess text-ink"
-                  : "border text-ink-2 disabled:opacity-40",
+                  : "border border-line-2 text-ink-2 disabled:opacity-40",
               )}
-              style={changedOnly && comparing ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
           </span>
         </div>

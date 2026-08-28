@@ -34,20 +34,6 @@ export const LABEL = `rgba(${law.label.rgba.join(",")})`;
 export const LABEL_SIZE = law.label.sizePx;
 export const HELD_HATCH = law.candidate.status.held.hatch;
 
-export const PAPER = "var(--pe-page)";
-export const MIST = "var(--pe-select)";
-
-export function designColor(token: string): string {
-  if (typeof document === "undefined") return "transparent";
-  const value = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
-  if (!value || value.includes("var(")) throw new Error(`design token unavailable: ${token}`);
-  return value;
-}
-
-export function alarmColor(): string {
-  return designColor("--pe-alarm");
-}
-
 function hash(value: string): number {
   let result = 2166136261;
   for (let i = 0; i < value.length; i++) result = Math.imul(result ^ value.charCodeAt(i), 16777619);

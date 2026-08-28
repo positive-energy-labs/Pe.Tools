@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { cn } from "#/lib/utils";
 
 /**
@@ -64,7 +64,7 @@ export function VizChip({
 export type KVTone = "caution";
 
 const KV_TONE: Record<KVTone, string> = {
-  caution: "var(--pe-caution)",
+  caution: "text-caution",
 };
 
 /** Label/value pairs; values are machine-measured so they read mono. */
@@ -84,8 +84,7 @@ export function KVGrid({
         <div key={i} className="min-w-0">
           <dt className="t-label text-ink-2">{item.label}</dt>
           <dd
-            className="face-mono t-value truncate"
-            style={item.tone ? { color: KV_TONE[item.tone] } : undefined}
+            className={cn("face-mono t-value truncate", item.tone && KV_TONE[item.tone])}
             title={typeof item.value === "string" ? item.value : undefined}
           >
             {item.value ?? "∅"}
@@ -130,7 +129,7 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
         role={hasChildren ? "button" : undefined}
         onClick={hasChildren ? () => setOpen(!open) : undefined}
         className={cn(
-          "flex min-w-0 items-center gap-1 pr-2 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]",
+          "flex min-w-0 items-center gap-1 pr-2 hover:veil",
           dense ? "py-px" : "py-0.5",
           hasChildren && "cursor-pointer select-none",
         )}
@@ -178,11 +177,6 @@ export type Column<Row> = {
 
 /** The head band shifts the ground, so `--pe-on` is re-declared on the same rule
  * (the design-lang plumbing convention). */
-const RECESS_GROUND = {
-  background: "var(--pe-recess)",
-  "--pe-on": "var(--pe-recess)",
-} as CSSProperties;
-
 /** Readonly grid, Revit-schedule flavored: optional centered title band, recessed
  * header band, hairline gridlines, mono numerals. Data cells go square (radius 0
  * inside the 2px frame) — data surfaces may. */
@@ -208,7 +202,7 @@ export function DataTable<Row>({
       )}
       <div className="overflow-auto" style={{ maxHeight }}>
         <table className="t-value w-full border-collapse text-left">
-          <thead className="sticky top-0 z-10" style={RECESS_GROUND}>
+          <thead className="on-recess sticky top-0 z-10">
             <tr>
               {columns.map((col) => (
                 <th
@@ -226,10 +220,7 @@ export function DataTable<Row>({
           </thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr
-                key={rowKey(row, index)}
-                className="hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
-              >
+              <tr key={rowKey(row, index)} className="hover:veil">
                 {columns.map((col) => (
                   <td
                     key={col.key}

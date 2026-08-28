@@ -159,14 +159,14 @@ export function Composer({
         <div
           role="listbox"
           aria-label="Commands"
-          className="absolute bottom-full mb-2 w-full overflow-hidden rounded-sm border-[0.5px] border-line-2 bg-artifact [--pe-on:var(--pe-artifact)]"
+          className="absolute bottom-full mb-2 w-full overflow-hidden rounded-sm border-[0.5px] border-line-2 on-artifact"
         >
           {matches.slice(0, 6).map((command) => (
             <button
               key={`${command.kind}:${command.name}`}
               type="button"
               onClick={() => pick(command)}
-              className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
+              className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left hover:veil"
             >
               {/* a slash command is a machine identifier — mono */}
               <span className="t-value face-mono text-ink">/{command.name}</span>
@@ -180,7 +180,7 @@ export function Composer({
           (draft, attachments, the in-flight run), so it wears the artifact treatment — one
           ground shift plus one quiet hairline. The card clips its children, so the budget bar
           stays a flush rectangle under the boundary. */}
-      <div className="overflow-hidden rounded-sm border-[0.5px] border-line-2 bg-artifact [--pe-on:var(--pe-artifact)]">
+      <div className="overflow-hidden rounded-sm border-[0.5px] border-line-2 on-artifact">
         {topBar}
 
         {attachments.length > 0 ? (

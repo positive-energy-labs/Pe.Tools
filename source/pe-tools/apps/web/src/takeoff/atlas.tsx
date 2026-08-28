@@ -21,7 +21,6 @@ import {
   ReadCell,
   StateDot,
   TextCell,
-  VERDICT_INK,
 } from "#/components/master-table/cells";
 import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
@@ -38,6 +37,7 @@ import {
 } from "#/components/master-table/model";
 import { Pane, PaneSplit, PaneWorkspace } from "#/components/mechanism/pane";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";
+import { token } from "#/lib/token";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { FLAG_MEANING, loopBounds, pathD } from "#/takeoff/model";
 import {
@@ -139,7 +139,10 @@ const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; note: st
 
 /** The CSS ink behind a room state — for the SVG plan fills and rail bars, which cannot take
  * a tone name. One derivation, so the three surfaces cannot diverge. */
-const stateInk = (state: RoomState): string => VERDICT_INK[STATE_META[state].tone];
+const stateInk = (state: RoomState): string => {
+  const tone = STATE_META[state].tone;
+  return token(tone === "ink" ? "ink-2" : tone === "mute" ? "ink-mute" : tone);
+};
 
 /** The one alarm is `call` (tone carries it); `unreviewed` is the one dim. */
 const stateMeta = (state: RoomState): RowVerdict => ({
@@ -166,10 +169,10 @@ const STAGE_BLURB: Record<Stage, string> = {
  * as an SVG stroke over the designer's own zone colours, so the cursor is drawn in NEUTRAL INK
  * instead: no hue bought, and still the highest-contrast mark on the plan.
  */
-const CURSOR_INK = "var(--pe-ink)";
+const cursorInk = () => token("ink");
 
 /** Held residue and the "no boundary" fallback both mean "nothing real is here". */
-const ABSENT_INK = "var(--pe-ink-mute)";
+const absentInk = () => token("ink-mute");
 
 /**
  * Per-zone progress, derived: one equal segment per room, coloured by that room's own state. A
@@ -362,8 +365,8 @@ function RoomNameCell({
       title={state.join(" · ") || undefined}
       className={cn(
         "flex min-w-0 items-center",
-        entity.hovered && "[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]",
-        entity.selected && "bg-select [--pe-on:var(--pe-select)]",
+        entity.hovered && "veil",
+        entity.selected && "on-select",
       )}
     >
       <div className="min-w-0 flex-1">
@@ -799,9 +802,7 @@ export function Atlas({ store }: AtlasProps) {
               /* adopt · refresh moved to the TargetingHead's stage verbs (they demand bindings). */
             >
               <div className="shrink-0 border-b border-line px-2 py-1.5">
-                <div className="t-caption t-upper mb-1 text-ink-2">
-                  room states — one per room
-                </div>
+                <div className="t-caption t-upper mb-1 text-ink-2">room states — one per room</div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   {ROOM_STATES.map((s) => (
                     <span
@@ -841,20 +842,13 @@ export function Atlas({ store }: AtlasProps) {
                           on && "bg-select",
                         )}
                       >
-                        <span className="face-mono t-value w-3 shrink-0 text-ink-2">
-                          {i + 1}
-                        </span>
+                        <span className="face-mono t-value w-3 shrink-0 text-ink-2">{i + 1}</span>
                         <span
-                          className={cn(
-                            "face-mono t-value flex-1 truncate",
-                            !on && "text-ink-2",
-                          )}
+                          className={cn("face-mono t-value flex-1 truncate", !on && "text-ink-2")}
                         >
                           {stage}
                         </span>
-                        <span className="face-mono t-value tabular-nums text-ink-2">
-                          {n}
-                        </span>
+                        <span className="face-mono t-value tabular-nums text-ink-2">{n}</span>
                       </button>
                     );
                   })}
@@ -1218,11 +1212,11 @@ function LevelPlan({
         <title>Level plan — declared zones, detected rooms, held residue</title>
         {/* Clicking nothing returns instantly to the whole house. */}
         <rect
+          className="fill-transparent"
           x={0}
           y={0}
           width={viewport.width}
           height={viewport.height}
-          fill="transparent"
           onClick={onClear}
         />
 
@@ -1264,8 +1258,8 @@ function LevelPlan({
                   key={s.id}
                   d={pathD([s.outer, ...s.holes], frame)}
                   fillRule="evenodd"
-                  fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
-                  stroke={ABSENT_INK}
+                  fill={`color-mix(in srgb, ${absentInk()} 12%, transparent)`}
+                  stroke={absentInk()}
                   strokeOpacity={0.35}
                   strokeDasharray="3 2"
                   strokeWidth={1}
@@ -1277,7 +1271,7 @@ function LevelPlan({
               {z.rooms.map((room) => {
                 const state = stateOf(room);
                 const isCursor = room.guid === cursor;
-                const tone = isCursor ? CURSOR_INK : stateInk(state);
+                const tone = isCursor ? cursorInk() : stateInk(state);
                 const [labelX, labelY] = frame.toViewport(room.label);
                 const click = (e: React.MouseEvent) => {
                   e.stopPropagation();
@@ -1327,8 +1321,7 @@ function LevelPlan({
                         y={labelY}
                         textAnchor="middle"
                         fontSize={font}
-                        fill="var(--pe-ink)"
-                        className="pointer-events-none select-none"
+                        className="pointer-events-none select-none fill-ink"
                       >
                         <tspan x={labelX} fontWeight={600}>
                           {room.name}
@@ -1348,9 +1341,8 @@ function LevelPlan({
                   y={zoneLabelY}
                   textAnchor="middle"
                   fontSize={font * 0.95}
-                  fill="var(--pe-ink)"
                   fillOpacity={0.55}
-                  className="pointer-events-none select-none"
+                  className="pointer-events-none select-none fill-ink"
                 >
                   {z.zone.key}
                 </text>
@@ -1364,8 +1356,8 @@ function LevelPlan({
         {ROOM_STATES.map((s) => (
           <Swatch key={s} tone={stateInk(s)} label={STATE_META[s].label} />
         ))}
-        <Swatch tone={ABSENT_INK} label="held residue" seam />
-        <Swatch tone={CURSOR_INK} label="cursor" />
+        <Swatch tone={absentInk()} label="held residue" seam />
+        <Swatch tone={cursorInk()} label="cursor" />
         {skipped > 0 && (
           <span className="face-mono t-value text-ink-2">
             {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
@@ -1504,9 +1496,7 @@ function Line({ label, value, muted }: { label: string; value: string; muted?: b
   return (
     <p className="face-mono t-value flex gap-1.5">
       <span className="w-16 shrink-0 text-right text-ink-2">{label}</span>
-      <span className={cn("min-w-0 flex-1 break-words", muted && "text-ink-2")}>
-        {value}
-      </span>
+      <span className={cn("min-w-0 flex-1 break-words", muted && "text-ink-2")}>{value}</span>
     </p>
   );
 }
@@ -1566,9 +1556,7 @@ function ZoneCard({
       <div className="flex items-center gap-1.5 px-2 py-1.5">
         <ZoneThumb zone={zone.zone} className="size-5" />
         <span className="face-mono t-value">{zone.zone.key}</span>
-        <span className="face-mono t-value min-w-0 truncate text-ink-2">
-          {zone.name}
-        </span>
+        <span className="face-mono t-value min-w-0 truncate text-ink-2">{zone.name}</span>
         <button
           type="button"
           onClick={onClose}
@@ -1732,9 +1720,7 @@ function RoomPanel({
           <div className="px-2.5 py-2">
             <p className="t-label t-upper mb-1 text-ink-2">manual j — this room</p>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
-              <span className="face-mono t-value pr-1.5 text-right text-ink-2">
-                ceil ft
-              </span>
+              <span className="face-mono t-value pr-1.5 text-right text-ink-2">ceil ft</span>
               <span className="rounded-[1px] border border-line">
                 <NumberCell
                   value={room.ceilingFt}
@@ -1745,9 +1731,7 @@ function RoomPanel({
               </span>
               {MANUAL_J.map((mj) => (
                 <Fragment key={mj.field}>
-                  <span className="face-mono t-value pr-1.5 text-right text-ink-2">
-                    {mj.label}
-                  </span>
+                  <span className="face-mono t-value pr-1.5 text-right text-ink-2">{mj.label}</span>
                   <span className="rounded-[1px] border border-line">
                     <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
@@ -1764,9 +1748,7 @@ function RoomPanel({
               {open.map((flag) => (
                 <li key={flag}>
                   <p className="face-mono t-value text-alarm">{flag}</p>
-                  <p className="face-mono t-value text-ink-2">
-                    {FLAG_MEANING[flag] ?? "no blurb"}
-                  </p>
+                  <p className="face-mono t-value text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
                   {/* The verdict's TONE is derived from the lane, not maintained: on the live
                       lane it writes onto the Room Region provenance blob (a write beyond the
                       page — `commit`), on the fixture it only marks locally (`act`). The route
@@ -1932,8 +1914,8 @@ function ZonePeek({
               key={residue.id}
               d={pathD([residue.outer, ...residue.holes], frame)}
               fillRule="evenodd"
-              fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
-              stroke={ABSENT_INK}
+              fill={`color-mix(in srgb, ${absentInk()} 12%, transparent)`}
+              stroke={absentInk()}
               strokeOpacity={0.4}
               strokeDasharray="4 3"
               strokeWidth={1}
@@ -1948,7 +1930,7 @@ function ZonePeek({
             const state = stateOf(room);
             // `stateInk`, not the tone NAME — the tone is a token key ("alarm"), and feeding it
             // to color-mix silently produced an invalid colour (found during the adoption pass).
-            const accent = on ? CURSOR_INK : stateInk(state);
+            const accent = on ? cursorInk() : stateInk(state);
             const [labelX, labelY] = frame.toViewport(room.label);
             if (!room.outer) {
               const r = Math.max(Math.sqrt(Math.max(room.sqft, 20)) / 3.2, span / 90);
@@ -1992,8 +1974,7 @@ function ZonePeek({
               y={cursorY}
               textAnchor="middle"
               fontSize={font}
-              className="pointer-events-none select-none"
-              fill="var(--pe-ink)"
+              className="pointer-events-none select-none fill-ink"
             >
               <tspan x={cursorX} fontWeight={600}>
                 {cursorRoom.name}
@@ -2007,10 +1988,10 @@ function ZonePeek({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-2.5 py-1">
-        <Swatch tone={CURSOR_INK} label="cursor room" />
+        <Swatch tone={cursorInk()} label="cursor room" />
         <Swatch tone={stateInk("call")} label="needs a call" />
         {zone.residues.length > 0 && (
-          <Swatch tone={ABSENT_INK} label={`held ×${zone.residues.length}`} seam />
+          <Swatch tone={absentInk()} label={`held ×${zone.residues.length}`} seam />
         )}
         <span className="face-mono t-value text-ink-2">
           {withGeometry.length}/{zone.rooms.length} with real boundaries

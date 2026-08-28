@@ -22,10 +22,7 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
   const { item, lens } = props;
   const onLens = pinMatchesLens(item, lens);
   return (
-    <div
-      className="flex flex-col gap-1 border-b px-2 py-1.5"
-      style={{ borderColor: "var(--pe-line-2)" }}
-    >
+    <div className="flex flex-col gap-1 border-b px-2 py-1.5 border-line-2">
       <div className="flex items-baseline gap-2">
         <Verb
           label={`${zoneShort(item.zone)} · A ${runShort(item.runA)} → B ${runShort(item.runB)}${!onLens ? " ≠ lens" : ""}`}
@@ -60,10 +57,7 @@ export function Tray(props: {
   const { items, loadedSet } = useFb();
   return (
     <div className="flex size-full min-h-0 flex-col bg-page">
-      <div
-        className="flex h-8 shrink-0 items-center gap-2 border-b px-2"
-        style={{ borderColor: "var(--pe-line-2)" }}
-      >
+      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 border-line-2">
         <span className="t-label t-upper text-ink-2">staging</span>
         <span className="face-mono t-caption t-label text-ink-2">
           {items.length === 0 ? "empty" : `${items.length} staged`}
@@ -83,9 +77,8 @@ export function Tray(props: {
                 "face-mono t-caption rounded-[2px] px-1.5 py-0.5",
                 props.review
                   ? "bg-recess text-ink"
-                  : "border text-ink-2 hover:text-ink",
+                  : "border border-line-2 text-ink-2 hover:text-ink",
               )}
-              style={props.review ? undefined : { borderColor: "var(--pe-line-2)" }}
             />
           )}
           {items.length > 0 && (
@@ -100,8 +93,7 @@ export function Tray(props: {
       </div>
       {loadedSet && (
         <div
-          className="face-mono t-caption shrink-0 truncate border-b px-2 py-1 text-ink-2"
-          style={{ borderColor: "var(--pe-line-2)" }}
+          className="face-mono t-caption shrink-0 truncate border-b px-2 py-1 text-ink-2 border-line-2"
           title="This staging was rehydrated from an export manifest — it is editable; exporting mints a NEW stamp, the loaded set is never overwritten."
         >
           loaded from set {loadedSet}
@@ -110,9 +102,9 @@ export function Tray(props: {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items.length === 0 ? (
           <p className="face-mono t-caption px-2 py-3 t-label leading-relaxed text-ink-2">
-            Nothing staged. Hit <span className="text-ink">＋ stage</span> on a zone card to
-            pin its current A/B pair here; click rooms/residues on the staged B panel to flag them.
-            Export writes PNGs + manifest.json + clip.txt and puts the block on the clipboard.
+            Nothing staged. Hit <span className="text-ink">＋ stage</span> on a zone card to pin its
+            current A/B pair here; click rooms/residues on the staged B panel to flag them. Export
+            writes PNGs + manifest.json + clip.txt and puts the block on the clipboard.
           </p>
         ) : (
           items.map((item) => (
@@ -120,10 +112,7 @@ export function Tray(props: {
           ))
         )}
       </div>
-      <div
-        className="flex flex-col gap-1.5 border-t px-2 py-2"
-        style={{ borderColor: "var(--pe-line-2)" }}
-      >
+      <div className="flex flex-col gap-1.5 border-t px-2 py-2 border-line-2">
         <ExportVerbs items={items} pool={props.pool} />
         <ExportStatus />
       </div>

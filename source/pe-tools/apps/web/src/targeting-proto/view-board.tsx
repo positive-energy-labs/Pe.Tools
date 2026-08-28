@@ -27,6 +27,7 @@ import {
   type Product,
   type Verb as V,
 } from "#/targeting-proto/model";
+import { cn } from "#/lib/utils";
 
 const RUN_CSS =
   "@keyframes tb-run{from{transform:translateX(-100%)}to{transform:translateX(400%)}}";
@@ -40,12 +41,12 @@ function Demand({ product, k, b }: { product: Product; k: string; b: Bindings })
   const bound = b.isBound(link);
   return (
     <span
-      className="face-mono t-caption"
+      className={cn(
+        "face-mono t-caption border-b",
+        bound ? "text-ink" : "text-caution",
+        isSeam(link) ? "seam-border border-caution" : "border-transparent",
+      )}
       title={`${k}: ${b.labelOf(link) ?? "unbound"}${isSeam(link) ? ` — seam, needs ${link.needs}` : ""}`}
-      style={{
-        color: bound ? "var(--pe-ink)" : "var(--pe-caution)",
-        borderBottom: isSeam(link) ? "1px dashed var(--pe-caution)" : "1px solid transparent",
-      }}
     >
       {k}
       {bound ? "" : " ∅"}
@@ -68,11 +69,13 @@ export function BoardView({ product }: { product: Product }) {
     return (
       <div
         key={v.key}
-        className="relative grid items-center gap-x-4 px-2.5"
+        className={cn(
+          "relative grid items-center gap-x-4 px-2.5",
+          i > 0 && "border-t border-line-2",
+        )}
         style={{
           gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
           minHeight: 34,
-          borderTop: i === 0 ? undefined : "1px solid var(--pe-line-2)",
         }}
       >
         <span>
@@ -87,17 +90,14 @@ export function BoardView({ product }: { product: Product }) {
         </span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           {v.demands.length === 0 ? (
-            <span className="face-mono t-caption" style={{ color: "var(--pe-ink-mute)" }}>
-              —
-            </span>
+            <span className="face-mono t-caption text-ink-mute">—</span>
           ) : (
             v.demands.map((k) => <Demand key={k} product={product} k={k} b={b} />)
           )}
         </span>
         <span
-          className="face-mono t-caption text-right"
+          className={cn("face-mono t-caption text-right", can.ok ? "text-ink-mute" : "text-ink-2")}
           style={{
-            color: can.ok ? "var(--pe-ink-mute)" : "var(--pe-ink-2)",
             fontStyle: can.ok ? undefined : "italic",
           }}
         >
@@ -110,10 +110,9 @@ export function BoardView({ product }: { product: Product }) {
             style={{ left: 0, right: 0, bottom: -1, height: 2 }}
           >
             <span
-              className="block h-full"
+              className="block h-full bg-ink"
               style={{
                 width: "25%",
-                background: "var(--pe-ink)",
                 animation: "tb-run 1s linear infinite",
               }}
             />
@@ -129,9 +128,7 @@ export function BoardView({ product }: { product: Product }) {
       <ArtifactFrame
         head={
           <>
-            <span className="t-label t-upper" style={{ color: "var(--pe-ink)" }}>
-              {product.name}
-            </span>
+            <span className="t-label t-upper text-ink">{product.name}</span>
             <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-4 gap-y-1">
               {prefix.length > 0 ? (
                 <PathInput
@@ -154,12 +151,7 @@ export function BoardView({ product }: { product: Product }) {
                     style={{ opacity: dim ? 0.45 : 1 }}
                     title={dim ? `${e.key} is out of scope at ${b.stage.label}` : undefined}
                   >
-                    <span
-                      className="face-mono t-caption t-upper"
-                      style={{ color: "var(--pe-ink-mute)" }}
-                    >
-                      {e.dir}
-                    </span>
+                    <span className="face-mono t-caption t-upper text-ink-mute">{e.dir}</span>
                     <PathInput
                       product={product}
                       chain={chain}
@@ -178,8 +170,7 @@ export function BoardView({ product }: { product: Product }) {
           <>
             <PaneStrip product={product} b={b} />
             <span
-              className="face-mono t-caption"
-              style={{ color: runner.last ? "var(--pe-done)" : "var(--pe-ink-mute)" }}
+              className={cn("face-mono t-caption", runner.last ? "text-done" : "text-ink-mute")}
             >
               {runner.last ? `ran ${runner.last.verb}` : "idle"}
             </span>
@@ -188,22 +179,17 @@ export function BoardView({ product }: { product: Product }) {
       >
         <StageStrip product={product} b={b} runner={runner} />
         <div
-          className="grid px-2.5 pt-1.5 pb-0.5 face-mono t-caption t-upper"
+          className="grid px-2.5 pt-1.5 pb-0.5 face-mono t-caption t-upper text-ink-mute"
           style={{
             gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
             columnGap: "1rem",
-            color: "var(--pe-ink-mute)",
           }}
         >
           <span>verb</span>
           <span>needs</span>
           <span className="text-right">state</span>
         </div>
-        <div
-          style={{ borderTop: "1px solid var(--pe-ink)", borderBottom: "1px solid var(--pe-ink)" }}
-        >
-          {verbs.map(row)}
-        </div>
+        <div className="border-t border-t-ink border-b border-b-ink">{verbs.map(row)}</div>
       </ArtifactFrame>
     </div>
   );

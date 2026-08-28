@@ -6,6 +6,7 @@ import { Provenance, Section } from "#/components/lang/section";
 import { KVGrid, VizChip, type VizIndex } from "#/ops/primitives";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
+import { cn } from "#/lib/utils";
 
 /**
  * glance.* surfaces about the model itself: what IS this document, and what is
@@ -75,9 +76,7 @@ function Stat({
       className="min-w-[64px] border-r border-line px-3 py-1.5"
       title={warn ? warnTitle : undefined}
     >
-      <div className="face-mono t-value" style={warn ? { color: "var(--pe-caution)" } : undefined}>
-        {value ?? "∅"}
-      </div>
+      <div className={`face-mono t-value ${warn ? "text-caution" : ""}`}>{value ?? "∅"}</div>
       <div className="t-caption text-ink-2">{label}</div>
     </div>
   );
@@ -356,10 +355,10 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             {sheetPlacements.map((p, i) => (
               <span
                 key={i}
-                className="face-mono t-caption"
-                style={{
-                  color: p.isActiveSheet === true ? "var(--pe-ink)" : "var(--pe-ink-2)",
-                }}
+                className={cn(
+                  "face-mono t-caption",
+                  p.isActiveSheet === true ? "text-ink" : "text-ink-2",
+                )}
                 title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
               >
                 sheet {text(p.sheetNumber)} · {text(p.sheetName)}
@@ -422,7 +421,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           ) : (
             <ul className="flex flex-col gap-1">
               {confidenceWarnings.map((warning, i) => (
-                <li key={i} className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
+                <li key={i} className="face-mono t-caption text-caution">
                   {warning}
                 </li>
               ))}
@@ -432,19 +431,12 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             /* plain content, not enclosed (border budget) — the caution ink and the
                upper head carry the weight the old tinted box was buying. */
             <div>
-              <div
-                className="face-mono t-caption t-upper mb-1"
-                style={{ color: "var(--pe-caution)" }}
-              >
+              <div className="face-mono t-caption t-upper mb-1 text-caution">
                 api limitations (verbatim)
               </div>
               <ul className="flex flex-col gap-1">
                 {apiLimitations.map((limitation, i) => (
-                  <li
-                    key={i}
-                    className="t-label leading-snug"
-                    style={{ color: "var(--pe-caution)" }}
-                  >
+                  <li key={i} className="t-label leading-snug text-caution">
                     {limitation}
                   </li>
                 ))}

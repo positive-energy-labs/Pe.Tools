@@ -85,9 +85,7 @@ export function Pane({
               <h2 className="t-label t-upper min-w-0 truncate text-ink-2">{title}</h2>
             )}
             {meta != null && (
-              <span className="face-mono t-value min-w-0 truncate text-ink-2">
-                {meta}
-              </span>
+              <span className="face-mono t-value min-w-0 truncate text-ink-2">{meta}</span>
             )}
           </div>
           {actions != null && (
@@ -342,7 +340,7 @@ function PaneResizeHandle({
       onDoubleClick={onReset}
       className={cn(
         // Hover buys no hue (the one hover law): the gutter lifts with the neutral veil.
-        "group z-20 flex touch-none items-center justify-center bg-recess/50 outline-none hover:bg-[var(--pe-veil)] focus-visible:bg-[var(--pe-veil)]",
+        "group z-20 flex touch-none items-center justify-center bg-recess/50 outline-none hover:veil focus-visible:veil",
         axis === "horizontal" ? "h-full w-2 cursor-col-resize" : "h-2 w-full cursor-row-resize",
         className,
       )}

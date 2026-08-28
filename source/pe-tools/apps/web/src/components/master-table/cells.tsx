@@ -103,7 +103,7 @@ export function CellSelect({
       }}
       className={cn(
         "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-select",
-        invalid && "bg-[color-mix(in_srgb,var(--pe-alarm)_10%,var(--pe-on))] text-alarm",
+        invalid && "alarm-wash text-alarm",
         className,
       )}
     >
@@ -139,18 +139,29 @@ export function ReadCell({
 export function StateDot({ tone, dim }: { tone: VerdictTone; dim?: boolean }) {
   return (
     <span
-      className="inline-block size-2 shrink-0 rounded-[1px] align-middle"
-      style={{ background: VERDICT_INK[tone], opacity: dim ? 0.35 : 1 }}
+      className={cn(
+        "inline-block size-2 shrink-0 rounded-[1px] align-middle",
+        VERDICT_DOT_CLASS[tone],
+      )}
+      style={{ opacity: dim ? 0.35 : 1 }}
     />
   );
 }
 
-export const VERDICT_INK: Record<VerdictTone, string> = {
-  alarm: "var(--pe-alarm)",
-  caution: "var(--pe-caution)",
-  done: "var(--pe-done)",
-  ink: "var(--pe-ink-2)",
-  mute: "var(--pe-ink-mute)",
+const VERDICT_DOT_CLASS: Record<VerdictTone, string> = {
+  alarm: "bg-alarm",
+  caution: "bg-caution",
+  done: "bg-done",
+  ink: "bg-ink-2",
+  mute: "bg-ink-mute",
+};
+
+export const VERDICT_TEXT_CLASS: Record<VerdictTone, string> = {
+  alarm: "text-alarm",
+  caution: "text-caution",
+  done: "text-done",
+  ink: "text-ink-2",
+  mute: "text-ink-mute",
 };
 
 /** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The

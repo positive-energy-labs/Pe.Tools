@@ -40,6 +40,7 @@ import {
   PROPOSAL_THREAD,
   type ProposalItem,
 } from "#/design-system/fixtures";
+import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/design-system_/proposal-flow")({
   component: ProposalFlow,
@@ -122,8 +123,10 @@ function ProposalFlow() {
             {PROPOSAL_THREAD.map((m, i) => (
               <div key={i} className="flex gap-3 pb-2.5">
                 <span
-                  className="w-8 shrink-0 pt-0.5 font-pe-mono text-[10px] tracking-[0.09em] uppercase"
-                  style={{ color: m.who === "pea" ? "var(--pe-pea-ink)" : "var(--pe-ink-2)" }}
+                  className={cn(
+                    "w-8 shrink-0 pt-0.5 font-pe-mono text-[10px] tracking-[0.09em] uppercase",
+                    m.who === "pea" ? "text-pea-ink" : "text-ink-2",
+                  )}
                 >
                   {m.who}
                 </span>

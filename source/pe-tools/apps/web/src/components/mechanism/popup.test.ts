@@ -16,7 +16,7 @@ test("popup CSS composes anchor, caller minimum, content growth, and viewport ce
   expect(POPUP_COMBOBOX_WIDTH_CLASS).toContain("--popup-min-width");
   expect(POPUP_COMBOBOX_WIDTH_CLASS).toContain("--available-width");
   expect(POPUP_COMBOBOX_WIDTH_CLASS).toContain("w-max");
-  expect(POPUP_SURFACE_CLASS).toContain("[--pe-on:var(--pe-artifact)]");
+  expect(POPUP_SURFACE_CLASS).toContain("on-artifact");
 
   expect(source("./combobox.tsx")).toContain("POPUP_COMBOBOX_WIDTH_CLASS");
   for (const [file, minimum] of [

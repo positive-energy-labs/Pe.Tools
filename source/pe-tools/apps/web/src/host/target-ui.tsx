@@ -61,22 +61,27 @@ export function chipDescriptor(r: TargetResolution): {
 }
 
 export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: Lane | null }) {
-  const color =
+  const className =
     tone === "pinned"
-      ? "var(--pe-done)"
+      ? "bg-done"
       : tone === "implicit"
         ? lane
-          ? laneVar(lane)
-          : "var(--pe-ink-2)"
+          ? undefined
+          : "bg-ink-2"
         : tone === "ambiguous"
-          ? "var(--pe-caution)"
+          ? "bg-caution"
           : tone === "dangling"
-            ? "var(--pe-caution)"
-            : "var(--pe-line-2)";
+            ? "bg-caution"
+            : "bg-line-2";
   return (
     <span
-      className="inline-block shrink-0"
-      style={{ width: 6, height: 6, borderRadius: 1, background: color }}
+      className={`inline-block shrink-0 ${className ?? ""}`}
+      style={{
+        width: 6,
+        height: 6,
+        borderRadius: 1,
+        background: tone === "implicit" && lane ? laneVar(lane) : undefined,
+      }}
     />
   );
 }

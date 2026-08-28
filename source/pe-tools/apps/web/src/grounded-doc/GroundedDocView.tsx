@@ -27,7 +27,7 @@ const pageKey = (page: number) => `p${page}`;
 
 /** The one hover veil, as an arbitrary-property class (design-lang hover law: a neutral ink
  * veil composited as a background-image over whatever fill is already there — no hue). */
-const VEIL_HOVER = "hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]";
+const VEIL_HOVER = "hover:veil";
 
 /**
  * Grounded-document view with up to three scroll-synced lanes: markdown blocks,
@@ -291,9 +291,7 @@ function ImagesPane({
                         className="max-h-72 w-full object-contain"
                       />
                       <span className="flex items-center gap-1.5 border-t border-line bg-recess px-1.5 py-0.5">
-                        <span className="t-caption face-mono text-ink-2">
-                          {image.category}
-                        </span>
+                        <span className="t-caption face-mono text-ink-2">{image.category}</span>
                         {isPinned && <Pin className="size-3 text-ink" />}
                       </span>
                     </button>

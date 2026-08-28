@@ -6,6 +6,7 @@
  */
 import type { Grille, GrilleInput } from "./math";
 import { frac, pct } from "./math";
+import { cn } from "#/lib/utils";
 
 type Props = {
   field: Grille[];
@@ -26,26 +27,26 @@ export function FieldChart({ field, active, onPick }: Props) {
   const Y = (f: number) => H - PAD.b - (f / maxFree) * (H - PAD.t - PAD.b);
   const widths = [...new Set(field.map((g) => g.opening))].sort((a, b) => a - b);
   return (
-    <svg width={W} height={H} className="face-mono t-caption" style={{ color: "var(--pe-ink)" }}>
-      <line x1={PAD.l} x2={W - PAD.r} y1={H - PAD.b} y2={H - PAD.b} stroke="var(--pe-line-2)" />
-      <line x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={H - PAD.b} stroke="var(--pe-line-2)" />
-      <text x={(PAD.l + W - PAD.r) / 2} y={H - 6} textAnchor="middle" fill="var(--pe-ink-2)">
+    <svg width={W} height={H} className="face-mono t-caption text-ink">
+      <line className="stroke-line-2" x1={PAD.l} x2={W - PAD.r} y1={H - PAD.b} y2={H - PAD.b} />
+      <line className="stroke-line-2" x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={H - PAD.b} />
+      <text className="fill-ink-2" x={(PAD.l + W - PAD.r) / 2} y={H - 6} textAnchor="middle">
         qty openings →
       </text>
-      <text x={4} y={PAD.t + 6} fill="var(--pe-ink-2)">
+      <text className="fill-ink-2" x={4} y={PAD.t + 6}>
         free %
       </text>
       {Array.from({ length: maxN }, (_, i) => i + 1).map((n) => (
-        <text key={n} x={X(n)} y={H - PAD.b + 10} textAnchor="middle" fill="var(--pe-ink-mute)">
+        <text className="fill-ink-mute" key={n} x={X(n)} y={H - PAD.b + 10} textAnchor="middle">
           {n}
         </text>
       ))}
       <line
+        className="stroke-line"
         x1={PAD.l}
         x2={W - PAD.r}
         y1={Y(active.freeArea)}
         y2={Y(active.freeArea)}
-        stroke="var(--pe-line)"
         strokeDasharray="3 3"
       />
       {widths.map((w) => {
@@ -55,9 +56,8 @@ export function FieldChart({ field, active, onPick }: Props) {
         return (
           <g key={w}>
             <polyline
+              className="fill-none stroke-current"
               points={pts.map((g) => `${X(g.openings)},${Y(g.freeArea)}`).join(" ")}
-              fill="none"
-              stroke="currentColor"
               strokeWidth={hot ? 1.6 : 0.6}
               opacity={hot ? 1 : 0.5}
             />
@@ -65,9 +65,9 @@ export function FieldChart({ field, active, onPick }: Props) {
                 unlabelled so labels do not pile up — the hover title still names them */}
             {(hot || (pts.length > 1 && Math.round(w * 16) % 2 === 0)) && (
               <text
+                className={cn(hot ? "fill-current" : "fill-ink-mute")}
                 x={X(last.openings) + 4}
                 y={Y(last.freeArea) + 3}
-                fill={hot ? "currentColor" : "var(--pe-ink-mute)"}
                 fontWeight={hot ? 700 : 400}
               >
                 {frac(w)}″
@@ -81,9 +81,8 @@ export function FieldChart({ field, active, onPick }: Props) {
                   cx={X(g.openings)}
                   cy={Y(g.freeArea)}
                   r={on ? 5 : 2.5}
-                  fill={on ? "var(--pe-page)" : "currentColor"}
-                  stroke="currentColor"
                   strokeWidth={on ? 2 : 0}
+                  className={cn(on ? "fill-page" : "fill-current", "stroke-current")}
                   style={{ cursor: "pointer" }}
                   onClick={() => onPick({ opening: g.opening, openings: g.openings, rib: g.rib })}
                 >

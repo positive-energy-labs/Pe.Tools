@@ -152,7 +152,7 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
 
 function AgreementWord({ agreement }: { agreement: Agreement }) {
   return (
-    <span className="face-mono t-label" style={{ color: AGREEMENT_TONE[agreement] }}>
+    <span className={`face-mono t-label ${AGREEMENT_TONE[agreement]}`}>
       {AGREEMENT_LABEL[agreement]}
     </span>
   );
@@ -249,7 +249,8 @@ function FamilySidebar({ stage }: { stage: Stage }) {
         {constituents(stage.family).map((group) => (
           <div key={group.kind} className="flex flex-col">
             <dt className="face-mono t-label">
-              {group.kind} <span className="tabular-nums text-[var(--pe-ink-2)]">{group.count}</span>
+              {group.kind}{" "}
+              <span className="tabular-nums text-[var(--pe-ink-2)]">{group.count}</span>
             </dt>
             <dd className="m-0 face-mono t-caption leading-4 text-[var(--pe-ink-2)]">
               {group.names.join(" · ")}

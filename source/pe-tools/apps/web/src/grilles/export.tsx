@@ -55,10 +55,7 @@ export function ExportSheet({
         #grille-export-sheet { position: absolute; inset: 0; margin: 0; }
         .no-print { display: none !important; }
       }`}</style>
-      <div
-        className="no-print flex items-center gap-3 border-b px-3 py-2"
-        style={{ borderColor: "var(--pe-line)" }}
-      >
+      <div className="no-print flex items-center gap-3 border-b px-3 py-2 border-line">
         <span className="face-mono t-label t-upper text-ink-mute">export sheet</span>
         <span className="face-mono t-label text-ink-2">
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
@@ -79,10 +76,7 @@ export function ExportSheet({
 
       <div id="grille-export-sheet" className="mx-auto max-w-[1100px] p-8">
         {/* title block */}
-        <div
-          className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 t-label"
-          style={{ borderColor: "var(--pe-ink)" }}
-        >
+        <div className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 t-label border-ink">
           <div>
             <div className="t-label t-upper text-ink-mute">
               Positive Energy · custom wood floor grille

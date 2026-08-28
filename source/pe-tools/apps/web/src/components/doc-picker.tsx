@@ -11,9 +11,9 @@ import { Verb } from "#/components/lang/verb";
  * Selection is the selection FILL, never a hue; hover is the one veil.
  */
 
-const EXT_COLOR: Record<string, string> = {
-  rvt: "var(--viz-1)",
-  rfa: "var(--viz-6)",
+const EXT_CLASS: Record<string, string> = {
+  rvt: "border-viz-1 text-viz-1",
+  rfa: "border-viz-6 text-viz-6",
 };
 
 export function extOf(path: string): string | undefined {
@@ -56,17 +56,15 @@ export function DocRow({
       reason={`Pick document ${label}.`}
       disabled={disabled}
       onClick={onPick}
-      className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-line px-2 py-1 text-left hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] disabled:opacity-40 disabled:italic ${
-        selected ? "bg-select [--pe-on:var(--pe-select)]" : ""
+      className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-line px-2 py-1 text-left hover:veil disabled:opacity-40 disabled:italic ${
+        selected ? "on-select" : ""
       }`}
     >
       {ext ? (
         <span
-          className="t-caption face-mono shrink-0 rounded-[2px] border-[0.5px] px-1"
-          style={{
-            borderColor: EXT_COLOR[ext] ?? "var(--pe-line-2)",
-            color: EXT_COLOR[ext] ?? "var(--pe-ink-2)",
-          }}
+          className={`t-caption face-mono shrink-0 rounded-[2px] border-[0.5px] px-1 ${
+            EXT_CLASS[ext] ?? "border-line-2 text-ink-2"
+          }`}
         >
           {ext}
         </span>

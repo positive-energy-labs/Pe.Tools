@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { frac } from "./math";
+import { cn } from "#/lib/utils";
 
 /** Parses `5/8`, `1 1/2`, `0.625`. */
 export function parseInches(s: string): number | null {
@@ -39,8 +40,11 @@ export function InchField({
   };
   return (
     <input
-      className={`face-mono w-16 rounded border bg-transparent px-1 text-right t-value ${className}`}
-      style={{ borderColor: "var(--pe-line)", ...style }}
+      className={cn(
+        `face-mono w-16 rounded border bg-transparent px-1 text-right t-value ${className}`,
+        "border-line",
+      )}
+      style={{ ...style }}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}

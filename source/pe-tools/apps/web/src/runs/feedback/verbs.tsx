@@ -24,12 +24,13 @@ export function ExportVerbs(props: {
       disabled={disabled}
       onClick={() => void runExport(verb, props.items, props.pool)}
       className={cn(
-        "face-mono t-caption border px-2 py-0.5 t-label disabled:opacity-40",
-        primary
-          ? "border-transparent bg-commit text-on-commit"
-          : "text-ink-2 hover:text-ink",
+        cn(
+          "face-mono t-caption border px-2 py-0.5 t-label disabled:opacity-40",
+          primary ? "border-transparent bg-commit text-on-commit" : "text-ink-2 hover:text-ink",
+        ),
+        !primary && "border-line-2",
       )}
-      style={{ borderColor: primary ? undefined : "var(--pe-line-2)", borderRadius: 2 }}
+      style={{ borderColor: undefined, borderRadius: 2 }}
     />
   );
   return (
@@ -65,22 +66,14 @@ export function ExportStatus(props: { className?: string }) {
   }
   if (exportError) {
     return (
-      <div
-        className={cn("face-mono t-caption", props.className)}
-        style={{ color: "var(--pe-alarm)" }}
-      >
+      <div className={cn(cn("face-mono t-caption", props.className), "text-alarm")}>
         export failed: {exportError}
       </div>
     );
   }
   if (!lastExport) return null;
   return (
-    <div
-      className={cn(
-        "face-mono t-caption flex flex-col gap-0.5 text-ink-2",
-        props.className,
-      )}
-    >
+    <div className={cn("face-mono t-caption flex flex-col gap-0.5 text-ink-2", props.className)}>
       <span className="break-all">
         wrote {lastExport.files.length} file{lastExport.files.length === 1 ? "" : "s"} + clip.txt →{" "}
         <span className="text-ink">{lastExport.dir}</span>
@@ -102,12 +95,12 @@ export function ExportStatus(props: { className?: string }) {
       >
         ?set={lastExport.stamp}
       </a>
-      {lastExport.warning && <span style={{ color: "var(--pe-alarm)" }}>{lastExport.warning}</span>}
+      {lastExport.warning && <span className="text-alarm">{lastExport.warning}</span>}
       <details>
         <summary className="cursor-pointer">view the clip block</summary>
         <pre
-          className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5"
-          style={{ borderColor: "var(--pe-line-2)", borderRadius: 2 }}
+          className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5 border-line-2"
+          style={{ borderRadius: 2 }}
         >
           {lastExport.text}
         </pre>
@@ -135,8 +128,8 @@ export function FlagChips(props: { item: StagedItem }) {
           onMouseEnter={() => fb.setHoverFlag(`${props.item.key}::${el}`)}
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
-          className="face-mono t-caption border px-1"
-          style={{ borderColor: "var(--pe-alarm)", color: "var(--pe-alarm)", borderRadius: 2 }}
+          className="face-mono t-caption border px-1 border-alarm text-alarm"
+          style={{ borderRadius: 2 }}
         >
           ⚑ {flagLabel(el)} ✕
         </button>
@@ -161,10 +154,10 @@ export function NoteInput(props: {
       "One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block.",
     autoFocus: props.autoFocus,
     className: cn(
-      "face-mono t-caption w-full border bg-page px-1.5 py-0.5 t-label placeholder:text-ink-2/50",
+      "face-mono t-caption w-full border border-line-2 bg-page px-1.5 py-0.5 t-label placeholder:text-ink-2/50",
       props.className,
     ),
-    style: { borderColor: "var(--pe-line-2)", borderRadius: 2 },
+    style: { borderRadius: 2 },
   };
   return props.multiline ? (
     <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} />

@@ -95,10 +95,8 @@ function fmtTok(tokens: number): string {
 // a reprocess is a cost owed this send (caution). Machine-measured, so mono.
 const CACHE_BASE = "rounded-sm border-[0.5px] px-[5px] py-px t-caption face-mono whitespace-nowrap";
 const CACHE_TONE = {
-  cached:
-    "text-done border-[color-mix(in_srgb,var(--pe-done)_50%,transparent)] bg-[color-mix(in_srgb,var(--pe-done)_12%,transparent)]",
-  reproc:
-    "text-caution border-[color-mix(in_srgb,var(--pe-caution)_55%,transparent)] bg-[color-mix(in_srgb,var(--pe-caution)_10%,transparent)]",
+  cached: "text-done border-done/50 bg-done/12",
+  reproc: "text-caution border-caution/55 bg-caution/10",
 } as const;
 
 function CacheBadge({ state }: { state: CacheState }) {
@@ -137,16 +135,15 @@ const PILL_TONE: Record<NonNullable<WorkbenchContextItem["state"]>, string> = {
 // (neutral) · free = the cached prefix survived (done).
 const BLAST_BASE = "rounded-sm border-[0.5px] px-1 t-caption face-mono whitespace-nowrap";
 const BLAST_TONE: Record<Blast, string> = {
-  prefix:
-    "text-caution border-[color-mix(in_srgb,var(--pe-caution)_50%,transparent)] bg-[color-mix(in_srgb,var(--pe-caution)_8%,transparent)]",
+  prefix: "text-caution border-caution/50 bg-caution/8",
   system: "text-ink-2 border-line-2",
-  free: "text-done border-[color-mix(in_srgb,var(--pe-done)_50%,transparent)] bg-[color-mix(in_srgb,var(--pe-done)_10%,transparent)]",
+  free: "text-done border-done/50 bg-done/10",
 };
 
 // Row chrome shared by every layer row; grid-cols differ by density (see WorldLane).
 // Hover is the one veil (a background-image, so it composits over any fill).
 const WORLD_ROW =
-  "grid w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3.5 py-1.5 text-left [font:inherit] hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]";
+  "grid w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3.5 py-1.5 text-left [font:inherit] hover:veil";
 
 export function WorldLane({
   breakdown,
@@ -193,7 +190,7 @@ export function WorldLane({
 
   return (
     <div className="flex min-h-0 flex-col [font-variant-numeric:tabular-nums]">
-      <div className="sticky top-0 z-[2] flex items-center gap-2.5 border-b-[0.5px] border-line bg-artifact [--pe-on:var(--pe-artifact)] px-3.5 pt-3 pb-2.5">
+      <div className="sticky top-0 z-[2] flex items-center gap-2.5 border-b-[0.5px] border-line on-artifact px-3.5 pt-3 pb-2.5">
         <h2 className="t-label t-upper m-0 text-ink-2">What the agent sends the model</h2>
         <div className="ml-auto flex items-center gap-1.5">
           {/* mode = a fill, never a hue — the lang Switcher replaces the hand-rolled dial */}
@@ -217,7 +214,7 @@ export function WorldLane({
           {/* Δ is a mode toggle too: pressed = the selection fill, never a hue. */}
           <button
             type="button"
-            className="h-6 w-[26px] cursor-pointer rounded-sm border-[0.5px] border-line-2 bg-transparent text-ink-2 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] aria-pressed:bg-select aria-pressed:text-ink disabled:cursor-default disabled:italic disabled:opacity-40"
+            className="h-6 w-[26px] cursor-pointer rounded-sm border-[0.5px] border-line-2 bg-transparent text-ink-2 hover:veil aria-pressed:bg-select aria-pressed:text-ink disabled:cursor-default disabled:italic disabled:opacity-40"
             aria-pressed={diff}
             onClick={() => setDiff((value) => !value)}
             title={
@@ -246,7 +243,7 @@ export function WorldLane({
       ) : null}
 
       {inspect && cache.hasBaseline ? (
-        <div className="mx-3.5 mt-2.5 grid gap-1.5 rounded-sm border-[0.5px] border-line bg-page [--pe-on:var(--pe-page)] px-3 py-2.5 t-label">
+        <div className="mx-3.5 mt-2.5 grid gap-1.5 rounded-sm border-[0.5px] border-line on-page px-3 py-2.5 t-label">
           <div className="flex items-center gap-[7px] t-caption face-mono [font-variant-numeric:tabular-nums]">
             <span className="size-[9px] flex-none rounded-[2px] bg-done" />
             cache-read · 0.1×
@@ -258,7 +255,7 @@ export function WorldLane({
             <span className="ml-auto text-ink-2">{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
-            <div className="rounded-sm border-[0.5px] border-[color-mix(in_srgb,var(--pe-caution)_40%,transparent)] bg-[color-mix(in_srgb,var(--pe-caution)_8%,transparent)] px-2 py-1.5 t-caption leading-[1.45] text-caution">
+            <div className="rounded-sm border-[0.5px] border-caution/40 bg-caution/8 px-2 py-1.5 t-caption leading-[1.45] text-caution">
               Δ this send: {whySentence(layers, cache, totals.reprocessed)}
             </div>
           ) : null}
@@ -274,11 +271,7 @@ export function WorldLane({
           const blast = blastOf(layer.rank);
           return (
             <div
-              className={cn(
-                "border-b-[0.5px] border-line",
-                changed &&
-                  "[background:linear-gradient(var(--pe-artifact),color-mix(in_srgb,var(--pe-caution)_8%,transparent))]",
-              )}
+              className={cn("border-b-[0.5px] border-line", changed && "caution-wash-artifact")}
               key={layer.id}
             >
               <button
@@ -367,13 +360,13 @@ function ItemRow({
   return (
     <li
       className={cn(
-        "overflow-hidden rounded-sm border-[0.5px] bg-page [--pe-on:var(--pe-page)]",
+        "overflow-hidden rounded-sm border-[0.5px] on-page",
         // delta layers tint their item borders caution
-        blast ? "border-[color-mix(in_srgb,var(--pe-caution)_45%,transparent)]" : "border-line",
+        blast ? "border-caution/45" : "border-line",
       )}
     >
       <button
-        className="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-[9px] py-1.5 text-left [font:inherit] enabled:hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] disabled:cursor-default"
+        className="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-[9px] py-1.5 text-left [font:inherit] enabled:hover:veil disabled:cursor-default"
         type="button"
         disabled={!hasBody}
         onClick={() => hasBody && onToggle()}
@@ -408,7 +401,7 @@ function ItemRow({
         </span>
       </button>
       {open && hasBody ? (
-        <pre className="m-0 max-h-[220px] overflow-auto border-t-[0.5px] border-line bg-recess [--pe-on:var(--pe-recess)] px-[9px] py-2 t-caption face-mono leading-[1.5] break-words whitespace-pre-wrap text-ink-2">
+        <pre className="m-0 max-h-[220px] overflow-auto border-t-[0.5px] border-line on-recess px-[9px] py-2 t-caption face-mono leading-[1.5] break-words whitespace-pre-wrap text-ink-2">
           {item.body}
         </pre>
       ) : null}
@@ -627,7 +620,7 @@ export function ContextRibbon({
         cache={cache}
         className="relative flex h-1.5 items-stretch overflow-hidden bg-recess"
       />
-      <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] rounded-sm border-[0.5px] border-line-2 bg-page [--pe-on:var(--pe-page)] px-2.5 py-2 t-label text-ink-2 group-hover/ribbon:flex group-focus-visible/ribbon:flex">
+      <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] rounded-sm border-[0.5px] border-line-2 on-page px-2.5 py-2 t-label text-ink-2 group-hover/ribbon:flex group-focus-visible/ribbon:flex">
         {rows.map((row) => (
           <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
             <span className="size-2 flex-none rounded-[2px]" style={{ background: tone(row.id) }} />

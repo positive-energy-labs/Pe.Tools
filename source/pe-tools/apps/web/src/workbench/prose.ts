@@ -12,7 +12,7 @@
  */
 export const PROSE_CLASS = [
   "prose prose-sm max-w-none leading-normal text-ink",
-  "[--tw-prose-body:var(--pe-ink)] [--tw-prose-headings:var(--pe-ink)] [--tw-prose-bold:var(--pe-ink)] [--tw-prose-links:var(--pe-nav)] [--tw-prose-bullets:var(--pe-ink-2)] [--tw-prose-counters:var(--pe-ink-2)] [--tw-prose-quotes:var(--pe-ink-2)] [--tw-prose-quote-borders:var(--pe-line-2)] [--tw-prose-hr:var(--pe-line-2)] [--tw-prose-captions:var(--pe-ink-2)] [--tw-prose-code:var(--pe-ink)] [--tw-prose-th-borders:var(--pe-line-2)] [--tw-prose-td-borders:var(--pe-line)]",
+  "prose-pe",
   "prose-p:my-0 prose-p:mb-[0.45em] last:prose-p:mb-0",
   // Flat heading hierarchy inside answers: chat turns are dense working content, so headings keep
   // the body face and size — weight and spacing carry the structure. (Spectral is a page-title

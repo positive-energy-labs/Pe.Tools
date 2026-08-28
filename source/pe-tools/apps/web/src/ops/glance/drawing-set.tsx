@@ -113,13 +113,8 @@ function Thumbnail({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex min-w-0 flex-col gap-1 rounded-md border p-1.5 text-left hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))] ${selected ? "border-line-2" : "border-line"}`}
+      className={`flex min-w-0 flex-col gap-1 rounded-md border p-1.5 text-left hover:veil ${selected ? "on-select border-line-2" : "border-line"}`}
       /* selection is a fill, never a hue — the select rung, with --pe-on re-declared. */
-      style={
-        selected
-          ? ({ background: "var(--pe-select)", "--pe-on": "var(--pe-select)" } as React.CSSProperties)
-          : undefined
-      }
       title={
         entry
           ? `${sheet.sheetNumber} — ${sheet.sheetName}`

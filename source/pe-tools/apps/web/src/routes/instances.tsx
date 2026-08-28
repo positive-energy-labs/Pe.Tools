@@ -11,6 +11,7 @@ import type { Column, Verdict } from "#/components/master-table/model";
 import { useFleet, worldName, type WorldFacts } from "#/host/fleet";
 import { HOST_QUERY_KEY } from "#/host/queries";
 import { useWorldLog } from "#/host/use-target";
+import { cn } from "#/lib/utils";
 
 /**
  * /instances — the fleet dashboard. Every Revit world `pe-revit session status` knows about plus
@@ -300,15 +301,14 @@ function Page() {
               {legs.map((leg) => (
                 <span
                   key={`${leg.name}-${leg.pid}`}
-                  className="face-mono t-caption rounded-md border border-line-2 px-1"
-                  style={{
-                    color:
-                      leg.state === "up"
-                        ? "var(--pe-ink)"
-                        : leg.state === "down"
-                          ? "var(--pe-ink-mute)"
-                          : "var(--pe-ink-2)",
-                  }}
+                  className={cn(
+                    "face-mono t-caption rounded-md border border-line-2 px-1",
+                    leg.state === "up"
+                      ? "text-ink"
+                      : leg.state === "down"
+                        ? "text-ink-mute"
+                        : "text-ink-2",
+                  )}
                   // legBecause is the SDK's own disclosure of WHY it believes this leg belongs to
                   // this session — including when it is only a lane match and not proof.
                   title={`${leg.name} ${leg.state} via ${leg.how}${leg.url ? ` (${leg.url})` : ""} — ${leg.legBecause}`}
@@ -658,7 +658,7 @@ function Page() {
                 type="button"
                 onClick={() => setLedgerOpen(false)}
                 title="Collapse the ledger to its rail — nothing is lost; events keep accumulating."
-                className="t-caption cursor-pointer rounded-md border border-line-2 px-1 text-ink-2 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
+                className="t-caption cursor-pointer rounded-md border border-line-2 px-1 text-ink-2 hover:veil"
               >
                 ›
               </button>
@@ -700,7 +700,7 @@ function Page() {
             type="button"
             onClick={() => setLedgerOpen(true)}
             title="Open the ledger — bridge-observed world events merged with your own actions from this tab."
-            className="ml-2 flex w-6 cursor-pointer flex-col items-center gap-2 self-stretch rounded-md border border-line-2 bg-transparent py-2 hover:[background-image:linear-gradient(var(--pe-veil),var(--pe-veil))]"
+            className="ml-2 flex w-6 cursor-pointer flex-col items-center gap-2 self-stretch rounded-md border border-line-2 bg-transparent py-2 hover:veil"
           >
             <span className="t-caption t-upper text-ink-2 [writing-mode:vertical-rl]">
               ledger · {ledger.length}

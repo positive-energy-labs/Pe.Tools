@@ -146,14 +146,17 @@ export function SpecSheet({
                   return (
                     <g key={block.id}>
                       <rect
+                        className={cn(
+                          lit ? "fill-select" : "fill-transparent",
+                          lit ? "stroke-ink" : "stroke-line-2",
+                        )}
                         x={x}
                         y={y}
                         width={width}
                         height={height}
-                        fill={lit ? "var(--pe-select)" : "transparent"}
                         /* A neutral mark, not a hue: a fill cannot separate at this size, so
                            the highest-contrast neutral is what lights it (takeoffs #8). */
-                        stroke={lit ? "var(--pe-ink)" : "var(--pe-line-2)"}
+
                         strokeWidth={lit ? 1 : 0.4}
                       >
                         <title>
@@ -167,7 +170,7 @@ export function SpecSheet({
                           x={x}
                           y={y - 1.5}
                           fontSize={4}
-                          fill="var(--pe-ink-2)"
+                          className="fill-ink-2"
                           style={{ fontFamily: "ui-monospace, monospace" }}
                         >
                           {block.id}
@@ -218,19 +221,19 @@ export function ProposalCard({
       accepted: {
         mark: "✓",
         word: "accepted",
-        colour: "var(--pe-done)",
+        className: "text-done",
         note: `Accepted — the table now reads ${proposal.proposed} for ${target}. The proposal itself was never persisted; only the value it argued for is in the document, and its citation is still live.`,
       },
       denied: {
         mark: "—",
         word: "denied",
-        colour: "var(--pe-ink-mute)",
+        className: "text-ink-mute",
         note: `Denied — the profile keeps its own value for ${target}. Nothing was written, and the citation is unaffected: grounding is a fact about the spec, not about pea.`,
       },
       superseded: {
         mark: "—",
         word: "superseded by your edit",
-        colour: "var(--pe-ink-mute)",
+        className: "text-ink-mute",
         // MUTED, never `--pe-done`: nothing of pea's was adopted. Accepted and superseded look
         // different because they ARE different — one is agreement, the other is being overtaken.
         // The CELL shows nothing at all; the grammar has no `severed` stage.
@@ -242,9 +245,8 @@ export function ProposalCard({
         ref={register}
         onMouseEnter={() => onHover(true)}
         onMouseLeave={() => onHover(false)}
-        className="face-mono flex items-baseline gap-1 py-0.5 t-caption"
+        className={cn("face-mono flex items-baseline gap-1 py-0.5 t-caption", settled.className)}
         title={settled.note}
-        style={{ color: settled.colour }}
       >
         <span>{settled.mark}</span>
         <span className="truncate">{target}</span>
@@ -258,14 +260,13 @@ export function ProposalCard({
       ref={register}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
-      className="mb-1.5 py-1 pl-2"
+      className={cn(
+        "mb-1.5 py-1 pl-2 border-l-[1.5px] border-l-pea",
+        focused ? "pea-wash" : "bg-transparent",
+      )}
       /* Pea's identity, never the commit colour: the card edge is a MARK (`--pe-pea`, the display
          rung) and the focus wash is mixed from pea's ink. */
       style={{
-        borderLeft: "1.5px solid var(--pe-pea)",
-        background: focused
-          ? "color-mix(in srgb, var(--pe-pea-ink) 12%, transparent)"
-          : "transparent",
         transition: "background 0.25s",
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."

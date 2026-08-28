@@ -126,7 +126,7 @@ import {
   ReadCell,
   StateDot,
   TextCell,
-  VERDICT_INK,
+  VERDICT_TEXT_CLASS,
   VerdictCell,
 } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -1170,9 +1170,9 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       // squiggle law: drift outranks the citation, because a cell that is both is more urgently
       // the first. The citation spends no meaning colour; it is a hairline.
       const underline = drifted
-        ? "underline decoration-[var(--pe-alarm)] decoration-dotted underline-offset-[3px]"
+        ? "underline decoration-alarm decoration-dotted underline-offset-[3px]"
         : grounded
-          ? "underline decoration-[var(--pe-line-2)] decoration-dotted underline-offset-[3px]"
+          ? "underline decoration-line-2 decoration-dotted underline-offset-[3px]"
           : undefined;
       const groundedNote = grounded
         ? ` Grounded in ${(world.grounding[row.name] ?? []).join(", ")} of ${world.spec?.fileName ?? "the spec"} — the hairline underline is that citation, and it stays put in every overlay unless drift outranks it.`
@@ -1520,8 +1520,10 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
           const state = agreementOf(world, draft, row, typeName);
           return (
             <span
-              className="face-mono t-value block px-1.5 text-center"
-              style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
+              className={cn(
+                "face-mono t-value block px-1.5 text-center",
+                VERDICT_TEXT_CLASS[AGREEMENT_TONE[state]],
+              )}
               title={MARK_TITLE[state]}
             >
               {MARK[state]}
@@ -1621,7 +1623,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
         ? focusedParts.has(row.slug ?? "")
         : focusedParams.has(row.name) || pinnedParam === row.name;
     return cn(
-      row.kind === "ghost" && "bg-[color-mix(in_srgb,var(--pe-caution)_6%,transparent)]",
+      row.kind === "ghost" && "bg-caution/6",
       // The hairline is drawn on whichever ghost is first IN VISIBLE ORDER, not on whichever one
       // the fixture happened to list first — sorting reorders the ghosts among themselves, and a
       // section rule that stayed on a row in the middle of the section would be drawing a boundary

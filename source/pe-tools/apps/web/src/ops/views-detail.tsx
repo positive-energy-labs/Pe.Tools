@@ -17,6 +17,7 @@ import { Provenance, Section } from "#/components/lang/section";
 import { type Column, DataTable, KVGrid, VizChip, type VizIndex, vizVar } from "#/ops/primitives";
 import { type OpViewProps, type OpViewRegistry, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { contentViewport, fitFrame } from "#/lib/affine-frame";
+import { cn } from "#/lib/utils";
 
 /**
  * Curated readonly detail/matrix views. Each view narrows `data` defensively,
@@ -49,8 +50,10 @@ function columnIsNumeric(rows: string[][], columnIndex: number): boolean {
 function issueLine(issue: { severity: string; code: string; message: string }): ReactNode {
   return (
     <span
-      className="face-mono t-caption"
-      style={{ color: issue.severity === "Info" ? "var(--pe-ink-2)" : "var(--pe-caution)" }}
+      className={cn(
+        "face-mono t-caption",
+        issue.severity === "Info" ? "text-ink-2" : "text-caution",
+      )}
     >
       {issue.severity.toLowerCase()} {issue.code}: {issue.message}
     </span>
@@ -177,12 +180,11 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
     >
       {/* sheet / titleblock outline */}
       <rect
+        className="fill-none stroke-line-2"
         x={sheetX}
         y={sheetY}
         width={w}
         height={h}
-        fill="none"
-        stroke="var(--pe-line-2)"
         strokeWidth={0.75}
         vectorEffect="non-scaling-stroke"
       />
@@ -314,8 +316,11 @@ function ParameterRows({
               {p.name}
             </span>
             <span
-              className="face-mono t-value shrink-0 text-right"
-              style={{ color: !p.found || p.isBlank ? "var(--pe-caution)" : undefined }}
+              className={cn(
+                "face-mono t-value shrink-0 text-right",
+                !p.found || (p.isBlank && "text-caution"),
+              )}
+              style={{ color: undefined }}
               title={p.rawValue ?? undefined}
             >
               {!p.found ? "not found" : p.isBlank ? "blank" : (p.displayValue ?? p.value ?? "∅")}
@@ -481,7 +486,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       numeric: true,
       cell: (w) => (
         /* a proposed value that would change is STAGED, i.e. unsaved — caution ink. */
-        <span style={{ color: w.changed ? "var(--pe-caution)" : undefined }}>
+        <span className={cn(w.changed && "text-caution")} style={{ color: undefined }}>
           {linkValueText(w.proposedValue)}
         </span>
       ),
@@ -491,13 +496,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       header: "issue",
       cell: (w) => {
         const issue = issueByTarget.get(w.targetElementUniqueId);
-        return issue ? (
-          <span className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
-            {issue.code}
-          </span>
-        ) : (
-          ""
-        );
+        return issue ? <span className="face-mono t-caption text-caution">{issue.code}</span> : "";
       },
     },
   ];
@@ -542,7 +541,7 @@ function ParameterLinksView({ data }: OpViewProps) {
       {issues
         .filter((i) => !i.targetElementUniqueId)
         .map((issue, i) => (
-          <span key={i} className="face-mono t-caption" style={{ color: "var(--pe-caution)" }}>
+          <span key={i} className="face-mono t-caption text-caution">
             {issue.severity} {issue.code}: {issue.message}
           </span>
         ))}
@@ -878,13 +877,12 @@ function FamilyModelView({ data }: OpViewProps) {
             {ev.diagnostics.map((d, i) => (
               <div key={i} className="border-b border-line px-2 py-1">
                 <span
-                  className="face-mono t-caption"
-                  style={{
-                    color:
-                      d.provenance === "Unresolved" || d.provenance === "Inferred"
-                        ? "var(--pe-caution)"
-                        : "var(--pe-ink-2)",
-                  }}
+                  className={cn(
+                    "face-mono t-caption",
+                    d.provenance === "Unresolved" || d.provenance === "Inferred"
+                      ? "text-caution"
+                      : "text-ink-2",
+                  )}
                 >
                   {d.code} @ {d.path}
                   {d.confidence != null ? ` (confidence ${d.confidence})` : ""}

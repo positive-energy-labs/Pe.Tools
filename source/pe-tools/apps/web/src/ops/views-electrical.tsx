@@ -12,6 +12,7 @@ import {
   type OpViewRegistry,
   UnrecognizedShape,
 } from "#/ops/registry";
+import { cn } from "#/lib/utils";
 
 /**
  * Readonly electrical views: panels, circuits, load classifications, and the
@@ -41,8 +42,10 @@ function IssuesNote({ data }: { data: Rec }) {
         return (
           <span
             key={i}
-            className="face-mono t-caption"
-            style={{ color: severity === "Info" ? "var(--pe-ink-2)" : "var(--pe-caution)" }}
+            className={cn(
+              "face-mono t-caption",
+              severity === "Info" ? "text-ink-2" : "text-caution",
+            )}
           >
             {severity.toLowerCase()}: {asString(issue.code)} — {asString(issue.message)}
           </span>
@@ -547,12 +550,7 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
   return (
     <article className="min-w-0 rounded-md border border-line-2">
       {/* the head band is a recessed ground shift — --pe-on re-declared with it. */}
-      <div
-        className="flex items-baseline justify-between gap-2 border-b border-line-2 px-2 py-1.5"
-        style={
-          { background: "var(--pe-recess)", "--pe-on": "var(--pe-recess)" } as React.CSSProperties
-        }
-      >
+      <div className="on-recess flex items-baseline justify-between gap-2 border-b border-line-2 px-2 py-1.5">
         <h3 className="face-mono t-value truncate" title={panelName}>
           {panelName}
         </h3>

@@ -28,6 +28,7 @@
   --color-commit: var(--pe-commit);
   --color-on-commit: var(--pe-on-commit);
   --color-nav: var(--pe-nav);
+  --color-on: var(--pe-on);
 
   --color-viz-1: var(--viz-1);
   --color-viz-2: var(--viz-2);
@@ -40,6 +41,56 @@
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+}
+
+@utility on-page {
+  background: var(--pe-page);
+  --pe-on: var(--pe-page);
+}
+@utility on-artifact {
+  background: var(--pe-artifact);
+  --pe-on: var(--pe-artifact);
+}
+@utility on-recess {
+  background: var(--pe-recess);
+  --pe-on: var(--pe-recess);
+}
+@utility on-select {
+  background: var(--pe-select);
+  --pe-on: var(--pe-select);
+}
+@utility veil {
+  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
+}
+@utility seam-border {
+  border-style: dashed;
+}
+@utility alarm-wash {
+  background: color-mix(in srgb, var(--pe-alarm) 10%, var(--pe-on));
+}
+@utility pea-wash {
+  background: color-mix(in srgb, var(--pe-pea-ink) 12%, transparent);
+}
+@utility caution-wash-artifact {
+  background: linear-gradient(
+    var(--pe-artifact),
+    color-mix(in srgb, var(--pe-caution) 8%, transparent)
+  );
+}
+@utility prose-pe {
+  --tw-prose-body: var(--pe-ink);
+  --tw-prose-headings: var(--pe-ink);
+  --tw-prose-bold: var(--pe-ink);
+  --tw-prose-links: var(--pe-nav);
+  --tw-prose-bullets: var(--pe-ink-2);
+  --tw-prose-counters: var(--pe-ink-2);
+  --tw-prose-quotes: var(--pe-ink-2);
+  --tw-prose-quote-borders: var(--pe-line-2);
+  --tw-prose-hr: var(--pe-line-2);
+  --tw-prose-captions: var(--pe-ink-2);
+  --tw-prose-code: var(--pe-ink);
+  --tw-prose-th-borders: var(--pe-line-2);
+  --tw-prose-td-borders: var(--pe-line);
 }
 
 /* PE type system: tier × face × case. */

@@ -39,6 +39,7 @@ import {
   type Stage,
   type Verb,
 } from "#/targeting-proto/model";
+import { cn } from "#/lib/utils";
 
 function Choice({
   children,
@@ -325,11 +326,7 @@ export type InputMode = "segmented" | "columns" | "search";
 /** The ONE in-flight mark. Opacity only — dashed stays the seam slot (R13b). */
 export const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
 
-const POP: React.CSSProperties = {
-  border: "1px solid var(--pe-line-2)",
-  background: "var(--pe-page)",
-  boxShadow: "0 2px 8px color-mix(in srgb, var(--pe-ink) 8%, transparent)",
-};
+const POP_CLASS = "border border-line-2 bg-page";
 
 /** Every option path through `chain` given the id bound ABOVE the chain (for search). */
 function enumeratePaths(chain: Link[], aboveId: string): { link: Link; opt: Option }[][] {
@@ -358,11 +355,11 @@ function OptionList({
   return (
     <div className="max-h-56 overflow-y-auto py-1">
       {opts === null ? (
-        <div className="t-caption px-2 py-1" style={{ color: "var(--pe-caution)" }}>
+        <div className="t-caption px-2 py-1 text-caution">
           no legal options — needs {link.needs}
         </div>
       ) : opts.length === 0 ? (
-        <div className="t-caption px-2 py-1" style={{ color: "var(--pe-ink-2)" }}>
+        <div className="t-caption px-2 py-1 text-ink-2">
           {link.parent ? `bind ${link.parent} first` : link.needs}
         </div>
       ) : (
@@ -377,18 +374,15 @@ function OptionList({
                 b.pick(link, o.id);
                 onPicked?.();
               }}
-              className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-              style={{ background: on ? "var(--pe-select)" : undefined }}
+              className={cn(
+                "flex w-full items-baseline gap-2 px-2 py-0.5 text-left",
+                on && "bg-select",
+              )}
+              style={{ background: undefined }}
             >
               {link.multi ? <span className="face-mono t-caption">{on ? "☑" : "☐"}</span> : null}
-              <span className="t-value" style={{ color: "var(--pe-ink)" }}>
-                {o.label}
-              </span>
-              {o.sub && !compact ? (
-                <span className="t-caption" style={{ color: "var(--pe-ink-2)" }}>
-                  {o.sub}
-                </span>
-              ) : null}
+              <span className="t-value text-ink">{o.label}</span>
+              {o.sub && !compact ? <span className="t-caption text-ink-2">{o.sub}</span> : null}
             </Choice>
           );
         })
@@ -457,7 +451,11 @@ export function PathInput({
     .join("\n");
 
   const caution = leafLabel == null || unboundAncestor !== undefined;
-  const color = caution ? "var(--pe-caution)" : tone === "mute" ? "var(--pe-ink-2)" : "var(--pe-ink)";
+  const toneClass = caution
+    ? "border-caution text-caution"
+    : tone === "mute"
+      ? "border-line-2 text-ink-2"
+      : "border-ink text-ink";
   const closedText = showAll
     ? chain.map((l) => b.labelOf(l) ?? l.placeholder).join(" › ")
     : unboundAncestor
@@ -468,30 +466,24 @@ export function PathInput({
   const segLink = chain.find((l) => l.key === seg) ?? leaf;
   const segmented = (
     <>
-      <div
-        className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"
-        style={{ borderBottom: "1px solid var(--pe-line-2)" }}
-      >
+      <div className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1 border-b border-b-line-2">
         {chain.map((l, i) => {
           const on = l.key === seg;
           const lab = b.labelOf(l);
           return (
             <span key={l.key} className="inline-flex items-baseline gap-1">
-              {i > 0 ? (
-                <span className="face-mono t-caption" style={{ color: "var(--pe-ink-mute)" }}>
-                  ›
-                </span>
-              ) : null}
+              {i > 0 ? <span className="face-mono t-caption text-ink-mute">›</span> : null}
               <Choice
                 selected={on}
                 reason={`Select ${lab ?? l.placeholder}.`}
                 onClick={() => setSeg(l.key)}
-                className="face-mono t-caption"
+                className={cn(
+                  "face-mono t-caption border-b",
+                  on ? "border-ink bg-select" : "border-transparent bg-transparent",
+                  lab == null ? "text-caution" : "text-ink",
+                )}
                 style={{
                   padding: "0 3px",
-                  background: on ? "var(--pe-select)" : "transparent",
-                  color: lab == null ? "var(--pe-caution)" : "var(--pe-ink)",
-                  borderBottom: on ? "1px solid var(--pe-ink)" : "1px solid transparent",
                 }}
               >
                 {lab ?? l.placeholder}
@@ -518,14 +510,10 @@ export function PathInput({
       {chain.map((l, i) => (
         <div
           key={l.key}
-          style={{ width: 176, borderLeft: i > 0 ? "1px solid var(--pe-line-2)" : undefined }}
+          className={i > 0 ? "border-l border-line-2" : undefined}
+          style={{ width: 176 }}
         >
-          <div
-            className="face-mono t-caption t-upper px-2 pt-1.5"
-            style={{ color: "var(--pe-ink-2)" }}
-          >
-            {l.key}
-          </div>
+          <div className="face-mono t-caption t-upper px-2 pt-1.5 text-ink-2">{l.key}</div>
           <OptionList
             link={l}
             b={b}
@@ -552,27 +540,20 @@ export function PathInput({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={`search ${chain.map((l) => l.key).join(" / ")}`}
-        className="t-value w-full px-2 py-1"
+        className="t-value w-full px-2 py-1 bg-transparent border-b border-b-line-2 text-ink"
         style={{
-          background: "transparent",
-          borderBottom: "1px solid var(--pe-line-2)",
           outline: "none",
-          color: "var(--pe-ink)",
         }}
       />
       <div className="max-h-64 overflow-y-auto py-1">
         {above == null ? (
-          <div className="t-caption px-2 py-1" style={{ color: "var(--pe-caution)" }}>
-            bind {chain[0]?.parent} first
-          </div>
+          <div className="t-caption px-2 py-1 text-caution">bind {chain[0]?.parent} first</div>
         ) : paths.length === 0 ? (
-          <div className="t-caption px-2 py-1" style={{ color: "var(--pe-caution)" }}>
+          <div className="t-caption px-2 py-1 text-caution">
             no legal paths — needs {leaf.needs}
           </div>
         ) : hits.length === 0 ? (
-          <div className="t-caption px-2 py-1" style={{ color: "var(--pe-ink-2)" }}>
-            no match
-          </div>
+          <div className="t-caption px-2 py-1 text-ink-2">no match</div>
         ) : (
           hits.map(({ p, text }) => {
             const picked = p.every((x) => b.isPicked(x.link, x.opt.id));
@@ -583,14 +564,17 @@ export function PathInput({
                 selected={picked}
                 reason={`Pick path ${text}.`}
                 onClick={() => b.pickPath(p.map((x) => ({ link: x.link, id: x.opt.id })))}
-                className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                style={{ background: picked ? "var(--pe-select)" : undefined }}
+                className={cn(
+                  "flex w-full items-baseline gap-2 px-2 py-0.5 text-left",
+                  picked && "bg-select",
+                )}
+                style={{ background: undefined }}
               >
                 {last.link.multi ? (
                   <span className="face-mono t-caption">{picked ? "☑" : "☐"}</span>
                 ) : null}
                 {p.length > 1 ? (
-                  <span className="t-caption" style={{ color: "var(--pe-ink-mute)" }}>
+                  <span className="t-caption text-ink-mute">
                     {p
                       .slice(0, -1)
                       .map((x) => x.opt.label)
@@ -598,14 +582,8 @@ export function PathInput({
                     /
                   </span>
                 ) : null}
-                <span className="t-value" style={{ color: "var(--pe-ink)" }}>
-                  {last.opt.label}
-                </span>
-                {last.opt.sub ? (
-                  <span className="t-caption" style={{ color: "var(--pe-ink-2)" }}>
-                    {last.opt.sub}
-                  </span>
-                ) : null}
+                <span className="t-value text-ink">{last.opt.label}</span>
+                {last.opt.sub ? <span className="t-caption text-ink-2">{last.opt.sub}</span> : null}
               </Choice>
             );
           })
@@ -622,12 +600,14 @@ export function PathInput({
         busy={lit}
         reason={title}
         onClick={() => b.setOpen(open ? null : slot)}
-        className={showAll ? "face-mono t-caption" : "face-mono t-label"}
+        className={cn(
+          showAll ? "face-mono t-caption" : "face-mono t-label",
+          "border-b",
+          open ? "bg-select" : "bg-transparent",
+          toneClass,
+        )}
         style={{
           padding: 0,
-          background: open ? "var(--pe-select)" : "transparent",
-          borderBottom: `1px solid ${caution ? "var(--pe-caution)" : tone === "mute" ? "var(--pe-line-2)" : "var(--pe-ink)"}`,
-          color,
           whiteSpace: "nowrap",
           cursor: "pointer",
           animation: lit ? "tp-pulse 0.9s ease-in-out infinite" : undefined,
@@ -637,8 +617,8 @@ export function PathInput({
       </Choice>
       {open ? (
         <span
-          className="absolute left-0 top-full z-40 mt-1 block overflow-hidden"
-          style={{ ...POP, minWidth: mode === "columns" ? 176 * chain.length : 300 }}
+          className={`absolute left-0 top-full z-40 mt-1 block overflow-hidden ${POP_CLASS}`}
+          style={{ minWidth: mode === "columns" ? 176 * chain.length : 300 }}
         >
           {mode === "segmented" ? segmented : mode === "columns" ? columns : search}
         </span>
@@ -662,11 +642,7 @@ export function StageStrip({
   meter?: boolean;
 }) {
   return (
-    <div
-      className="flex"
-      role="tablist"
-      style={{ borderTop: "1px solid var(--pe-ink)", borderBottom: "1px solid var(--pe-line-2)" }}
-    >
+    <div className="flex border-t border-t-ink border-b border-b-line-2" role="tablist">
       {product.stages.map((s, i) => {
         const ready = s.verbs.filter((v) => runner.canRun(v).ok).length;
         const on = b.stage.key === s.key;
@@ -683,20 +659,18 @@ export function StageStrip({
                 return c.ok ? `${v.label}: ready` : `${v.label}: ${c.reason}`;
               })
               .join(" · ")}`}
-            className="face-mono t-caption t-upper flex items-baseline gap-2 px-2.5 py-1"
-            style={{
-              borderLeft: i > 0 ? "1px solid var(--pe-line-2)" : undefined,
-              background: on ? "var(--pe-select)" : "transparent",
-              boxShadow: on ? "inset 0 -2px 0 var(--pe-ink)" : undefined,
-              color: on ? "var(--pe-ink)" : "var(--pe-ink-2)",
-            }}
+            className={cn(
+              "face-mono t-caption t-upper flex items-baseline gap-2 px-2.5 py-1",
+              i > 0 && "border-l border-line-2",
+              on ? "border-b-2 border-b-ink bg-select text-ink" : "bg-transparent text-ink-2",
+            )}
           >
             <span>{s.label}</span>
             {meter ? (
               <span
+                className={cn(ready === 0 ? "text-ink-mute" : "text-ink")}
                 style={{
                   fontVariantNumeric: "tabular-nums",
-                  color: ready === 0 ? "var(--pe-ink-mute)" : "var(--pe-ink)",
                 }}
               >
                 {ready}/{s.verbs.length}
@@ -714,9 +688,7 @@ export function StageStrip({
 export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
   return (
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="face-mono t-caption t-upper" style={{ color: "var(--pe-ink-mute)" }}>
-        panes
-      </span>
+      <span className="face-mono t-caption t-upper text-ink-mute">panes</span>
       {product.panes.map((p) => {
         const st = paneState(product, p, b);
         return (
@@ -724,12 +696,13 @@ export function PaneStrip({ product, b }: { product: Product; b: Bindings }) {
             key={p.key}
             title={st.reason}
             aria-disabled={!st.ok}
-            className="face-mono t-caption"
+            className={cn(
+              "face-mono t-caption border-b",
+              st.ok ? "border-line-2 text-ink" : "border-transparent text-ink-mute",
+            )}
             style={{
               padding: 0,
-              color: st.ok ? "var(--pe-ink)" : "var(--pe-ink-mute)",
               fontStyle: st.ok ? undefined : "italic",
-              borderBottom: st.ok ? "1px solid var(--pe-line-2)" : "1px solid transparent",
               cursor: st.ok ? "pointer" : "not-allowed",
             }}
           >
