@@ -88,7 +88,7 @@ export function LaneBadge({ lane }: { lane: Lane }) {
       className="face-mono t-caption"
       style={{
         padding: "0 4px",
-        borderRadius: 2,
+        borderRadius: "var(--radius)",
         color: laneVar(lane),
         backgroundColor: `color-mix(in srgb, ${laneVar(lane)} 12%, transparent)`,
         border: `1px solid color-mix(in srgb, ${laneVar(lane)} 25%, transparent)`,

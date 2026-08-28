@@ -105,7 +105,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                   style={{
                     backgroundColor: token("page"),
                     border: `0.5px solid ${token("line")}`,
-                    borderRadius: 2,
+                    borderRadius: "var(--radius)",
                   }}
                   role="img"
                   aria-label={`${view.name} — click a part to edit what drives it`}

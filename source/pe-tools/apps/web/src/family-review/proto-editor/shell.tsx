@@ -162,7 +162,7 @@ export function StatePanel({
                   style={{
                     backgroundColor: editor.focus === change.path ? token("select") : "transparent",
                     border: "none",
-                    borderRadius: 2,
+                    borderRadius: "var(--radius)",
                     cursor: "pointer",
                     padding: 0,
                   }}
@@ -278,7 +278,7 @@ export function RefToken({
             style={{
               border: `0.5px solid ${token("line-2")}`,
               backgroundColor: token("page"),
-              borderRadius: 2,
+              borderRadius: "var(--radius)",
             }}
           >
             {options.length === 0 ? (
@@ -372,7 +372,7 @@ export function TypeStage({ editor }: { editor: Editor }) {
           style={{
             backgroundColor: name === editor.typeName ? token("select") : "transparent",
             border: "none",
-            borderRadius: 2,
+            borderRadius: "var(--radius)",
             cursor: "pointer",
             color: name === editor.typeName ? token("ink") : token("ink-2"),
           }}

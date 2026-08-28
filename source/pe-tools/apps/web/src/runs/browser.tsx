@@ -416,7 +416,12 @@ export function ZonePanel(props: {
     <div
       ref={hostRef}
       className="relative shrink-0 overflow-hidden"
-      style={{ width: maxW, height: maxH, backgroundColor: token("page"), borderRadius: 2 }}
+      style={{
+        width: maxW,
+        height: maxH,
+        backgroundColor: token("page"),
+        borderRadius: "var(--radius)",
+      }}
     >
       <div
         className="absolute"
@@ -610,7 +615,7 @@ export function ZonePanel(props: {
             top: Math.min(hover.y + 12, maxH - 22),
             borderColor: hover.flagged ? token("alarm") : token("line-2"),
             color: hover.flagged ? token("alarm") : token("ink"),
-            borderRadius: 2,
+            borderRadius: "var(--radius)",
           }}
         >
           {hover.flagged ? "⚑ " : ""}
@@ -625,7 +630,11 @@ function MissingPanel(props: { w: number; h: number; label: string }) {
   return (
     <div
       className="face-mono flex shrink-0 items-center justify-center bg-recess t-label text-ink-2"
-      style={{ width: props.w, height: props.h, borderRadius: 2 }}
+      style={{
+        width: props.w,
+        height: props.h,
+        borderRadius: "var(--radius)",
+      }}
     >
       {props.label}
     </div>
@@ -683,7 +692,7 @@ function StageButton(props: {
         }
         className="face-mono shrink-0 border px-1.5 t-caption"
         style={{
-          borderRadius: 2,
+          borderRadius: "var(--radius)",
           borderColor: staged ? token("alarm") : token("line-2"),
           color: staged ? token("alarm") : token("ink-2"),
         }}
@@ -787,7 +796,7 @@ function ZoneCard(props: {
   return (
     <div
       className="flex min-w-0 flex-col gap-1.5 border bg-page p-2"
-      style={{ borderColor: token("line-2"), borderRadius: 2 }}
+      style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
     >
       <div className="flex items-baseline gap-2">
         <span className="face-mono t-value font-semibold" title={name}>
@@ -839,7 +848,7 @@ function ZoneCard(props: {
               )}
               style={{
                 borderColor: props.highlighted ? token("ink-2") : token("line-2"),
-                borderRadius: 2,
+                borderRadius: "var(--radius)",
               }}
             >
               ⌖ highlight
@@ -980,7 +989,7 @@ function RunStrip(props: {
             className="flex shrink-0 items-stretch overflow-hidden border"
             style={{
               borderColor: isCur || isPrev ? token("ink-2") : token("line-2"),
-              borderRadius: 2,
+              borderRadius: "var(--radius)",
               backgroundColor: isCur ? token("recess") : "transparent",
             }}
           >
@@ -1483,7 +1492,7 @@ function PlanPane(props: {
       {props.tag && (
         <div
           className="face-mono absolute left-2 top-2 border bg-page/90 px-1.5 py-0.5 t-label text-ink-2"
-          style={{ borderRadius: 2 }}
+          style={{ borderRadius: "var(--radius)" }}
         >
           {props.tag}
         </div>
@@ -1571,7 +1580,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
   return (
     <div
       className="face-mono absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-page/95 px-2 py-1.5 t-caption text-ink-2 shadow-sm"
-      style={{ borderRadius: 2 }}
+      style={{ borderRadius: "var(--radius)" }}
     >
       <span className="flex items-baseline">
         <span
@@ -1676,7 +1685,7 @@ function LevelStatsFloater(props: {
   return (
     <div
       className="face-mono absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-page/95 px-2 py-1.5 t-label shadow-sm"
-      style={{ borderRadius: 2 }}
+      style={{ borderRadius: "var(--radius)" }}
     >
       <span className="flex items-baseline t-caption font-semibold uppercase tracking-wide text-ink-2">
         {level} — this run
@@ -1758,7 +1767,7 @@ function ZonePeekFloater(props: {
   return (
     <div
       className="face-mono pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 border bg-page/95 p-2 t-label shadow-sm"
-      style={{ borderRadius: 2 }}
+      style={{ borderRadius: "var(--radius)" }}
     >
       <div className="mb-1 flex flex-col items-center">
         <span className="text-ink">{props.zoneName}</span>
@@ -1919,7 +1928,7 @@ function PlanDock(props: {
               onClick={() => props.onPickLevel(l)}
               title="Show this level on the plan — the sheet scrolls to its section (and scrolling the sheet moves this tab)."
               className={cn(
-                "face-mono rounded-[2px] px-2 py-0.5 t-label",
+                "face-mono rounded-sm px-2 py-0.5 t-label",
                 l === level ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
               )}
             >
@@ -1933,7 +1942,7 @@ function PlanDock(props: {
             onClick={() => setShowKey((v) => !v)}
             title="Show/hide the key — what each mark on the plan means."
             className={cn(
-              "face-mono rounded-[2px] border px-1.5 py-0.5 t-caption",
+              "face-mono rounded-sm border px-1.5 py-0.5 t-caption",
               showKey ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
             )}
             style={{ borderColor: token("line-2") }}
@@ -1945,7 +1954,7 @@ function PlanDock(props: {
             onClick={() => setShowStats((v) => !v)}
             title="Show/hide the level-stats floater — solve counts, sf, loudest rejections, A/B deltas."
             className={cn(
-              "face-mono rounded-[2px] border px-1.5 py-0.5 t-caption",
+              "face-mono rounded-sm border px-1.5 py-0.5 t-caption",
               showStats ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
             )}
             style={{ borderColor: token("line-2") }}
@@ -2899,7 +2908,7 @@ export default function RunBrowser() {
               onClick={() => setReview(false)}
               title="Back to the normal sheet."
               className="face-mono ml-auto border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
-              style={{ borderColor: token("line-2"), borderRadius: 2 }}
+              style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               ✕ exit review
             </Press>
@@ -3153,7 +3162,7 @@ export default function RunBrowser() {
                 onClick={() => setBaseline(null)}
                 title="Clear the baseline — cards show the current run only, same footprint."
                 className="face-mono border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
-                style={{ borderColor: token("line-2"), borderRadius: 2 }}
+                style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
               >
                 clear A
               </Press>
@@ -3163,7 +3172,7 @@ export default function RunBrowser() {
                 onClick={() => setBaseline("auto")}
                 title="Restore the default baseline: the current run's chronological predecessor."
                 className="face-mono border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
-                style={{ borderColor: token("line-2"), borderRadius: 2 }}
+                style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
               >
                 A: auto
               </Press>
@@ -3173,7 +3182,7 @@ export default function RunBrowser() {
               onClick={() => setUnderlay((u) => !u)}
               title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
               className={cn(
-                "face-mono rounded-[2px] px-1.5 py-0.5 t-caption",
+                "face-mono rounded-sm px-1.5 py-0.5 t-caption",
                 underlay ? "bg-recess text-ink" : "border text-ink-2",
               )}
               style={underlay ? undefined : { borderColor: token("line-2") }}
@@ -3190,7 +3199,7 @@ export default function RunBrowser() {
                   : "Needs a baseline — pick A first."
               }
               className={cn(
-                "face-mono rounded-[2px] px-1.5 py-0.5 t-caption",
+                "face-mono rounded-sm px-1.5 py-0.5 t-caption",
                 changedOnly && comparing
                   ? "bg-recess text-ink"
                   : "border text-ink-2 disabled:opacity-40",

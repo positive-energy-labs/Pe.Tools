@@ -889,7 +889,7 @@ export function VariantA() {
                       backgroundColor: token("artifact"),
                       color: token("ink"),
                       border: `0.5px solid ${token("line-2")}`,
-                      borderRadius: 2,
+                      borderRadius: "var(--radius)",
                       padding: "3px 4px",
                     }}
                   >

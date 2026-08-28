@@ -103,7 +103,7 @@ export function Triptych({
               style={{
                 backgroundColor: token("page"),
                 border: `0.5px solid ${token("line")}`,
-                borderRadius: 2,
+                borderRadius: "var(--radius)",
               }}
             >
               {sheet.planes.map((plane) => {

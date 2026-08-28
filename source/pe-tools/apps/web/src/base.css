@@ -36,6 +36,7 @@
   --viz-6: oklch(0.47 0.055 85);
 
   --radius: 0.125rem;
+  --space-unit: 0.25rem;
   --font-body: "Open Sans", system-ui, -apple-system, sans-serif;
   --font-display: "Spectral", Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;

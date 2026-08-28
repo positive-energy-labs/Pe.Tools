@@ -141,7 +141,7 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
             value === verdict ? "text-ink" : "text-ink-mute",
           )}
           style={{
-            borderRadius: 2,
+            borderRadius: "var(--radius)",
             borderColor: value === verdict ? token("line-2") : token("line"),
             backgroundColor: value === verdict ? token("select") : "transparent",
           }}
@@ -191,7 +191,7 @@ function RefusalPanel({ family, size }: { family: BoardFamily; size: number }) {
   return (
     <div
       className="flex flex-col justify-center gap-1 border p-3"
-      style={{ width: size * 3 + 16, borderRadius: 2, borderColor: token("alarm") }}
+      style={{ width: size * 3 + 16, borderRadius: "var(--radius)", borderColor: token("alarm") }}
     >
       <span className="face-mono t-label" style={{ color: token("alarm") }}>
         {family.refusal?.code ?? "refused"}
@@ -369,7 +369,7 @@ export function ReviewBoard({
                   "flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5 text-left",
                   entry.key === selected ? "bg-select" : "",
                 )}
-                style={{ borderRadius: 2 }}
+                style={{ borderRadius: "var(--radius)" }}
               >
                 <span className="face-mono t-label">{entry.family.name}</span>
                 <span className="flex items-baseline gap-1.5">
@@ -398,7 +398,7 @@ export function ReviewBoard({
                 style={{
                   backgroundColor: token("artifact"),
                   border: `0.5px solid ${token("line-2")}`,
-                  borderRadius: 2,
+                  borderRadius: "var(--radius)",
                 }}
               >
                 <FamilySidebar stage={entry} />

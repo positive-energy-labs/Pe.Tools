@@ -254,12 +254,12 @@ export function WorldLane({
       {inspect && cache.hasBaseline ? (
         <div className="mx-3.5 mt-2.5 grid gap-1.5 rounded-sm border-[0.5px] border-line on-page px-3 py-2.5 t-label">
           <div className="flex items-center gap-[7px] t-caption face-mono [font-variant-numeric:tabular-nums]">
-            <span className="size-[9px] flex-none rounded-[2px] bg-done" />
+            <span className="size-[9px] flex-none rounded-sm bg-done" />
             cache-read · 0.1×
             <span className="ml-auto text-ink-2">{fmtTok(totals.cached)}</span>
           </div>
           <div className="flex items-center gap-[7px] t-caption face-mono [font-variant-numeric:tabular-nums]">
-            <span className="size-[9px] flex-none rounded-[2px] bg-caution caution-hatch" />
+            <span className="size-[9px] flex-none rounded-sm bg-caution caution-hatch" />
             reprocessed · 1×
             <span className="ml-auto text-ink-2">{fmtTok(totals.reprocessed)}</span>
           </div>
@@ -292,7 +292,7 @@ export function WorldLane({
                 onClick={() => toggle(layer.id)}
               >
                 <span
-                  className="size-[9px] rounded-[2px]"
+                  className="size-[9px] rounded-sm"
                   style={{ backgroundColor: tone(layer.id) }}
                 />
                 <span className="t-value text-ink">
@@ -470,7 +470,7 @@ function BudgetBar({
   const system = segTok("system-prompt");
   const { obsCap, msgCap, horizon } = budgetBarModel(tools, system, mw, cache);
   const fill = (value: number, cap: number) => `${budgetFillPct(value, cap)}%`;
-  const pulse = "animate-[mg-bud-pulse_1.5s_ease-in-out_infinite]";
+  const pulse = "mg-bud-pulse";
 
   return (
     <span className={className}>
@@ -630,7 +630,7 @@ export function ContextRibbon({
         {rows.map((row) => (
           <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
             <span
-              className="size-2 flex-none rounded-[2px]"
+              className="size-2 flex-none rounded-sm"
               style={{ backgroundColor: tone(row.id) }}
             />
             {row.label}

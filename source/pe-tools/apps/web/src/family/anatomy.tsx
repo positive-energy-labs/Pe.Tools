@@ -298,7 +298,7 @@ export function AnatomyDrawing({
                   : ""
               }`}
               className={cn(
-                "face-mono flex w-full items-center gap-1 truncate rounded-[2px] border px-1 py-0.5 text-left t-caption",
+                "face-mono flex w-full items-center gap-1 truncate rounded-sm border px-1 py-0.5 text-left t-caption",
                 // Selection is a FILL, not a hue: the open constituent sits in the selection rung,
                 // the hovered one wears a hairline. Neither is a state of the model.
                 inspecting === part.slug

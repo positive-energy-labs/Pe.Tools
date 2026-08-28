@@ -769,7 +769,7 @@
   text-underline-offset: 3px;
 }
 .dl-spin {
-  animation: dl-spin 1.1s linear infinite;
+  animation: dl-spin var(--motion-control) linear infinite;
 }
 @keyframes dl-spin {
   to {

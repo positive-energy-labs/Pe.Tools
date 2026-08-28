@@ -101,7 +101,7 @@ export function Tray(props: {
                   : "Review the staged set: the sheet switches to single-column (bigger images), staged items only, each at its pinned A/B pair. Same cards, bigger layout."
               }
               className={cn(
-                "face-mono rounded-[2px] px-1.5 py-0.5 t-caption",
+                "face-mono rounded-sm px-1.5 py-0.5 t-caption",
                 props.review ? "bg-recess text-ink" : "border text-ink-2 hover:text-ink",
               )}
               style={props.review ? undefined : { borderColor: token("line-2") }}

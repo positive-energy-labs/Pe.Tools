@@ -1049,7 +1049,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-line p-2 t-caption text-ink-2">
+                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-sm border border-line p-2 t-caption text-ink-2">
                   {entry.profileJson}
                 </pre>
               )}

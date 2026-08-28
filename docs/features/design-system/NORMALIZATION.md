@@ -12,13 +12,18 @@ This file is the map, not the log. It says where a value lives now.
 
 | Layer | File | Owns |
 | --- | --- | --- |
-| raw authority | `apps/web/src/base.css` | Every raw value, under `[data-pe]`: colour roles (including fixed document ground and modal scrim), viz roles, the seven type size/line-height pairs, the three dash patterns, radius, motion, elevation, and z-index. Portable `.t-*`, `.dash-*`, `.shadow-*`, `.duration-control`, and layer classes consume them, so a no-Tailwind consumer needs nothing else. |
-| projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks and `@theme` mappings (`bg-document`, `bg-scrim`, `shadow-sm`/`shadow-lg`, `duration-control`, and semantic layers). It declares no number of its own. |
+| raw authority | `apps/web/src/base.css` | Every raw value, under `[data-pe]`: colour roles (including fixed document ground and modal scrim), viz roles, the seven type size/line-height pairs, the three dash patterns, radius, the spacing unit, motion, elevation, and z-index. Portable `.t-*`, `.dash-*`, `.shadow-*`, `.duration-control`, and layer classes consume them, so a no-Tailwind consumer needs nothing else. |
+| projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks and `@theme` mappings (`bg-document`, `bg-scrim`, `shadow-sm`/`shadow-lg`, `--spacing`, `duration-control`, and semantic layers). It declares no number of its own. |
 | grammar | `apps/web/src/components/lang/` | The semantic vocabulary: `Verb`, `Press`, `FactChip`/`VizChip`, `StateCell`, `EmptyState`, `HelpTip`, `OutcomeLine`, `ArmingStrip`, `AddressingBar`, `Section`, `Switcher`. This is the base layer. `components/ui` composites may depend on it, and four already do (`combobox`, `dialog`, `input-group`, `side-pane`, all for `Press`). |
-| product | routes and feature dirs | Geometry and refinement only: sizes, spacing, panel widths, chart dimensions. No colour, no type scale, no broken-line pattern. |
+| product | routes and feature dirs | Geometry and refinement only: sizes, spacing, panel widths, chart dimensions. No raw colour, no type scale, no broken-line pattern. |
 | runtime | `apps/web/src/lib/token.ts` | The one runtime token indirection for inline, SVG and serialized use. `token(role)` resolves `viz-*` and `dash-*` as raw families and everything else as `--pe-*`; `dash(role)` is its typed wrapper. Prefer a semantic class when a direct utility exists, but use this shared lookup wherever the value must cross a runtime or serialization boundary. |
 
 `styles.css` imports `base.css` then `design-lang.css`, in that order, and holds no value.
+
+Small UI chrome uses `rounded-sm` or `var(--radius)`, which both read the shared 2px radius. The
+exact-radius guard keeps raw 2px declarations out of product code; 0, 1px, pills/circles, and
+local drawing geometry remain separate shapes. Standard Tailwind spacing and dimensions derive
+from `--space-unit` through the `--spacing` projection, so density has one portable knob.
 
 `runs/visual-law.json` names a semantic `dashRole`; `base.css` owns the only numeric pattern.
 `eval/rhvac/render-zone-promotion.py` resolves `--dash-<role>` out of `base.css` with stdlib `re`
@@ -123,14 +128,14 @@ utilities, raw `<button>` outside `components/ui` + `components/lang`, `ui/butto
 `background:` shorthand in TS/TSX, unruled dashed strokes, `title` over 240 characters, raw
 absolute type values, raw leading utilities, unprojected faces, raw numeric dash patterns in
 maintained JSON, static numeric CSS colours and stock palette utilities, non-inset raw elevation,
-fixed transition durations, and global numeric stacking layers. The previous class-only type regex
+fixed transition/animation durations, exact raw 2px radius, and global numeric stacking layers. The previous class-only type regex
 missed CSS declarations, style objects, and template CSS. Do not restate a gate in prose; it is
 executable.
 
 Commands, from `source/pe-tools` (this worktree pins `node_modules/.bin/vp.ps1`):
 
 ```text
-vp run @pe/repo-guards#test                    design guard + docs guard, 27 tests
+vp run @pe/repo-guards#test                    design guard + docs guard
 vp check apps/web/src tests/repo-guards/src    0 errors; 15 pre-existing warnings
 vp run @pe/web#build                           client + server build, prerender /
 ```

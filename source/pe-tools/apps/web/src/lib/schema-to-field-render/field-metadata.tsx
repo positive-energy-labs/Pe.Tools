@@ -87,7 +87,7 @@ function FieldMetadataTooltip({
                 {formattedDefault !== undefined ? (
                   <div className="space-y-1">
                     <div className="font-medium text-ink">Default</div>
-                    <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-recess px-2 py-1 face-mono text-ink">
+                    <pre className="t-label whitespace-pre-wrap break-words rounded-sm bg-recess px-2 py-1 face-mono text-ink">
                       {formattedDefault}
                     </pre>
                   </div>
@@ -129,7 +129,7 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
         <Tooltip.Trigger
           aria-label="View change details"
           className={cn(
-            "t-caption t-upper inline-flex items-center rounded-[2px] border px-1.5 py-0.5 font-semibold",
+            "t-caption t-upper inline-flex items-center rounded-sm border px-1.5 py-0.5 font-semibold",
             "border-caution/30 bg-caution/10 text-caution",
             // Compact buys tighter padding only — the tier already IS the small size.
             compact && "px-1 py-0",
@@ -149,13 +149,13 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
                 ) : null}
                 <div className="space-y-1">
                   <div className="font-medium text-ink">Before</div>
-                  <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-recess px-2 py-1 face-mono text-ink">
+                  <pre className="t-label whitespace-pre-wrap break-words rounded-sm bg-recess px-2 py-1 face-mono text-ink">
                     {beforeDisplay}
                   </pre>
                 </div>
                 <div className="space-y-1">
                   <div className="font-medium text-ink">After</div>
-                  <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-recess px-2 py-1 face-mono text-ink">
+                  <pre className="t-label whitespace-pre-wrap break-words rounded-sm bg-recess px-2 py-1 face-mono text-ink">
                     {afterDisplay}
                   </pre>
                 </div>
@@ -182,7 +182,7 @@ export function FieldMessages({
   return (
     <div
       className={cn(
-        "rounded-[2px] border px-3 py-2 t-value",
+        "rounded-sm border px-3 py-2 t-value",
         "border-alarm/30 bg-alarm/10 text-alarm",
         compact && "t-label px-2 py-1.5",
       )}
@@ -206,7 +206,7 @@ function OptionMetadataChip({
   return (
     <span
       className={cn(
-        "t-caption inline-flex max-w-full items-center truncate rounded-[2px] border px-1.5 py-0.5 font-medium",
+        "t-caption inline-flex max-w-full items-center truncate rounded-sm border px-1.5 py-0.5 font-medium",
         tone === "neutral" && "border-line bg-recess/40 text-ink-mute",
         tone === "warning" && "border-caution/30 bg-caution/10 text-caution",
         tone === "danger" && "border-alarm/30 bg-alarm/10 text-alarm",
@@ -259,7 +259,7 @@ function RequiredBadge() {
   return (
     <span
       aria-label="Required"
-      className="t-caption t-upper inline-flex items-center rounded-[2px] bg-alarm/10 px-1.5 py-0.5 font-semibold text-alarm"
+      className="t-caption t-upper inline-flex items-center rounded-sm bg-alarm/10 px-1.5 py-0.5 font-semibold text-alarm"
     >
       Required
     </span>

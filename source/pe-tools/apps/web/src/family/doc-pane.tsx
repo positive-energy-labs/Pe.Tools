@@ -47,10 +47,7 @@ export function SpecText({
             }
             /* Lighting is a FILL and never a hue (SURFACE-PHILOSOPHY §5): `--pe-select` is
                literally the ground ladder's selection rung, so the law is structural here. */
-            className={cn(
-              "rounded-[2px] border p-2",
-              lit ? "border-line-2 bg-select" : "border-line",
-            )}
+            className={cn("rounded-sm border p-2", lit ? "border-line-2 bg-select" : "border-line")}
           >
             <div className="face-mono flex items-baseline justify-between t-caption text-ink-2">
               <span>

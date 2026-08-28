@@ -102,7 +102,7 @@ export function ExportStatus(props: { className?: string }) {
         <summary className="cursor-pointer">view the clip block</summary>
         <pre
           className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5"
-          style={{ borderColor: token("line-2"), borderRadius: 2 }}
+          style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
         >
           {lastExport.text}
         </pre>
@@ -131,7 +131,11 @@ export function FlagChips(props: { item: StagedItem }) {
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
           className="face-mono border px-1 t-caption"
-          style={{ borderColor: token("caution"), color: token("caution"), borderRadius: 2 }}
+          style={{
+            borderColor: token("caution"),
+            color: token("caution"),
+            borderRadius: "var(--radius)",
+          }}
         >
           ⚑ {flagLabel(el)} ✕
         </Press>
@@ -159,7 +163,7 @@ export function NoteInput(props: {
       "face-mono w-full border bg-page px-1.5 py-0.5 t-label placeholder:text-ink-2/50",
       props.className,
     ),
-    style: { borderColor: token("line-2"), borderRadius: 2 },
+    style: { borderColor: token("line-2"), borderRadius: "var(--radius)" },
   };
   return props.multiline ? (
     <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} />

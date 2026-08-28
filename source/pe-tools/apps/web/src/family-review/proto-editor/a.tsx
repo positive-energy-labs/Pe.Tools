@@ -297,7 +297,7 @@ function RailRow({
       style={{
         backgroundColor: current ? token("select") : "transparent",
         border: "none",
-        borderRadius: 2,
+        borderRadius: "var(--radius)",
         cursor: "pointer",
       }}
     >

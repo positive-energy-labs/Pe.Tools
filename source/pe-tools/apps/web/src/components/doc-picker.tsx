@@ -61,7 +61,7 @@ export function DocRow({
     >
       {ext ? (
         <span
-          className="t-caption face-mono shrink-0 rounded-[2px] border-[0.5px] px-1"
+          className="t-caption face-mono shrink-0 rounded-sm border-[0.5px] px-1"
           style={{
             borderColor: EXT_COLOR[ext] ?? token("line-2"),
             color: EXT_COLOR[ext] ?? token("ink-2"),

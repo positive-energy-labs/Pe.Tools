@@ -2,6 +2,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --spacing: var(--space-unit);
   --font-sans: var(--font-body);
   --font-weight-normal: var(--weight-regular);
   --font-weight-medium: var(--weight-medium);

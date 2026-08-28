@@ -714,7 +714,7 @@ export function FamilyWorkspace({
               "face-mono flex items-center justify-center",
               open.length === 1
                 ? "size-2 rounded-[1px] bg-pea"
-                : "h-3.5 min-w-3.5 rounded-[2px] border border-pea px-0.5 t-caption text-pea-ink",
+                : "h-3.5 min-w-3.5 rounded-sm border border-pea px-0.5 t-caption text-pea-ink",
             )}
           >
             {open.length > 1 ? open.length : null}
@@ -1201,7 +1201,7 @@ export function FamilyWorkspace({
             else bindTo(slug, property, choice);
           }}
           className={cn(
-            "face-mono h-6 w-full min-w-0 truncate rounded-[2px] border-0 bg-recess px-1 t-caption text-ink outline-none",
+            "face-mono h-6 w-full min-w-0 truncate rounded-sm border-0 bg-recess px-1 t-caption text-ink outline-none",
             className,
           )}
         >
@@ -1766,7 +1766,7 @@ export function FamilyWorkspace({
         onChange={(event) => editMeta(slug, meta.key, event.target.value)}
         title={meta.note}
         aria-label={meta.label}
-        className="face-mono h-5 w-full rounded-[2px] border border-line-2 bg-transparent px-1 t-caption outline-none"
+        className="face-mono h-5 w-full rounded-sm border border-line-2 bg-transparent px-1 t-caption outline-none"
       >
         {(meta.options ?? []).map((option) => (
           <option key={option} value={option}>
@@ -1786,7 +1786,7 @@ export function FamilyWorkspace({
         {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
       </p>
 
-      <div className="mb-2 rounded-[2px] border border-line p-1.5">
+      <div className="mb-2 rounded-sm border border-line p-1.5">
         <p className="face-mono mb-1 flex items-center gap-1 t-caption text-ink-2">
           bindable dims — represented in the table
           <HelpTip>
@@ -1825,7 +1825,7 @@ export function FamilyWorkspace({
                         refusal (an emptied literal) is the cell's own note in both places. */}
                     <NavStateCell
                       value={bindingOf(world, draft, part.slug, dim.property)}
-                      className="rounded-[2px] border border-line-2 t-caption text-caution"
+                      className="rounded-sm border border-line-2 t-caption text-caution"
                       note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
                       onCommit={(next) => editLiteral(part.slug, dim.property, next)}
                     />
@@ -1838,7 +1838,7 @@ export function FamilyWorkspace({
         })}
       </div>
 
-      <div className="rounded-[2px] border border-line p-1.5">
+      <div className="rounded-sm border border-line p-1.5">
         <p
           className="face-mono mb-1 t-caption text-ink-2"
           title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
@@ -1876,7 +1876,7 @@ export function FamilyWorkspace({
           )}
         </p>
 
-        <div className="mb-2 rounded-[2px] border border-line p-1.5">
+        <div className="mb-2 rounded-sm border border-line p-1.5">
           <p className="face-mono mb-1 flex items-center gap-1 t-caption text-ink-2">
             family value {isFormula(authored) ? "· formula" : ""}
             <HelpTip>
@@ -1901,7 +1901,7 @@ export function FamilyWorkspace({
             }
             stagedBy={family.length > 0 ? "pea" : "you"}
             className={cn(
-              "rounded-[2px] border border-line-2 t-label",
+              "rounded-sm border border-line-2 t-label",
               isFormula(authored) && "italic",
             )}
             note={
@@ -1919,7 +1919,7 @@ export function FamilyWorkspace({
           )}
         </div>
 
-        <div className="mb-2 rounded-[2px] border border-line p-1.5">
+        <div className="mb-2 rounded-sm border border-line p-1.5">
           <p
             className="face-mono mb-1 t-caption text-ink-2"
             title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
@@ -1945,7 +1945,7 @@ export function FamilyWorkspace({
           )}
         </div>
 
-        <div className="rounded-[2px] border border-line p-1.5">
+        <div className="rounded-sm border border-line p-1.5">
           <p
             className="face-mono mb-1 t-caption text-ink-2"
             title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."

@@ -150,6 +150,13 @@ describe("design guard â€” current token authority", () => {
     }
     expect(base, "base.css t-title weight").toContain("font-weight: var(--weight-strong);");
   });
+
+  it("projects the shared spacing unit through Tailwind", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
+    expect(base, "base.css spacing unit").toContain("--space-unit: 0.25rem;");
+    expect(lang, "design-lang.css spacing projection").toContain("--spacing: var(--space-unit);");
+  });
 });
 
 const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;
@@ -181,6 +188,10 @@ const stripComments = (text: string): string =>
 /** Blank out template literals so CSS-in-TS declarations do not look like inline style objects. */
 const stripTemplateLiterals = (text: string): string =>
   text.replace(/`[\s\S]*?`/g, (m) => m.replace(/[^\n]/g, " "));
+
+/** Keep browser-effective template CSS while masking only data substitutions. */
+const maskTemplateExpressions = (text: string): string =>
+  text.replace(/\$\{[^}]*\}/g, (m) => m.replace(/[^\n]/g, "_"));
 
 // ── hard zeros ───────────────────────────────────────────────────────────────────────────────
 
@@ -255,6 +266,32 @@ describe("design guard — maintained surface hard zeros", () => {
     assertZero("absoluteType", scan(files, re));
   });
 
+  it("has no raw exact 2px radius outside the foundation", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
+      (f) => ({ ...f, text: stripComments(f.text) }),
+    );
+    const re = new RegExp(
+      [
+        "rounded-\\[2px\\]",
+        "borderRadius\\s*[:=]\\s*[\"']?2(?:px)?[\"']?(?=\\s*[,};])",
+        "border-radius\\s*:\\s*2px(?=\\s*[;}]|$)",
+      ].join("|"),
+      "g",
+    );
+    expect(
+      scan(
+        [
+          {
+            rel: "negative-radius.tsx",
+            text: "borderRadius: 20, border-radius: 20px; rounded-[20px]",
+          },
+        ],
+        re,
+      ),
+    ).toEqual([]);
+    assertZero("exactRadius", scan(files, re));
+  });
+
   it("no raw leading utilities", () => {
     assertZero("rawLeading", scan(FILES, /(?<![-\w])leading-[\w[\].-]+/g));
   });
@@ -297,9 +334,10 @@ describe("design guard — maintained surface hard zeros", () => {
   it("has no static numeric CSS colors or stock palette utilities outside the foundation", () => {
     const files = FILES.filter((f) => f.rel !== "base.css").map((f) => ({
       ...f,
-      text: stripTemplateLiterals(stripComments(f.text)),
+      text: maskTemplateExpressions(stripComments(f.text)),
     }));
-    const numericColor = /(?<!s)\b(?:rgba?|hsla?)\([^)]*\d[^)]*\)/g;
+    const numericColor =
+      /\b(?:rgba?|hsla?|oklch|lab|lch)\(\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|grad|rad|turn)?(?=\s|,|\/|\))/gi;
     const stockPalette =
       /(?<![-\w])(?:bg|text|border|divide|ring|outline|fill|stroke)-(?:white|black|slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-\d{2,3})?(?:\/\d+)?(?![-\w])/g;
     assertZero("staticColor", [...scan(files, numericColor), ...scan(files, stockPalette)]);
@@ -307,9 +345,9 @@ describe("design guard — maintained surface hard zeros", () => {
 
   it("uses shared elevation tokens for non-inset shadows", () => {
     const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
-      (f) => ({ ...f, text: stripTemplateLiterals(stripComments(f.text)) }),
+      (f) => ({ ...f, text: maskTemplateExpressions(stripComments(f.text)) }),
     );
-    const re = /(?:box-shadow|boxShadow)\s*[:=][^;{},]*/g;
+    const re = /(?:box-shadow|boxShadow)\s*[:=][^;\n}]*/g;
     const offences = scan(files, re).filter(
       (o) =>
         !/\binset\b|\bvar\(/.test(o.match) && /\d+(?:\.\d+)?(?:px|rem)?|color-mix\(/.test(o.match),
@@ -319,12 +357,30 @@ describe("design guard — maintained surface hard zeros", () => {
 
   it("uses the shared control duration for fixed motion", () => {
     const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
-      (f) => ({ ...f, text: stripTemplateLiterals(stripComments(f.text)) }),
+      (f) => ({ ...f, text: maskTemplateExpressions(stripComments(f.text)) }),
     );
-    const utility = /(?<![-\w])duration-(?:\[(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s)\]|\d+)(?![-\w])/g;
+    const utility =
+      /(?<![-\w])(?:duration-(?:\[(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s)\]|\d+)|animate-\[[^\]]*_\d+(?:\.\d+)?(?:ms|s)(?:_|\]))(?![-\w])/g;
     const declaration =
-      /\btransition(?:Property|Duration)?\s*[:=][^;{},]{0,600}\b\d+(?:\.\d+)?(?:ms|s)\b/g;
+      /\b(?:transition(?:Property|Duration)?|animation(?:Name|Duration)?)\s*[:=][^;\n}]{0,600}\b\d+(?:\.\d+)?(?:ms|s)\b/g;
     assertZero("fixedMotion", [...scan(files, utility), ...scan(files, declaration)]);
+  });
+
+  it("catches static template CSS colors but allows data-driven color arguments", () => {
+    const fixture = [
+      {
+        rel: "static-template.tsx",
+        text: "`color: rgb(12 34 56); border-color: hsl(120 50% 40%);`",
+      },
+      {
+        rel: "dynamic-template.tsx",
+        text: "`color: rgb(${r} ${g} ${b}); border-color: hsl(${hue} 50% 40%);`",
+      },
+    ].map((f) => ({ ...f, text: maskTemplateExpressions(f.text) }));
+    const numericColor =
+      /\b(?:rgba?|hsla?|oklch|lab|lch)\(\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|grad|rad|turn)?(?=\s|,|\/|\))/gi;
+    expect(scan(fixture.slice(0, 1), numericColor)).not.toEqual([]);
+    expect(scan(fixture.slice(1), numericColor)).toEqual([]);
   });
 
   it("uses semantic layers for global stacking", () => {

@@ -244,7 +244,7 @@
   display: grid;
   place-items: center;
   border: 0.5px solid var(--pe-line);
-  border-radius: 2px;
+  border-radius: var(--radius);
   background: var(--pe-artifact);
   --pe-on: var(--pe-artifact);
   color: var(--pe-nav);
@@ -502,7 +502,7 @@
   vertical-align: text-bottom;
   background: var(--pe-pea);
   border-radius: 0;
-  animation: mg-blink 1s steps(2, start) infinite;
+  animation: mg-blink var(--motion-control) steps(2, start) infinite;
 }
 @keyframes mg-blink {
   50% {
@@ -521,7 +521,7 @@
   );
   background-size: 45% 100%;
   background-repeat: no-repeat;
-  animation: mg-sheen 2.2s linear infinite;
+  animation: mg-sheen var(--motion-control) linear infinite;
 }
 @keyframes mg-sheen {
   0% {
@@ -550,7 +550,10 @@
 /* ===== World inspector — rendered inside .side-body; the panel's styling is Tailwind in world.tsx.
    The body's own overflow-y:auto scrolls it; no lane-specific layout needed here anymore. ===== */
 
-/* Active OM-window fill pulse — referenced by world.tsx via animate-[mg-bud-pulse_…]. */
+/* Active OM-window fill pulse — referenced by world.tsx via the shared motion class. */
+.mg-bud-pulse {
+  animation: mg-bud-pulse var(--motion-control) ease-in-out infinite;
+}
 @keyframes mg-bud-pulse {
   0%,
   100% {

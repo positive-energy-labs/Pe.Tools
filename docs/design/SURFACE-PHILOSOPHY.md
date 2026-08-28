@@ -251,7 +251,8 @@ Every raw value of the language lives in `apps/web/src/base.css` — colour role
 tiers, the three dash patterns — and `apps/web/src/design-lang.css` is only its Tailwind
 projection. Rendered live in `/design-system` §02. Meaning is assigned in one place so that
 reconsidering a colour is a one-line edit; components consume role tokens rather than raw palette,
-and there is no prototype exemption — an incubating variant pays the same gates as a shipped route.
+and product code uses no raw colour values. There is no prototype exemption — an incubating variant
+pays the same gates as a shipped route.
 The authoring map is [`../features/design-system/NORMALIZATION.md`](../features/design-system/NORMALIZATION.md).
 
 The four that shape a design rather than an implementation:

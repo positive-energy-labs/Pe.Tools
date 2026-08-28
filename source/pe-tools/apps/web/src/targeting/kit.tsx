@@ -381,7 +381,7 @@ export function Picker<K extends string>({
           borderBottom: `1px solid ${caution ? token("caution") : token("ink")}`,
           color: caution ? token("caution") : token("ink"),
           whiteSpace: "nowrap",
-          animation: lit ? "tp-pulse 0.9s ease-in-out infinite" : undefined,
+          animation: lit ? "tp-pulse var(--motion-control) ease-in-out infinite" : undefined,
         }}
       >
         {link.dir ? `${DIR_GLYPH[link.dir]} ${closedText}` : closedText}
