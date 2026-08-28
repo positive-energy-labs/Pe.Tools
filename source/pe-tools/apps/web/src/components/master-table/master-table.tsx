@@ -659,7 +659,7 @@ export function MasterTable<Row extends RowData>({
             const facts = cellFactsText(cellState);
             return (
               <div className="face-mono t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line bg-recess px-2 whitespace-nowrap on-recess">
-                <span className="dl-tag shrink-0 text-ink">
+                <span className="tag shrink-0 text-ink">
                   {column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}
                 </span>
                 <span className="truncate text-ink-2">

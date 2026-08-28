@@ -74,8 +74,15 @@ export function OutcomeLine({ kind, label, says, className }: OutcomeLineProps) 
   const Icon = OUTCOME_ICON[kind];
   return (
     <div className={cn("dl-outcome", className)} data-kind={kind}>
-      <Icon className={kind === "busy" ? "dl-spin" : undefined} />
-      <span className="dl-outcome-label">{label}</span>
+      <Icon className={kind === "busy" ? "spin" : undefined} />
+      <span
+        className={cn(
+          "dl-outcome-label",
+          (kind === "partial" || kind === "error") && "squiggle squiggle-unsettled",
+        )}
+      >
+        {label}
+      </span>
       {says != null ? <span className="dl-outcome-says">{says}</span> : <span />}
     </div>
   );

@@ -19,13 +19,6 @@
  * by inline styles the rAF/scroll controller sets per frame; (2) [data-mode] lane widths;
  * (3) pseudo-elements, descendant/state selectors, and keyframe animations (caret blink, sheen).
  */
-.lens-frame {
-  font-family: var(--font-body);
-  color: var(--pe-ink);
-  background: var(--pe-page);
-  --pe-on: var(--pe-page);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .mg-scroll {
     scroll-behavior: auto;
@@ -254,10 +247,6 @@
   cursor: pointer;
   z-index: 6;
 }
-.mapdial-tail:hover {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
-}
-
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
    live height (+ the pb-4 gap below it) so the last turn always clears the input box. */
 .lens-chat {
@@ -549,11 +538,6 @@
 .lens-moment:hover .lens-fork {
   opacity: 1;
 }
-.lens-fork:hover {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
-  color: var(--pe-ink);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .lens-scroller {
     scroll-behavior: auto;

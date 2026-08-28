@@ -37,7 +37,7 @@ export function Switcher<T extends string>({
           disabled={option.disabled}
           title={option.title}
           aria-pressed={value === option.value}
-          className="dl-switcher-opt"
+          className={cn("dl-switcher-opt enabled:hover:veil", option.disabled === true && "locked")}
           data-on={value === option.value ? "" : undefined}
         >
           {option.label}

@@ -76,8 +76,6 @@
   padding: 1px 6px;
   background: var(--dl-cell-fill, transparent);
   box-shadow: var(--dl-cell-ring, none);
-  color: var(--dl-cell-ink, inherit);
-  font-style: var(--dl-cell-italic, normal);
 }
 
 /* ── ROW SCALE (ruled 2026-08-16): inside a table the cell IS the td's content box — one
@@ -126,8 +124,6 @@
       discipline, enforces precedence. Greyed italic is the settled "look but don't touch". */
 .dl-cell[data-body="locked"] {
   --dl-cell-fill: color-mix(in srgb, var(--pe-ink) 6%, var(--pe-on));
-  --dl-cell-ink: var(--pe-ink-mute);
-  --dl-cell-italic: italic;
   --dl-cell-ring: none;
   padding-right: 6px;
   padding-left: 6px;
@@ -151,12 +147,10 @@
       already says. */
 .dl-cell[data-unsaved] {
   --dl-cell-square: var(--pe-caution);
-  font-weight: 700;
   padding-left: 10px;
 }
 .dl-cell[data-unsaved="pea"] {
   --dl-cell-square: var(--pe-pea-ink);
-  font-weight: inherit;
 }
 /* ONE square, two authors — the shape is identical, only `--dl-cell-square` differs, so the two
    can never diverge into two marks, with the colour axis doing "whose". */
@@ -232,22 +226,6 @@
 /* 3 · THE SQUIGGLE FAMILY — one decoration family, ranked by colour. The decoration says
       "state of the value"; the colour says which state; the two primary text colours are
       untouched. Rides on the TEXT, never on the box. */
-.dl-sq {
-  text-decoration-line: underline;
-  text-decoration-style: wavy;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-.dl-sq[data-state="drift"] {
-  text-decoration-color: var(--pe-alarm);
-}
-.dl-sq[data-state="stale"] {
-  text-decoration-color: var(--pe-caution);
-}
-.dl-sq[data-state="unverified"] {
-  text-decoration-color: var(--pe-ink-mute);
-}
-
 /* NEVER (ruled 2026-08-16) — nothing was ever attempted here. Draws NO squiggle: the squiggle
    family distrusts an existing value, and here nothing exists to distrust. The value alone goes
    muted. Distinct from locked (no italic, no fill — the cell is writable, just untouched). */
@@ -257,15 +235,6 @@
 
 /* drift's second half: the other side's value as a struck ghost token, INLINE, so the one alarm
    is unmissable and still costs zero row height. */
-.dl-ghost {
-  font-family: var(--font-pe-mono);
-  font-size: 11px;
-  color: var(--pe-alarm);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  white-space: nowrap;
-}
-
 .dl-cell-line {
   display: inline-flex;
   flex-wrap: wrap;
@@ -292,12 +261,6 @@
 }
 /* 5 · a PLAIN underline is a citation, on the SOURCE NAME in the footline — a different element
       from the value — so it can never occupy the squiggle's slot. */
-.dl-cite {
-  text-decoration: underline solid var(--pe-line-2);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
-
 /* ── EMPTY STATE · empty.tsx ───────────────────────────────────────────────────────────────
    The labelled empty: the statement is italic muted (absence is quiet), the EXIT is upright
    secondary ink (a way out is an instruction, not an absence). `data-story` distinguishes the
@@ -377,7 +340,6 @@
   cursor: not-allowed;
   background: var(--pe-recess);
   color: var(--pe-ink-2);
-  font-style: italic;
   border-color: var(--pe-line-2);
 }
 
@@ -477,17 +439,6 @@
    carries, and buys no hue doing it. Focus-visible takes the veil plus the firm hairline —
    "selection and focus are a fill" applied to controls. Disabled takes neither. Tone-specific
    hovers (nav's underline above) may ADD, never replace. */
-.dl-verb:enabled:hover,
-.dl-chip-x:enabled:hover {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
-}
-.dl-verb:focus-visible,
-.dl-chip-x:focus-visible {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
-  outline: 1px solid var(--pe-line-2);
-  outline-offset: 0;
-}
-
 /* ── CHIPS · chip.tsx ──────────────────────────────────────────────────────────────────────
    Two components, not two modes of one: round 1 proved a NARROWING control cannot be built from
    a STATE FACT. Machine-measured, so mono; a hairline edge because chips routinely sit on a
@@ -695,9 +646,6 @@
   border: 0;
   cursor: pointer;
 }
-.dl-switcher-opt:enabled:hover {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
-}
 .dl-switcher-opt[data-on] {
   background: var(--pe-select);
   --pe-on: var(--pe-select);
@@ -706,7 +654,6 @@
 .dl-switcher-opt:disabled {
   cursor: not-allowed;
   color: var(--pe-ink-mute);
-  font-style: italic;
 }
 
 /* ── OUTCOMES · outcome.tsx ────────────────────────────────────────────────────────────────
@@ -763,21 +710,6 @@
 }
 /* the squiggly-under says "not settled" — the SAME family the cells use, which is exactly why a
    partial and an error read as unfinished without touching the type weight. */
-.dl-outcome[data-kind="partial"] .dl-outcome-label,
-.dl-outcome[data-kind="error"] .dl-outcome-label {
-  text-decoration: underline wavy var(--pe-caution);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-.dl-spin {
-  animation: dl-spin 1.1s linear infinite;
-}
-@keyframes dl-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* ── ARMING · arming-strip.tsx ─────────────────────────────────────────────────────────────
    The cell grammar at its largest scale: a tinted ground plus one edge — the same "fills
    separate, borders do not" move that won round 1. Only e's arming strip read as CEREMONY
@@ -789,14 +721,6 @@
    against `--pe-on` here would be a var cycle. */
 
 /* the small mono tag that names a state or an object. Quiet by default; a phase may tint it. */
-.dl-tag {
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-  color: var(--pe-ink-2);
-}
 /* only the PHASE tag takes the ceremony colour; every other tag in the strip stays quiet. */
 .dl-strip[data-phase="armed"] .dl-tag-phase {
   color: var(--pe-commit);
@@ -869,9 +793,6 @@
 .dl-strip-reason-input::placeholder {
   color: var(--pe-ink-mute);
 }
-.dl-strip-reason-input:focus-visible {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
-}
 .dl-strip-refusal {
   margin: 0;
   max-width: 72ch;
@@ -939,14 +860,14 @@
   color: var(--pe-ink-2);
 }
 .dl-key-item .dl-cell,
-.dl-key-item .dl-sq,
-.dl-key-item .dl-cite {
+.dl-key-item .squiggle,
+.dl-key-item .citation {
   font-family: var(--font-pe-mono);
   font-size: 12px;
 }
 /* the specimen carries the page's primary ink — except a locked one, which must keep the muted
    ink that IS its state, so the `--dl-cell-ink` escape hatch is left alone. */
-.dl-key-item .dl-sq,
-.dl-key-item .dl-cite {
+.dl-key-item .squiggle,
+.dl-key-item .citation {
   color: var(--pe-ink);
 }

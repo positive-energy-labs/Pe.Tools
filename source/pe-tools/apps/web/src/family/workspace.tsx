@@ -2146,7 +2146,7 @@ export function FamilyWorkspace({ requestedFamily }: { requestedFamily?: string 
       <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-line">
         <div className="flex h-6 shrink-0 items-center gap-2 border-b border-line bg-recess px-2">
           {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
-          <span className="dl-tag shrink-0">
+          <span className="tag shrink-0">
             {inspect.kind === "part" ? "constituent" : "parameter"}
           </span>
           <span className="face-mono min-w-0 flex-1 truncate t-caption text-ink">

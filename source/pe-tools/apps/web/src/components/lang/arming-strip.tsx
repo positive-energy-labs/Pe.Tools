@@ -87,7 +87,7 @@ export function ArmingStrip({
       <ArtifactFrame className={className}>
         <div className="dl-strip" data-phase="refused">
           <div className="dl-strip-line">
-            <span className="dl-tag dl-tag-phase">refused</span>
+            <span className="tag dl-tag-phase">refused</span>
             <span className="dl-strip-verb">{verb}</span>
           </div>
           <p className="dl-strip-refusal">{state.refusal}</p>
@@ -109,7 +109,7 @@ export function ArmingStrip({
     <ArtifactFrame className={className}>
       <div className="dl-strip" data-phase={armed ? "armed" : "unarmed"}>
         <div className="dl-strip-line">
-          <span className="dl-tag dl-tag-phase">{armed ? "armed" : "unarmed"}</span>
+          <span className="tag dl-tag-phase">{armed ? "armed" : "unarmed"}</span>
           <span className="dl-strip-verb">{verb}</span>
           <span className="dl-strip-target">{target}</span>
           <FactChip title="The plan this write was made against.">plan {planHash}</FactChip>
@@ -119,7 +119,7 @@ export function ArmingStrip({
         </div>
 
         <input
-          className="dl-strip-reason-input"
+          className="dl-strip-reason-input focus-visible:veil"
           value={reason}
           onChange={(e) => onReasonChange(e.target.value)}
           placeholder={REASON_PLACEHOLDER}
@@ -142,7 +142,7 @@ export function ArmingStrip({
           {armed ? (
             <Verb label="cancel" onClick={onCancel} reason="Disarms — nothing is written" />
           ) : null}
-          {armed ? <span className="dl-tag">armed against a plan of unknown age</span> : null}
+          {armed ? <span className="tag">armed against a plan of unknown age</span> : null}
         </div>
       </div>
     </ArtifactFrame>

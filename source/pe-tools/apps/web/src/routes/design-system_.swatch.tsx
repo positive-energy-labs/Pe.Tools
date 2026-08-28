@@ -512,7 +512,7 @@ function LangGroup() {
             </ArtifactFrame>
           </Spec>
           <Spec cap="head" className="w-52">
-            <ArtifactFrame head={<span className="dl-tag">door 421</span>}>
+            <ArtifactFrame head={<span className="tag">door 421</span>}>
               <div className="px-2.5 py-2">
                 <StateCell value="2 hr" stage="proposed" />
               </div>
@@ -520,10 +520,10 @@ function LangGroup() {
           </Spec>
           <Spec cap="head + foot" className="w-52">
             <ArtifactFrame
-              head={<span className="dl-tag">door 421</span>}
+              head={<span className="tag">door 421</span>}
               foot={
                 <>
-                  <span className="dl-tag">2 unsaved</span>
+                  <span className="tag">2 unsaved</span>
                   <Verb
                     tone="commit"
                     label="save"

@@ -138,7 +138,7 @@ function ProposalFlow() {
               className="mt-1"
               head={
                 <>
-                  <span className="dl-tag">{PROPOSAL_TARGET}</span>
+                  <span className="tag">{PROPOSAL_TARGET}</span>
                   <FactChip tone="pea" title="Proposals pea is still waiting on you for.">
                     {open} open
                   </FactChip>
@@ -157,7 +157,7 @@ function ProposalFlow() {
               }
               foot={
                 <>
-                  <span className="dl-tag">
+                  <span className="tag">
                     {denied > 0 ? `${denied} denied · ` : ""}
                     {accepted} to write
                   </span>
@@ -255,7 +255,7 @@ function ProposalFlow() {
                 onClick={reset}
                 reason="Puts every proposal back to its fixture state"
               />
-              <span className="dl-tag">
+              <span className="tag">
                 {open} open · {accepted} accepted · {denied} denied
                 {committed ? " · committed" : ""}
               </span>
@@ -355,7 +355,7 @@ function ProposalTable({
       className="max-w-184"
       head={
         <>
-          <span className="dl-tag">{PROPOSAL_TARGET} · under review</span>
+          <span className="tag">{PROPOSAL_TARGET} · under review</span>
           <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
             fixture
           </FactChip>

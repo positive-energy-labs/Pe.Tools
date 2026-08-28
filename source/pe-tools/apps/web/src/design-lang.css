@@ -67,6 +67,63 @@
 @utility veil {
   background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
 }
+@utility hairline {
+  outline: 1px solid var(--pe-line-2);
+  outline-offset: 0;
+}
+@utility locked {
+  font-style: italic;
+}
+@utility unsaved {
+  font-weight: 700;
+}
+@utility squiggle {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+@utility squiggle-drift {
+  text-decoration-color: var(--pe-alarm);
+}
+@utility squiggle-stale {
+  text-decoration-color: var(--pe-caution);
+}
+@utility squiggle-unverified {
+  text-decoration-color: var(--pe-ink-mute);
+}
+@utility squiggle-unsettled {
+  text-decoration-color: var(--pe-caution);
+}
+@utility ghost-drift {
+  font-family: var(--font-pe-mono);
+  font-size: 11px;
+  color: var(--pe-alarm);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  white-space: nowrap;
+}
+@utility citation {
+  text-decoration: underline solid var(--pe-line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+@utility tag {
+  font-family: var(--font-pe-mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--pe-ink-2);
+}
+@utility spin {
+  animation: pe-spin 1.1s linear infinite;
+}
+@keyframes pe-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @utility seam-border {
   border-style: dashed;
 }

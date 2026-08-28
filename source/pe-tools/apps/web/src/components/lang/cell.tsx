@@ -39,6 +39,12 @@ import "./lang.css";
  * nothing exists to distrust, so it draws no squiggle (ruled 2026-08-16, consolidation batch). */
 export type Unsettled = "drift" | "stale" | "unverified";
 
+const SQUIGGLE_CLASS: Record<Unsettled, string> = {
+  drift: "squiggle squiggle-drift",
+  stale: "squiggle squiggle-stale",
+  unverified: "squiggle squiggle-unverified",
+};
+
 export interface StateCellProps {
   /** The value as shown. Long values are expected — the grammar is built around them. */
   value: React.ReactNode;
@@ -235,6 +241,7 @@ export function StateCell(props: StateCellProps) {
   initial.current = typeof value === "string" ? value : "";
 
   const editable = props.onCommit != null && read.body !== "locked" && typeof value === "string";
+  const stateClass = cn(read.body === "locked" && "locked", read.unsaved === "you" && "unsaved");
   // Locate is a click on the cell BODY when not editing; an editable cell's input swallows its
   // own clicks (the caret owns them), so the handler can sit on the wrapper unconditionally.
   const locate =
@@ -273,7 +280,7 @@ export function StateCell(props: StateCellProps) {
     };
     return (
       <span
-        className={cn("dl-cell", locate != null && "cursor-pointer", className)}
+        className={cn("dl-cell", stateClass, locate != null && "cursor-pointer", className)}
         data-scale="row"
         onClick={locate}
         data-body={read.body ?? undefined}
@@ -289,7 +296,10 @@ export function StateCell(props: StateCellProps) {
             placeholder={props.placeholder}
             inputMode={props.numeric != null ? "decimal" : undefined}
             tabIndex={-1}
-            className={cn("dl-cell-input", read.unsettled != null && "dl-sq")}
+            className={cn(
+              "dl-cell-input",
+              read.unsettled != null && SQUIGGLE_CLASS[read.unsettled],
+            )}
             data-state={read.unsettled ?? undefined}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -311,7 +321,7 @@ export function StateCell(props: StateCellProps) {
             onBlur={(e) => commit(e.currentTarget)}
           />
         ) : read.unsettled != null ? (
-          <span className="dl-sq" data-state={read.unsettled}>
+          <span className={SQUIGGLE_CLASS[read.unsettled]} data-state={read.unsettled}>
             {value}
           </span>
         ) : (
@@ -341,7 +351,7 @@ export function StateCell(props: StateCellProps) {
   else if (confidence === "low") facts.push("low confidence");
   if (grounding != null)
     facts.push(
-      <span className="dl-cite" key="cite">
+      <span className="citation" key="cite">
         {grounding.doc} p.{grounding.page}
       </span>,
     );
@@ -350,14 +360,14 @@ export function StateCell(props: StateCellProps) {
     <span className={cn(locate != null && "cursor-pointer", className)} onClick={locate}>
       <span className="dl-cell-line">
         <span
-          className="dl-cell"
+          className={cn("dl-cell", stateClass)}
           data-body={read.body ?? undefined}
           data-seam={read.seam ? "" : undefined}
           data-never={read.never ? "" : undefined}
           data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
         >
           {read.unsettled != null ? (
-            <span className="dl-sq" data-state={read.unsettled}>
+            <span className={SQUIGGLE_CLASS[read.unsettled]} data-state={read.unsettled}>
               {value}
             </span>
           ) : (
@@ -365,7 +375,7 @@ export function StateCell(props: StateCellProps) {
           )}
         </span>
         {read.unsettled === "drift" && modelValue != null ? (
-          <span className="dl-ghost" title="the value the model currently holds">
+          <span className="ghost-drift" title="the value the model currently holds">
             {modelValue}
           </span>
         ) : null}

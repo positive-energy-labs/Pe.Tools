@@ -100,7 +100,7 @@ function ArmingRoute() {
                     onClick={reset}
                     reason="Puts the strip back to unarmed with the original plan"
                   />
-                  <span className="dl-tag">the receipt is plain content — never framed</span>
+                  <span className="tag">the receipt is plain content — never framed</span>
                 </div>
               </>
             ) : (
@@ -125,7 +125,7 @@ function ArmingRoute() {
               <FactChip dashed title="Fixture data — nothing is planned, nothing is written.">
                 fixture
               </FactChip>
-              <span className="dl-tag">
+              <span className="tag">
                 phase {phase} · plan {planHash}
                 {replanned ? " (re-planned)" : ""}
               </span>

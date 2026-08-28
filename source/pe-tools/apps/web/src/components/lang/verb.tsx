@@ -100,7 +100,11 @@ export function Verb(props: VerbProps) {
     <>
       <button
         type="button"
-        className={cn("dl-verb", className)}
+        className={cn(
+          "dl-verb enabled:hover:veil focus-visible:veil focus-visible:hairline",
+          inert && "locked",
+          className,
+        )}
         data-tone={tone}
         disabled={inert}
         onClick={onClick}

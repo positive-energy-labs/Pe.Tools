@@ -72,7 +72,7 @@ export function NarrowChip({ label, count, onRemove, title, className }: NarrowC
       <span className="dl-chip-count">{count}</span>
       <button
         type="button"
-        className="dl-chip-x"
+        className="dl-chip-x enabled:hover:veil focus-visible:veil focus-visible:hairline"
         onClick={onRemove}
         title={`Remove the "${label}" narrowing — widens the view back out`}
       >

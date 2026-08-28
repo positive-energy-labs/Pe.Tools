@@ -233,7 +233,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
     text: "Plain content is never enclosed. The artifact frame is reserved for a machine-operated object that carries state — the table, pea's card, the arming strip, the sentence. A lane of plain controls or receipts sits on the page ground with nothing around it.",
     demo: (
       <div className="w-full max-w-sm">
-        <ArtifactFrame head={<span className="dl-tag">framed — carries state</span>}>
+        <ArtifactFrame head={<span className="tag">framed — carries state</span>}>
           <div className="px-2.5 py-2">
             <StateCell value="2 hr" stage="proposed" />
           </div>
@@ -668,7 +668,7 @@ function ArtifactFrameBlock() {
         <ArtifactFrame
           head={
             <>
-              <span className="dl-tag">overhead coiling door 421</span>
+              <span className="tag">overhead coiling door 421</span>
               <FactChip title="Rows currently in scope.">13 params</FactChip>
               <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
                 fixture
@@ -677,7 +677,7 @@ function ArtifactFrameBlock() {
           }
           foot={
             <>
-              <span className="dl-tag">2 unsaved</span>
+              <span className="tag">2 unsaved</span>
               <Verb
                 tone="commit"
                 label="save profile"
@@ -813,7 +813,7 @@ function VerbBlock() {
       <CounterExample why="all three writes wear the same blue however far they reach. Tinting by blast radius mints hues the reader must learn, and the group head already said it.">
         <span className="flex items-center gap-2">
           <Verb tone="commit" label="save profile" icon={Save} onClick={noop} reason="document" />
-          <span className="dl-tag">…would need a second blue for model, a third for external</span>
+          <span className="tag">…would need a second blue for model, a third for external</span>
         </span>
       </CounterExample>
 
@@ -1204,7 +1204,7 @@ function RealTable() {
       <ArtifactFrame
         head={
           <>
-            <span className="dl-tag">overhead coiling door 421 · parameters</span>
+            <span className="tag">overhead coiling door 421 · parameters</span>
             <FactChip title="Rows in scope before any narrowing.">
               {PARAM_ROWS.length} params
             </FactChip>
@@ -1221,7 +1221,7 @@ function RealTable() {
         }
         foot={
           <>
-            <span className="dl-tag">2 unsaved · 1 refused by Revit</span>
+            <span className="tag">2 unsaved · 1 refused by Revit</span>
             <Verb
               tone="commit"
               label="apply to Revit"

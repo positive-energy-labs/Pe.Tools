@@ -493,7 +493,7 @@ export function Lens({
   // gutter/lane heights). Bailing to a different tree when empty left --vp unset, so on the
   // first populated render the lanes/MapDial fell back to 560px and got cut off.
   return (
-    <div className="lens-frame" ref={frameRef} data-mode={mode}>
+    <div className="lens-frame on-page font-sans text-ink" ref={frameRef} data-mode={mode}>
       <div className="lens-scroller" ref={scrollerRef}>
         {/* The grid (and thus the sidebar) always mounts — even with no messages — so the thread
             list stays visible on a fresh session and the --vp ResizeObserver always fires. */}
@@ -565,7 +565,7 @@ export function Lens({
             {!following && moments.length > 0 ? (
               <button
                 type="button"
-                className="mapdial-tail"
+                className="mapdial-tail hover:veil"
                 title="Jump to latest"
                 aria-label="Jump to latest"
                 onPointerDown={(e) => e.stopPropagation()}

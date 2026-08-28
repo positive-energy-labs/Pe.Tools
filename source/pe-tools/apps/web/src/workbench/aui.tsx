@@ -237,7 +237,7 @@ function UserMoment() {
         <span>you</span>
         {/* lens-fork kept as CSS: visibility is driven by `.lens-moment:hover` (geometry element) */}
         <button
-          className="lens-fork"
+          className="lens-fork hover:veil hover:text-ink"
           type="button"
           title="Fork the conversation from this turn into a new thread"
           onClick={() => void forkThread(id)}
