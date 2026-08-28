@@ -32,16 +32,15 @@
  *                        remain legal.
  *
  * ── HARD ZERO (every category below must remain empty) ─────────────────────────────────────
- *  rawTextSize      any raw text-[Npx] or named Tailwind text-size utility. The tier system
- *                   (t-* classes) is the scale; the remaining spends are non-exact tail sites.
- *  rawButton        <button> outside components/ui + components/lang: verbs come from
- *                   lang/Verb; the tail is non-verb machinery.
- *  uiButtonImports  import sites of ui/button. The maintained surface uses the shared
- *                   language primitives instead.
- *  dashed           border-dashed / stroke-dasharray / border-style: dashed outside
- *                   components/lang + design-lang.css. R13b: every broken-edge mechanism
- *                   occupies the SAME slot and means SEAM. The baseline covers the audited
- *                   deliberate spends (exhibit chrome, drawing-set's seam, atlas's legend).
+ *  rawTextSize      any raw text-[Npx|Nrem] or named Tailwind text-size utility. The seven
+ *                   tiers (t-* classes) are the scale; nothing else names a size.
+ *  rawButton        <button> outside components/ui + components/lang. World actions are
+ *                   lang/Verb, surface machinery is lang/Press.
+ *  uiButtonImports  import sites of ui/button. The file is deleted; this stops it returning.
+ *  dashed           any broken line outside components/lang + design-lang.css + base.css whose
+ *                   value is not a named role. Broken lines carry THREE roles under ONE
+ *                   authority — seam, reference, void, patterned in base.css. Callers wear a
+ *                   dash-* / seam-border class or read dash(role).
  *  longTitle        title= props over 240 characters. Long guidance belongs in visible HelpTip
  *                   content; instance facts may remain in title attributes.
  *
@@ -236,8 +235,8 @@ const assertZero = (name: string, offences: Offence[]) => {
 
 describe("design guard — maintained surface hard zeros", () => {
   it("rawTextSize — arbitrary and named raw text-size utilities", () => {
-    // Absolute units only. `text-[0.7rem]` (ADR 0004's named outlier, in `ui/badge`) survived the
-    // px-only form of this gate; `em` stays legal because `text-[1em]` is an inheritance
+    // Absolute units only. `text-[0.7rem]` in `ui/badge` survived the px-only form of this gate
+    // through every earlier sweep; `em` stays legal because `text-[1em]` is an inheritance
     // instruction — `PROSE_CLASS` is composed at two different tiers by its two consumers.
     const re =
       /(?<![-\w])text-(?:\[(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem)\]|xs|sm|base|lg|xl|\d+xl)(?![-\w])/g;

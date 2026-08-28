@@ -45,8 +45,8 @@ taken most of the time.
 
 **A surface unreachable from the front door rots.** Reachability from the index tracks liveness
 better than any timestamp — if nobody can navigate to it, nobody notices it is wrong. Every route
-deleted in the last purge wave was unlinked, and the surfaces carrying today's worst violations are
-the ones you can only reach by typing a URL.
+deleted in the last purge wave was unlinked. Every living route carries a front-door card today,
+incubating products included, which is why an incubating product is enforced like a shipped one.
 
 ---
 
@@ -118,10 +118,10 @@ readings of one coordinate pair as three columns.
 ## 3 · Honesty
 
 **A stand-in announces itself and says what would replace it.** → rendered: `/design-system` §01,
-on the dashed `FactChip`. The dashed edge is reserved for that one meaning; it is currently the
-most over-subscribed visual in the codebase — dashed also means estimated, not-started,
-needs-attention, held, void, and open-proposal depending on where you look. Do not add a ninth
-meaning; if you need one, take a different slot.
+on the `seam` `FactChip`. A broken line carries exactly three roles, each with its own pattern in
+`base.css`: `seam` (declared, nothing real behind it — the one UI broken edge), `reference` (says
+where a drawing is measured from), and `void` (space where material is absent). Every consumer
+wears a named role; a raw pattern is a guard failure. Do not add a fourth role without a ruling.
 
 **Keep the ledger of open stand-ins beside the feature** as Owed lines in the owning feature's
 `docs/features/<name>/LEDGER.md`, one entry per gap naming what discharges it. An entry leaves the
@@ -143,7 +143,7 @@ naming the reason and pointing at the legitimate path beats an action that works
 
 **Refuse per option, not per surface**, and **make the explanation a required constructor
 argument.** → rendered: `/design-system` §01, with the counter-example — the same refusal drawn
-through `ui/button`, which demands nothing and so ships greyed and mute.
+through a bare `Press`, which demands nothing and so ships greyed and mute.
 
 **A silent refusal reads as an edit that vanished.** A rejected commit must visibly restore the
 previous value *and* say why, near the cell, without resizing the row. Open defect: the shared cell
@@ -246,11 +246,12 @@ say where options come from.
 
 ## 5 · Colour and type
 
-Full rules in the header of `apps/web/src/design-lang.css` — the one place a colour of the
-language is decided — rendered live in `/design-system` §02. (`COLOR-ROLES.md` is the
-superseded ancestor — deleted, git history only.) Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
-components consume role tokens rather than raw palette. Deliberately alien prototype chrome, such as
-a variant switcher, is exempt — it must not read as part of the design under review.
+Every raw value of the language lives in `apps/web/src/base.css` — colour roles, the seven type
+tiers, the three dash patterns — and `apps/web/src/design-lang.css` is only its Tailwind
+projection. Rendered live in `/design-system` §02. Meaning is assigned in one place so that
+reconsidering a colour is a one-line edit; components consume role tokens rather than raw palette,
+and there is no prototype exemption — an incubating variant pays the same gates as a shipped route.
+The authoring map is [`../features/design-system/NORMALIZATION.md`](../features/design-system/NORMALIZATION.md).
 
 The four that shape a design rather than an implementation:
 

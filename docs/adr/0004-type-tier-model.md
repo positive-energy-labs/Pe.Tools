@@ -1,6 +1,7 @@
-# ADR 0004 — Six-tier type model for the web surfaces
+# ADR 0004 — Type tier model for the web surfaces
 
-Date: 2026-08-16. Status: accepted, codified in `apps/web/src/styles.css`.
+Date: 2026-08-16, amended 2026-08-28 (six tiers to seven). Status: accepted, codified in
+`apps/web/src/base.css` and projected by `apps/web/src/design-lang.css`.
 
 ## Context
 
@@ -17,8 +18,9 @@ design-lang-local decision: it constrains what any feature's route is allowed to
 
 Three axes are separated, and call sites never name a pixel:
 
-- **tier** — `t-caption` 10/1.4 · `t-label` 11/1.3 · `t-value` 12/1.4 · `t-prose` 13/1.55 ·
-  `t-title` 16/1.25 · `t-display` 40/1.1. A tier carries its own leading; no call site names one.
+- **tier** — `t-caption` 10/1.4 · `t-label` 11/1.4 · `t-value` 12/1.45 · `t-prose` 13/1.6 ·
+  `t-title` 16/1.3 · `t-head` 24/1.2 · `t-display` 40/1.15. A tier carries its own leading; no call
+  site names one.
 - **face** — `font-sans` is the default, `face-mono` is the marked case. Mono is permitted on
   identifiers, paths, keys, counts, measured numbers, timestamps, durations, states and outcome
   receipts; forbidden on verbs/buttons, labels, section heads, empty states, help prose and
@@ -31,14 +33,24 @@ emphasis inside real `t-prose` — never chrome emphasis. **Semibold** = `t-titl
 only. `t-upper` is declared after `face-mono` on purpose so head tracking wins; heads are sans, and
 `face-mono` never composes with `t-upper`.
 
-A standing minimize-options bias applies: adding a tier requires the same bar as adding a state word.
+`t-head` was added 2026-08-28. `t-title` 16 to `t-display` 40 left a 24px void, and three
+route-level headings had landed inside it at 20, 24 and 30px. Its role is the heading that names a
+whole route or workspace, one per surface; `t-title` names a region inside it.
+
+**Owners.** `base.css` declares the size and line-height pair for every tier and the portable
+`[data-pe] .t-*` classes. `design-lang.css` projects the same variables as `@utility` blocks and
+declares no number of its own. Nothing else may name a type value.
+
+A standing minimize-options bias applies: adding a tier requires the same bar as adding a state
+word. The seventh tier was earned by role evidence — three headings with nowhere to sit — not by
+call-site volume.
 
 ## Consequences
 
 - Any new size, leading, or weight written at a call site is a defect, not a variation.
-- Enforcement is owed: an oxlint JS-plugin rule vs a staged hook vs CI is unruled; until then the
-  law is convention plus review.
-- Sweep order follows the census: `/design-system` first (9 distinct sizes — it cannot be the
-  ratchet while it is the worst offender), then the three files carrying 58% of title prose.
-- Known outliers to fold in: `components/ui/badge.tsx` renders at `text-[0.7rem]` (11.2px), a size
-  that appears nowhere else; the display face is named three ways under two token names.
+- Enforcement is deterministic. `tests/repo-guards/src/design-guard.test.ts` asserts a hard zero on
+  raw text-size utilities (arbitrary `px` and `rem`, and the named Tailwind sizes) and on sub-10px
+  type, and asserts that each tier's `.t-*` and `@utility t-*` blocks bind that tier's own size and
+  line-height variables in both owners. `em` stays legal: `text-[1em]` is an instruction not to
+  change size.
+- The map for authors is [`../features/design-system/NORMALIZATION.md`](../features/design-system/NORMALIZATION.md).
