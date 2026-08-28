@@ -669,24 +669,25 @@ describe("design guard — foundation topology", () => {
     expect(embedded![1]).toBe(base!.text);
   });
 
-  it("keeps the documented type and composition grammar in standalone base.css", () => {
+  it("keeps the documented type, depth, and composition grammar in standalone base.css", () => {
     const base = CSS_FILES.find((file) => file.rel === "base.css");
     expect(base).toBeDefined();
     const design = readFileSync(join(ROOT, "DESIGN.md"), "utf8");
     const type = design.slice(design.indexOf("## Type:"), design.indexOf("## Depth:"));
+    const depth = design.slice(design.indexOf("## Depth:"), design.indexOf("## Motion:"));
     const composition = design.slice(
       design.indexOf("## Composition utilities"),
       design.indexOf("## The six laws"),
     );
-    const grammar = [type, composition]
+    const grammar = [type, depth, composition]
       .flatMap((section) => [...section.matchAll(/`([^`]+)`/g)].map((match) => match[1]))
       .map((name) => (name.startsWith("-") ? `squiggle${name}` : name))
       .filter((name) =>
-        /^(?:t-(?:caption|label|value|prose|title|display|upper)|face-mono|on-(?:page|artifact|recess|select)|veil|hairline|(?:alarm|pea|caution)-wash(?:-artifact)?|seam-border|locked|unsaved|squiggle(?:-(?:drift|stale|unverified|unsettled))?|ghost-drift|citation|tag|spin|prose-pe)$/.test(
+        /^(?:t-(?:caption|label|value|prose|title|display|upper)|face-mono|z-(?:raised|sticky|popup|modal)|on-(?:page|artifact|recess|select)|veil|hairline|(?:alarm|pea|caution)-wash(?:-artifact)?|seam-border|locked|unsaved|squiggle(?:-(?:drift|stale|unverified|unsettled))?|ghost-drift|citation|tag|spin|prose-pe)$/.test(
           name,
         ),
       );
-    expect(grammar).toHaveLength(30);
+    expect(grammar).toHaveLength(34);
     expect(new Set(grammar).size).toBe(grammar.length);
     for (const name of grammar) {
       const state = name === "veil" ? ":hover" : "";

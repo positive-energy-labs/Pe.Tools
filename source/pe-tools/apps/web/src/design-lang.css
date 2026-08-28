@@ -6,10 +6,6 @@
   --font-pe: "Open Sans", system-ui, -apple-system, sans-serif;
   --font-pe-display: "Spectral", Georgia, "Times New Roman", serif;
   --font-pe-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
-  --z-raised: 10;
-  --z-sticky: 20;
-  --z-popup: 40;
-  --z-modal: 50;
   --motion: 120ms;
 }
 

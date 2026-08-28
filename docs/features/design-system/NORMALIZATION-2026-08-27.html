@@ -234,6 +234,10 @@
   --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
   --font-pe-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
   --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  --z-raised: 10;
+  --z-sticky: 20;
+  --z-popup: 40;
+  --z-modal: 50;
 }
 
 .dark {
@@ -338,6 +342,19 @@
 [data-pe] .page-wrap {
   width: min(1080px, calc(100% - 2rem));
   margin-inline: auto;
+}
+
+.z-raised {
+  z-index: var(--z-raised);
+}
+.z-sticky {
+  z-index: var(--z-sticky);
+}
+.z-popup {
+  z-index: var(--z-popup);
+}
+.z-modal {
+  z-index: var(--z-modal);
 }
 
 .on-page {

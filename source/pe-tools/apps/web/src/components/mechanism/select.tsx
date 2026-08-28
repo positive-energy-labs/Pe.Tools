@@ -44,11 +44,11 @@ function SelectContent({
 }: SelectPrimitive.Popup.Props & Pick<SelectPrimitive.Positioner.Props, "sideOffset">) {
   return (
     <SelectPrimitive.Portal>
-      <SelectPrimitive.Positioner className="isolate z-modal outline-none" sideOffset={sideOffset}>
+      <SelectPrimitive.Positioner className="isolate z-popup outline-none" sideOffset={sideOffset}>
         <SelectPrimitive.Popup
           data-slot="select-content"
           className={cn(
-            `z-modal max-h-(--available-height) min-w-(--anchor-width) origin-(--transform-origin) overflow-y-auto p-1 outline-none ${POPUP_SURFACE_CLASS} data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95`,
+            `z-popup max-h-(--available-height) min-w-(--anchor-width) origin-(--transform-origin) overflow-y-auto p-1 outline-none ${POPUP_SURFACE_CLASS} data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95`,
             className,
           )}
           {...props}
