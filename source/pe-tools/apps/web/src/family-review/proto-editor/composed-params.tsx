@@ -33,6 +33,7 @@ import {
 import { setParamDataType } from "#/family-review/proto-editor/model";
 import { RefToken, type Editor } from "#/family-review/proto-editor/shell";
 import { setOverride, setParamFormula, setParamValue } from "#/family/family-model";
+import { Press } from "#/components/lang/press";
 
 /** Where a value came from, in one word — the sentence's honesty inside the table's skeleton. */
 const SOURCE_WORD: Record<ParamCell["source"], string> = {
@@ -96,7 +97,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
       {sort == null ? (
         <span>{label}</span>
       ) : (
-        <button
+        <Press
           type="button"
           title={`Sort by ${label}`}
           onClick={() =>
@@ -117,7 +118,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
         >
           {label}
           {view.sort === sort ? (view.descending ? " ↓" : " ↑") : ""}
-        </button>
+        </Press>
       )}
       {span ? <span className="block font-normal normal-case">{span}</span> : null}
     </th>

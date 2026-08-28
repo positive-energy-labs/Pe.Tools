@@ -10,6 +10,7 @@ import { token } from "#/lib/token";
 import type { SheetRow } from "./sheet";
 import { SpecDrawing } from "./spec-drawing";
 import { frac, pct } from "./math";
+import { Press } from "#/components/lang/press";
 
 export function ExportSheet({
   rows,
@@ -61,16 +62,20 @@ export function ExportSheet({
         <span className="face-mono text-[11px] text-ink-2">
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
-        <button
+        <Press
           type="button"
           className="face-mono ml-auto text-[11px] text-nav"
           onClick={() => window.print()}
         >
           print / save PDF
-        </button>
-        <button type="button" className="face-mono text-[11px] text-nav" onClick={onClose}>
+        </Press>
+        <Press
+          type="button"
+          className="face-mono text-[11px] text-ink-2 hover:text-ink"
+          onClick={onClose}
+        >
           close
-        </button>
+        </Press>
       </div>
 
       <div id="grille-export-sheet" className="mx-auto max-w-[1100px] p-8">
@@ -118,13 +123,13 @@ export function ExportSheet({
                   free area <b className="text-ink">{pct(r.freeArea)}</b> ·{" "}
                   {r.actualFreeArea.toFixed(1)} in²
                 </span>
-                <button
+                <Press
                   type="button"
                   className="no-print text-nav"
                   onClick={() => downloadSvg(r.id)}
                 >
                   .svg
-                </button>
+                </Press>
               </figcaption>
               <div className="overflow-x-auto">
                 <SpecDrawing g={r} px={px} id={`-${r.id}`} />

@@ -34,6 +34,7 @@ import {
   type ConnGeo,
   type SolidGeo,
 } from "#/family/family-model";
+import { Press } from "#/components/lang/press";
 
 // ── the triptych ────────────────────────────────────────────────────────────────────────────────
 
@@ -308,7 +309,7 @@ export function PartSidebar({
     );
 
   const walk = (id: string) => (
-    <button
+    <Press
       type="button"
       onClick={() => onSelect(id)}
       title={`Open ${id} — same sidebar, one step along the graph`}
@@ -324,7 +325,7 @@ export function PartSidebar({
       }}
     >
       {id}
-    </button>
+    </Press>
   );
 
   return (
@@ -501,7 +502,7 @@ function SlotCell({
 
   if (cell.kind === "name")
     return (
-      <button
+      <Press
         type="button"
         onClick={() => {
           onSelect(rowId);
@@ -520,7 +521,7 @@ function SlotCell({
         }}
       >
         {cell.value}
-      </button>
+      </Press>
     );
 
   if (cell.kind === "text" && cell.write == null)

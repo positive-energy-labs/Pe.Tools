@@ -58,6 +58,7 @@ import {
 import { CompactTable, type CompactColumn } from "#/family-review/proto/compact-table";
 import { ScaleNote, Triptych } from "#/family-review/proto/views";
 import { cn } from "#/lib/utils";
+import { Press } from "#/components/lang/press";
 
 /** One family at one type — the unit the board judges. */
 export interface Stage {
@@ -130,7 +131,7 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
   return (
     <div className="flex items-center gap-1" role="group" aria-label="verdict">
       {VERDICT_KEYS.map((verdict) => (
-        <button
+        <Press
           key={verdict}
           type="button"
           onClick={() => onPick(verdict)}
@@ -146,7 +147,7 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
           }}
         >
           {VERDICT_LABEL[verdict]}
-        </button>
+        </Press>
       ))}
     </div>
   );
@@ -363,7 +364,7 @@ export function ReviewBoard({
         {board.map((entry) => (
           <div key={entry.key} className="relative border-b" style={{ borderColor: token("line") }}>
             <div className="flex items-start">
-              <button
+              <Press
                 type="button"
                 onClick={() => setSelected(entry.key)}
                 className={cn(
@@ -382,8 +383,8 @@ export function ReviewBoard({
                     </span>
                   ) : null}
                 </span>
-              </button>
-              <button
+              </Press>
+              <Press
                 type="button"
                 aria-expanded={expanded === entry.key}
                 onClick={() => setExpanded(expanded === entry.key ? null : entry.key)}
@@ -391,7 +392,7 @@ export function ReviewBoard({
                 className="shrink-0 px-2 py-1.5 face-mono t-caption text-ink-mute"
               >
                 {expanded === entry.key ? "hide" : "open"}
-              </button>
+              </Press>
             </div>
             {expanded === entry.key ? (
               <div

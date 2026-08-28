@@ -11,6 +11,7 @@ import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import type { GroundedBlock, ParsedPage } from "#/grounded-doc/types";
 import { PROSE_CLASS } from "#/workbench/prose";
 import { cn } from "#/lib/utils";
+import { Press } from "#/components/lang/press";
 
 // GFM adds tables/strikethrough/task-lists — equipment schedules are tables.
 // Memoized because react-markdown re-parses on every render and the tree is
@@ -117,7 +118,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
 
   return (
     <div className="flex w-full max-w-sm flex-col items-center gap-2">
-      <button
+      <Press
         type="button"
         disabled={parsing}
         onClick={() => inputRef.current?.click()}
@@ -163,7 +164,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
           className="hidden"
           onChange={(event) => handleFiles(event.target.files)}
         />
-      </button>
+      </Press>
 
       {!parsing && (
         <div className="flex w-full items-center gap-1.5">
@@ -271,7 +272,7 @@ function ImagesPane({
                   const isFocused = engine.focus?.blockId === image.id;
                   const isPinned = engine.pinned?.blockId === image.id;
                   return (
-                    <button
+                    <Press
                       type="button"
                       key={image.id}
                       ref={laneAnchorRef(refs, image.id)}
@@ -294,7 +295,7 @@ function ImagesPane({
                         <span className="t-caption face-mono text-ink-2">{image.category}</span>
                         {isPinned && <Pin className="size-3 text-ink" />}
                       </span>
-                    </button>
+                    </Press>
                   );
                 })}
               </div>
@@ -424,7 +425,7 @@ function PageCanvas({
           const isPinned = engine.pinned?.blockId === block.id;
           const isApprox = engine.ambiguousBlockIds.has(block.id);
           return block.bboxes.map((bbox, index) => (
-            <button
+            <Press
               type="button"
               key={`${block.id}-${index}`}
               ref={
@@ -466,7 +467,7 @@ function PageCanvas({
                   {block.kind}
                 </span>
               )}
-            </button>
+            </Press>
           ));
         })}
         {/* Extracted-image regions, so hovering an image in the images lane
@@ -478,7 +479,7 @@ function PageCanvas({
           const isFocused = engine.focus?.blockId === image.id;
           const isPinned = engine.pinned?.blockId === image.id;
           return (
-            <button
+            <Press
               type="button"
               key={image.id}
               ref={laneAnchorRef(refs, image.id)}

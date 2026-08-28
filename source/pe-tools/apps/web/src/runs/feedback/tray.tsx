@@ -11,6 +11,7 @@ import { cn } from "#/lib/utils";
 
 import { fb, type StagedItem, useFb } from "./staging";
 import { ExportStatus, ExportVerbs, FlagChips, NoteInput, runShort, zoneShort } from "./verbs";
+import { Press } from "#/components/lang/press";
 
 export type Lens = { curId: string | null; prevId: string | null };
 
@@ -27,7 +28,7 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
       style={{ borderColor: token("line-2") }}
     >
       <div className="flex items-baseline gap-2">
-        <button
+        <Press
           type="button"
           onClick={() => props.onSwing(item)}
           title={
@@ -55,15 +56,15 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
               ≠ lens
             </span>
           )}
-        </button>
-        <button
+        </Press>
+        <Press
           type="button"
           onClick={() => fb.unstage(item.key)}
           title="Remove this item from the staged set."
           className="tele ml-auto text-[10px] text-ink-2 hover:text-ink"
         >
           ✕
-        </button>
+        </Press>
       </div>
       <FlagChips item={item} />
       <NoteInput item={item} multiline />
@@ -91,7 +92,7 @@ export function Tray(props: {
         </span>
         <span className="ml-auto flex items-center gap-1.5">
           {items.length > 0 && (
-            <button
+            <Press
               type="button"
               onClick={props.onToggleReview}
               title={
@@ -106,17 +107,17 @@ export function Tray(props: {
               style={props.review ? undefined : { borderColor: token("line-2") }}
             >
               {props.review ? "✕ exit review" : "review staged"}
-            </button>
+            </Press>
           )}
           {items.length > 0 && (
-            <button
+            <Press
               type="button"
               onClick={() => fb.clear()}
               title="Unstage everything."
               className="tele text-[10px] text-ink-2 hover:text-ink"
             >
               clear
-            </button>
+            </Press>
           )}
         </span>
       </div>
@@ -157,7 +158,7 @@ export function Tray(props: {
  * pane (pane collapse law). */
 export function TrayCollapsed(props: { count: number; onExpand: () => void }) {
   return (
-    <button
+    <Press
       type="button"
       onClick={props.onExpand}
       title="Expand the staging tray."
@@ -167,6 +168,6 @@ export function TrayCollapsed(props: { count: number; onExpand: () => void }) {
       <span className="tele-label text-ink-2" style={{ writingMode: "vertical-rl" }}>
         staging{props.count > 0 ? ` · ${props.count}` : ""}
       </span>
-    </button>
+    </Press>
   );
 }

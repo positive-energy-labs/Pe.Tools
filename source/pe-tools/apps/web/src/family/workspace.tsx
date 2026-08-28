@@ -121,6 +121,7 @@ import { useAtomValue } from "@effect/atom-react";
 
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
+import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { VerbLane } from "#/components/verb-lane";
 import { Verb } from "#/components/lang/verb";
@@ -179,6 +180,7 @@ import { cn } from "#/lib/utils";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 import { worldTrunk } from "#/targeting/world";
+import { Press } from "#/components/lang/press";
 
 export function FamilyWorkspace({
   store,
@@ -697,7 +699,7 @@ export function FamilyWorkspace({
         .join(" · ");
       return (
         <span className="flex h-7 items-center justify-center">
-          <button
+          <Press
             type="button"
             onClick={() => locate(open[0]!)}
             aria-label={`locate ${open.length} proposal(s) on ${row.name}`}
@@ -716,7 +718,7 @@ export function FamilyWorkspace({
             )}
           >
             {open.length > 1 ? open.length : null}
-          </button>
+          </Press>
         </span>
       );
     },
@@ -751,15 +753,16 @@ export function FamilyWorkspace({
         const dim = world.geomBySlug.get(slug)?.dims.find((entry) => entry.property === property);
         return (
           <span className="flex h-7 min-w-0 items-center px-1.5">
-            <button
+            <Press
               type="button"
               onClick={() => setInspect({ kind: "part", slug })}
-              title={`${slug}.${property} — a bindable ${row.dataType} dimension that NO parameter drives. ${dim?.note ?? ""} It is ${literal} for every type of this family, forever: no type can differ, no schedule can read it, no formula can reach it. Its value is the ONE merged cell to the right, spanning every type column, because there is exactly one of it. Click to open ${slug} in the inspector; use "bind…" in the state column to give it a parameter.`}
+              // Row-specific facts only; what a geom row IS lives on the table's HelpTip.
+              title={`${slug}.${property} — a bindable ${row.dataType} dimension that no parameter drives; it is ${literal} for every type. ${dim?.note ?? ""} Click to open ${slug} in the inspector.`}
               className="face-mono block w-full truncate text-left t-caption italic leading-[12px] text-ink-mute hover:text-ink"
             >
               {row.name}
               <span className="ml-1 not-italic t-caption text-caution">geom</span>
-            </button>
+            </Press>
           </span>
         );
       }
@@ -798,14 +801,14 @@ export function FamilyWorkspace({
               {row.kind === "live-only" ? (
                 <span className="text-ink-2">{row.name}</span>
               ) : (
-                <button
+                <Press
                   type="button"
                   onClick={() => setInspect({ kind: "param", name: row.name })}
                   title={`Open ${row.name} in the inspector below the spec — where its FAMILY-LEVEL value is edited, along with its formula, its consumers, and its citation. The type columns on this row only ever hold overrides; the value they inherit lives there.`}
                   className="hover:underline"
                 >
                   {row.name}
-                </button>
+                </Press>
               )}
               {row.isInstance && <span className="ml-1 t-caption text-ink-mute">inst</span>}
               {world.missingInRevit.has(row.name) && (
@@ -830,7 +833,7 @@ export function FamilyWorkspace({
                 )}
                 {drives.length > 0 && <span className="text-ink-mute">→ </span>}
                 {drives.map((entry, index) => (
-                  <button
+                  <Press
                     key={`${entry.slug}.${entry.property}`}
                     type="button"
                     onMouseDown={(event) => event.preventDefault()}
@@ -840,7 +843,7 @@ export function FamilyWorkspace({
                   >
                     {index > 0 && <span className="text-ink-mute">, </span>}
                     {entry.slug}.{entry.property}
-                  </button>
+                  </Press>
                 ))}
               </span>
             )}
@@ -866,7 +869,7 @@ export function FamilyWorkspace({
        ladder's selection rung, so the law cannot be broken here by accident. */
     headerClassName: options.header && stageType === typeName ? "bg-select" : undefined,
     header: options.header ? (
-      <button
+      <Press
         type="button"
         onClick={() => {
           setStageType(typeName);
@@ -880,7 +883,7 @@ export function FamilyWorkspace({
         className="face-mono t-label block w-full text-left text-ink-2 hover:text-ink"
       >
         {typeName} <span className="opacity-60">⤢</span>
-      </button>
+      </Press>
     ) : undefined,
     title: `What "${typeName}" overrides in the DRAFT. An empty cell INHERITS — the family value shows through as the grey placeholder, which is the only place the family level appears now that it has no column of its own. Typing creates the override; clearing hands the type back to the family. Under the ⇄ live and ⇄ saved overlays this same column shows Revit's number and the disk's number instead, read-only, in place.`,
     cell: (row) => {
@@ -1191,7 +1194,8 @@ export function FamilyWorkspace({
           autoFocus
           value=""
           aria-label={`bind ${slug}.${property}`}
-          title={`Give ${slug}.${property} a parameter. Binding to an EXISTING parameter DISCARDS the ${literal} literal and the dim starts reading that row instead — check the row says what you want before you pick. Binding to a NEW parameter KEEPS ${literal} as that parameter's family value, so the geometry does not move at all and only its reachability changes.`}
+          // The two choices' consequences are stated once, on the table's HelpTip.
+          title={`Give ${slug}.${property} a parameter — an existing one discards the ${literal} literal, a new one keeps ${literal} as its family value.`}
           onChange={(event) => {
             const choice = event.target.value;
             if (choice === "") setBinding(null);
@@ -1479,7 +1483,7 @@ export function FamilyWorkspace({
       tableState={tableState}
       onTableStateChange={setTableState}
       summary={
-        <span title="Read left to right: how much of this profile the spec backs, what pea still wants, how many geometry dimensions nothing can reach, how many cells save would write, and where Revit disagrees. The one alarm is spent on drift and nothing else; unbound and unsaved wear caution, because a gap and a pending write are warnings rather than conflicts.">
+        <span>
           {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
           {world.typeNames.length} types ·{" "}
           <span className={ghostCount > 0 ? "text-caution" : undefined}>{ghostCount} unbound</span>{" "}
@@ -1490,7 +1494,31 @@ export function FamilyWorkspace({
           ·{" "}
           <span className={driftCells.length > 0 ? "text-alarm" : undefined}>
             {driftCells.length} drift
-          </span>
+          </span>{" "}
+          {/* Region orientation: how to read the counts, what an unbound geom row is, and what
+              each of the two bind choices does. Every ghost row's title defers to this. */}
+          <HelpTip>
+            <p>
+              Read left to right: how much of this profile the spec backs, what pea still wants, how
+              many geometry dimensions nothing can reach, how many cells save would write, and where
+              Revit disagrees. The one alarm is spent on drift and nothing else; unbound and unsaved
+              wear caution, because a gap and a pending write are warnings rather than conflicts.
+            </p>
+            <p className="mt-1.5">
+              An <b>unbound</b> row (marked <i>geom</i>) is a bindable dimension that NO parameter
+              drives. Its literal is the same for every type of this family, forever: no type can
+              differ, no schedule can read it, no formula can reach it. That is why its value sits
+              in the ONE merged cell spanning every type column — because there is exactly one of
+              it. Clicking its name opens the constituent in the inspector.
+            </p>
+            <p className="mt-1.5">
+              Binding one (<i>bind…</i> in the state column) is a choice of two. Binding to an{" "}
+              <b>existing</b> parameter DISCARDS the literal and the dimension starts reading that
+              row instead — check the row says what you want before you pick. Binding to a{" "}
+              <b>new</b> parameter KEEPS the literal as that parameter&rsquo;s family value, so the
+              geometry does not move at all and only its reachability changes.
+            </p>
+          </HelpTip>
         </span>
       }
       empty={
@@ -1761,11 +1789,14 @@ export function FamilyWorkspace({
       </p>
 
       <div className="mb-2 rounded-[2px] border border-line p-1.5">
-        <p
-          className="face-mono mb-1 t-caption text-ink-2"
-          title="The constituent's bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE LIVES rather than as a second place to work. A bound dim names the parameter that represents it in the table; an unbound one carries its literal and the very same bind verb its ghost row carries."
-        >
+        <p className="face-mono mb-1 flex items-center gap-1 t-caption text-ink-2">
           bindable dims — represented in the table
+          <HelpTip>
+            The constituent&rsquo;s bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE
+            LIVES rather than as a second place to work. A bound dim names the parameter that
+            represents it in the table; an unbound one carries its literal and the very same bind
+            verb its ghost row carries.
+          </HelpTip>
         </p>
         {part.dims.map((dim) => {
           const bound = boundParam(bindingOf(world, draft, part.slug, dim.property));
@@ -1778,7 +1809,7 @@ export function FamilyWorkspace({
                 {dim.property}
               </span>
               {bound != null ? (
-                <button
+                <Press
                   type="button"
                   onClick={() => {
                     setInspect({ kind: "param", name: bound });
@@ -1788,7 +1819,7 @@ export function FamilyWorkspace({
                   className="face-mono min-w-0 flex-1 truncate text-left t-caption text-ink hover:underline"
                 >
                   {bound}
-                </button>
+                </Press>
               ) : (
                 <>
                   <span className="min-w-0 flex-1">
@@ -1848,11 +1879,14 @@ export function FamilyWorkspace({
         </p>
 
         <div className="mb-2 rounded-[2px] border border-line p-1.5">
-          <p
-            className="face-mono mb-1 t-caption text-ink-2"
-            title="THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows it only as the grey placeholder in each type cell, and a placeholder is not an editor; this is where it is actually authored. Type an expression beginning with = to make it a formula instead, which locks every type column on the row."
-          >
+          <p className="face-mono mb-1 flex items-center gap-1 t-caption text-ink-2">
             family value {isFormula(authored) ? "· formula" : ""}
+            <HelpTip>
+              THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows
+              it only as the grey placeholder in each type cell, and a placeholder is not an editor;
+              this is where it is actually authored. Type an expression beginning with = to make it
+              a formula instead, which locks every type column on the row.
+            </HelpTip>
           </p>
           {/* THE FAMILY-LEVEL VALUE CELL, on the editable `StateCell` (R8, families #6): pea's
               open family-level proposal takes the body (fold + wash), your unwritten edit takes
@@ -1900,7 +1934,7 @@ export function FamilyWorkspace({
             </EmptyState>
           ) : (
             drives.map((entry) => (
-              <button
+              <Press
                 key={`${entry.slug}.${entry.property}`}
                 type="button"
                 onClick={() => setInspect({ kind: "part", slug: entry.slug })}
@@ -1908,7 +1942,7 @@ export function FamilyWorkspace({
                 className="face-mono block w-full truncate text-left t-caption text-ink hover:underline"
               >
                 → {entry.slug}.{entry.property}
-              </button>
+              </Press>
             ))
           )}
         </div>

@@ -47,6 +47,7 @@ import {
   useComboboxAnchor,
 } from "#/components/ui/combobox";
 import { cn } from "#/lib/utils";
+import { Press } from "#/components/lang/press";
 
 export interface MasterTableProps<Row extends RowData> {
   rows: readonly Row[];
@@ -439,14 +440,14 @@ export function MasterTable<Row extends RowData>({
           />
         ))}
         {activeFilters.length > 0 && (
-          <button
+          <Press
             type="button"
             onClick={() => updateState((state) => ({ ...state, filters: {} }))}
             title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
             className="t-label rounded-sm px-1 text-ink-2 hover:veil"
           >
             clear column filters
-          </button>
+          </Press>
         )}
       </div>
 
@@ -713,7 +714,7 @@ function LeafHeader<Row>({
       )}
     >
       {column.sort ? (
-        <button
+        <Press
           type="button"
           onClick={(event) => onSort(event.shiftKey)}
           title="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
@@ -726,7 +727,7 @@ function LeafHeader<Row>({
               {sortCount > 1 && <span className="opacity-60">{rank + 1}</span>}
             </span>
           )}
-        </button>
+        </Press>
       ) : (
         <span className="t-caption t-upper block text-ink-2">{column.header ?? column.label}</span>
       )}

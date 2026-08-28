@@ -13,6 +13,7 @@ import { Textarea } from "#/components/ui/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
 import { selectSkillCommands } from "#/workbench/chat-state";
 import type { Mode } from "#/workbench/depth";
+import { Press } from "#/components/lang/press";
 
 interface SlashCommand {
   name: string;
@@ -144,7 +145,7 @@ export function Composer({
           className="absolute bottom-full mb-2 w-full overflow-hidden rounded-sm border-[0.5px] border-line-2 on-artifact"
         >
           {matches.slice(0, 6).map((command) => (
-            <button
+            <Press
               key={`${command.kind}:${command.name}`}
               type="button"
               onClick={() => pick(command)}
@@ -153,7 +154,7 @@ export function Composer({
               {/* a slash command is a machine identifier — mono */}
               <span className="t-value face-mono text-ink">/{command.name}</span>
               <span className="truncate t-label text-ink-2">{command.description}</span>
-            </button>
+            </Press>
           ))}
         </div>
       ) : null}
@@ -173,7 +174,7 @@ export function Composer({
                 className="inline-flex items-center gap-1 rounded-sm border-[0.5px] border-line bg-recess px-2 py-0.5 t-label text-ink-2"
               >
                 {attachment.name ?? "attachment"}
-                <button
+                <Press
                   type="button"
                   title="Remove"
                   onClick={() =>
@@ -183,7 +184,7 @@ export function Composer({
                   }
                 >
                   <X className="size-3" />
-                </button>
+                </Press>
               </span>
             ))}
           </div>

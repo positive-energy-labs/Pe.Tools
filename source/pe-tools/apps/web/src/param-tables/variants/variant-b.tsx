@@ -42,6 +42,7 @@ import {
   PARAM_META,
   type FcRow,
 } from "#/param-tables/variants/fixture";
+import { Press } from "#/components/lang/press";
 
 // ---------------------------------------------------------------------------
 // Domain: the far side (types × tags) and the binding definitions
@@ -533,7 +534,7 @@ export function VariantB() {
                   >
                     {/* LANG GAP: gutter binding marker — §4's gutter-marker law has no
                         canon component; a raw ⇄ button carries locate + count here. */}
-                    <button
+                    <Press
                       type="button"
                       className="w-9 shrink-0 text-left font-mono t-caption"
                       style={{ color: token("nav") }}
@@ -541,7 +542,7 @@ export function VariantB() {
                       onClick={() => setSelected(isSel ? null : def.id)}
                     >
                       ⇄ {def.addr.split("!")[1]}
-                    </button>
+                    </Press>
                     <span className="min-w-0 flex-1 truncate text-xs">{def.label}</span>
                     {boundCell(def)}
                     <span className="w-5 t-caption" style={{ color: token("ink-mute") }}>
@@ -562,7 +563,7 @@ export function VariantB() {
                     : undefined
                 }
               >
-                <button
+                <Press
                   type="button"
                   className="w-9 shrink-0 text-left font-mono t-caption"
                   style={{ color: token("nav") }}
@@ -570,7 +571,7 @@ export function VariantB() {
                   onClick={() => setSelected(selected === IN_DEF.id ? null : IN_DEF.id)}
                 >
                   ⇄ {IN_DEF.addr.split("!")[1]}
-                </button>
+                </Press>
                 <span className="min-w-0 flex-1 truncate text-xs">{IN_DEF.label}</span>
                 <StateCell
                   scale="row"

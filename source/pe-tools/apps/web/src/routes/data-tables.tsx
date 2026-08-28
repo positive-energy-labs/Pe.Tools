@@ -20,6 +20,7 @@ import { appAtomRegistry } from "#/state/registry";
 import { createRouteStoreCore, fail } from "#/state/route-store";
 import { useRouteStore } from "#/state/use-route-store";
 import { VerbLane } from "#/components/verb-lane";
+import { Press } from "#/components/lang/press";
 
 /**
  * /data-tables — author synthetic data tables (revit.apply.schedule table lane).
@@ -327,7 +328,7 @@ function DraftEditor({
                       <option value="Text">txt</option>
                       <option value="Number">num</option>
                     </select>
-                    <button
+                    <Press
                       type="button"
                       title={
                         draft.columns.length === 1
@@ -339,7 +340,7 @@ function DraftEditor({
                       onClick={() => removeColumn(columnIndex)}
                     >
                       <Trash2 className="size-3" />
-                    </button>
+                    </Press>
                   </div>
                 </th>
               ))}
@@ -377,14 +378,14 @@ function DraftEditor({
                   </td>
                 ))}
                 <td className="border-b border-l border-line px-1 text-center">
-                  <button
+                  <Press
                     type="button"
                     title="Remove this row — it is deleted in Revit on apply"
                     className="text-ink-2 hover:text-ink"
                     onClick={() => removeRow(rowIndex)}
                   >
                     <Trash2 className="size-3" />
-                  </button>
+                  </Press>
                 </td>
               </tr>
             ))}

@@ -22,6 +22,7 @@ import {
   type Runner,
 } from "#/targeting/kit";
 import { targets, type Link, type Product, type Verb } from "#/targeting/model";
+import { Press } from "#/components/lang/press";
 
 function Demand<K extends string>({
   product,
@@ -128,7 +129,7 @@ export function TargetingHead<K extends string>({
   };
 
   const expandToggle = (
-    <button
+    <Press
       type="button"
       onClick={() => setExpanded((x) => !x)}
       aria-expanded={expanded}
@@ -141,7 +142,7 @@ export function TargetingHead<K extends string>({
       style={{ borderLeft: `1px solid ${token("line-2")}`, color: token("ink-2") }}
     >
       {expanded ? "▴" : "▾"}
-    </button>
+    </Press>
   );
 
   const line = (

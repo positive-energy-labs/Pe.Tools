@@ -45,6 +45,7 @@ import {
 } from "#/host/loaded-families-view";
 import { HOST_QUERY_KEY, useHostStatusQuery, useLoadedFamiliesMatrixQuery } from "#/host/queries";
 import { cn } from "#/lib/utils";
+import { Press } from "#/components/lang/press";
 
 type FfFamilyPlan = FfPlanEntry;
 type FfReconciliationPlan = FfPlanEntry["plan"];
@@ -515,7 +516,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         facet: (row) => (pickedIds.has(row.familyId) ? "picked" : ""),
         all: "any",
         cell: (row) => (
-          <button
+          <Press
             type="button"
             title={
               pickedIds.has(row.familyId)
@@ -533,7 +534,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
             className="face-mono t-value h-7 w-full px-1.5 text-left text-ink-2 hover:text-ink"
           >
             {pickedIds.has(row.familyId) ? "▪" : "□"}
-          </button>
+          </Press>
         ),
       },
       {
@@ -828,7 +829,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                 return (
                   <tr key={entry.familyId} className="border-b border-line">
                     <td className="w-8 py-0.5">
-                      <button
+                      <Press
                         type="button"
                         disabled={flag !== null}
                         title={
@@ -842,7 +843,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                         className="face-mono t-value text-ink-2 hover:text-ink disabled:cursor-not-allowed"
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
-                      </button>
+                      </Press>
                     </td>
                     <td className="face-mono py-0.5 t-label">{entry.familyName}</td>
                     <td

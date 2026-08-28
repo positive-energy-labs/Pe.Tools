@@ -5,6 +5,7 @@
 import { useEffect } from "react";
 
 import { token } from "#/lib/token";
+import { Press } from "#/components/lang/press";
 
 export function VariantSwitcher({
   variants,
@@ -57,7 +58,7 @@ export function VariantSwitcher({
         boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
       }}
     >
-      <button
+      <Press
         type="button"
         onClick={() => go(-1)}
         style={{
@@ -69,11 +70,11 @@ export function VariantSwitcher({
         }}
       >
         ←
-      </button>
+      </Press>
       <span>
         PROTO {current.toUpperCase()} — {variants[idx]?.name ?? "?"} ({idx + 1}/{variants.length})
       </span>
-      <button
+      <Press
         type="button"
         onClick={() => go(1)}
         style={{
@@ -85,7 +86,7 @@ export function VariantSwitcher({
         }}
       >
         →
-      </button>
+      </Press>
     </div>
   );
 }

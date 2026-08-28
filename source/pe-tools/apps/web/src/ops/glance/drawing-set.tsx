@@ -8,6 +8,7 @@ import { VizChip } from "#/ops/primitives";
 import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 import { SheetCanvas } from "#/ops/views-detail";
+import { Press } from "#/components/lang/press";
 
 /**
  * glance.drawing-set — the wall of sheets an architect pins up. The full sheet
@@ -111,7 +112,7 @@ function Thumbnail({
   onSelect: () => void;
 }) {
   return (
-    <button
+    <Press
       type="button"
       onClick={onSelect}
       className={`flex min-w-0 flex-col gap-1 rounded-sm border p-1.5 text-left hover:veil ${selected ? "border-line-2" : "border-line"}`}
@@ -130,7 +131,7 @@ function Thumbnail({
       {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
       <span className="face-mono t-caption truncate">{sheet.sheetNumber}</span>
       {entry && <span className="t-label truncate text-ink-2">{sheet.sheetName}</span>}
-    </button>
+    </Press>
   );
 }
 

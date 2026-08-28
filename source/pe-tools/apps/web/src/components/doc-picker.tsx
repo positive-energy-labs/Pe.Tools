@@ -1,4 +1,5 @@
 import { token } from "#/lib/token";
+import { Press } from "#/components/lang/press";
 /**
  * DocPicker rows — the one visual vocabulary for picking a document, shared by every
  * mount (the sentence's doc slot, the .rvt/.rfa chips). The look is the poc/chip-a
@@ -50,7 +51,7 @@ export function DocRow({
   onPick: () => void;
 }) {
   return (
-    <button
+    <Press
       type="button"
       disabled={disabled}
       onClick={onPick}
@@ -82,6 +83,6 @@ export function DocRow({
         ) : null}
       </span>
       {selected ? <span className="t-caption face-mono shrink-0 text-ink">◉</span> : null}
-    </button>
+    </Press>
   );
 }

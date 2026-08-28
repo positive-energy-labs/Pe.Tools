@@ -37,6 +37,7 @@ import {
   type Stage,
   type Verb,
 } from "#/targeting/model";
+import { Press } from "#/components/lang/press";
 
 const DIR_GLYPH: Record<Dir, string> = { read: "←", write: "→", sync: "⇄", duplex: "⇆" };
 
@@ -365,7 +366,7 @@ export function Picker<K extends string>({
   return (
     <span ref={ref} className="relative inline-flex items-baseline">
       <style>{PULSE_CSS}</style>
-      <button
+      <Press
         type="button"
         onClick={() => {
           if (!open) setLevel(link.key);
@@ -385,7 +386,7 @@ export function Picker<K extends string>({
         }}
       >
         {link.dir ? `${DIR_GLYPH[link.dir]} ${closedText}` : closedText}
-      </button>
+      </Press>
       {open ? (
         <span className="absolute left-0 top-full z-40 mt-1 block overflow-hidden" style={POP}>
           {/* crumbs — the trunk, one segment per level; the current level is underlined */}
@@ -403,7 +404,7 @@ export function Picker<K extends string>({
                       ›
                     </span>
                   ) : null}
-                  <button
+                  <Press
                     type="button"
                     onClick={() => (setLevel(l.key), setQ(""))}
                     className="face-mono t-caption"
@@ -415,7 +416,7 @@ export function Picker<K extends string>({
                     }}
                   >
                     {lab ?? l.placeholder}
-                  </button>
+                  </Press>
                 </span>
               );
             })}
@@ -466,7 +467,7 @@ export function Picker<K extends string>({
               hits.map((o) => {
                 const on = b.isPicked(cur, o.id);
                 return (
-                  <button
+                  <Press
                     key={o.id}
                     type="button"
                     onClick={() => {
@@ -487,7 +488,7 @@ export function Picker<K extends string>({
                         {o.sub}
                       </span>
                     ) : null}
-                  </button>
+                  </Press>
                 );
               })
             )}
@@ -500,7 +501,7 @@ export function Picker<K extends string>({
                   {b.labelOf(cur)} › {below!.key}
                 </div>
                 {belowHits.map((o) => (
-                  <button
+                  <Press
                     key={`below:${o.id}`}
                     type="button"
                     onClick={() => {
@@ -526,7 +527,7 @@ export function Picker<K extends string>({
                         {o.sub}
                       </span>
                     ) : null}
-                  </button>
+                  </Press>
                 ))}
               </>
             ) : null}
@@ -567,7 +568,7 @@ export function StageStrip<K extends string>({
         const ready = s.verbs.filter((v) => runner.canRun(v).ok).length;
         const on = b.stage.key === s.key;
         return (
-          <button
+          <Press
             key={s.key}
             type="button"
             role="tab"
@@ -598,7 +599,7 @@ export function StageStrip<K extends string>({
                 {ready}/{s.verbs.length}
               </span>
             ) : null}
-          </button>
+          </Press>
         );
       })}
       <span className="flex-1" />
@@ -623,7 +624,7 @@ export function PaneStrip<K extends string>({
       {product.panes.map((p) => {
         const st = paneState(product, p, b);
         return (
-          <button
+          <Press
             type="button"
             key={p.key}
             title={st.reason}
@@ -640,7 +641,7 @@ export function PaneStrip<K extends string>({
             }}
           >
             {p.label}
-          </button>
+          </Press>
         );
       })}
     </span>

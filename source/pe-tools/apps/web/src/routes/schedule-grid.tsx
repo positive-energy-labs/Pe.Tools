@@ -24,6 +24,7 @@ import { ValueDiff } from "#/components/ui/value-diff";
 import { VerbLane } from "#/components/verb-lane";
 import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
+import { Press } from "#/components/lang/press";
 
 /**
  * /schedule-grid — a web surface for editing any Revit schedule collaboratively. The rail
@@ -522,7 +523,7 @@ function PendingStrip({
               key={key}
               className="flex items-center gap-3 border-b border-line px-3 py-1 last:border-b-0"
             >
-              <button
+              <Press
                 type="button"
                 className="flex min-w-0 shrink-0 items-baseline gap-1.5 rounded-sm px-0.5 text-left hover:veil"
                 title="Highlight this cell's row in the grid and scroll it into view."
@@ -532,7 +533,7 @@ function PendingStrip({
                   {columnHeader(columnNumber)}
                 </span>
                 <span className="face-mono t-caption text-ink-2">r{rowNumber}</span>
-              </button>
+              </Press>
               <ValueDiff
                 from={currentText(key)}
                 to={next}

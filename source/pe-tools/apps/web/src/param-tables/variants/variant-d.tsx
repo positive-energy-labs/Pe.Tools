@@ -41,6 +41,7 @@ import {
   PARAM_META,
   type FcRow,
 } from "#/param-tables/variants/fixture";
+import { Press } from "#/components/lang/press";
 
 // ---------------------------------------------------------------------------
 // Static shape derived from the fixture (no invented data)
@@ -322,7 +323,7 @@ export function VariantD() {
     const st = staged[k];
     const hot = selected === k;
     return (
-      <button
+      <Press
         type="button"
         onClick={() => toggleSelect(k)}
         className="inline-flex items-baseline gap-1 rounded-none px-1 text-left font-mono text-xs"
@@ -347,7 +348,7 @@ export function VariantD() {
           <span>{factDisplay(k)}</span>
         )}
         {f.unit != null ? <span style={MUTE}>{f.unit}</span> : null}
-      </button>
+      </Press>
     );
   };
 

@@ -5,6 +5,7 @@ import { addressSchema, type Address } from "@pe/agent-contracts";
 import { EmptyState } from "#/components/lang/empty";
 import { useFleet } from "#/host/fleet";
 import { documentAddress, type SessionFacts } from "#/host/target";
+import { Press } from "#/components/lang/press";
 
 export interface RouteDocumentChoice {
   at: Address;
@@ -115,14 +116,14 @@ export function RouteDocumentPicker({
     <div className="grid gap-2">
       <p className="t-label text-ink-2">pick a document</p>
       {choices.map((choice) => (
-        <button
+        <Press
           key={choice.at}
           type="button"
           className="rounded-sm border border-line px-3 py-2 text-left t-value text-ink hover:veil"
           onClick={() => onPick(choice.at)}
         >
           {choice.label}
-        </button>
+        </Press>
       ))}
     </div>
   );

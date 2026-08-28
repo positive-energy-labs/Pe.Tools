@@ -29,6 +29,7 @@ import {
   type SlotKind,
 } from "#/family-review/proto-editor/model";
 import type { FamilyModel } from "#/family/family-model";
+import { Press } from "#/components/lang/press";
 
 // ── the edit channel ────────────────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,7 @@ export function StatePanel({
           <ul className="mt-1 space-y-0.5">
             {staged.map((change) => (
               <li key={change.path}>
-                <button
+                <Press
                   type="button"
                   onClick={() => editor.setFocus(change.path)}
                   title={`Show ${change.path} in the json pane`}
@@ -175,7 +176,7 @@ export function StatePanel({
                   </span>
                   <span className="text-ink-mute"> {change.before ?? "∅"} → </span>
                   <span className="text-ink">{change.after ?? "∅"}</span>
-                </button>
+                </Press>
               </li>
             ))}
           </ul>
@@ -245,7 +246,7 @@ export function RefToken({
 
   return (
     <span className="relative inline-block">
-      <button
+      <Press
         type="button"
         title={title}
         onClick={() => setOpen((prev) => !prev)}
@@ -262,10 +263,10 @@ export function RefToken({
         }}
       >
         {bound ? value : "— pick —"}
-      </button>
+      </Press>
       {open ? (
         <>
-          <button
+          <Press
             type="button"
             aria-label="close picker"
             onClick={() => setOpen(false)}
@@ -286,7 +287,7 @@ export function RefToken({
               </p>
             ) : (
               options.map((option) => (
-                <button
+                <Press
                   key={option}
                   type="button"
                   onClick={() => {
@@ -305,7 +306,7 @@ export function RefToken({
                   <span className="text-ink-mute">
                     {nodeValue(editor.model, editor.typeName, option) ?? ""}
                   </span>
-                </button>
+                </Press>
               ))
             )}
           </div>
@@ -362,7 +363,7 @@ export function TypeStage({ editor }: { editor: Editor }) {
     <span className="flex items-baseline gap-1">
       <span className="t-caption text-ink-mute">type</span>
       {Object.keys(editor.model.types).map((name) => (
-        <button
+        <Press
           key={name}
           type="button"
           title={`Resolve every value on this surface for the ${name} type`}
@@ -377,7 +378,7 @@ export function TypeStage({ editor }: { editor: Editor }) {
           }}
         >
           {name}
-        </button>
+        </Press>
       ))}
     </span>
   );

@@ -10,6 +10,7 @@ import type { Column } from "#/components/master-table/model";
 
 import type { Grille, GrilleInput } from "./math";
 import { SHEET_ROWS, frac, pct, solve } from "./math";
+import { Press } from "#/components/lang/press";
 
 export type SheetRow = Grille & { id: string };
 
@@ -156,9 +157,9 @@ export function Sheet({
           : null
       }
       summary={
-        <button type="button" className="face-mono t-label text-nav" onClick={add}>
+        <Press type="button" className="face-mono t-label text-ink-2 hover:text-ink" onClick={add}>
           + profile
-        </button>
+        </Press>
       }
     />
   );

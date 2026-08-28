@@ -42,6 +42,7 @@ import {
   FOM_HWCH_PLANT,
   PARAM_META,
 } from "#/param-tables/variants/fixture";
+import { Press } from "#/components/lang/press";
 
 // ---------------------------------------------------------------------------
 // Derived world — everything computed from the fixture, nothing remembered.
@@ -266,7 +267,7 @@ export function VariantC() {
         />
       );
     return (
-      <button
+      <Press
         type="button"
         className="ptc-live"
         data-unsaved={edited[k] ? "" : undefined}
@@ -276,12 +277,12 @@ export function VariantC() {
       >
         {fmtNum(authored[k])}
         <sup className="ptc-mark-out">{BINDINGS[k].mark}</sup>
-      </button>
+      </Press>
     );
   };
 
   const SourcedValue = ({ k, children }: { k: SourceKey; children: React.ReactNode }) => (
-    <button
+    <Press
       type="button"
       className="ptc-sourced"
       title={`Sourced from the model: ${SOURCES[k].says}. Click to see the derivation.`}
@@ -289,7 +290,7 @@ export function VariantC() {
     >
       {children}
       <sup className="ptc-mark-in">{SOURCES[k].mark}</sup>
-    </button>
+    </Press>
   );
 
   return (

@@ -63,6 +63,7 @@ import {
   type WorldZone,
 } from "#/takeoff/world";
 import { cn } from "#/lib/utils";
+import { Press } from "#/components/lang/press";
 
 export type Verdict = "accept" | "dismiss";
 
@@ -821,7 +822,7 @@ export function Atlas({ store }: AtlasProps) {
                   {stageCounts.map(({ stage, n }, i) => {
                     const on = stageFilter === stage;
                     return (
-                      <button
+                      <Press
                         key={stage}
                         type="button"
                         title={STAGE_BLURB[stage]}
@@ -845,18 +846,18 @@ export function Atlas({ store }: AtlasProps) {
                           {stage}
                         </span>
                         <span className="face-mono t-value tabular-nums text-ink-2">{n}</span>
-                      </button>
+                      </Press>
                     );
                   })}
                 </div>
                 {stageFilter && (
-                  <button
+                  <Press
                     type="button"
                     className="t-caption mt-1 text-ink-2 hover:text-ink"
                     onClick={() => setStageFilter(null)}
                   >
                     clear filter — show all {world.zones.length}
-                  </button>
+                  </Press>
                 )}
               </div>
 
@@ -878,7 +879,7 @@ export function Atlas({ store }: AtlasProps) {
                           const off = !onPlan(z);
                           return (
                             <li key={z.zone.key}>
-                              <button
+                              <Press
                                 type="button"
                                 onClick={() => selectZone(on ? null : z)}
                                 title={
@@ -907,7 +908,7 @@ export function Atlas({ store }: AtlasProps) {
                                   </FactChip>
                                 )}
                                 <ZoneStateBar zone={z} states={states} />
-                              </button>
+                              </Press>
                             </li>
                           );
                         })}
@@ -929,7 +930,7 @@ export function Atlas({ store }: AtlasProps) {
                     const zs = world.zones.filter((z) => z.zone.lane.label === lane.label);
                     const calls = zs.reduce((n, z) => n + zoneCalls(z), 0);
                     return (
-                      <button
+                      <Press
                         key={lane.label}
                         type="button"
                         onClick={() => setLevel(lane.label)}
@@ -944,11 +945,11 @@ export function Atlas({ store }: AtlasProps) {
                         {lane.label}
                         <span className="ml-1 opacity-60">{zs.length}</span>
                         {calls > 0 && <span className="ml-1 text-alarm">·{calls}</span>}
-                      </button>
+                      </Press>
                     );
                   })}
 
-                  <button
+                  <Press
                     type="button"
                     onClick={() => setStatsOpen(!statsOpen)}
                     title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
@@ -958,8 +959,8 @@ export function Atlas({ store }: AtlasProps) {
                     )}
                   >
                     level stats
-                  </button>
-                  <button
+                  </Press>
+                  <Press
                     type="button"
                     onClick={() => setPlanOpen(!planOpen)}
                     title={
@@ -970,7 +971,7 @@ export function Atlas({ store }: AtlasProps) {
                     className="face-mono t-value rounded-sm border border-line-2 px-1.5 py-0.5 text-ink-2 hover:bg-recess"
                   >
                     {planOpen ? "▴ hide plan" : "▾ show plan"}
-                  </button>
+                  </Press>
 
                   <span className="face-mono t-value ml-auto text-ink-2">
                     {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc
@@ -1063,7 +1064,7 @@ export function Atlas({ store }: AtlasProps) {
                         {/* The fields-mode control lives HERE, not in the room panel — the panel
                           vanishes with the cursor, and a mode's off-switch must not vanish
                           with it. */}
-                        <button
+                        <Press
                           type="button"
                           onClick={() =>
                             store.actions.setAtlasPage({
@@ -1078,7 +1079,7 @@ export function Atlas({ store }: AtlasProps) {
                           className="ml-2 rounded-sm border border-line-2 px-1.5 py-px text-ink-2 hover:bg-recess"
                         >
                           fields: {fieldsMode}
-                        </button>
+                        </Press>
                       </>
                     }
                     empty={
@@ -1415,13 +1416,13 @@ function LevelStats({
     <div className="absolute top-2 right-2 z-20 w-64 rounded-sm border border-line bg-page/95 px-2 py-1.5 shadow-sm backdrop-blur">
       <div className="mb-1 flex items-baseline gap-1.5">
         <span className="t-label t-upper text-ink-2">{level} — level totals</span>
-        <button
+        <Press
           type="button"
           onClick={onClose}
           className="face-mono t-value ml-auto text-ink-2 hover:text-ink"
         >
           ×
-        </button>
+        </Press>
       </div>
 
       <div className="flex h-2 w-full items-stretch gap-px overflow-hidden rounded-[1px]">
@@ -1555,14 +1556,14 @@ function ZoneCard({
         <ZoneThumb zone={zone.zone} className="size-5" />
         <span className="face-mono t-value">{zone.zone.key}</span>
         <span className="face-mono t-value min-w-0 truncate text-ink-2">{zone.name}</span>
-        <button
+        <Press
           type="button"
           onClick={onClose}
           title="deselect this zone (Esc) — the table widens back to the whole house"
           className="face-mono t-value ml-auto text-ink-2 hover:text-ink"
         >
           ×
-        </button>
+        </Press>
       </div>
 
       <ZonePeek zone={zone} cursorRoom={cursorRoom} geoReady={geoReady} stateOf={stateOf} />

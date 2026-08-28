@@ -29,6 +29,7 @@ import { token } from "#/lib/token";
 import { StateCell, type StateCellProps } from "#/components/lang/cell";
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import type { ProtoProposal } from "#/family/world";
+import { Press } from "#/components/lang/press";
 
 /**
  * The editable `StateCell`, wired to whatever cell navigation surrounds it. Inside a MasterTable
@@ -96,7 +97,7 @@ function ProposalNotch({
   onLocate: (proposal: ProtoProposal) => void;
 }) {
   return (
-    <button
+    <Press
       type="button"
       tabIndex={-1}
       // Do not take focus from the input on the way down — the notch is a pointer, not an editor.

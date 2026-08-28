@@ -33,6 +33,7 @@ import {
   type SlotKind,
 } from "#/family-review/proto-editor/model";
 import { RefToken, TextToken, type Editor } from "#/family-review/proto-editor/shell";
+import { Press } from "#/components/lang/press";
 
 const RAIL_ORDER: NodeKind[] = [
   "param",
@@ -80,7 +81,7 @@ export function ParadigmA({ editor }: { editor: Editor }) {
   const slot = node ? REANCHOR_SLOT[node.kind] : undefined;
 
   const Walk = ({ id, label }: { id: string; label: string }) => (
-    <button
+    <Press
       type="button"
       title={`Make ${id} the anchor — the same two-direction view, one step along the graph`}
       onClick={() => setAnchor(id)}
@@ -96,7 +97,7 @@ export function ParadigmA({ editor }: { editor: Editor }) {
       }}
     >
       {label}
-    </button>
+    </Press>
   );
 
   return (
@@ -288,7 +289,7 @@ function RailRow({
   onPick: () => void;
 }) {
   return (
-    <button
+    <Press
       type="button"
       title={`${node.id} — ${node.detail}`}
       onClick={onPick}
@@ -302,6 +303,6 @@ function RailRow({
     >
       <span className="face-mono t-label truncate text-ink">{node.label}</span>
       <span className="face-mono t-caption text-ink-mute">{count > 0 ? count : ""}</span>
-    </button>
+    </Press>
   );
 }

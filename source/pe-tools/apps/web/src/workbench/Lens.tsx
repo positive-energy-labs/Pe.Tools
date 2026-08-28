@@ -29,6 +29,7 @@ import {
   turnAtFocalPoint,
   type TailFollowState,
 } from "./model";
+import { Press } from "#/components/lang/press";
 
 /**
  * The unified workbench view (one layout, one scroll). Modes toggle panes over a single
@@ -571,7 +572,7 @@ export function Lens({
             <div className="cs-focal" ref={csFocalRef} />
             <div className="caret" ref={caretRef} />
             {!following && moments.length > 0 ? (
-              <button
+              <Press
                 type="button"
                 className="mapdial-tail"
                 title="Jump to latest"
@@ -580,7 +581,7 @@ export function Lens({
                 onClick={scrollToTail}
               >
                 ↓
-              </button>
+              </Press>
             ) : null}
           </div>
 
@@ -712,7 +713,7 @@ function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "tra
       {showContext && systemPrompt?.content ? (
         <ArtifactFrame
           head={
-            <button
+            <Press
               className="flex w-full cursor-pointer items-center justify-between border-0 bg-transparent p-0 t-label t-upper text-ink-2"
               type="button"
               title="Show or hide the resolved system prompt pea started with"
@@ -720,7 +721,7 @@ function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "tra
             >
               <span>System prompt{systemPrompt.source ? ` · ${systemPrompt.source}` : ""}</span>
               <span>{open ? "hide" : "show"}</span>
-            </button>
+            </Press>
           }
         >
           {open ? (

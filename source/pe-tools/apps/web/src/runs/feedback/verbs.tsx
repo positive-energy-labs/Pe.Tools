@@ -8,6 +8,8 @@ import { cn } from "#/lib/utils";
 
 import { runExport } from "./export";
 import { fb, flagLabel, type StagedItem, useFb } from "./staging";
+import { Press } from "#/components/lang/press";
+import { Verb } from "#/components/lang/verb";
 
 export function ExportVerbs(props: {
   items: StagedItem[];
@@ -16,20 +18,22 @@ export function ExportVerbs(props: {
 }) {
   const { exporting } = useFb();
   const disabled = props.items.length === 0 || exporting !== null;
-  const btn = (verb: "chat" | "sheet" | "snip", label: string, title: string, primary = false) => (
-    <button
-      type="button"
+  // A disabled commit Verb renders its reason visibly, so the refusal leads the sentence.
+  const refusal =
+    props.items.length === 0
+      ? "Nothing is staged yet — stage at least one item first. "
+      : exporting !== null
+        ? "An export is already running. "
+        : "";
+  const btn = (verb: "chat" | "sheet" | "snip", label: string, does: string, primary = false) => (
+    <Verb
+      label={label}
+      reason={refusal + does}
+      tone={primary ? "commit" : "act"}
       disabled={disabled}
+      busy={exporting === verb}
       onClick={() => void runExport(verb, props.items, props.pool)}
-      title={title}
-      className={cn(
-        "tele border px-2 py-0.5 text-[11px] disabled:opacity-40",
-        primary ? "border-transparent bg-commit text-on-commit" : "text-ink-2 hover:text-ink",
-      )}
-      style={{ borderColor: primary ? undefined : token("line-2"), borderRadius: 2 }}
-    >
-      {exporting === verb ? "…" : label}
-    </button>
+    />
   );
   return (
     <div className={cn("flex items-center gap-1.5", props.compact && "gap-1")}>
@@ -119,7 +123,7 @@ export function FlagChips(props: { item: StagedItem }) {
   return (
     <span className="flex flex-wrap gap-1">
       {props.item.flags.map((el) => (
-        <button
+        <Press
           key={el}
           type="button"
           onClick={() => fb.toggleFlag(props.item.key, el)}
@@ -130,7 +134,7 @@ export function FlagChips(props: { item: StagedItem }) {
           style={{ borderColor: token("alarm"), color: token("alarm"), borderRadius: 2 }}
         >
           ⚑ {flagLabel(el)} ✕
-        </button>
+        </Press>
       ))}
     </span>
   );

@@ -39,6 +39,7 @@ import {
   PARAM_META,
 } from "#/param-tables/variants/fixture";
 import type { FcRow, ParamMeta } from "#/param-tables/variants/fixture";
+import { Press } from "#/components/lang/press";
 
 // ─── the cell model ─────────────────────────────────────────────────────────
 // A link is a PROPERTY OF A CELL — one optional field, not a schema column.
@@ -423,7 +424,7 @@ export function VariantA() {
         ·
       </span>
       {TABLES.map((tb) => (
-        <button
+        <Press
           key={tb.key}
           type="button"
           className="face-mono t-label"
@@ -445,7 +446,7 @@ export function VariantA() {
           }}
         >
           {tb.name}
-        </button>
+        </Press>
       ))}
     </span>
   );

@@ -476,14 +476,28 @@
    "selection and focus are a fill" applied to controls. Disabled takes neither. Tone-specific
    hovers (nav's underline above) may ADD, never replace. */
 .dl-verb:enabled:hover,
+.dl-press:enabled:hover,
 .dl-chip-x:enabled:hover {
   background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
 }
 .dl-verb:focus-visible,
+.dl-press:focus-visible,
 .dl-chip-x:focus-visible {
   background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
   outline: 1px solid var(--pe-line-2);
   outline-offset: 0;
+}
+
+/* PRESS - press.tsx - the neutral machinery control. It draws no layout on purpose: the
+   call site owns padding, ground and type, and this class owns only what EVERY control in the
+   language owes: the hover law above, the focus ring above, and an honest cursor. No tone
+   lives here; a control that has earned a tone is a `Verb`. */
+.dl-press {
+  appearance: none;
+  cursor: pointer;
+}
+.dl-press:disabled {
+  cursor: not-allowed;
 }
 
 /* ── CHIPS · chip.tsx ──────────────────────────────────────────────────────────────────────

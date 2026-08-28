@@ -95,6 +95,7 @@ import {
   type ZoneViewport,
   zoneViewport,
 } from "./world";
+import { Press } from "#/components/lang/press";
 
 // Palette lives in ./palette — shared with the export compositor so the PNGs an agent reads
 // match the screen (round-1 friction #1 resolved). UNKNOWN_STROKE/UNKNOWN_FILL live there too:
@@ -653,7 +654,7 @@ function StageButton(props: {
   return (
     <>
       {otherPairs.length > 0 && (
-        <button
+        <Press
           type="button"
           onClick={() => props.onSwing(otherPairs[0]!)}
           title={`This zone is staged under ${otherPairs.length} other A/B pair${otherPairs.length === 1 ? "" : "s"} (pinned at stage time; the lens is only a view). Click to swing the lens to the pinned pair.`}
@@ -661,9 +662,9 @@ function StageButton(props: {
           style={{ color: token("caution") }}
         >
           ⚑{otherPairs.length}≠
-        </button>
+        </Press>
       )}
-      <button
+      <Press
         type="button"
         onClick={() =>
           fb.toggleStage({
@@ -689,7 +690,7 @@ function StageButton(props: {
         }}
       >
         {staged ? "staged ✓" : "＋ stage"}
-      </button>
+      </Press>
     </>
   );
 }
@@ -825,7 +826,7 @@ function ZoneCard(props: {
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           <StageButton name={name} runA={runA} runB={runB} a={a} b={b} onSwing={props.onSwing} />
           {locatable ? (
-            <button
+            <Press
               type="button"
               onClick={() => props.onToggleHighlight(locatable)}
               title={
@@ -843,7 +844,7 @@ function ZoneCard(props: {
               }}
             >
               ⌖ highlight
-            </button>
+            </Press>
           ) : null}
         </span>
       </div>
@@ -984,7 +985,7 @@ function RunStrip(props: {
               background: isCur ? token("recess") : "transparent",
             }}
           >
-            <button
+            <Press
               type="button"
               onClick={() => onPickCur(entry.id)}
               className="flex flex-col items-start px-2 py-1 text-left"
@@ -1003,8 +1004,8 @@ function RunStrip(props: {
                   </span>
                 ) : null}
               </span>
-            </button>
-            <button
+            </Press>
+            <Press
               type="button"
               onClick={() => onPickBaseline(entry.id)}
               disabled={isCur}
@@ -1021,7 +1022,7 @@ function RunStrip(props: {
               }
             >
               {isPrev ? "A✕" : "A"}
-            </button>
+            </Press>
           </div>
         );
       })}
@@ -1573,14 +1574,14 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
         >
           evidence — the run's raster
         </span>
-        <button
+        <Press
           type="button"
           onClick={props.onClose}
           title="Hide the key (the plan header's 'key' button brings it back)."
           className="tele ml-auto text-ink-2 hover:text-ink"
         >
           ×
-        </button>
+        </Press>
       </span>
       <div className={cn("flex flex-col gap-0.5", !props.underlay && "opacity-40")}>
         {row(
@@ -1671,14 +1672,14 @@ function LevelStatsFloater(props: {
     >
       <span className="flex items-baseline text-[10px] font-semibold uppercase tracking-wide text-ink-2">
         {level} — this run
-        <button
+        <Press
           type="button"
           onClick={props.onClose}
           title="Hide the level stats (the plan header's 'stats' button brings them back)."
           className="tele ml-auto normal-case tracking-normal hover:text-ink"
         >
           ×
-        </button>
+        </Press>
       </span>
       <span>
         {b.solved}/{b.zones} zones solve{" "}
@@ -1904,7 +1905,7 @@ function PlanDock(props: {
       >
         <div className="flex gap-0.5">
           {levels.map((l) => (
-            <button
+            <Press
               key={l}
               type="button"
               onClick={() => props.onPickLevel(l)}
@@ -1915,11 +1916,11 @@ function PlanDock(props: {
               )}
             >
               {l.replace(" Level", "")}
-            </button>
+            </Press>
           ))}
         </div>
         <span className="ml-auto flex items-center gap-1.5">
-          <button
+          <Press
             type="button"
             onClick={() => setShowKey((v) => !v)}
             title="Show/hide the key — what each mark on the plan means."
@@ -1930,8 +1931,8 @@ function PlanDock(props: {
             style={{ borderColor: token("line-2") }}
           >
             key
-          </button>
-          <button
+          </Press>
+          <Press
             type="button"
             onClick={() => setShowStats((v) => !v)}
             title="Show/hide the level-stats floater — solve counts, sf, loudest rejections, A/B deltas."
@@ -1942,7 +1943,7 @@ function PlanDock(props: {
             style={{ borderColor: token("line-2") }}
           >
             stats
-          </button>
+          </Press>
           <span className="tele text-[10px] text-ink-2">
             drag = pan · wheel = zoom · click zone = highlight · esc = clear
           </span>
@@ -2245,7 +2246,7 @@ function LedgerDock(props: {
                 ? ` WARNING: ${possiblyPartialTitle(row.partiality.zones, row.partiality.modal)}`
                 : "";
           return (
-            <button
+            <Press
               type="button"
               onClick={() => onPickBaseline(row.id)}
               title={
@@ -2259,7 +2260,7 @@ function LedgerDock(props: {
               )}
             >
               {isA ? "A" : "set A"}
-            </button>
+            </Press>
           );
         },
       },
@@ -2467,7 +2468,7 @@ function LedgerDock(props: {
 
   return (
     <div className="shrink-0 border-t" style={{ borderColor: token("line-2") }}>
-      <button
+      <Press
         type="button"
         onClick={onToggle}
         title={
@@ -2485,7 +2486,7 @@ function LedgerDock(props: {
         <span className="tele ml-auto text-[11px] text-ink-2">
           {open ? "▾ collapse" : "▴ expand"}
         </span>
-      </button>
+      </Press>
       {open && (
         <div className="flex flex-col" style={{ height: 320 }}>
           {/* Provenance: the surface names the directory it read, so "which pool am I looking
@@ -2882,7 +2883,7 @@ export default function RunBrowser() {
             <span className="tele text-[11px] text-ink-2">
               each item at its pinned A/B pair · the lens is untouched
             </span>
-            <button
+            <Press
               type="button"
               onClick={() => setReview(false)}
               title="Back to the normal sheet."
@@ -2890,7 +2891,7 @@ export default function RunBrowser() {
               style={{ borderColor: token("line-2"), borderRadius: 2 }}
             >
               ✕ exit review
-            </button>
+            </Press>
           </div>
           {stagedItems.length === 0 && (
             <p className="tele text-[11px] text-ink-2">
@@ -2902,7 +2903,7 @@ export default function RunBrowser() {
             return (
               <div key={item.key} className="flex flex-col gap-1">
                 <div className="flex items-baseline gap-2">
-                  <button
+                  <Press
                     type="button"
                     onClick={() => swingLens(item)}
                     title={
@@ -2923,15 +2924,15 @@ export default function RunBrowser() {
                         ≠ lens
                       </span>
                     )}
-                  </button>
-                  <button
+                  </Press>
+                  <Press
                     type="button"
                     onClick={() => fb.unstage(item.key)}
                     title="Remove this item from the staged set."
                     className="tele ml-auto text-[10px] text-ink-2 hover:text-ink"
                   >
                     ✕ unstage
-                  </button>
+                  </Press>
                 </div>
                 <ZoneCard
                   name={item.zone}
@@ -3134,7 +3135,7 @@ export default function RunBrowser() {
               </Chip>
             ) : null}
             {prevId ? (
-              <button
+              <Press
                 type="button"
                 onClick={() => setBaseline(null)}
                 title="Clear the baseline — cards show the current run only, same footprint."
@@ -3142,9 +3143,9 @@ export default function RunBrowser() {
                 style={{ borderColor: token("line-2"), borderRadius: 2 }}
               >
                 clear A
-              </button>
+              </Press>
             ) : (
-              <button
+              <Press
                 type="button"
                 onClick={() => setBaseline("auto")}
                 title="Restore the default baseline: the current run's chronological predecessor."
@@ -3152,9 +3153,9 @@ export default function RunBrowser() {
                 style={{ borderColor: token("line-2"), borderRadius: 2 }}
               >
                 A: auto
-              </button>
+              </Press>
             )}
-            <button
+            <Press
               type="button"
               onClick={() => setUnderlay((u) => !u)}
               title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
@@ -3165,8 +3166,8 @@ export default function RunBrowser() {
               style={underlay ? undefined : { borderColor: token("line-2") }}
             >
               ink evidence
-            </button>
-            <button
+            </Press>
+            <Press
               type="button"
               onClick={() => setChangedOnly((c) => !c)}
               disabled={!comparing}
@@ -3184,7 +3185,7 @@ export default function RunBrowser() {
               style={changedOnly && comparing ? undefined : { borderColor: token("line-2") }}
             >
               changed only
-            </button>
+            </Press>
           </span>
         </div>
         <RunStrip
@@ -3218,7 +3219,7 @@ export default function RunBrowser() {
               title="plan"
               meta={comparing ? "A | B — panes share one viewport" : "the level, spatially true"}
               actions={
-                <button
+                <Press
                   type="button"
                   onClick={() => setPlanOpen((o) => !o)}
                   title={
@@ -3229,7 +3230,7 @@ export default function RunBrowser() {
                   className="tele px-1.5 text-[11px] text-ink-2 hover:text-ink"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}
-                </button>
+                </Press>
               }
             >
               {planOpen && (

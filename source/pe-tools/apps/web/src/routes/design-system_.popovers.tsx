@@ -50,6 +50,7 @@ import {
 import { FieldOptionMultiSelect, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
 import { cn } from "#/lib/utils";
+import { Press } from "#/components/lang/press";
 
 export const Route = createFileRoute("/design-system_/popovers")({ component: PopoverHarness });
 
@@ -335,7 +336,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
 
       <div className="flex flex-wrap gap-1 border-t border-line pt-2">
         {SPECIMENS.map((s) => (
-          <button
+          <Press
             key={s.id}
             type="button"
             onClick={() => onPick(s.id)}
@@ -346,7 +347,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
             )}
           >
             {s.name}
-          </button>
+          </Press>
         ))}
       </div>
 

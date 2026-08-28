@@ -21,6 +21,7 @@ import {
   type CacheView,
   type Layer,
 } from "./world-cache";
+import { Press } from "#/components/lang/press";
 
 /**
  * The World inspector — "what Pea actually sent the model", ordered by request position
@@ -220,7 +221,7 @@ export function WorldLane({
             ]}
           />
           {/* Δ is a mode toggle too: pressed = the selection fill, never a hue. */}
-          <button
+          <Press
             type="button"
             className="h-6 w-[26px] cursor-pointer rounded-sm border-[0.5px] border-line-2 bg-transparent text-ink-2 hover:veil aria-pressed:bg-select aria-pressed:text-ink disabled:cursor-default disabled:italic disabled:opacity-40"
             aria-pressed={diff}
@@ -235,7 +236,7 @@ export function WorldLane({
             disabled={!cache.hasBaseline}
           >
             Δ
-          </button>
+          </Press>
         </div>
       </div>
 
@@ -282,7 +283,7 @@ export function WorldLane({
               className={cn("border-b-[0.5px] border-line", changed && "caution-wash-artifact")}
               key={layer.id}
             >
-              <button
+              <Press
                 className={cn(
                   WORLD_ROW,
                   inspect ? "grid-cols-[9px_1fr_auto_auto_auto_auto]" : "grid-cols-[9px_1fr_auto]",
@@ -311,7 +312,7 @@ export function WorldLane({
                 >
                   ▸
                 </span>
-              </button>
+              </Press>
               {isOpen ? (
                 <div className="pt-0 pr-3.5 pb-[11px] pl-[31px]">
                   <p className="mt-0 mb-1.5 t-label leading-[1.5] text-ink-2">
@@ -373,7 +374,7 @@ function ItemRow({
         blast ? "border-caution/45" : "border-line",
       )}
     >
-      <button
+      <Press
         className="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-[9px] py-1.5 text-left [font:inherit] enabled:hover:veil disabled:cursor-default"
         type="button"
         disabled={!hasBody}
@@ -407,7 +408,7 @@ function ItemRow({
             </span>
           ) : null}
         </span>
-      </button>
+      </Press>
       {open && hasBody ? (
         <pre className="m-0 max-h-[220px] overflow-auto border-t-[0.5px] border-line on-recess px-[9px] py-2 t-caption face-mono leading-[1.5] break-words whitespace-pre-wrap text-ink-2">
           {item.body}
@@ -610,7 +611,7 @@ export function ContextRibbon({
   ];
 
   return (
-    <button
+    <Press
       type="button"
       className="group/ribbon relative block w-full cursor-pointer border-0 bg-transparent p-0"
       onClick={onOpenWorld}
@@ -639,6 +640,6 @@ export function ContextRibbon({
           {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
         </span>
       </span>
-    </button>
+    </Press>
   );
 }

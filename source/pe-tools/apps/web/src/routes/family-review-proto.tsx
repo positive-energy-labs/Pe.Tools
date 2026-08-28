@@ -27,6 +27,7 @@ import { token } from "#/lib/token";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { FactChip } from "#/components/lang/chip";
+import { HelpTip } from "#/components/lang/help";
 import { RUN_SOURCE, loadBoard } from "#/family-review/proto/board";
 import { ReviewBoard, stages, useEdits, useVerdicts } from "#/family-review/proto/review-board";
 
@@ -82,25 +83,47 @@ function FamilyReviewProto() {
         <div className="flex flex-wrap items-baseline gap-2">
           <span className="face-mono t-caption text-ink-mute">writes to</span>
           <FactChip
-            tone="alarm"
-            title="Nothing. Not the family.json, not the document above, not any other document this json has been materialized into. A family.json may be materialized into many documents across many years and NOTHING here can sync them — that is out of scope by law, not by omission."
+            tone="caution"
+            title="Where an edit or a verdict on this board would land: nowhere, by scope. The three unanswered questions behind that are stated in full beside the strip."
           >
             nothing
           </FactChip>
           <FactChip
             tone="caution"
             dashed
-            title="OPEN QUESTION for kaitpw. A verdict is a human fact about a family AT A RUN — not about the json, which outlives the run, and not about the document, which is one materialization of many. Nothing in the repo has a home for that fact yet, so this board keeps verdicts in memory for the length of a page view."
+            title="OPEN QUESTION for kaitpw — a verdict has no home in the repo yet. Stated in full beside the strip."
           >
             a verdict would go — open
           </FactChip>
           <FactChip
             tone="caution"
             dashed
-            title="OPEN QUESTION for kaitpw. An edit here changes the PORTABLE DOCUMENT, whose prior materializations this board cannot reach and must never appear to reach. Writing back to the family.json on disk is one answer; staging a change for the next materialization is another. Until one is ruled, edits stage in memory and go nowhere."
+            title="OPEN QUESTION for kaitpw — an edit's destination is unruled. Stated in full beside the strip."
           >
             an edit would go — open
           </FactChip>
+          {/* The strip's three claims in full; the chips above carry only the short fact. */}
+          <HelpTip>
+            <p>
+              <b>nothing.</b> Not the family.json, not the document above, not any other document
+              this json has been materialized into. A family.json may be materialized into many
+              documents across many years and NOTHING here can sync them — that is out of scope by
+              law, not by omission.
+            </p>
+            <p className="mt-1.5">
+              <b>a verdict would go — OPEN QUESTION for kaitpw.</b> A verdict is a human fact about
+              a family AT A RUN — not about the json, which outlives the run, and not about the
+              document, which is one materialization of many. Nothing in the repo has a home for
+              that fact yet, so this board keeps verdicts in memory for the length of a page view.
+            </p>
+            <p className="mt-1.5">
+              <b>an edit would go — OPEN QUESTION for kaitpw.</b> An edit here changes the PORTABLE
+              DOCUMENT, whose prior materializations this board cannot reach and must never appear
+              to reach. Writing back to the family.json on disk is one answer; staging a change for
+              the next materialization is another. Until one is ruled, edits stage in memory and go
+              nowhere.
+            </p>
+          </HelpTip>
           {staged > 0 ? (
             <FactChip
               tone="caution"

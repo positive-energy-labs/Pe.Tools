@@ -18,6 +18,7 @@ import { product as defineProduct } from "#/targeting/model";
 import { worldTrunk, type WorldStart } from "#/targeting/world";
 import { RouteDocument } from "#/workbench/route-document";
 import { useRouteState } from "#/workbench/route-state";
+import { Press } from "#/components/lang/press";
 
 const YEARS = ["24", "25", "26"];
 
@@ -402,13 +403,13 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
                 <span className="t-caption t-upper text-ink-2">ledger</span>
                 <HelpTip>Settled SDK envelopes merged with bridge-observed world events.</HelpTip>
               </span>
-              <button
+              <Press
                 type="button"
                 onClick={() => setLedgerOpen(false)}
                 className="t-caption rounded-sm border border-line-2 px-1"
               >
                 ›
-              </button>
+              </Press>
             </div>
             <div ref={logRef} className="max-h-[72vh] min-h-0 flex-1 overflow-y-auto">
               {ledger.length === 0 ? (
@@ -426,7 +427,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
             </div>
           </div>
         ) : (
-          <button
+          <Press
             type="button"
             onClick={() => setLedgerOpen(true)}
             className="ml-2 flex w-6 flex-col items-center gap-2 self-stretch rounded-sm border border-line-2 bg-transparent py-2"
@@ -434,7 +435,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
             <span className="t-caption t-upper text-ink-2 [writing-mode:vertical-rl]">
               ledger · {ledger.length}
             </span>
-          </button>
+          </Press>
         )}
       </div>
     </div>

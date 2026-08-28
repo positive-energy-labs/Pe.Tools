@@ -28,6 +28,7 @@ import { isRenderable, toThreadMessages } from "./aui-adapter";
 import { APPROVAL_OPTIONS, toolTarget } from "./chat-state";
 import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
+import { Press } from "#/components/lang/press";
 
 /**
  * assistant-ui mounted as a pure render-from view over ChatState. The runtime holds no state
@@ -139,14 +140,14 @@ function TurnTag({ id }: { id: string }) {
   if (!found) return null;
   turn = Math.max(1, turn);
   return (
-    <button
+    <Press
       type="button"
       className="t-label face-mono cursor-pointer border-0 bg-transparent p-0 text-ink-2 hover:text-ink"
       title={`Center turn ${turn} on the focal axis`}
       onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
     >
       #{turn}
-    </button>
+    </Press>
   );
 }
 
@@ -291,7 +292,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   // (kiln/lichen) spent taxonomy colours on chrome. Chrome buys no weight, no hue.
   return (
     <div className="border-l-2 border-line-2">
-      <button
+      <Press
         className="inline-flex items-center gap-[5px] bg-transparent px-1.5 py-px t-label text-ink-2 hover:text-ink"
         type="button"
         title="Pea's chain of thought for this turn — collapsed so the spine stays calm"
@@ -299,7 +300,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
       >
         <ChevronRight size={12} className={`transition-transform ${open ? "rotate-90" : ""}`} />
         <span>Thought process</span>
-      </button>
+      </Press>
       {open ? (
         <div className="mt-1 mb-0.5 ml-2 border-l border-line pl-[9px] t-prose whitespace-pre-wrap text-ink-2">
           {text}

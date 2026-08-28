@@ -9,6 +9,7 @@ import {
 } from "#/components/ui/command";
 import { EmptyState } from "#/components/lang/empty";
 import type { StoredThreadSummary } from "#/workbench/provider";
+import { Press } from "#/components/lang/press";
 
 /** Status dot shared by the sidebar list + palette. */
 function ThreadDot({ active }: { active: boolean }) {
@@ -73,7 +74,7 @@ export function ThreadList({
               <span className={`min-w-0 flex-1 truncate ${active ? "text-ink" : "text-ink-2"}`}>
                 {thread.title}
               </span>
-              <button
+              <Press
                 type="button"
                 title="Delete thread"
                 className="hidden shrink-0 rounded-sm p-0.5 text-ink-2 group-hover/row:inline hover:veil"
@@ -83,7 +84,7 @@ export function ThreadList({
                 }}
               >
                 <X className="size-3.5" />
-              </button>
+              </Press>
             </div>
           );
         })}
@@ -98,7 +99,7 @@ export function ThreadList({
 
       <div className="mt-auto flex flex-col gap-1 border-t-[0.5px] border-line p-2">
         {/* page-scoped acts: neutral ink, veil on hover — no blue (blue = writes beyond / nav) */}
-        <button
+        <Press
           type="button"
           title="Start a new thread — the current one stays in the list"
           className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink hover:veil"
@@ -106,8 +107,8 @@ export function ThreadList({
         >
           <Plus className="size-4" />
           New thread
-        </button>
-        <button
+        </Press>
+        <Press
           type="button"
           title="Search every thread by title (⌘K)"
           className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink-2 hover:veil"
@@ -119,7 +120,7 @@ export function ThreadList({
           <kbd className="rounded-sm border border-line-2 px-1 py-0.5 t-caption face-mono text-ink-2">
             ⌘K
           </kbd>
-        </button>
+        </Press>
       </div>
     </div>
   );
@@ -191,7 +192,7 @@ export function ThreadPalette({
                 <span className={`flex-1 truncate ${active ? "text-ink" : "text-ink/85"}`}>
                   {thread.title}
                 </span>
-                <button
+                <Press
                   type="button"
                   title="Delete thread"
                   className="shrink-0 rounded-sm p-0.5 text-ink-2 opacity-0 transition-opacity group-hover/row:opacity-100 hover:veil data-selected:opacity-100"
@@ -201,7 +202,7 @@ export function ThreadPalette({
                   }}
                 >
                   <X className="size-3.5" />
-                </button>
+                </Press>
               </CommandItem>
             );
           })}

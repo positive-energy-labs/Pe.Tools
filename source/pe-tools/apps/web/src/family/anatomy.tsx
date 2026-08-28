@@ -41,6 +41,7 @@ import { token } from "#/lib/token";
 import { useMemo } from "react";
 
 import { EmptyState } from "#/components/lang/empty";
+import { HelpTip } from "#/components/lang/help";
 import {
   buildSheet,
   sheetBounds,
@@ -59,6 +60,7 @@ import {
 import { draftedModel } from "#/family/project";
 import { boundParam } from "#/family/world";
 import { cn } from "#/lib/utils";
+import { Press } from "#/components/lang/press";
 
 // ── the parts, resolved for one type ────────────────────────────────────────────────────────────
 
@@ -268,11 +270,14 @@ export function AnatomyDrawing({
     <div className="flex size-full min-h-0">
       {views}
       <div className="min-w-0 flex-1 overflow-y-auto p-2">
-        <p
-          className="face-mono mb-1 t-caption text-ink-2"
-          title="The profile's own constituent list. Hovering one lights both the shape and the table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it in the doc pane's lower half, where the half of it no parameter can drive — direction, system type, where its frame sits — is edited."
-        >
+        <p className="face-mono mb-1 flex items-center gap-1 t-caption text-ink-2">
           constituents · {typeName}
+          <HelpTip>
+            The profile&rsquo;s own constituent list. Hovering one lights both the shape and the
+            table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it
+            in the doc pane&rsquo;s lower half, where the half of it no parameter can drive —
+            direction, system type, where its frame sits — is edited.
+          </HelpTip>
         </p>
         {world.constituents.map((part) => {
           const geom = world.geomBySlug.get(part.slug);
@@ -281,7 +286,7 @@ export function AnatomyDrawing({
               (dim) => boundParam(bindingOf(world, draft, part.slug, dim.property)) == null,
             ).length ?? 0;
           return (
-            <button
+            <Press
               key={part.slug}
               type="button"
               onMouseEnter={() => onFocus({ kind: "part", id: part.slug })}
@@ -313,7 +318,7 @@ export function AnatomyDrawing({
                   {unbound}⚠
                 </span>
               )}
-            </button>
+            </Press>
           );
         })}
       </div>
