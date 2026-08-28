@@ -13,11 +13,11 @@ Shapes considered: merge as-is (keeps four spellings); utilities as the only lan
 
 - **Vocabulary and grammar are standardized before any consumer.** Roles, scales, type tiers, and composition utilities are law the moment they are ruled; the design guard pays their rent. **Components keep the second-consumer rule.**
 - **One spelling.** House tokens are `--pe-*` (repo convention for "custom/house"; `--r-*` is renamed by codemod). The shadcn semantic aliases (`--background`, `bg-muted`, …) are deleted. A bare `var(--pe-*)` inside TSX is a hard zero; roles are reached only through the generated utilities. Escape hatches are not generated rather than ratcheted.
-- **One grammar dialect.** Composition rules (wash, veil, tiers, mono) are `@utility`; only rules bound to one component's DOM stay in that component's CSS.
+- **One grammar dialect.** Composition rules (wash, tiers, mono) are plain classes in `base.css`; `veil` is the one `@utility` because it takes `hover:`. Only rules bound to one component's DOM stay in that component's CSS.
 - **`base.css` is the deep module.** A page that links it and sets `data-pe` is on-system with no other knowledge. Standalone HTML prototypes link it. Its header carries the band math and laws (restored from `design-lang.css` at `1455d25`).
 - **Scales by evidence.** `z` gets four named rungs; motion gets one duration; space is the Tailwind default; elevation does not exist (depth is ground shift + hairline; `shadow-*` is a hard zero).
 - **Split by job, not origin.** `components/ui/` becomes `components/mechanism/` (behaviour, no roles inside); `components/lang/` keeps meaning components with required arguments.
-- **Routes compose; they do not colour.** A route file may use `lang/` components and layout utilities; a role utility in a route file is a hard zero. Panes and variants keep full layout freedom.
+- **Routes compose; they do not colour.** A route file may use `lang/` components and layout utilities; a role utility in a route file is a ratchet (`routeRoleColor`, 333 at adoption) that may only fall; zero is the target. Panes and variants keep full layout freedom.
 - Prototype trees (`proto*`) are internal-only and exempt from every guard; they are deleted, not maintained.
 
 ## Consequences
