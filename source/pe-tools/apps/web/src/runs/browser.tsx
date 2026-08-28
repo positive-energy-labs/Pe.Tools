@@ -604,7 +604,7 @@ export function ZonePanel(props: {
       {/* Instant id popover — replaces the slow native tooltip on these elements. */}
       {hover && (
         <div
-          className="face-mono pointer-events-none absolute z-10 whitespace-nowrap border bg-page/95 px-1.5 py-0.5 t-caption shadow-sm"
+          className="face-mono pointer-events-none absolute z-raised whitespace-nowrap border bg-page/95 px-1.5 py-0.5 t-caption shadow-sm"
           style={{
             left: Math.min(hover.x + 10, maxW - 90),
             top: Math.min(hover.y + 12, maxH - 22),
@@ -2984,7 +2984,7 @@ export default function RunBrowser() {
                 }}
               >
                 <div
-                  className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1"
+                  className="sticky top-0 z-sticky -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1"
                   style={{ borderColor: token("line-2") }}
                 >
                   <h2 className="face-mono t-value font-semibold uppercase tracking-wide">

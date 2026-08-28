@@ -35,6 +35,8 @@ authoring decision flow, and the enforcement commands are
 
 ### The language
 
+- 2026-08-28 — Semantic chrome joins the same ownership law: `base.css` owns fixed document ground, modal scrim, float/modal elevation, control motion, and the six global layers (`raised`, `sticky`, `popup`, `modal`, `notice`, `dev`); `design-lang.css` projects portable and Tailwind utilities. Product code retains only data-driven colours and local drawing/table geometry. The guard hard-zeros static CSS colours, raw non-inset elevation, fixed durations, and global numeric layers.
+
 - 2026-08-16 — The design language is settled (base 2, rounds 1–2); grammar in `components/lang/`. Standing law: nothing exists on `/design-system` unless it is a real component with a real consumer (no shims — a workaround is noise that hides a gap).
 - 2026-08-28 — Ownership stack ruled: `base.css` is the raw portable authority under `[data-pe]`, `design-lang.css` is only its Tailwind projection and declares no number, `components/lang` is the base semantic grammar, product code owns geometry and refinement only, and `lib/token.ts` is the one runtime token lookup. `components/ui` composites may depend on `components/lang`; four already do, for `Press`. The `--r-*` token family is retired and guarded at zero. Map: [NORMALIZATION.md](NORMALIZATION.md).
 - 2026-08-16 — Stretching the system and migrating components/routes are one paired exercise; every migration is a probe and every gap is recorded, never worked around.

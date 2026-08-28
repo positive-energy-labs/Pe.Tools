@@ -164,7 +164,7 @@ export function SidePane({
         aria-label="Resize pane"
         onPointerDown={onResizeDown}
         className={cn(
-          "absolute inset-y-0 z-10 w-[5px] cursor-col-resize touch-none",
+          "absolute inset-y-0 z-raised w-[5px] cursor-col-resize touch-none",
           "hover:bg-line-2 active:bg-line-2",
           side === "left" ? "-right-[2px]" : "-left-[2px]",
         )}

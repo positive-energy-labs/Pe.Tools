@@ -446,7 +446,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
       </div>
 
       {!live && (
-        <div className="absolute right-2 bottom-2 z-40">
+        <div className="absolute right-2 bottom-2 z-popup">
           <Verb
             label="leave fixture → live"
             onClick={() =>

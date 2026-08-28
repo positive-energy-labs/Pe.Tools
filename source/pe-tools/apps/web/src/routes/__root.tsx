@@ -93,7 +93,7 @@ export function RouteConflictBanner() {
     <aside
       role="status"
       aria-live="polite"
-      className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-3 border-b border-caution bg-page px-4 py-2 text-ink shadow-sm"
+      className="fixed inset-x-0 top-0 z-notice flex items-center justify-center gap-3 border-b border-caution bg-page px-4 py-2 text-ink shadow-sm"
     >
       <strong className="t-label">Changed elsewhere</strong>
       <span className="t-value">

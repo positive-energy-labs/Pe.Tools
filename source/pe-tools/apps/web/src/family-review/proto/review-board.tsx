@@ -394,12 +394,11 @@ export function ReviewBoard({
             </div>
             {expanded === entry.key ? (
               <div
-                className="absolute left-full top-0 z-20 w-64"
+                className="absolute left-full top-0 z-popup w-64 shadow-float"
                 style={{
                   backgroundColor: token("artifact"),
                   border: `0.5px solid ${token("line-2")}`,
                   borderRadius: 2,
-                  boxShadow: `0 2px 8px color-mix(in srgb, ${token("ink")} 10%, transparent)`,
                 }}
               >
                 <FamilySidebar stage={entry} />

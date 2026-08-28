@@ -281,7 +281,6 @@ const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
 const POP: React.CSSProperties = {
   border: `1px solid ${token("line-2")}`,
   backgroundColor: token("page"),
-  boxShadow: `0 2px 8px color-mix(in srgb, ${token("ink")} 8%, transparent)`,
   minWidth: 320,
 };
 
@@ -388,7 +387,10 @@ export function Picker<K extends string>({
         {link.dir ? `${DIR_GLYPH[link.dir]} ${closedText}` : closedText}
       </Press>
       {open ? (
-        <span className="absolute left-0 top-full z-40 mt-1 block overflow-hidden" style={POP}>
+        <span
+          className="absolute left-0 top-full z-popup mt-1 block overflow-hidden shadow-float"
+          style={POP}
+        >
           {/* crumbs — the trunk, one segment per level; the current level is underlined */}
           <div
             className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"

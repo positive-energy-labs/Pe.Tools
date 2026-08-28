@@ -12,6 +12,8 @@
   --color-artifact: var(--pe-artifact);
   --color-recess: var(--pe-recess);
   --color-select: var(--pe-select);
+  --color-document: var(--pe-document);
+  --color-scrim: var(--pe-scrim);
   --color-ink: var(--pe-ink);
   --color-ink-2: var(--pe-ink-2);
   --color-ink-mute: var(--pe-ink-mute);
@@ -38,6 +40,8 @@
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --shadow-sm: var(--shadow-float);
+  --shadow-lg: var(--shadow-modal);
 }
 
 @utility t-caption {
@@ -77,4 +81,40 @@
 
 @utility veil {
   background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
+}
+
+@utility bg-document {
+  background: var(--pe-document);
+}
+
+@utility bg-scrim {
+  background: var(--pe-scrim);
+}
+
+@utility caution-hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--pe-ink) 40%, transparent) 0 2px,
+    transparent 2px 4px
+  );
+}
+
+@utility shadow-float {
+  box-shadow: var(--shadow-float);
+}
+
+@utility shadow-modal {
+  box-shadow: var(--shadow-modal);
+}
+
+@utility duration-control {
+  transition-duration: var(--motion-control);
+}
+
+@utility z-notice {
+  z-index: var(--z-notice);
+}
+
+@utility z-dev {
+  z-index: var(--z-dev);
 }

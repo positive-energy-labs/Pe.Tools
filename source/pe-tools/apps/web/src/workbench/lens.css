@@ -103,9 +103,9 @@
   border-radius: 0; /* hard-square segment bars */
   opacity: 0.38;
   transition:
-    opacity 0.14s ease,
-    width 0.14s ease,
-    background 0.14s ease;
+    opacity var(--motion-control) ease,
+    width var(--motion-control) ease,
+    background var(--motion-control) ease;
 }
 /* number rides on the band, to its left. Hidden by default; revealed on hover (below) and
    ALWAYS on the focal band (the reticle readout). Machine-measured: mono, tracked, tabular. */
@@ -124,7 +124,7 @@
   white-space: nowrap;
   text-align: right;
   opacity: 0;
-  transition: opacity 0.14s ease;
+  transition: opacity var(--motion-control) ease;
   pointer-events: none;
 }
 /* on screen = inside the candlestick's viewport range */
@@ -296,9 +296,9 @@
   line-height: var(--type-value-line-height);
   color: var(--pe-ink-2);
   transition:
-    background 0.14s ease,
-    border-color 0.14s ease,
-    border-width 0.14s ease;
+    background var(--motion-control) ease,
+    border-color var(--motion-control) ease,
+    border-width var(--motion-control) ease;
 }
 /* the tool name never shrinks; only the target arg truncates */
 .lens-marker > span {
@@ -385,8 +385,8 @@
   --pe-on: var(--pe-page);
   opacity: 0.62;
   transition:
-    border-color 0.16s ease,
-    opacity 0.16s ease;
+    border-color var(--motion-control) ease,
+    opacity var(--motion-control) ease;
 }
 .lens-cell.hover {
   opacity: 1;

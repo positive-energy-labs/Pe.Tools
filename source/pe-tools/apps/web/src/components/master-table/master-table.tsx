@@ -466,7 +466,7 @@ export function MasterTable<Row extends RowData>({
                     rowSpan={table.getHeaderGroups().length}
                     style={{ top: 0, width: GUTTER_PX, minWidth: GUTTER_PX }}
                     title="Rows marked in this gutter owe a person a decision — the mark's own title says what."
-                    className="sticky left-0 z-20 border-b border-line bg-recess p-0 on-recess"
+                    className="sticky left-0 z-sticky border-b border-line bg-recess p-0 on-recess"
                   />
                 )}
                 {headerGroup.headers.map((header) => {
@@ -500,7 +500,7 @@ export function MasterTable<Row extends RowData>({
                       colSpan={header.colSpan}
                       rowSpan={header.rowSpan}
                       style={{ top: stickyTop(rowIndex) }}
-                      className="t-caption t-upper sticky z-10 whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-px text-left text-ink-2 on-recess first:border-l-0"
+                      className="t-caption t-upper sticky z-sticky whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-px text-left text-ink-2 on-recess first:border-l-0"
                     >
                       <table.FlexRender header={header} />
                     </th>
@@ -706,10 +706,10 @@ function LeafHeader<Row>({
       rowSpan={rowSpan}
       style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
       className={cn(
-        "sticky z-10 align-top whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-1 font-normal on-recess first:border-l-0",
+        "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-1 font-normal on-recess first:border-l-0",
         column.right ? "text-right" : "text-left",
         column.width,
-        column.lock && "z-20",
+        column.lock && "z-sticky",
         column.headerClassName,
       )}
     >

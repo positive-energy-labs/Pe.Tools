@@ -293,6 +293,48 @@ describe("design guard — maintained surface hard zeros", () => {
       /(?:font-weight|fontWeight)\s*[:=]\s*(?:["']?\d+(?:\.\d+)?["']?|\{\s*\d+(?:\.\d+)?\s*\})/g;
     assertZero("numericWeight", scan(files, re));
   });
+
+  it("has no static numeric CSS colors or stock palette utilities outside the foundation", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css").map((f) => ({
+      ...f,
+      text: stripTemplateLiterals(stripComments(f.text)),
+    }));
+    const numericColor = /(?<!s)\b(?:rgba?|hsla?)\([^)]*\d[^)]*\)/g;
+    const stockPalette =
+      /(?<![-\w])(?:bg|text|border|divide|ring|outline|fill|stroke)-(?:white|black|slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-\d{2,3})?(?:\/\d+)?(?![-\w])/g;
+    assertZero("staticColor", [...scan(files, numericColor), ...scan(files, stockPalette)]);
+  });
+
+  it("uses shared elevation tokens for non-inset shadows", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
+      (f) => ({ ...f, text: stripTemplateLiterals(stripComments(f.text)) }),
+    );
+    const re = /(?:box-shadow|boxShadow)\s*[:=][^;{},]*/g;
+    const offences = scan(files, re).filter(
+      (o) =>
+        !/\binset\b|\bvar\(/.test(o.match) && /\d+(?:\.\d+)?(?:px|rem)?|color-mix\(/.test(o.match),
+    );
+    assertZero("rawElevation", offences);
+  });
+
+  it("uses the shared control duration for fixed motion", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
+      (f) => ({ ...f, text: stripTemplateLiterals(stripComments(f.text)) }),
+    );
+    const utility = /(?<![-\w])duration-(?:\[(?:\d+(?:\.\d+)?|\.\d+)(?:ms|s)\]|\d+)(?![-\w])/g;
+    const declaration =
+      /\btransition(?:Property|Duration)?\s*[:=][^;{},]{0,600}\b\d+(?:\.\d+)?(?:ms|s)\b/g;
+    assertZero("fixedMotion", [...scan(files, utility), ...scan(files, declaration)]);
+  });
+
+  it("uses semantic layers for global stacking", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
+      (f) => ({ ...f, text: stripComments(f.text) }),
+    );
+    const re =
+      /(?<![-\w])z-(?:10|20|30|40|50|60|\[9999\])(?![-\w])|\bzIndex\s*[:=]\s*(?:10|20|30|40|50|60|9999)\b|\bz-index\s*:\s*(?:10|20|30|40|50|60|9999)\b/g;
+    assertZero("globalLayer", scan(files, re));
+  });
 });
 
 const isTsx = (f: Entry) => f.rel.endsWith(".tsx");

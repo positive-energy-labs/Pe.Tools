@@ -270,11 +270,11 @@ export function RefToken({
             type="button"
             aria-label="close picker"
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-20 cursor-default"
+            className="fixed inset-0 z-raised cursor-default"
             style={{ backgroundColor: "transparent", border: "none" }}
           />
           <div
-            className="absolute left-0 top-full z-30 mt-1 max-h-72 w-72 overflow-y-auto px-1 py-1"
+            className="absolute left-0 top-full z-popup mt-1 max-h-72 w-72 overflow-y-auto px-1 py-1"
             style={{
               border: `0.5px solid ${token("line-2")}`,
               backgroundColor: token("page"),

@@ -134,7 +134,7 @@ function Cap({ children }: { children: React.ReactNode }) {
 function DesignSystem() {
   return (
     <div className="t-prose min-h-screen bg-page text-ink">
-      <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
+      <header className="sticky top-0 z-sticky border-b border-line bg-page/90 backdrop-blur">
         <div className="page-wrap flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
             <span className="t-title face-display">Design system</span>
@@ -673,7 +673,7 @@ function Tokens() {
     <Section
       n="02"
       title="tokens"
-      note="eighteen, and every one of them is oklch(L C h) off a declared band — src/design-lang.css is the one place a colour is decided"
+      note="eighteen, and every one of them is oklch(L C h) off a declared band — src/base.css is the one place a colour is decided"
     >
       <p className="t-prose max-w-[80ch] text-ink-2">
         <code className="face-mono t-label">--pe-*</code> is canon. The old{" "}
@@ -713,8 +713,8 @@ function Tokens() {
       <GapNote>
         the swatch reads a resolved value for every token except the two hairlines, which are
         declared as <code>color-mix()</code> and read back unresolved. Nothing is wrong with the
-        colour; the ledger of computed contrast lives in the header of{" "}
-        <code>src/design-lang.css</code> because no component can compute it.
+        colour; the ledger of computed contrast lives in the header of <code>src/base.css</code>{" "}
+        because no component can compute it.
       </GapNote>
     </Section>
   );
@@ -807,7 +807,7 @@ function VerbBlock() {
   return (
     <Demo
       label="Verb · VerbGroup"
-      consumers="ArmingStrip (shipping); pea's card accept/deny (/design-system/proposal-flow); soon: the family clean-room verb lane, the takeoff panes. components/ui/verb.tsx still serves the unmigrated routes"
+      consumers="ArmingStrip (shipping); pea's card accept/deny (/design-system/proposal-flow); soon: the family clean-room verb lane, the takeoff panes. components/lang/verb.tsx serves the shared action grammar"
       spec={
         <>
           Four tones, and the tones are the whole colour story: <em>act</em> is neutral,{" "}

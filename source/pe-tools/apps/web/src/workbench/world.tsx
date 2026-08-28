@@ -259,7 +259,7 @@ export function WorldLane({
             <span className="ml-auto text-ink-2">{fmtTok(totals.cached)}</span>
           </div>
           <div className="flex items-center gap-[7px] t-caption face-mono [font-variant-numeric:tabular-nums]">
-            <span className="size-[9px] flex-none rounded-[2px] bg-caution [background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,0.4)_0_2px,transparent_2px_4px)]" />
+            <span className="size-[9px] flex-none rounded-[2px] bg-caution caution-hatch" />
             reprocessed · 1×
             <span className="ml-auto text-ink-2">{fmtTok(totals.reprocessed)}</span>
           </div>

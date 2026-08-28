@@ -419,7 +419,7 @@
   cursor: help;
 }
 .dl-help-pop {
-  z-index: 40;
+  z-index: var(--z-popup);
   width: max-content;
   max-width: 38ch;
   padding: 5px 8px;

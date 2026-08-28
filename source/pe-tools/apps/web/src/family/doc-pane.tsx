@@ -267,7 +267,7 @@ export function ProposalCard({
         backgroundColor: focused
           ? `color-mix(in srgb, ${token("pea-ink")} 12%, transparent)`
           : "transparent",
-        transition: "background 0.25s",
+        transition: "background var(--motion-control)",
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >

@@ -139,7 +139,7 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
       >
         <span
           className={cn(
-            "t-caption inline-block w-3 shrink-0 text-center text-ink-2 transition-transform duration-[120ms]",
+            "t-caption inline-block w-3 shrink-0 text-center text-ink-2 transition-transform duration-control",
             open && hasChildren && "rotate-90",
           )}
         >
@@ -209,7 +209,7 @@ export function DataTable<Row>({
       )}
       <div className="overflow-auto" style={{ maxHeight }}>
         <table className="t-value w-full border-collapse text-left">
-          <thead className="sticky top-0 z-10" style={RECESS_GROUND}>
+          <thead className="sticky top-0 z-sticky" style={RECESS_GROUND}>
             <tr>
               {columns.map((col) => (
                 <th

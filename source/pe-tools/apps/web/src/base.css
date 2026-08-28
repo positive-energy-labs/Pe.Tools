@@ -5,6 +5,8 @@
   --pe-artifact: #f1eee6;
   --pe-recess: #e4e1d9;
   --pe-select: #d9d6ce;
+  --pe-document: #fff;
+  --pe-scrim: rgb(0 0 0 / 80%);
 
   /* Ink */
   --pe-ink: #38352d;
@@ -59,10 +61,14 @@
   --dash-reference: 12 3 2 3;
   --dash-void: 4 3;
   --motion-control: 120ms;
+  --shadow-float: 0 2px 8px color-mix(in srgb, var(--pe-ink) 18%, transparent);
+  --shadow-modal: 0 4px 24px color-mix(in srgb, var(--pe-scrim) 50%, transparent);
   --z-raised: 10;
   --z-sticky: 20;
   --z-popup: 40;
   --z-modal: 50;
+  --z-notice: 60;
+  --z-dev: 9999;
 }
 
 .dark {
@@ -177,6 +183,34 @@
 }
 [data-pe] .z-modal {
   z-index: var(--z-modal);
+}
+[data-pe] .z-notice {
+  z-index: var(--z-notice);
+}
+[data-pe] .z-dev {
+  z-index: var(--z-dev);
+}
+[data-pe] .bg-document {
+  background: var(--pe-document);
+}
+[data-pe] .bg-scrim {
+  background: var(--pe-scrim);
+}
+[data-pe] .caution-hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--pe-ink) 40%, transparent) 0 2px,
+    transparent 2px 4px
+  );
+}
+[data-pe] .shadow-float {
+  box-shadow: var(--shadow-float);
+}
+[data-pe] .shadow-modal {
+  box-shadow: var(--shadow-modal);
+}
+[data-pe] .duration-control {
+  transition-duration: var(--motion-control);
 }
 
 [data-pe] .on-page {

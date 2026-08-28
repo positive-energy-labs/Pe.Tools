@@ -12,8 +12,8 @@ This file is the map, not the log. It says where a value lives now.
 
 | Layer | File | Owns |
 | --- | --- | --- |
-| raw authority | `apps/web/src/base.css` | Every raw value, under `[data-pe]`. Colour roles, viz roles, the seven type size/line-height pairs, the three dash patterns, radius, motion, z-index. Portable `.t-*`, `.dash-*` and `.seam-border` classes consume them, so a no-Tailwind consumer needs nothing else. |
-| projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks. It declares no number of its own. |
+| raw authority | `apps/web/src/base.css` | Every raw value, under `[data-pe]`: colour roles (including fixed document ground and modal scrim), viz roles, the seven type size/line-height pairs, the three dash patterns, radius, motion, elevation, and z-index. Portable `.t-*`, `.dash-*`, `.shadow-*`, `.duration-control`, and layer classes consume them, so a no-Tailwind consumer needs nothing else. |
+| projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks and `@theme` mappings (`bg-document`, `bg-scrim`, `shadow-sm`/`shadow-lg`, `duration-control`, and semantic layers). It declares no number of its own. |
 | grammar | `apps/web/src/components/lang/` | The semantic vocabulary: `Verb`, `Press`, `FactChip`/`VizChip`, `StateCell`, `EmptyState`, `HelpTip`, `OutcomeLine`, `ArmingStrip`, `AddressingBar`, `Section`, `Switcher`. This is the base layer. `components/ui` composites may depend on it, and four already do (`combobox`, `dialog`, `input-group`, `side-pane`, all for `Press`). |
 | product | routes and feature dirs | Geometry and refinement only: sizes, spacing, panel widths, chart dimensions. No colour, no type scale, no broken-line pattern. |
 | runtime | `apps/web/src/lib/token.ts` | The one runtime token indirection for inline, SVG and serialized use. `token(role)` resolves `viz-*` and `dash-*` as raw families and everything else as `--pe-*`; `dash(role)` is its typed wrapper. Prefer a semantic class when a direct utility exists, but use this shared lookup wherever the value must cross a runtime or serialization boundary. |
@@ -121,14 +121,16 @@ runtime PE/viz reads outside `lib/token.ts`, unprojected type tiers, dead shim t
 tokens, retired `tele` words, hex literals outside `base.css`, sub-10px text, raw text-size
 utilities, raw `<button>` outside `components/ui` + `components/lang`, `ui/button` imports, inline
 `background:` shorthand in TS/TSX, unruled dashed strokes, `title` over 240 characters, raw
-absolute type values, raw leading utilities, unprojected faces, and raw numeric dash patterns in
-maintained JSON. The previous class-only type regex missed CSS declarations, style objects, and
-template CSS. Do not restate a gate in prose; it is executable.
+absolute type values, raw leading utilities, unprojected faces, raw numeric dash patterns in
+maintained JSON, static numeric CSS colours and stock palette utilities, non-inset raw elevation,
+fixed transition durations, and global numeric stacking layers. The previous class-only type regex
+missed CSS declarations, style objects, and template CSS. Do not restate a gate in prose; it is
+executable.
 
 Commands, from `source/pe-tools` (this worktree pins `node_modules/.bin/vp.ps1`):
 
 ```text
-vp run @pe/repo-guards#test                    design guard + docs guard, 23 tests
+vp run @pe/repo-guards#test                    design guard + docs guard, 27 tests
 vp check apps/web/src tests/repo-guards/src    0 errors; 15 pre-existing warnings
 vp run @pe/web#build                           client + server build, prerender /
 ```
@@ -171,6 +173,9 @@ What the waves taught, beyond the counts.
   popover foundation once, and every consumer got the portal and the `aria-describedby`.
 - **The browser finds what the guard cannot.** Duplicate React keys in `/param-tables` variant C
   came from repeated FOM `headRow` labels in a browser pass, not a deterministic lane.
+- **Chrome is a system value, not a product exception.** Fixed document white, modal black/80,
+  elevation, motion, and global layers now have one raw owner and portable/Tailwind projections;
+  product surfaces retain only data colours and local drawing/table geometry.
 
 ## Verdicts later
 

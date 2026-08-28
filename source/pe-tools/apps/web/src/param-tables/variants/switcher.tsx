@@ -40,13 +40,12 @@ export function VariantSwitcher({
 
   return (
     <div
-      className="face-mono t-value"
+      className="face-mono t-value z-dev shadow-modal"
       style={{
         position: "fixed",
         bottom: 16,
         left: "50%",
         transform: "translateX(-50%)",
-        zIndex: 9999,
         display: "flex",
         alignItems: "center",
         gap: 12,
@@ -54,7 +53,6 @@ export function VariantSwitcher({
         color: token("page"),
         borderRadius: 999,
         padding: "8px 16px",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
       }}
     >
       <Press
