@@ -398,13 +398,10 @@
 }
 
 /* ── HELP TIP · help.tsx ───────────────────────────────────────────────────────────────────
-   Region orientation behind a "?" mark. Reveal is hover/focus, CSS-only; the pop is SANS
-   because orientation is human language. One per region, beside its title, never on a control
-   (controls keep native titles). */
-.dl-help {
-  position: relative;
-  display: inline-flex;
-}
+   Region orientation behind a "?" mark. The pop is SANS because orientation is human language.
+   One per region, beside its title, never on a control (controls keep native titles).
+   Placement, reveal and the hidden state belong to the popover foundation (`ui/tooltip` over
+   Base UI, portalled to the body); this file only draws the mark and the note's box. */
 .dl-help-mark {
   display: grid;
   place-items: center;
@@ -422,9 +419,6 @@
   cursor: help;
 }
 .dl-help-pop {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
   z-index: 40;
   width: max-content;
   max-width: 38ch;
@@ -436,11 +430,6 @@
   background: var(--pe-artifact);
   --pe-on: var(--pe-artifact);
   border: 1px solid var(--pe-line-2);
-  visibility: hidden;
-}
-.dl-help:hover .dl-help-pop,
-.dl-help:focus-within .dl-help-pop {
-  visibility: visible;
 }
 
 /* blast radius is a GROUPING concern, not a tone. */

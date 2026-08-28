@@ -1,8 +1,8 @@
 /**
  * HELP TIP — region-level orientation, one hover away.
  *
- * CONSUMERS: /design-system §04 head (first); soon — pane/page titles and section heads across
- * the swept routes, as the replacement for inline explanatory prose.
+ * CONSUMERS: /design-system §04 head (first); the /param-tables variants; the family workspace
+ * and the two family prototypes, where it holds the prose that used to hide in long titles.
  *
  * THE BOUNDARY (ruled 2026-08-16, kaitpw — "make ? help a first-class primitive"):
  * - A `title` carries a CONTROL-level fact: what pressing does, why it refuses. Terse,
@@ -14,10 +14,15 @@
  *
  * Prose inside is SANS — orientation is human language, not a machine measurement.
  *
- * ponytail: CSS-only hover/focus reveal, absolutely positioned — no popover library, no portal.
- * Known ceiling: it clips inside overflow containers; when the shared popover foundation lands,
- * this rides it. Section heads — its habitat — rarely clip.
+ * The note rides the repo's popover foundation (`ui/tooltip` over Base UI), so it portals to the
+ * body instead of clipping inside the scroll regions its consumers actually sit in. The portal
+ * is `keepMounted`, which is what makes `aria-describedby` a stable association rather than one
+ * that exists only while the note is open — the reference resolves even while the note is
+ * `hidden`, which is the whole point of describing a control with text it does not display.
  */
+import { useId } from "react";
+
+import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
 import { cn } from "#/lib/utils";
 
 import "./lang.css";
@@ -29,14 +34,26 @@ export interface HelpTipProps {
 }
 
 export function HelpTip({ children, className }: HelpTipProps) {
+  const noteId = useId();
   return (
-    <span className={cn("dl-help", className)}>
-      <button type="button" className="dl-help-mark" aria-label="What is this?">
-        ?
-      </button>
-      <span className="dl-help-pop" role="note">
-        {children}
-      </span>
-    </span>
+    <UiTooltipProvider>
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          type="button"
+          className={cn("dl-help-mark", className)}
+          aria-label="What is this?"
+          aria-describedby={noteId}
+        >
+          ?
+        </Tooltip.Trigger>
+        <Tooltip.Portal keepMounted>
+          <Tooltip.Positioner side="bottom" align="start" sideOffset={4}>
+            <Tooltip.Popup id={noteId} className="dl-help-pop" role="note">
+              {children}
+            </Tooltip.Popup>
+          </Tooltip.Positioner>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </UiTooltipProvider>
   );
 }
