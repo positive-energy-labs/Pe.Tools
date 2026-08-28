@@ -16,7 +16,7 @@ This file is the map, not the log. It says where a value lives now.
 | projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks. It declares no number of its own. |
 | grammar | `apps/web/src/components/lang/` | The semantic vocabulary: `Verb`, `Press`, `FactChip`/`VizChip`, `StateCell`, `EmptyState`, `HelpTip`, `OutcomeLine`, `ArmingStrip`, `AddressingBar`, `Section`, `Switcher`. This is the base layer. `components/ui` composites may depend on it, and four already do (`combobox`, `dialog`, `input-group`, `side-pane`, all for `Press`). |
 | product | routes and feature dirs | Geometry and refinement only: sizes, spacing, panel widths, chart dimensions. No colour, no type scale, no broken-line pattern. |
-| runtime | `apps/web/src/lib/token.ts` | The one runtime token lookup. `token(role)` resolves `viz-*` and `dash-*` as raw families and everything else as `--pe-*`; `dash(role)` is its typed wrapper. Reserved for surfaces that serialize a drawing without a stylesheet (`grilles/spec-drawing`, `runs/feedback/composite`). Everywhere else, wear the class. |
+| runtime | `apps/web/src/lib/token.ts` | The one runtime token indirection for inline, SVG and serialized use. `token(role)` resolves `viz-*` and `dash-*` as raw families and everything else as `--pe-*`; `dash(role)` is its typed wrapper. Prefer a semantic class when a direct utility exists, but use this shared lookup wherever the value must cross a runtime or serialization boundary. |
 
 `styles.css` imports `base.css` then `design-lang.css`, in that order, and holds no value.
 
@@ -165,8 +165,8 @@ What the waves taught, beyond the counts.
 - **Fix at the primitive, not the call site.** `HelpTip` clipped on three of six new placements
   because it was absolutely positioned inside scroll containers. It moved onto the repo's existing
   popover foundation once, and every consumer got the portal and the `aria-describedby`.
-- **The browser finds what the guard cannot.** Duplicate React keys in `/param-tables` variant A
-  came from a browser pass, not a lane.
+- **The browser finds what the guard cannot.** Duplicate React keys in `/param-tables` variant C
+  came from repeated FOM `headRow` labels in a browser pass, not a deterministic lane.
 
 ## Verdicts later
 
