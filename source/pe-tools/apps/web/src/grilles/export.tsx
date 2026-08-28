@@ -11,6 +11,7 @@ import type { SheetRow } from "./sheet";
 import { SpecDrawing } from "./spec-drawing";
 import { frac, pct } from "./math";
 import { Press } from "#/components/lang/press";
+import { Verb } from "#/components/lang/verb";
 
 export function ExportSheet({
   rows,
@@ -62,13 +63,12 @@ export function ExportSheet({
         <span className="face-mono t-label text-ink-2">
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
-        <Press
-          type="button"
-          className="face-mono ml-auto t-label text-nav"
+        <Verb
+          label="print / save PDF"
+          reason="Hands this sheet to the browser's print dialog, where it becomes a PDF. Nothing in the model or the row set changes."
+          className="ml-auto"
           onClick={() => window.print()}
-        >
-          print / save PDF
-        </Press>
+        />
         <Press
           type="button"
           className="face-mono t-label text-ink-2 hover:text-ink"
@@ -89,7 +89,7 @@ export function ExportSheet({
               Positive Energy · custom wood floor grille
             </div>
             <input
-              className="mt-1 w-full bg-transparent text-[16px] outline-none"
+              className="mt-1 w-full bg-transparent t-title outline-none"
               placeholder="project / location"
               value={project}
               onChange={(e) => onProject(e.target.value)}
@@ -123,13 +123,12 @@ export function ExportSheet({
                   free area <b className="text-ink">{pct(r.freeArea)}</b> ·{" "}
                   {r.actualFreeArea.toFixed(1)} in²
                 </span>
-                <Press
-                  type="button"
-                  className="no-print text-nav"
+                <Verb
+                  label=".svg"
+                  reason="Saves this one drawing as a standalone .svg file, tokens baked in. Nothing in the model or the row set changes."
+                  className="no-print"
                   onClick={() => downloadSvg(r.id)}
-                >
-                  .svg
-                </Press>
+                />
               </figcaption>
               <div className="overflow-x-auto">
                 <SpecDrawing g={r} px={px} id={`-${r.id}`} />

@@ -140,7 +140,7 @@ export function Triptych({
                       : `color-mix(in srgb, ${token("ink")} 10%, transparent)`,
                   stroke: on ? token("ink") : token("ink-2"),
                   strokeWidth: on ? 1.6 : 1,
-                  strokeDasharray: geo.isVoid ? "4 3" : undefined,
+                  className: geo.isVoid ? "dash-void" : undefined,
                 };
                 return (
                   <Hit key={id} label={`solid ${geo.slug}`} onClick={() => onSelect(id)}>

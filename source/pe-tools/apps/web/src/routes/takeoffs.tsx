@@ -691,9 +691,7 @@ function Panel({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[calc(100vh-4rem)] w-[44rem] overflow-y-auto sm:max-w-[44rem]">
         <DialogHeader>
-          <DialogTitle className="font-pe-display text-sm font-semibold tracking-tight">
-            {title}
-          </DialogTitle>
+          <DialogTitle className="font-pe-display">{title}</DialogTitle>
         </DialogHeader>
         {children}
       </DialogContent>

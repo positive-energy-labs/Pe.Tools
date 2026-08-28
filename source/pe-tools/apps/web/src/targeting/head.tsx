@@ -10,6 +10,8 @@ import { token } from "#/lib/token";
  */
 import { useState } from "react";
 
+import { cn } from "#/lib/utils";
+
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Verb as VerbButton } from "#/components/lang/verb";
 import { TargetCaption, TargetingFlow } from "#/targeting/flow";
@@ -38,11 +40,11 @@ function Demand<K extends string>({
   const seam = b.feeds[k]?.seam;
   return (
     <span
-      className="face-mono t-caption"
+      className={cn("face-mono t-caption border-b", seam ? "seam-border" : undefined)}
       title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${seam.needs}` : ""}`}
       style={{
         color: bound ? token("ink") : token("caution"),
-        borderBottom: seam ? `1px dashed ${token("caution")}` : "1px solid transparent",
+        borderBottomColor: seam ? token("caution") : "transparent",
       }}
     >
       {k}

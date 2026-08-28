@@ -34,7 +34,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
 import { PARAM_ROWS, ageText, cellProps, type ParamRow } from "#/design-system/fixtures";
 
 export const Route = createFileRoute("/design-system")({ component: DesignSystem });
@@ -105,7 +105,7 @@ function Demo({
 /** A recorded gap, said out loud where a reader would otherwise think the demo was finished. */
 function GapNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="face-mono t-caption max-w-[86ch] border-l border-dashed border-line-2 pl-2 text-ink-2">
+    <p className="face-mono t-caption max-w-[86ch] border-l border-line-2 pl-2 text-ink-2">
       <span className="text-caution">gap · </span>
       {children}
     </p>
@@ -355,10 +355,13 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
             reason="no .r10 target bound — bind one in the sentence first"
           />
         </span>
-        <CounterExample why="the same refusal through ui/button, which the unmigrated routes still run on: it takes no reason, so the greying is unfalsifiable and a reader cannot tell a rule from a bug. Requiring the string is the enforcement.">
-          <Button variant="outline" size="sm" disabled>
+        <CounterExample why="the same refusal as surface machinery. Press is the right control for a tab or a close ×, and it takes no reason — so the greying is unfalsifiable and a reader cannot tell a rule from a bug. A control that acts on the world is a Verb, and requiring the string is the enforcement.">
+          <Press
+            disabled
+            className="inline-flex h-6 shrink-0 items-center rounded-md border border-line px-2 t-value font-medium text-ink disabled:opacity-50"
+          >
             sync to .r10
-          </Button>
+          </Press>
         </CounterExample>
       </span>
     ),
@@ -379,11 +382,63 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   },
   {
     name: "a stand-in announces itself",
-    text: "A surface with no such mark is claiming to be real, and that claim has to be true. The dashed edge is the mark, and it is reserved for ONE meaning — seam: typed but unproven. Dashed already means estimated, not-started, needs-attention, held, void and open-proposal across the unmigrated routes; do not mint a ninth, take a different slot.",
+    text: "A surface with no such mark is claiming to be real, and that claim has to be true. In the UI the broken edge means ONE thing — seam: declared, with nothing real behind it. A technical drawing is the exception, and it is a real one: draughting has always used broken lines as a vocabulary, so drawings get two more NAMED roles and nothing else. Three roles, one authority in base.css; no call site names a pattern, and a surface that serializes a drawing reads the same values through lib/token.ts.",
     demo: (
-      <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
-        fixture
-      </FactChip>
+      <span className="flex items-center gap-3">
+        <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
+          fixture
+        </FactChip>
+        <svg width="150" height="34" aria-label="the two drawing roles" className="shrink-0">
+          <line
+            x1={2}
+            y1={9}
+            x2={110}
+            y2={9}
+            stroke="currentColor"
+            strokeWidth={1}
+            className="dash-reference"
+          />
+          <text x={116} y={12} className="face-mono t-caption" fill="currentColor">
+            reference
+          </text>
+          <rect
+            x={2}
+            y={19}
+            width={108}
+            height={12}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1}
+            className="dash-void"
+          />
+          <text x={116} y={29} className="face-mono t-caption" fill="currentColor">
+            void
+          </text>
+        </svg>
+      </span>
+    ),
+  },
+  {
+    name: "type is tier × face × case",
+    text: "A call site never names a pixel. Seven tiers carry their own leading, and each one is a ROLE, not a size: caption is machine chrome, label is a field name, value is a datum, prose is something a person reads, title names a region, head names the whole surface, display is the front door. Adding a rung takes the same bar as adding a state word — t-head exists because three route headings had landed at 20, 24 and 30px with nothing to sit on.",
+    demo: (
+      <span className="flex flex-col gap-0.5">
+        {(
+          [
+            ["t-caption", "the machine's own chrome"],
+            ["t-label", "field name"],
+            ["t-value", "42.5 sf"],
+            ["t-prose", "something a person reads"],
+            ["t-title", "a region"],
+            ["t-head", "the surface"],
+          ] as const
+        ).map(([tier, sample]) => (
+          <span key={tier} className="flex items-baseline gap-2">
+            <span className="face-mono t-caption w-16 shrink-0 text-ink-mute">{tier}</span>
+            <span className={tier}>{sample}</span>
+          </span>
+        ))}
+      </span>
     ),
   },
   {

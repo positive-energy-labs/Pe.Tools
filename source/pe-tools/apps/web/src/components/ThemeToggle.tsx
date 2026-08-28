@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
+import { cn } from "#/lib/utils";
 
 type ThemeMode = "light" | "dark" | "auto";
 
@@ -58,18 +59,18 @@ export function ThemeToggle({ className }: { className?: string }) {
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
+    <Press
       onClick={cycle}
       aria-label={label}
       title={label}
-      className={className}
+      className={cn(
+        "inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border border-line px-2 t-value font-medium whitespace-nowrap text-ink transition-all hover:veil [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        className,
+      )}
     >
       <Icon className="size-3.5" />
       {LABEL[mode]}
-    </Button>
+    </Press>
   );
 }
 

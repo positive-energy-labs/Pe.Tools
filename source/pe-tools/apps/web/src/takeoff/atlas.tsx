@@ -232,10 +232,7 @@ function Swatch({ tone, label, seam }: { tone: string; label: string; seam?: boo
   return (
     <span className="face-mono t-value inline-flex items-center gap-1 text-ink-2">
       <span
-        className={cn(
-          "inline-block size-2.5 rounded-[1px] border",
-          seam === true && "border-dashed",
-        )}
+        className={cn("inline-block size-2.5 rounded-[1px] border", seam === true && "seam-border")}
         style={{
           backgroundColor: `color-mix(in srgb, ${tone} 16%, transparent)`,
           borderColor: tone,
@@ -1261,10 +1258,9 @@ function LevelPlan({
                   fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
                   stroke={ABSENT_INK}
                   strokeOpacity={0.35}
-                  strokeDasharray="3 2"
                   strokeWidth={1}
                   vectorEffect="non-scaling-stroke"
-                  className="pointer-events-none"
+                  className="dash-seam pointer-events-none"
                 />
               ))}
 
@@ -1291,9 +1287,8 @@ function LevelPlan({
                       fill={`color-mix(in srgb, ${tone} 45%, transparent)`}
                       stroke={tone}
                       strokeWidth={isCursor ? 2 : 1}
-                      strokeDasharray="3 2"
                       vectorEffect="non-scaling-stroke"
-                      className="cursor-pointer"
+                      className="dash-seam cursor-pointer"
                       onClick={click}
                     >
                       <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label} (no detected boundary)`}</title>
@@ -1919,9 +1914,9 @@ function ZonePeek({
               fill={`color-mix(in srgb, ${ABSENT_INK} 12%, transparent)`}
               stroke={ABSENT_INK}
               strokeOpacity={0.4}
-              strokeDasharray="4 3"
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
+              className="dash-seam"
             >
               <title>{`held residue · ${residue.reason} · ${fmtNum(residue.rawSqft, 0)} sf`}</title>
             </path>
@@ -1945,8 +1940,8 @@ function ZonePeek({
                   fill={`color-mix(in srgb, ${accent} ${on ? 45 : 18}%, transparent)`}
                   stroke={accent}
                   strokeWidth={on ? 2 : 1}
-                  strokeDasharray="3 2"
                   vectorEffect="non-scaling-stroke"
+                  className="dash-seam"
                 >
                   <title>{`${room.name} · ${fmtNum(room.sqft, 0)} sf · position only, no boundary`}</title>
                 </circle>

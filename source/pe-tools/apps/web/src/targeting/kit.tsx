@@ -610,7 +610,13 @@ export function StageStrip<K extends string>({
   );
 }
 
-/** Pane strip — demands gate panes, made visible. Disabled panes read as locked text and say why. */
+/**
+ * Pane strip — demands gate panes, made visible. This READS; it does not act. Every entry used to
+ * be a control with no click handler, claiming an affordance it does not have, so the entries are
+ * plain text now: an available pane is upright with its underline, a gated one is muted italic and
+ * its `title` says what it needs. No action is invented — wiring the gate is still owed
+ * (design-system ledger, targeting Q4).
+ */
 export function PaneStrip<K extends string>({
   product,
   b,
@@ -626,24 +632,18 @@ export function PaneStrip<K extends string>({
       {product.panes.map((p) => {
         const st = paneState(product, p, b);
         return (
-          <Press
-            type="button"
+          <span
             key={p.key}
             title={st.reason}
-            disabled={!st.ok}
-            aria-disabled={!st.ok}
             className="face-mono t-caption"
             style={{
               color: st.ok ? token("ink") : token("ink-mute"),
               fontStyle: st.ok ? undefined : "italic",
-              borderBottom: st.ok ? `1px solid ${token("line-2")}` : "1px solid transparent",
-              backgroundColor: "transparent",
-              padding: 0,
-              pointerEvents: st.ok ? undefined : "none",
+              borderBottom: st.ok ? `1px solid ${token("line-2")}` : undefined,
             }}
           >
             {p.label}
-          </Press>
+          </span>
         );
       })}
     </span>

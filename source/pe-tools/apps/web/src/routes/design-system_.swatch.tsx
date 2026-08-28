@@ -35,7 +35,7 @@ import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { Badge } from "#/components/ui/badge";
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
 import {
   Card,
   CardAction,
@@ -282,7 +282,7 @@ function Swatch() {
             <Link to="/design-system" className="t-label text-nav hover:underline">
               ← design system
             </Link>
-            <span className="font-pe-display text-sm font-semibold tracking-tight">swatch</span>
+            <span className="t-title font-pe-display">swatch</span>
             <span className="truncate t-label text-ink-2">
               every component · every variant · every state · the import path
             </span>
@@ -299,8 +299,8 @@ function Swatch() {
 
       <main className="page-wrap flex flex-col gap-8 pt-6 pb-24">
         <div className="flex flex-col gap-3">
-          <p className="font-pe-display text-2xl font-semibold tracking-tight">The swatch.</p>
-          <p className="max-w-[80ch] text-[12.5px] leading-relaxed text-ink-2">
+          <p className="t-head font-pe-display">The swatch.</p>
+          <p className="max-w-[80ch] t-prose text-ink-2">
             A lookup table, not a spec: find the component, read its whole variant × state surface
             at once, copy the import path — the rulings behind any of it live on{" "}
             <Link to="/design-system" className="text-nav hover:underline">
@@ -325,7 +325,7 @@ function GroupHead({ title, note }: { title: string; note: string }) {
   return (
     <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
       <span className="t-label font-semibold tracking-[0.09em] uppercase">{title}</span>
-      <span className="min-w-0 flex-1 text-[11.5px] text-ink-2">{note}</span>
+      <span className="min-w-0 flex-1 t-label text-ink-2">{note}</span>
     </div>
   );
 }
@@ -804,16 +804,9 @@ const BADGE_VARIANTS = [
   "kiln",
 ] as const;
 
-const BUTTON_VARIANTS = [
-  "default",
-  "outline",
-  "secondary",
-  "ghost",
-  "destructive",
-  "link",
-] as const;
-const BUTTON_SIZES = ["xs", "sm", "default", "lg"] as const;
-const BUTTON_ICON_SIZES = ["icon-xs", "icon-sm", "icon", "icon-lg"] as const;
+/** The shape the exhibit's own trigger/action specimens wear, now that `ui/button` is gone. */
+const SPEC_PRESS =
+  "inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border border-line px-2 t-value font-medium whitespace-nowrap text-ink transition-all hover:veil";
 
 const PANE_KINDS = ["navigation", "visual", "content", "inspector"] as const;
 
@@ -848,38 +841,36 @@ function UiGroup() {
       </Block>
 
       <Block
-        group="ui"
-        file="button"
-        name="Button · buttonVariants"
-        consumers="22 consumers — the widest surface in the app"
+        group="lang"
+        file="press"
+        name="Press — the machinery control"
+        consumers="every control outside components/ui + components/lang"
       >
-        <Grid
-          rows={BUTTON_VARIANTS}
-          cols={BUTTON_SIZES}
-          cell={(v, s) => (
-            <Button variant={v} size={s}>
-              save
-            </Button>
-          )}
-        />
         <Lane>
-          {BUTTON_ICON_SIZES.map((s) => (
-            <Spec key={s} cap={`variant=outline · size=${s}`}>
-              <Button variant="outline" size={s} aria-label="refresh">
-                <RefreshCw />
-              </Button>
-            </Spec>
-          ))}
-          {BUTTON_VARIANTS.map((v) => (
-            <Spec key={v} cap={`variant=${v} · disabled`}>
-              <Button variant={v} disabled>
-                save
-              </Button>
-            </Spec>
-          ))}
+          <Spec cap="neutral · the call site owns its layout">
+            <Press className="inline-flex h-6 items-center rounded-md border border-line px-2 t-value font-medium text-ink">
+              raw json
+            </Press>
+          </Spec>
+          <Spec cap="icon · the one shape Press draws">
+            <Press icon aria-label="refresh" className="size-6 text-ink">
+              <RefreshCw className="size-3" />
+            </Press>
+          </Spec>
+          <Spec cap="disabled · no reason, and none is claimed">
+            <Press
+              disabled
+              className="inline-flex h-6 items-center rounded-md border border-line px-2 t-value font-medium text-ink disabled:opacity-50"
+            >
+              raw json
+            </Press>
+          </Spec>
         </Lane>
         <Note>
-          hover, :focus-visible and :active (translate-y-px) cannot be frozen — hover a specimen.
+          Press mints no tone and draws no layout — it owns native button semantics, the one hover
+          veil, the focus ring and an honest disabled cursor. A control that ACTS on the world is a
+          Verb (below), which is where the four tones and the required reason live. Hover and
+          :focus-visible cannot be frozen — hover a specimen.
         </Note>
       </Block>
 
@@ -898,9 +889,7 @@ function UiGroup() {
                   <CardDescription>13 params · 3 types</CardDescription>
                 </div>
                 <CardAction>
-                  <Button variant="outline" size="xs">
-                    open
-                  </Button>
+                  <Press className={cn(SPEC_PRESS, "h-5 rounded-sm t-caption")}>open</Press>
                 </CardAction>
               </CardHeader>
               <CardContent>content</CardContent>
@@ -968,9 +957,7 @@ function UiGroup() {
         <Lane>
           <Spec cap="trigger → portalled popup">
             <Dialog>
-              <DialogTrigger render={<Button variant="outline" size="sm" />}>
-                open dialog
-              </DialogTrigger>
+              <DialogTrigger render={<Press className={SPEC_PRESS} />}>open dialog</DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Dialog</DialogTitle>
@@ -1027,7 +1014,7 @@ function UiGroup() {
               <InputGroup>
                 <InputGroupInput placeholder="search…" />
                 <InputGroupAddon align="inline-end">
-                  <InputGroupButton size="icon-xs" variant="ghost" aria-label="search">
+                  <InputGroupButton size="icon-xs" aria-label="search">
                     <Search />
                   </InputGroupButton>
                 </InputGroupAddon>
@@ -1070,9 +1057,13 @@ function UiGroup() {
                   title={k}
                   meta="4"
                   actions={
-                    <Button variant="ghost" size="icon-xs" aria-label="refresh">
-                      <RefreshCw />
-                    </Button>
+                    <Press
+                      icon
+                      aria-label="refresh"
+                      className="size-5 rounded-sm text-ink hover:veil"
+                    >
+                      <RefreshCw className="size-2.5" />
+                    </Press>
                   }
                 >
                   <div className="p-2 t-label text-ink-2">body</div>
@@ -1271,7 +1262,7 @@ function ComboboxSpec() {
       <div ref={anchorRef} className="inline-flex">
         <ComboboxTrigger
           title="Category"
-          render={<Button variant="outline" size="sm" className="w-40 justify-between" />}
+          render={<Press className={cn(SPEC_PRESS, "h-7 w-40 justify-between")} />}
         >
           <span className="truncate">{picked?.label ?? "category"}</span>
         </ComboboxTrigger>

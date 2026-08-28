@@ -61,7 +61,7 @@ function BoxMark({
         : "none",
     stroke,
     strokeWidth: outline ? 0.8 : 1.3,
-    strokeDasharray: box.isSolid ? undefined : "4 3",
+    className: box.isSolid ? undefined : "dash-void",
   };
 
   if (box.diameter != null && view.depth === 2) {
@@ -120,7 +120,7 @@ export function ViewPanel({
             y2={vertical ? size : at}
             stroke={muted ? token("line") : token("line-2")}
             strokeWidth={0.75}
-            strokeDasharray="2 3"
+            className="dash-reference"
           />
           {labelPlanes && !muted ? (
             <text

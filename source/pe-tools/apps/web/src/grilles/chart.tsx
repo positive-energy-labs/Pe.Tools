@@ -47,7 +47,7 @@ export function FieldChart({ field, active, onPick }: Props) {
         y1={Y(active.freeArea)}
         y2={Y(active.freeArea)}
         stroke={token("line")}
-        strokeDasharray="3 3"
+        className="dash-reference"
       />
       {widths.map((w) => {
         const pts = field.filter((g) => g.opening === w).sort((a, b) => a.openings - b.openings);

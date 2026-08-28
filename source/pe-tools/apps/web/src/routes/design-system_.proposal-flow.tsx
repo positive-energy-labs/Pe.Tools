@@ -102,7 +102,7 @@ function ProposalFlow() {
       />
 
       <main className="page-wrap flex flex-col gap-10 pt-8 pb-24">
-        <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-ink-2">
+        <p className="max-w-[78ch] t-prose text-ink-2">
           Accept, deny or undo anything in pea&apos;s card and watch the row below it move. Both
           surfaces render every value through one function, so the card cannot teach a mark the
           table does not draw. <strong className="font-normal text-ink">Connected Load</strong> is
@@ -127,7 +127,7 @@ function ProposalFlow() {
                 >
                   {m.who}
                 </span>
-                <p className="min-w-0 text-[12.5px] leading-relaxed">{m.text}</p>
+                <p className="min-w-0 t-prose">{m.text}</p>
               </div>
             ))}
 
@@ -179,9 +179,7 @@ function ProposalFlow() {
                     key={item.key}
                     className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 border-b border-line px-2.5 py-2 last:border-b-0"
                   >
-                    <span className="truncate face-mono text-[10.5px] text-ink-2">
-                      {item.param}
-                    </span>
+                    <span className="truncate face-mono t-caption text-ink-2">{item.param}</span>
                     <span className="flex min-w-0 flex-wrap items-baseline gap-2">
                       {/* GAP (StateCell): the card knows the PRIOR value and the cell has no slot
                           for it — `current → proposed` is renderable in a chat card and physically
@@ -190,9 +188,7 @@ function ProposalFlow() {
                           beside the cell rather than smuggled into `value`, so the two scales stay
                           honestly different where the model is honestly incomplete. */}
                       {item.review === "open" && item.current != null ? (
-                        <span className="face-mono text-[10.5px] text-ink-mute">
-                          {item.current} →
-                        </span>
+                        <span className="face-mono t-caption text-ink-mute">{item.current} →</span>
                       ) : null}
                       <StateCell {...itemCell(item, committed)} />
                     </span>
@@ -381,7 +377,7 @@ function Header({ title, note }: { title: string; note: string }) {
           <Link to="/design-system" className="t-label text-nav hover:underline">
             ← design system
           </Link>
-          <span className="font-pe-display text-sm font-semibold tracking-tight">{title}</span>
+          <span className="t-title font-pe-display">{title}</span>
           <span className="truncate t-label text-ink-2">{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no document.">
             fixture
@@ -398,14 +394,14 @@ function SectionHead({ n, title, note }: { n: string; title: string; note: strin
     <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
       <span className="face-mono t-caption text-ink-mute">{n}</span>
       <span className="t-label font-semibold tracking-[0.09em] uppercase">{title}</span>
-      <span className="min-w-0 flex-1 text-[11.5px] text-ink-2">{note}</span>
+      <span className="min-w-0 flex-1 t-label text-ink-2">{note}</span>
     </div>
   );
 }
 
 function Gap({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-[86ch] border-l border-dashed border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
+    <p className="max-w-[86ch] border-l border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
       <span className="text-caution">gap · </span>
       {children}
     </p>

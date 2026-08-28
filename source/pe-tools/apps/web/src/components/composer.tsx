@@ -7,7 +7,6 @@ import {
 } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
-import { Button } from "#/components/ui/button";
 import { ControlChips } from "#/components/control-chips";
 import { Textarea } from "#/components/ui/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
@@ -203,15 +202,14 @@ export function Composer({
           />
           {/* Control row: attachments + session controls (model/access) left, send right. */}
           <div className="flex items-center gap-1 pt-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
+            <Press
+              icon
+              className="size-7 text-ink hover:veil"
               title="Attach files"
               onClick={() => fileRef.current?.click()}
             >
               <Paperclip className="size-4" />
-            </Button>
+            </Press>
             <input
               ref={fileRef}
               type="file"
@@ -222,20 +220,26 @@ export function Composer({
             <ControlChips />
             <span className="flex-1" />
             {isRunning ? (
-              <Button type="button" size="icon" title="Stop" aria-label="Stop" onClick={cancel}>
+              <Press
+                icon
+                className="size-7 border border-line bg-artifact text-ink hover:veil"
+                title="Stop"
+                aria-label="Stop"
+                onClick={cancel}
+              >
                 <Square className="size-3.5" />
-              </Button>
+              </Press>
             ) : (
-              <Button
-                type="button"
-                size="icon"
+              <Press
+                icon
+                className="size-7 border border-line bg-artifact text-ink hover:veil disabled:pointer-events-none disabled:opacity-50"
                 title="Send"
                 aria-label="Send message"
                 disabled={!canSend}
                 onClick={sendCurrent}
               >
                 <ArrowUp className="size-4" />
-              </Button>
+              </Press>
             )}
           </div>
         </div>

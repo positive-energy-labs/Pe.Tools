@@ -67,6 +67,11 @@
   line-height: var(--type-title-line-height);
 }
 
+@utility t-head {
+  font-size: var(--type-head-size);
+  line-height: var(--type-head-line-height);
+}
+
 @utility t-display {
   font-size: var(--type-display-size);
   line-height: var(--type-display-line-height);

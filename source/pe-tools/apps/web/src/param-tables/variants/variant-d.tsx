@@ -539,7 +539,7 @@ export function VariantD() {
       <AddressingBar
         name="param-tables · d"
         sentence={
-          <span className="text-sm">
+          <span className="t-prose">
             ProjectA_Clone_Aug_11 · Main House · <span className="font-medium">design facts</span>
           </span>
         }

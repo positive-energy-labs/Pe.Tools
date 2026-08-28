@@ -47,8 +47,13 @@
   --type-prose-line-height: 1.6;
   --type-title-size: 16px;
   --type-title-line-height: 1.3;
+  --type-head-size: 24px;
+  --type-head-line-height: 1.2;
   --type-display-size: 40px;
   --type-display-line-height: 1.15;
+  --dash-seam: 3 2;
+  --dash-reference: 12 3 2 3;
+  --dash-void: 4 3;
   --motion-control: 120ms;
   --z-raised: 10;
   --z-sticky: 20;
@@ -252,8 +257,22 @@
     transform: rotate(360deg);
   }
 }
+/* Broken lines — three roles, one authority. No second dash authority exists; a drawing
+   serialized without a stylesheet reads these same values through `lib/token.ts`.
+     seam       declared, with nothing real behind it. The one UI broken edge.
+     reference  not part of the thing drawn — says where it is measured from.
+     void       an outline of space where material is absent. */
 [data-pe] .seam-border {
   border-style: dashed;
+}
+[data-pe] .dash-seam {
+  stroke-dasharray: var(--dash-seam);
+}
+[data-pe] .dash-reference {
+  stroke-dasharray: var(--dash-reference);
+}
+[data-pe] .dash-void {
+  stroke-dasharray: var(--dash-void);
 }
 
 [data-pe] .alarm-wash {
@@ -310,6 +329,14 @@
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: var(--type-title-line-height);
+}
+/* t-head names the whole surface — one per route or workspace. t-title names a region inside it
+   (a pane, a dialog, a card); t-display is the front door's hero. */
+[data-pe] .t-head {
+  font-size: var(--type-head-size);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: var(--type-head-line-height);
 }
 [data-pe] .t-display {
   font-size: var(--type-display-size);

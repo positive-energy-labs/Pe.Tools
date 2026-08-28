@@ -23,7 +23,7 @@ export function SchemaToFieldRender({
     [schemaDocument, validationResult],
   );
   if (rootEntries.length === 0) {
-    return <p className="text-sm text-ink-2">Schema has no editable properties.</p>;
+    return <p className="t-prose text-ink-2">Schema has no editable properties.</p>;
   }
 
   return (

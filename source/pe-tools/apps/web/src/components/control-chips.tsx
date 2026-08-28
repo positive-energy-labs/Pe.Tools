@@ -1,4 +1,4 @@
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
 import { EmptyState } from "#/components/lang/empty";
 import {
   Combobox,
@@ -95,11 +95,7 @@ function Picker({
         <ComboboxTrigger
           title={title}
           render={
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 max-w-40 justify-between gap-1 px-2 text-ink-2"
-            />
+            <Press className="inline-flex h-7 max-w-40 shrink-0 items-center justify-between gap-1 rounded-md px-2 t-value font-medium whitespace-nowrap text-ink-2 transition-all hover:veil aria-expanded:bg-recess aria-expanded:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0" />
           }
         >
           <span className="t-value face-mono truncate">{label}</span>

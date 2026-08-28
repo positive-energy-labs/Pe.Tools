@@ -390,7 +390,7 @@ export function VariantB() {
 
   return (
     <div
-      className="flex h-screen flex-col overflow-hidden text-sm"
+      className="flex h-screen flex-col overflow-hidden t-prose"
       style={{ backgroundColor: token("page"), color: token("ink") }}
     >
       <AddressingBar

@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "#/lib/utils";
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
 
 /**
  * SidePane — one width-adjustable flanking pane for the workbench. Replaces the ad-hoc
@@ -122,14 +122,14 @@ export function SidePane({
           className,
         )}
       >
-        <Button
-          size="icon-sm"
-          variant="ghost"
+        <Press
+          icon
+          className="size-6 text-ink hover:veil [&_svg:not([class*='size-'])]:size-3"
           aria-label="Expand pane"
           onClick={() => setOpen(true)}
         >
           <Expand />
-        </Button>
+        </Press>
         {rail && <div className="mt-1 flex flex-col items-center gap-1">{rail}</div>}
       </div>
     );
@@ -144,14 +144,14 @@ export function SidePane({
       className={cn("relative flex shrink-0 flex-col border-line bg-page", border, className)}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2.5">
-        <Button
-          size="icon-sm"
-          variant="ghost"
+        <Press
+          icon
+          className="size-6 text-ink hover:veil [&_svg:not([class*='size-'])]:size-3"
           aria-label="Collapse pane"
           onClick={() => setOpen(false)}
         >
           <Collapse />
-        </Button>
+        </Press>
         <div className="min-w-0 flex-1">{header}</div>
       </div>
 

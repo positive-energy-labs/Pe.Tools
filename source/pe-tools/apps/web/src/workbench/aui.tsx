@@ -207,9 +207,7 @@ function UserMoment() {
         {/* Hard block, not a speech bubble — the radius law. Right alignment + a NEUTRAL ink
             wash are the scan cue for "my turns": fills separate, and no hue is bought (the
             "you" identity ruling). No border — plain prose is never enclosed. */}
-        {text ? (
-          <div className="rounded-sm bg-ink/6 px-3 py-2 text-sm leading-normal">{text}</div>
-        ) : null}
+        {text ? <div className="rounded-sm bg-ink/6 px-3 py-2 t-prose">{text}</div> : null}
       </div>
     </MomentSection>
   );

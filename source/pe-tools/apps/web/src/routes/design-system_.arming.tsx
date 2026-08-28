@@ -70,7 +70,7 @@ function ArmingRoute() {
       />
 
       <main className="page-wrap flex flex-col gap-10 pt-8 pb-24">
-        <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-ink-2">
+        <p className="max-w-[78ch] t-prose text-ink-2">
           The strip is the cell grammar at its largest scale: a tinted ground plus one edge, inside
           the artifact frame it draws itself. Round 1 found that only this treatment read as{" "}
           <em>ceremony</em> rather than as another component, and attributed it to border scarcity.
@@ -250,7 +250,7 @@ function Frozen({
     <div className="flex min-w-0 flex-col gap-2">
       <span className="face-mono t-caption text-ink-mute">{phase}</span>
       {children}
-      <p className="text-[10.5px] leading-relaxed text-ink-2">{says}</p>
+      <p className="t-caption text-ink-2">{says}</p>
     </div>
   );
 }
@@ -265,7 +265,7 @@ function Header({ title, note }: { title: string; note: string }) {
           <Link to="/design-system" className="t-label text-nav hover:underline">
             ← design system
           </Link>
-          <span className="font-pe-display text-sm font-semibold tracking-tight">{title}</span>
+          <span className="t-title font-pe-display">{title}</span>
           <span className="truncate t-label text-ink-2">{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no plan.">
             fixture
@@ -282,14 +282,14 @@ function SectionHead({ n, title, note }: { n: string; title: string; note: strin
     <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
       <span className="face-mono t-caption text-ink-mute">{n}</span>
       <span className="t-label font-semibold tracking-[0.09em] uppercase">{title}</span>
-      <span className="min-w-0 flex-1 text-[11.5px] text-ink-2">{note}</span>
+      <span className="min-w-0 flex-1 t-label text-ink-2">{note}</span>
     </div>
   );
 }
 
 function Gap({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-[86ch] border-l border-dashed border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
+    <p className="max-w-[86ch] border-l border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
       <span className="text-caution">gap · </span>
       {children}
     </p>

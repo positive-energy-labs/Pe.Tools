@@ -307,7 +307,7 @@ export function FieldLegendRow({
   path?: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-2 px-2 text-sm text-ink-2">
+    <div className="inline-flex items-center gap-2 px-2 t-prose text-ink-2">
       <span>{label}</span>
       {required ? <RequiredBadge /> : null}
       <FieldChangeBadge path={path} />

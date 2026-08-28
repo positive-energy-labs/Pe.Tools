@@ -485,6 +485,19 @@
   appearance: none;
   cursor: pointer;
 }
+/* Icon-only — the one shape `Press` draws, because a square hit target is geometry, not tone.
+   The call site still owns the size. */
+.dl-press-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+}
+.dl-press-icon > svg {
+  pointer-events: none;
+  flex: none;
+}
 .dl-press:disabled {
   cursor: not-allowed;
 }

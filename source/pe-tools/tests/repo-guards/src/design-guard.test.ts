@@ -118,7 +118,7 @@ describe("design guard â€” current token authority", () => {
   it("projects every type tier through shared raw size and line-height values", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
     const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
-    for (const tier of ["caption", "label", "value", "prose", "title", "display"]) {
+    for (const tier of ["caption", "label", "value", "prose", "title", "head", "display"]) {
       const block = new RegExp(
         `(?:\\.t-${tier}|@utility\\s+t-${tier})\\s*\\{(?=[^}]*font-size:\\s*var\\(--type-${tier}-size\\))(?=[^}]*line-height:\\s*var\\(--type-${tier}-line-height\\))[^}]*\\}`,
         "s",
@@ -247,7 +247,11 @@ const ratchet = (name: string, offences: Offence[]) => {
 
 describe("design guard — ratchets (baselines may only fall)", () => {
   it("rawTextSize — arbitrary and named raw text-size utilities", () => {
-    const re = /(?<![-\w])text-(?:\[(?:\d+(?:\.\d+)?|\.\d+)px\]|xs|sm|base|lg|xl|\d+xl)(?![-\w])/g;
+    // Absolute units only. `text-[0.7rem]` (ADR 0004's named outlier, in `ui/badge`) survived the
+    // px-only form of this gate; `em` stays legal because `text-[1em]` is an inheritance
+    // instruction — `PROSE_CLASS` is composed at two different tiers by its two consumers.
+    const re =
+      /(?<![-\w])text-(?:\[(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem)\]|xs|sm|base|lg|xl|\d+xl)(?![-\w])/g;
     ratchet("rawTextSize", scan(FILES, re));
   });
 
@@ -265,14 +269,17 @@ describe("design guard — ratchets (baselines may only fall)", () => {
     ratchet("uiButtonImports", scan(FILES, /from\s+["'][^"']*ui\/button["']/g));
   });
 
-  it("dashed — broken-edge mechanisms outside lang (R13b: dashed means SEAM, one slot)", () => {
-    ratchet(
-      "dashed",
-      scan(
-        FILES.filter((f) => !inUiOrLang(f) && f.rel !== "design-lang.css" && f.rel !== "base.css"),
-        /border-dashed|stroke-dasharray|border-style:\s*dashed/g,
-      ),
-    );
+  it("dashed — every broken line comes from a named role, never a raw pattern", () => {
+    // Both representations: an edge (border/outline `dashed`) and a stroke (camelCase JSX attr,
+    // kebab CSS declaration, or a serialized SVG string) whose value is not a `dash()` role.
+    // Authority: base.css. Callers wear a `dash-*`/`seam-border` class or read `dash(role)`.
+    const edge =
+      /border-dashed|(?:\bborder(?:-(?:top|right|bottom|left|style)|Top|Right|Bottom|Left|Style)?|\boutline(?:-style|Style)?)\s*:\s*[^;\n]{0,40}\bdashed\b/g;
+    const stroke = /stroke-?[Dd]asharray\s*[:=](?![^\n]{0,30}dash\()/g;
+    const files = FILES.filter(
+      (f) => !inUiOrLang(f) && f.rel !== "design-lang.css" && f.rel !== "base.css",
+    ).map((f) => ({ ...f, text: stripComments(f.text) }));
+    ratchet("dashed", [...scan(files, edge), ...scan(files, stroke)]);
   });
 
   it("longTitle — title= props over 240 chars (the hover shadow-doc, fit review B·5)", () => {

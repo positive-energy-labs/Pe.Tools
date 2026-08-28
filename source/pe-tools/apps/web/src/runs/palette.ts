@@ -10,7 +10,9 @@ export const SEAL_RUN = law.invented.sealRun as Rgba;
 export const CLOSE_M = law.invented.close as Rgba;
 export const ZONE_STROKE = `rgba(${law.zone.stroke.rgba.join(",")})`;
 export const ZONE_WIDTH = law.zone.stroke.widthPx;
-export const ZONE_DASH = law.zone.stroke.dash.join(" ");
+// The zone boundary is the RECEIVED input the solver's output is read against, so it wears the
+// shared `reference` broken line. It is deliberately not read from `law.zone.stroke.dash`: the
+// visual law owns this surface's colours and widths, never a second dash-pattern authority.
 const residueTreatment = (residue: typeof law.void) => ({
   fill: residue.fill,
   outline: {

@@ -9,7 +9,12 @@ import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { VerbLane } from "#/components/verb-lane";
 import { Provenance } from "#/components/lang/section";
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
+import { cn } from "#/lib/utils";
+
+/** This route's own chip shape — a dense picker rail, used by its glances, examples and mode. */
+const OPS_CHIP =
+  "inline-flex h-5 shrink-0 items-center justify-center gap-1 rounded-sm px-2 t-caption font-medium whitespace-nowrap transition-all hover:veil";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import {
@@ -209,14 +214,16 @@ function OpsPage({ store }: { store: OpsStore }) {
         <section className="flex flex-wrap items-center gap-1.5">
           <span className="t-label t-upper mr-1 text-ink-2">Glance</span>
           {syntheticOps.map((glance) => (
-            <Button
+            <Press
               key={glance.key}
-              variant={selectedGlanceKey === glance.key ? "secondary" : "ghost"}
-              size="xs"
+              className={cn(
+                OPS_CHIP,
+                selectedGlanceKey === glance.key ? "bg-recess text-ink" : "text-ink",
+              )}
               onClick={() => store.actions.setSelectedGlance(glance.key)}
             >
               {glance.displayName}
-            </Button>
+            </Press>
           ))}
         </section>
 
@@ -314,10 +321,9 @@ function OperationPane({
           <h2 className="t-label t-upper text-ink-2">Request</h2>
           <span className="flex gap-1">
             {operation.requestExamples.map((example) => (
-              <Button
+              <Press
                 key={example.name}
-                variant="ghost"
-                size="xs"
+                className={cn(OPS_CHIP, "text-ink")}
                 title={example.description}
                 onClick={() => {
                   setArgs(example.json);
@@ -325,16 +331,15 @@ function OperationPane({
                 }}
               >
                 {example.name}
-              </Button>
+              </Press>
             ))}
             {schema ? (
-              <Button
-                variant="outline"
-                size="xs"
+              <Press
+                className={cn(OPS_CHIP, "border border-line text-ink")}
                 onClick={() => setMode(mode === "form" ? "raw" : "form")}
               >
                 {mode === "form" ? "raw" : "form"}
-              </Button>
+              </Press>
             ) : null}
           </span>
         </div>

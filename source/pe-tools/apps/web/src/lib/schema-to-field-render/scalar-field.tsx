@@ -71,7 +71,7 @@ export function ScalarField({
             size="sm"
             onCheckedChange={field.change}
           />
-          <span className="text-sm text-ink-2">{field.value ? "Enabled" : "Disabled"}</span>
+          <span className="t-prose text-ink-2">{field.value ? "Enabled" : "Disabled"}</span>
         </div>
       ) : options.length > 0 && allowsCustomValue ? (
         <>

@@ -412,7 +412,7 @@ function FixtureViews({
                   y2={Y(0)}
                   stroke={token("line")}
                   strokeWidth={0.5}
-                  strokeDasharray="2 4"
+                  className="dash-reference"
                 />
                 <line
                   x1={X(0)}
@@ -421,7 +421,7 @@ function FixtureViews({
                   y2={BOX - M}
                   stroke={token("line")}
                   strokeWidth={0.5}
-                  strokeDasharray="2 4"
+                  className="dash-reference"
                 />
               </>
             )}
@@ -478,7 +478,7 @@ function FixtureViews({
                       : token("line-2")
                     : partStroke(part.slug),
                   strokeWidth: 0.8,
-                  strokeDasharray: part.isVoid ? "3 2" : undefined,
+                  className: part.isVoid ? "dash-void" : undefined,
                 };
                 if (view.depth === "z" && part.kind === "cyl")
                   return (
@@ -822,7 +822,7 @@ function ModelViews({
                     y2={Y(0)}
                     stroke={token("line")}
                     strokeWidth={0.5}
-                    strokeDasharray="2 4"
+                    className="dash-reference"
                   />
                   <line
                     x1={X(0)}
@@ -831,7 +831,7 @@ function ModelViews({
                     y2={BOX - M}
                     stroke={token("line")}
                     strokeWidth={0.5}
-                    strokeDasharray="2 4"
+                    className="dash-reference"
                   />
                 </>
               )}
@@ -885,7 +885,7 @@ function ModelViews({
                       : token("line-2")
                     : partStroke(geo.slug),
                   strokeWidth: 0.8,
-                  strokeDasharray: geo.isVoid ? "3 2" : undefined,
+                  className: geo.isVoid ? "dash-void" : undefined,
                 };
                 if (view.depth === "z" && geo.isCyl && geo.w != null)
                   return (
@@ -971,7 +971,7 @@ function ModelViews({
                     y2={Y(sheet.rcp[view.v] as number)}
                     stroke={token("viz-5")}
                     strokeWidth={0.8}
-                    strokeDasharray="1.5 3"
+                    className="dash-reference"
                   />
                   <circle
                     cx={X(sheet.rcp[view.u] as number)}

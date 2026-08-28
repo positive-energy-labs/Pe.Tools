@@ -11,7 +11,7 @@ import { WorkbenchRuntimeProvider } from "#/workbench/aui";
 import { Lens } from "#/workbench/Lens";
 import { ContextRibbon, useCacheView } from "#/workbench/world";
 import { selectBreakdown, selectRunStatus } from "#/workbench/chat-state";
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
 import { SidePane } from "#/components/ui/side-pane";
 import { X } from "lucide-react";
 import { chatPluginTitle } from "#/workbench/route-chat-plugins";
@@ -135,7 +135,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
               className="size-2 shrink-0 rounded-full data-[s=error]:bg-caution data-[s=idle]:bg-ink-mute data-[s=running]:bg-pea data-[s=waiting]:bg-caution"
               data-s={status}
             />
-            <span className="truncate text-sm font-semibold">{threadLabel}</span>
+            <span className="truncate t-title">{threadLabel}</span>
           </div>
           <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
             <WorldBadge world={world} />
@@ -205,15 +205,15 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
               defaultWidth={640}
               header={
                 <div className="flex items-center justify-between">
-                  <span className="truncate text-sm font-semibold">{chatPluginTitle(plugin)}</span>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
+                  <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
+                  <Press
+                    icon
+                    className="size-6 text-ink hover:veil [&_svg:not([class*='size-'])]:size-3"
                     title="Close workspace"
                     onClick={() => store.actions.setPlugin(undefined)}
                   >
                     <X />
-                  </Button>
+                  </Press>
                 </div>
               }
             >

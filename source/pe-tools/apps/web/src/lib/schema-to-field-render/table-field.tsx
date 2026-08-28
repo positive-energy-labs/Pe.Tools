@@ -233,7 +233,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
       />
       <FieldMessages messages={field.errors} />
       <div className="overflow-auto rounded-lg border border-line">
-        <table className="min-w-full border-collapse text-sm">
+        <table className="min-w-full border-collapse t-prose">
           <thead className="bg-recess/50 text-left t-value uppercase tracking-wide text-ink-2">
             <tr>
               {fixedColumns.map(([columnKey]) => (
@@ -265,7 +265,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
               <tr>
                 <td
                   colSpan={fixedColumns.length + dynamicColumnKeys.length + 1}
-                  className="px-3 py-6 text-center text-sm text-ink-2"
+                  className="px-3 py-6 text-center t-prose text-ink-2"
                 >
                   No rows yet.
                 </td>

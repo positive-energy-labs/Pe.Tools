@@ -7,7 +7,7 @@ import { cn } from "#/lib/utils";
 // (colour-by-kind, label carries the meaning). Variant names keep their series identity from
 // the cat-* era; the classes resolve straight onto --viz-1..6.
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[0.7rem] font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3",
+  "inline-flex w-fit shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 t-label font-medium whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3",
   {
     variants: {
       variant: {

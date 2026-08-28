@@ -152,9 +152,9 @@ export function ThreadPalette({
       description="Search threads"
       className="overflow-hidden rounded-xl sm:max-w-xl"
     >
-      <CommandInput placeholder="Search threads by title…" className="h-12 text-[15px]" />
+      <CommandInput placeholder="Search threads by title…" className="h-12 t-prose" />
       <CommandList className="max-h-[60vh] p-1.5">
-        <CommandEmpty className="py-10 text-center text-sm text-ink-2">
+        <CommandEmpty className="py-10 text-center t-prose text-ink-2">
           No threads match.
         </CommandEmpty>
         <CommandItem

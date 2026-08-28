@@ -95,9 +95,7 @@ function chooseDetailTargets(series: Series[]): string[] {
  * DELIBERATE dashed spend: this is the SEAM slot (a declared sheet with no anchor
  * geometry behind it — the stand-in announces what the detail budget left out). */
 function EmptyFrame() {
-  return (
-    <div aria-hidden className="aspect-[3/2] rounded-none border border-dashed border-line-2" />
-  );
+  return <div aria-hidden className="seam-border aspect-[3/2] rounded-none border border-line-2" />;
 }
 
 function Thumbnail({

@@ -29,7 +29,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { FactChip } from "#/components/lang/chip";
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
 import {
   Combobox,
   ComboboxContent,
@@ -50,7 +50,6 @@ import {
 import { FieldOptionMultiSelect, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
 import { cn } from "#/lib/utils";
-import { Press } from "#/components/lang/press";
 
 export const Route = createFileRoute("/design-system_/popovers")({ component: PopoverHarness });
 
@@ -140,11 +139,7 @@ function PickerChipSpecimen() {
         <ComboboxTrigger
           title="Category"
           render={
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 max-w-40 justify-between gap-1 px-2 text-ink-2"
-            />
+            <Press className="inline-flex h-7 max-w-40 shrink-0 items-center justify-between gap-1 rounded-md px-2 t-value font-medium whitespace-nowrap text-ink-2 transition-all hover:veil aria-expanded:bg-recess aria-expanded:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0" />
           }
         >
           <span className="face-mono t-value truncate">{picked?.label ?? "category"}</span>
@@ -357,13 +352,13 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
         {specimen.defects.map((d) => (
           <p
             key={d}
-            className="border-l border-dashed border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2"
+            className="border-l border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2"
           >
             <span className="text-caution">observed · </span>
             {d}
           </p>
         ))}
-        <p className="border-l border-dashed border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
+        <p className="border-l border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
           <span className="text-alarm">the headline · </span>
           three of the four combobox consumers ask for a wider popup than their anchor (
           <code>min-w-44</code>, <code>min-w-56</code>) and every one of them is overruled by{" "}

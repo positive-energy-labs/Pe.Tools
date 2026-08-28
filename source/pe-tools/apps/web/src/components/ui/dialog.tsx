@@ -4,7 +4,7 @@ import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
 import { cn } from "#/lib/utils";
-import { Button } from "#/components/ui/button";
+import { Press } from "#/components/lang/press";
 import { X as RiCloseLine } from "lucide-react";
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -59,7 +59,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            render={<Button variant="ghost" className="absolute top-2 right-2" size="icon-sm" />}
+            render={<Press icon className="absolute top-2 right-2 size-6 text-ink hover:veil" />}
           >
             <RiCloseLine />
             <span className="sr-only">Close</span>
@@ -92,7 +92,13 @@ function DialogFooter({
     >
       {children}
       {showCloseButton && (
-        <DialogPrimitive.Close render={<Button variant="outline" />}>Close</DialogPrimitive.Close>
+        <DialogPrimitive.Close
+          render={
+            <Press className="inline-flex h-7 shrink-0 items-center justify-center rounded-md border border-line px-2 t-value font-medium text-ink hover:veil" />
+          }
+        >
+          Close
+        </DialogPrimitive.Close>
       )}
     </div>
   );
@@ -102,7 +108,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-sm font-medium", className)}
+      className={cn("t-title", className)}
       {...props}
     />
   );

@@ -57,7 +57,6 @@ import {
   type ResidueKind,
   SEAL_DOOR,
   SEAL_RUN,
-  ZONE_DASH,
   ZONE_STROKE,
   ZONE_WIDTH,
 } from "./palette";
@@ -593,7 +592,7 @@ export function ZonePanel(props: {
             fill="none"
             stroke={ZONE_STROKE}
             strokeWidth={ZONE_WIDTH}
-            strokeDasharray={ZONE_DASH}
+            className="dash-reference"
           />
         </svg>
       </div>
@@ -1371,7 +1370,7 @@ function PlanPane(props: {
             fillRule="evenodd"
             fill={lit ? token("veil") : "transparent"}
             stroke={ZONE_STROKE}
-            strokeDasharray={ZONE_DASH}
+            className="dash-reference"
             style={{ strokeWidth: `calc(var(--sw) * ${ZONE_WIDTH}px)`, cursor: "pointer" }}
             onPointerEnter={() => props.onHover(zone.Zone)}
             onPointerLeave={() => props.onHover(null)}
@@ -1490,7 +1489,7 @@ function PlanPane(props: {
         </div>
       )}
       {!data && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-ink-2">
+        <div className="absolute inset-0 flex items-center justify-center t-prose text-ink-2">
           loading {props.runId}…
         </div>
       )}
@@ -1515,11 +1514,20 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
       style={{ backgroundColor: bg, ...extra }}
     />
   );
-  const line = (border: string, dashed = false) => (
-    <span
-      className="inline-block h-0 w-4 shrink-0"
-      style={{ borderTop: `2px ${dashed ? "dashed" : "solid"} ${border}` }}
-    />
+  // Drawn as an SVG line, not a border, so the swatch wears the SAME broken-line role the plan
+  // draws with — a legend that restates a pattern in a second dialect can drift out of true.
+  const line = (stroke: string, reference = false) => (
+    <svg className="h-0.5 w-4 shrink-0 overflow-visible" viewBox="0 0 16 2" aria-hidden>
+      <line
+        x1={0}
+        y1={1}
+        x2={16}
+        y2={1}
+        stroke={stroke}
+        strokeWidth={2}
+        className={reference ? "dash-reference" : undefined}
+      />
+    </svg>
   );
   const hatchedSwatch = (
     id: string,
@@ -1987,7 +1995,7 @@ function PlanDock(props: {
             </div>
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-ink-2">
+          <div className="flex flex-1 items-center justify-center t-prose text-ink-2">
             loading {level ?? "level"}…
           </div>
         )}
@@ -2504,7 +2512,7 @@ function LedgerDock(props: {
             </div>
           )}
           {rows === null ? (
-            <div className="face-mono p-4 text-sm text-ink-2">loading the run ledger…</div>
+            <div className="face-mono p-4 t-prose text-ink-2">loading the run ledger…</div>
           ) : (
             <MasterTable
               rows={rows}
@@ -2825,13 +2833,13 @@ export default function RunBrowser() {
 
   if (error) {
     return (
-      <div className="face-mono p-8 text-sm" style={{ color: token("caution") }}>
+      <div className="face-mono p-8 t-prose" style={{ color: token("caution") }}>
         run pool unavailable: {error}
       </div>
     );
   }
   if (!runs) {
-    return <div className="face-mono p-8 text-sm text-ink-2">loading run pool…</div>;
+    return <div className="face-mono p-8 t-prose text-ink-2">loading run pool…</div>;
   }
   // Empty pool is a SYSTEM story, not a filter story: nothing is hidden, nothing has been
   // captured. The page says which directory it watched and what fills it.
@@ -2876,7 +2884,7 @@ export default function RunBrowser() {
   const sheetBody = (
     <main ref={setMainRefs} onScroll={onSheetScroll} className="size-full min-h-0 overflow-y-auto">
       {reportCur === null ? (
-        <div className="face-mono p-8 text-sm text-ink-2">loading run…</div>
+        <div className="face-mono p-8 t-prose text-ink-2">loading run…</div>
       ) : review ? (
         <div className="flex flex-col gap-4 p-4">
           <div className="flex items-baseline gap-3">
@@ -3090,7 +3098,7 @@ export default function RunBrowser() {
         style={{ borderColor: token("line-2") }}
       >
         <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="face-mono text-sm font-semibold">runs</h1>
+          <h1 className="face-mono t-title">runs</h1>
           {linkNote && (
             <span
               className="face-mono t-label"

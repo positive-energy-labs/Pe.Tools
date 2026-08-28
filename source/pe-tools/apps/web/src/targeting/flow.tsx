@@ -5,6 +5,7 @@ import { token } from "#/lib/token";
  * sync/duplex terminals keep both heads on the right.
  */
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { cn } from "#/lib/utils";
 import {
   freshnessWord,
   PaneStrip,
@@ -77,10 +78,14 @@ function Terminal<K extends string>({
   const dim = !b.demanded.has(link.key);
   const node = (
     <div
-      className={`flex min-w-36 flex-col px-2 py-1 ${side === "left" ? "items-end" : "items-start"}`}
+      className={cn(
+        "flex min-w-36 flex-col border px-2 py-1",
+        side === "left" ? "items-end" : "items-start",
+        b.feeds[link.key].seam ? "seam-border" : undefined,
+      )}
       style={{
         backgroundColor: token("artifact"),
-        border: `1px ${b.feeds[link.key].seam ? `dashed ${token("caution")}` : `solid ${token("line")}`}`,
+        borderColor: b.feeds[link.key].seam ? token("caution") : token("line"),
       }}
     >
       <TargetCaption b={b} link={link} />

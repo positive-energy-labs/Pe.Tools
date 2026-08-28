@@ -16,8 +16,17 @@ import { cn } from "#/lib/utils";
 
 import "./lang.css";
 
-export type PressProps = React.ComponentProps<"button">;
+export type PressProps = React.ComponentProps<"button"> & {
+  /** Icon-only: a square, centred hit target. The call site still sets its own `size-*`. */
+  icon?: boolean;
+};
 
-export function Press({ className, type, ...props }: PressProps) {
-  return <button type={type ?? "button"} className={cn("dl-press", className)} {...props} />;
+export function Press({ className, type, icon, ...props }: PressProps) {
+  return (
+    <button
+      type={type ?? "button"}
+      className={cn("dl-press", icon === true && "dl-press-icon", className)}
+      {...props}
+    />
+  );
 }

@@ -163,7 +163,7 @@ export function HostIssuePanel({
   return (
     <div
       className={cn(
-        "rounded-lg border p-3 text-sm",
+        "rounded-lg border p-3 t-prose",
         // a busy bridge / doc conflict is NOT the model disagreeing — caution, not alarm.
         issue.kind === "conflict" || issue.kind === "bridge_busy"
           ? "border-caution/30 bg-caution/10 text-caution"
