@@ -118,8 +118,9 @@ const collectCode = (dir: string, relBase: string, out: Entry[]): Entry[] => {
   return out;
 };
 
+const CODE_FILES = collectCode(ROOT, "", []);
 const CSS_FILES = collectCss(ROOT, "", []);
-const FILES: Entry[] = [...collectCode(ROOT, "", []), ...CSS_FILES];
+const FILES: Entry[] = [...CODE_FILES, ...CSS_FILES];
 
 const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;
 
@@ -454,6 +455,24 @@ describe("design guard — hard zeros", () => {
     const offences = scan(FILES, /--r-/g);
     expect(offences.length, `Legacy --r- spelling:\n${report(offences)}`).toBe(0);
   });
+
+  it("no bare PE token vars in governed TypeScript", () => {
+    const offences = scan(
+      CODE_FILES.filter((file) => file.rel !== "lib/token.ts"),
+      /var\(--pe-/g,
+    );
+    expect(offences.length, `Bare PE token vars in TypeScript:\n${report(offences)}`).toBe(0);
+  });
+
+  it("no numeric or arbitrary z indexes in governed TypeScript", () => {
+    const offences = scan(CODE_FILES, /(?<![-\w])z-(?:\[[^\]\s]+\]|\d+)(?![-\w])|\bzIndex\s*:/g);
+    expect(offences.length, `Numeric z indexes:\n${report(offences)}`).toBe(0);
+  });
+
+  it("no duration utility except the motion token", () => {
+    const offences = scan(CODE_FILES, /duration-(?!\(--motion\)(?![-\w]))/g);
+    expect(offences.length, `Non-canonical duration utilities:\n${report(offences)}`).toBe(0);
+  });
 });
 
 describe("design guard — foundation topology", () => {
@@ -738,10 +757,7 @@ describe("design guard — ratchets (baselines may only fall)", () => {
   });
 
   it("mechanismButtonImports — open tail; falls to 0 when mechanism/button dies", () => {
-    ratchet(
-      "mechanismButtonImports",
-      scan(FILES, /from\s+["'][^"']*mechanism\/button["']/g),
-    );
+    ratchet("mechanismButtonImports", scan(FILES, /from\s+["'][^"']*mechanism\/button["']/g));
   });
 
   it("dashed — broken-edge mechanisms outside lang (R13b: dashed means SEAM, one slot)", () => {
@@ -749,8 +765,7 @@ describe("design guard — ratchets (baselines may only fall)", () => {
       "dashed",
       scan(
         FILES.filter(
-          (f) =>
-            !inMechanismOrLang(f) && f.rel !== "base.css" && f.rel !== "design-lang.css",
+          (f) => !inMechanismOrLang(f) && f.rel !== "base.css" && f.rel !== "design-lang.css",
         ),
         /border-dashed|stroke-dasharray|border-style:\s*dashed/g,
       ),
