@@ -12,8 +12,8 @@ This file is the map, not the log. It says where a value lives now.
 
 | Layer | File | Owns |
 | --- | --- | --- |
-| raw authority | `apps/web/src/base.css` | Every raw value, under `[data-pe]`: colour roles (including fixed document ground and modal scrim), viz roles, the seven type size/line-height pairs, the three dash patterns, radius, the spacing unit, motion, elevation, and z-index. Portable `.t-*`, `.dash-*`, `.shadow-*`, `.duration-control`, and layer classes consume them, so a no-Tailwind consumer needs nothing else. |
-| projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks and `@theme` mappings (`bg-document`, `bg-scrim`, `shadow-sm`/`shadow-lg`, `--spacing`, `duration-control`, and semantic layers). It declares no number of its own. |
+| raw authority | `apps/web/src/base.css` | Every raw value, under `[data-pe]`: colour roles (including fixed document ground and modal scrim), viz roles, the seven type size/line-height pairs, the three dash patterns, radius, the spacing unit, motion, elevation, z-index, prose adapter, and composed pattern fills. Portable `.t-*`, `.dash-*`, `.shadow-*`, `.duration-control`, and layer classes consume them, so a no-Tailwind consumer needs nothing else. |
+| projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks and `@theme` mappings (`bg-document`, `bg-scrim`, `shadow-sm`/`shadow-lg`, `--spacing`, `duration-control`, semantic layers, and composed fills). It declares no independent semantic value; derived geometry such as `radius-xl` may remain arithmetic. |
 | grammar | `apps/web/src/components/lang/` | The semantic vocabulary: `Verb`, `Press`, `FactChip`/`VizChip`, `StateCell`, `EmptyState`, `HelpTip`, `OutcomeLine`, `ArmingStrip`, `AddressingBar`, `Section`, `Switcher`. This is the base layer. `components/ui` composites may depend on it, and four already do (`combobox`, `dialog`, `input-group`, `side-pane`, all for `Press`). |
 | product | routes and feature dirs | Geometry and refinement only: sizes, spacing, panel widths, chart dimensions. No raw colour, no type scale, no broken-line pattern. |
 | runtime | `apps/web/src/lib/token.ts` | The one runtime token indirection for inline, SVG and serialized use. `token(role)` resolves `viz-*` and `dash-*` as raw families and everything else as `--pe-*`; `dash(role)` is its typed wrapper. Prefer a semantic class when a direct utility exists, but use this shared lookup wherever the value must cross a runtime or serialization boundary. |
@@ -28,6 +28,10 @@ from `--space-unit` through the `--spacing` projection, so density has one porta
 `runs/visual-law.json` names a semantic `dashRole`; `base.css` owns the only numeric pattern.
 `eval/rhvac/render-zone-promotion.py` resolves `--dash-<role>` out of `base.css` with stdlib `re`
 and fails fast. Reading the shared authority is not a second authority.
+
+Generated dependency CSS is another authority at build time. Every consumed plugin or generated
+block needs an explicit adapter contract in `base.css`; otherwise its defaults can bypass the raw
+tiers and roles while source guards stay green.
 
 ## Maintained scope
 

@@ -17,10 +17,10 @@ export const PROSE_CLASS = [
   // Flat heading hierarchy inside answers: chat turns are dense working content, so headings keep
   // the body face and size — weight and spacing carry the structure. (Spectral is a page-title
   // garnish; the PE design language forbids it in dense content, and the density law forbids size jumps.)
-  "prose-headings:font-sans prose-headings:text-[1em] prose-headings:font-semibold prose-headings:text-ink prose-headings:mt-[0.9em] prose-headings:mb-[0.35em]",
+  "prose-headings:font-sans prose-headings:text-ink prose-headings:mt-[0.9em] prose-headings:mb-[0.35em]",
   "prose-a:text-nav prose-a:underline prose-a:underline-offset-2",
   // Code = data surface: hard corners per the radius law; machine text sits on the artifact rung.
-  "prose-code:rounded-none prose-code:border-[0.5px] prose-code:border-line prose-code:bg-artifact prose-code:px-[5px] prose-code:py-px prose-code:t-value prose-code:font-normal",
+  "prose-code:rounded-none prose-code:border-[0.5px] prose-code:border-line prose-code:bg-artifact prose-code:px-[5px] prose-code:py-px",
   "prose-code:before:content-none prose-code:after:content-none",
   "prose-pre:rounded-none prose-pre:border-[0.5px] prose-pre:border-line prose-pre:bg-artifact prose-pre:text-ink",
 ].join(" ");

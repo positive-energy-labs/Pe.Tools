@@ -62,6 +62,12 @@
   --dash-reference: 12 3 2 3;
   --dash-void: 4 3;
   --motion-control: 120ms;
+  --pattern-caution-hatch: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--pe-ink) 40%, transparent) 0 2px,
+    transparent 2px 4px
+  );
+  --fill-veil: linear-gradient(var(--pe-veil), var(--pe-veil));
   --shadow-float: 0 2px 8px color-mix(in srgb, var(--pe-ink) 18%, transparent);
   --shadow-modal: 0 4px 24px color-mix(in srgb, var(--pe-scrim) 50%, transparent);
   --z-raised: 10;
@@ -198,11 +204,7 @@
   background: var(--pe-scrim);
 }
 [data-pe] .caution-hatch {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    color-mix(in srgb, var(--pe-ink) 40%, transparent) 0 2px,
-    transparent 2px 4px
-  );
+  background-image: var(--pattern-caution-hatch);
 }
 [data-pe] .shadow-float {
   box-shadow: var(--shadow-float);
@@ -232,7 +234,7 @@
 }
 
 [data-pe] .veil:hover {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
+  background-image: var(--fill-veil);
 }
 
 [data-pe] .hairline {
@@ -331,8 +333,11 @@
 }
 
 [data-pe] .prose-pe {
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line-height);
   --tw-prose-body: var(--pe-ink);
   --tw-prose-headings: var(--pe-ink);
+  --tw-prose-lead: var(--pe-ink-2);
   --tw-prose-bold: var(--pe-ink);
   --tw-prose-links: var(--pe-nav);
   --tw-prose-bullets: var(--pe-ink-2);
@@ -341,9 +346,40 @@
   --tw-prose-quote-borders: var(--pe-line-2);
   --tw-prose-hr: var(--pe-line-2);
   --tw-prose-captions: var(--pe-ink-2);
+  --tw-prose-kbd: var(--pe-ink);
+  --tw-prose-kbd-shadows: var(--pe-line-2);
   --tw-prose-code: var(--pe-ink);
+  --tw-prose-pre-code: var(--pe-ink);
+  --tw-prose-pre-bg: var(--pe-artifact);
   --tw-prose-th-borders: var(--pe-line-2);
   --tw-prose-td-borders: var(--pe-line);
+}
+
+[data-pe] .prose-pe :where(h1, h2, h3, h4, h5, h6) {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: var(--weight-strong);
+}
+[data-pe] .prose-pe :where([class~="lead"]) {
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line-height);
+}
+[data-pe] .prose-pe :where(code, pre, table, kbd, figcaption) {
+  font-size: var(--type-value-size);
+  line-height: var(--type-value-line-height);
+}
+[data-pe] .prose-pe :where(p, ul, ol, li, pre) {
+  font-weight: var(--weight-regular);
+}
+[data-pe] .prose-pe :where(a, blockquote, kbd) {
+  font-weight: var(--weight-medium);
+}
+[data-pe] .prose-pe :where(strong, dt, th) {
+  font-weight: var(--weight-strong);
+}
+[data-pe] .prose-pe :where(kbd) {
+  border-radius: var(--radius);
+  box-shadow: none;
 }
 
 /* Type is tier x face x case. */

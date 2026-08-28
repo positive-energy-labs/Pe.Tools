@@ -157,6 +157,42 @@ describe("design guard â€” current token authority", () => {
     expect(base, "base.css spacing unit").toContain("--space-unit: 0.25rem;");
     expect(lang, "design-lang.css spacing projection").toContain("--spacing: var(--space-unit);");
   });
+
+  it("projects the shared control motion through Tailwind defaults", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
+    expect(base).toContain("--motion-control: 120ms;");
+    expect(lang).toContain("--default-transition-duration: var(--motion-control);");
+    expect(lang).toContain("--tw-animation-duration: var(--motion-control);");
+  });
+
+  it("projects composed veil and caution fills from one raw recipe each", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
+    expect(base).toContain("--pattern-caution-hatch: repeating-linear-gradient(");
+    expect(base.match(/repeating-linear-gradient/g)?.length).toBe(1);
+    expect(base).toContain("--fill-veil: linear-gradient(var(--pe-veil), var(--pe-veil));");
+    expect(base).toContain("background-image: var(--pattern-caution-hatch);");
+    expect(lang).toContain("background-image: var(--pattern-caution-hatch);");
+    expect(base).toContain("background-image: var(--fill-veil);");
+    expect(lang).toContain("background-image: var(--fill-veil);");
+  });
+
+  it("routes the prose plugin's size and weight-bearing elements through the design tiers", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    expect(base).toMatch(
+      /\[data-pe\] \.prose-pe\s*\{(?=[^}]*font-size:\s*var\(--type-prose-size\))(?=[^}]*line-height:\s*var\(--type-prose-line-height\))/s,
+    );
+    expect(base).toContain(":where(h1, h2, h3, h4, h5, h6)");
+    expect(base).toContain(':where([class~="lead"])');
+    expect(base).toContain(":where(code, pre, table, kbd, figcaption)");
+    expect(base).toContain(":where(p, ul, ol, li, pre)");
+    expect(base).toContain(":where(a, blockquote, kbd)");
+    expect(base).toContain(":where(strong, dt, th)");
+    for (const name of ["lead", "kbd", "kbd-shadows", "pre-code", "pre-bg"]) {
+      expect(base, `prose color variable ${name}`).toContain(`--tw-prose-${name}:`);
+    }
+  });
 });
 
 const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;
@@ -337,22 +373,52 @@ describe("design guard — maintained surface hard zeros", () => {
       text: maskTemplateExpressions(stripComments(f.text)),
     }));
     const numericColor =
-      /\b(?:rgba?|hsla?|oklch|lab|lch)\(\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|grad|rad|turn)?(?=\s|,|\/|\))/gi;
+      /\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|grad|rad|turn)?(?=\s|,|\/|\))/gi;
+    const displayP3 = /\bcolor\(\s*display-p3\s+[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?=\s|\/|\))/gi;
+    const namedColor =
+      /\b(?:color|fill|stroke|background(?:-[\w-]+)?|border(?:-[\w-]+)?|outline(?:-[\w-]+)?|(?:box|text)-shadow)\s*[:=][^;\n}]*\b(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle| tomato|transparent|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen)\b/gi;
     const stockPalette =
       /(?<![-\w])(?:bg|text|border|divide|ring|outline|fill|stroke)-(?:white|black|slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-\d{2,3})?(?:\/\d+)?(?![-\w])/g;
-    assertZero("staticColor", [...scan(files, numericColor), ...scan(files, stockPalette)]);
+    const namedOffences = scan(files, namedColor).filter(
+      (o) => !/\b(?:transparent|currentColor|inherit)\b/i.test(o.match),
+    );
+    assertZero("staticColor", [
+      ...scan(files, numericColor),
+      ...scan(files, displayP3),
+      ...namedOffences,
+      ...scan(files, stockPalette),
+    ]);
   });
 
   it("uses shared elevation tokens for non-inset shadows", () => {
     const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
       (f) => ({ ...f, text: maskTemplateExpressions(stripComments(f.text)) }),
     );
-    const re = /(?:box-shadow|boxShadow)\s*[:=][^;\n}]*/g;
-    const offences = scan(files, re).filter(
-      (o) =>
-        !/\binset\b|\bvar\(/.test(o.match) && /\d+(?:\.\d+)?(?:px|rem)?|color-mix\(/.test(o.match),
+    const declaration = /(?:box-shadow|boxShadow)\s*[:=][^;}]*/g;
+    const declarations = scan(files, declaration).filter((o) => {
+      const value = o.match;
+      return (
+        !/\binset\b/.test(value) &&
+        !/\bvar\(\s*--shadow-(?:float|modal)\s*\)/.test(value) &&
+        !/\bvar\(\s*--dl-cell-ring(?:\s*[,)]|\s)/.test(value) &&
+        !/^\s*(?:box-shadow|boxShadow)\s*[:=]\s*none\s*$/i.test(value)
+      );
+    });
+    const utility =
+      /(?<![-\w])(?:shadow-[\w[\].:%()/-]+|drop-shadow(?:-[\w[\].:%()/-]+)?)(?![-\w])/g;
+    const bareUtility = /\b(?:className|class)\s*=\s*["'`][^"'`]*\bshadow(?=\s|["'`])/g;
+    const allowed = new Set([
+      "shadow-none",
+      "shadow-sm",
+      "shadow-lg",
+      "shadow-float",
+      "shadow-modal",
+    ]);
+    const utilities = [...scan(files, utility), ...scan(files, bareUtility)].filter(
+      (o) => !allowed.has(o.match),
     );
-    assertZero("rawElevation", offences);
+    const filters = scan(files, /\b(?:filter\s*[:=][^;}]*drop-shadow|text-shadow\s*[:=][^;}]*)/gi);
+    assertZero("rawElevation", [...declarations, ...utilities, ...filters]);
   });
 
   it("uses the shared control duration for fixed motion", () => {
@@ -378,9 +444,61 @@ describe("design guard — maintained surface hard zeros", () => {
       },
     ].map((f) => ({ ...f, text: maskTemplateExpressions(f.text) }));
     const numericColor =
-      /\b(?:rgba?|hsla?|oklch|lab|lch)\(\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|grad|rad|turn)?(?=\s|,|\/|\))/gi;
+      /\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|grad|rad|turn)?(?=\s|,|\/|\))/gi;
     expect(scan(fixture.slice(0, 1), numericColor)).not.toEqual([]);
     expect(scan(fixture.slice(1), numericColor)).toEqual([]);
+  });
+
+  it("catches authored paint colors and elevation escapes but keeps dynamic and shared forms legal", () => {
+    const paint = [
+      { rel: "paint.css", text: "color: oklab(0.7 0.1 0.2); fill: hwb(120 20% 30%);" },
+      { rel: "paint.css", text: "stroke: color(display-p3 0.2 0.3 0.4); border: 1px solid red;" },
+      { rel: "paint.tsx", text: "`color: rgb(${r} ${g} ${b}); background: currentColor;`" },
+    ].map((f) => ({ ...f, text: maskTemplateExpressions(f.text) }));
+    const color =
+      /\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:%|deg|grad|rad|turn)?(?=\s|,|\/|\))/gi;
+    const p3 = /\bcolor\(\s*display-p3\s+[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?=\s|\/|\))/gi;
+    const names = /\b(?:color|fill|stroke|border)\s*[:=][^;\n}]*\b(?:red|blue|white|black)\b/gi;
+    expect(scan(paint.slice(0, 2), color)).not.toEqual([]);
+    expect(scan(paint.slice(0, 2), p3)).not.toEqual([]);
+    expect(scan(paint.slice(1, 2), names)).not.toEqual([]);
+    expect([
+      ...scan(paint.slice(2), color),
+      ...scan(paint.slice(2), p3),
+      ...scan(paint.slice(2), names),
+    ]).toEqual([]);
+
+    const shadows = [
+      { rel: "shadow.tsx", text: 'className="shadow-md drop-shadow-sm"' },
+      {
+        rel: "shadow.css",
+        text: "filter: drop-shadow(0 1px 2px red); text-shadow: 0 1px red;",
+      },
+      {
+        rel: "shadow.css",
+        text: "box-shadow: var(--shadow-float); box-shadow: inset 0 0 0 1px red;",
+      },
+    ];
+    const utility =
+      /(?<![-\w])(?:shadow-[\w[\].:%()/-]+|drop-shadow(?:-[\w[\].:%()/-]+)?)(?![-\w])/g;
+    const bareUtility = /\b(?:className|class)\s*=\s*["'`][^"'`]*\bshadow(?=\s|["'`])/g;
+    const allowed = new Set([
+      "shadow-none",
+      "shadow-sm",
+      "shadow-lg",
+      "shadow-float",
+      "shadow-modal",
+    ]);
+    expect(
+      [...scan(shadows.slice(0, 1), utility), ...scan(shadows.slice(0, 1), bareUtility)].filter(
+        (o) => !allowed.has(o.match),
+      ),
+    ).not.toEqual([]);
+    expect(
+      [...scan(shadows.slice(2), utility), ...scan(shadows.slice(2), bareUtility)].filter(
+        (o) => !allowed.has(o.match),
+      ),
+    ).toEqual([]);
   });
 
   it("uses semantic layers for global stacking", () => {

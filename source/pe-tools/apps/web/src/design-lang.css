@@ -8,6 +8,7 @@
   --font-weight-medium: var(--weight-medium);
   --font-weight-semibold: var(--weight-strong);
   --font-weight-bold: var(--weight-bold);
+  --default-transition-duration: var(--motion-control);
 
   --color-page: var(--pe-page);
   --color-artifact: var(--pe-artifact);
@@ -43,6 +44,14 @@
   --radius-xl: calc(var(--radius) + 4px);
   --shadow-sm: var(--shadow-float);
   --shadow-lg: var(--shadow-modal);
+}
+
+/* tw-animate-css uses this fallback for data-state animation utilities. Keep it on the same
+   control-motion rung as transitions; the plugin remains an adapter, not an authority. */
+@layer base {
+  [data-pe] {
+    --tw-animation-duration: var(--motion-control);
+  }
 }
 
 @utility t-caption {
@@ -81,7 +90,7 @@
 }
 
 @utility veil {
-  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
+  background-image: var(--fill-veil);
 }
 
 @utility bg-document {
@@ -93,11 +102,7 @@
 }
 
 @utility caution-hatch {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    color-mix(in srgb, var(--pe-ink) 40%, transparent) 0 2px,
-    transparent 2px 4px
-  );
+  background-image: var(--pattern-caution-hatch);
 }
 
 @utility shadow-float {
