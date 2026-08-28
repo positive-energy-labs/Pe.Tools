@@ -42,6 +42,36 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+@utility t-caption {
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line-height);
+}
+
+@utility t-label {
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
+}
+
+@utility t-value {
+  font-size: var(--type-value-size);
+  line-height: var(--type-value-line-height);
+}
+
+@utility t-prose {
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line-height);
+}
+
+@utility t-title {
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-line-height);
+}
+
+@utility t-display {
+  font-size: var(--type-display-size);
+  line-height: var(--type-display-line-height);
+}
+
 @utility veil {
   background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
 }

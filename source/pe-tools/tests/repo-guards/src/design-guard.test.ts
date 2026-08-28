@@ -114,6 +114,19 @@ describe("design guard â€” current token authority", () => {
     const offences = scan(code, /var\(--(?:pe|viz)-/g);
     expect(offences, report(offences)).toEqual([]);
   });
+
+  it("projects every type tier through shared raw size and line-height values", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
+    for (const tier of ["caption", "label", "value", "prose", "title", "display"]) {
+      const block = new RegExp(
+        `(?:\\.t-${tier}|@utility\\s+t-${tier})\\s*\\{(?=[^}]*font-size:\\s*var\\(--type-${tier}-size\\))(?=[^}]*line-height:\\s*var\\(--type-${tier}-line-height\\))[^}]*\\}`,
+        "s",
+      );
+      expect(base, `base.css wiring for t-${tier}`).toMatch(block);
+      expect(lang, `design-lang.css wiring for t-${tier}`).toMatch(block);
+    }
+  });
 });
 
 const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;

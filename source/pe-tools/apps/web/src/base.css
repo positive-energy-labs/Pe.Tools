@@ -37,6 +37,18 @@
   --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
   --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
   --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  --type-caption-size: 10px;
+  --type-caption-line-height: 1.4;
+  --type-label-size: 11px;
+  --type-label-line-height: 1.4;
+  --type-value-size: 12px;
+  --type-value-line-height: 1.45;
+  --type-prose-size: 13px;
+  --type-prose-line-height: 1.6;
+  --type-title-size: 16px;
+  --type-title-line-height: 1.3;
+  --type-display-size: 40px;
+  --type-display-line-height: 1.15;
   --motion-control: 120ms;
   --z-raised: 10;
   --z-sticky: 20;
@@ -278,32 +290,32 @@
 
 /* Type is tier x face x case. */
 [data-pe] .t-caption {
-  font-size: 10px;
-  line-height: 1.4;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line-height);
 }
 [data-pe] .t-label {
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
 }
 [data-pe] .t-value {
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--type-value-size);
+  line-height: var(--type-value-line-height);
 }
 [data-pe] .t-prose {
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line-height);
 }
 [data-pe] .t-title {
-  font-size: 16px;
+  font-size: var(--type-title-size);
   font-weight: 600;
   letter-spacing: -0.01em;
-  line-height: 1.3;
+  line-height: var(--type-title-line-height);
 }
 [data-pe] .t-display {
-  font-size: 40px;
+  font-size: var(--type-display-size);
   font-weight: 600;
   letter-spacing: -0.01em;
-  line-height: 1.15;
+  line-height: var(--type-display-line-height);
 }
 [data-pe] .face-mono {
   font-family: var(--font-mono);
