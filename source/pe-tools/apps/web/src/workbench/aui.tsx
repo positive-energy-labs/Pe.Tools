@@ -349,7 +349,10 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
         title="Pea's chain of thought for this turn — collapsed so the spine stays calm"
         onClick={() => setOpen((value) => !value)}
       >
-        <ChevronRight size={12} className={`transition-transform ${open ? "rotate-90" : ""}`} />
+        <ChevronRight
+          size={12}
+          className={`transition-transform duration-(--motion) ${open ? "rotate-90" : ""}`}
+        />
         <span>Thought process</span>
       </button>
       {open ? (

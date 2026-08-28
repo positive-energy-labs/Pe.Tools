@@ -261,14 +261,11 @@ export function ProposalCard({
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       className={cn(
-        "mb-1.5 py-1 pl-2 border-l-[1.5px] border-l-pea",
+        "mb-1.5 py-1 pl-2 border-l-[1.5px] border-l-pea transition-colors duration-(--motion)",
         focused ? "pea-wash" : "bg-transparent",
       )}
       /* Pea's identity, never the commit colour: the card edge is a MARK (`--pe-pea`, the display
          rung) and the focus wash is mixed from pea's ink. */
-      style={{
-        transition: "background 0.25s",
-      }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
       <div className="face-mono t-caption text-ink-2">{target}</div>

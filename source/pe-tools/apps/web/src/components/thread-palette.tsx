@@ -217,7 +217,7 @@ export function ThreadPalette({
                 <button
                   type="button"
                   title="Delete thread"
-                  className="shrink-0 rounded-sm p-0.5 text-ink-2 opacity-0 transition-opacity group-hover/row:opacity-100 hover:veil data-selected:opacity-100"
+                  className="shrink-0 rounded-sm p-0.5 text-ink-2 opacity-0 transition-opacity duration-(--motion) group-hover/row:opacity-100 hover:veil data-selected:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();
                     onDelete(thread.id);

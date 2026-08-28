@@ -299,7 +299,10 @@ export function WorldLane({
                   </span>
                 ) : null}
                 <span
-                  className={cn("t-label text-ink-2 transition-transform", isOpen && "rotate-90")}
+                  className={cn(
+                    "t-label text-ink-2 transition-transform duration-(--motion)",
+                    isOpen && "rotate-90",
+                  )}
                 >
                   ▸
                 </span>
@@ -394,7 +397,12 @@ function ItemRow({
             <span className="t-value face-mono text-ink-2">{fmtTok(item.tokens)}</span>
           ) : null}
           {hasBody ? (
-            <span className={cn("t-caption text-ink-2 transition-transform", open && "rotate-90")}>
+            <span
+              className={cn(
+                "t-caption text-ink-2 transition-transform duration-(--motion)",
+                open && "rotate-90",
+              )}
+            >
               ▸
             </span>
           ) : null}

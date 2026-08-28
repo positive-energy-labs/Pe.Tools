@@ -219,8 +219,10 @@ export function Sentence({
           ) : (
             <>
               <span
-                className={cn("face-mono t-label", TONE_CLASS[prefixTone])}
-                style={{ transition: "color 0.6s" }}
+                className={cn(
+                  "face-mono t-label transition-colors duration-(--motion)",
+                  TONE_CLASS[prefixTone],
+                )}
               >
                 {prefix}{" "}
               </span>

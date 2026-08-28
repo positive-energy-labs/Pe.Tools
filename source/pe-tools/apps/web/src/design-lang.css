@@ -10,6 +10,7 @@
   --z-sticky: 20;
   --z-popup: 40;
   --z-modal: 50;
+  --motion: 120ms;
 }
 
 @theme inline {

@@ -137,7 +137,7 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
       >
         <span
           className={cn(
-            "t-caption inline-block w-3 shrink-0 text-center text-ink-2 transition-transform duration-[120ms]",
+            "t-caption inline-block w-3 shrink-0 text-center text-ink-2 transition-transform duration-(--motion)",
             open && hasChildren && "rotate-90",
           )}
         >

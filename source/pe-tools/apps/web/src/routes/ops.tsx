@@ -248,7 +248,7 @@ function OpsPlayground() {
                           setSelected(undefined);
                         }}
                         className={cn(
-                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors",
+                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors duration-(--motion)",
                           !active && "hover:veil",
                           active && "on-select",
                         )}
@@ -279,7 +279,7 @@ function OpsPlayground() {
                       <button
                         onClick={() => select(op)}
                         className={cn(
-                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors",
+                          "w-full rounded-[2px] px-2 py-1 text-left transition-colors duration-(--motion)",
                           !active && "hover:veil",
                           active && "on-select",
                         )}
@@ -514,7 +514,9 @@ function OpResult({ opKey, result }: { opKey: string; result: RunResult }) {
       )}
       <details className="group">
         <summary className="face-mono t-caption t-upper cursor-pointer select-none list-none text-ink-2 hover:text-ink">
-          <span className="mr-1 inline-block transition-transform group-open:rotate-90">▸</span>
+          <span className="mr-1 inline-block transition-transform duration-(--motion) group-open:rotate-90">
+            ▸
+          </span>
           raw response
         </summary>
         <div className="mt-2">
