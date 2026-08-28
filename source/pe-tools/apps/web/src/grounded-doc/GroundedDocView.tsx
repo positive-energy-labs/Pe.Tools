@@ -217,7 +217,7 @@ function MarkdownPane({
       <div className="flex flex-col gap-1 p-3">
         {doc.pages.map((page) => (
           <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
-            <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-page/95 px-3 py-1 text-ink-2 backdrop-blur">
+            <p className="t-label t-upper sticky top-0 z-raised -mx-3 mb-1 bg-page/95 px-3 py-1 text-ink-2 backdrop-blur">
               Page {page.page}
             </p>
             <div className="flex flex-col gap-1">
@@ -263,7 +263,7 @@ function ImagesPane({
           if (images.length === 0) return null;
           return (
             <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
-              <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-page/95 px-3 py-1 text-ink-2 backdrop-blur">
+              <p className="t-label t-upper sticky top-0 z-raised -mx-3 mb-1 bg-page/95 px-3 py-1 text-ink-2 backdrop-blur">
                 Page {page.page}
               </p>
               <div className="flex flex-col gap-2">
@@ -451,8 +451,8 @@ function PageCanvas({
                 "absolute rounded-[1px] border",
                 isFocused
                   ? isApprox
-                    ? "z-10 border-2 border-caution"
-                    : "z-10 border-2 border-ink"
+                    ? "z-raised border-2 border-caution"
+                    : "z-raised border-2 border-ink"
                   : page.screenshotUrl
                     ? isApprox
                       ? "border-caution"
@@ -489,7 +489,7 @@ function PageCanvas({
               className={cn(
                 "absolute rounded-[1px] border",
                 isFocused
-                  ? "z-10 border-2 border-ink"
+                  ? "z-raised border-2 border-ink"
                   : cn("border-[var(--viz-4)] hover:border-ink", VEIL_HOVER),
               )}
             />

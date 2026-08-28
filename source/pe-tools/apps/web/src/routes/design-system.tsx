@@ -99,7 +99,7 @@ function Cap({ children }: { children: React.ReactNode }) {
 function DesignSystem() {
   return (
     <div className="t-prose min-h-screen bg-page text-ink">
-      <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
+      <header className="sticky top-0 z-sticky border-b border-line bg-page/90 backdrop-blur">
         <div className="page-wrap flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
             <span className="t-title font-pe-display">Design system</span>
@@ -659,8 +659,8 @@ function ArtifactFrameBlock() {
         <>
           The language&apos;s one enclosure: a ground shift plus a quiet inset hairline. No radius,
           no shadow — round 1 ruled that fills separate and outline borders do not. Optional
-          recessed head and foot bands re-declare <code className="face-mono t-label">--pe-on</code>,
-          so every wash a child mixes lands on the ground it is actually standing on.
+          recessed head and foot bands re-declare <code className="face-mono t-label">--pe-on</code>
+          , so every wash a child mixes lands on the ground it is actually standing on.
         </>
       }
     >

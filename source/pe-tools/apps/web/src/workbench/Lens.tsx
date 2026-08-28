@@ -506,7 +506,7 @@ export function Lens({
             <div
               aria-hidden="true"
               title={`target: ${chipDescriptor(chatTarget.resolution).text}`}
-              className={targetRailClass}
+              className={cn("z-raised", targetRailClass)}
               style={{
                 position: "absolute",
                 left: 0,
@@ -514,7 +514,6 @@ export function Lens({
                 bottom: 0,
                 width: 2,
                 opacity: targetTone === "muted" ? 0.25 : 0.55,
-                zIndex: 1,
               }}
             />
             <div className="mapdial-strip" ref={stripRef}>

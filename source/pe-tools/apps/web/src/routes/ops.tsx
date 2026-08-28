@@ -231,7 +231,7 @@ function OpsPlayground() {
               query was search-hostile). */}
           {matchedGlances.length > 0 && (
             <section>
-              <h2 className="t-label t-upper sticky top-0 z-10 bg-page px-3 pb-1 pt-3 text-ink-2">
+              <h2 className="t-label t-upper sticky top-0 z-raised bg-page px-3 pb-1 pt-3 text-ink-2">
                 Glance
                 <span className="face-mono t-caption ml-1.5 text-ink-2">
                   {matchedGlances.length}
@@ -266,7 +266,7 @@ function OpsPlayground() {
           )}
           {grouped.map(({ domain, ops: members }) => (
             <section key={domain}>
-              <h2 className="t-label t-upper sticky top-0 z-10 bg-page px-3 pb-1 pt-3 text-ink-2">
+              <h2 className="t-label t-upper sticky top-0 z-raised bg-page px-3 pb-1 pt-3 text-ink-2">
                 {domain}
                 <span className="face-mono t-caption ml-1.5 text-ink-2">{members.length}</span>
               </h2>

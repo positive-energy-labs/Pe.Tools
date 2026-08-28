@@ -190,7 +190,7 @@ export function WorldLane({
 
   return (
     <div className="flex min-h-0 flex-col [font-variant-numeric:tabular-nums]">
-      <div className="sticky top-0 z-[2] flex items-center gap-2.5 border-b-[0.5px] border-line on-artifact px-3.5 pt-3 pb-2.5">
+      <div className="sticky top-0 z-raised flex items-center gap-2.5 border-b-[0.5px] border-line on-artifact px-3.5 pt-3 pb-2.5">
         <h2 className="t-label t-upper m-0 text-ink-2">What the agent sends the model</h2>
         <div className="ml-auto flex items-center gap-1.5">
           {/* mode = a fill, never a hue — the lang Switcher replaces the hand-rolled dial */}

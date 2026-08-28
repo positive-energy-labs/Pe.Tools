@@ -406,7 +406,9 @@ export function Picker({
         {closedText}
       </Choice>
       {open ? (
-        <span className={`absolute left-0 top-full z-40 mt-1 block overflow-hidden ${POP_CLASS}`}>
+        <span
+          className={`absolute left-0 top-full z-popup mt-1 block overflow-hidden ${POP_CLASS}`}
+        >
           {/* crumbs — the trunk, one segment per level; the current level is underlined */}
           <div className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1 border-b border-b-line-2">
             {chain.map((l, i) => {

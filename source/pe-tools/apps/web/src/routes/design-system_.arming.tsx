@@ -259,7 +259,7 @@ function Frozen({
 
 function Header({ title, note }: { title: string; note: string }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
+    <header className="sticky top-0 z-sticky border-b border-line bg-page/90 backdrop-blur">
       <div className="page-wrap flex items-center justify-between py-2.5">
         <div className="flex min-w-0 items-baseline gap-3">
           <Link to="/design-system" className="text-[11px] text-nav hover:underline">

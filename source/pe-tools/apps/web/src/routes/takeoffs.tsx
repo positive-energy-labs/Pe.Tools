@@ -384,7 +384,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
 
       {/* A failed host call is an ERROR, not a seam — caution, deliberately not the alarm. */}
       {failure && (
-        <div className="absolute bottom-2 left-1/2 z-40 max-w-2xl -translate-x-1/2 bg-page px-2 py-1">
+        <div className="absolute bottom-2 left-1/2 z-popup max-w-2xl -translate-x-1/2 bg-page px-2 py-1">
           <OutcomeLine kind="error" label={failure.message} />
           <Verb
             label="dismiss"
@@ -395,7 +395,7 @@ function TakeoffsPage({ store }: { store: TakeoffStore }) {
       )}
 
       {!live && (
-        <div className="absolute right-2 bottom-2 z-40">
+        <div className="absolute right-2 bottom-2 z-popup">
           <Verb
             label="leave fixture → live"
             onClick={() => store.actions.patchSearch({ source: "live" })}

@@ -48,7 +48,7 @@ export function ExportSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-auto bg-page text-ink">
+    <div className="fixed inset-0 z-modal overflow-auto bg-page text-ink">
       <style>{`@media print {
         body * { visibility: hidden; }
         #grille-export-sheet, #grille-export-sheet * { visibility: visible; }

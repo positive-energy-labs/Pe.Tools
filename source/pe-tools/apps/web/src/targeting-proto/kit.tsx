@@ -617,7 +617,7 @@ export function PathInput({
       </Choice>
       {open ? (
         <span
-          className={`absolute left-0 top-full z-40 mt-1 block overflow-hidden ${POP_CLASS}`}
+          className={`absolute left-0 top-full z-popup mt-1 block overflow-hidden ${POP_CLASS}`}
           style={{ minWidth: mode === "columns" ? 176 * chain.length : 300 }}
         >
           {mode === "segmented" ? segmented : mode === "columns" ? columns : search}

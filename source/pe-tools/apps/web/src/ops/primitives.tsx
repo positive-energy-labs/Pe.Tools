@@ -202,7 +202,7 @@ export function DataTable<Row>({
       )}
       <div className="overflow-auto" style={{ maxHeight }}>
         <table className="t-value w-full border-collapse text-left">
-          <thead className="on-recess sticky top-0 z-10">
+          <thead className="on-recess sticky top-0 z-raised">
             <tr>
               {columns.map((col) => (
                 <th

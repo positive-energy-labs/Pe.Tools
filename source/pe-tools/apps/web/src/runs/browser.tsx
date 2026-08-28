@@ -608,7 +608,7 @@ export function ZonePanel(props: {
       {hover && (
         <div
           className={cn(
-            "face-mono t-caption pointer-events-none absolute z-10 whitespace-nowrap border bg-page/95 px-1.5 py-0.5",
+            "face-mono t-caption pointer-events-none absolute z-raised whitespace-nowrap border bg-page/95 px-1.5 py-0.5",
             hover.flagged ? "border-alarm" : "border-line-2",
             hover.flagged ? "text-alarm" : "text-ink",
           )}
@@ -2922,7 +2922,7 @@ export default function RunBrowser() {
                   else sectionRefs.current.delete(level);
                 }}
               >
-                <div className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1 border-line-2">
+                <div className="sticky top-0 z-raised -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1 border-line-2">
                   <h2 className="face-mono t-caption t-value font-semibold uppercase tracking-wide">
                     {level}
                   </h2>

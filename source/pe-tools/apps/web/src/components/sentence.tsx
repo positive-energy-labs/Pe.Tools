@@ -129,7 +129,7 @@ function Slot({
 function Popover({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="absolute left-0 top-full z-30 mt-1 max-h-72 w-80 overflow-y-auto px-2 py-1 border-[0.5px] border-line-2 bg-page"
+      className="absolute left-0 top-full z-popup mt-1 max-h-72 w-80 overflow-y-auto px-2 py-1 border-[0.5px] border-line-2 bg-page"
       style={{
         borderRadius: 2,
       }}

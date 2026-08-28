@@ -76,7 +76,7 @@ export function ProposedCell({
         <span
           aria-hidden
           title={unsaved}
-          className="absolute bottom-px left-px z-20 size-1 rounded-[1px] bg-caution"
+          className="absolute bottom-px left-px z-sticky size-1 rounded-[1px] bg-caution"
         />
       )}
       {first && (
@@ -106,7 +106,7 @@ function ProposalNotch({
       onClick={() => onLocate(first)}
       aria-label={`locate the proposal for ${where}`}
       title={`Pea proposes ${first.proposed} for ${where}${count > 1 ? ` (and ${count - 1} more on this cell)` : ""}. ${first.note} — click the notch to bring the card into the sidebar. The cell itself is ORDINARY: type your own value and the proposal is severed, with no verdict to give. The fold survives every overlay, because a proposal is a fact about the cell rather than about which reading is showing.`}
-      className="absolute right-0 top-0 z-20 size-0 border-l-[7px] border-t-[7px] border-l-transparent border-t-pea"
+      className="absolute right-0 top-0 z-sticky size-0 border-l-[7px] border-t-[7px] border-l-transparent border-t-pea"
     />
   );
 }
