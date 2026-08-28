@@ -1,51 +1,62 @@
 /* =============================================================================================
-   THE DESIGN LANGUAGE — CANON. Imported by `./styles.css`; loaded on every route.
+   THE DESIGN LANGUAGE — CANON. `base.css` decides every colour in the language.
    =============================================================================================
 
-   This file is the one place a colour of the design language is decided. Reconsidering a colour
-   is a ONE-LINE EDIT here and nowhere else: no component, no route, and no CSS file downstream
-   may name a colour literal. `components/lang/*` consumes `var(--pe-…)` exclusively — that is
-   what makes the language palette-invariant, and it is the fix for the round-2 finding that
-   canon `Button`/`Chip` reached app tokens no palette scope could retint.
+   `./styles.css` imports this file, so it loads on every route. It is also plain CSS with no
+   build step: a standalone HTML page links this one file and sets `data-pe` on <html> to get the
+   roles, the scoped element defaults, and `.page-wrap`. The Tailwind vocabulary that projects
+   these roles into utilities — `text-ink`, `on-artifact`, `veil`, `hairline`, the `t-*` tiers,
+   the z rungs, `--motion` — is compiled from `./design-lang.css` and reaches app code only. The
+   agent cheat sheet for both surfaces is `./DESIGN.md`.
+
+   Reconsidering a colour is a ONE-LINE EDIT here and nowhere else: no component, no route, and
+   no CSS file downstream may name a colour literal. App code reaches a role through a generated
+   utility, because a bare `var(--pe-*)` in TypeScript is a hard zero; `lib/token.ts` is the one
+   reader for values a utility cannot express. That is what makes the language palette-invariant,
+   and it is the fix for the round-2 finding that canon `Button`/`Chip` reached app tokens no
+   palette scope could retint.
 
    PROVENANCE — this is not a fresh opinion. It is palette **p3 · wholistic bands**, which won
    design-lang base 2 round 2 (ruled 2026-08-16) against three rivals plus the unfixed
    incumbent, judged by flipping each in both modes over one byte-identical base.
 
-   ── THE 18 TOKENS (+ the viz ladder) ──────────────────────────────────────────────────────
+   ── THE 17 ROLES (+ the viz ladder) ────────────────────────────────────────────────────────
      GROUND LADDER (4)  page · artifact · recess · select
      INK LADDER    (3)  ink · ink-2 · ink-mute
      HAIRLINE      (2)  line · line-2
-     MEANING       (9)  pea · pea-ink · alarm · caution · done · commit · on-commit · nav
-                        (…that is 8; the 9th is `--pe-ink-mute` doing double duty as the
-                         "never checked" rank of the squiggle family — see the reuse table)
+     MEANING       (8)  pea · pea-ink · alarm · caution · done · commit · on-commit · nav
+                        `--pe-ink-mute` serves the meaning band a ninth time, as the "never
+                        checked" rank of the squiggle family, but it is counted once in the ink
+                        ladder — see the reuse table.
      VIZ LADDER    (6)  --viz-1..6 — the PARALLEL palette for taxonomy/series spends; indexed,
-                        band-quantized, governed by the grayscale law (see its block below).
+                        band-quantized, governed by the grayscale rider (see its block below).
                         Not part of the meaning contract: a viz colour never carries state.
+     `--pe-on` and `--pe-veil` are plumbing rather than roles. Each has its own heading below.
 
-   Tints, washes and hairline-over-fill are NOT tokens. Components mix them from these with
+   Tints, washes and hairline-over-fill are NOT roles. Components mix them from these with
    `color-mix()` against `--pe-on`. A surface that wants a different wash STRENGTH is proposing a
    grammar change, not a colour change.
 
-   ── STANDING LAWS THESE TOKENS ENCODE (SURFACE-PHILOSOPHY §5) ──────────────────────────────
-     · ONE ALARM. `--pe-alarm` means "the model disagrees". Nothing else may wear it.
-     · PEA IS NEVER BLUE. The agent's proposals wear the agent's identity.
-     · SELECTION AND FOCUS ARE A FILL, NEVER A HUE — only ever `--pe-select`, which is literally
-       the 4th rung of the ground ladder, so the law is structural rather than remembered.
-       EXTENSION (ruled 2026-08-16, R13a): on a spatial view where a fill cannot separate —
-       coloured plan fills, zone peeks — the locate mark is `--pe-ink`: neutral, no hue bought,
-       the highest-contrast mark available. Takeoffs' cursor is the precedent.
-     · THE ONLY FILLED BLUE is the verb that writes beyond the page (`--pe-commit`).
-       Nav is blue TEXT (`--pe-nav`, byte-identical) and nothing else in the language is blue.
-       "BEYOND THE PAGE" (ruled 2026-08-16, fit reviews): the write leaves the current page's
-       state — disk, host document, external system; a write that only moves this page's own
-       state is not blue.
-     · THE GRAYSCALE EXTENSION (ruled 2026-08-16, fit reviews): a meaning-band spend on a fill
-       SMALLER THAN A WORD requires a non-hue channel — pattern, weight, outline or position
-       must carry the distinction too. Hue-only fills at rail/pip scale ride the priced
-       alarm/caution CVD collision (honest costs, below) exactly where a wrong read is dear.
-     · MONO MEANS THE MACHINE MEASURED THIS. Type carries meaning on the same terms as colour.
-     · BOLD IS RESERVED FOR UNSAVED, everywhere, always.
+   ── THE SIX LAWS (one line each in `./DESIGN.md`, which SURFACE-PHILOSOPHY §5 points at) ────
+     1 · ONE ALARM. `--pe-alarm` means "the model disagrees". Nothing else may wear it.
+     2 · PEA IS NEVER BLUE. The agent's proposals wear the agent's identity.
+     3 · SELECTION AND FOCUS ARE A FILL, NEVER A HUE — only ever `--pe-select`, which is
+         literally the 4th rung of the ground ladder, so the law is structural rather than
+         remembered. EXTENSION (ruled 2026-08-16, R13a): on a spatial view where a fill cannot
+         separate — coloured plan fills, zone peeks — the locate mark is `--pe-ink`: neutral,
+         no hue bought, the highest-contrast mark available. Takeoffs' cursor is the precedent.
+     4 · THE ONLY FILLED BLUE is the verb that writes beyond the page (`--pe-commit`). Nav is
+         blue TEXT (`--pe-nav`, byte-identical) and nothing else in the language is blue.
+         "BEYOND THE PAGE" (ruled 2026-08-16, fit reviews): the write leaves the current page's
+         state — disk, host document, external system; a write that only moves this page's own
+         state is not blue.
+     5 · MONO MEANS THE MACHINE MEASURED THIS. Type carries meaning on the same terms as colour.
+     6 · BOLD IS RESERVED FOR UNSAVED, everywhere, always.
+
+     RIDER — THE GRAYSCALE EXTENSION (ruled 2026-08-16, fit reviews): a meaning-band spend on a
+     fill SMALLER THAN A WORD requires a non-hue channel, because pattern, weight, outline or
+     position must carry the distinction too. Hue-only fills at rail/pip scale ride the priced
+     alarm/caution CVD collision (honest costs, below) exactly where a wrong read is dear.
 
    ── OUTCOME KINDS REUSE THE MEANING ROLES — no outcome gets a hue of its own ────────────────
      busy      → --pe-ink-2      (neutral machine fact, in flight)
@@ -98,7 +109,7 @@
    declaration reads as "lifted" in both. Hover buys no hue — same law as selection and focus.
 
    ── p3 · THE BAND SYSTEM (why these values and not others) ─────────────────────────────────
-   Every one of the 18 tokens is `oklch(L C h)` with L, C and h taken from a declared band.
+   Every one of the 17 roles is `oklch(L C h)` with L, C and h taken from a declared band.
    Nothing was eyeballed; the pairing table below is the consequence, not the argument.
 
    1 · THE NEUTRAL HUE — 88° (warm paper), used by EVERY ground and EVERY ink, BOTH MODES.

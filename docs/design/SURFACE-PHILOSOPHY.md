@@ -246,22 +246,14 @@ say where options come from.
 
 ## 5 · Colour and type
 
-Raw colour authority is `apps/web/src/pe-base.css`; Tailwind vocabulary and projections live in
-`apps/web/src/design-lang.css`, rendered live in `/design-system` §02. (`COLOR-ROLES.md` is the
-superseded ancestor — deleted, git history only.) Meaning is assigned in one place so that reconsidering a colour is a one-line edit;
-components consume role tokens rather than raw palette. Deliberately alien prototype chrome, such as
-a variant switcher, is exempt — it must not read as part of the design under review.
+The whole vocabulary is one screen:
+[`apps/web/src/DESIGN.md`](../../source/pe-tools/apps/web/src/DESIGN.md) — 17 roles, 6 type tiers,
+4 z rungs, one motion duration, the composition utilities, and the six laws. `base.css` is the
+colour authority and carries the band math behind the values; `/design-system` §02 renders them live.
 
-The four that shape a design rather than an implementation:
-
-- **Selection and focus are a fill, never a hue.** Anything answering "where am I / what is lit" is a
-  neutral fill.
-- **One alarm.** Exactly one colour means "the model disagrees", and nothing else may wear it.
-- **Agent proposals wear the agent's identity colour**, never the commit colour.
-- **The only interactive blue is the verb that writes beyond the page.** Safe verbs never turn blue.
-
-**Monospace means machine-authored literal text** — identifiers, paths, code, keys, measured numbers.
-Type carries meaning on the same terms as colour.
+Meaning is assigned in one place so that reconsidering a colour is a one-line edit; components
+consume role tokens rather than raw palette. Deliberately alien prototype chrome, such as a variant
+switcher, is exempt — it must not read as part of the design under review.
 
 ---
 

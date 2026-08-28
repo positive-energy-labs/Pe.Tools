@@ -172,7 +172,7 @@ Fixed *bottom-centre*, *constant-width* pill: ← arrow, `B — Sidebar layout` 
 
 **Isolated HTML variants.**
 
-For component-ey questions (a widget, an idiom, an interaction in isolation): one file, no framework, no server, opens by double-click, survives being emailed. Domain language on every label. Title and one-line question at top, variants side by side or tabbed. Real logic in a pure `<script>` module the page calls into; the shell is throwaway.
+For component-ey questions (a widget, an idiom, an interaction in isolation): one file, no framework, no server, opens by double-click, survives being emailed. Domain language on every label. Title and one-line question at top, variants side by side or tabbed. Real logic in a pure `<script>` module the page calls into; the shell is throwaway. Every variant links `apps/web/src/base.css` and sets `data-pe` on `<html>`, so it inherits the design language's roles for free, and a variant that invents a colour is out of the lineup.
 
 **Cleanup.**
 
