@@ -137,9 +137,10 @@ function UpdateButton() {
 
 export const Route = createFileRoute("/")({ component: App });
 
-/** The front door lists EVERY living route (SURFACE-PHILOSOPHY §0: a surface unreachable
- * from the front door rots). `/design-system`'s satellite exhibits are reachable through
- * the satellite links on its card. */
+/** The front door lists every product and incubating-product route (SURFACE-PHILOSOPHY §0:
+ * an undiscoverable product rots). Explicitly round-scoped throwaway experiments may remain
+ * typed-URL-only while still paying the maintained styling guard. `/design-system`'s satellite
+ * exhibits are reachable through the satellite links on its card. */
 const TOOLS = [
   {
     to: "/family",

@@ -43,10 +43,11 @@ I looking at, what state is it in, what would each verb do, and why is that one 
 deepen; they never rescue. Tiebreak between two surfaces that both pass: speed through the path
 taken most of the time.
 
-**A surface unreachable from the front door rots.** Reachability from the index tracks liveness
-better than any timestamp — if nobody can navigate to it, nobody notices it is wrong. Every route
-deleted in the last purge wave was unlinked. Every living route carries a front-door card today,
-incubating products included, which is why an incubating product is enforced like a shipped one.
+**An undiscoverable product rots.** Reachability from the index tracks liveness better than any
+timestamp — if nobody can navigate to it, nobody notices it is wrong. Every product and
+incubating-product route carries a front-door card, which is why an incubating product is enforced
+like a shipped one. An explicitly round-scoped throwaway experiment may remain typed-URL-only, but
+it still pays the maintained styling guard.
 
 ---
 

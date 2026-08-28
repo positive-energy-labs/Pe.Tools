@@ -305,7 +305,7 @@ authoring decision flow, and the enforcement commands are
 
 ### Discoverability and rot risk
 
-- Every living route now has a front-door card, including `/param-tables`, `/parameter-links`, `/data-tables`, `/design-system` and `/schedule-grid`. Reachability is no longer the rot signal it was; the next signal to find is which linked routes nobody opens.
+- Every product and incubating-product route has a front-door card, including `/param-tables`, `/parameter-links`, `/data-tables`, `/design-system` and `/schedule-grid`. Explicitly round-scoped throwaway experiments may remain typed-URL-only while still paying the maintained styling guard. The next signal is which linked routes nobody opens.
 - Decide the front door's brand dot: either it earns a real lamp (host connected?) or the dot goes. Neutral ink is a holding position. The front door also needs a ruled navigation-surface form before `ui/card` can die there.
 - "Update check unavailable" conflates endpoint 500, dead network, and a dev proxy with no host into one advisory because the query surfaces one `error` string. Honest fix is upstream in the `/host/update` contract, not in chrome.
 - Declaration-only symbols flagged but not cut inside the protected `src/takeoff/**` zone, for the next takeoff pass to decide: `readStatus`, `readViews`, `readZones`, `applyRegistry`, `readZoneRegions` (`takeoff/host.ts`); `DEFAULT_ARTIFACT_DIR` (`takeoff/model.ts`); `openDecisions` (`takeoff/proto/mock.ts`); `ZonePlan`, `PlanLegend` (`takeoff/zone-plan.tsx`).

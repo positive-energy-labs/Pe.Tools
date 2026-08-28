@@ -27,10 +27,12 @@ and fails fast. Reading the shared authority is not a second authority.
 ## Maintained scope
 
 Every TypeScript, TSX, CSS and JSON surface under `apps/web/src` is maintained and enforced,
-mounted routes and incubating variants alike. The generated `routeTree.gen.ts` is the only
-exclusion. `/param-tables` is an incubating product, not a prototype exemption: it is mounted,
-switches five variants on `?variant`, is front-door discoverable as `Incubating product`, and pays
-every gate.
+including mounted product routes, incubating variants, and explicitly round-scoped throwaway
+experiments. The generated `routeTree.gen.ts` is the only source exclusion. Product and
+incubating-product routes must be front-door discoverable; throwaway experiments may remain
+typed-URL-only while still paying every gate. `/param-tables` is an incubating product: it is
+mounted, switches five variants on `?variant`, is front-door discoverable as `Incubating product`,
+and pays every gate.
 
 `docs/remote-factory.html` is a private disposable standalone page and is deliberately outside the
 maintained set. It was not migrated and does not need to be.
