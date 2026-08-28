@@ -8,13 +8,8 @@
    exact defect round 2 found in canon `Button`/`Chip`, and
    `components/lang` exists partly to not have it.
 
-   One file rather than seven: the mechanisms below are genuinely SHARED — the hover law, the
-   one `::before` square that two authors draw, the `--pe-on` re-declarations, the squiggle
-   family. Splitting them per component is how they drift apart. Each block names its component.
-
-   SCOPING: every rule is scoped by a `dl-` class. No element selectors, no ancestor scope —
-   these primitives must render correctly anywhere on any route, including routes still on the
-   old token vocabulary.
+   The remaining component-bound rules exceed the about-300-line split threshold. They stay
+   together; each block names the component whose DOM it owns.
 
    ══ THE SLOT TABLE (what may say what — ruled through two rounds) ══════════════════════════
      CELL BODY (fill + ring)  → pea's PROPOSAL, and UNEDITABLE/DISABLED. Nothing else. Ever.
