@@ -386,8 +386,8 @@ export function VariantC() {
                       ))}
                     </tr>
                     <tr>
-                      {FOM_HWCH_PLANT.headRow.map((h) => (
-                        <th key={h} className="ptc-fom-head">
+                      {FOM_HWCH_PLANT.headRow.map((h, i) => (
+                        <th key={`${i}-${h}`} className="ptc-fom-head">
                           {h}
                         </th>
                       ))}
