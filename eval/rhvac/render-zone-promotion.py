@@ -35,9 +35,11 @@ def load_visual_law(path=LAW_PATH):
 LAW = load_visual_law()
 
 
+@functools.lru_cache(maxsize=None)
 def dash_pattern(role, path=BASE_CSS_PATH):
     """Resolve a semantic dash role to its numeric pattern from base.css. Fail fast: a missing
-    or unparseable role is a broken coupling, not a reason to draw a solid line."""
+    or unparseable role is a broken coupling, not a reason to draw a solid line. Cached — this is
+    called per zone loop, and base.css does not change under a running render."""
     text = Path(path).read_text(encoding="utf-8")
     match = re.search(rf"^\s*--dash-{re.escape(role)}\s*:\s*([^;]+);", text, re.MULTILINE)
     if not match:
@@ -47,7 +49,9 @@ def dash_pattern(role, path=BASE_CSS_PATH):
     except ValueError as error:
         raise SystemExit(
             f"--dash-{role} in {path} is not a numeric pattern: {match.group(1)!r}") from error
-    if not pattern or any(value < 0 for value in pattern):
+    # STRICTLY positive: every role is, and a zero-length segment would leave the dash walker
+    # unable to advance — an infinite loop instead of a wrong picture.
+    if not pattern or any(value <= 0 for value in pattern):
         raise SystemExit(f"--dash-{role} in {path} is not a usable dash pattern: {pattern}")
     return pattern
 

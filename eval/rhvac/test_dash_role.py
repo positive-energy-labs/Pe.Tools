@@ -8,8 +8,11 @@ fails if that drift comes back.
 
 import importlib.util
 import json
+import tempfile
 import unittest
 from pathlib import Path
+
+from PIL import Image, ImageDraw
 
 HERE = Path(__file__).resolve().parent
 ZONE_SCRIPT = HERE / "render-zone-promotion.py"
@@ -55,6 +58,42 @@ class DashRoleCoupling(unittest.TestCase):
     def test_unknown_role_fails_fast(self):
         with self.assertRaises(SystemExit):
             self.renderer.dash_pattern("no-such-role")
+
+    def write_css(self, declaration):
+        handle = tempfile.NamedTemporaryFile("w", suffix=".css", delete=False, encoding="utf-8")
+        handle.write(f":root {{\n  {declaration}\n}}\n")
+        handle.close()
+        self.addCleanup(Path(handle.name).unlink)
+        return Path(handle.name)
+
+    def test_non_positive_pattern_fails_fast(self):
+        # A zero-length segment leaves the dash walker unable to advance — reject it at the
+        # resolver rather than hang the render.
+        for declaration in ("--dash-probe: 0 0;", "--dash-probe: 4 0;", "--dash-probe: -2 3;"):
+            with self.subTest(declaration=declaration):
+                with self.assertRaises(SystemExit):
+                    self.renderer.dash_pattern("probe", self.write_css(declaration))
+
+    def test_non_numeric_pattern_fails_fast(self):
+        with self.assertRaises(SystemExit):
+            self.renderer.dash_pattern("probe", self.write_css("--dash-probe: solid;"))
+
+    def test_four_value_reference_renders_broken(self):
+        """The whole point of the role: `reference` is on-off-on-off, and the old two-value
+        walker raised on it. It must draw, and it must not draw solid."""
+        pattern = self.renderer.dash_pattern("reference")
+        self.assertEqual(len(pattern), 4)
+
+        # A real zone loop, not a two-point path: `_draw_dashed` closes the polygon, so a
+        # there-and-back segment retraces itself and the return leg fills the forward leg's gaps.
+        # Sample the top edge away from the corners the other two edges reach.
+        image = Image.new("RGB", (64, 40), (255, 255, 255))
+        self.renderer._draw_dashed(
+            ImageDraw.Draw(image), [(0, 1), (63, 1), (32, 38)], (0, 0, 0), 1, pattern)
+        row = [image.getpixel((x, 1)) for x in range(4, 60)]
+        inked = sum(1 for pixel in row if pixel == (0, 0, 0))
+        self.assertGreater(inked, 0, "the reference role drew nothing")
+        self.assertLess(inked, len(row), "the reference role drew a solid line")
 
 
 if __name__ == "__main__":
