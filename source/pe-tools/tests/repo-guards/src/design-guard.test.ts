@@ -31,26 +31,25 @@
  *                        background-image, so a shorthand reset is forbidden; CSS declarations
  *                        remain legal.
  *
- * ── RATCHET (count may only fall; baselines in design-guard.baseline.json) ─────────────────
+ * ── HARD ZERO (every category below must remain empty) ─────────────────────────────────────
  *  rawTextSize      any raw text-[Npx] or named Tailwind text-size utility. The tier system
  *                   (t-* classes) is the scale; the remaining spends are non-exact tail sites.
  *  rawButton        <button> outside components/ui + components/lang: verbs come from
  *                   lang/Verb; the tail is non-verb machinery.
- *  uiButtonImports  import sites of ui/button — the still-open half; each route
- *                   pass that migrates a consumer lowers this until the file is deleted.
+ *  uiButtonImports  import sites of ui/button. The maintained surface uses the shared
+ *                   language primitives instead.
  *  dashed           border-dashed / stroke-dasharray / border-style: dashed outside
  *                   components/lang + design-lang.css. R13b: every broken-edge mechanism
  *                   occupies the SAME slot and means SEAM. The baseline covers the audited
  *                   deliberate spends (exhibit chrome, drawing-set's seam, atlas's legend).
- *  longTitle        title= props over 240 characters — the hover-shadow-doc ratchet from fit
- *                   review B·5: prose moved out of sight instead of deleted. May only shrink.
+ *  longTitle        title= props over 240 characters. Long guidance belongs in visible HelpTip
+ *                   content; instance facts may remain in title attributes.
  *
  *  The walk covers every apps/web/src TypeScript, TSX, and CSS file, including prototype paths.
  *  Only the generated route tree is excluded; mounted prototypes remain maintained surface.
  *
- *  A count ABOVE its baseline fails with the offending files. A count BELOW its baseline also
- *  fails — asking you to lower the baseline — because a ratchet that can silently slacken is
- *  not a ratchet. Update src/design-guard.baseline.json in the same commit as the win.
+ *  Every category is a direct hard-zero assertion. Failures include the first 40 offending
+ *  paths and source matches, so a new violation points at its repair site.
  * =============================================================================================
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -163,18 +162,18 @@ const stripTemplateLiterals = (text: string): string =>
 
 // ── hard zeros ───────────────────────────────────────────────────────────────────────────────
 
-describe("design guard — carried debt ratchets", () => {
+describe("design guard — maintained surface hard zeros", () => {
   it("no dead shim token is consumed (the alias shim reads zero lines, forever)", () => {
     const re =
       /var\(--(?:st-|act-|cat-|pe-blue|pe-green|paper|mist|basalt|slate|lens-ink-2|clay|kiln|lichen|fail|user|pea-tint|pea-line|line-soft)/g;
     const offences = scan(FILES, re);
-    ratchet("deadShim", offences);
+    assertZero("deadShim", offences);
   });
 
   it("no bare var(--line) / var(--line-2) — the canon hairlines are --pe-line / --pe-line-2", () => {
     const re = /var\(--line(?:-2)?\s*[,)]/g;
     const offences = scan(FILES, re);
-    ratchet("bareLine", offences);
+    assertZero("bareLine", offences);
   });
 
   it("no tele / tele-label / section-label class words (type tiers replaced the bundles)", () => {
@@ -186,7 +185,7 @@ describe("design guard — carried debt ratchets", () => {
         offences.push({ rel: f.rel, line: lineOf(stripped, m.index), match: m[0] });
       }
     }
-    ratchet("tele", offences);
+    assertZero("tele", offences);
   });
 
   it("no hex colour literal outside base.css (a colour is a one-line edit there)", () => {
@@ -195,13 +194,13 @@ describe("design guard — carried debt ratchets", () => {
       FILES.filter((f) => f.rel !== "base.css").map((f) => ({ ...f, text: stripComments(f.text) })),
       re,
     );
-    ratchet("hex", offences);
+    assertZero("hex", offences);
   });
 
   it("no sub-10px type (the 10px floor)", () => {
     const re = /text-\[[0-9]px\]/g;
     const offences = scan(FILES, re);
-    ratchet("sub10", offences);
+    assertZero("sub10", offences);
   });
 
   it("no raw numeric dash pattern in maintained web JSON (roles only)", () => {
@@ -224,51 +223,29 @@ describe("design guard — carried debt ratchets", () => {
   });
 });
 
-// ── ratchets ─────────────────────────────────────────────────────────────────────────────────
-
-type Baseline = Record<string, number>;
-const BASELINE: Baseline = JSON.parse(
-  readFileSync(join(HERE, "design-guard.baseline.json"), "utf8"),
-);
-
 const isTsx = (f: Entry) => f.rel.endsWith(".tsx");
 const inUiOrLang = (f: Entry) =>
   f.rel.startsWith("components/ui/") || f.rel.startsWith("components/lang/");
 
-const ratchet = (name: string, offences: Offence[]) => {
-  const base = BASELINE[name];
-  expect(base, `Baseline "${name}" missing from design-guard.baseline.json`).toBeTypeOf("number");
-  const count = offences.length;
-  if (count > base) {
-    const byFile = new Map<string, number>();
-    for (const o of offences) byFile.set(o.rel, (byFile.get(o.rel) ?? 0) + 1);
-    const files = [...byFile.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([rel, n]) => `  ${rel}: ${n}`)
-      .join("\n");
-    expect.fail(
-      `RATCHET "${name}" grew: ${count} > baseline ${base}. The count may only fall. Offenders:\n${files}`,
-    );
-  }
-  if (count < base) {
-    expect.fail(
-      `RATCHET "${name}" fell: ${count} < baseline ${base}. Good — lock it in: lower "${name}" to ${count} in src/design-guard.baseline.json (same commit).`,
-    );
-  }
+const assertZero = (name: string, offences: Offence[]) => {
+  expect(
+    offences,
+    `HARD ZERO "${name}" found ${offences.length} offender(s):\n${report(offences)}`,
+  ).toEqual([]);
 };
 
-describe("design guard — ratchets (baselines may only fall)", () => {
+describe("design guard — maintained surface hard zeros", () => {
   it("rawTextSize — arbitrary and named raw text-size utilities", () => {
     // Absolute units only. `text-[0.7rem]` (ADR 0004's named outlier, in `ui/badge`) survived the
     // px-only form of this gate; `em` stays legal because `text-[1em]` is an inheritance
     // instruction — `PROSE_CLASS` is composed at two different tiers by its two consumers.
     const re =
       /(?<![-\w])text-(?:\[(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem)\]|xs|sm|base|lg|xl|\d+xl)(?![-\w])/g;
-    ratchet("rawTextSize", scan(FILES, re));
+    assertZero("rawTextSize", scan(FILES, re));
   });
 
   it("rawButton — <button> outside components/ui + components/lang", () => {
-    ratchet(
+    assertZero(
       "rawButton",
       scan(
         FILES.filter((f) => isTsx(f) && !inUiOrLang(f)),
@@ -277,8 +254,8 @@ describe("design guard — ratchets (baselines may only fall)", () => {
     );
   });
 
-  it("uiButtonImports — open tail; falls to 0 when ui/button dies", () => {
-    ratchet("uiButtonImports", scan(FILES, /from\s+["'][^"']*ui\/button["']/g));
+  it("no ui/button imports", () => {
+    assertZero("uiButtonImports", scan(FILES, /from\s+["'][^"']*ui\/button["']/g));
   });
 
   it("dashed — every broken line comes from a named role, never a raw pattern", () => {
@@ -291,7 +268,7 @@ describe("design guard — ratchets (baselines may only fall)", () => {
     const files = FILES.filter(
       (f) => !inUiOrLang(f) && f.rel !== "design-lang.css" && f.rel !== "base.css",
     ).map((f) => ({ ...f, text: stripComments(f.text) }));
-    ratchet("dashed", [...scan(files, edge), ...scan(files, stroke)]);
+    assertZero("dashed", [...scan(files, edge), ...scan(files, stroke)]);
   });
 
   it("longTitle — title= props over 240 chars (the hover shadow-doc, fit review B·5)", () => {
@@ -309,6 +286,6 @@ describe("design guard — ratchets (baselines may only fall)", () => {
         }
       }
     }
-    ratchet("longTitle", offences);
+    assertZero("longTitle", offences);
   });
 });

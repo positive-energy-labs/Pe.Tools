@@ -804,7 +804,7 @@ const BADGE_VARIANTS = [
   "kiln",
 ] as const;
 
-/** The shape the exhibit's own trigger/action specimens wear, now that `ui/button` is gone. */
+/** The shape the exhibit's own trigger/action specimens wear. */
 const SPEC_PRESS =
   "inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border border-line px-2 t-value font-medium whitespace-nowrap text-ink transition-all hover:veil";
 

@@ -8,17 +8,17 @@ import { VariantD } from "#/param-tables/variants/variant-d";
 import { VariantE } from "#/param-tables/variants/variant-e";
 
 /**
- * PROTOTYPE ROUTE — find-the-product round 1 for "param tables":
+ * INCUBATING ROUTE — find-the-product round 1 for "param tables":
  * arbitrary engineering tables (Basis of Design, Figures of Merit) whose
  * cells link to parameters on model elements. Hybrid of /parameter-links
  * (linkage profile, evaluation, apply) and /data-tables (authored tables).
  *
  * Five structurally different answers to "what is this page", switchable via
  * ?variant=a..e. Shared fixture: real project-a M001/FOM/fan-coil data
- * (param-tables/proto/fixture.ts). No persistence, no host calls — every
+ * (param-tables/variants/fixture.ts). No persistence, no host calls — every
  * apply is a mock that renders its receipt.
  *
- * Throwaway: this whole folder dies at round close (prototype skill rules).
+ * Mounted variants are kept here while the product shape is evaluated.
  */
 export const Route = createFileRoute("/param-tables")({
   validateSearch: (search: Record<string, unknown>) => ({

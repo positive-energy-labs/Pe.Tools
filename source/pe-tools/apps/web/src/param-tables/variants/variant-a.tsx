@@ -549,7 +549,7 @@ export function VariantA() {
                   <th style={{ borderBottom: `0.5px solid ${token("line")}` }} />
                   {Array.from({ length: cols }, (_, c) => (
                     <th
-                      key={c}
+                      key={`header-${c}`}
                       className="t-caption face-mono"
                       style={{
                         color: token("ink-mute"),

@@ -182,7 +182,7 @@ function Thesis() {
 }
 
 /* ═══ 02 · laws ═════════════════════════════════════════════════════════════════════════════
-   THE RATCHET (ruled 2026-08-16): docs/design/SURFACE-PHILOSOPHY.md is prose law; this route is
+   THE DESIGN LAW (ruled 2026-08-16): docs/design/SURFACE-PHILOSOPHY.md is prose law; this route is
    the executable one. A position that CAN be rendered with a shipping component migrates here as
    a live specimen and collapses to a one-line pointer in the doc. What stays prose over there is
    the honest list of what nothing can render yet, plus the process rules that never will. */
