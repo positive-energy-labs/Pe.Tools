@@ -234,7 +234,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
       <FieldMessages messages={field.errors} />
       <div className="overflow-auto rounded-lg border border-line">
         <table className="min-w-full border-collapse t-prose">
-          <thead className="bg-recess/50 text-left t-value uppercase tracking-wide text-ink-2">
+          <thead className="bg-recess/50 text-left t-value t-upper text-ink-2">
             <tr>
               {fixedColumns.map(([columnKey]) => (
                 <th key={columnKey} className="px-3 py-2">

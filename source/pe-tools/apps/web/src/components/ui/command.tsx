@@ -117,7 +117,7 @@ function CommandGroup({
       data-slot="command-group"
       className={cn(
         // Group headings take the section-label voice (small-caps tracked sans).
-        "overflow-hidden p-1 text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:t-label **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:text-ink-2",
+        "overflow-hidden p-1 text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:t-label **:[[cmdk-group-heading]]:t-upper **:[[cmdk-group-heading]]:text-ink-2",
         className,
       )}
       {...props}
@@ -167,7 +167,7 @@ function CommandShortcut({ className, ...props }: React.ComponentProps<"span">) 
       data-slot="command-shortcut"
       className={cn(
         // Shortcuts are machine facts — telemetry voice.
-        "ml-auto face-mono t-caption tracking-[0.08em] text-ink-2 uppercase group-data-selected/command-item:text-ink",
+        "ml-auto face-mono t-caption t-upper text-ink-2 group-data-selected/command-item:text-ink",
         className,
       )}
       {...props}

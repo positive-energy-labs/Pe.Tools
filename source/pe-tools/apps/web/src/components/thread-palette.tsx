@@ -174,7 +174,7 @@ export function ThreadPalette({
         </CommandItem>
         <CommandGroup
           heading="Recent"
-          className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:t-caption [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:uppercase"
+          className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:t-caption [&_[cmdk-group-heading]]:t-upper"
         >
           {threads.map((thread) => {
             const active = thread.id === currentThreadId;

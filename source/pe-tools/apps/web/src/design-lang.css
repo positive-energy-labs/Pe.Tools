@@ -89,6 +89,12 @@
   line-height: var(--type-display-line-height);
 }
 
+@utility t-upper {
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 @utility veil {
   background-image: var(--fill-veil);
 }

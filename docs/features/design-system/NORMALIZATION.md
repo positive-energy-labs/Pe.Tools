@@ -13,7 +13,7 @@ This file is the map, not the log. It says where a value lives now.
 | Layer | File | Owns |
 | --- | --- | --- |
 | raw authority | `apps/web/src/base.css` | Every raw value, under `[data-pe]`: colour roles (including fixed document ground and modal scrim), viz roles, the seven type size/line-height pairs, the three dash patterns, radius, the spacing unit, motion, elevation, z-index, prose adapter, and composed pattern fills. Portable `.t-*`, `.dash-*`, `.shadow-*`, `.duration-control`, and layer classes consume them, so a no-Tailwind consumer needs nothing else. |
-| projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks and `@theme` mappings (`bg-document`, `bg-scrim`, `shadow-sm`/`shadow-lg`, `--spacing`, `duration-control`, semantic layers, and composed fills). It declares no independent semantic value; derived geometry such as `radius-xl` may remain arithmetic. |
+| projection | `apps/web/src/design-lang.css` | The Tailwind projection of the same variables as `@utility` blocks and `@theme` mappings (`bg-document`, `bg-scrim`, `shadow-sm`/`shadow-lg`, `--spacing`, `duration-control`, semantic layers, and composed fills). It owns no independent semantic value; derived geometry such as `radius-xl` may remain arithmetic. |
 | grammar | `apps/web/src/components/lang/` | The semantic vocabulary: `Verb`, `Press`, `FactChip`/`VizChip`, `StateCell`, `EmptyState`, `HelpTip`, `OutcomeLine`, `ArmingStrip`, `AddressingBar`, `Section`, `Switcher`. This is the base layer. `components/ui` composites may depend on it, and four already do (`combobox`, `dialog`, `input-group`, `side-pane`, all for `Press`). |
 | product | routes and feature dirs | Geometry and refinement only: sizes, spacing, panel widths, chart dimensions. No raw colour, no type scale, no broken-line pattern. |
 | runtime | `apps/web/src/lib/token.ts` | The one runtime token indirection for inline, SVG and serialized use. `token(role)` resolves `viz-*` and `dash-*` as raw families and everything else as `--pe-*`; `dash(role)` is its typed wrapper. Prefer a semantic class when a direct utility exists, but use this shared lookup wherever the value must cross a runtime or serialization boundary. |
@@ -43,8 +43,9 @@ typed-URL-only while still paying every gate. `/param-tables` is an incubating p
 mounted, switches five variants on `?variant`, is front-door discoverable as `Incubating product`,
 and pays every gate.
 
-`docs/remote-factory.html` is a private disposable standalone page and is deliberately outside the
-maintained set. It was not migrated and does not need to be.
+Disposable standalone artifacts are deliberately outside the maintained set: the private
+`docs/remote-factory.html` page and existing `apps/web/docs/*.html` demos. They were not migrated
+and do not need to be. Future artifacts should link/use `base.css` when practical.
 
 ## Authoring a new surface
 
@@ -128,7 +129,8 @@ failure output. The baseline file is deleted; there is no ratchet left to slacke
 The gates: retired `--r-*` tokens, shadcn semantic colour names, arbitrary PE colour utilities,
 runtime PE/viz reads outside `lib/token.ts`, unprojected type tiers, dead shim tokens, bare line
 tokens, retired `tele` words, hex literals outside `base.css`, sub-10px text, raw text-size
-utilities, raw `<button>` outside `components/ui` + `components/lang`, `ui/button` imports, inline
+utilities, raw `<button>` outside `components/ui` + `components/lang`, `ui/button` imports, raw
+uppercase case utilities/transforms outside the foundation and grammar owners, inline
 `background:` shorthand in TS/TSX, unruled dashed strokes, `title` over 240 characters, raw
 absolute type values, raw leading utilities, unprojected faces, raw numeric dash patterns in
 maintained JSON, static numeric CSS colours and stock palette utilities, non-inset raw elevation,
@@ -205,3 +207,7 @@ Open questions in behaviour terms. Each needs an observation or a product call, 
 4. Should `PaneStrip` gain a real pane-opening action, or be deleted? It is honest today and claims
    nothing. Its purpose — gated panes a user can open — is unbuilt, and the product shape has not
    settled enough to say which.
+5. Is opacity a legal de-emphasis mechanism, or does it shadow the ink ladder? This decides the
+   treatment for ungroundable and other de-emphasized content; do not add an opacity token first.
+6. Should dense chat/workbench `0.5px` hairlines become a shared fine-stroke token, or remain local
+   geometry? The current concentration is evidence for a verdict, not permission to mint a token.

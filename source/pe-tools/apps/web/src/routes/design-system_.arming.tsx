@@ -281,7 +281,7 @@ function SectionHead({ n, title, note }: { n: string; title: string; note: strin
   return (
     <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
       <span className="face-mono t-caption text-ink-mute">{n}</span>
-      <span className="t-label font-semibold tracking-[0.09em] uppercase">{title}</span>
+      <span className="t-label t-upper">{title}</span>
       <span className="min-w-0 flex-1 t-label text-ink-2">{note}</span>
     </div>
   );

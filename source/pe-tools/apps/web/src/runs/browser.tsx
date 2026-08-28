@@ -1583,12 +1583,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
       style={{ borderRadius: "var(--radius)" }}
     >
       <span className="flex items-baseline">
-        <span
-          className={cn(
-            "font-semibold uppercase tracking-wide",
-            !props.underlay && "line-through opacity-50",
-          )}
-        >
+        <span className={cn("t-upper", !props.underlay && "line-through opacity-50")}>
           evidence — the run's raster
         </span>
         <Press
@@ -1617,7 +1612,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
           "Closure the solver INVENTED across wall-run gaps. Pale + translucent = synthetic.",
         )}
       </div>
-      <span className="mt-0.5 font-semibold uppercase tracking-wide">decisions — drawn on top</span>
+      <span className="mt-0.5 t-upper">decisions — drawn on top</span>
       <div className="flex flex-col gap-0.5">
         {row(
           sw(candidateTone("legend", "R01").fill),
@@ -1687,7 +1682,7 @@ function LevelStatsFloater(props: {
       className="face-mono absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-page/95 px-2 py-1.5 t-label shadow-sm"
       style={{ borderRadius: "var(--radius)" }}
     >
-      <span className="flex items-baseline t-caption font-semibold uppercase tracking-wide text-ink-2">
+      <span className="flex items-baseline t-caption t-upper text-ink-2">
         {level} — this run
         <Press
           type="button"
@@ -2897,9 +2892,7 @@ export default function RunBrowser() {
       ) : review ? (
         <div className="flex flex-col gap-4 p-4">
           <div className="flex items-baseline gap-3">
-            <h2 className="face-mono t-value font-semibold uppercase tracking-wide">
-              review — {stagedItems.length} staged
-            </h2>
+            <h2 className="face-mono t-value t-upper">review — {stagedItems.length} staged</h2>
             <span className="face-mono t-label text-ink-2">
               each item at its pinned A/B pair · the lens is untouched
             </span>
@@ -2996,9 +2989,7 @@ export default function RunBrowser() {
                   className="sticky top-0 z-sticky -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1"
                   style={{ borderColor: token("line-2") }}
                 >
-                  <h2 className="face-mono t-value font-semibold uppercase tracking-wide">
-                    {level}
-                  </h2>
+                  <h2 className="face-mono t-value t-upper">{level}</h2>
                   <span className="face-mono t-label text-ink-2">
                     {solved}/{zonePairs.length} solved · {fmtSqft(sf)}
                   </span>

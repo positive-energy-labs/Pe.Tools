@@ -49,7 +49,7 @@ function FamilyReviewProto() {
         style={{ borderColor: token("line") }}
       >
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-label tracking-wide text-ink-mute">FAMILY REVIEW</span>
+          <span className="face-mono t-label t-upper text-ink-mute">FAMILY REVIEW</span>
           <span className="t-value">
             {families.length} portable families · {board.length} family × type
           </span>

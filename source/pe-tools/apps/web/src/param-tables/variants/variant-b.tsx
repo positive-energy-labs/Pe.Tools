@@ -454,10 +454,7 @@ export function VariantB() {
         {/* ------------------------------------------------------------------ */}
         <div className="flex w-[430px] shrink-0 flex-col gap-3 overflow-y-auto p-3">
           <div className="flex items-center gap-1.5">
-            <span
-              className="t-caption font-medium uppercase tracking-widest"
-              style={{ color: token("ink-mute") }}
-            >
+            <span className="t-caption t-upper" style={{ color: token("ink-mute") }}>
               source substrate
             </span>
             <HelpTip>
@@ -482,7 +479,7 @@ export function VariantB() {
                 <tbody>
                   <tr style={{ color: token("ink-mute") }}>
                     {FOM_HWCH_PLANT.groupRow.map((c, i) => (
-                      <td key={i} className="px-1.5 py-0.5 font-medium uppercase tracking-wide">
+                      <td key={i} className="px-1.5 py-0.5 t-upper">
                         {c}
                       </td>
                     ))}
@@ -511,10 +508,7 @@ export function VariantB() {
             {/* Plant design temps — the bound cells. Gutter markers locate; the
                 decision (evaluate/apply) is made where the evidence is: the ledger. */}
             <div className="border-t px-2 py-1.5" style={{ borderColor: token("line") }}>
-              <div
-                className="mb-1 t-caption font-medium uppercase tracking-widest"
-                style={{ color: token("ink-mute") }}
-              >
+              <div className="mb-1 t-caption t-upper" style={{ color: token("ink-mute") }}>
                 plant design temps · bound
               </div>
               {OUT_DEFS.map((def) => {
@@ -710,10 +704,7 @@ export function VariantB() {
 
             <table className="w-full t-value" style={{ borderCollapse: "collapse" }}>
               <thead>
-                <tr
-                  className="text-left t-caption uppercase tracking-wider"
-                  style={{ color: token("ink-mute") }}
-                >
+                <tr className="text-left t-caption t-upper" style={{ color: token("ink-mute") }}>
                   <th className="px-3 py-1.5 font-medium">dir</th>
                   <th className="px-2 py-1.5 font-medium">source</th>
                   <th className="px-2 py-1.5 font-medium">target parameter</th>
@@ -912,10 +903,7 @@ function FarSide({
       ) : null}
       <table className="t-caption" style={{ borderCollapse: "collapse" }}>
         <thead>
-          <tr
-            className="text-left t-caption uppercase tracking-wider"
-            style={{ color: token("ink-mute") }}
-          >
+          <tr className="text-left t-caption t-upper" style={{ color: token("ink-mute") }}>
             <th className="py-0.5 pr-4 font-medium">type</th>
             <th className="py-0.5 pr-4 font-medium">tags hit</th>
             <th className="py-0.5 pr-4 font-medium">model holds</th>
@@ -988,10 +976,7 @@ function InboundFarSide() {
     <div className="ml-5 border-l pl-3" style={{ borderColor: token("line-2") }}>
       <table className="t-caption" style={{ borderCollapse: "collapse" }}>
         <thead>
-          <tr
-            className="text-left t-caption uppercase tracking-wider"
-            style={{ color: token("ink-mute") }}
-          >
+          <tr className="text-left t-caption t-upper" style={{ color: token("ink-mute") }}>
             <th className="py-0.5 pr-4 font-medium">type</th>
             <th className="py-0.5 pr-4 font-medium">tags read</th>
             <th className="py-0.5 font-medium">Σ contribution</th>

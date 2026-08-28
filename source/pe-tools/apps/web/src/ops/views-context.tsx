@@ -156,7 +156,7 @@ function ContextSummaryView({ data }: OpViewProps) {
       {/* hero: document identity large, chips beneath, active-view stage line —
           Revit's window chrome distilled to a title block */}
       <div className="min-w-0 rounded-sm border border-line-2 px-4 py-3">
-        <div className="face-mono t-caption uppercase tracking-[0.3em] text-ink-2">DOCUMENT</div>
+        <div className="face-mono t-caption t-upper text-ink-2">DOCUMENT</div>
         <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
           <span
             className="t-title min-w-0 truncate"
@@ -182,9 +182,7 @@ function ContextSummaryView({ data }: OpViewProps) {
         {/* stage line: where the camera is right now */}
         {activeView && (
           <div className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-line pt-2">
-            <span className="face-mono t-caption uppercase tracking-[0.08em] text-ink-2">
-              ON STAGE
-            </span>
+            <span className="face-mono t-caption t-upper text-ink-2">ON STAGE</span>
             <VizChip viz={activeView.isSheet === true ? 2 : 1} title="view kind">
               {text(activeView.viewType)}
             </VizChip>
@@ -756,7 +754,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
     <div className="flex flex-col gap-3">
       {/* testimony header: the phrase under interrogation */}
       <div className="min-w-0">
-        <div className="face-mono t-caption uppercase tracking-[0.3em] text-ink-2">REFERENCE</div>
+        <div className="face-mono t-caption t-upper text-ink-2">REFERENCE</div>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-2">
           <span className="t-title min-w-0 font-medium">“{text(res.referenceText)}”</span>
           <span

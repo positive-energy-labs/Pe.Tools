@@ -298,7 +298,7 @@ function PopoverHarness() {
     <div className="fixed inset-0 grid grid-cols-3 grid-rows-3 gap-2 bg-page p-2 t-prose text-ink">
       {POSITIONS.map((p) => (
         <div key={p.id} className={cn("relative flex min-h-0 min-w-0", p.cls)}>
-          <span className="face-mono t-caption pointer-events-none absolute top-0 left-0 tracking-[0.09em] text-ink-mute uppercase">
+          <span className="face-mono t-caption t-upper pointer-events-none absolute top-0 left-0 text-ink-mute">
             {p.id}
           </span>
           {p.id === "centre" ? (

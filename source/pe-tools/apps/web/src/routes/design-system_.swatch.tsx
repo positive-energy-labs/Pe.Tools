@@ -324,7 +324,7 @@ function Swatch() {
 function GroupHead({ title, note }: { title: string; note: string }) {
   return (
     <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
-      <span className="t-label font-semibold tracking-[0.09em] uppercase">{title}</span>
+      <span className="t-label t-upper">{title}</span>
       <span className="min-w-0 flex-1 t-label text-ink-2">{note}</span>
     </div>
   );

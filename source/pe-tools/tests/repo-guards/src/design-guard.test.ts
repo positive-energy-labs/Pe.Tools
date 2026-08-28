@@ -133,6 +133,15 @@ describe("design guard â€” current token authority", () => {
     }
   });
 
+  it("projects the shared uppercase case marker through Tailwind", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
+    const rule =
+      /(?:\.t-upper|@utility\s+t-upper)\s*\{(?=[^}]*font-weight:\s*var\(--weight-strong\))(?=[^}]*letter-spacing:\s*0\.08em)(?=[^}]*text-transform:\s*uppercase)[^}]*\}/s;
+    expect(base, "base.css wiring for t-upper").toMatch(rule);
+    expect(lang, "design-lang.css wiring for t-upper").toMatch(rule);
+  });
+
   it("projects the shared weight variables through Tailwind", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
     const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
@@ -330,6 +339,18 @@ describe("design guard — maintained surface hard zeros", () => {
 
   it("no raw leading utilities", () => {
     assertZero("rawLeading", scan(FILES, /(?<![-\w])leading-[\w[\].-]+/g));
+  });
+
+  it("uses t-upper instead of raw uppercase utilities or authored transforms", () => {
+    const files = FILES.filter(
+      (f) =>
+        f.rel !== "base.css" &&
+        f.rel !== "design-lang.css" &&
+        !f.rel.startsWith("components/lang/"),
+    ).map((f) => ({ ...f, text: stripComments(f.text) }));
+    const utility = /(?<![-\w])uppercase(?![-\w])/g;
+    const declaration = /text-transform\s*:\s*uppercase\b/gi;
+    assertZero("rawUppercase", [...scan(files, utility), ...scan(files, declaration)]);
   });
 
   it("no numeric line-height outside the foundation", () => {

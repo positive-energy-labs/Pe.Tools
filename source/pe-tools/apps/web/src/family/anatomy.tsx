@@ -581,7 +581,7 @@ function FixtureViews({
               y={BOX - 5}
               fontSize={7}
               fill={token("ink-2")}
-              className="face-mono uppercase"
+              className="face-mono t-upper"
             >
               {view.label}
             </text>
@@ -987,7 +987,7 @@ function ModelViews({
                 y={BOX - 5}
                 fontSize={7}
                 fill={token("ink-2")}
-                className="face-mono uppercase"
+                className="face-mono t-upper"
               >
                 {view.label}
               </text>
