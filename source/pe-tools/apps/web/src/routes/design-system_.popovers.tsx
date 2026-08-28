@@ -322,7 +322,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
         <Link to="/design-system" className="t-label text-nav hover:underline">
           ← design system
         </Link>
-        <span className="font-pe-display t-prose font-semibold">popover position harness</span>
+        <span className="face-display t-prose font-semibold">popover position harness</span>
         <FactChip dashed title="Fixture option lists — no host, no live catalogue call.">
           fixture
         </FactChip>
@@ -350,15 +350,12 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
         <span className="t-caption text-ink-mute">consumers: {specimen.consumers}</span>
         <span className="face-mono t-caption text-ink-2">shape: {specimen.shape}</span>
         {specimen.defects.map((d) => (
-          <p
-            key={d}
-            className="border-l border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2"
-          >
+          <p key={d} className="border-l border-line-2 pl-2 face-mono t-caption text-ink-2">
             <span className="text-caution">observed · </span>
             {d}
           </p>
         ))}
-        <p className="border-l border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
+        <p className="border-l border-line-2 pl-2 face-mono t-caption text-ink-2">
           <span className="text-alarm">the headline · </span>
           three of the four combobox consumers ask for a wider popup than their anchor (
           <code>min-w-44</code>, <code>min-w-56</code>) and every one of them is overruled by{" "}
@@ -366,7 +363,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
           <code>ui/select</code> grows to fit its content. Two dropdown families, opposite width
           laws, and the request the consumer wrote down is silently ignored.
         </p>
-        <p className="pt-1 t-caption leading-relaxed text-ink-mute">
+        <p className="pt-1 t-caption text-ink-mute">
           Open the same specimen at all nine positions and compare. Nothing here is corrected — each
           is mounted exactly as its consumer mounts it, so the inconsistency you see is the
           inconsistency that ships. One popover foundation in <code>components/lang/</code>{" "}

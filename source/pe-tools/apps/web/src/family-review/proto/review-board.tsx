@@ -196,7 +196,7 @@ function RefusalPanel({ family, size }: { family: BoardFamily; size: number }) {
       <span className="face-mono t-label" style={{ color: token("alarm") }}>
         {family.refusal?.code ?? "refused"}
       </span>
-      <p className="m-0 t-label leading-4 text-ink-2">{family.refusal?.detail}</p>
+      <p className="m-0 t-label text-ink-2">{family.refusal?.detail}</p>
       <span className="t-caption text-ink-mute">
         Revit never built this family, so there is no drawing to compare. That is the finding, not a
         gap in the board.
@@ -240,7 +240,7 @@ function FamilySidebar({ stage }: { stage: Stage }) {
           </div>
         </>
       ) : (
-        <span className="t-caption leading-4 text-ink-2">
+        <span className="t-caption text-ink-2">
           nothing was built, so there is nothing to draw — what the document declares, below, is the
           whole content
         </span>
@@ -252,9 +252,7 @@ function FamilySidebar({ stage }: { stage: Stage }) {
             <dt className="face-mono t-label">
               {group.kind} <span className="tabular-nums text-ink-2">{group.count}</span>
             </dt>
-            <dd className="m-0 face-mono t-caption leading-4 text-ink-2">
-              {group.names.join(" · ")}
-            </dd>
+            <dd className="m-0 face-mono t-caption text-ink-2">{group.names.join(" · ")}</dd>
           </div>
         ))}
       </dl>

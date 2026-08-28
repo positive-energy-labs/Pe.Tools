@@ -120,7 +120,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
       ref={mainRef}
       data-mode={mode}
       data-plugin={plugin}
-      className="fixed inset-0 bg-page font-pe text-ink"
+      className="fixed inset-0 bg-page font-sans text-ink"
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}

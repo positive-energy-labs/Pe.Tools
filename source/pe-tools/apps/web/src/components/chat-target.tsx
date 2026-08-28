@@ -56,7 +56,7 @@ export function TargetWorld() {
       </div>
 
       {/* raw resolution — provenance, not decoration */}
-      <div className="mb-2 break-all t-caption face-mono leading-[1.5] text-ink-2">
+      <div className="mb-2 break-all t-caption face-mono text-ink-2">
         {resolutionReadout(resolution)}
       </div>
 

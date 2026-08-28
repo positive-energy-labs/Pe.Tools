@@ -159,7 +159,7 @@ function ContextSummaryView({ data }: OpViewProps) {
         <div className="face-mono t-caption uppercase tracking-[0.3em] text-ink-2">DOCUMENT</div>
         <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
           <span
-            className="t-title min-w-0 truncate leading-tight"
+            className="t-title min-w-0 truncate"
             title={activeDoc ? text(activeDoc.title) : undefined}
           >
             {activeDoc ? text(activeDoc.title) : "no active document"}
@@ -758,9 +758,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
       <div className="min-w-0">
         <div className="face-mono t-caption uppercase tracking-[0.3em] text-ink-2">REFERENCE</div>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-2">
-          <span className="t-title min-w-0 font-medium leading-snug">
-            “{text(res.referenceText)}”
-          </span>
+          <span className="t-title min-w-0 font-medium">“{text(res.referenceText)}”</span>
           <span
             className="face-mono t-caption"
             style={{

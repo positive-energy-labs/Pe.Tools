@@ -438,7 +438,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
               </div>
               <ul className="flex flex-col gap-1">
                 {apiLimitations.map((limitation, i) => (
-                  <li key={i} className="t-label leading-snug" style={{ color: token("caution") }}>
+                  <li key={i} className="t-label" style={{ color: token("caution") }}>
                     {limitation}
                   </li>
                 ))}
@@ -452,7 +452,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
               </summary>
               <ul className="mt-1 flex flex-col gap-1 pl-3">
                 {notInspected.map((item, i) => (
-                  <li key={i} className="t-label leading-snug text-ink-2">
+                  <li key={i} className="t-label text-ink-2">
                     {item}
                   </li>
                 ))}

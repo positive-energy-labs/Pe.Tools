@@ -58,7 +58,7 @@ export function SpecText({
               </span>
               <span>{block.kind}</span>
             </div>
-            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption leading-snug text-ink">
+            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption text-ink">
               {block.md}
             </pre>
           </div>
@@ -169,7 +169,7 @@ export function SpecSheet({
                           y={y - 1.5}
                           fontSize={4}
                           fill={token("ink-2")}
-                          style={{ fontFamily: "ui-monospace, monospace" }}
+                          className="face-mono"
                         >
                           {block.id}
                         </text>
@@ -275,10 +275,10 @@ export function ProposalCard({
       <div className="face-mono t-label text-pea-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 t-caption leading-snug text-ink">{proposal.note}</p>
+      <p className="mt-0.5 t-caption text-ink">{proposal.note}</p>
       {blockMd && (
         <p
-          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-ink-2"
+          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption text-ink-2"
           title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}

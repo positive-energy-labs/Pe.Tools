@@ -151,7 +151,7 @@
       already says. */
 .dl-cell[data-unsaved] {
   --dl-cell-square: var(--pe-caution);
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   padding-left: 10px;
 }
 .dl-cell[data-unsaved="pea"] {
@@ -219,8 +219,8 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   font-style: italic;
   color: var(--pe-caution);
   background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
@@ -258,8 +258,8 @@
 /* drift's second half: the other side's value as a struck ghost token, INLINE, so the one alarm
    is unmissable and still costs zero row height. */
 .dl-ghost {
-  font-family: var(--font-pe-mono);
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: var(--type-label-size);
   color: var(--pe-alarm);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
@@ -279,12 +279,12 @@
 .dl-foot {
   display: block;
   margin-top: 1px;
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   letter-spacing: 0.02em;
   font-style: normal;
-  font-weight: 400;
-  line-height: 1.35;
+  font-weight: var(--weight-regular);
+  line-height: var(--type-caption-line-height);
   color: var(--pe-ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -305,8 +305,8 @@
    attribute exists so the distinction is authored, greppable and styleable when one is earned. */
 .dl-empty {
   display: block;
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
   font-style: italic;
   color: var(--pe-ink-mute);
 }
@@ -329,8 +329,8 @@
   gap: 5px;
   height: 24px;
   padding: 0 8px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--type-value-size);
+  font-weight: var(--weight-medium);
   white-space: nowrap;
   background: transparent;
   color: var(--pe-ink);
@@ -389,9 +389,9 @@
    pass §0's no-tooltips bar, and the lane-spam argument never applied to the lone page-blast
    verb. Every other verb keeps title-only. */
 .dl-verb-reason {
-  font-size: 10px;
+  font-size: var(--type-caption-size);
   font-style: italic;
-  line-height: 1.35;
+  line-height: var(--type-caption-line-height);
   color: var(--pe-ink-2);
   align-self: center;
   max-width: 36ch;
@@ -408,10 +408,10 @@
   width: 13px;
   height: 13px;
   padding: 0;
-  font-family: var(--font-pe-mono);
+  font-family: var(--font-mono);
   /* TIER LAW (2026-08-16 pass): every size in this file sits on a tier rung — 10/11/12/13/16. */
-  font-size: 10px;
-  line-height: 1;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line-height);
   color: var(--pe-ink-2);
   background: transparent;
   border: 1px solid var(--pe-line-2);
@@ -423,9 +423,9 @@
   width: max-content;
   max-width: 38ch;
   padding: 5px 8px;
-  font-family: var(--font-pe, sans-serif);
-  font-size: 11px;
-  line-height: 1.5;
+  font-family: var(--font-body);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
   color: var(--pe-ink-2);
   background: var(--pe-artifact);
   --pe-on: var(--pe-artifact);
@@ -442,14 +442,14 @@
   border-bottom: 1px solid var(--pe-line);
 }
 .dl-verb-group-title {
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--pe-ink);
 }
 .dl-verb-group-radius {
-  font-size: 10px;
+  font-size: var(--type-caption-size);
   color: var(--pe-ink-2);
 }
 .dl-verb-row {
@@ -518,8 +518,8 @@
   overflow: hidden;
   padding: 0 5px;
   height: 18px;
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   letter-spacing: 0.03em;
   color: var(--dl-chip-ink, var(--pe-ink-2));
   background: var(--pe-artifact);
@@ -585,9 +585,9 @@
 }
 .dl-section-label {
   margin: 0;
-  font-size: 11px;
-  line-height: 1.4;
-  font-weight: 600;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
+  font-weight: var(--weight-strong);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--pe-ink);
@@ -600,9 +600,9 @@
 }
 .dl-provenance {
   margin: 6px 0 0;
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
-  line-height: 1.5;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line-height);
   letter-spacing: 0.02em;
   color: var(--pe-ink-2);
 }
@@ -631,8 +631,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   font-variant-numeric: tabular-nums;
   color: var(--pe-ink);
 }
@@ -661,8 +661,8 @@
   border-bottom: 1px solid var(--pe-line);
 }
 .dl-addr-name {
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--pe-ink-2);
@@ -685,8 +685,8 @@
 .dl-switcher-opt {
   height: 20px;
   padding: 0 6px;
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
   color: var(--pe-ink-2);
@@ -720,8 +720,8 @@
   align-items: baseline;
   gap: 7px;
   padding: 2px 0;
-  font-family: var(--font-pe-mono);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--type-value-size);
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--dl-outcome-ink);
@@ -733,8 +733,8 @@
   color: var(--dl-outcome-ink);
 }
 .dl-outcome-says {
-  font-family: var(--font-pe);
-  font-size: 11px;
+  font-family: var(--font-body);
+  font-size: var(--type-label-size);
   font-style: italic;
   color: var(--pe-ink-2);
   overflow: hidden;
@@ -789,8 +789,8 @@
 
 /* the small mono tag that names a state or an object. Quiet by default; a phase may tint it. */
 .dl-tag {
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   letter-spacing: 0.09em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
@@ -835,19 +835,19 @@
   gap: 8px;
 }
 .dl-strip-verb {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--type-prose-size);
+  font-weight: var(--weight-medium);
 }
 .dl-strip-target {
-  font-family: var(--font-pe-mono);
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: var(--type-label-size);
   color: var(--pe-ink-2);
 }
 /* the reason is supplied BEFORE the verb arms and stays visible after — an armed strip that
    hides its own reason is a button with extra steps. */
 .dl-strip-reason {
-  font-size: 12px;
+  font-size: var(--type-value-size);
   font-style: italic;
   color: var(--pe-ink);
   padding-left: 8px;
@@ -856,7 +856,7 @@
 .dl-strip-reason-input {
   width: 100%;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--type-value-size);
   font-style: italic;
   color: var(--pe-ink);
   background: var(--pe-on);
@@ -874,8 +874,8 @@
 .dl-strip-refusal {
   margin: 0;
   max-width: 72ch;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: var(--type-value-size);
+  line-height: var(--type-value-line-height);
 }
 .dl-strip-controls {
   display: flex;
@@ -914,15 +914,15 @@
 }
 /* the axis names stay QUIET — this is a key, not a legend poster. */
 .dl-key-axis-name {
-  font-family: var(--font-pe-mono);
-  font-size: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--pe-ink-2);
 }
 .dl-key-axis-asks {
   min-width: 0;
-  font-size: 10px;
+  font-size: var(--type-caption-size);
   font-style: italic;
   color: var(--pe-ink-mute);
   overflow: hidden;
@@ -934,14 +934,14 @@
   grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   align-items: baseline;
   gap: 7px;
-  font-size: 11px;
+  font-size: var(--type-label-size);
   color: var(--pe-ink-2);
 }
 .dl-key-item .dl-cell,
 .dl-key-item .dl-sq,
 .dl-key-item .dl-cite {
-  font-family: var(--font-pe-mono);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--type-value-size);
 }
 /* the specimen carries the page's primary ink — except a locked one, which must keep the muted
    ink that IS its state, so the `--dl-cell-ink` escape hatch is left alone. */

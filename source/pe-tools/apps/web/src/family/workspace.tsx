@@ -714,7 +714,7 @@ export function FamilyWorkspace({
               "face-mono flex items-center justify-center",
               open.length === 1
                 ? "size-2 rounded-[1px] bg-pea"
-                : "h-3.5 min-w-3.5 rounded-[2px] border border-pea px-0.5 t-caption leading-none text-pea-ink",
+                : "h-3.5 min-w-3.5 rounded-[2px] border border-pea px-0.5 t-caption text-pea-ink",
             )}
           >
             {open.length > 1 ? open.length : null}
@@ -758,7 +758,7 @@ export function FamilyWorkspace({
               onClick={() => setInspect({ kind: "part", slug })}
               // Row-specific facts only; what a geom row IS lives on the table's HelpTip.
               title={`${slug}.${property} — a bindable ${row.dataType} dimension that no parameter drives; it is ${literal} for every type. ${dim?.note ?? ""} Click to open ${slug} in the inspector.`}
-              className="face-mono block w-full truncate text-left t-caption italic leading-[12px] text-ink-mute hover:text-ink"
+              className="face-mono block w-full truncate text-left t-caption italic text-ink-mute hover:text-ink"
             >
               {row.name}
               <span className="ml-1 not-italic t-caption text-caution">geom</span>
@@ -797,7 +797,7 @@ export function FamilyWorkspace({
           where={`the family value of ${row.name}`}
         >
           <span className="face-mono t-value block min-w-0 flex-1 truncate px-1.5" title={reason}>
-            <span className="block truncate leading-[13px]">
+            <span className="block truncate">
               {row.kind === "live-only" ? (
                 <span className="text-ink-2">{row.name}</span>
               ) : (
@@ -826,7 +826,7 @@ export function FamilyWorkspace({
                 DERIVED SPENDS NO COLOUR: the language has no role for "a formula
                 computed this", and the leading `=` already says it. Italic carries the rest. */}
             {(isFormula(authored) || drives.length > 0) && (
-              <span className="block truncate t-caption leading-[11px]">
+              <span className="block truncate t-caption">
                 {isFormula(authored) && <span className="italic text-ink-2">{authored}</span>}
                 {isFormula(authored) && drives.length > 0 && (
                   <span className="text-ink-mute"> · </span>
@@ -907,7 +907,7 @@ export function FamilyWorkspace({
         if (overlay === "live")
           return (
             <ReadCell
-              className="leading-7 text-ink-mute"
+              className="text-ink-mute"
               value="unread — not a parameter"
               reason={`UNREAD, not absent. Revit's family certainly carries this number — it is in the solid — but a parameter read cannot report it, because it is not a parameter. Nothing here can be compared, and silence is not agreement. Binding it is what makes it readable at all.`}
             />
@@ -916,7 +916,6 @@ export function FamilyWorkspace({
           return (
             <ReadCell
               className={cn(
-                "leading-7",
                 diskLiteral === null
                   ? "italic text-caution"
                   : diskLiteral !== literal
@@ -966,7 +965,7 @@ export function FamilyWorkspace({
         const entry = draft.live[row.name]?.[typeName];
         return (
           <ReadCell
-            className="leading-7 text-ink-mute"
+            className="text-ink-mute"
             value={entry?.value ?? "—"}
             reason={`${MARK_TITLE["only-live"]} The last read listed "${row.name}" as present in the family but reported no per-type value for it, so there is nothing here to compare — only the fact that the parameter exists and the profile does not claim it.`}
           />
@@ -1017,7 +1016,7 @@ export function FamilyWorkspace({
         if (world.missingInRevit.has(row.name))
           return marks(
             <ReadCell
-              className={cn("leading-7 italic text-caution", underline)}
+              className={cn("italic text-caution", underline)}
               value="not in Revit"
               reason={`${MARK_TITLE["only-profile"]}${groundedNote}`}
             />,
@@ -1026,7 +1025,7 @@ export function FamilyWorkspace({
         if (!entry)
           return marks(
             <ReadCell
-              className={cn("leading-7 text-ink-mute", underline)}
+              className={cn("text-ink-mute", underline)}
               value="·"
               reason={`${MARK_TITLE.unread} Re-read the family before treating this dot as a match.${groundedNote}`}
             />,
@@ -1034,7 +1033,6 @@ export function FamilyWorkspace({
         return marks(
           <ReadCell
             className={cn(
-              "leading-7",
               drifted && "text-alarm",
               entry.readOnly && "italic text-ink-2",
               underline,
@@ -1054,7 +1052,7 @@ export function FamilyWorkspace({
         if (diskValue === null)
           return marks(
             <ReadCell
-              className={cn("leading-7 italic text-caution", underline)}
+              className={cn("italic text-caution", underline)}
               value="new — not on disk"
               reason={`"${row.name}" is not in the saved profile at all: this page created it. Saving adds the whole parameter, and this type will resolve to ${draftValue}.${groundedNote}`}
             />,
@@ -1062,7 +1060,7 @@ export function FamilyWorkspace({
         const willWrite = diskValue !== draftValue;
         return marks(
           <ReadCell
-            className={cn("leading-7", willWrite ? "text-caution" : "text-ink-2", underline)}
+            className={cn(willWrite ? "text-caution" : "text-ink-2", underline)}
             value={
               <>
                 {diskValue || "—"}
@@ -1089,7 +1087,7 @@ export function FamilyWorkspace({
       if (isFormula(authored))
         return (
           <ReadCell
-            className={cn("leading-7 italic text-ink-2", options.align === "right" && "text-right")}
+            className={cn("italic text-ink-2", options.align === "right" && "text-right")}
             value="ƒ driven"
             reason={`LOCKED — the family level drives this with ${authored}, so a type cannot override its result. The formula is shown on the parameter's own cell; change what feeds it instead. Switch to ⇄ live to see the number Revit computes for it.`}
           />
@@ -1965,7 +1963,7 @@ export function FamilyWorkspace({
             blocks.map((id) => (
               <p
                 key={id}
-                className="face-mono line-clamp-3 whitespace-pre-line t-caption leading-snug text-ink"
+                className="face-mono line-clamp-3 whitespace-pre-line t-caption text-ink"
                 title={`Block ${id} of ${world.spec?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
               >
                 <span className="text-ink-2">{id} · </span>

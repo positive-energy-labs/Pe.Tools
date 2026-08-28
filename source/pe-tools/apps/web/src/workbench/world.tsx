@@ -264,7 +264,7 @@ export function WorldLane({
             <span className="ml-auto text-ink-2">{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
-            <div className="rounded-sm border-[0.5px] border-caution/40 bg-caution/8 px-2 py-1.5 t-caption leading-[1.45] text-caution">
+            <div className="rounded-sm border-[0.5px] border-caution/40 bg-caution/8 px-2 py-1.5 t-caption text-caution">
               Δ this send: {whySentence(layers, cache, totals.reprocessed)}
             </div>
           ) : null}
@@ -318,11 +318,11 @@ export function WorldLane({
               </Press>
               {isOpen ? (
                 <div className="pt-0 pr-3.5 pb-[11px] pl-[31px]">
-                  <p className="mt-0 mb-1.5 t-label leading-[1.5] text-ink-2">
+                  <p className="mt-0 mb-1.5 t-label text-ink-2">
                     {PLAIN_CAP[layer.id] ?? layer.label}
                   </p>
                   {inspect && changed ? (
-                    <p className="mt-0 mb-1.5 t-caption face-mono leading-[1.45] text-caution">
+                    <p className="mt-0 mb-1.5 t-caption face-mono text-caution">
                       ⚡ changed this send → {BLAST_LABEL[blast]}. {driftHint(blast)}
                     </p>
                   ) : null}
@@ -347,7 +347,7 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="px-3.5 pt-[11px] pb-4 t-caption leading-[1.5] text-ink-2">
+        <div className="px-3.5 pt-[11px] pb-4 t-caption text-ink-2">
           cache state <span className={cn(CACHE_BASE, CACHE_TONE.cached)}>≈ inferred</span> from a
           frontend snapshot diff — the provider only reports aggregate cache totals.
         </div>
@@ -413,7 +413,7 @@ function ItemRow({
         </span>
       </Press>
       {open && hasBody ? (
-        <pre className="m-0 max-h-[220px] overflow-auto border-t-[0.5px] border-line on-recess px-[9px] py-2 t-caption face-mono leading-[1.5] break-words whitespace-pre-wrap text-ink-2">
+        <pre className="m-0 max-h-[220px] overflow-auto border-t-[0.5px] border-line on-recess px-[9px] py-2 t-caption face-mono break-words whitespace-pre-wrap text-ink-2">
           {item.body}
         </pre>
       ) : null}

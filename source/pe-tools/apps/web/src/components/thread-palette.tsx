@@ -23,7 +23,7 @@ function ThreadDot({ active }: { active: boolean }) {
 
 export function ThreadEmpty() {
   return (
-    <main className="grid min-h-screen place-items-center bg-page font-pe">
+    <main className="grid min-h-screen place-items-center bg-page font-sans">
       <a href="/chat" className="rounded-sm px-3 py-2 hover:veil">
         <EmptyState story="scope" exit="open the thread palette">
           pick or start a thread

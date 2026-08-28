@@ -524,7 +524,7 @@ export function ZonePanel(props: {
                     y={labelY}
                     fill={LABEL}
                     fontSize={LABEL_SIZE}
-                    fontFamily="monospace"
+                    fontFamily="var(--font-mono)"
                     textAnchor="middle"
                     pointerEvents="none"
                   >
@@ -576,7 +576,7 @@ export function ZonePanel(props: {
                         y={toPx(vp, labelPoint[0], labelPoint[1])[1]}
                         fill={LABEL}
                         fontSize={LABEL_SIZE}
-                        fontFamily="monospace"
+                        fontFamily="var(--font-mono)"
                         pointerEvents="none"
                       >
                         H {res.id}
@@ -891,7 +891,7 @@ function ZoneCard(props: {
         )}
       </div>
 
-      <table className="face-mono w-full table-fixed t-label leading-4">
+      <table className="face-mono w-full table-fixed t-label">
         <colgroup>
           <col className="w-[76px]" />
           {comparing ? (
@@ -990,11 +990,11 @@ function RunStrip(props: {
               className="flex flex-col items-start px-2 py-1 text-left"
               title={`${entry.id} — click to make this the CURRENT run (B).`}
             >
-              <span className="face-mono t-value leading-4">
+              <span className="face-mono t-value">
                 {isCur ? <b>B · </b> : null}
                 {meta?.label ?? entry.id.slice(0, 15)}
               </span>
-              <span className="face-mono t-caption leading-3 text-ink-2">
+              <span className="face-mono t-caption text-ink-2">
                 {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
                 {typeof meta?.zoneFilter === "string" ? (
                   <span style={{ color: token("caution") }} title={partialTitle(meta.zoneFilter)}>
@@ -1349,7 +1349,7 @@ function PlanPane(props: {
                   x={toPx(vp, labelPoint[0], labelPoint[1])[0]}
                   y={toPx(vp, labelPoint[0], labelPoint[1])[1]}
                   fill={LABEL}
-                  fontFamily="monospace"
+                  fontFamily="var(--font-mono)"
                   style={{ fontSize: `calc(var(--sw) * ${LABEL_SIZE}px)` }}
                 >
                   H {res.id}
@@ -1383,7 +1383,7 @@ function PlanPane(props: {
             y={ly - 4}
             pointerEvents="none"
             fill={LABEL}
-            fontFamily="monospace"
+            fontFamily="var(--font-mono)"
             style={{ fontSize: `calc(var(--sw) * ${LABEL_SIZE}px)` }}
           >
             {zone.Zone.split("#")[1] ?? zone.Zone} {zone.triage.verdict === "hold" ? "· hold" : ""}
@@ -2849,7 +2849,7 @@ export default function RunBrowser() {
         <EmptyState story="scope" exit="run the takeoff harness to fill the pool">
           No runs captured yet
         </EmptyState>
-        <p className="face-mono t-label leading-relaxed text-ink-2">
+        <p className="face-mono t-label text-ink-2">
           Every run of{" "}
           <span className="text-ink">
             ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope

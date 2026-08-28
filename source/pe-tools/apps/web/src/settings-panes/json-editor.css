@@ -18,7 +18,7 @@
 /* json token roles — property keys lead; strings/numbers get quiet distinction. */
 .jsonpane .th-property {
   color: var(--pe-ink);
-  font-weight: 550;
+  font-weight: var(--weight-medium);
 }
 .jsonpane .th-string {
   color: var(--pe-ink-2);

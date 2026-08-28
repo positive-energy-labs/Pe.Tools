@@ -41,6 +41,11 @@
  *                   value is not a named role. Broken lines carry THREE roles under ONE
  *                   authority — seam, reference, void, patterned in base.css. Callers wear a
  *                   dash-* / seam-border class or read dash(role).
+ *  absoluteType      numeric font-size/fontSize, line-height/lineHeight, and font-weight/fontWeight
+ *                   outside the foundation. Every UI value consumes a tier or weight variable;
+ *                   SVG drawing geometry keeps its numeric fontSize presentation attributes.
+ *  rawLeading       every Tailwind leading-* utility. Tier leading is authoritative.
+ *  rawFace          font-mono, ui-monospace, and --font-pe-mono outside the foundation.
  *  longTitle        title= props over 240 characters. Long guidance belongs in visible HelpTip
  *                   content; instance facts may remain in title attributes.
  *
@@ -126,6 +131,24 @@ describe("design guard â€” current token authority", () => {
       expect(base, `base.css wiring for t-${tier}`).toMatch(block);
       expect(lang, `design-lang.css wiring for t-${tier}`).toMatch(block);
     }
+  });
+
+  it("projects the shared weight variables through Tailwind", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
+    for (const [name, value] of [
+      ["regular", "400"],
+      ["medium", "500"],
+      ["strong", "600"],
+      ["bold", "700"],
+    ]) {
+      expect(base, `base.css value for weight-${name}`).toContain(`--weight-${name}: ${value};`);
+      const projection = name === "regular" ? "normal" : name === "strong" ? "semibold" : name;
+      expect(lang, `design-lang.css projection for weight-${name}`).toContain(
+        `--font-weight-${projection}: var(--weight-${name});`,
+      );
+    }
+    expect(base, "base.css t-title weight").toContain("font-weight: var(--weight-strong);");
   });
 });
 
@@ -219,6 +242,56 @@ describe("design guard — maintained surface hard zeros", () => {
     }));
     const offences = scan(code, /\bbackground\s*:/g);
     expect(offences, report(offences)).toEqual([]);
+  });
+
+  it("no absolute type values outside base.css and design-lang.css", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
+      (f) => ({
+        ...f,
+        text: stripComments(f.text),
+      }),
+    );
+    const re = /(?:font-size|fontSize)\s*[:=]\s*["']?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem)?["']?/g;
+    assertZero("absoluteType", scan(files, re));
+  });
+
+  it("no raw leading utilities", () => {
+    assertZero("rawLeading", scan(FILES, /(?<![-\w])leading-[\w[\].-]+/g));
+  });
+
+  it("no numeric line-height outside the foundation", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
+      (f) => ({
+        ...f,
+        text: stripComments(f.text),
+      }),
+    );
+    const re =
+      /(?:line-height|lineHeight)\s*[:=]\s*(?!calc\(1\.75rem\s*-\s*1px\))["']?(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem)?["']?/g;
+    assertZero("numericLineHeight", scan(files, re));
+  });
+
+  it("uses one face spelling outside the foundation", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
+      (f) => ({
+        ...f,
+        text: stripComments(f.text),
+      }),
+    );
+    const re = /(?<![-\w])font-mono(?![-\w])|ui-monospace|--font-pe-mono/g;
+    assertZero("rawFace", scan(files, re));
+  });
+
+  it("uses weight variables outside the foundation", () => {
+    const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
+      (f) => ({
+        ...f,
+        text: stripComments(f.text),
+      }),
+    );
+    const re =
+      /(?:font-weight|fontWeight)\s*[:=]\s*(?:["']?\d+(?:\.\d+)?["']?|\{\s*\d+(?:\.\d+)?\s*\})/g;
+    assertZero("numericWeight", scan(files, re));
   });
 });
 

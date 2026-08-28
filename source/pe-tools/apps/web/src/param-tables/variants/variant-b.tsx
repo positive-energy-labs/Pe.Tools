@@ -397,7 +397,7 @@ export function VariantB() {
         name="param tables · b"
         sentence={
           <span className="flex items-baseline gap-1.5">
-            <span className="font-mono t-value">ProjectA_Clone_Aug_11</span>
+            <span className="face-mono t-value">ProjectA_Clone_Aug_11</span>
             <span style={{ color: token("ink-mute") }}>›</span>
             <span>M001 design tables</span>
             <span style={{ color: token("ink-mute") }}>›</span>
@@ -494,7 +494,7 @@ export function VariantB() {
                       </td>
                     ))}
                   </tr>
-                  <tr className="font-mono">
+                  <tr className="face-mono">
                     {FOM_HWCH_PLANT.dataRow.map((c, i) => (
                       <td key={i} className="whitespace-nowrap px-1.5 py-0.5">
                         {c}
@@ -536,7 +536,7 @@ export function VariantB() {
                         canon component; a raw ⇄ button carries locate + count here. */}
                     <Press
                       type="button"
-                      className="w-9 shrink-0 text-left font-mono t-caption"
+                      className="w-9 shrink-0 text-left face-mono t-caption"
                       style={{ color: token("nav") }}
                       title={`bound — 1 binding sources this cell (${def.addr}); click to find it in the ledger`}
                       onClick={() => setSelected(isSel ? null : def.id)}
@@ -565,7 +565,7 @@ export function VariantB() {
               >
                 <Press
                   type="button"
-                  className="w-9 shrink-0 text-left font-mono t-caption"
+                  className="w-9 shrink-0 text-left face-mono t-caption"
                   style={{ color: token("nav") }}
                   title={`bound (inbound) — the model feeds this cell (${IN_DEF.addr}); click to find the binding`}
                   onClick={() => setSelected(selected === IN_DEF.id ? null : IN_DEF.id)}
@@ -647,7 +647,7 @@ export function VariantB() {
                   any evaluation is stale — the gate is visible, not implied.
                 </HelpTip>
                 <span className="flex-1" />
-                <span className="font-mono t-caption" style={{ color: token("ink-mute") }}>
+                <span className="face-mono t-caption" style={{ color: token("ink-mute") }}>
                   {TYPE_GROUPS.length} types · {FC_UNITS.length} tags in scope
                 </span>
               </div>
@@ -746,22 +746,22 @@ export function VariantB() {
                         title={STATUS_TITLE[status]}
                       >
                         <td
-                          className="px-3 py-1.5 font-mono"
+                          className="px-3 py-1.5 face-mono"
                           title="outbound — the table writes the model"
                         >
                           →
                         </td>
                         <td className="px-2 py-1.5">
-                          <span className="font-mono">{def.addr}</span>{" "}
+                          <span className="face-mono">{def.addr}</span>{" "}
                           <span style={{ color: token("ink-mute") }}>{def.label}</span>
                         </td>
                         <td className="px-2 py-1.5">
-                          <span className="font-mono">{def.paramName}</span>{" "}
+                          <span className="face-mono">{def.paramName}</span>{" "}
                           <span style={{ color: token("ink-mute") }}>
                             {meta?.label} · {meta?.scope} scope
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-2 py-1.5 font-mono">
+                        <td className="whitespace-nowrap px-2 py-1.5 face-mono">
                           {TYPE_GROUPS.length} types · {FC_UNITS.length} tags
                         </td>
                         <td className="whitespace-nowrap px-2 py-1.5">
@@ -811,20 +811,20 @@ export function VariantB() {
                     title="inbound — the model feeds the table cell; recomputed every render, fresh by construction"
                   >
                     <td
-                      className="px-3 py-1.5 font-mono"
+                      className="px-3 py-1.5 face-mono"
                       title="inbound — the model feeds the table"
                     >
                       ←
                     </td>
                     <td className="px-2 py-1.5">
-                      <span className="font-mono">{IN_DEF.addr}</span>{" "}
+                      <span className="face-mono">{IN_DEF.addr}</span>{" "}
                       <span style={{ color: token("ink-mute") }}>{IN_DEF.label}</span>
                     </td>
                     <td className="px-2 py-1.5">
-                      <span className="font-mono">{IN_DEF.paramName}</span>{" "}
+                      <span className="face-mono">{IN_DEF.paramName}</span>{" "}
                       <span style={{ color: token("ink-mute") }}>reduce: Σ {IN_DEF.reducer}</span>
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 font-mono">
+                    <td className="whitespace-nowrap px-2 py-1.5 face-mono">
                       {FC_UNITS.length} tags · Σ
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5">
@@ -868,7 +868,7 @@ function Station({ word, n, ink, title }: { word: string; n: number; ink: string
       }}
       title={title}
     >
-      <span className="font-mono">{n}</span>
+      <span className="face-mono">{n}</span>
       <span>{word}</span>
     </span>
   );
@@ -928,9 +928,9 @@ function FarSide({
             const modelTags = MODEL_TAG_COUNT[v.typeName];
             return (
               <tr key={v.typeName}>
-                <td className="py-0.5 pr-4 font-mono">{v.typeName}</td>
+                <td className="py-0.5 pr-4 face-mono">{v.typeName}</td>
                 <td
-                  className="whitespace-nowrap py-0.5 pr-4 font-mono"
+                  className="whitespace-nowrap py-0.5 pr-4 face-mono"
                   title={v.tags.map((t) => t.tag).join(", ")}
                 >
                   {v.tags.length}
@@ -944,10 +944,10 @@ function FarSide({
                     </span>
                   ) : null}
                 </td>
-                <td className="py-0.5 pr-4 font-mono">
+                <td className="py-0.5 pr-4 face-mono">
                   {fmtNum(v.current)} {unit}
                 </td>
-                <td className="py-0.5 pr-4 font-mono">
+                <td className="py-0.5 pr-4 face-mono">
                   {staged && v.verdict !== "noop"
                     ? `→ ${fmtNum(v.proposed)} ${unit}`
                     : staged
@@ -1000,11 +1000,11 @@ function InboundFarSide() {
         <tbody>
           {TYPE_GROUPS.map((g) => (
             <tr key={g.typeName}>
-              <td className="py-0.5 pr-4 font-mono">{g.typeName}</td>
-              <td className="py-0.5 pr-4 font-mono" title={g.tags.map((t) => t.tag).join(", ")}>
+              <td className="py-0.5 pr-4 face-mono">{g.typeName}</td>
+              <td className="py-0.5 pr-4 face-mono" title={g.tags.map((t) => t.tag).join(", ")}>
                 {g.tags.length}
               </td>
-              <td className="py-0.5 font-mono">
+              <td className="py-0.5 face-mono">
                 {g.tags.reduce((n, t) => n + t.heat.capTotal, 0).toLocaleString("en-US")} Btu/h
               </td>
             </tr>
@@ -1013,8 +1013,8 @@ function InboundFarSide() {
             <td className="py-0.5 pr-4" style={{ color: token("ink-mute") }}>
               total → {IN_DEF.addr}
             </td>
-            <td className="py-0.5 pr-4 font-mono">{FC_UNITS.length}</td>
-            <td className="py-0.5 font-mono">{CAP_TOTAL.toLocaleString("en-US")} Btu/h</td>
+            <td className="py-0.5 pr-4 face-mono">{FC_UNITS.length}</td>
+            <td className="py-0.5 face-mono">{CAP_TOTAL.toLocaleString("en-US")} Btu/h</td>
           </tr>
         </tbody>
       </table>

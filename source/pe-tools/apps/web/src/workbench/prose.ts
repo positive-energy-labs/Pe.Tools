@@ -11,7 +11,7 @@
  * them, un-overridden elements use the plugin's light defaults and go near-black in dark.
  */
 export const PROSE_CLASS = [
-  "prose prose-sm max-w-none leading-normal text-ink",
+  "prose max-w-none text-ink",
   "prose-pe",
   "prose-p:my-0 prose-p:mb-[0.45em] last:prose-p:mb-0",
   // Flat heading hierarchy inside answers: chat turns are dense working content, so headings keep

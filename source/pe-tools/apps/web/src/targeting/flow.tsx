@@ -34,7 +34,6 @@ export function TargetCaption<K extends string>({ b, link }: { b: Bindings<K>; l
       className="face-mono t-caption"
       style={{
         color: feed.stale || feed.state === "error" ? token("caution") : token("ink-mute"),
-        lineHeight: 1,
       }}
     >
       {targetMode(link)}

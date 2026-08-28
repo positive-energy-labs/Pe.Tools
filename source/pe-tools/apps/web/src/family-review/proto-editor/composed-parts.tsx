@@ -518,7 +518,7 @@ function SlotCell({
           borderRadius: 0,
           cursor: "pointer",
           color: token("ink"),
-          fontWeight: 600,
+          fontWeight: "var(--weight-strong)",
           padding: 0,
         }}
       >

@@ -223,7 +223,7 @@ function LogLine({ line }: { line: string }) {
   const timestamp = match?.[1] ?? "";
   const rest = timestamp ? line.slice(timestamp.length) : line;
   return (
-    <div className="face-mono t-label whitespace-pre leading-[1.5]">
+    <div className="face-mono t-label whitespace-pre">
       {timestamp && <span className="text-ink-2">{timestamp}</span>}
       <span style={{ color: logLineColor(rest) }}>{rest}</span>
     </div>

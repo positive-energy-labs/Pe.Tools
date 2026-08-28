@@ -69,7 +69,7 @@ export function FieldChart({ field, active, onPick }: Props) {
                 x={X(last.openings) + 4}
                 y={Y(last.freeArea) + 3}
                 fill={hot ? "currentColor" : token("ink-mute")}
-                fontWeight={hot ? 700 : 400}
+                fontWeight={hot ? "var(--weight-bold)" : "var(--weight-regular)"}
               >
                 {frac(w)}″
               </text>

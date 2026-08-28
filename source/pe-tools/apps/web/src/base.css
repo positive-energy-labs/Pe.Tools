@@ -34,9 +34,13 @@
   --viz-6: oklch(0.47 0.055 85);
 
   --radius: 0.125rem;
-  --font-body: var(--font-pe, "Open Sans", system-ui, sans-serif);
-  --font-display: var(--font-pe-display, "Spectral", Georgia, serif);
-  --font-mono: var(--font-pe-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  --font-body: "Open Sans", system-ui, -apple-system, sans-serif;
+  --font-display: "Spectral", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+  --weight-bold: 700;
   --type-caption-size: 10px;
   --type-caption-line-height: 1.4;
   --type-label-size: 11px;
@@ -205,7 +209,7 @@
   font-style: italic;
 }
 [data-pe] .unsaved {
-  font-weight: 700;
+  font-weight: var(--weight-bold);
 }
 
 [data-pe] .squiggle {
@@ -229,7 +233,7 @@
 [data-pe] .ghost-drift {
   color: var(--pe-alarm);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--type-label-size);
   text-decoration: line-through;
   white-space: nowrap;
 }
@@ -243,7 +247,7 @@
 [data-pe] .tag {
   color: var(--pe-ink-2);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--type-caption-size);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -326,7 +330,7 @@
 }
 [data-pe] .t-title {
   font-size: var(--type-title-size);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   letter-spacing: -0.01em;
   line-height: var(--type-title-line-height);
 }
@@ -334,13 +338,13 @@
    (a pane, a dialog, a card); t-display is the front door's hero. */
 [data-pe] .t-head {
   font-size: var(--type-head-size);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   letter-spacing: -0.01em;
   line-height: var(--type-head-line-height);
 }
 [data-pe] .t-display {
   font-size: var(--type-display-size);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   letter-spacing: -0.01em;
   line-height: var(--type-display-line-height);
 }
@@ -349,8 +353,11 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
+[data-pe] .face-display {
+  font-family: var(--font-display);
+}
 [data-pe] .t-upper {
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }

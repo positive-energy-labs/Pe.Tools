@@ -296,7 +296,7 @@ function App() {
             Internal tools ·{" "}
             <span className="face-mono normal-case font-normal">update proof 0.6.22</span>
           </p>
-          <h1 className="t-display font-pe-display tracking-tight text-ink">
+          <h1 className="t-display face-display tracking-tight text-ink">
             Healthy people, healthy planet.
           </h1>
           <p className="t-prose mt-4 text-ink-2">

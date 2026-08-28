@@ -356,7 +356,7 @@ function OperationPane({
             value={args}
             onChange={(event) => setArgs(event.currentTarget.value)}
             spellCheck={false}
-            className="min-h-32 font-mono"
+            className="min-h-32 face-mono"
           />
         )}
       </section>

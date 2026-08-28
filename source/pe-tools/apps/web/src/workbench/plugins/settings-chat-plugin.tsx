@@ -59,7 +59,7 @@ export function SettingsChatPlugin({
           commitCommand="save"
           commitLabel={(staged) => `Save ${staged}`}
           reviewHint="Pea can propose; only you can save."
-          renderLabel={(path) => <span className="font-mono">{path}</span>}
+          renderLabel={(path) => <span className="face-mono">{path}</span>}
           renderValue={displaySettingsValue}
         />
       ) : null}

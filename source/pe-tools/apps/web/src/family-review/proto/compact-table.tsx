@@ -76,7 +76,7 @@ export function CompactTable<Row>({
         document.activeElement instanceof HTMLElement && moveFrom(document.activeElement, direction)
       }
     >
-      <table className="w-full table-fixed face-mono t-label leading-4">
+      <table className="w-full table-fixed face-mono t-label">
         <colgroup>
           {columns.map((column) => (
             <col key={column.key} className={column.width} />

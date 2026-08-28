@@ -553,7 +553,7 @@ export function VariantA() {
                       className="t-caption face-mono"
                       style={{
                         color: token("ink-mute"),
-                        fontWeight: 400,
+                        fontWeight: "var(--weight-regular)",
                         textAlign: "center",
                         borderBottom: `0.5px solid ${token("line")}`,
                         borderLeft: `0.5px solid ${token("line")}`,

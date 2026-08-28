@@ -117,7 +117,7 @@
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--type-value-size);
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
   color: var(--pe-ink-2);
@@ -249,8 +249,8 @@
   --pe-on: var(--pe-artifact);
   color: var(--pe-nav);
   font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1;
+  font-size: var(--type-prose-size);
+  line-height: var(--type-prose-line-height);
   cursor: pointer;
   z-index: 6;
 }
@@ -292,8 +292,8 @@
   border-left: 2px solid var(--pe-pea);
   padding: 1px 7px 1px 9px;
   border-radius: 0; /* instrument surface — hard square */
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: var(--type-value-size);
+  line-height: var(--type-value-line-height);
   color: var(--pe-ink-2);
   transition:
     background 0.14s ease,
@@ -329,7 +329,7 @@
   flex: 0 1 auto;
   min-width: 0; /* allow the ellipsis (the marker is a flex row) */
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--type-value-size);
   color: var(--pe-ink-2);
   /* Reset the global `code` pill (border + muted fill) — the marker target is inline. */
   background: transparent;
@@ -429,8 +429,8 @@
   margin: 0;
   padding: 3px 8px 6px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line-height);
   color: var(--pe-ink-2);
   white-space: pre-wrap;
   word-break: break-word;
@@ -456,7 +456,7 @@
 .lens-cell .h .h-title,
 .lens-inspect .h .h-title {
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--type-prose-size);
   color: var(--pe-ink);
   overflow: hidden;
   text-overflow: ellipsis;

@@ -81,7 +81,7 @@ export function SpecDrawing({
       height={height}
       viewBox={`${-M} ${-M} ${width} ${height}`}
       className="face-mono"
-      style={{ color: token("ink"), fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+      style={{ color: token("ink") }}
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -234,7 +234,7 @@ export function SpecDrawing({
 
 const inp: React.CSSProperties = {
   width: 44,
-  fontSize: 10,
+  fontSize: "var(--type-caption-size)",
   backgroundColor: token("page"),
   textAlign: "center",
 };

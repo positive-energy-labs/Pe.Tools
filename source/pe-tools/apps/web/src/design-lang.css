@@ -1,14 +1,12 @@
 /* App-only Tailwind projection. Raw roles and portable grammar live in base.css. */
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  --font-pe: "Open Sans", system-ui, -apple-system, sans-serif;
-  --font-pe-display: "Spectral", Georgia, "Times New Roman", serif;
-  --font-pe-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
-}
-
 @theme inline {
-  --font-sans: var(--font-pe);
+  --font-sans: var(--font-body);
+  --font-weight-normal: var(--weight-regular);
+  --font-weight-medium: var(--weight-medium);
+  --font-weight-semibold: var(--weight-strong);
+  --font-weight-bold: var(--weight-bold);
 
   --color-page: var(--pe-page);
   --color-artifact: var(--pe-artifact);

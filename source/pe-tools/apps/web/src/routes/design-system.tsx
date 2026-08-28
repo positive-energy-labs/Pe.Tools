@@ -137,7 +137,7 @@ function DesignSystem() {
       <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
         <div className="page-wrap flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
-            <span className="t-title font-pe-display">Design system</span>
+            <span className="t-title face-display">Design system</span>
             <span className="t-caption t-upper text-ink-mute">the language, catalogued</span>
             <Link to="/" className="t-label text-nav hover:underline">
               ← tools
@@ -164,7 +164,7 @@ function DesignSystem() {
 function Thesis() {
   return (
     <section className="flex flex-col gap-3">
-      <p className="t-display font-pe-display">One cell grammar, at three scales.</p>
+      <p className="t-display face-display">One cell grammar, at three scales.</p>
       <p className="t-prose max-w-[74ch] text-ink-2">
         Pea proposes; you decide; the model is allowed to disagree. Every surface in pe-tools has to
         say those three things at a glance, and the language does it with one treatment used at

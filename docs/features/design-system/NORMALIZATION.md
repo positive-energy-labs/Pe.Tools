@@ -85,7 +85,7 @@ Seven tiers, each carrying its own leading. No call site names a size, a leading
 | `t-head` | 24 / 1.2 | the heading that names a whole route or workspace, one per surface |
 | `t-display` | 40 / 1.15 | the front door's hero |
 
-**Face**: `font-sans` is the default, `face-mono` is the marked case — identifiers, paths, keys,
+**Face**: `font-sans` is the default, `face-display` is the display garnish, and `face-mono` is the marked case — identifiers, paths, keys,
 counts, measured numbers, timestamps, states, outcome receipts. Never on verbs, labels, heads,
 empty states or help prose.
 
@@ -120,8 +120,10 @@ The gates: retired `--r-*` tokens, shadcn semantic colour names, arbitrary PE co
 runtime PE/viz reads outside `lib/token.ts`, unprojected type tiers, dead shim tokens, bare line
 tokens, retired `tele` words, hex literals outside `base.css`, sub-10px text, raw text-size
 utilities, raw `<button>` outside `components/ui` + `components/lang`, `ui/button` imports, inline
-`background:` shorthand in TS/TSX, unruled dashed strokes, `title` over 240 characters, and raw
-numeric dash patterns in maintained JSON. Do not restate a gate in prose; it is executable.
+`background:` shorthand in TS/TSX, unruled dashed strokes, `title` over 240 characters, raw
+absolute type values, raw leading utilities, unprojected faces, and raw numeric dash patterns in
+maintained JSON. The previous class-only type regex missed CSS declarations, style objects, and
+template CSS. Do not restate a gate in prose; it is executable.
 
 Commands, from `source/pe-tools` (this worktree pins `node_modules/.bin/vp.ps1`):
 

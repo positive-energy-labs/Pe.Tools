@@ -1,6 +1,6 @@
 # ADR 0004 — Type tier model for the web surfaces
 
-Date: 2026-08-16, amended 2026-08-28 (six tiers to seven). Status: accepted, codified in
+Date: 2026-08-16, amended 2026-08-28 (six tiers to seven; raw type authority closed). Status: accepted, codified in
 `apps/web/src/base.css` and projected by `apps/web/src/design-lang.css`.
 
 ## Context
@@ -21,14 +21,18 @@ Three axes are separated, and call sites never name a pixel:
 - **tier** — `t-caption` 10/1.4 · `t-label` 11/1.4 · `t-value` 12/1.45 · `t-prose` 13/1.6 ·
   `t-title` 16/1.3 · `t-head` 24/1.2 · `t-display` 40/1.15. A tier carries its own leading; no call
   site names one.
-- **face** — `font-sans` is the default, `face-mono` is the marked case. Mono is permitted on
+- **face** — `font-sans` is the default, `face-display` is the display garnish, and `face-mono` is
+  the marked case. Mono is permitted on
   identifiers, paths, keys, counts, measured numbers, timestamps, durations, states and outcome
   receipts; forbidden on verbs/buttons, labels, section heads, empty states, help prose and
-  refusal explanations. `tele` survives as `face-mono` only.
+  refusal explanations. The retired `tele` bundle has no call-site replacement beyond the tier,
+  face, and case axes.
 - **case** — `t-upper`. A section head is `t-label` + `t-upper`: a case, not a size. That retires
   `section-label`, `tele-label`-as-header, `.dl-verb-group-title` and four hand-rolled variants.
 
-Weight is carried by the utilities, not by call sites: **bold** = unsaved on data surfaces, or
+Weight is carried by `--weight-regular`, `--weight-medium`, `--weight-strong`, and `--weight-bold`
+in `base.css`, projected to Tailwind's normal/medium/semibold/bold utilities. Call sites do not
+name numeric weights: **bold** = unsaved on data surfaces, or
 emphasis inside real `t-prose` — never chrome emphasis. **Semibold** = `t-title` / `t-upper` heads
 only. `t-upper` is declared after `face-mono` on purpose so head tracking wins; heads are sans, and
 `face-mono` never composes with `t-upper`.
@@ -47,10 +51,6 @@ call-site volume.
 
 ## Consequences
 
-- Any new size, leading, or weight written at a call site is a defect, not a variation.
-- Enforcement is deterministic. `tests/repo-guards/src/design-guard.test.ts` asserts a hard zero on
-  raw text-size utilities (arbitrary `px` and `rem`, and the named Tailwind sizes) and on sub-10px
-  type, and asserts that each tier's `.t-*` and `@utility t-*` blocks bind that tier's own size and
-  line-height variables in both owners. `em` stays legal: `text-[1em]` is an instruction not to
-  change size.
+- Any new size, leading, or weight written at a call site is a defect, not a variation. SVG drawing labels may keep numeric `fontSize` presentation geometry or use the run scale factor.
+- Enforcement is deterministic. `tests/repo-guards/src/design-guard.test.ts` asserts hard zeros on raw text-size utilities, absolute `font-size`/`fontSize`, numeric `line-height`/`lineHeight`, numeric `font-weight`/`fontWeight`, raw `leading-*`, unprojected faces, and sub-10px type. It also asserts that each tier's `.t-*` and `@utility t-*` blocks bind that tier's own size and line-height variables in both owners. `em` stays legal: `text-[1em]` is an instruction not to change size. The earlier class-only raw text regex was a blind spot because it did not inspect CSS declarations, style objects, or template CSS.
 - The map for authors is [`../features/design-system/NORMALIZATION.md`](../features/design-system/NORMALIZATION.md).

@@ -40,6 +40,7 @@ export function VariantSwitcher({
 
   return (
     <div
+      className="face-mono t-value"
       style={{
         position: "fixed",
         bottom: 16,
@@ -53,21 +54,19 @@ export function VariantSwitcher({
         color: token("page"),
         borderRadius: 999,
         padding: "8px 16px",
-        fontFamily: "ui-monospace, monospace",
-        fontSize: 12,
         boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
       }}
     >
       <Press
         type="button"
         onClick={() => go(-1)}
+        className="t-title"
         style={{
           cursor: "pointer",
           backgroundColor: "transparent",
           backgroundImage: "none",
           border: "none",
           color: "inherit",
-          fontSize: 14,
         }}
       >
         ←
@@ -78,13 +77,13 @@ export function VariantSwitcher({
       <Press
         type="button"
         onClick={() => go(1)}
+        className="t-title"
         style={{
           cursor: "pointer",
           backgroundColor: "transparent",
           backgroundImage: "none",
           border: "none",
           color: "inherit",
-          fontSize: 14,
         }}
       >
         →

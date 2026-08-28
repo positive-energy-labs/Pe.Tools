@@ -209,7 +209,7 @@ function Grid<R extends string, C extends string>({
 
 /** What a frozen specimen cannot show. One line, mono, never a paragraph. */
 function Note({ children }: { children: React.ReactNode }) {
-  return <p className="face-mono t-caption leading-snug text-ink-mute">{children}</p>;
+  return <p className="face-mono t-caption text-ink-mute">{children}</p>;
 }
 
 /** A minimal bound around a component that fills its container. */
@@ -275,14 +275,14 @@ function Jump({ group, files }: { group: "lang" | "ui"; files: readonly string[]
 
 function Swatch() {
   return (
-    <div className="min-h-screen bg-page t-prose leading-normal text-ink">
+    <div className="min-h-screen bg-page t-prose text-ink">
       <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
         <div className="page-wrap flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
             <Link to="/design-system" className="t-label text-nav hover:underline">
               ← design system
             </Link>
-            <span className="t-title font-pe-display">swatch</span>
+            <span className="t-title face-display">swatch</span>
             <span className="truncate t-label text-ink-2">
               every component · every variant · every state · the import path
             </span>
@@ -299,7 +299,7 @@ function Swatch() {
 
       <main className="page-wrap flex flex-col gap-8 pt-6 pb-24">
         <div className="flex flex-col gap-3">
-          <p className="t-head font-pe-display">The swatch.</p>
+          <p className="t-head face-display">The swatch.</p>
           <p className="max-w-[80ch] t-prose text-ink-2">
             A lookup table, not a spec: find the component, read its whole variant × state surface
             at once, copy the import path — the rulings behind any of it live on{" "}

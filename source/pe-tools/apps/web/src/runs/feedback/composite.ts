@@ -105,7 +105,7 @@ function overlaySvg(
     }
     if (room.disposition) {
       parts.push(
-        `<text x="${(room.lx - vp.minX) * vp.pxPerFt}" y="${(vp.maxY - room.ly) * vp.pxPerFt}" fill="${LABEL}" font-family="monospace" font-size="${LABEL_SIZE}" text-anchor="middle">${room.disposition === "held" ? "H" : "A"} ${svgEscape(room.id)}</text>`,
+        `<text x="${(room.lx - vp.minX) * vp.pxPerFt}" y="${(vp.maxY - room.ly) * vp.pxPerFt}" fill="${LABEL}" font-family="var(--font-mono)" font-size="${LABEL_SIZE}" text-anchor="middle">${room.disposition === "held" ? "H" : "A"} ${svgEscape(room.id)}</text>`,
       );
     }
     if (flagged) {
@@ -115,7 +115,7 @@ function overlaySvg(
       if (first) {
         const [x, y] = [(first[0] - vp.minX) * vp.pxPerFt, (vp.maxY - first[1]) * vp.pxPerFt];
         parts.push(
-          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="monospace" font-size="12" font-weight="bold">⚑ ${svgEscape(room.id)}</text>`,
+          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="var(--font-mono)" font-size="var(--type-value-size)" font-weight="var(--weight-bold)">⚑ ${svgEscape(room.id)}</text>`,
         );
       }
     }
@@ -142,7 +142,7 @@ function overlaySvg(
       const point = res.loops[0]?.[0];
       if (point) {
         parts.push(
-          `<text x="${(point[0] - vp.minX) * vp.pxPerFt}" y="${(vp.maxY - point[1]) * vp.pxPerFt}" fill="${LABEL}" font-family="monospace" font-size="${LABEL_SIZE}">H ${svgEscape(res.id)}</text>`,
+          `<text x="${(point[0] - vp.minX) * vp.pxPerFt}" y="${(vp.maxY - point[1]) * vp.pxPerFt}" fill="${LABEL}" font-family="var(--font-mono)" font-size="${LABEL_SIZE}">H ${svgEscape(res.id)}</text>`,
         );
       }
     }
@@ -151,7 +151,7 @@ function overlaySvg(
       if (first) {
         const [x, y] = [(first[0] - vp.minX) * vp.pxPerFt, (vp.maxY - first[1]) * vp.pxPerFt];
         parts.push(
-          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="monospace" font-size="12" font-weight="bold">⚑ residue ${svgEscape(res.id)}</text>`,
+          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="var(--font-mono)" font-size="var(--type-value-size)" font-weight="var(--weight-bold)">⚑ residue ${svgEscape(res.id)}</text>`,
         );
       }
     }

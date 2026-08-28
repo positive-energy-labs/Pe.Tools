@@ -1319,7 +1319,7 @@ function LevelPlan({
                         fill={token("ink")}
                         className="pointer-events-none select-none"
                       >
-                        <tspan x={labelX} fontWeight={600}>
+                        <tspan x={labelX} fontWeight="var(--weight-strong)">
                           {room.name}
                         </tspan>
                         <tspan x={labelX} dy={font * 1.15} fillOpacity={0.65}>
@@ -1696,9 +1696,7 @@ function RoomPanel({
     >
       <div className="divide-y divide-line">
         <div className="px-2.5 py-2">
-          <h2 className="font-pe-display t-title leading-tight font-semibold tracking-tight">
-            {room.name}
-          </h2>
+          <h2 className="face-display t-title font-semibold tracking-tight">{room.name}</h2>
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
             <StateDot {...stateMeta(state)} />
             <span
@@ -1974,7 +1972,7 @@ function ZonePeek({
               className="pointer-events-none select-none"
               fill={token("ink")}
             >
-              <tspan x={cursorX} fontWeight={600}>
+              <tspan x={cursorX} fontWeight="var(--weight-strong)">
                 {cursorRoom.name}
               </tspan>
               <tspan x={cursorX} dy={font * 1.15} fillOpacity={0.7}>

@@ -649,53 +649,53 @@ const CSS = `
 .ptc-scroll { flex: 1; overflow: auto; padding: 24px; }
 .ptc-paper { max-width: 880px; margin: 0 auto; }
 .ptc-sentence { display: inline-flex; gap: 6px; align-items: baseline; }
-.ptc-noun { font-family: ui-monospace, monospace; font-size: 12px; color: ${token("ink")}; }
-.ptc-sep { color: ${token("ink-mute")}; font-size: 11px; }
+.ptc-noun { font-family: var(--font-mono); font-size: var(--type-value-size); color: ${token("ink")}; }
+.ptc-sep { color: ${token("ink-mute")}; font-size: var(--type-label-size); }
 
 /* THE DOCUMENT — print typography, deliberately divergent (see file header). */
-.ptc-doc { font-family: Georgia, 'Times New Roman', serif; color: ${token("ink")}; padding: 36px 48px 48px; font-size: 13.5px; line-height: 1.5; }
+.ptc-doc { font-family: var(--font-display); color: ${token("ink")}; padding: 36px 48px 48px; font-size: var(--type-prose-size); line-height: var(--type-prose-line-height); }
 .ptc-sheethead { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid ${token("ink")}; padding-bottom: 8px; margin-bottom: 24px; }
-.ptc-sheetproj { font-family: ui-monospace, monospace; font-size: 11px; color: ${token("ink-2")}; }
-.ptc-sheettitle { font-size: 15px; letter-spacing: 0.14em; font-weight: 600; }
-.ptc-sheetno { font-family: ui-monospace, monospace; font-size: 14px; font-weight: 600; }
-.ptc-exh { font-size: 12px; letter-spacing: 0.12em; font-weight: 600; margin: 26px 0 10px; border-bottom: 1px solid ${token("line")}; padding-bottom: 4px; display: flex; align-items: baseline; gap: 8px; }
+.ptc-sheetproj { font-family: var(--font-mono); font-size: var(--type-label-size); color: ${token("ink-2")}; }
+.ptc-sheettitle { font-size: var(--type-title-size); letter-spacing: 0.14em; font-weight: var(--weight-strong); }
+.ptc-sheetno { font-family: var(--font-mono); font-size: var(--type-title-size); font-weight: var(--weight-strong); }
+.ptc-exh { font-size: var(--type-value-size); letter-spacing: 0.12em; font-weight: var(--weight-strong); margin: 26px 0 10px; border-bottom: 1px solid ${token("line")}; padding-bottom: 4px; display: flex; align-items: baseline; gap: 8px; }
 .ptc-bod { width: 100%; border-collapse: collapse; }
 .ptc-bod td { padding: 3px 0; vertical-align: baseline; border-bottom: 1px solid ${token("line-2")}; }
 .ptc-bod-label { color: ${token("ink-2")}; padding-right: 24px; }
 .ptc-bod-value { text-align: right; font-variant-numeric: tabular-nums; white-space: pre-line; max-width: 340px; }
-.ptc-fom { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ptc-fom { width: 100%; border-collapse: collapse; font-size: var(--type-value-size); }
 .ptc-fom th, .ptc-fom td { border: 1px solid ${token("line")}; padding: 4px 6px; text-align: center; }
-.ptc-fom-group { letter-spacing: 0.1em; font-size: 11px; }
-.ptc-fom-head { font-weight: 400; color: ${token("ink-2")}; font-size: 11px; }
+.ptc-fom-group { letter-spacing: 0.1em; font-size: var(--type-label-size); }
+.ptc-fom-head { font-weight: var(--weight-regular); color: ${token("ink-2")}; font-size: var(--type-label-size); }
 .ptc-fom-cell { font-variant-numeric: tabular-nums; }
-.ptc-footnote { font-size: 11px; color: ${token("ink-2")}; font-style: italic; margin-top: 6px; }
+.ptc-footnote { font-size: var(--type-label-size); color: ${token("ink-2")}; font-style: italic; margin-top: 6px; }
 .ptc-legend { margin-top: 28px; border-top: 1px solid ${token("line")}; padding-top: 8px; }
-.ptc-legendhead { font-size: 10px; letter-spacing: 0.14em; color: ${token("ink-2")}; margin: 0 0 6px; }
-.ptc-legendline { font-size: 11px; margin: 2px 0; color: ${token("ink-2")}; }
+.ptc-legendhead { font-size: var(--type-caption-size); letter-spacing: 0.14em; color: ${token("ink-2")}; margin: 0 0 6px; }
+.ptc-legendline { font-size: var(--type-label-size); margin: 2px 0; color: ${token("ink-2")}; }
 .ptc-revs { margin-top: 20px; }
-.ptc-revtable { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ptc-revtable { width: 100%; border-collapse: collapse; font-size: var(--type-value-size); }
 .ptc-revtable td { border-top: 1px solid ${token("line-2")}; padding: 3px 8px 3px 0; }
-.ptc-rev-n { font-family: ui-monospace, monospace; width: 2ch; }
+.ptc-rev-n { font-family: var(--font-mono); width: 2ch; }
 
 /* Live values in prose. LANG GAP (see LiveValue): raw marks, no canon primitive exists. */
 .ptc-live, .ptc-sourced { font: inherit; color: inherit; background: none; border: none; padding: 0 2px; cursor: pointer; font-variant-numeric: tabular-nums; }
 .ptc-live:hover, .ptc-sourced:hover { background: ${token("select")}; }
-.ptc-live[data-unsaved] { font-weight: 700; } /* bold is reserved for unsaved — crosses the print boundary */
+.ptc-live[data-unsaved] { font-weight: var(--weight-bold); } /* bold is reserved for unsaved — crosses the print boundary */
 .ptc-live[data-drift] { text-decoration: underline wavy ${token("alarm")}; text-decoration-thickness: 1px; text-underline-offset: 3px; } /* the one alarm: a target disagrees with the sheet */
-.ptc-mark-out { font-family: ui-monospace, monospace; font-size: 9px; color: ${token("nav")}; margin-left: 1px; } /* nav ink: clicking drills in */
-.ptc-mark-in { font-family: ui-monospace, monospace; font-size: 9px; color: ${token("ink-2")}; margin-left: 1px; }
+.ptc-mark-out { font-family: var(--font-mono); font-size: var(--type-caption-size); color: ${token("nav")}; margin-left: 1px; } /* nav ink: clicking drills in */
+.ptc-mark-in { font-family: var(--font-mono); font-size: var(--type-caption-size); color: ${token("ink-2")}; margin-left: 1px; }
 .ptc-edit { font: inherit; font-variant-numeric: tabular-nums; width: 6ch; text-align: right; border: 1px solid ${token("line")}; background: ${token("page")}; --pe-on: ${token("page")}; color: ${token("ink")}; padding: 0 2px; }
-.ptc-mono { font-family: ui-monospace, monospace; font-size: 0.92em; }
+.ptc-mono { font-family: var(--font-mono); font-size: var(--type-value-size); }
 
 /* The binding panel — app grammar, not print. */
 .ptc-panel { width: 420px; flex-shrink: 0; overflow: auto; padding: 24px 24px 24px 0; }
-.ptc-panelhead { display: flex; flex-direction: column; gap: 2px; font-size: 12px; padding: 6px 0; }
+.ptc-panelhead { display: flex; flex-direction: column; gap: 2px; font-size: var(--type-value-size); padding: 6px 0; }
 .ptc-panelfoot { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 6px 0; }
-.ptc-dim { color: ${token("ink-2")}; font-size: 11px; }
-.ptc-fan { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-.ptc-fan th { text-align: left; font-weight: 400; color: ${token("ink-mute")}; font-size: 10.5px; padding: 4px 8px; border-bottom: 1px solid ${token("line")}; }
+.ptc-dim { color: ${token("ink-2")}; font-size: var(--type-label-size); }
+.ptc-fan { width: 100%; border-collapse: collapse; font-size: var(--type-value-size); }
+.ptc-fan th { text-align: left; font-weight: var(--weight-regular); color: ${token("ink-mute")}; font-size: var(--type-label-size); padding: 4px 8px; border-bottom: 1px solid ${token("line")}; }
 .ptc-fan td { padding: 3px 8px; border-bottom: 1px solid ${token("line-2")}; vertical-align: baseline; }
 .ptc-fan tr[data-refused] td { color: ${token("ink-2")}; }
-.ptc-fan-total td { border-top: 1px solid ${token("line")}; font-weight: 600; }
-.ptc-panelhint { font-size: 10.5px; color: ${token("ink-mute")}; margin-top: 8px; text-align: right; }
+.ptc-fan-total td { border-top: 1px solid ${token("line")}; font-weight: var(--weight-strong); }
+.ptc-panelhint { font-size: var(--type-label-size); color: ${token("ink-mute")}; margin-top: 8px; text-align: right; }
 `;

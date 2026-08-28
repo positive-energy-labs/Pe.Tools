@@ -265,7 +265,7 @@ function Header({ title, note }: { title: string; note: string }) {
           <Link to="/design-system" className="t-label text-nav hover:underline">
             ← design system
           </Link>
-          <span className="t-title font-pe-display">{title}</span>
+          <span className="t-title face-display">{title}</span>
           <span className="truncate t-label text-ink-2">{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no plan.">
             fixture
@@ -289,7 +289,7 @@ function SectionHead({ n, title, note }: { n: string; title: string; note: strin
 
 function Gap({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-[86ch] border-l border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
+    <p className="max-w-[86ch] border-l border-line-2 pl-2 face-mono t-caption text-ink-2">
       <span className="text-caution">gap · </span>
       {children}
     </p>

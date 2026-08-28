@@ -139,7 +139,7 @@ export function ArrayField({
               // Keep user input editable while JSON is invalid.
             }
           }}
-          className="min-h-32 font-mono t-value"
+          className="min-h-32 face-mono t-value"
         />
       )}
       <span className="t-value text-ink-2">

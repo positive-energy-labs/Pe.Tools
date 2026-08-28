@@ -592,7 +592,7 @@ export function Lens({
               {moments.length === 0 ? (
                 <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
                   {/* Pea's name wears the agent identity — never blue (design-lang law). */}
-                  <h1 className="m-0 t-head font-pe-display text-pea">Pea</h1>
+                  <h1 className="m-0 t-head face-display text-pea">Pea</h1>
                   <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
                     no messages in this thread yet
                   </EmptyState>
@@ -723,7 +723,7 @@ function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "tra
           }
         >
           {open ? (
-            <pre className="m-0 t-label face-mono px-[9px] py-2 leading-[1.5] break-words whitespace-pre-wrap text-ink-2">
+            <pre className="m-0 t-label face-mono px-[9px] py-2 break-words whitespace-pre-wrap text-ink-2">
               {systemPrompt.content}
             </pre>
           ) : null}

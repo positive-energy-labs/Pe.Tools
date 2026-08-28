@@ -132,7 +132,7 @@ export function Tray(props: {
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items.length === 0 ? (
-          <p className="face-mono px-2 py-3 t-label leading-relaxed text-ink-2">
+          <p className="face-mono px-2 py-3 t-label text-ink-2">
             Nothing staged. Hit <span className="text-ink">＋ stage</span> on a zone card to pin its
             current A/B pair here; click rooms/residues on the staged B panel to flag them. Export
             writes PNGs + manifest.json + clip.txt and puts the block on the clipboard.

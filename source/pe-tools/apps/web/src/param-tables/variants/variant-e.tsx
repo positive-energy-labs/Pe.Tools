@@ -350,7 +350,7 @@ export function VariantE() {
         <span className="block t-caption" style={secondary}>
           {fact.label} ⟵ authored
         </span>
-        <span className="block font-mono t-caption" style={muted}>
+        <span className="block face-mono t-caption" style={muted}>
           {link.param.name}
         </span>
       </th>
@@ -363,7 +363,7 @@ export function VariantE() {
         {label}
       </span>
       {sub != null ? (
-        <span className="block font-mono t-caption" style={muted}>
+        <span className="block face-mono t-caption" style={muted}>
           {sub}
         </span>
       ) : (
@@ -411,7 +411,7 @@ export function VariantE() {
                 style={{ backgroundColor: token("recess"), ["--pe-on" as string]: token("recess") }}
               >
                 <td colSpan={COLS} className="px-2 py-1" style={{ borderTop: hairline }}>
-                  <span className="font-mono t-caption">{group.name}</span>
+                  <span className="face-mono t-caption">{group.name}</span>
                   <span className="ml-2 t-caption" style={muted}>
                     {group.rows.length} row{group.rows.length === 1 ? "" : "s"} · perf params at
                     type scope
@@ -437,28 +437,28 @@ export function VariantE() {
               </tr>
               {group.rows.map((row) => (
                 <tr key={row.tag} style={{ borderTop: hairline }}>
-                  <td className="px-2 py-0.5 font-mono">{row.tag}</td>
+                  <td className="px-2 py-0.5 face-mono">{row.tag}</td>
                   <td className="px-2 py-0.5">{row.serves}</td>
                   <td className="px-2 py-0.5" style={secondary}>
                     {row.location}
                   </td>
-                  <td className="px-2 py-0.5 font-mono t-caption" style={secondary}>
+                  <td className="px-2 py-0.5 face-mono t-caption" style={secondary}>
                     {row.model}
                   </td>
                   <td
-                    className="px-2 py-0.5 font-mono"
+                    className="px-2 py-0.5 face-mono"
                     title="inbound — read from PE_M_PerfHeat_CapacityDesignTotal on the type"
                   >
                     {row.heat.capTotal.toLocaleString()}
                   </td>
-                  <td className="px-2 py-0.5 font-mono">{fmtNum(row.heat.gpm, 1)}</td>
+                  <td className="px-2 py-0.5 face-mono">{fmtNum(row.heat.gpm, 1)}</td>
                   {LINKS.map((link) => (
-                    <td key={link.param.name} className="px-2 py-0.5 font-mono">
+                    <td key={link.param.name} className="px-2 py-0.5 face-mono">
                       <StateCell {...linkedCellProps(group, link)} />
                     </td>
                   ))}
-                  <td className="px-2 py-0.5 font-mono">{row.cool.total.toLocaleString()}</td>
-                  <td className="px-2 py-0.5 font-mono">{fmtNum(row.mca, 1)}</td>
+                  <td className="px-2 py-0.5 face-mono">{row.cool.total.toLocaleString()}</td>
+                  <td className="px-2 py-0.5 face-mono">{fmtNum(row.mca, 1)}</td>
                 </tr>
               ))}
             </Fragment>
@@ -473,7 +473,7 @@ export function VariantE() {
   const fomLens = (
     <div className="p-6">
       <div className="mb-2 t-caption" style={secondary}>
-        <span className="font-mono">SXL - FOM HWCH Plant</span> → sheet exhibit · a saved projection
+        <span className="face-mono">SXL - FOM HWCH Plant</span> → sheet exhibit · a saved projection
         of the same {FC_UNITS.length}-row substrate — switching lens re-projects, nothing is retyped
       </div>
       <table className="border-collapse t-value" style={{ border: hairline }}>
@@ -518,7 +518,7 @@ export function VariantE() {
                 // LANG GAP (2): the inbound cell has no reserved mark either — hover carries it.
                 <td
                   key={i}
-                  className="px-3 py-1 text-center font-mono"
+                  className="px-3 py-1 text-center face-mono"
                   style={{ border: hairline }}
                 >
                   <StateCell
@@ -531,7 +531,7 @@ export function VariantE() {
               ) : (
                 <td
                   key={i}
-                  className={`px-3 py-1 text-center ${i >= 3 ? "font-mono" : ""}`}
+                  className={`px-3 py-1 text-center ${i >= 3 ? "face-mono" : ""}`}
                   style={{ border: hairline }}
                   title={
                     i >= 3
@@ -565,7 +565,7 @@ export function VariantE() {
   const bodLens = (
     <div className="p-6">
       <div className="mb-2 t-caption" style={secondary}>
-        <span className="font-mono">SXL - M_BOD_MainHouse</span> (sheet M001) · label × value
+        <span className="face-mono">SXL - M_BOD_MainHouse</span> (sheet M001) · label × value
         projection of the same substrate — authored facts render through the same editor as the lane
       </div>
       <table className="border-collapse t-value">
@@ -573,7 +573,7 @@ export function VariantE() {
           {BOD_MAIN_HOUSE.map((entry) => (
             <tr key={entry.key} style={{ borderTop: hairline }}>
               <td className="max-w-xl px-2 py-1 pr-6">{entry.label}</td>
-              <td className="px-2 py-1 font-mono">
+              <td className="px-2 py-1 face-mono">
                 {entry.key === "odt-winter" ? (
                   factCell("odtWinter")
                 ) : entry.numeric != null ? (
@@ -601,7 +601,7 @@ export function VariantE() {
         name="param tables"
         sentence={
           <span className="flex items-center gap-1.5 t-value">
-            <span className="font-mono">ProjectA_Clone_Aug_11</span>
+            <span className="face-mono">ProjectA_Clone_Aug_11</span>
             <span style={muted}>›</span>
             <span>Mechanical Equipment</span>
             <span style={muted}>›</span>
@@ -716,7 +716,7 @@ export function VariantE() {
               ) : (
                 <span style={muted}>no staged writes</span>
               )}
-              <span className="ml-auto font-mono" style={muted}>
+              <span className="ml-auto face-mono" style={muted}>
                 lens: {lens}
               </span>
             </span>
@@ -736,12 +736,12 @@ export function VariantE() {
                   <span className="t-caption" style={secondary}>
                     {fact.label}
                   </span>
-                  <span className="w-14 font-mono t-value">{factCell(key)}</span>
+                  <span className="w-14 face-mono t-value">{factCell(key)}</span>
                   <span className="t-caption" style={muted}>
                     {fact.unit}
                   </span>
                   {fact.target != null ? (
-                    <span className="font-mono t-caption" style={muted}>
+                    <span className="face-mono t-caption" style={muted}>
                       → {fact.target}
                     </span>
                   ) : null}

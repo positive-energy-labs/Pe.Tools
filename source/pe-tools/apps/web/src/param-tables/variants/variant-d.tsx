@@ -326,7 +326,7 @@ export function VariantD() {
       <Press
         type="button"
         onClick={() => toggleSelect(k)}
-        className="inline-flex items-baseline gap-1 rounded-none px-1 text-left font-mono t-value"
+        className="inline-flex items-baseline gap-1 rounded-none px-1 text-left face-mono t-value"
         // LANG GAP: cross-pane subscriber highlight — the selection fill is being applied
         // to every subscriber of the selected fact, not just the pressed control. The
         // language has "selection is a fill" but no ruling on selection PROPAGATION.
@@ -376,7 +376,7 @@ export function VariantD() {
     if (to != null && ro) {
       valueNode = (
         <span className="inline-flex items-baseline gap-2">
-          <span className="font-mono">{fmtNum(cur)}</span>
+          <span className="face-mono">{fmtNum(cur)}</span>
           <span
             className="t-caption"
             style={{ color: token("alarm") }}
@@ -389,7 +389,7 @@ export function VariantD() {
     } else if (to != null && to !== cur) {
       valueNode = (
         <span
-          className="font-mono"
+          className="face-mono"
           title={`staged by fact "${f.label}" — Commit writes ${fmtNum(to)} to ${p} on this type (${t.count} tag${t.count === 1 ? "" : "s"})`}
         >
           {/* LANG GAP: old→new staged transition token (same gap as the table wing). */}
@@ -398,7 +398,7 @@ export function VariantD() {
       );
     } else if (to != null) {
       valueNode = (
-        <span className="font-mono" title="already holds the staged value — Commit is a no-op here">
+        <span className="face-mono" title="already holds the staged value — Commit is a no-op here">
           {fmtNum(cur)}
         </span>
       );
@@ -409,11 +409,11 @@ export function VariantD() {
           value={fmtNum(cur)}
           agree="drift"
           note={`fact "${f.label}" says ${fmtNum(committedFact)} — this type holds ${fmtNum(cur)}${ro ? " · formula-owned, so a write would refuse; reconcile in the family" : ""}`}
-          className="font-mono"
+          className="face-mono"
         />
       );
     } else {
-      valueNode = <span className="font-mono">{fmtNum(cur)}</span>;
+      valueNode = <span className="face-mono">{fmtNum(cur)}</span>;
     }
 
     return (
@@ -464,7 +464,7 @@ export function VariantD() {
               authored fact (flows out to subscribers) from a model-sourced one (flows
               in). Raw arrows in mute ink until ruled. */}
           <span
-            className="font-mono t-value"
+            className="face-mono t-value"
             style={MUTE}
             title={
               inbound
@@ -477,7 +477,7 @@ export function VariantD() {
           <span className="truncate t-value" title={f.label}>
             {f.label}
           </span>
-          <span className="inline-flex items-baseline gap-1 font-mono t-value">
+          <span className="inline-flex items-baseline gap-1 face-mono t-value">
             <StateCell
               scale="row"
               value={st ?? factDisplay(f.key)}
@@ -495,7 +495,7 @@ export function VariantD() {
             {f.unit != null ? <span style={MUTE}>{f.unit}</span> : null}
           </span>
           <span
-            className="font-mono t-caption"
+            className="face-mono t-caption"
             style={MUTE}
             title={`fan-out: ${f.tableCells} table cell${f.tableCells === 1 ? "" : "s"} subscribe${f.tableCells === 1 ? "s" : ""}${f.target != null ? `; ${f.target} on ${TYPE_GROUPS.length} types / ${TAG_TOTAL} tags` : "; no model parameter linked"}${inbound ? `; sourced from ${f.sourceParam ?? ""}` : ""}`}
           >
@@ -504,7 +504,7 @@ export function VariantD() {
           </span>
         </div>
         {fanout != null ? (
-          <div className="pl-6 font-mono t-caption" style={{ color: token("caution") }}>
+          <div className="pl-6 face-mono t-caption" style={{ color: token("caution") }}>
             stages {fanout.ok.length} types · {fanout.tags} tags
             {fanout.no.length > 0
               ? ` — ${fanout.no.length} refuses (formula-owned: ${fanout.no.map((w) => w.typeName).join(", ")})`
@@ -512,7 +512,7 @@ export function VariantD() {
           </div>
         ) : null}
         {st != null && f.target == null ? (
-          <div className="pl-6 font-mono t-caption" style={MUTE}>
+          <div className="pl-6 face-mono t-caption" style={MUTE}>
             table subscribers only — settles on Commit, nothing leaves the page
           </div>
         ) : null}
@@ -729,7 +729,7 @@ export function VariantD() {
               </HelpTip>
             }
             aside={
-              <span className="font-mono t-caption" style={MUTE}>
+              <span className="face-mono t-caption" style={MUTE}>
                 {stagedKeys.length > 0
                   ? `${landing.length} writes staged · ${refusing.length} will refuse`
                   : "nothing staged"}
@@ -738,7 +738,7 @@ export function VariantD() {
           >
             <ArtifactFrame
               foot={
-                <span className="font-mono t-caption" style={MUTE}>
+                <span className="face-mono t-caption" style={MUTE}>
                   {FACTS.length} facts · {FACTS.filter((f) => f.target != null).length} drive params
                   · 1 model-sourced
                 </span>
@@ -761,7 +761,7 @@ export function VariantD() {
               </HelpTip>
             }
             aside={
-              <span className="font-mono t-caption" style={MUTE}>
+              <span className="face-mono t-caption" style={MUTE}>
                 {TYPE_GROUPS.length} types · {TAG_TOTAL} tags
               </span>
             }
@@ -785,7 +785,7 @@ export function VariantD() {
                       style={{ borderColor: token("line") }}
                     >
                       <div className="flex items-baseline gap-2">
-                        <span className="font-mono t-value">{t.typeName}</span>
+                        <span className="face-mono t-value">{t.typeName}</span>
                         <FactChip title="instances of this type in the Main House schedule — one type write moves all of them">
                           {t.count} tag{t.count === 1 ? "" : "s"}
                         </FactChip>
@@ -798,7 +798,7 @@ export function VariantD() {
                         >
                           <span style={INK2}>{paramLabel(CAP_PARAM)}</span>
                           <span className="inline-flex items-baseline gap-1">
-                            <span className="font-mono">
+                            <span className="face-mono">
                               {(model[t.typeName]?.[CAP_PARAM] ?? 0).toLocaleString("en-US")}
                             </span>
                             <span style={MUTE}>Btu/h</span>
@@ -809,8 +809,8 @@ export function VariantD() {
                         </div>
                       </div>
                       <div
-                        className="mt-1 font-mono t-caption"
-                        style={stagedHere ? { fontWeight: 600 } : MUTE}
+                        className="mt-1 face-mono t-caption"
+                        style={stagedHere ? { fontWeight: "var(--weight-strong)" } : MUTE}
                         title={
                           stagedHere
                             ? "these tags see the staged value the moment Commit lands"

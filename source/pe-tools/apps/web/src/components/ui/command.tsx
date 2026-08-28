@@ -167,7 +167,7 @@ function CommandShortcut({ className, ...props }: React.ComponentProps<"span">) 
       data-slot="command-shortcut"
       className={cn(
         // Shortcuts are machine facts — telemetry voice.
-        "ml-auto font-mono t-caption tracking-[0.08em] text-ink-2 uppercase group-data-selected/command-item:text-ink",
+        "ml-auto face-mono t-caption tracking-[0.08em] text-ink-2 uppercase group-data-selected/command-item:text-ink",
         className,
       )}
       {...props}

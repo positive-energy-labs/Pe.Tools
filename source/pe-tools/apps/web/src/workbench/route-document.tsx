@@ -90,7 +90,7 @@ export function RouteDocumentEmpty() {
   const href = useLocation({ select: (location) => location.href });
   const choices = routeDocumentChoices(sessions);
   return (
-    <main className="grid min-h-screen place-items-center bg-page font-pe">
+    <main className="grid min-h-screen place-items-center bg-page font-sans">
       {choices.length > 1 ? (
         <RouteDocumentPicker
           choices={choices}
