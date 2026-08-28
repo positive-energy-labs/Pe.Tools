@@ -45,7 +45,7 @@ export function RouteWorkspaceShell({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-baseline gap-3">
             {/* a page title is chrome — ink, not a meaning hue (it wore the alarm via shim) */}
-            <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-ink">
+            <h1 className="font-pe-display text-xl font-semibold tracking-tight text-ink">
               {title}
             </h1>
             {subtitle}

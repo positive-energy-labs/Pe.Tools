@@ -51,7 +51,7 @@ function ToggleGroupItem({
       aria-pressed={active}
       onClick={() => ctx?.onValueChange(value)}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap text-ink-2 transition-colors outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-line-2/30 aria-pressed:bg-page aria-pressed:text-ink [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-3",
+        "inline-flex items-center gap-1 rounded-md px-2.5 py-1 t-value font-medium whitespace-nowrap text-ink-2 transition-colors outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-line-2/30 aria-pressed:bg-page aria-pressed:text-ink [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-3",
         className,
       )}
       {...props}

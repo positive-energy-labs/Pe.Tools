@@ -61,21 +61,21 @@ export function ExportStatus(props: { className?: string }) {
   const { exporting, lastExport, exportError } = useFb();
   if (exporting) {
     return (
-      <div className={cn("tele text-[10px] text-ink-2", props.className)}>
+      <div className={cn("face-mono t-caption text-ink-2", props.className)}>
         compositing + writing export…
       </div>
     );
   }
   if (exportError) {
     return (
-      <div className={cn("tele text-[10px]", props.className)} style={{ color: token("alarm") }}>
+      <div className={cn("face-mono t-caption", props.className)} style={{ color: token("alarm") }}>
         export failed: {exportError}
       </div>
     );
   }
   if (!lastExport) return null;
   return (
-    <div className={cn("tele flex flex-col gap-0.5 text-[10px] text-ink-2", props.className)}>
+    <div className={cn("face-mono flex flex-col gap-0.5 t-caption text-ink-2", props.className)}>
       <span className="break-all">
         wrote {lastExport.files.length} file{lastExport.files.length === 1 ? "" : "s"} + clip.txt →{" "}
         <span className="text-ink">{lastExport.dir}</span>
@@ -115,7 +115,7 @@ export function ExportStatus(props: { className?: string }) {
 export function FlagChips(props: { item: StagedItem }) {
   if (props.item.flags.length === 0) {
     return (
-      <span className="tele text-[10px] text-ink-2/60">
+      <span className="face-mono t-caption text-ink-2/60">
         no flags — click rooms/residues on the staged B panel
       </span>
     );
@@ -130,7 +130,7 @@ export function FlagChips(props: { item: StagedItem }) {
           onMouseEnter={() => fb.setHoverFlag(`${props.item.key}::${el}`)}
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
-          className="tele border px-1 text-[10px]"
+          className="face-mono border px-1 t-caption"
           style={{ borderColor: token("alarm"), color: token("alarm"), borderRadius: 2 }}
         >
           ⚑ {flagLabel(el)} ✕
@@ -156,7 +156,7 @@ export function NoteInput(props: {
       "One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block.",
     autoFocus: props.autoFocus,
     className: cn(
-      "tele w-full border bg-page px-1.5 py-0.5 text-[11px] placeholder:text-ink-2/50",
+      "face-mono w-full border bg-page px-1.5 py-0.5 t-label placeholder:text-ink-2/50",
       props.className,
     ),
     style: { borderColor: token("line-2"), borderRadius: 2 },

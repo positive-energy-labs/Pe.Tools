@@ -49,7 +49,7 @@ export function VariantSwitcher({
         display: "flex",
         alignItems: "center",
         gap: 12,
-        background: token("ink"),
+        backgroundColor: token("ink"),
         color: token("page"),
         borderRadius: 999,
         padding: "8px 16px",
@@ -63,7 +63,8 @@ export function VariantSwitcher({
         onClick={() => go(-1)}
         style={{
           cursor: "pointer",
-          background: "none",
+          backgroundColor: "transparent",
+          backgroundImage: "none",
           border: "none",
           color: "inherit",
           fontSize: 14,
@@ -79,7 +80,8 @@ export function VariantSwitcher({
         onClick={() => go(1)}
         style={{
           cursor: "pointer",
-          background: "none",
+          backgroundColor: "transparent",
+          backgroundImage: "none",
           border: "none",
           color: "inherit",
           fontSize: 14,

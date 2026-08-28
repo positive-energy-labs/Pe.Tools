@@ -143,7 +143,7 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
           style={{
             borderRadius: 2,
             borderColor: value === verdict ? token("line-2") : token("line"),
-            background: value === verdict ? token("select") : "transparent",
+            backgroundColor: value === verdict ? token("select") : "transparent",
           }}
         >
           {VERDICT_LABEL[verdict]}
@@ -398,7 +398,7 @@ export function ReviewBoard({
               <div
                 className="absolute left-full top-0 z-20 w-64"
                 style={{
-                  background: token("artifact"),
+                  backgroundColor: token("artifact"),
                   border: `0.5px solid ${token("line-2")}`,
                   borderRadius: 2,
                   boxShadow: `0 2px 8px color-mix(in srgb, ${token("ink")} 10%, transparent)`,

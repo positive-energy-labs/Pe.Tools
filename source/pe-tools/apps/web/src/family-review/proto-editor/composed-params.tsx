@@ -109,7 +109,8 @@ export function ParamGrid({ editor }: { editor: Editor }) {
           }
           className="t-caption t-upper"
           style={{
-            background: "none",
+            backgroundColor: "transparent",
+            backgroundImage: "none",
             border: "none",
             cursor: "pointer",
             color: "inherit",
@@ -140,7 +141,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
           style={{
             width: 120,
             padding: "0 4px",
-            background: "transparent",
+            backgroundColor: "transparent",
             border: "none",
             borderBottom: `0.5px solid ${token("line-2")}`,
             borderRadius: 0,
@@ -299,7 +300,7 @@ function Cell({
       onClick={onPick}
       className="px-2 py-0.5 align-baseline"
       style={{
-        background: on || focused ? token("select") : "transparent",
+        backgroundColor: on || focused ? token("select") : "transparent",
         outline: "none",
         whiteSpace: "nowrap",
       }}
@@ -352,7 +353,7 @@ function GridText({
         style={{
           width: 84,
           padding: "0 2px",
-          background: editing ? token("page") : "transparent",
+          backgroundColor: editing ? token("page") : "transparent",
           border: "none",
           borderBottom: editing ? `0.5px solid ${token("ink")}` : "0.5px solid transparent",
           borderRadius: 0,

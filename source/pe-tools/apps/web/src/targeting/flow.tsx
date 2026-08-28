@@ -51,7 +51,7 @@ function Connector<K extends string>({ link, active }: { link: Link<K>; active: 
   return (
     <span
       aria-hidden
-      className="face-mono shrink-0 text-center text-xs"
+      className="face-mono shrink-0 text-center t-value"
       style={{ color: active ? token("ink") : token("line-2"), minWidth: 64 }}
     >
       {glyph}
@@ -79,7 +79,7 @@ function Terminal<K extends string>({
     <div
       className={`flex min-w-36 flex-col px-2 py-1 ${side === "left" ? "items-end" : "items-start"}`}
       style={{
-        background: token("artifact"),
+        backgroundColor: token("artifact"),
         border: `1px ${b.feeds[link.key].seam ? `dashed ${token("caution")}` : `solid ${token("line")}`}`,
       }}
     >

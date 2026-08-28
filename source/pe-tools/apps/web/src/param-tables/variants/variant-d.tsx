@@ -326,11 +326,11 @@ export function VariantD() {
       <Press
         type="button"
         onClick={() => toggleSelect(k)}
-        className="inline-flex items-baseline gap-1 rounded-none px-1 text-left font-mono text-xs"
+        className="inline-flex items-baseline gap-1 rounded-none px-1 text-left font-mono t-value"
         // LANG GAP: cross-pane subscriber highlight — the selection fill is being applied
         // to every subscriber of the selected fact, not just the pressed control. The
         // language has "selection is a fill" but no ruling on selection PROPAGATION.
-        style={hot ? { background: token("select") } : undefined}
+        style={hot ? { backgroundColor: token("select") } : undefined}
         title={`subscribes to fact "${f.label}" — the cell is a projection; edit the fact in the registry`}
       >
         {/* LANG GAP: fact-subscription glyph — no canon mark says "this value flows in
@@ -419,8 +419,8 @@ export function VariantD() {
     return (
       <div
         key={p}
-        className="flex cursor-pointer items-baseline justify-between gap-2 px-1 py-px text-xs"
-        style={hot ? { background: token("select") } : undefined}
+        className="flex cursor-pointer items-baseline justify-between gap-2 px-1 py-px t-value"
+        style={hot ? { backgroundColor: token("select") } : undefined}
         onClick={() => toggleSelect(factKey)}
         title={p}
       >
@@ -455,7 +455,7 @@ export function VariantD() {
         className="border-b px-2 py-1"
         style={{
           borderColor: token("line"),
-          ...(hot ? { background: token("select") } : null),
+          ...(hot ? { backgroundColor: token("select") } : null),
         }}
         onClick={() => toggleSelect(f.key)}
       >
@@ -464,7 +464,7 @@ export function VariantD() {
               authored fact (flows out to subscribers) from a model-sourced one (flows
               in). Raw arrows in mute ink until ruled. */}
           <span
-            className="font-mono text-xs"
+            className="font-mono t-value"
             style={MUTE}
             title={
               inbound
@@ -474,10 +474,10 @@ export function VariantD() {
           >
             {inbound ? "←" : "→"}
           </span>
-          <span className="truncate text-xs" title={f.label}>
+          <span className="truncate t-value" title={f.label}>
             {f.label}
           </span>
-          <span className="inline-flex items-baseline gap-1 font-mono text-xs">
+          <span className="inline-flex items-baseline gap-1 font-mono t-value">
             <StateCell
               scale="row"
               value={st ?? factDisplay(f.key)}
@@ -534,7 +534,7 @@ export function VariantD() {
   return (
     <div
       className="flex h-screen flex-col overflow-hidden"
-      style={{ background: token("page"), color: token("ink") }}
+      style={{ backgroundColor: token("page"), color: token("ink") }}
     >
       <AddressingBar
         name="param-tables · d"
@@ -604,7 +604,7 @@ export function VariantD() {
             <div className="flex flex-col gap-3">
               <ArtifactFrame
                 head={
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex items-center gap-2 t-value">
                     <span className="font-medium">Hydronic Loop Temperatures</span>
                     <FactChip
                       dashed
@@ -615,7 +615,7 @@ export function VariantD() {
                   </div>
                 }
               >
-                <table className="w-full text-xs">
+                <table className="w-full t-value">
                   <thead>
                     <tr style={INK2}>
                       <th className="px-2 py-1 text-left font-normal" />
@@ -644,7 +644,7 @@ export function VariantD() {
 
               <ArtifactFrame
                 head={
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex items-center gap-2 t-value">
                     <span className="font-medium">{FOM_HWCH_PLANT.name}</span>
                     <span style={MUTE}>SXL header cells today — two cells fact-linked</span>
                   </div>
@@ -690,13 +690,13 @@ export function VariantD() {
 
               <ArtifactFrame
                 head={
-                  <div className="flex items-center gap-2 text-xs">
+                  <div className="flex items-center gap-2 t-value">
                     <span className="font-medium">BOD MainHouse</span>
                     <span style={MUTE}>M001 · every row subscribes to its fact</span>
                   </div>
                 }
               >
-                <table className="w-full text-xs">
+                <table className="w-full t-value">
                   <tbody>
                     {BOD_MAIN_HOUSE.map((e) => (
                       <tr key={e.key} className="border-t" style={{ borderColor: token("line") }}>
@@ -768,7 +768,7 @@ export function VariantD() {
           >
             <ArtifactFrame
               head={
-                <span className="text-xs font-medium">
+                <span className="t-value font-medium">
                   Hydronic Fan Coil Unit Performance Schedule — by type
                 </span>
               }
@@ -785,7 +785,7 @@ export function VariantD() {
                       style={{ borderColor: token("line") }}
                     >
                       <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-xs">{t.typeName}</span>
+                        <span className="font-mono t-value">{t.typeName}</span>
                         <FactChip title="instances of this type in the Main House schedule — one type write moves all of them">
                           {t.count} tag{t.count === 1 ? "" : "s"}
                         </FactChip>
@@ -793,7 +793,7 @@ export function VariantD() {
                       <div className="mt-1">
                         {LOOP_PARAMS.map((p) => paramRow(t, p))}
                         <div
-                          className="flex items-baseline justify-between gap-2 px-1 py-px text-xs"
+                          className="flex items-baseline justify-between gap-2 px-1 py-px t-value"
                           title={`${CAP_PARAM} — source of the model-sourced fact; provenance flows model → registry here`}
                         >
                           <span style={INK2}>{paramLabel(CAP_PARAM)}</span>

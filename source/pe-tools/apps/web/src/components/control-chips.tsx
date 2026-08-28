@@ -112,7 +112,7 @@ function Picker({
           {(option: PickerOption) => (
             <ComboboxItem key={option.id} value={option} className="flex-col items-start pr-7">
               <span className="text-ink">{option.name}</span>
-              {option.hint ? <span className="text-xs text-ink-2">{option.hint}</span> : null}
+              {option.hint ? <span className="t-value text-ink-2">{option.hint}</span> : null}
             </ComboboxItem>
           )}
         </ComboboxList>

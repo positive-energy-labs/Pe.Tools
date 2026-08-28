@@ -391,13 +391,13 @@ export function VariantB() {
   return (
     <div
       className="flex h-screen flex-col overflow-hidden text-sm"
-      style={{ background: token("page"), color: token("ink") }}
+      style={{ backgroundColor: token("page"), color: token("ink") }}
     >
       <AddressingBar
         name="param tables · b"
         sentence={
           <span className="flex items-baseline gap-1.5">
-            <span className="font-mono text-xs">ProjectA_Clone_Aug_11</span>
+            <span className="font-mono t-value">ProjectA_Clone_Aug_11</span>
             <span style={{ color: token("ink-mute") }}>›</span>
             <span>M001 design tables</span>
             <span style={{ color: token("ink-mute") }}>›</span>
@@ -470,7 +470,7 @@ export function VariantB() {
           <ArtifactFrame
             head={
               <div className="flex items-baseline gap-2">
-                <span className="text-xs font-medium">FOM HWCH Plant</span>
+                <span className="t-value font-medium">FOM HWCH Plant</span>
                 <span className="t-caption" style={{ color: token("ink-mute") }}>
                   sheet exhibit — today a dead SXL header grid
                 </span>
@@ -526,7 +526,7 @@ export function VariantB() {
                     style={
                       isSel
                         ? ({
-                            background: token("select"),
+                            backgroundColor: token("select"),
                             "--pe-on": token("select"),
                           } as React.CSSProperties)
                         : undefined
@@ -543,7 +543,7 @@ export function VariantB() {
                     >
                       ⇄ {def.addr.split("!")[1]}
                     </Press>
-                    <span className="min-w-0 flex-1 truncate text-xs">{def.label}</span>
+                    <span className="min-w-0 flex-1 truncate t-value">{def.label}</span>
                     {boundCell(def)}
                     <span className="w-5 t-caption" style={{ color: token("ink-mute") }}>
                       °F
@@ -557,7 +557,7 @@ export function VariantB() {
                 style={
                   selected === IN_DEF.id
                     ? ({
-                        background: token("select"),
+                        backgroundColor: token("select"),
                         "--pe-on": token("select"),
                       } as React.CSSProperties)
                     : undefined
@@ -572,7 +572,7 @@ export function VariantB() {
                 >
                   ⇄ {IN_DEF.addr.split("!")[1]}
                 </Press>
-                <span className="min-w-0 flex-1 truncate text-xs">{IN_DEF.label}</span>
+                <span className="min-w-0 flex-1 truncate t-value">{IN_DEF.label}</span>
                 <StateCell
                   scale="row"
                   value={CAP_TOTAL.toLocaleString("en-US")}
@@ -590,7 +590,7 @@ export function VariantB() {
           <ArtifactFrame
             head={
               <div className="flex items-baseline gap-2">
-                <span className="text-xs font-medium">BOD MainHouse</span>
+                <span className="t-value font-medium">BOD MainHouse</span>
                 <span className="t-caption" style={{ color: token("ink-mute") }}>
                   M001 · authored-only — no bindings yet
                 </span>
@@ -639,7 +639,7 @@ export function VariantB() {
           <ArtifactFrame
             head={
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium">Binding ledger</span>
+                <span className="t-value font-medium">Binding ledger</span>
                 <HelpTip>
                   One row per linkage. Direction is a property of the binding: → writes the model
                   from the table, ← feeds the table from the model. A binding moves through the
@@ -708,7 +708,7 @@ export function VariantB() {
               <span style={{ color: token("ink-mute") }}>fresh</span>
             </div>
 
-            <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+            <table className="w-full t-value" style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr
                   className="text-left t-caption uppercase tracking-wider"
@@ -737,7 +737,7 @@ export function VariantB() {
                           borderColor: token("line"),
                           ...(isSel
                             ? ({
-                                background: token("select"),
+                                backgroundColor: token("select"),
                                 "--pe-on": token("select"),
                               } as React.CSSProperties)
                             : null),
@@ -802,7 +802,7 @@ export function VariantB() {
                       borderColor: token("line"),
                       ...(selected === IN_DEF.id
                         ? ({
-                            background: token("select"),
+                            backgroundColor: token("select"),
                             "--pe-on": token("select"),
                           } as React.CSSProperties)
                         : null),

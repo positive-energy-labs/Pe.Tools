@@ -38,18 +38,18 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
           }
           className="flex min-w-0 items-baseline gap-2 text-left"
         >
-          <span className="tele text-xs font-semibold" title={item.zone}>
+          <span className="face-mono t-value font-semibold" title={item.zone}>
             {zoneShort(item.zone)}
           </span>
           <span
-            className="tele truncate text-[10px] text-ink-2"
+            className="face-mono truncate t-caption text-ink-2"
             title={`pinned A=${item.runA ?? "(none)"} B=${item.runB}`}
           >
             {item.level.replace(" Level", "")} · A {runShort(item.runA)} → B {runShort(item.runB)}
           </span>
           {!onLens && (
             <span
-              className="tele shrink-0 text-[10px]"
+              className="face-mono shrink-0 t-caption"
               style={{ color: token("caution") }}
               title="Pinned pair ≠ current lens. The stage keeps the pair it was staged from; click to view it."
             >
@@ -61,7 +61,7 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
           type="button"
           onClick={() => fb.unstage(item.key)}
           title="Remove this item from the staged set."
-          className="tele ml-auto text-[10px] text-ink-2 hover:text-ink"
+          className="face-mono ml-auto t-caption text-ink-2 hover:text-ink"
         >
           ✕
         </Press>
@@ -86,8 +86,8 @@ export function Tray(props: {
         className="flex h-8 shrink-0 items-center gap-2 border-b px-2"
         style={{ borderColor: token("line-2") }}
       >
-        <span className="tele-label text-ink-2">staging</span>
-        <span className="tele text-[11px] text-ink-2">
+        <span className="face-mono t-caption t-upper text-ink-2">staging</span>
+        <span className="face-mono t-label text-ink-2">
           {items.length === 0 ? "empty" : `${items.length} staged`}
         </span>
         <span className="ml-auto flex items-center gap-1.5">
@@ -101,7 +101,7 @@ export function Tray(props: {
                   : "Review the staged set: the sheet switches to single-column (bigger images), staged items only, each at its pinned A/B pair. Same cards, bigger layout."
               }
               className={cn(
-                "tele rounded-[2px] px-1.5 py-0.5 text-[10px]",
+                "face-mono rounded-[2px] px-1.5 py-0.5 t-caption",
                 props.review ? "bg-recess text-ink" : "border text-ink-2 hover:text-ink",
               )}
               style={props.review ? undefined : { borderColor: token("line-2") }}
@@ -114,7 +114,7 @@ export function Tray(props: {
               type="button"
               onClick={() => fb.clear()}
               title="Unstage everything."
-              className="tele text-[10px] text-ink-2 hover:text-ink"
+              className="face-mono t-caption text-ink-2 hover:text-ink"
             >
               clear
             </Press>
@@ -123,7 +123,7 @@ export function Tray(props: {
       </div>
       {loadedSet && (
         <div
-          className="tele shrink-0 truncate border-b px-2 py-1 text-[10px] text-ink-2"
+          className="face-mono shrink-0 truncate border-b px-2 py-1 t-caption text-ink-2"
           style={{ borderColor: token("line-2") }}
           title="This staging was rehydrated from an export manifest — it is editable; exporting mints a NEW stamp, the loaded set is never overwritten."
         >
@@ -132,7 +132,7 @@ export function Tray(props: {
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items.length === 0 ? (
-          <p className="tele px-2 py-3 text-[11px] leading-relaxed text-ink-2">
+          <p className="face-mono px-2 py-3 t-label leading-relaxed text-ink-2">
             Nothing staged. Hit <span className="text-ink">＋ stage</span> on a zone card to pin its
             current A/B pair here; click rooms/residues on the staged B panel to flag them. Export
             writes PNGs + manifest.json + clip.txt and puts the block on the clipboard.
@@ -164,8 +164,11 @@ export function TrayCollapsed(props: { count: number; onExpand: () => void }) {
       title="Expand the staging tray."
       className="flex size-full flex-col items-center gap-2 bg-page pt-2 hover:bg-recess"
     >
-      <span className="tele text-[11px] text-ink-2">▸</span>
-      <span className="tele-label text-ink-2" style={{ writingMode: "vertical-rl" }}>
+      <span className="face-mono t-label text-ink-2">▸</span>
+      <span
+        className="face-mono t-caption t-upper text-ink-2"
+        style={{ writingMode: "vertical-rl" }}
+      >
         staging{props.count > 0 ? ` · ${props.count}` : ""}
       </span>
     </Press>

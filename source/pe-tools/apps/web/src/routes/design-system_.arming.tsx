@@ -63,7 +63,7 @@ function ArmingRoute() {
   };
 
   return (
-    <div className="min-h-screen bg-page text-[13px] text-ink">
+    <div className="min-h-screen bg-page t-prose text-ink">
       <Header
         title="arming"
         note="unarmed → armed → refused → re-plan, driven live and frozen side by side"
@@ -262,11 +262,11 @@ function Header({ title, note }: { title: string; note: string }) {
     <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
       <div className="page-wrap flex items-center justify-between py-2.5">
         <div className="flex min-w-0 items-baseline gap-3">
-          <Link to="/design-system" className="text-[11px] text-nav hover:underline">
+          <Link to="/design-system" className="t-label text-nav hover:underline">
             ← design system
           </Link>
           <span className="font-pe-display text-sm font-semibold tracking-tight">{title}</span>
-          <span className="truncate text-[11px] text-ink-2">{note}</span>
+          <span className="truncate t-label text-ink-2">{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no plan.">
             fixture
           </FactChip>
@@ -281,7 +281,7 @@ function SectionHead({ n, title, note }: { n: string; title: string; note: strin
   return (
     <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
       <span className="face-mono t-caption text-ink-mute">{n}</span>
-      <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
+      <span className="t-label font-semibold tracking-[0.09em] uppercase">{title}</span>
       <span className="min-w-0 flex-1 text-[11.5px] text-ink-2">{note}</span>
     </div>
   );
@@ -289,7 +289,7 @@ function SectionHead({ n, title, note }: { n: string; title: string; note: strin
 
 function Gap({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-[86ch] border-l border-dashed border-line-2 pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-ink-2">
+    <p className="max-w-[86ch] border-l border-dashed border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
       <span className="text-caution">gap · </span>
       {children}
     </p>

@@ -232,7 +232,7 @@ export function SpecDrawing({
 const inp: React.CSSProperties = {
   width: 44,
   fontSize: 10,
-  background: token("page"),
+  backgroundColor: token("page"),
   textAlign: "center",
 };
 

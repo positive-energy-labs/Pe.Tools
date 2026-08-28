@@ -149,7 +149,7 @@ function GrillesRoute() {
           }}
         >
           <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
-          <p className="face-mono px-2 text-[10px] text-ink-mute">
+          <p className="face-mono px-2 t-caption text-ink-mute">
             click a point, or focus and use arrow keys: ←→ qty · ↑↓ opening width
           </p>
         </div>

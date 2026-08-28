@@ -644,7 +644,7 @@ function Tokens() {
             >
               <span
                 className="h-5 w-9 shrink-0 border border-line-2"
-                style={{ background: `var(${t.token})` }}
+                style={{ backgroundColor: `var(${t.token})` }}
                 title={values[t.token] ?? t.token}
               />
               <span className="face-mono t-caption truncate">{t.token}</span>

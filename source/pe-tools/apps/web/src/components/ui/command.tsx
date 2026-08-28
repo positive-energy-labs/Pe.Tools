@@ -69,7 +69,7 @@ function CommandInput({
         <CommandPrimitive.Input
           data-slot="command-input"
           className={cn(
-            "w-full text-xs/relaxed outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+            "w-full t-value outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
             className,
           )}
           {...props}
@@ -102,7 +102,7 @@ function CommandEmpty({
   return (
     <CommandPrimitive.Empty
       data-slot="command-empty"
-      className={cn("py-6 text-center text-xs/relaxed", className)}
+      className={cn("py-6 text-center t-value", className)}
       {...props}
     />
   );
@@ -117,7 +117,7 @@ function CommandGroup({
       data-slot="command-group"
       className={cn(
         // Group headings take the section-label voice (small-caps tracked sans).
-        "overflow-hidden p-1 text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:text-[11px] **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:text-ink-2",
+        "overflow-hidden p-1 text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:t-label **:[[cmdk-group-heading]]:font-semibold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:uppercase **:[[cmdk-group-heading]]:text-ink-2",
         className,
       )}
       {...props}
@@ -151,7 +151,7 @@ function CommandItem({
         // FILL, never a hue (the select rung), plus a neutral ink left rule as the locate
         // mark — the rule keeps keyboard nav visible without spending the commit blue on
         // something that is not a write.
-        "group/command-item relative flex min-h-7 cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-1 text-[13px] outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-ink data-selected:bg-select data-selected:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-ink-2",
+        "group/command-item relative flex min-h-7 cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-1 t-prose outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-ink data-selected:bg-select data-selected:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-ink-2",
         className,
       )}
       {...props}
@@ -167,7 +167,7 @@ function CommandShortcut({ className, ...props }: React.ComponentProps<"span">) 
       data-slot="command-shortcut"
       className={cn(
         // Shortcuts are machine facts — telemetry voice.
-        "ml-auto font-mono text-[10px] tracking-[0.08em] text-ink-2 uppercase group-data-selected/command-item:text-ink",
+        "ml-auto font-mono t-caption tracking-[0.08em] text-ink-2 uppercase group-data-selected/command-item:text-ink",
         className,
       )}
       {...props}

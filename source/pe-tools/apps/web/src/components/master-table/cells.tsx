@@ -141,7 +141,7 @@ export function StateDot({ tone, dim }: { tone: VerdictTone; dim?: boolean }) {
   return (
     <span
       className="inline-block size-2 shrink-0 rounded-[1px] align-middle"
-      style={{ background: VERDICT_INK[tone], opacity: dim ? 0.35 : 1 }}
+      style={{ backgroundColor: VERDICT_INK[tone], opacity: dim ? 0.35 : 1 }}
     />
   );
 }

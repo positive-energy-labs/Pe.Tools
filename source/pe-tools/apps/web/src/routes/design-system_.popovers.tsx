@@ -158,7 +158,7 @@ function PickerChipSpecimen() {
             <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
               <span className="text-ink">{option.label}</span>
               {option.description ? (
-                <span className="text-xs text-ink-2">{option.description}</span>
+                <span className="t-value text-ink-2">{option.description}</span>
               ) : null}
             </ComboboxItem>
           )}
@@ -260,7 +260,7 @@ const SPECIMENS: readonly Specimen[] = [
     defects: [
       "OBSERVED — anchor-width again: `Mechanical Equipment` wraps onto two lines here while `ui/select` renders the same option on one. Same data, same page, two answers.",
       "no explicit anchor is passed, unlike BOTH other combobox consumers, which each wrote an anchor `div` with a comment explaining that the in-popup input must not be the positioner anchor. Nothing in the API says which shape needs it — the knowledge lives in two ponytail comments.",
-      "OBSERVED — flips at the bottom edge (correct), but the description sub-line is `text-[10px] text-ink-2` here and `text-xs text-ink-2` in the picker chip: the same option list, rendered at two sizes by two consumers.",
+      "OBSERVED — flips at the bottom edge (correct), but the description sub-line is `t-caption text-ink-2` here and `t-value text-ink-2` in the picker chip: the same option list, rendered at two sizes by two consumers.",
     ],
     render: () => <FieldSelectSpecimen />,
   },
@@ -300,7 +300,7 @@ function PopoverHarness() {
     /* The grid IS the viewport — no page header, because a header would push the top row down and
        the top row is the whole point. The control panel lives in the centre cell, which is the one
        position with nothing to clamp against. */
-    <div className="fixed inset-0 grid grid-cols-3 grid-rows-3 gap-2 bg-page p-2 text-[13px] text-ink">
+    <div className="fixed inset-0 grid grid-cols-3 grid-rows-3 gap-2 bg-page p-2 t-prose text-ink">
       {POSITIONS.map((p) => (
         <div key={p.id} className={cn("relative flex min-h-0 min-w-0", p.cls)}>
           <span className="face-mono t-caption pointer-events-none absolute top-0 left-0 tracking-[0.09em] text-ink-mute uppercase">
@@ -324,10 +324,10 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
   return (
     <div className="max-w-[34rem] min-w-0 border border-line bg-artifact p-3 on-artifact">
       <div className="flex flex-wrap items-baseline gap-2 pb-2">
-        <Link to="/design-system" className="text-[11px] text-nav hover:underline">
+        <Link to="/design-system" className="t-label text-nav hover:underline">
           ← design system
         </Link>
-        <span className="font-pe-display text-[13px] font-semibold">popover position harness</span>
+        <span className="font-pe-display t-prose font-semibold">popover position harness</span>
         <FactChip dashed title="Fixture option lists — no host, no live catalogue call.">
           fixture
         </FactChip>
@@ -342,7 +342,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
             onClick={() => onPick(s.id)}
             title={`Mount ${s.name} at all nine positions`}
             className={cn(
-              "border px-1.5 py-0.5 font-[family-name:var(--font-pe-mono)] text-[10px]",
+              "border px-1.5 py-0.5 face-mono t-caption",
               s.id === specimen.id ? "border-line-2 bg-select text-ink" : "border-line text-ink-2",
             )}
           >
@@ -352,20 +352,18 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
       </div>
 
       <div className="flex flex-col gap-1.5 pt-2.5">
-        <span className="text-[10px] text-ink-mute">consumers: {specimen.consumers}</span>
-        <span className="font-[family-name:var(--font-pe-mono)] text-[10px] text-ink-2">
-          shape: {specimen.shape}
-        </span>
+        <span className="t-caption text-ink-mute">consumers: {specimen.consumers}</span>
+        <span className="face-mono t-caption text-ink-2">shape: {specimen.shape}</span>
         {specimen.defects.map((d) => (
           <p
             key={d}
-            className="border-l border-dashed border-line-2 pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-ink-2"
+            className="border-l border-dashed border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2"
           >
             <span className="text-caution">observed · </span>
             {d}
           </p>
         ))}
-        <p className="border-l border-dashed border-line-2 pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-ink-2">
+        <p className="border-l border-dashed border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
           <span className="text-alarm">the headline · </span>
           three of the four combobox consumers ask for a wider popup than their anchor (
           <code>min-w-44</code>, <code>min-w-56</code>) and every one of them is overruled by{" "}
@@ -373,7 +371,7 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
           <code>ui/select</code> grows to fit its content. Two dropdown families, opposite width
           laws, and the request the consumer wrote down is silently ignored.
         </p>
-        <p className="pt-1 text-[10px] leading-relaxed text-ink-mute">
+        <p className="pt-1 t-caption leading-relaxed text-ink-mute">
           Open the same specimen at all nine positions and compare. Nothing here is corrected — each
           is mounted exactly as its consumer mounts it, so the inconsistency you see is the
           inconsistency that ships. One popover foundation in <code>components/lang/</code>{" "}

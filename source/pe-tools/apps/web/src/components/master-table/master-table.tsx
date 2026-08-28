@@ -456,7 +456,7 @@ export function MasterTable<Row extends RowData>({
           role="grid"
           aria-rowcount={visibleRows.length}
           aria-colcount={columns.length + (gutter ? 1 : 0)}
-          className="w-full border-collapse text-xs"
+          className="w-full border-collapse t-value"
         >
           <thead ref={theadRef}>
             {table.getHeaderGroups().map((headerGroup, rowIndex) => (

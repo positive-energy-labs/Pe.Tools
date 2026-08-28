@@ -119,7 +119,10 @@ function Thumbnail({
       /* selection is a fill, never a hue — the select rung, with --pe-on re-declared. */
       style={
         selected
-          ? ({ background: token("select"), "--pe-on": token("select") } as React.CSSProperties)
+          ? ({
+              backgroundColor: token("select"),
+              "--pe-on": token("select"),
+            } as React.CSSProperties)
           : undefined
       }
       title={

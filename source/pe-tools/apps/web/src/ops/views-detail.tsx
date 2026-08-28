@@ -216,7 +216,7 @@ export function SheetCanvas({ entry }: { entry: RevitDetailSheets.Res.SheetDetai
               y={y + fontSize * 1.3}
               fontSize={fontSize}
               fill={hue}
-              className="font-[var(--font-pe-mono,_monospace)]"
+              className="face-mono"
             >
               {anchor.label.length > 28 ? `${anchor.label.slice(0, 27)}…` : anchor.label}
             </text>

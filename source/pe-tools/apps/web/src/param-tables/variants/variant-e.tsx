@@ -374,7 +374,7 @@ export function VariantE() {
 
   const gridLens = (
     <table
-      className="w-full border-collapse text-xs"
+      className="w-full border-collapse t-value"
       style={{ ["--pe-on" as string]: token("artifact") }}
     >
       <thead>
@@ -383,7 +383,7 @@ export function VariantE() {
             position: "sticky",
             top: 0,
             zIndex: 2,
-            background: token("artifact"),
+            backgroundColor: token("artifact"),
             boxShadow: `inset 0 -1px ${token("line")}`,
           }}
         >
@@ -407,7 +407,9 @@ export function VariantE() {
             <Fragment key={group.name}>
               {/* LANG GAP (4): no primitive for a type group-header row — this hand-rolled band
                   is what makes "one type write = N rows stage together" legible. */}
-              <tr style={{ background: token("recess"), ["--pe-on" as string]: token("recess") }}>
+              <tr
+                style={{ backgroundColor: token("recess"), ["--pe-on" as string]: token("recess") }}
+              >
                 <td colSpan={COLS} className="px-2 py-1" style={{ borderTop: hairline }}>
                   <span className="font-mono t-caption">{group.name}</span>
                   <span className="ml-2 t-caption" style={muted}>
@@ -474,7 +476,7 @@ export function VariantE() {
         <span className="font-mono">SXL - FOM HWCH Plant</span> → sheet exhibit · a saved projection
         of the same {FC_UNITS.length}-row substrate — switching lens re-projects, nothing is retyped
       </div>
-      <table className="border-collapse text-xs" style={{ border: hairline }}>
+      <table className="border-collapse t-value" style={{ border: hairline }}>
         <tbody>
           <tr>
             <td
@@ -566,7 +568,7 @@ export function VariantE() {
         <span className="font-mono">SXL - M_BOD_MainHouse</span> (sheet M001) · label × value
         projection of the same substrate — authored facts render through the same editor as the lane
       </div>
-      <table className="border-collapse text-xs">
+      <table className="border-collapse t-value">
         <tbody>
           {BOD_MAIN_HOUSE.map((entry) => (
             <tr key={entry.key} style={{ borderTop: hairline }}>
@@ -598,7 +600,7 @@ export function VariantE() {
       <AddressingBar
         name="param tables"
         sentence={
-          <span className="flex items-center gap-1.5 text-xs">
+          <span className="flex items-center gap-1.5 t-value">
             <span className="font-mono">ProjectA_Clone_Aug_11</span>
             <span style={muted}>›</span>
             <span>Mechanical Equipment</span>
@@ -667,7 +669,7 @@ export function VariantE() {
           className="flex min-h-0 flex-1 flex-col"
           head={
             <span className="flex w-full items-center gap-3">
-              <span className="text-xs">Main House fan coils × PE_* parameters</span>
+              <span className="t-value">Main House fan coils × PE_* parameters</span>
               <HelpTip>
                 One substrate, three lenses. The grid is every fan coil × every attribute; the FOM
                 exhibit and the BOD list are saved projections of the same rows and the same
@@ -734,7 +736,7 @@ export function VariantE() {
                   <span className="t-caption" style={secondary}>
                     {fact.label}
                   </span>
-                  <span className="w-14 font-mono text-xs">{factCell(key)}</span>
+                  <span className="w-14 font-mono t-value">{factCell(key)}</span>
                   <span className="t-caption" style={muted}>
                     {fact.unit}
                   </span>

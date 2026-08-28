@@ -87,7 +87,7 @@ export function ParadigmA({ editor }: { editor: Editor }) {
       onClick={() => setAnchor(id)}
       className="face-mono t-label"
       style={{
-        background: "transparent",
+        backgroundColor: "transparent",
         border: "none",
         borderBottom: `0.5px solid ${token("line-2")}`,
         borderRadius: 0,
@@ -295,7 +295,7 @@ function RailRow({
       onClick={onPick}
       className="flex w-full items-baseline justify-between gap-2 px-1 py-0.5 text-left"
       style={{
-        background: current ? token("select") : "transparent",
+        backgroundColor: current ? token("select") : "transparent",
         border: "none",
         borderRadius: 2,
         cursor: "pointer",

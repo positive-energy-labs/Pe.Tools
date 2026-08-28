@@ -59,19 +59,19 @@ export function ExportSheet({
         style={{ borderColor: token("line") }}
       >
         <span className="face-mono t-label t-upper text-ink-mute">export sheet</span>
-        <span className="face-mono text-[11px] text-ink-2">
+        <span className="face-mono t-label text-ink-2">
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
         <Press
           type="button"
-          className="face-mono ml-auto text-[11px] text-nav"
+          className="face-mono ml-auto t-label text-nav"
           onClick={() => window.print()}
         >
           print / save PDF
         </Press>
         <Press
           type="button"
-          className="face-mono text-[11px] text-ink-2 hover:text-ink"
+          className="face-mono t-label text-ink-2 hover:text-ink"
           onClick={onClose}
         >
           close
@@ -81,7 +81,7 @@ export function ExportSheet({
       <div id="grille-export-sheet" className="mx-auto max-w-[1100px] p-8">
         {/* title block */}
         <div
-          className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 text-[11px]"
+          className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 t-label"
           style={{ borderColor: token("ink") }}
         >
           <div>
@@ -102,7 +102,7 @@ export function ExportSheet({
         </div>
 
         {rows.length === 0 && (
-          <p className="face-mono py-8 text-[12px] text-ink-2">
+          <p className="face-mono py-8 t-value text-ink-2">
             nothing on the sheet — tick rows in the table first
           </p>
         )}
@@ -113,7 +113,7 @@ export function ExportSheet({
         >
           {rows.map((r, i) => (
             <figure key={r.id} id={`export-${r.id}`} className="min-w-0 break-inside-avoid">
-              <figcaption className="face-mono flex items-baseline gap-3 text-[11px]">
+              <figcaption className="face-mono flex items-baseline gap-3 t-label">
                 <b>G-{i + 1}</b>
                 <span>
                   {frac(r.boardLength)} × {frac(r.boardWidth)} · {r.openings} × {frac(r.opening)}″

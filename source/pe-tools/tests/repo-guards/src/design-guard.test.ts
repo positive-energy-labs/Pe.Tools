@@ -27,10 +27,13 @@
  *                        a colour literal" — a colour is a one-line edit in base.css.
  *  5. sub-10px type      text-[Npx] with N < 10. The 10px floor from the type-tier ruling
  *                        (ops enforced it on itself; the flagship pass finished the job).
+ *  6. inline backgrounds  background: in TypeScript/TSX style objects. The shared veil uses
+ *                        background-image, so a shorthand reset is forbidden; CSS declarations
+ *                        remain legal.
  *
  * ── RATCHET (count may only fall; baselines in design-guard.baseline.json) ─────────────────
- *  textPx           any text-[Npx]: off-tier type. The tier system (t-* classes) is the scale;
- *                   the remaining spends are exhibit chrome + a few audited sites.
+ *  rawTextSize      any raw text-[Npx] or named Tailwind text-size utility. The tier system
+ *                   (t-* classes) is the scale; the remaining spends are non-exact tail sites.
  *  rawButton        <button> outside components/ui + components/lang: verbs come from
  *                   lang/Verb; the tail is non-verb machinery.
  *  uiButtonImports  import sites of ui/button — the still-open half; each route
@@ -139,6 +142,10 @@ const stripComments = (text: string): string =>
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
     .replace(/(^|[^:])\/\/[^\n]*/gm, (m, pre: string) => pre + " ".repeat(m.length - pre.length));
 
+/** Blank out template literals so CSS-in-TS declarations do not look like inline style objects. */
+const stripTemplateLiterals = (text: string): string =>
+  text.replace(/`[\s\S]*?`/g, (m) => m.replace(/[^\n]/g, " "));
+
 // ── hard zeros ───────────────────────────────────────────────────────────────────────────────
 
 describe("design guard — carried debt ratchets", () => {
@@ -181,6 +188,15 @@ describe("design guard — carried debt ratchets", () => {
     const offences = scan(FILES, re);
     ratchet("sub10", offences);
   });
+
+  it("no inline background shorthand in TypeScript/TSX", () => {
+    const code = FILES.filter((f) => /\.tsx?$/.test(f.rel)).map((f) => ({
+      ...f,
+      text: stripTemplateLiterals(stripComments(f.text)),
+    }));
+    const offences = scan(code, /\bbackground\s*:/g);
+    expect(offences, report(offences)).toEqual([]);
+  });
 });
 
 // ── ratchets ─────────────────────────────────────────────────────────────────────────────────
@@ -217,8 +233,9 @@ const ratchet = (name: string, offences: Offence[]) => {
 };
 
 describe("design guard — ratchets (baselines may only fall)", () => {
-  it("textPx — arbitrary text-[Npx] off the tier ladder", () => {
-    ratchet("textPx", scan(FILES, /text-\[\d+px\]/g));
+  it("rawTextSize — arbitrary and named raw text-size utilities", () => {
+    const re = /(?<![-\w])text-(?:\[(?:\d+(?:\.\d+)?|\.\d+)px\]|xs|sm|base|lg|xl|\d+xl)(?![-\w])/g;
+    ratchet("rawTextSize", scan(FILES, re));
   });
 
   it("rawButton — <button> outside components/ui + components/lang", () => {

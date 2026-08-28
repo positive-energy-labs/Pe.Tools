@@ -105,9 +105,9 @@ export function PickList({
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1" role="listbox">
         {items.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-ink-2">{emptyNote}</div>
+          <div className="px-3 py-2 t-value text-ink-2">{emptyNote}</div>
         ) : flat.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-ink-2">Nothing matches “{query.trim()}”.</div>
+          <div className="px-3 py-2 t-value text-ink-2">Nothing matches “{query.trim()}”.</div>
         ) : (
           [...groups.entries()].map(([group, groupItems]) => (
             <div key={group} className="mb-1">
@@ -129,7 +129,7 @@ export function PickList({
                     onClick={() => onPick(item.id)}
                     onMouseEnter={() => setCursor(itemIndex)}
                     className={cn(
-                      "flex w-full items-baseline gap-2 border-l-2 px-3 py-1 text-left text-xs",
+                      "flex w-full items-baseline gap-2 border-l-2 px-3 py-1 text-left t-value",
                       // Selection is a FILL, never a hue: the select rung plus a neutral
                       // ink locate mark. No weight — chrome never buys weight.
                       active ? "border-ink bg-select text-ink" : "border-transparent text-ink",

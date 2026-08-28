@@ -180,7 +180,7 @@ export type Column<Row> = {
 /** The head band shifts the ground, so `--pe-on` is re-declared on the same rule
  * (the design-lang plumbing convention). */
 const RECESS_GROUND = {
-  background: token("recess"),
+  backgroundColor: token("recess"),
   "--pe-on": token("recess"),
 } as CSSProperties;
 

@@ -76,7 +76,7 @@ function FieldMetadataTooltip({
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup className="z-50 max-w-sm rounded-md border border-line bg-page px-3 py-2 text-xs shadow-lg">
+            <Tooltip.Popup className="z-50 max-w-sm rounded-md border border-line bg-page px-3 py-2 t-value shadow-lg">
               <div className="space-y-2">
                 {description ? (
                   <div className="space-y-1">
@@ -139,7 +139,7 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup className="z-50 max-w-sm rounded-md border border-line bg-page px-3 py-2 text-xs shadow-lg">
+            <Tooltip.Popup className="z-50 max-w-sm rounded-md border border-line bg-page px-3 py-2 t-value shadow-lg">
               <div className="space-y-2">
                 {change.isComposite && nestedChanges > 0 ? (
                   <p className="text-ink-2">
@@ -182,7 +182,7 @@ export function FieldMessages({
   return (
     <div
       className={cn(
-        "rounded-[2px] border px-3 py-2 text-xs",
+        "rounded-[2px] border px-3 py-2 t-value",
         "border-alarm/30 bg-alarm/10 text-alarm",
         compact && "t-label px-2 py-1.5",
       )}

@@ -135,7 +135,7 @@ function Block({
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="face-mono t-label text-ink">{name}</span>
         {/* `code` is display:block app-wide; `w-fit` keeps the path a token you select, not a band. */}
-        <code className="w-fit font-[family-name:var(--font-pe-mono)] text-[10px] break-all text-ink-2 select-all">
+        <code className="w-fit face-mono t-caption break-all text-ink-2 select-all">
           #/components/{group}/{file}
         </code>
         <span className="face-mono t-caption text-ink-mute">
@@ -263,11 +263,7 @@ function Jump({ group, files }: { group: "lang" | "ui"; files: readonly string[]
     <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
       <span className="t-caption t-upper text-ink">{group}</span>
       {files.map((f) => (
-        <a
-          key={f}
-          href={`#${group}-${f}`}
-          className="font-[family-name:var(--font-pe-mono)] text-[10px] text-nav hover:underline"
-        >
+        <a key={f} href={`#${group}-${f}`} className="face-mono t-caption text-nav hover:underline">
           {f}
         </a>
       ))}
@@ -279,15 +275,15 @@ function Jump({ group, files }: { group: "lang" | "ui"; files: readonly string[]
 
 function Swatch() {
   return (
-    <div className="min-h-screen bg-page text-[13px] leading-normal text-ink">
+    <div className="min-h-screen bg-page t-prose leading-normal text-ink">
       <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
         <div className="page-wrap flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
-            <Link to="/design-system" className="text-[11px] text-nav hover:underline">
+            <Link to="/design-system" className="t-label text-nav hover:underline">
               ← design system
             </Link>
             <span className="font-pe-display text-sm font-semibold tracking-tight">swatch</span>
-            <span className="truncate text-[11px] text-ink-2">
+            <span className="truncate t-label text-ink-2">
               every component · every variant · every state · the import path
             </span>
             <FactChip
@@ -328,7 +324,7 @@ function Swatch() {
 function GroupHead({ title, note }: { title: string; note: string }) {
   return (
     <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
-      <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
+      <span className="t-label font-semibold tracking-[0.09em] uppercase">{title}</span>
       <span className="min-w-0 flex-1 text-[11.5px] text-ink-2">{note}</span>
     </div>
   );
@@ -912,7 +908,7 @@ function UiGroup() {
             </Card>
           </Spec>
           <Spec cap="render prop → polymorphic" className="w-52">
-            <Card className="p-3 text-[11px]">{"<Card render={<Link/>} />"}</Card>
+            <Card className="p-3 t-label">{"<Card render={<Link/>} />"}</Card>
           </Spec>
         </Lane>
       </Block>
@@ -1079,7 +1075,7 @@ function UiGroup() {
                     </Button>
                   }
                 >
-                  <div className="p-2 text-[11px] text-ink-2">body</div>
+                  <div className="p-2 t-label text-ink-2">body</div>
                 </Pane>
               </Bound>
             </Spec>
@@ -1153,7 +1149,7 @@ function UiGroup() {
                 minWidth={110}
                 header={<span className="face-mono t-caption">header</span>}
               >
-                <div className="p-2 text-[11px] text-ink-2">body</div>
+                <div className="p-2 t-label text-ink-2">body</div>
               </SidePane>
               <div className="flex-1" />
             </Bound>
@@ -1168,7 +1164,7 @@ function UiGroup() {
                 minWidth={110}
                 header={<span className="face-mono t-caption">header</span>}
               >
-                <div className="p-2 text-[11px] text-ink-2">body</div>
+                <div className="p-2 t-label text-ink-2">body</div>
               </SidePane>
               <div className="flex-1" />
             </Bound>

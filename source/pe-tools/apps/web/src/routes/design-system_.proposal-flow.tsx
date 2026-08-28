@@ -95,7 +95,7 @@ function ProposalFlow() {
   const attention = items.filter((i) => i.review !== "denied" && i.confidence === "low").length;
 
   return (
-    <div className="min-h-screen bg-page text-[13px] text-ink">
+    <div className="min-h-screen bg-page t-prose text-ink">
       <Header
         title="proposal flow"
         note="one in-memory world, two scales — the card and the table are the same values"
@@ -122,7 +122,7 @@ function ProposalFlow() {
             {PROPOSAL_THREAD.map((m, i) => (
               <div key={i} className="flex gap-3 pb-2.5">
                 <span
-                  className="w-8 shrink-0 pt-0.5 font-[family-name:var(--font-pe-mono)] text-[10px] tracking-[0.09em] uppercase"
+                  className="w-8 shrink-0 pt-0.5 face-mono t-caption tracking-[0.09em] uppercase"
                   style={{ color: m.who === "pea" ? token("pea-ink") : token("ink-2") }}
                 >
                   {m.who}
@@ -179,7 +179,7 @@ function ProposalFlow() {
                     key={item.key}
                     className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 border-b border-line px-2.5 py-2 last:border-b-0"
                   >
-                    <span className="truncate font-[family-name:var(--font-pe-mono)] text-[10.5px] text-ink-2">
+                    <span className="truncate face-mono text-[10.5px] text-ink-2">
                       {item.param}
                     </span>
                     <span className="flex min-w-0 flex-wrap items-baseline gap-2">
@@ -190,7 +190,7 @@ function ProposalFlow() {
                           beside the cell rather than smuggled into `value`, so the two scales stay
                           honestly different where the model is honestly incomplete. */}
                       {item.review === "open" && item.current != null ? (
-                        <span className="font-[family-name:var(--font-pe-mono)] text-[10.5px] text-ink-mute">
+                        <span className="face-mono text-[10.5px] text-ink-mute">
                           {item.current} →
                         </span>
                       ) : null}
@@ -336,7 +336,7 @@ function ProposalTable({
         width: "w-24",
         facet: (r) => r.review,
         cell: (r) => (
-          <span className="block px-1.5 py-1 font-[family-name:var(--font-pe-mono)] text-[10px] text-ink-mute">
+          <span className="block px-1.5 py-1 face-mono t-caption text-ink-mute">
             {committed && r.review === "accepted" ? "written" : r.review}
           </span>
         ),
@@ -378,11 +378,11 @@ function Header({ title, note }: { title: string; note: string }) {
     <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
       <div className="page-wrap flex items-center justify-between py-2.5">
         <div className="flex min-w-0 items-baseline gap-3">
-          <Link to="/design-system" className="text-[11px] text-nav hover:underline">
+          <Link to="/design-system" className="t-label text-nav hover:underline">
             ← design system
           </Link>
           <span className="font-pe-display text-sm font-semibold tracking-tight">{title}</span>
-          <span className="truncate text-[11px] text-ink-2">{note}</span>
+          <span className="truncate t-label text-ink-2">{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no document.">
             fixture
           </FactChip>
@@ -397,7 +397,7 @@ function SectionHead({ n, title, note }: { n: string; title: string; note: strin
   return (
     <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
       <span className="face-mono t-caption text-ink-mute">{n}</span>
-      <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
+      <span className="t-label font-semibold tracking-[0.09em] uppercase">{title}</span>
       <span className="min-w-0 flex-1 text-[11.5px] text-ink-2">{note}</span>
     </div>
   );
@@ -405,7 +405,7 @@ function SectionHead({ n, title, note }: { n: string; title: string; note: strin
 
 function Gap({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-[86ch] border-l border-dashed border-line-2 pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-ink-2">
+    <p className="max-w-[86ch] border-l border-dashed border-line-2 pl-2 face-mono t-caption leading-relaxed text-ink-2">
       <span className="text-caution">gap · </span>
       {children}
     </p>

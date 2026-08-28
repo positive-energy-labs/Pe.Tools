@@ -234,7 +234,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
       <FieldMessages messages={field.errors} />
       <div className="overflow-auto rounded-lg border border-line">
         <table className="min-w-full border-collapse text-sm">
-          <thead className="bg-recess/50 text-left text-xs uppercase tracking-wide text-ink-2">
+          <thead className="bg-recess/50 text-left t-value uppercase tracking-wide text-ink-2">
             <tr>
               {fixedColumns.map(([columnKey]) => (
                 <th key={columnKey} className="px-3 py-2">
@@ -323,7 +323,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
         ) : null}
       </div>
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-ink-2">
+        <span className="t-value text-ink-2">
           {primaryColumnOptions.isLoading
             ? "Loading table suggestions..."
             : "Schema-driven table with fixed and dynamic columns."}

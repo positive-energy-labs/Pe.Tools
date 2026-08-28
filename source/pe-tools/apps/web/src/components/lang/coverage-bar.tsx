@@ -48,7 +48,7 @@ export function CoverageBar({
             className="dl-coverage-seg"
             style={{
               width: `${(s.count / denom) * 100}%`,
-              background: `color-mix(in srgb, ${token(`viz-${s.viz}`)} 55%, transparent)`,
+              backgroundColor: `color-mix(in srgb, ${token(`viz-${s.viz}`)} 55%, transparent)`,
             }}
           />
         ))}
@@ -63,7 +63,7 @@ export function CoverageBar({
       <div className="dl-coverage-legend">
         {segments.map((s) => (
           <span key={s.label} className="dl-coverage-key">
-            <span className="dl-coverage-dot" style={{ background: token(`viz-${s.viz}`) }} />
+            <span className="dl-coverage-dot" style={{ backgroundColor: token(`viz-${s.viz}`) }} />
             <span className="dl-coverage-label">{s.label}</span> {s.count}
           </span>
         ))}

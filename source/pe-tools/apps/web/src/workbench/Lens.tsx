@@ -518,7 +518,7 @@ export function Lens({
                 top: 0,
                 bottom: 0,
                 width: 2,
-                background: targetRailColor,
+                backgroundColor: targetRailColor,
                 opacity: targetTone === "muted" ? 0.25 : 0.55,
                 zIndex: 1,
               }}
@@ -553,7 +553,7 @@ export function Lens({
                         height: 2,
                         // A vanished session is a caution fact; ordinary bridge events keep
                         // their lane's taxonomy hue (viz ladder via laneVar).
-                        background:
+                        backgroundColor:
                           event.kind === "session-gone"
                             ? token("caution")
                             : laneVar(
@@ -592,9 +592,7 @@ export function Lens({
               {moments.length === 0 ? (
                 <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
                   {/* Pea's name wears the agent identity — never blue (design-lang law). */}
-                  <h1 className="m-0 font-[var(--font-display)] text-[30px] font-semibold text-pea">
-                    Pea
-                  </h1>
+                  <h1 className="m-0 font-pe-display text-[30px] font-semibold text-pea">Pea</h1>
                   <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
                     no messages in this thread yet
                   </EmptyState>

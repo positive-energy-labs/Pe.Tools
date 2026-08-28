@@ -141,7 +141,7 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
-        "relative flex min-h-7 w-full cursor-default items-center gap-2 rounded-md px-2 py-1 text-xs/relaxed outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink not-data-[variant=destructive]:data-highlighted:**:text-ink data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+        "relative flex min-h-7 w-full cursor-default items-center gap-2 rounded-md px-2 py-1 t-value outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink not-data-[variant=destructive]:data-highlighted:**:text-ink data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
         className,
       )}
       {...props}
@@ -168,7 +168,7 @@ function ComboboxLabel({ className, ...props }: ComboboxPrimitive.GroupLabel.Pro
   return (
     <ComboboxPrimitive.GroupLabel
       data-slot="combobox-label"
-      className={cn("px-2 py-1.5 text-xs text-ink-2", className)}
+      className={cn("px-2 py-1.5 t-value text-ink-2", className)}
       {...props}
     />
   );
@@ -183,7 +183,7 @@ function ComboboxEmpty({ className, ...props }: ComboboxPrimitive.Empty.Props) {
     <ComboboxPrimitive.Empty
       data-slot="combobox-empty"
       className={cn(
-        "hidden w-full justify-center py-2 text-center text-xs/relaxed text-ink-2 group-data-empty/combobox-content:flex",
+        "hidden w-full justify-center py-2 text-center t-value text-ink-2 group-data-empty/combobox-content:flex",
         className,
       )}
       {...props}
@@ -209,7 +209,7 @@ function ComboboxChips({
     <ComboboxPrimitive.Chips
       data-slot="combobox-chips"
       className={cn(
-        "flex min-h-7 flex-wrap items-center gap-1 rounded-md border border-line bg-line/20 bg-clip-padding px-2 py-0.5 text-xs/relaxed transition-colors focus-within:border-line-2 focus-within:ring-2 focus-within:ring-line-2/30 has-aria-invalid:border-caution has-aria-invalid:ring-2 has-aria-invalid:ring-caution/20 has-data-[slot=combobox-chip]:px-1 dark:bg-line/30 dark:has-aria-invalid:border-caution/50 dark:has-aria-invalid:ring-caution/40",
+        "flex min-h-7 flex-wrap items-center gap-1 rounded-md border border-line bg-line/20 bg-clip-padding px-2 py-0.5 t-value transition-colors focus-within:border-line-2 focus-within:ring-2 focus-within:ring-line-2/30 has-aria-invalid:border-caution has-aria-invalid:ring-2 has-aria-invalid:ring-caution/20 has-data-[slot=combobox-chip]:px-1 dark:bg-line/30 dark:has-aria-invalid:border-caution/50 dark:has-aria-invalid:ring-caution/40",
         className,
       )}
       {...props}
@@ -229,7 +229,7 @@ function ComboboxChip({
     <ComboboxPrimitive.Chip
       data-slot="combobox-chip"
       className={cn(
-        "flex h-[calc(--spacing(4.75))] w-fit items-center justify-center gap-1 rounded-[calc(var(--radius-sm)-2px)] bg-ink-2/10 px-1.5 text-xs/relaxed font-medium whitespace-nowrap text-ink has-disabled:pointer-events-none has-disabled:cursor-not-allowed has-disabled:opacity-50 has-data-[slot=combobox-chip-remove]:pr-0",
+        "flex h-[calc(--spacing(4.75))] w-fit items-center justify-center gap-1 rounded-[calc(var(--radius-sm)-2px)] bg-ink-2/10 px-1.5 t-value font-medium whitespace-nowrap text-ink has-disabled:pointer-events-none has-disabled:cursor-not-allowed has-disabled:opacity-50 has-data-[slot=combobox-chip-remove]:pr-0",
         className,
       )}
       {...props}

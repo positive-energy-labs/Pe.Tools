@@ -137,7 +137,7 @@ export function StatePanel({
   return (
     <aside
       className="flex min-h-0 w-80 shrink-0 flex-col border-l"
-      style={{ borderColor: token("line"), background: token("artifact") }}
+      style={{ borderColor: token("line"), backgroundColor: token("artifact") }}
     >
       <div className="border-b px-3 py-2" style={{ borderColor: token("line") }}>
         <div className="flex items-baseline justify-between gap-2">
@@ -160,7 +160,7 @@ export function StatePanel({
                   title={`Show ${change.path} in the json pane`}
                   className="face-mono t-caption w-full text-left"
                   style={{
-                    background: editor.focus === change.path ? token("select") : "transparent",
+                    backgroundColor: editor.focus === change.path ? token("select") : "transparent",
                     border: "none",
                     borderRadius: 2,
                     cursor: "pointer",
@@ -254,7 +254,7 @@ export function RefToken({
         style={{
           padding: "0 1px",
           cursor: "pointer",
-          background: open ? token("select") : "transparent",
+          backgroundColor: open ? token("select") : "transparent",
           border: "none",
           borderBottom: `0.5px solid ${bound ? token("ink") : token("caution")}`,
           borderRadius: 0,
@@ -271,13 +271,13 @@ export function RefToken({
             aria-label="close picker"
             onClick={() => setOpen(false)}
             className="fixed inset-0 z-20 cursor-default"
-            style={{ background: "transparent", border: "none" }}
+            style={{ backgroundColor: "transparent", border: "none" }}
           />
           <div
             className="absolute left-0 top-full z-30 mt-1 max-h-72 w-72 overflow-y-auto px-1 py-1"
             style={{
               border: `0.5px solid ${token("line-2")}`,
-              background: token("page"),
+              backgroundColor: token("page"),
               borderRadius: 2,
             }}
           >
@@ -296,7 +296,7 @@ export function RefToken({
                   }}
                   className="face-mono t-label flex w-full items-baseline justify-between gap-2 px-1 py-0.5 text-left"
                   style={{
-                    background: option === value ? token("select") : "transparent",
+                    backgroundColor: option === value ? token("select") : "transparent",
                     border: "none",
                     cursor: "pointer",
                     color: token("ink"),
@@ -347,7 +347,7 @@ export function TextToken({
       style={{
         width,
         padding: "0 2px",
-        background: draft != null ? token("select") : "transparent",
+        backgroundColor: draft != null ? token("select") : "transparent",
         border: "none",
         borderBottom: `0.5px solid ${value ? token("ink") : token("caution")}`,
         borderRadius: 0,
@@ -370,7 +370,7 @@ export function TypeStage({ editor }: { editor: Editor }) {
           onClick={() => editor.setTypeName(name)}
           className="face-mono t-label px-1"
           style={{
-            background: name === editor.typeName ? token("select") : "transparent",
+            backgroundColor: name === editor.typeName ? token("select") : "transparent",
             border: "none",
             borderRadius: 2,
             cursor: "pointer",

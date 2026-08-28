@@ -264,7 +264,7 @@ export function ProposalCard({
          rung) and the focus wash is mixed from pea's ink. */
       style={{
         borderLeft: `1.5px solid ${token("pea")}`,
-        background: focused
+        backgroundColor: focused
           ? `color-mix(in srgb, ${token("pea-ink")} 12%, transparent)`
           : "transparent",
         transition: "background 0.25s",

@@ -279,7 +279,10 @@ function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
          re-declares the ground it shifted. */
       style={
         isActive
-          ? ({ background: token("select"), "--pe-on": token("select") } as React.CSSProperties)
+          ? ({
+              backgroundColor: token("select"),
+              "--pe-on": token("select"),
+            } as React.CSSProperties)
           : undefined
       }
     >
@@ -725,7 +728,7 @@ function ScoreBar({ score, max, muted }: { score: number; max: number; muted: bo
           className="block h-full rounded-[1px]"
           style={{
             width: `${frac * 100}%`,
-            background: muted ? token("ink-mute") : token("viz-1"),
+            backgroundColor: muted ? token("ink-mute") : token("viz-1"),
           }}
         />
       </span>

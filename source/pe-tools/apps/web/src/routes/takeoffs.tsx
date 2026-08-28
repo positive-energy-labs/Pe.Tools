@@ -513,7 +513,7 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
             </span>
             <span
               className="inline-block size-2.5 shrink-0 rounded-[1px]"
-              style={{ background: `rgb(${r.region.color})` }}
+              style={{ backgroundColor: `rgb(${r.region.color})` }}
             />
             <span
               className="face-mono t-value w-24 shrink-0 truncate text-ink-2"

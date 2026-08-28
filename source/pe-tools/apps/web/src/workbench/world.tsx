@@ -291,7 +291,10 @@ export function WorldLane({
                 type="button"
                 onClick={() => toggle(layer.id)}
               >
-                <span className="size-[9px] rounded-[2px]" style={{ background: tone(layer.id) }} />
+                <span
+                  className="size-[9px] rounded-[2px]"
+                  style={{ backgroundColor: tone(layer.id) }}
+                />
                 <span className="t-value text-ink">
                   {layer.label}
                   {inspect ? (
@@ -473,16 +476,16 @@ function BudgetBar({
     <span className={className}>
       <span
         className="min-w-px border-r-[0.5px] border-line"
-        style={{ flexGrow: tools, background: tint("tools") }}
+        style={{ flexGrow: tools, backgroundColor: tint("tools") }}
       />
       <span
         className="min-w-px border-r-[0.5px] border-line"
-        style={{ flexGrow: system, background: tint("system-prompt") }}
+        style={{ flexGrow: system, backgroundColor: tint("system-prompt") }}
       />
       <span className={BAR_WIN} style={{ flexGrow: obsCap }}>
         <span
           className={cn(BAR_FILL, mw.reflecting && pulse)}
-          style={{ width: fill(mw.observationTokens, obsCap), background: tint("memory") }}
+          style={{ width: fill(mw.observationTokens, obsCap), backgroundColor: tint("memory") }}
         />
         {/* reflect floor: a recorded low-water mark — a real measured fact, so a SOLID
             caution hairline (dashed is reserved for seam). */}
@@ -497,7 +500,7 @@ function BudgetBar({
       <span className={BAR_WIN} style={{ flexGrow: msgCap }}>
         <span
           className={cn(BAR_FILL, mw.observing && pulse)}
-          style={{ width: fill(mw.messageTokens, msgCap), background: tint("messages") }}
+          style={{ width: fill(mw.messageTokens, msgCap), backgroundColor: tint("messages") }}
         />
         <span className={BAR_TRIG} title={`observe at ${fmtTok(msgCap)}`} />
       </span>
@@ -626,7 +629,10 @@ export function ContextRibbon({
       <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] rounded-sm border-[0.5px] border-line-2 on-page px-2.5 py-2 t-label text-ink-2 group-hover/ribbon:flex group-focus-visible/ribbon:flex">
         {rows.map((row) => (
           <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
-            <span className="size-2 flex-none rounded-[2px]" style={{ background: tone(row.id) }} />
+            <span
+              className="size-2 flex-none rounded-[2px]"
+              style={{ backgroundColor: tone(row.id) }}
+            />
             {row.label}
             {/* an active compaction is BUSY — neutral ink, not blue */}
             {row.active ? <span className="ml-1 text-ink-2">⟲</span> : null}

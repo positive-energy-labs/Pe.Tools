@@ -280,7 +280,7 @@ const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
 
 const POP: React.CSSProperties = {
   border: `1px solid ${token("line-2")}`,
-  background: token("page"),
+  backgroundColor: token("page"),
   boxShadow: `0 2px 8px color-mix(in srgb, ${token("ink")} 8%, transparent)`,
   minWidth: 320,
 };
@@ -378,7 +378,7 @@ export function Picker<K extends string>({
         style={{
           padding: 0,
           cursor: inert ? "not-allowed" : "pointer",
-          background: open ? token("select") : "transparent",
+          backgroundColor: open ? token("select") : "transparent",
           borderBottom: `1px solid ${caution ? token("caution") : token("ink")}`,
           color: caution ? token("caution") : token("ink"),
           whiteSpace: "nowrap",
@@ -410,7 +410,7 @@ export function Picker<K extends string>({
                     className="face-mono t-caption"
                     style={{
                       padding: "0 3px",
-                      background: on ? token("select") : "transparent",
+                      backgroundColor: on ? token("select") : "transparent",
                       color: lab == null ? token("caution") : token("ink"),
                       borderBottom: on ? `1px solid ${token("ink")}` : "1px solid transparent",
                     }}
@@ -436,7 +436,7 @@ export function Picker<K extends string>({
             placeholder={`search ${cur.key}${opts ? ` · ${opts.length}` : ""}`}
             className="t-value w-full px-2 py-1"
             style={{
-              background: "transparent",
+              backgroundColor: "transparent",
               borderBottom: `1px solid ${token("line-2")}`,
               outline: "none",
               color: token("ink"),
@@ -475,7 +475,7 @@ export function Picker<K extends string>({
                       advance();
                     }}
                     className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                    style={{ background: on ? token("select") : undefined }}
+                    style={{ backgroundColor: on ? token("select") : undefined }}
                   >
                     {cur.multi ? (
                       <span className="face-mono t-caption">{on ? "☑" : "☐"}</span>
@@ -512,7 +512,9 @@ export function Picker<K extends string>({
                       setQ("");
                     }}
                     className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                    style={{ background: b.isPicked(below!, o.id) ? token("select") : undefined }}
+                    style={{
+                      backgroundColor: b.isPicked(below!, o.id) ? token("select") : undefined,
+                    }}
                   >
                     {below!.multi ? (
                       <span className="face-mono t-caption">
@@ -583,7 +585,7 @@ export function StageStrip<K extends string>({
             className="face-mono t-caption t-upper flex items-baseline gap-2 px-2.5 py-1"
             style={{
               borderLeft: i > 0 ? `1px solid ${token("line-2")}` : undefined,
-              background: on ? token("select") : "transparent",
+              backgroundColor: on ? token("select") : "transparent",
               boxShadow: on ? `inset 0 -2px 0 ${token("ink")}` : undefined,
               color: on ? token("ink") : token("ink-2"),
             }}
@@ -635,7 +637,7 @@ export function PaneStrip<K extends string>({
               color: st.ok ? token("ink") : token("ink-mute"),
               fontStyle: st.ok ? undefined : "italic",
               borderBottom: st.ok ? `1px solid ${token("line-2")}` : "1px solid transparent",
-              background: "transparent",
+              backgroundColor: "transparent",
               padding: 0,
               pointerEvents: st.ok ? undefined : "none",
             }}

@@ -440,7 +440,7 @@ export function VariantA() {
             borderBottom: `0.5px solid ${token("ink")}`,
             borderRadius: 0,
             // selection is a FILL, never a hue
-            background: active === tb.key ? token("select") : "transparent",
+            backgroundColor: active === tb.key ? token("select") : "transparent",
             color: token("ink"),
             whiteSpace: "nowrap",
           }}
@@ -462,7 +462,7 @@ export function VariantA() {
   return (
     <div
       className="flex h-screen flex-col"
-      style={{ background: token("page"), color: token("ink") }}
+      style={{ backgroundColor: token("page"), color: token("ink") }}
     >
       <AddressingBar
         name="param tables"
@@ -595,7 +595,7 @@ export function VariantA() {
                           ...(isSel
                             ? // selection is a FILL; re-declare --pe-on so cell washes land right
                               ({
-                                background: token("select"),
+                                backgroundColor: token("select"),
                                 "--pe-on": token("select"),
                               } as CSSProperties)
                             : {}),
@@ -886,7 +886,7 @@ export function VariantA() {
                     onChange={(e) => setPickParam(e.target.value)}
                     title="the target parameter — type-scope perf params only in this proto"
                     style={{
-                      background: token("artifact"),
+                      backgroundColor: token("artifact"),
                       color: token("ink"),
                       border: `0.5px solid ${token("line-2")}`,
                       borderRadius: 2,

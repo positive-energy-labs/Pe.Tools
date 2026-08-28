@@ -168,7 +168,7 @@ export function HostIssuePanel({
         issue.kind === "conflict" || issue.kind === "bridge_busy"
           ? "border-caution/30 bg-caution/10 text-caution"
           : "border-alarm/30 bg-alarm/10 text-alarm",
-        compact && "p-2 text-xs",
+        compact && "p-2 t-value",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -181,7 +181,7 @@ export function HostIssuePanel({
         </div>
         {action}
       </div>
-      <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] opacity-80">
+      <div className="mt-2 flex flex-wrap gap-1.5 t-caption opacity-80">
         {issue.status ? <HostIssueMeta>status {issue.status}</HostIssueMeta> : null}
         {issue.operationKey ? <HostIssueMeta>{issue.operationKey}</HostIssueMeta> : null}
         {issue.activeOperation ? (
@@ -193,7 +193,7 @@ export function HostIssuePanel({
         ) : null}
       </div>
       {issue.fieldIssues?.length ? (
-        <ul className="mt-2 space-y-1 text-xs">
+        <ul className="mt-2 space-y-1 t-value">
           {issue.fieldIssues.slice(0, 5).map((fieldIssue) => (
             <li key={`${fieldIssue.path}:${fieldIssue.message}`} className="break-words">
               <code>{fieldIssue.path}</code>: {fieldIssue.message}
@@ -211,7 +211,7 @@ function HostIssueMeta({ children }: { children: ReactNode }) {
 
 export function HostConnectionPill({ connected, label }: { connected: boolean; label?: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-ink-2">
+    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap t-value text-ink-2">
       <span className={cn("size-2 rounded-full", connected ? "bg-ink" : "bg-ink-2/50")} />
       {connected ? (label ?? "Connected") : "Disconnected"}
     </span>

@@ -215,7 +215,7 @@ function ZoneStateBar({
           key={i}
           className="min-w-px flex-1 rounded-[1px]"
           style={{
-            background: stateInk(s),
+            backgroundColor: stateInk(s),
             opacity: s === "unreviewed" ? 0.3 : 0.9,
           }}
         />
@@ -236,7 +236,10 @@ function Swatch({ tone, label, seam }: { tone: string; label: string; seam?: boo
           "inline-block size-2.5 rounded-[1px] border",
           seam === true && "border-dashed",
         )}
-        style={{ background: `color-mix(in srgb, ${tone} 16%, transparent)`, borderColor: tone }}
+        style={{
+          backgroundColor: `color-mix(in srgb, ${tone} 16%, transparent)`,
+          borderColor: tone,
+        }}
       />
       {label}
     </span>
@@ -586,7 +589,7 @@ export function Atlas({ store }: AtlasProps) {
           <span className="face-mono t-value block truncate px-1.5">
             <span
               className="mr-1 inline-block size-2 rounded-[1px] align-middle"
-              style={{ background: `rgb(${row.zone.zone.color})` }}
+              style={{ backgroundColor: `rgb(${row.zone.zone.color})` }}
             />
             {row.zone.zone.key}
           </span>
@@ -895,7 +898,7 @@ export function Atlas({ store }: AtlasProps) {
                               >
                                 <ZoneThumb zone={z.zone} className="size-5" />
                                 <span className="face-mono t-value shrink-0">{z.zone.key}</span>
-                                <span className="min-w-0 flex-1 truncate text-xs text-ink-2">
+                                <span className="min-w-0 flex-1 truncate t-value text-ink-2">
                                   {off ? "off-plan scribble" : z.name}
                                 </span>
                                 {calls > 0 && (
@@ -1433,7 +1436,7 @@ function LevelStats({
               title={`${STATE_META[s].label} — ${fmtNum(area[s], 0)} sf`}
               style={{
                 width: `${(area[s] / Math.max(totalArea, 1)) * 100}%`,
-                background: stateInk(s),
+                backgroundColor: stateInk(s),
                 opacity: s === "unreviewed" ? 0.35 : 0.9,
               }}
             />
@@ -1698,7 +1701,7 @@ function RoomPanel({
     >
       <div className="divide-y divide-line">
         <div className="px-2.5 py-2">
-          <h2 className="font-pe-display text-base leading-tight font-semibold tracking-tight">
+          <h2 className="font-pe-display t-title leading-tight font-semibold tracking-tight">
             {room.name}
           </h2>
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5">

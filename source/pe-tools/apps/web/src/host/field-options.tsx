@@ -103,7 +103,7 @@ export function FieldOptionSelect({
             <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
               <span>{option.label}</span>
               {option.description ? (
-                <span className="text-[10px] text-ink-2">{option.description}</span>
+                <span className="t-caption text-ink-2">{option.description}</span>
               ) : null}
             </ComboboxItem>
           )}
@@ -160,7 +160,7 @@ export function FieldOptionMultiSelect({
               <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
                 <span>{option.label}</span>
                 {option.description ? (
-                  <span className="text-[10px] text-ink-2">{option.description}</span>
+                  <span className="t-caption text-ink-2">{option.description}</span>
                 ) : null}
               </ComboboxItem>
             )}

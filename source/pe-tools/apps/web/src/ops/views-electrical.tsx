@@ -550,7 +550,9 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
       {/* the head band is a recessed ground shift — --pe-on re-declared with it. */}
       <div
         className="flex items-baseline justify-between gap-2 border-b border-line-2 px-2 py-1.5"
-        style={{ background: token("recess"), "--pe-on": token("recess") } as React.CSSProperties}
+        style={
+          { backgroundColor: token("recess"), "--pe-on": token("recess") } as React.CSSProperties
+        }
       >
         <h3 className="face-mono t-value truncate" title={panelName}>
           {panelName}

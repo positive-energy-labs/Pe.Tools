@@ -103,7 +103,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                   height={SIZE}
                   viewBox={`0 0 ${SIZE} ${SIZE}`}
                   style={{
-                    background: token("page"),
+                    backgroundColor: token("page"),
                     border: `0.5px solid ${token("line")}`,
                     borderRadius: 2,
                   }}

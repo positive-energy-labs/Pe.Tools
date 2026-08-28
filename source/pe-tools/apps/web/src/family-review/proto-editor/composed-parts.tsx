@@ -101,7 +101,7 @@ export function Triptych({
               role="img"
               aria-label={`${view.name} view — click a part to open it in the sidebar`}
               style={{
-                background: token("page"),
+                backgroundColor: token("page"),
                 border: `0.5px solid ${token("line")}`,
                 borderRadius: 2,
               }}
@@ -315,7 +315,8 @@ export function PartSidebar({
       title={`Open ${id} — same sidebar, one step along the graph`}
       className="face-mono t-caption text-left"
       style={{
-        background: "none",
+        backgroundColor: "transparent",
+        backgroundImage: "none",
         border: "none",
         borderBottom: `0.5px solid ${token("line-2")}`,
         borderRadius: 0,
@@ -444,7 +445,7 @@ export function SentenceGrids({
                     key={`${row.id}/${cell.slot}`}
                     className="flex items-baseline gap-1 px-1"
                     style={{
-                      background:
+                      backgroundColor:
                         selected === row.id || focused(row.pointer)
                           ? token("select")
                           : "transparent",
@@ -511,7 +512,8 @@ function SlotCell({
         title={`Show ${rowId} in the drawing and the json`}
         className="face-mono t-label"
         style={{
-          background: "none",
+          backgroundColor: "transparent",
+          backgroundImage: "none",
           border: "none",
           borderRadius: 0,
           cursor: "pointer",
