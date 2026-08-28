@@ -83,7 +83,7 @@ export function CompactTable<Row>({
           ))}
         </colgroup>
         <thead>
-          <tr className="t-caption text-[var(--r-ink-mute)]">
+          <tr className="t-caption text-ink-mute">
             {columns.map((column) => (
               <th
                 key={column.key}
@@ -98,7 +98,7 @@ export function CompactTable<Row>({
           {rows.map((row) => (
             <tr
               key={rowKey(row)}
-              className="border-t border-[var(--r-line)] align-top"
+              className="border-t border-line align-top"
               title={rowTitle?.(row)}
             >
               {columns.map((column) => {

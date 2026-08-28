@@ -145,7 +145,7 @@ function ScheduleGridWorkspace({
         sort: (row) => row.rowNumber,
         cell: (row) => (
           <span
-            className="face-mono t-caption block truncate px-1.5 text-right text-[var(--r-ink-2)]"
+            className="face-mono t-caption block truncate px-1.5 text-right text-ink-2"
             title={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
           >
             {row.rowNumber}
@@ -242,14 +242,14 @@ function ScheduleGridWorkspace({
         : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-[var(--r-page)]">
+    <main className="flex h-screen flex-col overflow-hidden bg-page">
       <AddressingBar
         name="schedules"
         sentence={
           snapshot ? (
-            <span className="t-value text-[var(--r-ink)]">{snapshot.scheduleName}</span>
+            <span className="t-value text-ink">{snapshot.scheduleName}</span>
           ) : (
-            <span className="t-value italic text-[var(--r-ink-mute)]">
+            <span className="t-value italic text-ink-mute">
               {hydrated ? "no schedule open" : "connecting"}
             </span>
           )
@@ -316,9 +316,9 @@ function ScheduleGridWorkspace({
           header={
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-baseline gap-1.5">
-                <span className="t-caption t-upper text-[var(--r-ink-2)]">schedules</span>
+                <span className="t-caption t-upper text-ink-2">schedules</span>
                 {catalog ? (
-                  <span className="face-mono t-caption normal-case text-[var(--r-ink-2)]">
+                  <span className="face-mono t-caption normal-case text-ink-2">
                     {catalog.schedules.length}
                     {catalog.takenAt ? ` · ${timeAgo(catalog.takenAt)}` : ""}
                   </span>
@@ -372,7 +372,7 @@ function ScheduleGridWorkspace({
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           {/* grid-pane strip: the pane's own verb + the outcome lane — plain content */}
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-3 py-1">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1">
             <Verb
               label="re-read"
               busy={busy === "refresh"}
@@ -484,9 +484,9 @@ function PendingStrip({
   locate: (key: string) => void;
 }) {
   return (
-    <div className="shrink-0 border-t border-[var(--r-line)]">
-      <div className="flex items-baseline gap-2 border-b border-[var(--r-line)] px-3 py-1.5">
-        <span className="t-caption t-upper text-[var(--r-ink-2)]">pending</span>
+    <div className="shrink-0 border-t border-line">
+      <div className="flex items-baseline gap-2 border-b border-line px-3 py-1.5">
+        <span className="t-caption t-upper text-ink-2">pending</span>
         {/* The "nothing reaches Revit until you push" stamp lives in ONE home — the push
             verb's own reason (fit reviews, ruled 2026-08-16: repeated stamps train users to
             stop reading). */}
@@ -520,30 +520,30 @@ function PendingStrip({
           return (
             <div
               key={key}
-              className="flex items-center gap-3 border-b border-[var(--r-line)] px-3 py-1 last:border-b-0"
+              className="flex items-center gap-3 border-b border-line px-3 py-1 last:border-b-0"
             >
               <button
                 type="button"
-                className="flex min-w-0 shrink-0 items-baseline gap-1.5 rounded-[var(--radius)] px-0.5 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                className="flex min-w-0 shrink-0 items-baseline gap-1.5 rounded-sm px-0.5 text-left hover:veil"
                 title="Highlight this cell's row in the grid and scroll it into view."
                 onClick={() => locate(key)}
               >
-                <span className="t-label max-w-44 truncate text-[var(--r-ink)]">
+                <span className="t-label max-w-44 truncate text-ink">
                   {columnHeader(columnNumber)}
                 </span>
-                <span className="face-mono t-caption text-[var(--r-ink-2)]">r{rowNumber}</span>
+                <span className="face-mono t-caption text-ink-2">r{rowNumber}</span>
               </button>
               <ValueDiff
                 from={currentText(key)}
                 to={next}
                 className={
                   isStaged
-                    ? "min-w-0 flex-1 truncate font-bold text-[var(--r-caution)]"
-                    : "min-w-0 flex-1 truncate text-[var(--r-pea-ink)]"
+                    ? "min-w-0 flex-1 truncate font-bold text-caution"
+                    : "min-w-0 flex-1 truncate text-pea-ink"
                 }
               />
               {!isStaged && cell.proposal?.note && (
-                <span className="t-label hidden max-w-56 truncate text-[var(--r-ink-2)] sm:block">
+                <span className="t-label hidden max-w-56 truncate text-ink-2 sm:block">
                   {cell.proposal.note}
                 </span>
               )}

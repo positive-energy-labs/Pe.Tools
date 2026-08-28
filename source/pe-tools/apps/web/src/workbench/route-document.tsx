@@ -65,7 +65,7 @@ export function RouteDocumentSurface({ at, children }: { at: Address; children: 
         href={routeDocumentTabHref(href, at)}
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed right-3 top-3 z-50 t-label text-[var(--r-nav)] underline-offset-2 hover:underline"
+        className="fixed right-3 top-3 z-50 t-label text-nav underline-offset-2 hover:underline"
       >
         open in another tab
       </a>
@@ -89,7 +89,7 @@ export function RouteDocumentEmpty() {
   const href = useLocation({ select: (location) => location.href });
   const choices = routeDocumentChoices(sessions);
   return (
-    <main className="grid min-h-screen place-items-center bg-[var(--r-page)] font-pe">
+    <main className="grid min-h-screen place-items-center bg-page font-pe">
       {choices.length > 1 ? (
         <RouteDocumentPicker
           choices={choices}
@@ -113,12 +113,12 @@ export function RouteDocumentPicker({
 }) {
   return (
     <div className="grid gap-2">
-      <p className="t-label text-[var(--r-ink-2)]">pick a document</p>
+      <p className="t-label text-ink-2">pick a document</p>
       {choices.map((choice) => (
         <button
           key={choice.at}
           type="button"
-          className="rounded-sm border border-[var(--r-line)] px-3 py-2 text-left t-value text-[var(--r-ink)] hover:bg-[var(--r-veil)]"
+          className="rounded-sm border border-line px-3 py-2 text-left t-value text-ink hover:veil"
           onClick={() => onPick(choice.at)}
         >
           {choice.label}

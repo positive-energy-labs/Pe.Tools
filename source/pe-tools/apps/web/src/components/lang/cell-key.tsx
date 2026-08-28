@@ -14,7 +14,7 @@
  * - EVERY SPECIMEN IS A REAL `StateCell` WITH REAL PROPS. That is the point: a key drawn with its
  *   own markup can teach a treatment the table does not use, and eventually will. This one
  *   cannot lie, because it renders through the same component.
- * - The axis names stay quiet (`--r-ink-2`, 9.5px mono) — this is a key, not a legend poster.
+ * - The axis names stay quiet (`--pe-ink-2`, 9.5px mono) — this is a key, not a legend poster.
  *
  * ponytail: the axes are a fixed list, not a subset derived from the rows on screen. A real key
  * would drop axes the table never exercises; nothing has ruled how to detect that, and the

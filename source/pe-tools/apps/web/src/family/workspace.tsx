@@ -380,7 +380,7 @@ export function FamilyWorkspace({
    * aimed at that exact cell — including an empty commit, which hands the type back to inheriting
    * and is just as much a decision. There is no verdict left to give: pea argued for a number and
    * you wrote a different one, so accept and deny both became meaningless. The card settles muted,
-   * never on `--r-done` — nothing of pea's was adopted.
+   * never on `--pe-done` — nothing of pea's was adopted.
    */
   const sever = (next: Draft, param: string, typeName: string | null) => {
     for (const entry of world.proposals) {
@@ -683,7 +683,7 @@ export function FamilyWorkspace({
       if (open.length === 0)
         return accepted.length > 0 ? (
           <ReadCell
-            className="text-center text-[var(--r-done)]"
+            className="text-center text-done"
             value="✓"
             reason="Every proposal on this row is settled, and at least one was accepted — the value is in the profile, and its citation is still live in the sidebar."
           />
@@ -706,13 +706,13 @@ export function FamilyWorkspace({
                 ? `One open proposal on ${row.name} — ${where}. Click to bring its card into view in the doc sidebar, where accept and deny sit beside the spec text. Nothing pops over the table.`
                 : `${open.length} open proposals on ${row.name}, at different types — ${where}. The row is contested more than once; the corner folds in the cells say WHICH cells. Click to bring the cards into view.`
             }
-            /* Pea's identity, never the commit colour: a MARK takes `--r-pea` (the display rung),
+            /* Pea's identity, never the commit colour: a MARK takes `--pe-pea` (the display rung),
                a counted chip is text and takes pea's ink. */
             className={cn(
               "face-mono flex items-center justify-center",
               open.length === 1
-                ? "size-2 rounded-[1px] bg-[var(--r-pea)]"
-                : "h-3.5 min-w-3.5 rounded-[2px] border border-[var(--r-pea)] px-0.5 t-caption leading-none text-[var(--r-pea-ink)]",
+                ? "size-2 rounded-[1px] bg-pea"
+                : "h-3.5 min-w-3.5 rounded-[2px] border border-pea px-0.5 t-caption leading-none text-pea-ink",
             )}
           >
             {open.length > 1 ? open.length : null}
@@ -755,10 +755,10 @@ export function FamilyWorkspace({
               type="button"
               onClick={() => setInspect({ kind: "part", slug })}
               title={`${slug}.${property} — a bindable ${row.dataType} dimension that NO parameter drives. ${dim?.note ?? ""} It is ${literal} for every type of this family, forever: no type can differ, no schedule can read it, no formula can reach it. Its value is the ONE merged cell to the right, spanning every type column, because there is exactly one of it. Click to open ${slug} in the inspector; use "bind…" in the state column to give it a parameter.`}
-              className="face-mono block w-full truncate text-left t-caption italic leading-[12px] text-[var(--r-ink-mute)] hover:text-[var(--r-ink)]"
+              className="face-mono block w-full truncate text-left t-caption italic leading-[12px] text-ink-mute hover:text-ink"
             >
               {row.name}
-              <span className="ml-1 not-italic t-caption text-[var(--r-caution)]">geom</span>
+              <span className="ml-1 not-italic t-caption text-caution">geom</span>
             </button>
           </span>
         );
@@ -796,7 +796,7 @@ export function FamilyWorkspace({
           <span className="face-mono t-value block min-w-0 flex-1 truncate px-1.5" title={reason}>
             <span className="block truncate leading-[13px]">
               {row.kind === "live-only" ? (
-                <span className="text-[var(--r-ink-2)]">{row.name}</span>
+                <span className="text-ink-2">{row.name}</span>
               ) : (
                 <button
                   type="button"
@@ -807,14 +807,12 @@ export function FamilyWorkspace({
                   {row.name}
                 </button>
               )}
-              {row.isInstance && (
-                <span className="ml-1 t-caption text-[var(--r-ink-mute)]">inst</span>
-              )}
+              {row.isInstance && <span className="ml-1 t-caption text-ink-mute">inst</span>}
               {world.missingInRevit.has(row.name) && (
-                <span className="ml-1 t-caption text-[var(--r-caution)]">⊘</span>
+                <span className="ml-1 t-caption text-caution">⊘</span>
               )}
               {blocks.length > 0 && (
-                <span className="ml-1 t-caption text-[var(--r-ink-mute)]">{blocks.join(" ")}</span>
+                <span className="ml-1 t-caption text-ink-mute">{blocks.join(" ")}</span>
               )}
             </span>
             {/* The family level, on ONE line: the formula, and what the parameter DRIVES. A bound
@@ -826,13 +824,11 @@ export function FamilyWorkspace({
                 computed this", and the leading `=` already says it. Italic carries the rest. */}
             {(isFormula(authored) || drives.length > 0) && (
               <span className="block truncate t-caption leading-[11px]">
-                {isFormula(authored) && (
-                  <span className="italic text-[var(--r-ink-2)]">{authored}</span>
-                )}
+                {isFormula(authored) && <span className="italic text-ink-2">{authored}</span>}
                 {isFormula(authored) && drives.length > 0 && (
-                  <span className="text-[var(--r-ink-mute)]"> · </span>
+                  <span className="text-ink-mute"> · </span>
                 )}
-                {drives.length > 0 && <span className="text-[var(--r-ink-mute)]">→ </span>}
+                {drives.length > 0 && <span className="text-ink-mute">→ </span>}
                 {drives.map((entry, index) => (
                   <button
                     key={`${entry.slug}.${entry.property}`}
@@ -840,9 +836,9 @@ export function FamilyWorkspace({
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => setInspect({ kind: "part", slug: entry.slug })}
                     title={`${row.name} drives ${entry.slug}.${entry.property}. Click to open ${entry.slug} in the inspector — its non-bindable metadata (direction, system type, where its frame sits) lives there, because no parameter can drive those.`}
-                    className="text-[var(--r-ink-mute)] hover:text-[var(--r-ink)]"
+                    className="text-ink-mute hover:text-ink"
                   >
-                    {index > 0 && <span className="text-[var(--r-ink-mute)]">, </span>}
+                    {index > 0 && <span className="text-ink-mute">, </span>}
                     {entry.slug}.{entry.property}
                   </button>
                 ))}
@@ -866,9 +862,9 @@ export function FamilyWorkspace({
     group: "PROFILE",
     width: "w-28",
     right: options.align === "right",
-    /* The column on stage is lit by a FILL, never a hue — `--r-select` is literally the ground
+    /* The column on stage is lit by a FILL, never a hue — `--pe-select` is literally the ground
        ladder's selection rung, so the law cannot be broken here by accident. */
-    headerClassName: options.header && stageType === typeName ? "bg-[var(--r-select)]" : undefined,
+    headerClassName: options.header && stageType === typeName ? "bg-select" : undefined,
     header: options.header ? (
       <button
         type="button"
@@ -881,7 +877,7 @@ export function FamilyWorkspace({
           setOverlay("draft");
         }}
         title={`Drill into "${typeName}". The table pane swaps to the same table, narrowed to this one type and opened up with the spine and the crossing verbs. "← all types" in the pane header, or Esc, comes back.`}
-        className="face-mono t-label block w-full text-left text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
+        className="face-mono t-label block w-full text-left text-ink-2 hover:text-ink"
       >
         {typeName} <span className="opacity-60">⤢</span>
       </button>
@@ -908,7 +904,7 @@ export function FamilyWorkspace({
         if (overlay === "live")
           return (
             <ReadCell
-              className="leading-7 text-[var(--r-ink-mute)]"
+              className="leading-7 text-ink-mute"
               value="unread — not a parameter"
               reason={`UNREAD, not absent. Revit's family certainly carries this number — it is in the solid — but a parameter read cannot report it, because it is not a parameter. Nothing here can be compared, and silence is not agreement. Binding it is what makes it readable at all.`}
             />
@@ -919,10 +915,10 @@ export function FamilyWorkspace({
               className={cn(
                 "leading-7",
                 diskLiteral === null
-                  ? "italic text-[var(--r-caution)]"
+                  ? "italic text-caution"
                   : diskLiteral !== literal
-                    ? "text-[var(--r-caution)]"
-                    : "text-[var(--r-ink-2)]",
+                    ? "text-caution"
+                    : "text-ink-2",
               )}
               value={
                 diskLiteral === null ? (
@@ -930,9 +926,7 @@ export function FamilyWorkspace({
                 ) : (
                   <>
                     {diskLiteral}
-                    {diskLiteral !== literal && (
-                      <span className="ml-1 text-[var(--r-caution)]">→</span>
-                    )}
+                    {diskLiteral !== literal && <span className="ml-1 text-caution">→</span>}
                   </>
                 )
               }
@@ -969,7 +963,7 @@ export function FamilyWorkspace({
         const entry = draft.live[row.name]?.[typeName];
         return (
           <ReadCell
-            className="leading-7 text-[var(--r-ink-mute)]"
+            className="leading-7 text-ink-mute"
             value={entry?.value ?? "—"}
             reason={`${MARK_TITLE["only-live"]} The last read listed "${row.name}" as present in the family but reported no per-type value for it, so there is nothing here to compare — only the fact that the parameter exists and the profile does not claim it.`}
           />
@@ -988,9 +982,9 @@ export function FamilyWorkspace({
       // squiggle law: drift outranks the citation, because a cell that is both is more urgently
       // the first. The citation spends no meaning colour; it is a hairline.
       const underline = drifted
-        ? "underline decoration-[var(--r-alarm)] decoration-dotted underline-offset-[3px]"
+        ? "underline decoration-alarm decoration-dotted underline-offset-[3px]"
         : grounded
-          ? "underline decoration-[var(--r-line-2)] decoration-dotted underline-offset-[3px]"
+          ? "underline decoration-line-2 decoration-dotted underline-offset-[3px]"
           : undefined;
       const groundedNote = grounded
         ? ` Grounded in ${(world.grounding[row.name] ?? []).join(", ")} of ${world.spec?.fileName ?? "the spec"} — the hairline underline is that citation, and it stays put in every overlay unless drift outranks it.`
@@ -1020,7 +1014,7 @@ export function FamilyWorkspace({
         if (world.missingInRevit.has(row.name))
           return marks(
             <ReadCell
-              className={cn("leading-7 italic text-[var(--r-caution)]", underline)}
+              className={cn("leading-7 italic text-caution", underline)}
               value="not in Revit"
               reason={`${MARK_TITLE["only-profile"]}${groundedNote}`}
             />,
@@ -1029,7 +1023,7 @@ export function FamilyWorkspace({
         if (!entry)
           return marks(
             <ReadCell
-              className={cn("leading-7 text-[var(--r-ink-mute)]", underline)}
+              className={cn("leading-7 text-ink-mute", underline)}
               value="·"
               reason={`${MARK_TITLE.unread} Re-read the family before treating this dot as a match.${groundedNote}`}
             />,
@@ -1038,8 +1032,8 @@ export function FamilyWorkspace({
           <ReadCell
             className={cn(
               "leading-7",
-              drifted && "text-[var(--r-alarm)]",
-              entry.readOnly && "italic text-[var(--r-ink-2)]",
+              drifted && "text-alarm",
+              entry.readOnly && "italic text-ink-2",
               underline,
             )}
             value={entry.value}
@@ -1057,7 +1051,7 @@ export function FamilyWorkspace({
         if (diskValue === null)
           return marks(
             <ReadCell
-              className={cn("leading-7 italic text-[var(--r-caution)]", underline)}
+              className={cn("leading-7 italic text-caution", underline)}
               value="new — not on disk"
               reason={`"${row.name}" is not in the saved profile at all: this page created it. Saving adds the whole parameter, and this type will resolve to ${draftValue}.${groundedNote}`}
             />,
@@ -1065,11 +1059,7 @@ export function FamilyWorkspace({
         const willWrite = diskValue !== draftValue;
         return marks(
           <ReadCell
-            className={cn(
-              "leading-7",
-              willWrite ? "text-[var(--r-caution)]" : "text-[var(--r-ink-2)]",
-              underline,
-            )}
+            className={cn("leading-7", willWrite ? "text-caution" : "text-ink-2", underline)}
             value={
               <>
                 {diskValue || "—"}
@@ -1096,10 +1086,7 @@ export function FamilyWorkspace({
       if (isFormula(authored))
         return (
           <ReadCell
-            className={cn(
-              "leading-7 italic text-[var(--r-ink-2)]",
-              options.align === "right" && "text-right",
-            )}
+            className={cn("leading-7 italic text-ink-2", options.align === "right" && "text-right")}
             value="ƒ driven"
             reason={`LOCKED — the family level drives this with ${authored}, so a type cannot override its result. The formula is shown on the parameter's own cell; change what feeds it instead. Switch to ⇄ live to see the number Revit computes for it.`}
           />
@@ -1110,8 +1097,8 @@ export function FamilyWorkspace({
           value={override ?? ""}
           placeholder={authored}
           className={cn(
-            "placeholder:text-[var(--r-ink-mute)]",
-            proposals.length > 0 && "text-[var(--r-pea-ink)]",
+            "placeholder:text-ink-mute",
+            proposals.length > 0 && "text-pea-ink",
             options.align === "right" && "text-right",
             underline,
           )}
@@ -1212,7 +1199,7 @@ export function FamilyWorkspace({
             else bindTo(slug, property, choice);
           }}
           className={cn(
-            "face-mono h-6 w-full min-w-0 truncate rounded-[2px] border-0 bg-[var(--r-recess)] px-1 t-caption text-[var(--r-ink)] outline-none",
+            "face-mono h-6 w-full min-w-0 truncate rounded-[2px] border-0 bg-recess px-1 t-caption text-ink outline-none",
             className,
           )}
         >
@@ -1258,7 +1245,7 @@ export function FamilyWorkspace({
       <span className="flex h-7 items-center gap-1 px-1.5">
         <StateDot tone="caution" />
         <span
-          className="face-mono t-caption text-[var(--r-caution)]"
+          className="face-mono t-caption text-caution"
           title={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
         >
           unbound
@@ -1364,7 +1351,7 @@ export function FamilyWorkspace({
           if (world.missingInRevit.has(row.name))
             return (
               <ReadCell
-                className="italic text-[var(--r-caution)]"
+                className="italic text-caution"
                 value="missing"
                 reason={MARK_TITLE["only-profile"]}
               />
@@ -1374,9 +1361,9 @@ export function FamilyWorkspace({
           return (
             <ReadCell
               className={cn(
-                entry == null && "text-[var(--r-ink-mute)]",
-                state === "drift" && "text-[var(--r-alarm)]",
-                entry?.readOnly && "italic text-[var(--r-ink-2)]",
+                entry == null && "text-ink-mute",
+                state === "drift" && "text-alarm",
+                entry?.readOnly && "italic text-ink-2",
               )}
               value={entry?.value ?? "—"}
               reason={
@@ -1446,14 +1433,14 @@ export function FamilyWorkspace({
         ? focusedParts.has(row.slug ?? "")
         : focusedParams.has(row.name) || pinnedParam === row.name;
     return cn(
-      row.kind === "ghost" && "bg-[color-mix(in_srgb,var(--r-caution)_6%,transparent)]",
+      row.kind === "ghost" && "bg-caution/6",
       // The hairline is drawn on whichever ghost is first IN VISIBLE ORDER, not on whichever one
       // the fixture happened to list first — sorting reorders the ghosts among themselves, and a
       // section rule that stayed on a row in the middle of the section would be drawing a boundary
       // that is not there.
-      row.key === firstGhostKey && "[&>td]:border-t [&>td]:border-t-[var(--r-line-2)]",
+      row.key === firstGhostKey && "[&>td]:border-t [&>td]:border-t-line-2",
       // Focus is a FILL and never a hue.
-      lit && "bg-[var(--r-select)]",
+      lit && "bg-select",
     );
   };
 
@@ -1495,15 +1482,13 @@ export function FamilyWorkspace({
         <span title="Read left to right: how much of this profile the spec backs, what pea still wants, how many geometry dimensions nothing can reach, how many cells save would write, and where Revit disagrees. The one alarm is spent on drift and nothing else; unbound and unsaved wear caution, because a gap and a pending write are warnings rather than conflicts.">
           {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
           {world.typeNames.length} types ·{" "}
-          <span className={ghostCount > 0 ? "text-[var(--r-caution)]" : undefined}>
-            {ghostCount} unbound
-          </span>{" "}
+          <span className={ghostCount > 0 ? "text-caution" : undefined}>{ghostCount} unbound</span>{" "}
           ·{" "}
-          <span className={unsavedCount > 0 ? "text-[var(--r-caution)]" : undefined}>
+          <span className={unsavedCount > 0 ? "text-caution" : undefined}>
             {unsavedCount} unsaved
           </span>{" "}
           ·{" "}
-          <span className={driftCells.length > 0 ? "text-[var(--r-alarm)]" : undefined}>
+          <span className={driftCells.length > 0 ? "text-alarm" : undefined}>
             {driftCells.length} drift
           </span>
         </span>
@@ -1545,9 +1530,7 @@ export function FamilyWorkspace({
           {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
           <span
             className={
-              driftCells.some((cell) => cell.typeName === drillType)
-                ? "text-[var(--r-alarm)]"
-                : undefined
+              driftCells.some((cell) => cell.typeName === drillType) ? "text-alarm" : undefined
             }
           >
             {driftCells.filter((cell) => cell.typeName === drillType).length} drift
@@ -1725,7 +1708,7 @@ export function FamilyWorkspace({
     if (meta.control === "read")
       return (
         <span
-          className="face-mono t-caption text-[var(--r-ink-2)]"
+          className="face-mono t-caption text-ink-2"
           title={`${meta.note} READ-ONLY — a box you could type in would be claiming an edit that nothing downstream would actually make.`}
         >
           {value} <span className="t-caption opacity-50">reported</span>
@@ -1757,7 +1740,7 @@ export function FamilyWorkspace({
         onChange={(event) => editMeta(slug, meta.key, event.target.value)}
         title={meta.note}
         aria-label={meta.label}
-        className="face-mono h-5 w-full rounded-[2px] border border-[var(--r-line-2)] bg-transparent px-1 t-caption outline-none"
+        className="face-mono h-5 w-full rounded-[2px] border border-line-2 bg-transparent px-1 t-caption outline-none"
       >
         {(meta.options ?? []).map((option) => (
           <option key={option} value={option}>
@@ -1771,15 +1754,15 @@ export function FamilyWorkspace({
   const partInspector = (part: GeomConstituent): React.ReactNode => (
     <>
       <p
-        className="face-mono mb-1.5 t-caption text-[var(--r-ink-2)]"
+        className="face-mono mb-1.5 t-caption text-ink-2"
         title={`${part.slug} is a ${part.kind}. The kind is READ-ONLY here: a prism does not become a cylinder because a word changed, and the profile's job is to say what the geometry is, not to pretend it can be retyped.`}
       >
         {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
       </p>
 
-      <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
+      <div className="mb-2 rounded-[2px] border border-line p-1.5">
         <p
-          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-ink-2"
           title="The constituent's bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE LIVES rather than as a second place to work. A bound dim names the parameter that represents it in the table; an unbound one carries its literal and the very same bind verb its ghost row carries."
         >
           bindable dims — represented in the table
@@ -1789,7 +1772,7 @@ export function FamilyWorkspace({
           return (
             <div key={dim.property} className="flex items-center gap-2 py-0.5">
               <span
-                className="face-mono w-24 shrink-0 truncate t-caption text-[var(--r-ink-2)]"
+                className="face-mono w-24 shrink-0 truncate t-caption text-ink-2"
                 title={dim.note}
               >
                 {dim.property}
@@ -1802,7 +1785,7 @@ export function FamilyWorkspace({
                     setPinnedParam(bound);
                   }}
                   title={`Driven by "${bound}", currently ${draft.authored[bound] ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
-                  className="face-mono min-w-0 flex-1 truncate text-left t-caption text-[var(--r-ink)] hover:underline"
+                  className="face-mono min-w-0 flex-1 truncate text-left t-caption text-ink hover:underline"
                 >
                   {bound}
                 </button>
@@ -1813,7 +1796,7 @@ export function FamilyWorkspace({
                         refusal (an emptied literal) is the cell's own note in both places. */}
                     <NavStateCell
                       value={bindingOf(world, draft, part.slug, dim.property)}
-                      className="rounded-[2px] border border-[var(--r-line-2)] t-caption text-[var(--r-caution)]"
+                      className="rounded-[2px] border border-line-2 t-caption text-caution"
                       note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
                       onCommit={(next) => editLiteral(part.slug, dim.property, next)}
                     />
@@ -1826,9 +1809,9 @@ export function FamilyWorkspace({
         })}
       </div>
 
-      <div className="rounded-[2px] border border-[var(--r-line)] p-1.5">
+      <div className="rounded-[2px] border border-line p-1.5">
         <p
-          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-ink-2"
           title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
         >
           non-bindable metadata — lives only here
@@ -1836,7 +1819,7 @@ export function FamilyWorkspace({
         {part.meta.map((meta) => (
           <div key={meta.key} className="flex items-baseline gap-2 py-0.5">
             <span
-              className="face-mono w-24 shrink-0 truncate t-caption text-[var(--r-ink-2)]"
+              className="face-mono w-24 shrink-0 truncate t-caption text-ink-2"
               title={meta.note}
             >
               {meta.label}
@@ -1856,17 +1839,17 @@ export function FamilyWorkspace({
     const family = proposalsAt(name, null);
     return (
       <>
-        <p className="face-mono mb-1.5 t-caption text-[var(--r-ink-2)]">
+        <p className="face-mono mb-1.5 t-caption text-ink-2">
           {row?.dataType ?? "unknown"} · bound per {row?.isInstance ? "instance" : "type"}
           {row?.group ? ` · ${row.group}` : ""}
           {world.missingInRevit.has(name) && (
-            <span className="ml-1 text-[var(--r-caution)]">⊘ not in Revit</span>
+            <span className="ml-1 text-caution">⊘ not in Revit</span>
           )}
         </p>
 
-        <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
+        <div className="mb-2 rounded-[2px] border border-line p-1.5">
           <p
-            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-ink-2"
             title="THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows it only as the grey placeholder in each type cell, and a placeholder is not an editor; this is where it is actually authored. Type an expression beginning with = to make it a formula instead, which locks every type column on the row."
           >
             family value {isFormula(authored) ? "· formula" : ""}
@@ -1886,7 +1869,7 @@ export function FamilyWorkspace({
             }
             stagedBy={family.length > 0 ? "pea" : "you"}
             className={cn(
-              "rounded-[2px] border border-[var(--r-line-2)] t-label",
+              "rounded-[2px] border border-line-2 t-label",
               isFormula(authored) && "italic",
             )}
             note={
@@ -1897,16 +1880,16 @@ export function FamilyWorkspace({
             onCommit={(next) => editAuthored(name, next)}
           />
           {family.length > 0 && (
-            <p className="face-mono mt-1 t-caption text-[var(--r-pea-ink)]">
+            <p className="face-mono mt-1 t-caption text-pea-ink">
               pea proposes {family[0]!.proposed} here — the card is above; typing your own value
               severs it instead.
             </p>
           )}
         </div>
 
-        <div className="mb-2 rounded-[2px] border border-[var(--r-line)] p-1.5">
+        <div className="mb-2 rounded-[2px] border border-line p-1.5">
           <p
-            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-ink-2"
             title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
           >
             drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
@@ -1922,7 +1905,7 @@ export function FamilyWorkspace({
                 type="button"
                 onClick={() => setInspect({ kind: "part", slug: entry.slug })}
                 title={`Open ${entry.slug} — its kind, its other dims, and the non-bindable metadata no parameter can drive.`}
-                className="face-mono block w-full truncate text-left t-caption text-[var(--r-ink)] hover:underline"
+                className="face-mono block w-full truncate text-left t-caption text-ink hover:underline"
               >
                 → {entry.slug}.{entry.property}
               </button>
@@ -1930,9 +1913,9 @@ export function FamilyWorkspace({
           )}
         </div>
 
-        <div className="rounded-[2px] border border-[var(--r-line)] p-1.5">
+        <div className="rounded-[2px] border border-line p-1.5">
           <p
-            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-ink-2"
             title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."
           >
             grounding
@@ -1948,10 +1931,10 @@ export function FamilyWorkspace({
             blocks.map((id) => (
               <p
                 key={id}
-                className="face-mono line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink)]"
+                className="face-mono line-clamp-3 whitespace-pre-line t-caption leading-snug text-ink"
                 title={`Block ${id} of ${world.spec?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
               >
-                <span className="text-[var(--r-ink-2)]">{id} · </span>
+                <span className="text-ink-2">{id} · </span>
                 {world.spec?.blocks.find((block) => block.id === id)?.md ?? "(block not found)"}
               </p>
             ))
@@ -1963,13 +1946,13 @@ export function FamilyWorkspace({
 
   const inspectorPanel =
     inspect == null ? null : (
-      <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-[var(--r-line)]">
-        <div className="flex h-6 shrink-0 items-center gap-2 border-b border-[var(--r-line)] bg-[var(--r-recess)] px-2">
+      <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-line">
+        <div className="flex h-6 shrink-0 items-center gap-2 border-b border-line bg-recess px-2">
           {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
           <span className="dl-tag shrink-0">
             {inspect.kind === "part" ? "constituent" : "parameter"}
           </span>
-          <span className="face-mono min-w-0 flex-1 truncate t-caption text-[var(--r-ink)]">
+          <span className="face-mono min-w-0 flex-1 truncate t-caption text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
           <Verb
@@ -2049,9 +2032,9 @@ export function FamilyWorkspace({
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* proposals — margin annotations, docked as a stack above the spec */}
-        <div className="border-b border-[var(--r-line)] p-2">
+        <div className="border-b border-line p-2">
           <p
-            className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+            className="face-mono mb-1 t-caption text-ink-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
           >
             pea proposes — ephemeral, page-scoped
@@ -2143,7 +2126,7 @@ export function FamilyWorkspace({
   const runner = useRunner(product, bindings, busy?.id ?? null);
 
   return (
-    <main className="flex h-screen min-h-0 flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
+    <main className="flex h-screen min-h-0 flex-col bg-page text-ink">
       <TargetingHead
         product={product}
         b={bindings}

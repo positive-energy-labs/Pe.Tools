@@ -190,7 +190,7 @@ function OpsPage({ store }: { store: OpsStore }) {
   const runner = useRunner(product, b, busyState?.id ?? null);
 
   return (
-    <main className="min-h-screen bg-background p-4 text-foreground">
+    <main className="min-h-screen bg-page p-4 text-ink">
       <div className="mx-auto flex max-w-5xl flex-col gap-4">
         <TargetingHead
           product={product}
@@ -207,7 +207,7 @@ function OpsPage({ store }: { store: OpsStore }) {
         />
 
         <section className="flex flex-wrap items-center gap-1.5">
-          <span className="t-label t-upper mr-1 text-[var(--r-ink-2)]">Glance</span>
+          <span className="t-label t-upper mr-1 text-ink-2">Glance</span>
           {syntheticOps.map((glance) => (
             <Button
               key={glance.key}
@@ -229,7 +229,7 @@ function OpsPage({ store }: { store: OpsStore }) {
                   synthetic
                 </FactChip>
               </div>
-              <p className="t-prose text-[var(--r-ink-2)]">{selectedGlance.blurb}</p>
+              <p className="t-prose text-ink-2">{selectedGlance.blurb}</p>
             </header>
             <SyntheticRunner op={selectedGlance} bridgeSessionId={session.sessionId} />
           </section>
@@ -305,13 +305,13 @@ function OperationPane({
             </FactChip>
           ) : null}
         </div>
-        <p className="face-mono t-caption text-[var(--r-ink-2)]">{operation.key}</p>
-        <p className="t-prose max-w-2xl text-[var(--r-ink-2)]">{operation.description}</p>
+        <p className="face-mono t-caption text-ink-2">{operation.key}</p>
+        <p className="t-prose max-w-2xl text-ink-2">{operation.description}</p>
       </header>
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h2 className="t-label t-upper text-[var(--r-ink-2)]">Request</h2>
+          <h2 className="t-label t-upper text-ink-2">Request</h2>
           <span className="flex gap-1">
             {operation.requestExamples.map((example) => (
               <Button
@@ -358,7 +358,7 @@ function OperationPane({
 
       {result ? (
         <section className="flex flex-col gap-2">
-          <h2 className="t-label t-upper text-[var(--r-ink-2)]">Result</h2>
+          <h2 className="t-label t-upper text-ink-2">Result</h2>
           {Curated ? (
             <Curated data={result.value} opKey={operation.key} request={result.request} />
           ) : (
@@ -366,7 +366,7 @@ function OperationPane({
           )}
           {Curated ? (
             <details>
-              <summary className="face-mono t-caption cursor-pointer text-[var(--r-ink-2)]">
+              <summary className="face-mono t-caption cursor-pointer text-ink-2">
                 raw response
               </summary>
               <OutputBlock value={result.value} />
@@ -393,9 +393,9 @@ function JsonSchemaForm({
 }) {
   const fields = schemaProperties(schema);
   if (!fields.length)
-    return <p className="t-label text-[var(--r-ink-2)]">This operation has no request fields.</p>;
+    return <p className="t-label text-ink-2">This operation has no request fields.</p>;
   return (
-    <div className="grid gap-3 rounded-[var(--radius)] border border-[var(--r-line)] p-3">
+    <div className="grid gap-3 rounded-sm border border-line p-3">
       {fields.map(([name, field]) => (
         <div key={name} className="grid gap-1">
           <Label htmlFor={`op-field-${name}`}>{name}</Label>
@@ -503,7 +503,7 @@ function SchemaInput({
 
 function OutputBlock({ value }: { value: unknown }) {
   return (
-    <pre className="t-value max-h-[32rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)] p-3">
+    <pre className="t-value max-h-[32rem] overflow-auto rounded-sm border border-line p-3">
       {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
     </pre>
   );

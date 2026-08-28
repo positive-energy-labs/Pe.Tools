@@ -20,15 +20,15 @@ export function FamilyChatPlugin({ toolName, args, sessionState, running }: Rout
         <Metric value={document?.doc?.images?.length ?? 0} label="doc images" />
         {evidence ? (
           <span
-            className="t-label face-mono text-[var(--r-done)]"
+            className="t-label face-mono text-done"
             title={`Evidence from ${evidence.origin} of ${evidence.familyName} at ${evidence.reading.observedAt}`}
           >
             evidence · {evidence.origin}
           </span>
         ) : (
-          <span className="t-label text-[var(--r-ink-mute)]">no evidence yet</span>
+          <span className="t-label text-ink-mute">no evidence yet</span>
         )}
-        <Link className="ml-auto text-[var(--r-nav)] hover:underline" to="/family">
+        <Link className="ml-auto text-nav hover:underline" to="/family">
           Open workspace
         </Link>
       </div>

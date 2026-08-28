@@ -57,12 +57,12 @@ function RootComponent() {
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-pe suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
-      <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-accent selection:text-accent-foreground">
+      <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-select selection:text-ink">
         <RegistryContext.Provider value={appAtomRegistry}>
           {children}
           <RouteConflictBanner />
@@ -93,7 +93,7 @@ export function RouteConflictBanner() {
     <aside
       role="status"
       aria-live="polite"
-      className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-3 border-b border-[var(--r-caution)] bg-[var(--r-page)] px-4 py-2 text-[var(--r-ink)] shadow-sm"
+      className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-3 border-b border-caution bg-page px-4 py-2 text-ink shadow-sm"
     >
       <strong className="t-label">Changed elsewhere</strong>
       <span className="t-value">
@@ -102,7 +102,7 @@ export function RouteConflictBanner() {
       <Verb
         label="dismiss"
         reason="Dismiss this conflict notice."
-        className="t-label text-[var(--r-nav)] hover:underline"
+        className="t-label text-nav hover:underline"
         onClick={() => dismiss(false)}
       />
     </aside>

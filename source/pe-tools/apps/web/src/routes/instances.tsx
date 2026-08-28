@@ -114,7 +114,7 @@ function StartFields({
         value={year}
         onChange={(event) => setYear(event.target.value)}
         disabled={disabled}
-        className="face-mono t-caption rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5"
+        className="face-mono t-caption rounded-sm border border-line-2 bg-transparent px-1 py-0.5"
       >
         {YEARS.map((value) => (
           <option key={value} value={value}>
@@ -127,7 +127,7 @@ function StartFields({
         value={lane}
         onChange={(event) => setLane(event.target.value as WorldStart["lane"])}
         disabled={disabled}
-        className="face-mono t-caption rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5"
+        className="face-mono t-caption rounded-sm border border-line-2 bg-transparent px-1 py-0.5"
       >
         <option value="installed">installed</option>
         <option value="dev">dev</option>
@@ -138,7 +138,7 @@ function StartFields({
         onChange={(event) => setDoc(event.target.value)}
         disabled={disabled}
         placeholder="document (optional)"
-        className="face-mono t-caption w-44 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1 py-0.5"
+        className="face-mono t-caption w-44 rounded-sm border border-line-2 bg-transparent px-1 py-0.5"
       />
     </span>
   );
@@ -283,7 +283,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
         search: (world) => worldTrunk.label(world).toLowerCase(),
         sort: (world) => worldTrunk.label(world),
         cell: (world) => (
-          <span className="face-mono t-value block truncate px-1.5 text-[var(--r-ink)]">
+          <span className="face-mono t-value block truncate px-1.5 text-ink">
             {worldTrunk.label(world)}
           </span>
         ),
@@ -294,7 +294,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
         key: "detail",
         label: "lane · year · pid",
         cell: (world) => (
-          <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption block truncate px-1.5 text-ink-2">
             {worldSub(world)}
           </span>
         ),
@@ -303,7 +303,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
         key: "legs",
         label: "legs",
         cell: (world) => (
-          <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption block truncate px-1.5 text-ink-2">
             {world.row?.legs?.map((leg) => `${leg.name} ${leg.state}`).join(" · ") || "no legs"}
           </span>
         ),
@@ -312,7 +312,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
         key: "docs",
         label: "documents",
         cell: (world) => (
-          <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption block truncate px-1.5 text-ink-2">
             {world.activeDocumentTitle ?? (world.session ? "no open document" : "nothing observed")}
             {world.openDocumentCount > 1 ? ` +${world.openDocumentCount - 1}` : ""}
           </span>
@@ -327,7 +327,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
           (world.session ? world.session.observedAtUnixMs : parseUtc(world.row?.observedAtUtc)) ??
           0,
         cell: (world) => (
-          <span className="face-mono t-caption block px-1.5 text-right text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption block px-1.5 text-right text-ink-2">
             {timeAgo(
               world.session ? world.session.observedAtUnixMs : parseUtc(world.row?.observedAtUtc),
             )}
@@ -339,7 +339,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
   );
 
   return (
-    <div className="min-h-screen bg-[var(--r-page)]" data-testid="instances-workspace">
+    <div className="min-h-screen bg-page" data-testid="instances-workspace">
       <div className="mx-auto max-w-6xl px-6 pt-6">
         <TargetingHead
           product={product}
@@ -366,7 +366,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
         />
       </div>
       <div className="mx-auto flex min-h-[75vh] max-w-6xl gap-0 px-6 py-5">
-        <div className="flex flex-1 flex-col border-r border-[var(--r-line)] pr-5">
+        <div className="flex flex-1 flex-col border-r border-line pr-5">
           <MasterTable
             rows={worlds}
             columns={columns}
@@ -399,13 +399,13 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
           <div className="flex w-72 flex-col pl-5">
             <div className="flex items-baseline justify-between pb-2">
               <span className="flex items-center gap-1.5">
-                <span className="t-caption t-upper text-[var(--r-ink-2)]">ledger</span>
+                <span className="t-caption t-upper text-ink-2">ledger</span>
                 <HelpTip>Settled SDK envelopes merged with bridge-observed world events.</HelpTip>
               </span>
               <button
                 type="button"
                 onClick={() => setLedgerOpen(false)}
-                className="t-caption rounded-[var(--radius)] border border-[var(--r-line-2)] px-1"
+                className="t-caption rounded-sm border border-line-2 px-1"
               >
                 ›
               </button>
@@ -417,12 +417,10 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
                 </EmptyState>
               ) : null}
               {ledger.map((entry, index) => (
-                <div key={index} className="border-t border-[var(--r-line)] py-1.5">
-                  <span className="face-mono t-caption text-[var(--r-ink-2)]">{entry.actor}</span>
-                  <div className="t-label text-[var(--r-ink)]">{entry.label}</div>
-                  <span className="face-mono t-caption text-[var(--r-ink-2)]">
-                    {timeAgo(entry.atMs)}
-                  </span>
+                <div key={index} className="border-t border-line py-1.5">
+                  <span className="face-mono t-caption text-ink-2">{entry.actor}</span>
+                  <div className="t-label text-ink">{entry.label}</div>
+                  <span className="face-mono t-caption text-ink-2">{timeAgo(entry.atMs)}</span>
                 </div>
               ))}
             </div>
@@ -431,9 +429,9 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
           <button
             type="button"
             onClick={() => setLedgerOpen(true)}
-            className="ml-2 flex w-6 flex-col items-center gap-2 self-stretch rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent py-2"
+            className="ml-2 flex w-6 flex-col items-center gap-2 self-stretch rounded-sm border border-line-2 bg-transparent py-2"
           >
-            <span className="t-caption t-upper text-[var(--r-ink-2)] [writing-mode:vertical-rl]">
+            <span className="t-caption t-upper text-ink-2 [writing-mode:vertical-rl]">
               ledger · {ledger.length}
             </span>
           </button>

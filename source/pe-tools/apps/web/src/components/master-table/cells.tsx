@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * MASTER-TABLE CELL RENDERERS — thin wrappers over the language, not a second editor.
  *
@@ -102,8 +103,8 @@ export function CellSelect({
         if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
       }}
       className={cn(
-        "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-[var(--r-select)]",
-        invalid && "bg-[color-mix(in_srgb,var(--r-alarm)_10%,var(--r-on))] text-[var(--r-alarm)]",
+        "face-mono t-value h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-select",
+        invalid && "alarm-wash text-alarm",
         className,
       )}
     >
@@ -146,11 +147,11 @@ export function StateDot({ tone, dim }: { tone: VerdictTone; dim?: boolean }) {
 }
 
 export const VERDICT_INK: Record<VerdictTone, string> = {
-  alarm: "var(--r-alarm)",
-  caution: "var(--r-caution)",
-  done: "var(--r-done)",
-  ink: "var(--r-ink-2)",
-  mute: "var(--r-ink-mute)",
+  alarm: token("alarm"),
+  caution: token("caution"),
+  done: token("done"),
+  ink: token("ink-2"),
+  mute: token("ink-mute"),
 };
 
 /** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The
@@ -160,11 +161,7 @@ export function VerdictCell({ verdict }: { verdict: Verdict }) {
   return (
     <span className="face-mono t-value block truncate px-1.5" title={verdict.note}>
       <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
-      <span
-        className={verdict.tone === "alarm" ? "text-[var(--r-alarm)]" : "text-[var(--r-ink-2)]"}
-      >
-        {verdict.word}
-      </span>
+      <span className={verdict.tone === "alarm" ? "text-alarm" : "text-ink-2"}>{verdict.word}</span>
     </span>
   );
 }

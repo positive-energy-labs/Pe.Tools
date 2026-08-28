@@ -1,3 +1,5 @@
+import { token } from "#/lib/token";
+
 /**
  * PROTOTYPE (round 2) — THE FAMILY REVIEW BOARD, one layout.
  *
@@ -120,8 +122,8 @@ const VERDICT_KEYS: Verdict[] = ["good", "unsure", "wrong"];
  *
  * GAP: a raw button element rather than a primitive. `lang/Verb` is a verb (it acts); this is a
  * three-way EXCLUSIVE CHOICE that must also express "not judged yet". `ui/toggle-group` is the
- * right shape and cannot be used: it carries shadcn chrome (`rounded-lg`, `border-border`,
- * `bg-muted/40`) instead of role tokens and the 2px radius, and it has no empty member. Owed as
+ * right shape and cannot be used: it carries shadcn chrome (`rounded-lg`, `border-line`,
+ * `bg-recess/40`) instead of role tokens and the 2px radius, and it has no empty member. Owed as
  * one line in the design-system ledger, naming this route.
  */
 function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Verdict) => void }) {
@@ -135,12 +137,12 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
           title={`Record "${VERDICT_LABEL[verdict]}" for this family and type. Prototype: in memory only — the chrome says where a verdict would go, which is nowhere yet.`}
           className={cn(
             "border px-2.5 py-1 face-mono t-value",
-            value === verdict ? "text-[var(--r-ink)]" : "text-[var(--r-ink-mute)]",
+            value === verdict ? "text-ink" : "text-ink-mute",
           )}
           style={{
             borderRadius: 2,
-            borderColor: value === verdict ? "var(--r-line-2)" : "var(--r-line)",
-            background: value === verdict ? "var(--r-select)" : "transparent",
+            borderColor: value === verdict ? token("line-2") : token("line"),
+            background: value === verdict ? token("select") : "transparent",
           }}
         >
           {VERDICT_LABEL[verdict]}
@@ -188,13 +190,13 @@ function RefusalPanel({ family, size }: { family: BoardFamily; size: number }) {
   return (
     <div
       className="flex flex-col justify-center gap-1 border p-3"
-      style={{ width: size * 3 + 16, borderRadius: 2, borderColor: "var(--r-alarm)" }}
+      style={{ width: size * 3 + 16, borderRadius: 2, borderColor: token("alarm") }}
     >
-      <span className="face-mono t-label" style={{ color: "var(--r-alarm)" }}>
+      <span className="face-mono t-label" style={{ color: token("alarm") }}>
         {family.refusal?.code ?? "refused"}
       </span>
-      <p className="m-0 t-label leading-4 text-[var(--r-ink-2)]">{family.refusal?.detail}</p>
-      <span className="t-caption text-[var(--r-ink-mute)]">
+      <p className="m-0 t-label leading-4 text-ink-2">{family.refusal?.detail}</p>
+      <span className="t-caption text-ink-mute">
         Revit never built this family, so there is no drawing to compare. That is the finding, not a
         gap in the board.
       </span>
@@ -226,20 +228,18 @@ function FamilySidebar({ stage }: { stage: Stage }) {
       {probe ? (
         <>
           <div className="flex flex-col gap-0.5">
-            <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+            <span className="face-mono t-caption text-ink-mute">
               family.json · oracle prediction
             </span>
             <Triptych size={SIDEBAR_PANEL} halfSpan={halfSpan} ink={predicted} captions="short" />
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="face-mono t-caption text-[var(--r-ink-mute)]">
-              Revit · runtime probe
-            </span>
+            <span className="face-mono t-caption text-ink-mute">Revit · runtime probe</span>
             <Triptych size={SIDEBAR_PANEL} halfSpan={halfSpan} ink={actual} captions="short" />
           </div>
         </>
       ) : (
-        <span className="t-caption leading-4 text-[var(--r-ink-2)]">
+        <span className="t-caption leading-4 text-ink-2">
           nothing was built, so there is nothing to draw — what the document declares, below, is the
           whole content
         </span>
@@ -249,9 +249,9 @@ function FamilySidebar({ stage }: { stage: Stage }) {
         {constituents(stage.family).map((group) => (
           <div key={group.kind} className="flex flex-col">
             <dt className="face-mono t-label">
-              {group.kind} <span className="tabular-nums text-[var(--r-ink-2)]">{group.count}</span>
+              {group.kind} <span className="tabular-nums text-ink-2">{group.count}</span>
             </dt>
-            <dd className="m-0 face-mono t-caption leading-4 text-[var(--r-ink-2)]">
+            <dd className="m-0 face-mono t-caption leading-4 text-ink-2">
               {group.names.join(" · ")}
             </dd>
           </div>
@@ -301,7 +301,7 @@ export function ReviewBoard({
       key: "kind",
       label: "kind",
       width: "w-[84px]",
-      cell: (row) => <span className="text-[var(--r-ink-mute)]">{row.kind}</span>,
+      cell: (row) => <span className="text-ink-mute">{row.kind}</span>,
     },
     {
       key: "claim",
@@ -316,7 +316,7 @@ export function ReviewBoard({
     {
       key: "authored",
       label: "family.json says",
-      cell: (row) => <span className="text-[var(--r-ink-2)]">{row.authored}</span>,
+      cell: (row) => <span className="text-ink-2">{row.authored}</span>,
       edit: (row) => {
         const writable = claimEdit(row) != null;
         return {
@@ -330,7 +330,7 @@ export function ReviewBoard({
     {
       key: "actual",
       label: "Revit reports",
-      cell: (row) => <span className="text-[var(--r-ink-2)]">{row.actual}</span>,
+      cell: (row) => <span className="text-ink-2">{row.actual}</span>,
     },
     {
       key: "delta",
@@ -339,11 +339,11 @@ export function ReviewBoard({
       right: true,
       cell: (row) =>
         row.deviation == null ? (
-          <span className="text-[var(--r-ink-mute)]">—</span>
+          <span className="text-ink-mute">—</span>
         ) : row.deviation <= 1e-6 ? (
-          <span className="text-[var(--r-ink-mute)]">·</span>
+          <span className="text-ink-mute">·</span>
         ) : (
-          <span className="tabular-nums" style={{ color: "var(--r-alarm)" }}>
+          <span className="tabular-nums" style={{ color: token("alarm") }}>
             {feet(row.deviation)}
           </span>
         ),
@@ -358,32 +358,26 @@ export function ReviewBoard({
           you lose your place in the list you were scanning. */}
       <nav
         className="w-72 shrink-0 overflow-y-auto overflow-x-visible border-r"
-        style={{ borderColor: "var(--r-line)" }}
+        style={{ borderColor: token("line") }}
       >
         {board.map((entry) => (
-          <div
-            key={entry.key}
-            className="relative border-b"
-            style={{ borderColor: "var(--r-line)" }}
-          >
+          <div key={entry.key} className="relative border-b" style={{ borderColor: token("line") }}>
             <div className="flex items-start">
               <button
                 type="button"
                 onClick={() => setSelected(entry.key)}
                 className={cn(
                   "flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5 text-left",
-                  entry.key === selected ? "bg-[var(--r-select)]" : "",
+                  entry.key === selected ? "bg-select" : "",
                 )}
                 style={{ borderRadius: 2 }}
               >
                 <span className="face-mono t-label">{entry.family.name}</span>
                 <span className="flex items-baseline gap-1.5">
-                  <span className="face-mono t-caption text-[var(--r-ink-2)]">
-                    {entry.typeName}
-                  </span>
+                  <span className="face-mono t-caption text-ink-2">{entry.typeName}</span>
                   <AgreementWord agreement={headline(entry.rows)} />
                   {verdicts.get(entry.key) !== "unjudged" ? (
-                    <span className="t-caption text-[var(--r-ink-mute)]">
+                    <span className="t-caption text-ink-mute">
                       {VERDICT_LABEL[verdicts.get(entry.key)]}
                     </span>
                   ) : null}
@@ -394,7 +388,7 @@ export function ReviewBoard({
                 aria-expanded={expanded === entry.key}
                 onClick={() => setExpanded(expanded === entry.key ? null : entry.key)}
                 title="Show what this family.json declares, and six small drawings of it. For recognising a family, not judging one — judging is the overlay on the right."
-                className="shrink-0 px-2 py-1.5 face-mono t-caption text-[var(--r-ink-mute)]"
+                className="shrink-0 px-2 py-1.5 face-mono t-caption text-ink-mute"
               >
                 {expanded === entry.key ? "hide" : "open"}
               </button>
@@ -403,10 +397,10 @@ export function ReviewBoard({
               <div
                 className="absolute left-full top-0 z-20 w-64"
                 style={{
-                  background: "var(--r-artifact)",
-                  border: "0.5px solid var(--r-line-2)",
+                  background: token("artifact"),
+                  border: `0.5px solid ${token("line-2")}`,
                   borderRadius: 2,
-                  boxShadow: "0 2px 8px color-mix(in srgb, var(--r-ink) 10%, transparent)",
+                  boxShadow: `0 2px 8px color-mix(in srgb, ${token("ink")} 10%, transparent)`,
                 }}
               >
                 <FamilySidebar stage={entry} />
@@ -419,7 +413,7 @@ export function ReviewBoard({
       <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
         <header className="flex flex-wrap items-baseline gap-3">
           <span className="face-mono t-prose font-semibold">{stage.family.name}</span>
-          <span className="face-mono t-label text-[var(--r-ink-2)]">{stage.typeName}</span>
+          <span className="face-mono t-label text-ink-2">{stage.typeName}</span>
           <TallyChips rows={stage.rows} />
           <span className="ml-auto">
             <VerdictStrip
@@ -431,9 +425,7 @@ export function ReviewBoard({
 
         {/* THE READING, named on the family it belongs to: one document, from one run. */}
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-caption text-[var(--r-ink-mute)]">
-            this reading came from
-          </span>
+          <span className="face-mono t-caption text-ink-mute">this reading came from</span>
           <FactChip
             tone="meta"
             dashed
@@ -448,7 +440,7 @@ export function ReviewBoard({
             <Triptych size={PANEL} halfSpan={halfSpan} ink={actual} ghost={predicted} labelPlanes />
             <div className="flex items-center gap-4">
               <ScaleNote halfSpan={halfSpan} size={PANEL} />
-              <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+              <span className="face-mono t-caption text-ink-mute">
                 thin outline = the portable document&apos;s prediction · filled ink = what Revit
                 built · dashed = void. Daylight between them IS the disagreement.
               </span>
@@ -459,7 +451,7 @@ export function ReviewBoard({
         )}
 
         <div className="flex flex-col gap-1">
-          <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+          <span className="face-mono t-caption text-ink-mute">
             {shown.length} of {stage.rows.length} claims — everything that is not a plain agreement,
             plus every writable settings key. A cell that refuses the caret says why in its title.
           </span>

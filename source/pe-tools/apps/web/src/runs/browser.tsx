@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 // The takeoff run browser — the one /runs surface. A sheet of two-column zone cards is the page
 // body, grouped into level sections; the PLAN docks collapsible + resizable at the TOP (atlas
 // presentation law); the STAGING TRAY docks collapsible at the RIGHT of the A/B section
@@ -51,8 +52,6 @@ import {
   INK_M,
   LABEL,
   LABEL_SIZE,
-  MIST,
-  PAPER,
   PLAN_LAW,
   RESIDUE_TREATMENT,
   type ResidueKind,
@@ -241,19 +240,19 @@ function Delta({
   goodWhenUp?: boolean;
   suffix?: string;
 }) {
-  if (value === null) return <span className="text-muted-foreground/60">—</span>;
+  if (value === null) return <span className="text-ink-2/60">—</span>;
   const eps = 0.5 * 10 ** -digits; // half a display unit — matches every precision, incl. scorer's 3
 
   if (Math.abs(value) < eps) {
     return (
-      <span className="text-muted-foreground/60" title="No change vs the baseline run.">
+      <span className="text-ink-2/60" title="No change vs the baseline run.">
         ·
       </span>
     );
   }
   const good = goodWhenUp ? value > 0 : value < 0;
   return (
-    <span className="tabular-nums" style={{ color: good ? "var(--st-done)" : "var(--st-warn)" }}>
+    <span className="tabular-nums" style={{ color: good ? token("done") : token("caution") }}>
       {value > 0 ? "+" : ""}
       {fmtNum(value, digits)}
       {suffix}
@@ -380,7 +379,7 @@ export function ZonePanel(props: {
       if (!live) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctx.fillStyle = PAPER;
+      ctx.fillStyle = token("page");
       ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
       if (plan) {
         paintPlan(
@@ -417,7 +416,7 @@ export function ZonePanel(props: {
     <div
       ref={hostRef}
       className="relative shrink-0 overflow-hidden"
-      style={{ width: maxW, height: maxH, background: PAPER, borderRadius: 2 }}
+      style={{ width: maxW, height: maxH, background: token("page"), borderRadius: 2 }}
     >
       <div
         className="absolute"
@@ -495,7 +494,7 @@ export function ZonePanel(props: {
                 <path
                   d={d}
                   fill={residue ? "none" : tone.fill}
-                  stroke={hot || flagged ? "var(--r-alarm)" : (residue?.outline.color ?? "none")}
+                  stroke={hot || flagged ? token("alarm") : (residue?.outline.color ?? "none")}
                   strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
                   pointerEvents="all"
                   style={{ cursor: stagedItem ? "crosshair" : "default" }}
@@ -549,7 +548,7 @@ export function ZonePanel(props: {
                 <path
                   d={d}
                   fill={held ? tone.fill : "none"}
-                  stroke={hot || flagged ? "var(--r-alarm)" : (residue?.outline.color ?? "none")}
+                  stroke={hot || flagged ? token("alarm") : (residue?.outline.color ?? "none")}
                   strokeWidth={hot ? 4 : flagged ? 2.5 : (residue?.outline.widthPx ?? 0)}
                   pointerEvents="all"
                   style={{ cursor: stagedItem ? "crosshair" : "default" }}
@@ -598,19 +597,19 @@ export function ZonePanel(props: {
         </svg>
       </div>
       {plan === null ? (
-        <div className="tele absolute bottom-1 left-1 border bg-background/90 px-1 text-[10px] text-muted-foreground">
+        <div className="tele absolute bottom-1 left-1 border bg-page/90 px-1 text-[10px] text-ink-2">
           plan unavailable in this package
         </div>
       ) : null}
       {/* Instant id popover — replaces the slow native tooltip on these elements. */}
       {hover && (
         <div
-          className="tele pointer-events-none absolute z-10 whitespace-nowrap border bg-background/95 px-1.5 py-0.5 text-[10px] shadow-sm"
+          className="tele pointer-events-none absolute z-10 whitespace-nowrap border bg-page/95 px-1.5 py-0.5 text-[10px] shadow-sm"
           style={{
             left: Math.min(hover.x + 10, maxW - 90),
             top: Math.min(hover.y + 12, maxH - 22),
-            borderColor: hover.flagged ? "var(--r-alarm)" : "var(--line-2)",
-            color: hover.flagged ? "var(--r-alarm)" : "var(--foreground)",
+            borderColor: hover.flagged ? token("alarm") : token("line-2"),
+            color: hover.flagged ? token("alarm") : token("ink"),
             borderRadius: 2,
           }}
         >
@@ -625,7 +624,7 @@ export function ZonePanel(props: {
 function MissingPanel(props: { w: number; h: number; label: string }) {
   return (
     <div
-      className="tele flex shrink-0 items-center justify-center bg-secondary text-[11px] text-muted-foreground"
+      className="tele flex shrink-0 items-center justify-center bg-recess text-[11px] text-ink-2"
       style={{ width: props.w, height: props.h, borderRadius: 2 }}
     >
       {props.label}
@@ -659,7 +658,7 @@ function StageButton(props: {
           onClick={() => props.onSwing(otherPairs[0]!)}
           title={`This zone is staged under ${otherPairs.length} other A/B pair${otherPairs.length === 1 ? "" : "s"} (pinned at stage time; the lens is only a view). Click to swing the lens to the pinned pair.`}
           className="tele shrink-0 text-[10px]"
-          style={{ color: "var(--st-warn)" }}
+          style={{ color: token("caution") }}
         >
           ⚑{otherPairs.length}≠
         </button>
@@ -685,8 +684,8 @@ function StageButton(props: {
         className="tele shrink-0 border px-1.5 text-[10px]"
         style={{
           borderRadius: 2,
-          borderColor: staged ? "var(--r-alarm)" : "var(--line-2)",
-          color: staged ? "var(--r-alarm)" : "var(--st-meta)",
+          borderColor: staged ? token("alarm") : token("line-2"),
+          color: staged ? token("alarm") : token("ink-2"),
         }}
       >
         {staged ? "staged ✓" : "＋ stage"}
@@ -712,9 +711,9 @@ const STAT_ROWS: StatRow[] = [
   {
     label: "verdict",
     value: (z) => (
-      <span style={{ color: z.triage.verdict === "solve" ? "var(--st-done)" : "var(--st-warn)" }}>
+      <span style={{ color: z.triage.verdict === "solve" ? token("done") : token("caution") }}>
         {z.triage.verdict}
-        <span className="text-muted-foreground"> · {z.triage.reason}</span>
+        <span className="text-ink-2"> · {z.triage.reason}</span>
       </span>
     ),
   },
@@ -749,7 +748,7 @@ const STAT_ROWS: StatRow[] = [
     value: (z) => {
       const top = topRejections(z, 2);
       return top.length === 0 ? (
-        <span className="text-muted-foreground">none</span>
+        <span className="text-ink-2">none</span>
       ) : (
         top.map(([k, n]) => `${k} ×${n}`).join(" · ")
       );
@@ -787,8 +786,8 @@ function ZoneCard(props: {
 
   return (
     <div
-      className="flex min-w-0 flex-col gap-1.5 border bg-background p-2"
-      style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
+      className="flex min-w-0 flex-col gap-1.5 border bg-page p-2"
+      style={{ borderColor: token("line-2"), borderRadius: 2 }}
     >
       <div className="flex items-baseline gap-2">
         <span className="tele text-xs font-semibold" title={name}>
@@ -836,12 +835,10 @@ function ZoneCard(props: {
               }
               className={cn(
                 "tele shrink-0 border px-1.5 text-[10px]",
-                props.highlighted
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
+                props.highlighted ? "bg-recess text-ink" : "text-ink-2 hover:text-ink",
               )}
               style={{
-                borderColor: props.highlighted ? "var(--st-meta)" : "var(--line-2)",
+                borderColor: props.highlighted ? token("ink-2") : token("line-2"),
                 borderRadius: 2,
               }}
             >
@@ -909,7 +906,7 @@ function ZoneCard(props: {
         </colgroup>
         {comparing ? (
           <thead>
-            <tr className="text-[10px] text-muted-foreground">
+            <tr className="text-[10px] text-ink-2">
               <th aria-label="stat" />
               <th className="text-left font-normal">A · baseline</th>
               <th className="text-left font-normal">B · current</th>
@@ -920,7 +917,7 @@ function ZoneCard(props: {
         <tbody>
           {STAT_ROWS.map((row) => (
             <tr key={row.label} className="align-top">
-              <td className="pr-2 text-muted-foreground">{row.label}</td>
+              <td className="pr-2 text-ink-2">{row.label}</td>
               {comparing ? (
                 <>
                   <td className="truncate pr-2">{a ? row.value(a) : "—"}</td>
@@ -934,7 +931,7 @@ function ZoneCard(props: {
           ))}
           {knobs.length > 0 ? (
             <tr className="align-top">
-              <td className="pr-2 text-muted-foreground">knobs</td>
+              <td className="pr-2 text-ink-2">knobs</td>
               <td colSpan={comparing ? 3 : 1}>
                 <span className="flex flex-wrap gap-1">
                   {knobs.map(([k, v]) => (
@@ -982,9 +979,9 @@ function RunStrip(props: {
             key={entry.id}
             className="flex shrink-0 items-stretch overflow-hidden border"
             style={{
-              borderColor: isCur || isPrev ? "var(--st-meta)" : "var(--line-2)",
+              borderColor: isCur || isPrev ? token("ink-2") : token("line-2"),
               borderRadius: 2,
-              background: isCur ? "var(--secondary)" : "transparent",
+              background: isCur ? token("recess") : "transparent",
             }}
           >
             <button
@@ -997,10 +994,10 @@ function RunStrip(props: {
                 {isCur ? <b>B · </b> : null}
                 {meta?.label ?? entry.id.slice(0, 15)}
               </span>
-              <span className="tele text-[10px] leading-3 text-muted-foreground">
+              <span className="tele text-[10px] leading-3 text-ink-2">
                 {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
                 {typeof meta?.zoneFilter === "string" ? (
-                  <span style={{ color: "var(--st-warn)" }} title={partialTitle(meta.zoneFilter)}>
+                  <span style={{ color: token("caution") }} title={partialTitle(meta.zoneFilter)}>
                     {" "}
                     · partial
                   </span>
@@ -1013,9 +1010,9 @@ function RunStrip(props: {
               disabled={isCur}
               className="border-l px-1.5 text-[10px]"
               style={{
-                borderColor: "var(--line-2)",
-                background: isPrev ? "var(--secondary)" : "transparent",
-                color: isCur ? "var(--line-2)" : isPrev ? "var(--foreground)" : "var(--st-meta)",
+                borderColor: token("line-2"),
+                background: isPrev ? token("recess") : "transparent",
+                color: isCur ? token("line-2") : isPrev ? token("ink") : token("ink-2"),
               }}
               title={
                 isPrev
@@ -1371,7 +1368,7 @@ function PlanPane(props: {
           <path
             d={d}
             fillRule="evenodd"
-            fill={lit ? MIST : "transparent"}
+            fill={lit ? token("veil") : "transparent"}
             stroke={ZONE_STROKE}
             strokeDasharray={ZONE_DASH}
             style={{ strokeWidth: `calc(var(--sw) * ${ZONE_WIDTH}px)`, cursor: "pointer" }}
@@ -1415,7 +1412,11 @@ function PlanPane(props: {
     <div
       ref={hostRef}
       className="relative flex-1 overflow-hidden"
-      style={{ background: PAPER, cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+      style={{
+        background: token("page"),
+        cursor: dragging ? "grabbing" : "grab",
+        touchAction: "none",
+      }}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -1481,19 +1482,19 @@ function PlanPane(props: {
       </div>
       {props.tag && (
         <div
-          className="tele absolute left-2 top-2 border bg-background/90 px-1.5 py-0.5 text-[11px] text-muted-foreground"
+          className="tele absolute left-2 top-2 border bg-page/90 px-1.5 py-0.5 text-[11px] text-ink-2"
           style={{ borderRadius: 2 }}
         >
           {props.tag}
         </div>
       )}
       {!data && (
-        <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+        <div className="absolute inset-0 flex items-center justify-center text-sm text-ink-2">
           loading {props.runId}…
         </div>
       )}
       {data && !data.plan ? (
-        <div className="tele absolute bottom-2 left-2 border bg-background/90 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+        <div className="tele absolute bottom-2 left-2 border bg-page/90 px-1.5 py-0.5 text-[10px] text-ink-2">
           plan unavailable in this package
         </div>
       ) : null}
@@ -1560,7 +1561,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
   );
   return (
     <div
-      className="tele absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-background/95 px-2 py-1.5 text-[10px] text-muted-foreground shadow-sm"
+      className="tele absolute right-2 top-2 flex w-52 flex-col gap-1 border bg-page/95 px-2 py-1.5 text-[10px] text-ink-2 shadow-sm"
       style={{ borderRadius: 2 }}
     >
       <span className="flex items-baseline">
@@ -1576,7 +1577,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
           type="button"
           onClick={props.onClose}
           title="Hide the key (the plan header's 'key' button brings it back)."
-          className="tele ml-auto text-muted-foreground hover:text-foreground"
+          className="tele ml-auto text-ink-2 hover:text-ink"
         >
           ×
         </button>
@@ -1628,7 +1629,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
           "Input zone boundary. Always a hairline dash; status never changes its stroke.",
         )}
       </div>
-      <span className="mt-0.5 border-t pt-1 text-[9px]" style={{ borderColor: "var(--line-2)" }}>
+      <span className="mt-0.5 border-t pt-1 text-[9px]" style={{ borderColor: token("line-2") }}>
         solid dark = received · pale translucent = invented
         {props.underlay ? "" : " · underlay hidden"}
       </span>
@@ -1665,16 +1666,16 @@ function LevelStatsFloater(props: {
   if (!b) return null;
   return (
     <div
-      className="tele absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-background/95 px-2 py-1.5 text-[11px] shadow-sm"
+      className="tele absolute bottom-2 right-2 flex w-56 flex-col gap-0.5 border bg-page/95 px-2 py-1.5 text-[11px] shadow-sm"
       style={{ borderRadius: 2 }}
     >
-      <span className="flex items-baseline text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <span className="flex items-baseline text-[10px] font-semibold uppercase tracking-wide text-ink-2">
         {level} — this run
         <button
           type="button"
           onClick={props.onClose}
           title="Hide the level stats (the plan header's 'stats' button brings them back)."
-          className="tele ml-auto normal-case tracking-normal hover:text-foreground"
+          className="tele ml-auto normal-case tracking-normal hover:text-ink"
         >
           ×
         </button>
@@ -1696,7 +1697,7 @@ function LevelStatsFloater(props: {
         {a ? <Delta value={b.heldSqft - a.heldSqft} goodWhenUp={false} suffix=" sf" /> : null}
       </span>
       {b.rejTop.length > 0 && (
-        <span className="mt-0.5 flex flex-col text-muted-foreground">
+        <span className="mt-0.5 flex flex-col text-ink-2">
           {b.rejTop.map(([k, n]) => (
             <span key={k} title={`${n} rejections of kind ${k} across this level's zones.`}>
               {k} ×{n}
@@ -1747,13 +1748,13 @@ function ZonePeekFloater(props: {
   const knobs = adaptedKnobs(b);
   return (
     <div
-      className="tele pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 border bg-background/95 p-2 text-[11px] shadow-sm"
+      className="tele pointer-events-none absolute bottom-2 left-1/2 w-[30rem] max-w-[calc(100%-1rem)] -translate-x-1/2 border bg-page/95 p-2 text-[11px] shadow-sm"
       style={{ borderRadius: 2 }}
     >
       <div className="mb-1 flex flex-col items-center">
-        <span className="text-foreground">{props.zoneName}</span>
+        <span className="text-ink">{props.zoneName}</span>
         {props.highlighted && (
-          <span className="text-[10px] text-muted-foreground">highlighted · esc clears</span>
+          <span className="text-[10px] text-ink-2">highlighted · esc clears</span>
         )}
       </div>
       <table className="w-full table-fixed">
@@ -1765,25 +1766,25 @@ function ZonePeekFloater(props: {
         <tbody>
           {rows.map(([label, f]) => (
             <tr key={label} className="align-top">
-              {comparing && <td className="pr-2 text-right text-foreground">{a ? f(a) : "—"}</td>}
-              <td className="text-center text-muted-foreground">{label}</td>
-              <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
+              {comparing && <td className="pr-2 text-right text-ink">{a ? f(a) : "—"}</td>}
+              <td className="text-center text-ink-2">{label}</td>
+              <td className={cn("pl-2 text-ink", comparing ? "text-left" : "text-center")}>
                 {f(b)}
               </td>
             </tr>
           ))}
           <tr className="align-top">
-            {comparing && <td className="pr-2 text-right text-foreground">{rejList(a, true)}</td>}
-            <td className="text-center text-muted-foreground">rejections</td>
-            <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
+            {comparing && <td className="pr-2 text-right text-ink">{rejList(a, true)}</td>}
+            <td className="text-center text-ink-2">rejections</td>
+            <td className={cn("pl-2 text-ink", comparing ? "text-left" : "text-center")}>
               {rejList(b, false)}
             </td>
           </tr>
           {knobs.length > 0 && (
             <tr className="align-top">
               {comparing && <td />}
-              <td className="text-center text-muted-foreground">knobs</td>
-              <td className={cn("pl-2 text-foreground", comparing ? "text-left" : "text-center")}>
+              <td className="text-center text-ink-2">knobs</td>
+              <td className={cn("pl-2 text-ink", comparing ? "text-left" : "text-center")}>
                 {knobs.map(([k, v]) => `${k}=${v}`).join(" · ")}
               </td>
             </tr>
@@ -1899,7 +1900,7 @@ function PlanDock(props: {
     <div className="flex size-full min-h-0 flex-col">
       <div
         className="flex shrink-0 items-center gap-2 border-b px-2 py-1"
-        style={{ borderColor: "var(--line-2)" }}
+        style={{ borderColor: token("line-2") }}
       >
         <div className="flex gap-0.5">
           {levels.map((l) => (
@@ -1910,9 +1911,7 @@ function PlanDock(props: {
               title="Show this level on the plan — the sheet scrolls to its section (and scrolling the sheet moves this tab)."
               className={cn(
                 "tele rounded-[2px] px-2 py-0.5 text-[11px]",
-                l === level
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground hover:bg-muted",
+                l === level ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
               )}
             >
               {l.replace(" Level", "")}
@@ -1926,11 +1925,9 @@ function PlanDock(props: {
             title="Show/hide the key — what each mark on the plan means."
             className={cn(
               "tele rounded-[2px] border px-1.5 py-0.5 text-[10px]",
-              showKey
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:bg-muted",
+              showKey ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
             )}
-            style={{ borderColor: "var(--line-2)" }}
+            style={{ borderColor: token("line-2") }}
           >
             key
           </button>
@@ -1940,15 +1937,13 @@ function PlanDock(props: {
             title="Show/hide the level-stats floater — solve counts, sf, loudest rejections, A/B deltas."
             className={cn(
               "tele rounded-[2px] border px-1.5 py-0.5 text-[10px]",
-              showStats
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:bg-muted",
+              showStats ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
             )}
-            style={{ borderColor: "var(--line-2)" }}
+            style={{ borderColor: token("line-2") }}
           >
             stats
           </button>
-          <span className="tele text-[10px] text-muted-foreground">
+          <span className="tele text-[10px] text-ink-2">
             drag = pan · wheel = zoom · click zone = highlight · esc = clear
           </span>
         </span>
@@ -1973,7 +1968,7 @@ function PlanDock(props: {
             ) : null}
             <div
               className={cn("flex flex-1", comparing && "border-l")}
-              style={comparing ? { borderColor: "var(--line-2)" } : undefined}
+              style={comparing ? { borderColor: token("line-2") } : undefined}
             >
               <PlanPane
                 runId={curId}
@@ -1991,7 +1986,7 @@ function PlanDock(props: {
             </div>
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex flex-1 items-center justify-center text-sm text-ink-2">
             loading {level ?? "level"}…
           </div>
         )}
@@ -2118,10 +2113,7 @@ const NO_SCORES_TITLE =
 function scoreCell(row: RunRow, value: number | null): ReactNode {
   if (row.scores === null) {
     return (
-      <span
-        className="tele block px-1.5 text-right text-[10px] text-muted-foreground"
-        title={NO_SCORES_TITLE}
-      >
+      <span className="tele block px-1.5 text-right text-[10px] text-ink-2" title={NO_SCORES_TITLE}>
         no scores
       </span>
     );
@@ -2157,7 +2149,7 @@ function HeaderScores(props: {
   const f = (value: number | null | undefined) => (value == null ? "—" : value.toFixed(3));
   return (
     <span
-      className="tele text-xs text-muted-foreground"
+      className="tele text-xs text-ink-2"
       title="scores.json — the python scorer's board (score-looks-good.py, the single measure authority), persisted into the run package at harness time."
     >
       saved {f(primary?.savedWork)} {v11 ? "v1.1" : "v1"}
@@ -2210,14 +2202,10 @@ function LedgerDock(props: {
         search: (row) => `${row.label ?? ""} ${row.hash} ${row.id}`,
         cell: (row) => (
           <span className="tele flex min-w-0 items-baseline gap-1.5 px-1.5">
-            <span
-              className={cn("truncate", row.label ? "text-foreground" : "text-muted-foreground")}
-            >
+            <span className={cn("truncate", row.label ? "text-ink" : "text-ink-2")}>
               {runName(row)}
             </span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/70">
-              {fmtTime(row.when)}
-            </span>
+            <span className="shrink-0 text-[10px] text-ink-2/70">{fmtTime(row.when)}</span>
             <PartialityChip part={row.partiality} compact />
           </span>
         ),
@@ -2245,7 +2233,7 @@ function LedgerDock(props: {
           "The sheet's A/B selection. B (current) follows the clicked row; this cell sets/clears A (baseline).",
         cell: (row) => {
           if (row.id === curId) {
-            return <span className="tele block px-1.5 font-semibold text-foreground">B</span>;
+            return <span className="tele block px-1.5 font-semibold text-ink">B</span>;
           }
           const isA = row.id === prevId;
           // Picker warning, not a block: a partial package can still be a legitimate baseline
@@ -2267,9 +2255,7 @@ function LedgerDock(props: {
               }
               className={cn(
                 "tele h-7 w-full px-1.5 text-left",
-                isA
-                  ? "font-semibold text-foreground"
-                  : "text-muted-foreground/60 hover:text-muted-foreground",
+                isA ? "font-semibold text-ink" : "text-ink-2/60 hover:text-ink-2",
               )}
             >
               {isA ? "A" : "set A"}
@@ -2328,7 +2314,7 @@ function LedgerDock(props: {
         title: "Square footage in held rooms — area the solver found but did not trust.",
         sort: (row) => row.board.heldSqft,
         cell: (row) => (
-          <span className="tele block px-1.5 text-right tabular-nums text-muted-foreground">
+          <span className="tele block px-1.5 text-right tabular-nums text-ink-2">
             {fmtNum(row.board.heldSqft, 0)}
           </span>
         ),
@@ -2480,7 +2466,7 @@ function LedgerDock(props: {
   const optionSets = new Set(runs.map((r) => r.meta?.optionsHash ?? "?")).size;
 
   return (
-    <div className="shrink-0 border-t" style={{ borderColor: "var(--line-2)" }}>
+    <div className="shrink-0 border-t" style={{ borderColor: token("line-2") }}>
       <button
         type="button"
         onClick={onToggle}
@@ -2489,14 +2475,14 @@ function LedgerDock(props: {
             ? "Collapse the run ledger."
             : "Expand the run ledger — rows are runs, marks drive the sheet's A/B."
         }
-        className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-muted"
+        className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-recess"
       >
-        <span className="tele-label text-muted-foreground">ledger</span>
-        <span className="tele text-[11px] text-muted-foreground">
+        <span className="tele-label text-ink-2">ledger</span>
+        <span className="tele text-[11px] text-ink-2">
           {runs.length} runs · {optionSets} option sets · click a row = current (B), mark = baseline
           (A)
         </span>
-        <span className="tele ml-auto text-[11px] text-muted-foreground">
+        <span className="tele ml-auto text-[11px] text-ink-2">
           {open ? "▾ collapse" : "▴ expand"}
         </span>
       </button>
@@ -2506,15 +2492,15 @@ function LedgerDock(props: {
               at?" is never an inference from the run labels. */}
           {pool && (
             <div
-              className="tele shrink-0 truncate border-b px-3 py-1 text-[10px] text-muted-foreground"
-              style={{ borderColor: "var(--line-2)" }}
+              className="tele shrink-0 truncate border-b px-3 py-1 text-[10px] text-ink-2"
+              style={{ borderColor: token("line-2") }}
               title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
             >
               pool {pool}
             </div>
           )}
           {rows === null ? (
-            <div className="tele p-4 text-sm text-muted-foreground">loading the run ledger…</div>
+            <div className="tele p-4 text-sm text-ink-2">loading the run ledger…</div>
           ) : (
             <MasterTable
               rows={rows}
@@ -2835,13 +2821,13 @@ export default function RunBrowser() {
 
   if (error) {
     return (
-      <div className="tele p-8 text-sm" style={{ color: "var(--st-warn)" }}>
+      <div className="tele p-8 text-sm" style={{ color: token("caution") }}>
         run pool unavailable: {error}
       </div>
     );
   }
   if (!runs) {
-    return <div className="tele p-8 text-sm text-muted-foreground">loading run pool…</div>;
+    return <div className="tele p-8 text-sm text-ink-2">loading run pool…</div>;
   }
   // Empty pool is a SYSTEM story, not a filter story: nothing is hidden, nothing has been
   // captured. The page says which directory it watched and what fills it.
@@ -2851,9 +2837,9 @@ export default function RunBrowser() {
         <EmptyState story="scope" exit="run the takeoff harness to fill the pool">
           No runs captured yet
         </EmptyState>
-        <p className="tele text-[11px] leading-relaxed text-muted-foreground">
+        <p className="tele text-[11px] leading-relaxed text-ink-2">
           Every run of{" "}
-          <span className="text-foreground">
+          <span className="text-ink">
             ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope
           </span>{" "}
           auto-persists its package (report.json, zone TSVs, INKP bins) into the pool; this page
@@ -2861,7 +2847,7 @@ export default function RunBrowser() {
         </p>
         {pool && (
           <p
-            className="tele break-all text-[10px] text-muted-foreground"
+            className="tele break-all text-[10px] text-ink-2"
             title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
           >
             pool {pool}
@@ -2886,28 +2872,28 @@ export default function RunBrowser() {
   const sheetBody = (
     <main ref={setMainRefs} onScroll={onSheetScroll} className="size-full min-h-0 overflow-y-auto">
       {reportCur === null ? (
-        <div className="tele p-8 text-sm text-muted-foreground">loading run…</div>
+        <div className="tele p-8 text-sm text-ink-2">loading run…</div>
       ) : review ? (
         <div className="flex flex-col gap-4 p-4">
           <div className="flex items-baseline gap-3">
             <h2 className="tele text-xs font-semibold uppercase tracking-wide">
               review — {stagedItems.length} staged
             </h2>
-            <span className="tele text-[11px] text-muted-foreground">
+            <span className="tele text-[11px] text-ink-2">
               each item at its pinned A/B pair · the lens is untouched
             </span>
             <button
               type="button"
               onClick={() => setReview(false)}
               title="Back to the normal sheet."
-              className="tele ml-auto border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
-              style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
+              className="tele ml-auto border px-1.5 py-0.5 text-[10px] text-ink-2 hover:text-ink"
+              style={{ borderColor: token("line-2"), borderRadius: 2 }}
             >
               ✕ exit review
             </button>
           </div>
           {stagedItems.length === 0 && (
-            <p className="tele text-[11px] text-muted-foreground">
+            <p className="tele text-[11px] text-ink-2">
               Nothing staged anymore — stage zone cards from the normal sheet.
             </p>
           )}
@@ -2924,14 +2910,14 @@ export default function RunBrowser() {
                         ? "This item's pinned pair IS the current lens."
                         : "Pinned pair ≠ current lens — click to swing the lens to this pair (the stage is untouched)."
                     }
-                    className="tele flex items-baseline gap-2 text-[11px] text-muted-foreground hover:text-foreground"
+                    className="tele flex items-baseline gap-2 text-[11px] text-ink-2 hover:text-ink"
                   >
                     <span>
                       pinned A {item.runA ?? "(none)"} → B {item.runB}
                     </span>
                     {!onLens && (
                       <span
-                        style={{ color: "var(--st-warn)" }}
+                        style={{ color: token("caution") }}
                         title="Pinned pair differs from the page lens."
                       >
                         ≠ lens
@@ -2942,7 +2928,7 @@ export default function RunBrowser() {
                     type="button"
                     onClick={() => fb.unstage(item.key)}
                     title="Remove this item from the staged set."
-                    className="tele ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                    className="tele ml-auto text-[10px] text-ink-2 hover:text-ink"
                   >
                     ✕ unstage
                   </button>
@@ -2986,11 +2972,11 @@ export default function RunBrowser() {
                 }}
               >
                 <div
-                  className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-background px-4 py-1"
-                  style={{ borderColor: "var(--line-2)" }}
+                  className="sticky top-0 z-10 -mx-4 mb-2 flex items-baseline gap-3 border-b bg-page px-4 py-1"
+                  style={{ borderColor: token("line-2") }}
                 >
                   <h2 className="tele text-xs font-semibold uppercase tracking-wide">{level}</h2>
-                  <span className="tele text-[11px] text-muted-foreground">
+                  <span className="tele text-[11px] text-ink-2">
                     {solved}/{zonePairs.length} solved · {fmtSqft(sf)}
                   </span>
                   {hidden > 0 && (
@@ -3092,24 +3078,24 @@ export default function RunBrowser() {
   );
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col bg-background text-foreground">
+    <div className="flex h-dvh min-h-0 flex-col bg-page text-ink">
       <header
         className="flex shrink-0 flex-col gap-1.5 border-b px-4 py-2"
-        style={{ borderColor: "var(--line-2)" }}
+        style={{ borderColor: token("line-2") }}
       >
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="tele text-sm font-semibold">runs</h1>
           {linkNote && (
             <span
               className="tele text-[11px]"
-              style={{ color: "var(--st-warn)" }}
+              style={{ color: token("caution") }}
               title="The URL's deep link could not be fully applied."
             >
               {linkNote}
             </span>
           )}
           {board && (
-            <span className="tele text-xs text-muted-foreground">
+            <span className="tele text-xs text-ink-2">
               B: {board.solved}/{board.zones} solved · {board.acceptedRooms} rooms ·{" "}
               {fmtSqft(board.acceptedSqft)} accepted · {fmtSqft(board.heldSqft)} held
             </span>
@@ -3117,7 +3103,7 @@ export default function RunBrowser() {
           <PartialityChip part={partCur} prefix="B: " />
           <PartialityChip part={partPrev} prefix="A: " />
           {boardPrev && board && (
-            <span className="tele text-xs text-muted-foreground">
+            <span className="tele text-xs text-ink-2">
               Δ vs A: <Delta value={board.solved - boardPrev.solved} /> solved ·{" "}
               <Delta value={board.acceptedSqft - boardPrev.acceptedSqft} suffix=" sf" /> ·{" "}
               <Delta
@@ -3152,8 +3138,8 @@ export default function RunBrowser() {
                 type="button"
                 onClick={() => setBaseline(null)}
                 title="Clear the baseline — cards show the current run only, same footprint."
-                className="tele border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
-                style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
+                className="tele border px-1.5 py-0.5 text-[10px] text-ink-2 hover:text-ink"
+                style={{ borderColor: token("line-2"), borderRadius: 2 }}
               >
                 clear A
               </button>
@@ -3162,8 +3148,8 @@ export default function RunBrowser() {
                 type="button"
                 onClick={() => setBaseline("auto")}
                 title="Restore the default baseline: the current run's chronological predecessor."
-                className="tele border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
-                style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
+                className="tele border px-1.5 py-0.5 text-[10px] text-ink-2 hover:text-ink"
+                style={{ borderColor: token("line-2"), borderRadius: 2 }}
               >
                 A: auto
               </button>
@@ -3174,11 +3160,9 @@ export default function RunBrowser() {
               title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
               className={cn(
                 "tele rounded-[2px] px-1.5 py-0.5 text-[10px]",
-                underlay
-                  ? "bg-secondary text-secondary-foreground"
-                  : "border text-muted-foreground",
+                underlay ? "bg-recess text-ink" : "border text-ink-2",
               )}
-              style={underlay ? undefined : { borderColor: "var(--line-2)" }}
+              style={underlay ? undefined : { borderColor: token("line-2") }}
             >
               ink evidence
             </button>
@@ -3194,10 +3178,10 @@ export default function RunBrowser() {
               className={cn(
                 "tele rounded-[2px] px-1.5 py-0.5 text-[10px]",
                 changedOnly && comparing
-                  ? "bg-secondary text-secondary-foreground"
-                  : "border text-muted-foreground disabled:opacity-40",
+                  ? "bg-recess text-ink"
+                  : "border text-ink-2 disabled:opacity-40",
               )}
-              style={changedOnly && comparing ? undefined : { borderColor: "var(--line-2)" }}
+              style={changedOnly && comparing ? undefined : { borderColor: token("line-2") }}
             >
               changed only
             </button>
@@ -3242,7 +3226,7 @@ export default function RunBrowser() {
                       ? "Collapse the plan dock (drag the divider to resize it)."
                       : "Expand the plan dock."
                   }
-                  className="tele px-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                  className="tele px-1.5 text-[11px] text-ink-2 hover:text-ink"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}
                 </button>

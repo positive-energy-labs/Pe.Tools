@@ -1,7 +1,7 @@
 /* settings-panes round 1 — json pane primitive (throwaway with the round).
    Token classes come from @tanstack/highlight (`th-token th-<class>`); colors ride
    the design-lang role tokens (design-lang.css) so the pane reads as part of the
-   design under review. Washes follow lang.css's color-mix-over---r-on idiom. */
+   design under review. Washes follow lang.css's color-mix-over---pe-on idiom. */
 
 .jsonpane {
   position: relative;
@@ -17,21 +17,21 @@
 
 /* json token roles — property keys lead; strings/numbers get quiet distinction. */
 .jsonpane .th-property {
-  color: var(--r-ink);
+  color: var(--pe-ink);
   font-weight: 550;
 }
 .jsonpane .th-string {
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 .jsonpane .th-number {
-  color: var(--r-commit);
+  color: var(--pe-commit);
 }
 .jsonpane .th-literal {
-  color: var(--r-caution);
+  color: var(--pe-caution);
 }
 .jsonpane .th-operator,
 .jsonpane .th-meta {
-  color: var(--r-ink-mute);
+  color: var(--pe-ink-mute);
 }
 
 /* line decorations (JsonView only) — variants pass classNames on decorations */
@@ -40,17 +40,17 @@
   min-width: 100%;
 }
 .jsonpane .th-line.dec-proposed {
-  background: color-mix(in srgb, var(--r-pea-ink) 12%, var(--r-on));
+  background: color-mix(in srgb, var(--pe-pea-ink) 12%, var(--pe-on));
 }
 .jsonpane .th-line.dec-staged {
-  background: color-mix(in srgb, var(--r-caution) 12%, var(--r-on));
+  background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
 }
 .jsonpane .th-line.dec-attention {
-  background: color-mix(in srgb, var(--r-caution) 12%, var(--r-on));
-  box-shadow: inset 2px 0 0 var(--r-caution);
+  background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
+  box-shadow: inset 2px 0 0 var(--pe-caution);
 }
 .jsonpane .th-line.dec-issue {
-  box-shadow: inset 2px 0 0 var(--r-alarm);
+  box-shadow: inset 2px 0 0 var(--pe-alarm);
 }
 
 /* ── editor overlay ── */
@@ -76,7 +76,7 @@
   outline: none;
   background: transparent;
   color: transparent;
-  caret-color: var(--r-ink);
+  caret-color: var(--pe-ink);
   font: inherit;
   letter-spacing: inherit;
   tab-size: 2;
@@ -85,5 +85,5 @@
 }
 
 .jsonpane-input::selection {
-  background: color-mix(in srgb, var(--r-ink) 18%, transparent);
+  background: color-mix(in srgb, var(--pe-ink) 18%, transparent);
 }

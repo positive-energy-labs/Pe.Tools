@@ -91,7 +91,7 @@ function RoutePane({ store }: { store: RoutePaneStore }) {
             key={JSON.stringify(doc)}
             aria-label={`${spec.title} document`}
             defaultValue={JSON.stringify(doc, null, 2)}
-            className="mt-3 min-h-[70vh] w-full resize-y bg-[var(--r-recess)] p-3 face-mono t-value"
+            className="mt-3 min-h-[70vh] w-full resize-y bg-recess p-3 face-mono t-value"
             onBlur={(event) => {
               try {
                 const value: unknown = JSON.parse(event.currentTarget.value);

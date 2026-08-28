@@ -1,4 +1,4 @@
-﻿/**
+/**
  * /design-system — THE INDEX. The design language, stated and demonstrated.
  *
  * THE INDEX LAW (ruled 2026-08-16): **nothing exists on this page unless it
@@ -66,11 +66,11 @@ function Section({
 }) {
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
-        <span className="t-caption t-upper text-[var(--r-ink-mute)]">{n}</span>
+      <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
+        <span className="t-caption t-upper text-ink-mute">{n}</span>
         <span className="t-label t-upper">{title}</span>
         {help != null ? <HelpTip className="self-center">{help}</HelpTip> : null}
-        <span className="t-label min-w-0 flex-1 text-[var(--r-ink-2)]">{note}</span>
+        <span className="t-label min-w-0 flex-1 text-ink-2">{note}</span>
       </div>
       {children}
     </section>
@@ -91,11 +91,11 @@ function Demo({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-1 items-start gap-x-8 gap-y-3 border-b border-[var(--r-line)] py-4 last:border-b-0 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 items-start gap-x-8 gap-y-3 border-b border-line py-4 last:border-b-0 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="face-mono t-label text-[var(--r-ink)]">{label}</span>
-        <p className="t-prose text-[var(--r-ink-2)]">{spec}</p>
-        <span className="t-caption text-[var(--r-ink-mute)]">consumers: {consumers}</span>
+        <span className="face-mono t-label text-ink">{label}</span>
+        <p className="t-prose text-ink-2">{spec}</p>
+        <span className="t-caption text-ink-mute">consumers: {consumers}</span>
       </div>
       <div className="flex min-w-0 flex-col gap-3">{children}</div>
     </div>
@@ -105,8 +105,8 @@ function Demo({
 /** A recorded gap, said out loud where a reader would otherwise think the demo was finished. */
 function GapNote({ children }: { children: React.ReactNode }) {
   return (
-    <p className="face-mono t-caption max-w-[86ch] border-l border-dashed border-[var(--r-line-2)] pl-2 text-[var(--r-ink-2)]">
-      <span className="text-[var(--r-caution)]">gap · </span>
+    <p className="face-mono t-caption max-w-[86ch] border-l border-dashed border-line-2 pl-2 text-ink-2">
+      <span className="text-caution">gap · </span>
       {children}
     </p>
   );
@@ -117,7 +117,7 @@ function CounterExample({ why, children }: { why: string; children: React.ReactN
   return (
     <div className="flex flex-col gap-1 opacity-55">
       <div className="w-fit">{children}</div>
-      <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+      <span className="face-mono t-caption text-ink-mute">
         <span className="line-through">the wrong way</span> — {why}
       </span>
     </div>
@@ -126,22 +126,20 @@ function CounterExample({ why, children }: { why: string; children: React.ReactN
 
 /** A quiet caption under a specimen. */
 function Cap({ children }: { children: React.ReactNode }) {
-  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+  return <span className="face-mono t-caption text-ink-2">{children}</span>;
 }
 
 /* ═══ 00 · the page ═════════════════════════════════════════════════════════════════════════ */
 
 function DesignSystem() {
   return (
-    <div className="t-prose min-h-screen bg-[var(--r-page)] text-[var(--r-ink)]">
-      <header className="sticky top-0 z-20 border-b border-[var(--r-line)] bg-[var(--r-page)]/90 backdrop-blur">
+    <div className="t-prose min-h-screen bg-page text-ink">
+      <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
         <div className="page-wrap flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
             <span className="t-title font-pe-display">Design system</span>
-            <span className="t-caption t-upper text-[var(--r-ink-mute)]">
-              the language, catalogued
-            </span>
-            <Link to="/" className="t-label text-[var(--r-nav)] hover:underline">
+            <span className="t-caption t-upper text-ink-mute">the language, catalogued</span>
+            <Link to="/" className="t-label text-nav hover:underline">
               ← tools
             </Link>
           </div>
@@ -167,14 +165,14 @@ function Thesis() {
   return (
     <section className="flex flex-col gap-3">
       <p className="t-display font-pe-display">One cell grammar, at three scales.</p>
-      <p className="t-prose max-w-[74ch] text-[var(--r-ink-2)]">
+      <p className="t-prose max-w-[74ch] text-ink-2">
         Pea proposes; you decide; the model is allowed to disagree. Every surface in pe-tools has to
         say those three things at a glance, and the language does it with one treatment used at
         three sizes — the value inside a table cell, the value inside pea&apos;s chat card, and the
         whole write inside an arming strip are the same marks, scaled. Colour is spent only where a
         hue is a meaning; type carries the rest.
       </p>
-      <p className="t-value max-w-[74ch] text-[var(--r-ink-mute)]">
+      <p className="t-value max-w-[74ch] text-ink-mute">
         This page catalogues the components that are that language. It is a spec and a demonstration
         at once: the prose states the ruling, the specimen beside it is the shipping component
         obeying it. Where the component cannot obey it yet, the page says so.
@@ -209,7 +207,7 @@ const ORDERED_SPECIMENS = [...ORDER_SPECIMENS].sort(
 const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   {
     name: "one alarm",
-    text: "--r-alarm means the model disagrees. Nothing else in the product may wear it — not an error, not a warning, not a destructive verb. A busy bridge gets caution, because a busy bridge is not the model disagreeing.",
+    text: "--pe-alarm means the model disagrees. Nothing else in the product may wear it — not an error, not a warning, not a destructive verb. A busy bridge gets caution, because a busy bridge is not the model disagreeing.",
     demo: <StateCell value="1.75 in" agree="drift" modelValue="1.375 in" />,
   },
   {
@@ -241,10 +239,10 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
   },
   {
     name: "selection is a fill",
-    text: "Selection, focus and hover buy no hue, ever. Selection is literally the fourth rung of the ground ladder (--r-select); hover is one neutral ink veil identical on every control. The law is structural, not remembered.",
+    text: "Selection, focus and hover buy no hue, ever. Selection is literally the fourth rung of the ground ladder (--pe-select); hover is one neutral ink veil identical on every control. The law is structural, not remembered.",
     demo: (
       <span className="flex items-center gap-2">
-        <span className="t-label bg-[var(--r-select)] px-2 py-1">selected row</span>
+        <span className="t-label bg-select px-2 py-1">selected row</span>
         <Verb label="hover me" onClick={noop} reason="Takes the one veil — no hue" />
       </span>
     ),
@@ -316,7 +314,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
       <span className="flex flex-col gap-1">
         {ORDERED_SPECIMENS.map((p) => (
           <span key={cellStateLabel(p)} className="flex items-baseline gap-2">
-            <span className="face-mono t-caption w-16 shrink-0 text-[var(--r-ink-mute)]">
+            <span className="face-mono t-caption w-16 shrink-0 text-ink-mute">
               {cellStateLabel(p)}
             </span>
             <StateCell {...p} />
@@ -404,7 +402,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
     text: "A verb that writes beyond the page carries a human-readable reason supplied before it arms, explicit identity in the call rather than whatever is selected, the plan hash it was made against with a drift refusal, and a receipt whose failures stay staged for retry. Presented as an arming strip, never at hover height.",
     demo: (
       <span className="flex flex-col gap-1">
-        <Link to="/design-system/arming" className="t-value text-[var(--r-nav)] hover:underline">
+        <Link to="/design-system/arming" className="t-value text-nav hover:underline">
           /design-system/arming
         </Link>
         <Cap>
@@ -423,14 +421,14 @@ function Laws() {
       title="the laws"
       note="fifteen rules that decide every surface — each with the shipping component obeying it. A position lives here the moment a real component can render it; SURFACE-PHILOSOPHY keeps only what nothing can render yet"
     >
-      <div className="border-t border-[var(--r-line)]">
+      <div className="border-t border-line">
         {LAWS.map((law) => (
           <div
             key={law.name}
-            className="grid grid-cols-1 items-start gap-x-6 gap-y-2 border-b border-[var(--r-line)] py-3.5 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,20rem)]"
+            className="grid grid-cols-1 items-start gap-x-6 gap-y-2 border-b border-line py-3.5 sm:grid-cols-[9rem_minmax(0,1fr)_minmax(0,20rem)]"
           >
-            <span className="t-caption t-upper text-[var(--r-ink)]">{law.name}</span>
-            <p className="t-prose text-[var(--r-ink-2)]">{law.text}</p>
+            <span className="t-caption t-upper text-ink">{law.name}</span>
+            <p className="t-prose text-ink-2">{law.text}</p>
             <div className="flex flex-wrap items-center gap-2 sm:justify-self-end">{law.demo}</div>
           </div>
         ))}
@@ -454,22 +452,22 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     asks: "what surface is this sitting on?",
     tokens: [
       {
-        token: "--r-page",
+        token: "--pe-page",
         means: "the page itself; prose and page chrome",
         modes: "L .985 ↔ .185 — one hue (88°) in both modes",
       },
       {
-        token: "--r-artifact",
+        token: "--pe-artifact",
         means: "the machine-operated object: table, card, strip",
         modes: "one lightness step off the page, both modes",
       },
       {
-        token: "--r-recess",
+        token: "--pe-recess",
         means: "set INTO an artifact: head/foot bands, the key",
         modes: "same step size again — the ladder is even",
       },
       {
-        token: "--r-select",
+        token: "--pe-select",
         means: "selection + focus fill. never a hue",
         modes: "rung 4; the no-hue law made structural",
       },
@@ -480,17 +478,17 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     asks: "how loud is this text allowed to be?",
     tokens: [
       {
-        token: "--r-ink",
+        token: "--pe-ink",
         means: "primary text: values, labels, prose",
         modes: "inverted pair on the ground's own hue",
       },
       {
-        token: "--r-ink-2",
+        token: "--pe-ink-2",
         means: "annotations, footlines, captions, counts",
         modes: "light value sits AT the meaning band's lightness",
       },
       {
-        token: "--r-ink-mute",
+        token: "--pe-ink-mute",
         means: "locked · dropped · the 'never checked' squiggle",
         modes: "near-achromatic; ~0 drift and ~0 ΔL across modes",
       },
@@ -501,12 +499,12 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     asks: "is this a seam, or a box?",
     tokens: [
       {
-        token: "--r-line",
+        token: "--pe-line",
         means: "quiet: row rules, the artifact frame's inset edge",
         modes: "ink @12% ↔ @14% — derived, so it rides the hue free",
       },
       {
-        token: "--r-line-2",
+        token: "--pe-line-2",
         means: "firm: seams, citation underline, chip edge, focus",
         modes: "ink @22% ↔ @26%",
       },
@@ -517,42 +515,42 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     asks: "what fact is this hue standing for?",
     tokens: [
       {
-        token: "--r-pea",
+        token: "--pe-pea",
         means: "pea's MARK: proposal ring, corner fold, card edge",
         modes: "the display rung — band lightness stepped 0.08 toward its ground",
       },
       {
-        token: "--r-pea-ink",
+        token: "--pe-pea-ink",
         means: "pea at ink weight: pea's text, the wash source",
         modes: "on-band, both modes; h158 unmoved",
       },
       {
-        token: "--r-alarm",
+        token: "--pe-alarm",
         means: "THE one alarm: drift, refusal, the ghost value",
         modes: "the one legislated off-band token (+35% chroma), both modes",
       },
       {
-        token: "--r-caution",
+        token: "--pe-caution",
         means: "stale · unverified · unsaved · partial · error",
         modes: "on-band; 2.8× the incumbent kiln's chroma",
       },
       {
-        token: "--r-done",
+        token: "--pe-done",
         means: "it landed: receipts, the post-commit sentence",
         modes: "on-band; 25° from pea — adjacent, not equal",
       },
       {
-        token: "--r-commit",
+        token: "--pe-commit",
         means: "the only filled blue: writes beyond the page",
         modes: "PE blue's exact hue, band-quantized",
       },
       {
-        token: "--r-on-commit",
+        token: "--pe-on-commit",
         means: "text/icon sitting on a commit fill",
-        modes: "= --r-page. no pure white or black exists in the set",
+        modes: "= --pe-page. no pure white or black exists in the set",
       },
       {
-        token: "--r-nav",
+        token: "--pe-nav",
         means: "nav as blue TEXT — back · forward · out",
         modes: "byte-identical to commit; the job carries the difference",
       },
@@ -622,8 +620,8 @@ function Tokens() {
       title="tokens"
       note="eighteen, and every one of them is oklch(L C h) off a declared band — src/design-lang.css is the one place a colour is decided"
     >
-      <p className="t-prose max-w-[80ch] text-[var(--r-ink-2)]">
-        <code className="face-mono t-label">--r-*</code> is canon. The old{" "}
+      <p className="t-prose max-w-[80ch] text-ink-2">
+        <code className="face-mono t-label">--pe-*</code> is canon. The old{" "}
         <code className="face-mono t-label">--act-*</code> /{" "}
         <code className="face-mono t-label">--st-*</code> /{" "}
         <code className="face-mono t-label">--cat-*</code> role vocabulary in{" "}
@@ -635,9 +633,9 @@ function Tokens() {
 
       {TOKEN_GROUPS.map((g) => (
         <div key={g.group} className="flex flex-col gap-1.5">
-          <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1">
-            <span className="t-caption t-upper text-[var(--r-ink)]">{g.group}</span>
-            <span className="t-caption text-[var(--r-ink-mute)] italic">{g.asks}</span>
+          <div className="flex items-baseline gap-3 border-b border-line pb-1">
+            <span className="t-caption t-upper text-ink">{g.group}</span>
+            <span className="t-caption text-ink-mute italic">{g.asks}</span>
           </div>
           {g.tokens.map((t) => (
             <div
@@ -645,15 +643,13 @@ function Tokens() {
               className="grid grid-cols-[2.25rem_minmax(0,10rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-1 sm:grid-cols-[2.25rem_minmax(0,10rem)_minmax(0,1fr)_minmax(0,20rem)]"
             >
               <span
-                className="h-5 w-9 shrink-0 border border-[var(--r-line-2)]"
+                className="h-5 w-9 shrink-0 border border-line-2"
                 style={{ background: `var(${t.token})` }}
                 title={values[t.token] ?? t.token}
               />
               <span className="face-mono t-caption truncate">{t.token}</span>
-              <span className="t-label min-w-0 text-[var(--r-ink-2)]">{t.means}</span>
-              <span className="t-caption col-span-3 text-[var(--r-ink-mute)] sm:col-span-1">
-                {t.modes}
-              </span>
+              <span className="t-label min-w-0 text-ink-2">{t.means}</span>
+              <span className="t-caption col-span-3 text-ink-mute sm:col-span-1">{t.modes}</span>
             </div>
           ))}
         </div>
@@ -698,8 +694,8 @@ function ArtifactFrameBlock() {
         <>
           The language&apos;s one enclosure: a ground shift plus a quiet inset hairline. No radius,
           no shadow — round 1 ruled that fills separate and outline borders do not. Optional
-          recessed head and foot bands re-declare <code className="face-mono t-label">--r-on</code>,
-          so every wash a child mixes lands on the ground it is actually standing on.
+          recessed head and foot bands re-declare <code className="face-mono t-label">--pe-on</code>
+          , so every wash a child mixes lands on the ground it is actually standing on.
         </>
       }
     >
@@ -987,13 +983,13 @@ function StateCellBlock() {
         {CELL_MATRIX.map(({ row, says }) => (
           <div
             key={row.key}
-            className="grid grid-cols-1 items-baseline gap-x-5 gap-y-1 border-b border-[var(--r-line)] py-2 last:border-b-0 sm:grid-cols-[8rem_minmax(0,22rem)_minmax(0,1fr)]"
+            className="grid grid-cols-1 items-baseline gap-x-5 gap-y-1 border-b border-line py-2 last:border-b-0 sm:grid-cols-[8rem_minmax(0,22rem)_minmax(0,1fr)]"
           >
-            <span className="face-mono t-caption text-[var(--r-ink-mute)]">{row.param}</span>
+            <span className="face-mono t-caption text-ink-mute">{row.param}</span>
             <span className="min-w-0">
               <StateCell {...cellProps(row)} />
             </span>
-            <span className="t-caption text-[var(--r-ink-2)]">{says}</span>
+            <span className="t-caption text-ink-2">{says}</span>
           </div>
         ))}
       </div>
@@ -1034,7 +1030,7 @@ function CellKeyBlock() {
         </>
       }
     >
-      <div className="max-w-3xl border border-[var(--r-line)]">
+      <div className="max-w-3xl border border-line">
         <CellStateKey />
       </div>
       <GapNote>
@@ -1117,11 +1113,11 @@ function ArmingBlock() {
         </>
       }
     >
-      <p className="t-prose max-w-[76ch] text-[var(--r-ink-2)]">
+      <p className="t-prose max-w-[76ch] text-ink-2">
         The strip is a lifecycle, not a specimen: unarmed → armed → refused → re-plan. Freezing one
         frame here would teach the shape and hide the mechanism, which is exactly the mistake the
         round-1 fixture made. All three phases and one live instance are at{" "}
-        <Link to="/design-system/arming" className="text-[var(--r-nav)] hover:underline">
+        <Link to="/design-system/arming" className="text-nav hover:underline">
           /design-system/arming
         </Link>
         .
@@ -1169,9 +1165,7 @@ function RealTable() {
         width: "w-24",
         facet: (r) => r.scope,
         cell: (r) => (
-          <span className="face-mono t-caption block px-1.5 py-1 text-[var(--r-ink-2)]">
-            {r.scope}
-          </span>
+          <span className="face-mono t-caption block px-1.5 py-1 text-ink-2">{r.scope}</span>
         ),
       },
       {
@@ -1196,9 +1190,7 @@ function RealTable() {
         right: true,
         sort: (r) => r.ageMin ?? Number.MAX_SAFE_INTEGER,
         cell: (r) => (
-          <span className="face-mono t-caption block px-1.5 py-1 text-[var(--r-ink-2)]">
-            {ageText(r)}
-          </span>
+          <span className="face-mono t-caption block px-1.5 py-1 text-ink-2">{ageText(r)}</span>
         ),
       },
     ],
@@ -1212,7 +1204,7 @@ function RealTable() {
       note="the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell as its cell renderer"
       help="The product table primitive, unmodified, with the cell grammar as its renderer. Rows never grow; click a cell and the readout band under the table speaks its facts. The gap notes below are the section's deliverable."
     >
-      <p className="t-prose max-w-[80ch] text-[var(--r-ink-2)]">
+      <p className="t-prose max-w-[80ch] text-ink-2">
         The design-lang round hand-rolled its table, so the grammar was only ever proven against
         markup written to flatter it. This is the product primitive, unmodified, wrapped in an{" "}
         <code className="face-mono t-label">ArtifactFrame</code> per the border budget, with the
@@ -1224,7 +1216,7 @@ function RealTable() {
         is focused, the way a spreadsheet&apos;s formula bar reads out the active cell — click a
         cell below to see it.
       </p>
-      <p className="t-prose max-w-[80ch] text-[var(--r-ink-2)]">
+      <p className="t-prose max-w-[80ch] text-ink-2">
         This table is also the exhibit for two of §01&apos;s laws, because neither can be shown on a
         static specimen. <strong>A filter&apos;s vocabulary is stable under filtering:</strong> the
         facet options come from <code className="face-mono t-label">facetOptions</code> reading ALL
@@ -1303,9 +1295,7 @@ function RealTable() {
       </ArtifactFrame>
 
       <div className="flex flex-col gap-1.5 pt-1">
-        <span className="t-caption t-upper text-[var(--r-ink)]">
-          what MasterTable cannot express
-        </span>
+        <span className="t-caption t-upper text-ink">what MasterTable cannot express</span>
         <GapNote>
           <strong>the clause&apos;s residue.</strong> The cell-state clause (ruled 2026-08-16)
           discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome —
@@ -1380,17 +1370,17 @@ function Satellites() {
         {SATELLITES.map((s) => (
           <div
             key={s.to}
-            className="grid grid-cols-1 items-baseline gap-x-6 gap-y-1 border-b border-[var(--r-line)] py-3 last:border-b-0 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
+            className="grid grid-cols-1 items-baseline gap-x-6 gap-y-1 border-b border-line py-3 last:border-b-0 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
           >
-            <Link to={s.to} className="t-value text-[var(--r-nav)] hover:underline">
+            <Link to={s.to} className="t-value text-nav hover:underline">
               {s.name}
-              <span className="face-mono t-caption ml-2 text-[var(--r-ink-mute)]">{s.to}</span>
+              <span className="face-mono t-caption ml-2 text-ink-mute">{s.to}</span>
             </Link>
-            <p className="t-value text-[var(--r-ink-2)]">{s.purpose}</p>
+            <p className="t-value text-ink-2">{s.purpose}</p>
           </div>
         ))}
       </div>
-      <p className="t-label max-w-[80ch] text-[var(--r-ink-mute)]">
+      <p className="t-label max-w-[80ch] text-ink-mute">
         Satellites mock their worlds by construction — null identities, no host calls — and say so
         on the surface. That requirement closes only if a satellite is ever promoted to a real
         route.

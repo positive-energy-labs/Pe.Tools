@@ -27,7 +27,7 @@ const pageKey = (page: number) => `p${page}`;
 
 /** The one hover veil, as an arbitrary-property class (design-lang hover law: a neutral ink
  * veil composited as a background-image over whatever fill is already there — no hue). */
-const VEIL_HOVER = "hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]";
+const VEIL_HOVER = "hover:veil";
 
 /**
  * Grounded-document view with up to three scroll-synced lanes: markdown blocks,
@@ -39,10 +39,10 @@ const VEIL_HOVER = "hover:[background-image:linear-gradient(var(--r-veil),var(--
  * Purely presentational over a GroundedDocEngine — embed it anywhere and drive
  * focus externally via engine.hoverBlock(id, "external").
  *
- * COLOUR CONTRACT (design-lang): focus/selection is the `--r-select` fill in the
+ * COLOUR CONTRACT (design-lang): focus/selection is the `--pe-select` fill in the
  * markdown lane; over page imagery — where a fill cannot separate — the locate
- * mark is `--r-ink` (R13a). An APPROXIMATE grounding is a distrusted value and
- * wears `--r-caution`; extracted-image regions are a KIND, not a state, and wear
+ * mark is `--pe-ink` (R13a). An APPROXIMATE grounding is a distrusted value and
+ * wears `--pe-caution`; extracted-image regions are a KIND, not a state, and wear
  * `--viz-4`. Dashed edges are not spent here at all — none of these is a seam.
  */
 export function GroundedDocView({
@@ -134,9 +134,9 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
         className={cn(
           // A firm hairline, not a dashed one: dashed is the seam slot and an empty
           // upload target is "nothing in scope", not a stand-in (takeoffs #9 precedent).
-          "flex w-full flex-col items-center gap-3 rounded-[var(--radius)] border border-[var(--r-line-2)] px-6 py-12 text-center",
+          "flex w-full flex-col items-center gap-3 rounded-sm border border-line-2 px-6 py-12 text-center",
           // The drop target lights as the selection fill — a place you are standing.
-          dragOver && "bg-[var(--r-select)]",
+          dragOver && "bg-select",
         )}
       >
         {parsing ? (
@@ -147,7 +147,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
           />
         ) : (
           <>
-            <FileUp className="size-6 text-muted-foreground" />
+            <FileUp className="size-6 text-ink-2" />
             <EmptyState story="scope" exit="drop a PDF here, paste a URL below, or load the sample">
               no document loaded
             </EmptyState>
@@ -168,7 +168,7 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
       {!parsing && (
         <div className="flex w-full items-center gap-1.5">
           <div className="relative flex-1">
-            <Link2 className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Link2 className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-ink-2" />
             <Input
               type="url"
               value={url}
@@ -211,13 +211,13 @@ function MarkdownPane({
 
   return (
     <div
-      className="min-w-0 flex-1 overflow-y-auto border-r border-border"
+      className="min-w-0 flex-1 overflow-y-auto border-r border-line"
       onMouseLeave={() => engine.hoverBlock(null, "markdown")}
     >
       <div className="flex flex-col gap-1 p-3">
         {doc.pages.map((page) => (
           <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
-            <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-background/95 px-3 py-1 text-muted-foreground backdrop-blur">
+            <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-page/95 px-3 py-1 text-ink-2 backdrop-blur">
               Page {page.page}
             </p>
             <div className="flex flex-col gap-1">
@@ -254,7 +254,7 @@ function ImagesPane({
 
   return (
     <div
-      className="min-w-0 flex-1 overflow-y-auto border-r border-border"
+      className="min-w-0 flex-1 overflow-y-auto border-r border-line"
       onMouseLeave={() => engine.hoverBlock(null, "image")}
     >
       <div className="flex flex-col gap-1 p-3">
@@ -263,7 +263,7 @@ function ImagesPane({
           if (images.length === 0) return null;
           return (
             <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
-              <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-background/95 px-3 py-1 text-muted-foreground backdrop-blur">
+              <p className="t-label t-upper sticky top-0 z-10 -mx-3 mb-1 bg-page/95 px-3 py-1 text-ink-2 backdrop-blur">
                 Page {page.page}
               </p>
               <div className="flex flex-col gap-2">
@@ -278,9 +278,9 @@ function ImagesPane({
                       onMouseEnter={() => engine.hoverBlock(image.id, "image")}
                       onClick={() => engine.pinBlock(image.id, "image")}
                       className={cn(
-                        "group flex flex-col overflow-hidden rounded-[var(--radius)] border bg-white text-left",
+                        "group flex flex-col overflow-hidden rounded-sm border bg-white text-left",
                         // Over imagery a fill cannot separate: the locate mark is ink (R13a).
-                        isFocused ? "border-[var(--r-ink)]" : "border-border",
+                        isFocused ? "border-ink" : "border-line",
                         !isFocused && VEIL_HOVER,
                       )}
                     >
@@ -290,11 +290,9 @@ function ImagesPane({
                         loading="lazy"
                         className="max-h-72 w-full object-contain"
                       />
-                      <span className="flex items-center gap-1.5 border-t border-border bg-[var(--r-recess)] px-1.5 py-0.5">
-                        <span className="t-caption face-mono text-muted-foreground">
-                          {image.category}
-                        </span>
-                        {isPinned && <Pin className="size-3 text-[var(--r-ink)]" />}
+                      <span className="flex items-center gap-1.5 border-t border-line bg-recess px-1.5 py-0.5">
+                        <span className="t-caption face-mono text-ink-2">{image.category}</span>
+                        {isPinned && <Pin className="size-3 text-ink" />}
                       </span>
                     </button>
                   );
@@ -331,17 +329,17 @@ function MarkdownBlock({
       onMouseEnter={() => engine.hoverBlock(block.id, "markdown")}
       onClick={() => engine.pinBlock(block.id, "markdown")}
       className={cn(
-        "group cursor-pointer rounded-[var(--radius)] px-2 py-1.5",
+        "group cursor-pointer rounded-sm px-2 py-1.5",
         // Selection is a fill, never a hue — the select rung, whatever the block's state.
-        isFocused ? "bg-[var(--r-select)]" : VEIL_HOVER,
+        isFocused ? "bg-select" : VEIL_HOVER,
         !groundable && "opacity-60",
       )}
     >
       <div className="mb-0.5 flex items-center gap-1.5">
-        <span className="t-caption face-mono text-muted-foreground">{block.kind}</span>
+        <span className="t-caption face-mono text-ink-2">{block.kind}</span>
         {!groundable && (
           <span
-            className="t-caption italic text-[var(--r-ink-mute)]"
+            className="t-caption italic text-ink-mute"
             title="No bounding box from the parser — this block cannot be located on the page"
           >
             no bbox
@@ -349,13 +347,13 @@ function MarkdownBlock({
         )}
         {isApprox && (
           <span
-            className="t-caption face-mono text-[var(--r-caution)]"
+            className="t-caption face-mono text-caution"
             title="Approximate location — the parser gave this block and a sibling the same region, so the highlight can't be trusted precisely."
           >
             ≈ approx
           </span>
         )}
-        {isPinned && <Pin className="size-3 text-[var(--r-ink)]" />}
+        {isPinned && <Pin className="size-3 text-ink" />}
       </div>
       <BlockMarkdown md={block.md} />
     </div>
@@ -376,7 +374,7 @@ function PagePane({
 
   return (
     <div
-      className="min-w-0 flex-1 overflow-y-auto bg-[var(--r-recess)]"
+      className="min-w-0 flex-1 overflow-y-auto bg-recess"
       onMouseLeave={() => engine.hoverBlock(null, "page")}
     >
       <div className="flex flex-col gap-4 p-3">
@@ -409,9 +407,9 @@ function PageCanvas({
 
   return (
     <div ref={laneAnchorRef(refs, pageKey(page.page))}>
-      <p className="t-label t-upper mb-1 text-muted-foreground">Page {page.page}</p>
+      <p className="t-label t-upper mb-1 text-ink-2">Page {page.page}</p>
       <div
-        className="relative overflow-hidden rounded-[var(--radius)] border border-border bg-white"
+        className="relative overflow-hidden rounded-sm border border-line bg-white"
         style={{ aspectRatio: `${page.width} / ${page.height}` }}
       >
         {page.screenshotUrl && (
@@ -453,18 +451,18 @@ function PageCanvas({
                 "absolute rounded-[1px] border",
                 isFocused
                   ? isApprox
-                    ? "z-10 border-2 border-[var(--r-caution)]"
-                    : "z-10 border-2 border-[var(--r-ink)]"
+                    ? "z-10 border-2 border-caution"
+                    : "z-10 border-2 border-ink"
                   : page.screenshotUrl
                     ? isApprox
-                      ? "border-[var(--r-caution)]"
-                      : cn("border-transparent hover:border-[var(--r-ink)]", VEIL_HOVER)
+                      ? "border-caution"
+                      : cn("border-transparent hover:border-ink", VEIL_HOVER)
                     : // Wireframe mode (no screenshot): keep boxes faintly visible.
-                      cn("border-border hover:border-[var(--r-ink)]", VEIL_HOVER),
+                      cn("border-line hover:border-ink", VEIL_HOVER),
               )}
             >
               {!page.screenshotUrl && (
-                <span className="t-caption face-mono absolute left-0.5 top-0.5 text-[var(--r-ink-mute)]">
+                <span className="t-caption face-mono absolute left-0.5 top-0.5 text-ink-mute">
                   {block.kind}
                 </span>
               )}
@@ -491,8 +489,8 @@ function PageCanvas({
               className={cn(
                 "absolute rounded-[1px] border",
                 isFocused
-                  ? "z-10 border-2 border-[var(--r-ink)]"
-                  : cn("border-[var(--viz-4)] hover:border-[var(--r-ink)]", VEIL_HOVER),
+                  ? "z-10 border-2 border-ink"
+                  : cn("border-viz-4 hover:border-ink", VEIL_HOVER),
               )}
             />
           );

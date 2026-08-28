@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * TARGETING HEAD — the one artifact a route mounts to say what it reaches and what it can do.
  *
@@ -39,8 +40,8 @@ function Demand<K extends string>({
       className="face-mono t-caption"
       title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${seam.needs}` : ""}`}
       style={{
-        color: bound ? "var(--r-ink)" : "var(--r-caution)",
-        borderBottom: seam ? "1px dashed var(--r-caution)" : "1px solid transparent",
+        color: bound ? token("ink") : token("caution"),
+        borderBottom: seam ? `1px dashed ${token("caution")}` : "1px solid transparent",
       }}
     >
       {k}
@@ -100,13 +101,13 @@ export function TargetingHead<K extends string>({
         style={{
           gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
           minHeight: 34,
-          borderTop: i === 0 ? undefined : "1px solid var(--r-line-2)",
+          borderTop: i === 0 ? undefined : `1px solid ${token("line-2")}`,
         }}
       >
         <span>{verbButton(v, runner)}</span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           {v.demands.length === 0 ? (
-            <span className="face-mono t-caption" style={{ color: "var(--r-ink-mute)" }}>
+            <span className="face-mono t-caption" style={{ color: token("ink-mute") }}>
               —
             </span>
           ) : (
@@ -116,7 +117,7 @@ export function TargetingHead<K extends string>({
         <span
           className="face-mono t-caption text-right"
           style={{
-            color: can.ok ? "var(--r-ink-mute)" : "var(--r-ink-2)",
+            color: can.ok ? token("ink-mute") : token("ink-2"),
             fontStyle: can.ok ? undefined : "italic",
           }}
         >
@@ -137,7 +138,7 @@ export function TargetingHead<K extends string>({
           : "Expand the verbs: what each one needs and why it is or is not ready"
       }
       className="face-mono t-caption px-2.5"
-      style={{ borderLeft: "1px solid var(--r-line-2)", color: "var(--r-ink-2)" }}
+      style={{ borderLeft: `1px solid ${token("line-2")}`, color: token("ink-2") }}
     >
       {expanded ? "▴" : "▾"}
     </button>
@@ -145,7 +146,7 @@ export function TargetingHead<K extends string>({
 
   const line = (
     <>
-      <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
+      <span className="t-label t-upper" style={{ color: token("ink") }}>
         {product.name}
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
@@ -160,7 +161,7 @@ export function TargetingHead<K extends string>({
             >
               <TargetCaption b={b} link={t} />
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+                <span className="face-mono t-caption" style={{ color: token("ink-2") }}>
                   {t.joiner}
                 </span>
                 <Picker
@@ -192,14 +193,14 @@ export function TargetingHead<K extends string>({
             style={{
               gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
               columnGap: "1rem",
-              color: "var(--r-ink-mute)",
+              color: token("ink-mute"),
             }}
           >
             <span>verb</span>
             <span>needs</span>
             <span className="text-right">state</span>
           </div>
-          <div style={{ borderBottom: "1px solid var(--r-ink)" }}>{verbs.map(gridRow)}</div>
+          <div style={{ borderBottom: `1px solid ${token("ink")}` }}>{verbs.map(gridRow)}</div>
         </>
       ) : (
         <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2">

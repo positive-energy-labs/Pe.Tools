@@ -46,7 +46,11 @@ test("the optimistic user echo is replaced in place by the server's canonical tu
 
 test("state_changed carries the route:* map the route panes read", () => {
   const state = reduce([
-    { type: "state_changed", state: { "route:family": { revision: 2 } }, changedKeys: ["route:family"] },
+    {
+      type: "state_changed",
+      state: { "route:family": { revision: 2 } },
+      changedKeys: ["route:family"],
+    },
   ] as KnownAgentControllerEvent[]);
   expect(state.sessionValues).toEqual({ "route:family": { revision: 2 } });
 });
@@ -70,7 +74,12 @@ test("a suspension and an approval are both gates, and only a suspension resumes
       isRunning: true,
       pendingApproval: { toolCallId: "t1", toolName: "grep", args: {} },
       pendingSuspensions: {
-        t2: { toolCallId: "t2", toolName: "ask_user", args: {}, suspendPayload: { options: ["A"] } },
+        t2: {
+          toolCallId: "t2",
+          toolName: "ask_user",
+          args: {},
+          suspendPayload: { options: ["A"] },
+        },
       },
     },
   };

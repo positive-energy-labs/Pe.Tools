@@ -15,16 +15,16 @@
  *                        --pea-tint --pea-line --line-soft). The GROUND FLIP ruling: the alias
  *                        shim in styles.css reads ZERO lines and never grows one back — the
  *                        old vocabulary is deleted, so consuming it is consuming nothing.
- *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --r-line /
- *                        --r-line-2 (design-lang.css); the bare names died with the Lens
- *                        vocabulary. (The regex is literal, so var(--r-line) never matches.)
+ *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --pe-line /
+ *                        --pe-line-2 (base.css); the bare names died with the Lens
+ *                        vocabulary.
  *  3. tele classes       tele / tele-label / section-label as class words. The TYPE TIERS
  *                        ruling: tier x face x case replaced
  *                        the tele bundles, deleted 2026-08-16. Comments are stripped first;
  *                        lang's `dl-section-label` is a different word and stays legal.
- *  4. hex literals       #rrggbb / #rrggbbaa outside design-lang.css. THE LAW in the canon
+ *  4. hex literals       #rrggbb / #rrggbbaa outside base.css. THE LAW in the canon
  *                        header: "no component, no route, and no CSS file downstream may name
- *                        a colour literal" — a colour is a one-line edit in design-lang.css.
+ *                        a colour literal" — a colour is a one-line edit in base.css.
  *  5. sub-10px type      text-[Npx] with N < 10. The 10px floor from the type-tier ruling
  *                        (ops enforced it on itself; the flagship pass finished the job).
  *
@@ -42,11 +42,8 @@
  *  longTitle        title= props over 240 characters — the hover-shadow-doc ratchet from fit
  *                   review B·5: prose moved out of sight instead of deleted. May only shrink.
  *
- *  Prototype code is EXEMPT from the walk (any directory whose name starts with `proto`, and
- *  any `routes/<name>-proto.tsx`): the
- *  ratchets cannot tell a prototype from a shipping route, and a guard red from throwaway code
- *  proves nothing about the change in front of you. The promotion pass moves the winner out of
- *  `proto/`, which is what re-arms the ratchets for it. Decided 2026-08-19, family review round 1.
+ *  The walk covers every apps/web/src TypeScript, TSX, and CSS file, including prototype paths.
+ *  Only the generated route tree is excluded; mounted prototypes remain maintained surface.
  *
  *  A count ABOVE its baseline fails with the offending files. A count BELOW its baseline also
  *  fails — asking you to lower the baseline — because a ratchet that can silently slacken is
@@ -71,14 +68,10 @@ const collect = (dir: string, relBase: string, out: Entry[]): Entry[] => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const rel = relBase === "" ? e.name : `${relBase}/${e.name}`;
     if (e.isDirectory()) {
-      // Prototype code is exempt (the TODO above): find-the-product rounds may not arm the
-      // ratchets. The promotion pass deletes the proto dir, which re-arms them for the winner.
-      if (!SKIP_DIRS.has(e.name) && !e.name.startsWith("proto"))
-        collect(join(dir, e.name), rel, out);
+      if (!SKIP_DIRS.has(e.name)) collect(join(dir, e.name), rel, out);
       continue;
     }
     if (SKIP_FILES.has(e.name)) continue;
-    if (e.name.endsWith("-proto.tsx")) continue;
     if (!/\.(?:tsx?|css)$/.test(e.name)) continue;
     out.push({ rel, text: readFileSync(join(dir, e.name), "utf8") });
   }
@@ -86,6 +79,39 @@ const collect = (dir: string, relBase: string, out: Entry[]): Entry[] => {
 };
 
 const FILES: Entry[] = collect(ROOT, "", []);
+
+describe("design guard â€” current token authority", () => {
+  it("has no retired --r-* tokens", () => {
+    const offences = scan(FILES, /--r-[\w-]+/g);
+    expect(offences, report(offences)).toEqual([]);
+  });
+
+  it("has no shadcn semantic color vars or utilities", () => {
+    const names =
+      "background|foreground|primary|secondary|muted|accent|destructive|card|popover|border|input|ring|sidebar|chart-[1-5]";
+    const re = new RegExp(
+      `var\\(--(?:color-)?(?:${names})(?![-\\w])|["']--(?:color-)?(?:${names})(?![-\\w])["']\\s*:|(?:^|[,{;\\n])\\s*--(?:color-)?(?:${names})(?![-\\w])\\s*:|(?<![-\\w])(?:bg|text|border|divide|ring|outline|fill|stroke)-(?:${names})(?![-\\w])`,
+      "g",
+    );
+    const offences = scan(FILES, re);
+    expect(offences, report(offences)).toEqual([]);
+  });
+
+  it("has no arbitrary PE color utilities", () => {
+    const re =
+      /(?<![-\w])(?:bg|text|border(?:-[xytrbls])?|divide|ring|outline|fill|stroke|from|via|to)-\[[^\]]*var\(--pe-[^)]+\)[^\]]*\]/g;
+    const offences = scan(FILES, re);
+    expect(offences, report(offences)).toEqual([]);
+  });
+
+  it("reads runtime PE and viz vars only through lib/token.ts", () => {
+    const code = FILES.filter((f) => /\.tsx?$/.test(f.rel) && f.rel !== "lib/token.ts").map(
+      (f) => ({ ...f, text: stripComments(f.text) }),
+    );
+    const offences = scan(code, /var\(--(?:pe|viz)-/g);
+    expect(offences, report(offences)).toEqual([]);
+  });
+});
 
 const lineOf = (text: string, index: number): number => text.slice(0, index).split("\n").length;
 
@@ -123,7 +149,7 @@ describe("design guard — carried debt ratchets", () => {
     ratchet("deadShim", offences);
   });
 
-  it("no bare var(--line) / var(--line-2) — the canon hairlines are --r-line / --r-line-2", () => {
+  it("no bare var(--line) / var(--line-2) — the canon hairlines are --pe-line / --pe-line-2", () => {
     const re = /var\(--line(?:-2)?\s*[,)]/g;
     const offences = scan(FILES, re);
     ratchet("bareLine", offences);
@@ -141,10 +167,10 @@ describe("design guard — carried debt ratchets", () => {
     ratchet("tele", offences);
   });
 
-  it("no hex colour literal outside design-lang.css (a colour is a one-line edit there)", () => {
-    const re = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b/g;
+  it("no hex colour literal outside base.css (a colour is a one-line edit there)", () => {
+    const re = /(?<![\w#])#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?\b/g;
     const offences = scan(
-      FILES.filter((f) => f.rel !== "design-lang.css"),
+      FILES.filter((f) => f.rel !== "base.css").map((f) => ({ ...f, text: stripComments(f.text) })),
       re,
     );
     ratchet("hex", offences);
@@ -213,7 +239,7 @@ describe("design guard — ratchets (baselines may only fall)", () => {
     ratchet(
       "dashed",
       scan(
-        FILES.filter((f) => !inUiOrLang(f) && f.rel !== "design-lang.css"),
+        FILES.filter((f) => !inUiOrLang(f) && f.rel !== "design-lang.css" && f.rel !== "base.css"),
         /border-dashed|stroke-dasharray|border-style:\s*dashed/g,
       ),
     );

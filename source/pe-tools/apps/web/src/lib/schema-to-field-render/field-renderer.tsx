@@ -19,7 +19,7 @@ export function FieldRenderer(props: FieldRendererProps) {
 
   return (
     <Suspense
-      fallback={<div className="h-16 animate-pulse rounded-lg border border-border bg-muted/30" />}
+      fallback={<div className="h-16 animate-pulse rounded-lg border border-line bg-recess/30" />}
     >
       {CustomRenderer ? (
         <CustomRenderer {...nextProps} />

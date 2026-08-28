@@ -4,6 +4,8 @@
  */
 import { useEffect } from "react";
 
+import { token } from "#/lib/token";
+
 export function VariantSwitcher({
   variants,
   current,
@@ -46,8 +48,8 @@ export function VariantSwitcher({
         display: "flex",
         alignItems: "center",
         gap: 12,
-        background: "#1a1a2e",
-        color: "#e8e8f0",
+        background: token("ink"),
+        color: token("page"),
         borderRadius: 999,
         padding: "8px 16px",
         fontFamily: "ui-monospace, monospace",

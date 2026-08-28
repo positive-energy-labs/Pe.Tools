@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * SPEC DRAWING — the one pane that reflects per-slot information, drawn the way a Price
  * submittal draws a grille: line work in ink, no fills, extension lines + witness lines +
@@ -77,7 +78,7 @@ export function SpecDrawing({
       height={height}
       viewBox={`${-M} ${-M} ${width} ${height}`}
       className="face-mono"
-      style={{ color: "var(--r-ink)", fontFamily: "ui-monospace, monospace", fontSize: 10 }}
+      style={{ color: token("ink"), fontFamily: "ui-monospace, monospace", fontSize: 10 }}
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -104,7 +105,7 @@ export function SpecDrawing({
       </defs>
 
       {/* ── PLAN ── */}
-      <text x={0} y={-M + 10} fill="var(--r-ink-2)">
+      <text x={0} y={-M + 10} fill={token("ink-2")}>
         PLAN
       </text>
       <rect width={L} height={W} fill="none" stroke="currentColor" strokeWidth="1.2" />
@@ -116,7 +117,7 @@ export function SpecDrawing({
           width={ol}
           height={g.opening * PX}
           fill="none"
-          stroke={bad ? "var(--r-alarm)" : "currentColor"}
+          stroke={bad ? token("alarm") : "currentColor"}
           strokeWidth="0.8"
         />
       ))}
@@ -144,7 +145,7 @@ export function SpecDrawing({
 
       {/* ── SECTION A-A, 2× ── */}
       <g transform={`translate(0 ${secY})`}>
-        <text x={0} y={-30} fill="var(--r-ink-2)">
+        <text x={0} y={-30} fill={token("ink-2")}>
           SECTION A-A · ACROSS WIDTH · 2×
         </text>
         {[
@@ -172,7 +173,7 @@ export function SpecDrawing({
             width={-g.slack * SX}
             height={secH}
             fill="none"
-            stroke="var(--r-alarm)"
+            stroke={token("alarm")}
             strokeDasharray="3 2"
           />
         )}
@@ -231,7 +232,7 @@ export function SpecDrawing({
 const inp: React.CSSProperties = {
   width: 44,
   fontSize: 10,
-  background: "var(--r-page)",
+  background: token("page"),
   textAlign: "center",
 };
 
@@ -242,7 +243,7 @@ function Halo({ x, y, text, fs }: { x: number; y: number; text: string; fs: numb
       x={x}
       y={y}
       textAnchor="middle"
-      stroke="var(--r-page)"
+      stroke={token("page")}
       strokeWidth={fs / 3}
       fill="currentColor"
       fontSize={fs}
@@ -301,7 +302,7 @@ function Wit({ arr, fs, x1, x2, y, ext, label, small, value, children }: WitProp
           y={y - (value ? fs / 2 + 4 : 3)}
           textAnchor="middle"
           stroke="none"
-          fill="var(--r-ink-2)"
+          fill={token("ink-2")}
           fontSize={9}
         >
           {label}
@@ -356,7 +357,7 @@ function VWit({
               y={mid - fs - 2}
               textAnchor="middle"
               stroke="none"
-              fill="var(--r-ink-2)"
+              fill={token("ink-2")}
               fontSize={9}
             >
               {label}

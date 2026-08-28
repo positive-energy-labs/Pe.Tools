@@ -26,7 +26,7 @@ function ToggleGroup({
         role="group"
         data-slot="toggle-group"
         className={cn(
-          "inline-flex items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5",
+          "inline-flex items-center gap-0.5 rounded-lg border border-line bg-recess/40 p-0.5",
           className,
         )}
         {...props}
@@ -51,7 +51,7 @@ function ToggleGroupItem({
       aria-pressed={active}
       onClick={() => ctx?.onValueChange(value)}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 aria-pressed:bg-background aria-pressed:text-foreground [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-3",
+        "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap text-ink-2 transition-colors outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-line-2/30 aria-pressed:bg-page aria-pressed:text-ink [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-3",
         className,
       )}
       {...props}

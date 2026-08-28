@@ -128,25 +128,25 @@ export function EvaluationView({
         <ArtifactFrame className="overflow-x-auto">
           <table className="w-full border-collapse text-left">
             <thead>
-              <tr className="border-b border-border">
-                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Target</th>
-                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Parameter</th>
-                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Current</th>
-                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Linked</th>
-                <th className="t-caption t-upper px-2 py-1.5 text-muted-foreground">Result</th>
+              <tr className="border-b border-line">
+                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Target</th>
+                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Parameter</th>
+                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Current</th>
+                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Linked</th>
+                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Result</th>
               </tr>
             </thead>
             <tbody>
               {writes.map((write) => (
                 <tr
                   key={`${write.assignmentId}:${write.targetElementUniqueId}:${write.targetParameter.name ?? write.targetParameter.kind}`}
-                  className="border-b border-border last:border-b-0"
+                  className="border-b border-line last:border-b-0"
                 >
                   <td
                     className={
                       write.changed
-                        ? "t-value max-w-[14rem] truncate px-2 py-1 text-foreground"
-                        : "t-value max-w-[14rem] truncate px-2 py-1 text-[var(--r-ink-mute)]"
+                        ? "t-value max-w-[14rem] truncate px-2 py-1 text-ink"
+                        : "t-value max-w-[14rem] truncate px-2 py-1 text-ink-mute"
                     }
                   >
                     {write.targetElementName ?? write.targetElementId}
@@ -154,16 +154,16 @@ export function EvaluationView({
                   <td
                     className={
                       write.changed
-                        ? "t-value px-2 py-1 text-muted-foreground"
-                        : "t-value px-2 py-1 text-[var(--r-ink-mute)]"
+                        ? "t-value px-2 py-1 text-ink-2"
+                        : "t-value px-2 py-1 text-ink-mute"
                     }
                   >
                     {write.targetParameter.name ?? write.targetParameter.kind}
                   </td>
-                  <td className="t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]">
+                  <td className="t-value face-mono px-2 py-1 text-ink-mute">
                     {displayParameterLinkValue(write.currentValue)}
                   </td>
-                  <td className="t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]">
+                  <td className="t-value face-mono px-2 py-1 text-ink-mute">
                     {displayParameterLinkValue(write.linkedValue)}
                   </td>
                   {/* A changed result is a PENDING write — unsaved until apply — so it takes
@@ -171,8 +171,8 @@ export function EvaluationView({
                   <td
                     className={
                       write.changed
-                        ? "t-value face-mono px-2 py-1 font-bold text-foreground"
-                        : "t-value face-mono px-2 py-1 text-[var(--r-ink-mute)]"
+                        ? "t-value face-mono px-2 py-1 font-bold text-ink"
+                        : "t-value face-mono px-2 py-1 text-ink-mute"
                     }
                   >
                     {displayParameterLinkValue(write.proposedValue)}

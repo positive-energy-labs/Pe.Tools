@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * FLOW is the targeting manifest's geometric projection. Trunks stay in the page context;
  * terminals alone take sides: reads enter from the left, writes leave on the right, and
@@ -31,7 +32,7 @@ export function TargetCaption<K extends string>({ b, link }: { b: Bindings<K>; l
     <span
       className="face-mono t-caption"
       style={{
-        color: feed.stale || feed.state === "error" ? "var(--r-caution)" : "var(--r-ink-mute)",
+        color: feed.stale || feed.state === "error" ? token("caution") : token("ink-mute"),
         lineHeight: 1,
       }}
     >
@@ -51,7 +52,7 @@ function Connector<K extends string>({ link, active }: { link: Link<K>; active: 
     <span
       aria-hidden
       className="face-mono shrink-0 text-center text-xs"
-      style={{ color: active ? "var(--r-ink)" : "var(--r-line-2)", minWidth: 64 }}
+      style={{ color: active ? token("ink") : token("line-2"), minWidth: 64 }}
     >
       {glyph}
     </span>
@@ -78,13 +79,13 @@ function Terminal<K extends string>({
     <div
       className={`flex min-w-36 flex-col px-2 py-1 ${side === "left" ? "items-end" : "items-start"}`}
       style={{
-        background: "var(--r-artifact)",
-        border: `1px ${b.feeds[link.key].seam ? "dashed var(--r-caution)" : "solid var(--r-line)"}`,
+        background: token("artifact"),
+        border: `1px ${b.feeds[link.key].seam ? `dashed ${token("caution")}` : `solid ${token("line")}`}`,
       }}
     >
       <TargetCaption b={b} link={link} />
       <span className="inline-flex items-baseline gap-1.5">
-        <span className="face-mono t-caption" style={{ color: "var(--r-ink-2)" }}>
+        <span className="face-mono t-caption" style={{ color: token("ink-2") }}>
           {link.joiner}
         </span>
         <Picker product={product} link={link} b={b} runner={runner} extra={extra} inert={dim} />
@@ -121,7 +122,7 @@ function Rail<K extends string>({
     <div
       className={`flex min-w-0 flex-col justify-center gap-1.5 ${side === "left" ? "items-end" : "items-start"}`}
     >
-      <span className="face-mono t-caption t-upper px-1" style={{ color: "var(--r-ink-mute)" }}>
+      <span className="face-mono t-caption t-upper px-1" style={{ color: token("ink-mute") }}>
         {side === "left" ? "reads" : "writes · syncs"}
       </span>
       {links.length ? (
@@ -137,7 +138,7 @@ function Rail<K extends string>({
           />
         ))
       ) : (
-        <span className="face-mono t-caption px-1" style={{ color: "var(--r-ink-mute)" }}>
+        <span className="face-mono t-caption px-1" style={{ color: token("ink-mute") }}>
           none
         </span>
       )}
@@ -174,17 +175,17 @@ export function TargetingFlow<K extends string>({
         <ArtifactFrame
           head={
             <>
-              <span className="t-label t-upper" style={{ color: "var(--r-ink)" }}>
+              <span className="t-label t-upper" style={{ color: token("ink") }}>
                 {product.name}
               </span>
-              <span className="face-mono t-caption t-upper" style={{ color: "var(--r-ink-mute)" }}>
+              <span className="face-mono t-caption t-upper" style={{ color: token("ink-mute") }}>
                 trunks
               </span>
               {ends.map((end) => (
                 <span
                   key={end.key}
                   className="face-mono t-caption"
-                  style={{ color: "var(--r-ink-2)" }}
+                  style={{ color: token("ink-2") }}
                 >
                   {pathOf(product, end.key)
                     .filter((link) => link.dir === null)

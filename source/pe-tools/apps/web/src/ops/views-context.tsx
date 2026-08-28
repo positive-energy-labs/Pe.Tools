@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 import type { ReactNode } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -97,7 +98,7 @@ function IssueLines({ issues }: { issues: unknown }) {
           key={i}
           className="face-mono t-caption"
           style={{
-            color: issue.severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)",
+            color: issue.severity === "Info" ? token("ink-2") : token("caution"),
           }}
         >
           {text(issue.severity)} {text(issue.code)}: {text(issue.message)}
@@ -154,10 +155,8 @@ function ContextSummaryView({ data }: OpViewProps) {
     <div className="flex flex-col gap-5">
       {/* hero: document identity large, chips beneath, active-view stage line —
           Revit's window chrome distilled to a title block */}
-      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)] px-4 py-3">
-        <div className="face-mono t-caption uppercase tracking-[0.3em] text-[var(--r-ink-2)]">
-          DOCUMENT
-        </div>
+      <div className="min-w-0 rounded-sm border border-line-2 px-4 py-3">
+        <div className="face-mono t-caption uppercase tracking-[0.3em] text-ink-2">DOCUMENT</div>
         <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
           <span
             className="t-title min-w-0 truncate leading-tight"
@@ -166,13 +165,11 @@ function ContextSummaryView({ data }: OpViewProps) {
             {activeDoc ? text(activeDoc.title) : "no active document"}
           </span>
           {activeDoc && (
-            <span className="face-mono t-caption shrink-0 text-[var(--r-ink-2)]">
-              {docKind(activeDoc)}
-            </span>
+            <span className="face-mono t-caption shrink-0 text-ink-2">{docKind(activeDoc)}</span>
           )}
         </div>
         {docPath && (
-          <div className="face-mono t-caption mt-0.5 text-[var(--r-ink-2)]" title={docPath}>
+          <div className="face-mono t-caption mt-0.5 text-ink-2" title={docPath}>
             {truncateMiddle(docPath, 72)}
           </div>
         )}
@@ -184,8 +181,8 @@ function ContextSummaryView({ data }: OpViewProps) {
 
         {/* stage line: where the camera is right now */}
         {activeView && (
-          <div className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-[var(--r-line)] pt-2">
-            <span className="face-mono t-caption uppercase tracking-[0.08em] text-[var(--r-ink-2)]">
+          <div className="mt-2.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-line pt-2">
+            <span className="face-mono t-caption uppercase tracking-[0.08em] text-ink-2">
               ON STAGE
             </span>
             <VizChip viz={activeView.isSheet === true ? 2 : 1} title="view kind">
@@ -194,9 +191,7 @@ function ContextSummaryView({ data }: OpViewProps) {
             <span className="t-value min-w-0 truncate font-medium" title={text(activeView.title)}>
               {text(activeView.title)}
             </span>
-            <span className="face-mono t-value text-[var(--r-ink-2)]">
-              1:{text(activeView.scale)}
-            </span>
+            <span className="face-mono t-value text-ink-2">1:{text(activeView.scale)}</span>
             {asString(activeView.levelName) && (
               <FactChip title="level of the active view">{text(activeView.levelName)}</FactChip>
             )}
@@ -210,7 +205,7 @@ function ContextSummaryView({ data }: OpViewProps) {
                 key={i}
                 className="face-mono t-caption"
                 style={{
-                  color: p.isActiveSheet === true ? "var(--r-ink)" : "var(--r-ink-2)",
+                  color: p.isActiveSheet === true ? token("ink") : token("ink-2"),
                 }}
                 title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
               >
@@ -244,7 +239,7 @@ function ContextSummaryView({ data }: OpViewProps) {
       <Section
         label="visible categories"
         aside={
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption text-ink-2">
             {visibleCategories.length} categories
           </span>
         }
@@ -279,12 +274,12 @@ function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
   const isActive = doc.isActive === true;
   return (
     <div
-      className={`flex max-w-[18rem] min-w-0 flex-col gap-0.5 rounded-[var(--radius)] border px-2.5 py-1.5 ${isActive ? "border-[var(--r-line-2)]" : "border-[var(--r-line)]"}`}
+      className={`flex max-w-[18rem] min-w-0 flex-col gap-0.5 rounded-sm border px-2.5 py-1.5 ${isActive ? "border-line-2" : "border-line"}`}
       /* selection is a fill, never a hue — the active tab takes the select rung and
          re-declares the ground it shifted. */
       style={
         isActive
-          ? ({ background: "var(--r-select)", "--r-on": "var(--r-select)" } as React.CSSProperties)
+          ? ({ background: token("select"), "--pe-on": token("select") } as React.CSSProperties)
           : undefined
       }
     >
@@ -295,7 +290,7 @@ function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
         >
           {text(doc.title)}
         </span>
-        <span className="face-mono t-caption shrink-0 text-[var(--r-ink-2)]">{docKind(doc)}</span>
+        <span className="face-mono t-caption shrink-0 text-ink-2">{docKind(doc)}</span>
       </div>
       <div className="flex flex-wrap items-center gap-1">
         {isActive && <FactChip title="this document has focus in Revit">active</FactChip>}
@@ -315,9 +310,7 @@ function DocumentSessionView({ data }: OpViewProps) {
       <Section
         label="open documents"
         aside={
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">
-            {text(res.openDocumentCount)} open
-          </span>
+          <span className="face-mono t-caption text-ink-2">{text(res.openDocumentCount)} open</span>
         }
       >
         {docs.length === 0 ? (
@@ -395,14 +388,13 @@ function VisibleSummaryView({ data, request }: OpViewProps) {
           handles.length > 0
             ? handles
             : asRecords(row.sampleElements).map((s) => asRecord(s.handle));
-        if (samples.length === 0)
-          return <span className="face-mono t-caption text-[var(--r-ink-2)]">∅</span>;
+        if (samples.length === 0) return <span className="face-mono t-caption text-ink-2">∅</span>;
         const ids = samples.map((h) => handleId(h ?? undefined));
         const complete = row.isReturnedElementSetComplete === true;
         return (
           <span
             className="face-mono t-caption"
-            style={{ color: complete ? "var(--r-ink-2)" : "var(--r-caution)" }}
+            style={{ color: complete ? token("ink-2") : token("caution") }}
             title={complete ? undefined : "returned element set is incomplete"}
           >
             {ids.join(" ")}
@@ -424,7 +416,7 @@ function VisibleSummaryView({ data, request }: OpViewProps) {
           return handle ? `${handleId(handle)}-${handleLabel(handle)}` : String(i);
         }}
         footer={
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">
+          <span className="face-mono t-caption text-ink-2">
             {text(res.totalVisibleElementCount)} visible elements · {categories.length} categories
           </span>
         }
@@ -508,7 +500,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
   ];
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 rounded-[var(--radius)] border border-[var(--r-line)] px-3 py-2.5">
+    <div className="flex min-w-0 flex-col gap-4 rounded-sm border border-line px-3 py-2.5">
       <div className="flex min-w-0 flex-wrap items-baseline gap-2">
         <VizChip viz={1} title="view kind">
           {text(view.viewType)}
@@ -526,7 +518,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
             overrides disallowed
           </FactChip>
         )}
-        <span className="face-mono t-caption text-[var(--r-ink-2)]">
+        <span className="face-mono t-caption text-ink-2">
           {text(view.candidateVisibleElementCount)} candidate visible ·{" "}
           {text(view.viewOwnedElementCount)} view-owned
         </span>
@@ -571,10 +563,10 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
 
       <Section
         label="filters"
-        aside={<span className="face-mono t-caption text-[var(--r-ink-2)]">{filters.length}</span>}
+        aside={<span className="face-mono t-caption text-ink-2">{filters.length}</span>}
       >
         {filters.length === 0 ? (
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">no view filters applied</span>
+          <span className="face-mono t-caption text-ink-2">no view filters applied</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {filters.map((filter, i) => {
@@ -597,14 +589,10 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
 
       <Section
         label="hidden categories"
-        aside={
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">
-            {hiddenCategories.length}
-          </span>
-        }
+        aside={<span className="face-mono t-caption text-ink-2">{hiddenCategories.length}</span>}
       >
         {hiddenCategories.length === 0 ? (
-          <span className="face-mono t-caption text-[var(--r-ink-2)]">none hidden</span>
+          <span className="face-mono t-caption text-ink-2">none hidden</span>
         ) : (
           <div className="flex flex-wrap gap-1">
             {hiddenCategories.map((cat, i) => {
@@ -626,7 +614,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
       {links.length > 0 && (
         <Section
           label="links"
-          aside={<span className="face-mono t-caption text-[var(--r-ink-2)]">{links.length}</span>}
+          aside={<span className="face-mono t-caption text-ink-2">{links.length}</span>}
         >
           <div className="flex flex-wrap gap-1">
             {links.map((link, i) => {
@@ -652,9 +640,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
       {worksets.length > 0 && (
         <Section
           label="worksets"
-          aside={
-            <span className="face-mono t-caption text-[var(--r-ink-2)]">{worksets.length}</span>
-          }
+          aside={<span className="face-mono t-caption text-ink-2">{worksets.length}</span>}
         >
           <div className="flex flex-wrap gap-1">
             {worksets.map((workset, i) => (
@@ -701,7 +687,7 @@ function ViewRenderingStateView({ data }: OpViewProps) {
       <Section label="evidence limits">
         {confidenceWarnings.map((warning, i) => (
           <Provenance key={`w${i}`}>
-            <span style={{ color: "var(--r-caution)" }}>confidence: {warning}</span>
+            <span style={{ color: token("caution") }}>confidence: {warning}</span>
           </Provenance>
         ))}
         {notInspected.map((item, i) => (
@@ -734,18 +720,18 @@ function ScoreBar({ score, max, muted }: { score: number; max: number; muted: bo
       className="inline-flex shrink-0 items-center gap-1.5"
       title={`score ${score} of max ${max} in this set`}
     >
-      <span className="inline-block h-[3px] w-[72px] rounded-[1px] bg-[var(--r-line)]">
+      <span className="inline-block h-[3px] w-[72px] rounded-[1px] bg-line">
         <span
           className="block h-full rounded-[1px]"
           style={{
             width: `${frac * 100}%`,
-            background: muted ? "var(--r-ink-mute)" : "var(--viz-1)",
+            background: muted ? token("ink-mute") : token("viz-1"),
           }}
         />
       </span>
       <span
         className="face-mono t-caption"
-        style={{ color: muted ? "var(--r-ink-mute)" : undefined }}
+        style={{ color: muted ? token("ink-mute") : undefined }}
       >
         {score}
       </span>
@@ -767,9 +753,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
     <div className="flex flex-col gap-3">
       {/* testimony header: the phrase under interrogation */}
       <div className="min-w-0">
-        <div className="face-mono t-caption uppercase tracking-[0.3em] text-[var(--r-ink-2)]">
-          REFERENCE
-        </div>
+        <div className="face-mono t-caption uppercase tracking-[0.3em] text-ink-2">REFERENCE</div>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-2">
           <span className="t-title min-w-0 font-medium leading-snug">
             “{text(res.referenceText)}”
@@ -779,10 +763,10 @@ function ResolveReferencesView({ data }: OpViewProps) {
             style={{
               color:
                 candidateCount === 1
-                  ? "var(--r-done)"
+                  ? token("done")
                   : candidateCount === 0
-                    ? "var(--r-caution)"
-                    : "var(--r-caution)",
+                    ? token("caution")
+                    : token("caution"),
             }}
           >
             {candidateCount === 0
@@ -802,7 +786,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
           nothing in the model matched this reference
         </EmptyState>
       ) : (
-        <div className="flex flex-col rounded-[var(--radius)] border border-[var(--r-line)]">
+        <div className="flex flex-col rounded-sm border border-line">
           {candidates.map((candidate, i) => {
             const handle = asRecord(candidate.handle);
             const related = asRecords(candidate.relatedHandles);
@@ -812,25 +796,21 @@ function ResolveReferencesView({ data }: OpViewProps) {
             /* rank is carried by order, the #n gutter and the score bar (grayscale law).
                The edge mark only locates: ink for the leader (R13a's neutral locate mark),
                caution for a demoted candidate in an ambiguous set. */
-            const edge = top ? "var(--r-ink)" : ambiguous ? "var(--r-caution)" : "transparent";
+            const edge = top ? token("ink") : ambiguous ? token("caution") : "transparent";
             return (
               <div
                 key={handle ? `${handleId(handle)}-${i}` : i}
-                className={`flex min-w-0 flex-col gap-1 border-l-2 px-2.5 py-2 ${i < candidates.length - 1 ? "border-b border-b-[var(--r-line)]" : ""}`}
+                className={`flex min-w-0 flex-col gap-1 border-l-2 px-2.5 py-2 ${i < candidates.length - 1 ? "border-b border-b-line" : ""}`}
                 style={{ borderLeftColor: edge }}
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span className="face-mono t-caption w-6 shrink-0 text-[var(--r-ink-2)]">
-                    #{i + 1}
-                  </span>
+                  <span className="face-mono t-caption w-6 shrink-0 text-ink-2">#{i + 1}</span>
                   {handle && <HandleChip handle={handle} />}
                   <span className={`t-value min-w-0 truncate ${top ? "font-medium" : ""}`}>
                     {text(candidate.label)}
                   </span>
                   {handle && (
-                    <span className="face-mono t-caption text-[var(--r-ink-2)]">
-                      {handleId(handle)}
-                    </span>
+                    <span className="face-mono t-caption text-ink-2">{handleId(handle)}</span>
                   )}
                   {score !== undefined && (
                     <span className="ml-auto">
@@ -847,7 +827,7 @@ function ResolveReferencesView({ data }: OpViewProps) {
                 )}
                 {provenance.length > 0 && (
                   <details className="pl-6">
-                    <summary className="face-mono t-caption cursor-pointer select-none text-[var(--r-ink-2)]">
+                    <summary className="face-mono t-caption cursor-pointer select-none text-ink-2">
                       provenance ({provenance.length})
                     </summary>
                     <div className="mt-0.5 flex flex-col gap-0.5">
@@ -902,7 +882,7 @@ function ViewImageView({ data }: OpViewProps) {
       <Section label="exported image">
         <KVGrid columns={3} items={items} />
         <div className="mt-2">
-          <div className="t-label text-[var(--r-ink-2)]">file path</div>
+          <div className="t-label text-ink-2">file path</div>
           <div className="face-mono t-value" title={filePath}>
             {truncateMiddle(filePath, 72)}
           </div>

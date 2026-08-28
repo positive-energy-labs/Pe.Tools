@@ -2,14 +2,14 @@
    components/lang — THE DESIGN-LANGUAGE PRIMITIVES, one stylesheet.
    =============================================================================================
 
-   Every colour below is `var(--r-…)` from `src/design-lang.css`. There is not one colour
+   Every colour below is `var(--pe-…)` from `src/design-lang.css`. There is not one colour
    literal in this file, on purpose: a literal would be invariant against the token layer and
    would quietly un-decide a colour the palette round already decided. That invariance is the
    exact defect round 2 found in canon `Button`/`Chip`, and
    `components/lang` exists partly to not have it.
 
    One file rather than seven: the mechanisms below are genuinely SHARED — the hover law, the
-   one `::before` square that two authors draw, the `--r-on` re-declarations, the squiggle
+   one `::before` square that two authors draw, the `--pe-on` re-declarations, the squiggle
    family. Splitting them per component is how they drift apart. Each block names its component.
 
    SCOPING: every rule is scoped by a `dl-` class. No element selectors, no ancestor scope —
@@ -43,9 +43,9 @@
    block in design-lang.css for WHAT is allowed to wear one. */
 
 .dl-artifact {
-  background: var(--r-artifact);
-  box-shadow: inset 0 0 0 1px var(--r-line);
-  --r-on: var(--r-artifact);
+  background: var(--pe-artifact);
+  box-shadow: inset 0 0 0 1px var(--pe-line);
+  --pe-on: var(--pe-artifact);
 }
 .dl-artifact-head,
 .dl-artifact-foot {
@@ -53,17 +53,17 @@
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  background: var(--r-recess);
-  --r-on: var(--r-recess);
+  background: var(--pe-recess);
+  --pe-on: var(--pe-recess);
 }
 .dl-artifact-head {
   align-items: baseline;
-  border-bottom: 1px solid var(--r-line);
+  border-bottom: 1px solid var(--pe-line);
 }
 .dl-artifact-foot {
   justify-content: space-between;
   padding: 6px 10px;
-  border-top: 1px solid var(--r-line);
+  border-top: 1px solid var(--pe-line);
 }
 
 /* ── THE CELL · cell.tsx ───────────────────────────────────────────────────────────────────
@@ -107,9 +107,9 @@
       authored it, the square says nothing has been written yet, and they are the same fact seen
       from two sides. */
 .dl-cell[data-body="proposed"] {
-  --dl-cell-fill: color-mix(in srgb, var(--r-pea-ink) 20%, var(--r-on));
-  --dl-cell-ring: inset 0 0 0 1.5px color-mix(in srgb, var(--r-pea) 70%, transparent);
-  --dl-cell-square: var(--r-pea-ink);
+  --dl-cell-fill: color-mix(in srgb, var(--pe-pea-ink) 20%, var(--pe-on));
+  --dl-cell-ring: inset 0 0 0 1.5px color-mix(in srgb, var(--pe-pea) 70%, transparent);
+  --dl-cell-square: var(--pe-pea-ink);
   padding-right: 14px;
   padding-left: 10px;
 }
@@ -118,15 +118,15 @@
   position: absolute;
   top: 0;
   right: 0;
-  border-top: 9px solid var(--r-pea-ink);
+  border-top: 9px solid var(--pe-pea-ink);
   border-left: 9px solid transparent;
 }
 
 /* 1 · uneditable/disabled owns the body — declared AFTER the proposal so the CASCADE, not
       discipline, enforces precedence. Greyed italic is the settled "look but don't touch". */
 .dl-cell[data-body="locked"] {
-  --dl-cell-fill: color-mix(in srgb, var(--r-ink) 6%, var(--r-on));
-  --dl-cell-ink: var(--r-ink-mute);
+  --dl-cell-fill: color-mix(in srgb, var(--pe-ink) 6%, var(--pe-on));
+  --dl-cell-ink: var(--pe-ink-mute);
   --dl-cell-italic: italic;
   --dl-cell-ring: none;
   padding-right: 6px;
@@ -141,7 +141,7 @@
    dashed border style means "typed but unproven" and nothing else may use it. */
 .dl-cell[data-seam] {
   --dl-cell-ring: none;
-  outline: 1px dashed var(--r-line-2);
+  outline: 1px dashed var(--pe-line-2);
   outline-offset: -1px;
 }
 
@@ -150,12 +150,12 @@
       owns the body, so adding weight there would spend the reserved axis on something the wash
       already says. */
 .dl-cell[data-unsaved] {
-  --dl-cell-square: var(--r-caution);
+  --dl-cell-square: var(--pe-caution);
   font-weight: 700;
   padding-left: 10px;
 }
 .dl-cell[data-unsaved="pea"] {
-  --dl-cell-square: var(--r-pea-ink);
+  --dl-cell-square: var(--pe-pea-ink);
   font-weight: inherit;
 }
 /* ONE square, two authors — the shape is identical, only `--dl-cell-square` differs, so the two
@@ -193,13 +193,13 @@
   text-align: inherit;
 }
 .dl-cell-input::placeholder {
-  color: var(--r-ink-mute);
+  color: var(--pe-ink-mute);
   font-style: italic;
 }
 .dl-cell:has(.dl-cell-input:focus-visible) {
   box-shadow:
-    var(--dl-cell-ring, 0 0 #0000),
-    inset 0 0 0 1px var(--r-line-2);
+    var(--dl-cell-ring, 0 0 transparent),
+    inset 0 0 0 1px var(--pe-line-2);
 }
 
 /* THE REFUSAL NOTE (R8, folding families' RefusalNote into the grammar): absolutely
@@ -222,10 +222,10 @@
   font-family: var(--font-pe-mono);
   font-size: 10px;
   font-style: italic;
-  color: var(--r-caution);
-  background: color-mix(in srgb, var(--r-caution) 12%, var(--r-on));
+  color: var(--pe-caution);
+  background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
   border: 0;
-  border-left: 2px solid var(--r-caution);
+  border-left: 2px solid var(--pe-caution);
   cursor: pointer;
 }
 
@@ -239,20 +239,20 @@
   text-underline-offset: 3px;
 }
 .dl-sq[data-state="drift"] {
-  text-decoration-color: var(--r-alarm);
+  text-decoration-color: var(--pe-alarm);
 }
 .dl-sq[data-state="stale"] {
-  text-decoration-color: var(--r-caution);
+  text-decoration-color: var(--pe-caution);
 }
 .dl-sq[data-state="unverified"] {
-  text-decoration-color: var(--r-ink-mute);
+  text-decoration-color: var(--pe-ink-mute);
 }
 
 /* NEVER (ruled 2026-08-16) — nothing was ever attempted here. Draws NO squiggle: the squiggle
    family distrusts an existing value, and here nothing exists to distrust. The value alone goes
    muted. Distinct from locked (no italic, no fill — the cell is writable, just untouched). */
 .dl-cell[data-never] {
-  --dl-cell-ink: var(--r-ink-mute);
+  --dl-cell-ink: var(--pe-ink-mute);
 }
 
 /* drift's second half: the other side's value as a struck ghost token, INLINE, so the one alarm
@@ -260,7 +260,7 @@
 .dl-ghost {
   font-family: var(--font-pe-mono);
   font-size: 11px;
-  color: var(--r-alarm);
+  color: var(--pe-alarm);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
   white-space: nowrap;
@@ -285,7 +285,7 @@
   font-style: normal;
   font-weight: 400;
   line-height: 1.35;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -293,7 +293,7 @@
 /* 5 · a PLAIN underline is a citation, on the SOURCE NAME in the footline — a different element
       from the value — so it can never occupy the squiggle's slot. */
 .dl-cite {
-  text-decoration: underline solid var(--r-line-2);
+  text-decoration: underline solid var(--pe-line-2);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
@@ -308,15 +308,15 @@
   font-size: 11px;
   line-height: 1.5;
   font-style: italic;
-  color: var(--r-ink-mute);
+  color: var(--pe-ink-mute);
 }
 .dl-empty-exit {
   font-style: normal;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 .dl-empty-exit::before {
   content: " — ";
-  color: var(--r-ink-mute);
+  color: var(--pe-ink-mute);
 }
 
 /* ── VERBS · verb.tsx ──────────────────────────────────────────────────────────────────────
@@ -333,7 +333,7 @@
   font-weight: 500;
   white-space: nowrap;
   background: transparent;
-  color: var(--r-ink);
+  color: var(--pe-ink);
   border: 1px solid transparent;
   cursor: pointer;
 }
@@ -344,29 +344,29 @@
 }
 /* nav — blue TEXT, three directions, no border, no fill. The blue budget's cheap half. */
 .dl-verb[data-tone="nav"] {
-  color: var(--r-nav);
+  color: var(--pe-nav);
   padding: 0 4px;
 }
 .dl-verb[data-tone="nav"]:enabled:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-/* act — safe, page-scoped. Neutral. The mix is against `--r-on`, NOT against the artifact
+/* act — safe, page-scoped. Neutral. The mix is against `--pe-on`, NOT against the artifact
    token: mixing against the artifact is what made three round-2 buttons land within 1.03:1 of
    the ground they actually stood on, one of them invisible in dark. */
 .dl-verb[data-tone="act"] {
-  background: color-mix(in srgb, var(--r-ink) 10%, var(--r-on));
+  background: color-mix(in srgb, var(--pe-ink) 10%, var(--pe-on));
 }
 /* agent — pea's own verb. The agent's identity had no interaction slot, which made pea's own verb
    illegal; 4 of 5 round-1 builders hit it. This is that slot. */
 .dl-verb[data-tone="agent"] {
-  color: var(--r-pea-ink);
-  background: color-mix(in srgb, var(--r-pea-ink) 12%, var(--r-on));
+  color: var(--pe-pea-ink);
+  background: color-mix(in srgb, var(--pe-pea-ink) 12%, var(--pe-on));
 }
 /* commit — the ONLY filled blue in the language, at every blast radius. Scarcity is the signal. */
 .dl-verb[data-tone="commit"] {
-  background: var(--r-commit);
-  color: var(--r-on-commit);
+  background: var(--pe-commit);
+  color: var(--pe-on-commit);
 }
 /* DISABLED — the settled greyed-italic "look but don't touch", but it must still be READ: a
    refused option a newcomer cannot decipher is indistinguishable from a rendering bug. It keeps
@@ -375,10 +375,10 @@
    muted + italic + inert, not illegible: 5.26 | 8.08 against 3.10 | 5.64 before. */
 .dl-verb:disabled {
   cursor: not-allowed;
-  background: var(--r-recess);
-  color: var(--r-ink-2);
+  background: var(--pe-recess);
+  color: var(--pe-ink-2);
   font-style: italic;
-  border-color: var(--r-line-2);
+  border-color: var(--pe-line-2);
 }
 
 /* §3 (SURFACE-PHILOSOPHY, honesty): refuse PER OPTION, with the reason REQUIRED by the
@@ -392,7 +392,7 @@
   font-size: 10px;
   font-style: italic;
   line-height: 1.35;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
   align-self: center;
   max-width: 36ch;
 }
@@ -415,9 +415,9 @@
   /* TIER LAW (2026-08-16 pass): every size in this file sits on a tier rung — 10/11/12/13/16. */
   font-size: 10px;
   line-height: 1;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
   background: transparent;
-  border: 1px solid var(--r-line-2);
+  border: 1px solid var(--pe-line-2);
   border-radius: var(--radius);
   cursor: help;
 }
@@ -432,10 +432,10 @@
   font-family: var(--font-pe, sans-serif);
   font-size: 11px;
   line-height: 1.5;
-  color: var(--r-ink-2);
-  background: var(--r-artifact);
-  --r-on: var(--r-artifact);
-  border: 1px solid var(--r-line-2);
+  color: var(--pe-ink-2);
+  background: var(--pe-artifact);
+  --pe-on: var(--pe-artifact);
+  border: 1px solid var(--pe-line-2);
   visibility: hidden;
 }
 .dl-help:hover .dl-help-pop,
@@ -450,18 +450,18 @@
   gap: 6px;
   margin-bottom: 6px;
   padding-bottom: 3px;
-  border-bottom: 1px solid var(--r-line);
+  border-bottom: 1px solid var(--pe-line);
 }
 .dl-verb-group-title {
   font-family: var(--font-pe-mono);
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--r-ink);
+  color: var(--pe-ink);
 }
 .dl-verb-group-radius {
   font-size: 10px;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 .dl-verb-row {
   display: flex;
@@ -477,12 +477,12 @@
    hovers (nav's underline above) may ADD, never replace. */
 .dl-verb:enabled:hover,
 .dl-chip-x:enabled:hover {
-  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
 }
 .dl-verb:focus-visible,
 .dl-chip-x:focus-visible {
-  background-image: linear-gradient(var(--r-veil), var(--r-veil));
-  outline: 1px solid var(--r-line-2);
+  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
+  outline: 1px solid var(--pe-line-2);
   outline-offset: 0;
 }
 
@@ -505,27 +505,27 @@
   font-family: var(--font-pe-mono);
   font-size: 10px;
   letter-spacing: 0.03em;
-  color: var(--dl-chip-ink, var(--r-ink-2));
-  background: var(--r-artifact);
-  border: 1px solid var(--r-line);
+  color: var(--dl-chip-ink, var(--pe-ink-2));
+  background: var(--pe-artifact);
+  border: 1px solid var(--pe-line);
 }
 .dl-chip[data-tone="caution"] {
-  --dl-chip-ink: var(--r-caution);
+  --dl-chip-ink: var(--pe-caution);
 }
 .dl-chip[data-tone="done"] {
-  --dl-chip-ink: var(--r-done);
+  --dl-chip-ink: var(--pe-done);
 }
 .dl-chip[data-tone="alarm"] {
-  --dl-chip-ink: var(--r-alarm);
+  --dl-chip-ink: var(--pe-alarm);
 }
 .dl-chip[data-tone="pea"] {
-  --dl-chip-ink: var(--r-pea-ink);
+  --dl-chip-ink: var(--pe-pea-ink);
 }
 /* the dashed edge means SEAM — typed but unproven, a fixture, a stand-in. Reserved; nothing
    else in the language may use this border style. */
 .dl-chip[data-seam] {
   border-style: dashed;
-  border-color: var(--r-line-2);
+  border-color: var(--pe-line-2);
 }
 .dl-chip-label {
   min-width: 0;
@@ -534,7 +534,7 @@
   white-space: nowrap;
 }
 .dl-chip-count {
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
   font-variant-numeric: tabular-nums;
 }
 .dl-chip-x {
@@ -542,7 +542,7 @@
   place-items: center;
   width: 12px;
   height: 12px;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
   cursor: pointer;
   background: transparent;
   border: 0;
@@ -565,7 +565,7 @@
   gap: 8px;
   margin-bottom: 6px;
   padding-bottom: 3px;
-  border-bottom: 1px solid var(--r-line);
+  border-bottom: 1px solid var(--pe-line);
 }
 .dl-section-label {
   margin: 0;
@@ -574,7 +574,7 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--r-ink);
+  color: var(--pe-ink);
 }
 .dl-section-aside {
   display: flex;
@@ -588,7 +588,7 @@
   font-size: 10px;
   line-height: 1.5;
   letter-spacing: 0.02em;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 
 /* ── COVERAGE BAR · coverage-bar.tsx — the viz ladder's first catalogued consumer ─────────
@@ -597,13 +597,13 @@
   display: flex;
   height: 10px;
   overflow: hidden;
-  border: 1px solid var(--r-line);
+  border: 1px solid var(--pe-line);
 }
 .dl-coverage-seg {
-  border-right: 1px solid var(--r-on);
+  border-right: 1px solid var(--pe-on);
 }
 .dl-coverage-rest {
-  background: var(--r-recess);
+  background: var(--pe-recess);
 }
 .dl-coverage-legend {
   display: flex;
@@ -618,7 +618,7 @@
   font-family: var(--font-pe-mono);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
-  color: var(--r-ink);
+  color: var(--pe-ink);
 }
 .dl-coverage-dot {
   display: inline-block;
@@ -628,7 +628,7 @@
 }
 .dl-coverage-label,
 .dl-coverage-of {
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 
 /* ── ADDRESSING BAR · addressing-bar.tsx ───────────────────────────────────────────────────
@@ -642,14 +642,14 @@
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--r-line);
+  border-bottom: 1px solid var(--pe-line);
 }
 .dl-addr-name {
   font-family: var(--font-pe-mono);
   font-size: 10px;
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 .dl-addr-seam {
   margin-left: auto;
@@ -663,7 +663,7 @@
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  border: 1px solid var(--r-line-2);
+  border: 1px solid var(--pe-line-2);
   border-radius: var(--radius);
 }
 .dl-switcher-opt {
@@ -673,22 +673,22 @@
   font-size: 10px;
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
   background: transparent;
   border: 0;
   cursor: pointer;
 }
 .dl-switcher-opt:enabled:hover {
-  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
 }
 .dl-switcher-opt[data-on] {
-  background: var(--r-select);
-  --r-on: var(--r-select);
-  color: var(--r-ink);
+  background: var(--pe-select);
+  --pe-on: var(--pe-select);
+  color: var(--pe-ink);
 }
 .dl-switcher-opt:disabled {
   cursor: not-allowed;
-  color: var(--r-ink-mute);
+  color: var(--pe-ink-mute);
   font-style: italic;
 }
 
@@ -720,35 +720,35 @@
   font-family: var(--font-pe);
   font-size: 11px;
   font-style: italic;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .dl-outcome[data-kind="busy"],
 .dl-outcome[data-kind="advisory"] {
-  --dl-outcome-ink: var(--r-ink-2);
+  --dl-outcome-ink: var(--pe-ink-2);
 }
 .dl-outcome[data-kind="receipt"] {
-  --dl-outcome-ink: var(--r-done);
+  --dl-outcome-ink: var(--pe-done);
 }
 .dl-outcome[data-kind="refused"] {
-  --dl-outcome-ink: var(--r-alarm);
+  --dl-outcome-ink: var(--pe-alarm);
 }
 /* dropped never happened — italic, muted, no colour spent. */
 .dl-outcome[data-kind="dropped"] {
-  --dl-outcome-ink: var(--r-ink-mute);
+  --dl-outcome-ink: var(--pe-ink-mute);
   font-style: italic;
 }
 .dl-outcome[data-kind="partial"],
 .dl-outcome[data-kind="error"] {
-  --dl-outcome-ink: var(--r-caution);
+  --dl-outcome-ink: var(--pe-caution);
 }
 /* the squiggly-under says "not settled" — the SAME family the cells use, which is exactly why a
    partial and an error read as unfinished without touching the type weight. */
 .dl-outcome[data-kind="partial"] .dl-outcome-label,
 .dl-outcome[data-kind="error"] .dl-outcome-label {
-  text-decoration: underline wavy var(--r-caution);
+  text-decoration: underline wavy var(--pe-caution);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
@@ -766,10 +766,10 @@
    separate, borders do not" move that won round 1. Only e's arming strip read as CEREMONY
    rather than "just another component", and that was attributed to border scarcity.
 
-   The strip declares its own tinted fill as `--r-on`, which is what gives the act verbs inside
+   The strip declares its own tinted fill as `--pe-on`, which is what gives the act verbs inside
    it a resting shape against the ground they are actually standing on. The fill itself still
-   mixes against `--r-artifact`: the strip is only ever rendered inside a frame, and mixing it
-   against `--r-on` here would be a var cycle. */
+   mixes against `--pe-artifact`: the strip is only ever rendered inside a frame, and mixing it
+   against `--pe-on` here would be a var cycle. */
 
 /* the small mono tag that names a state or an object. Quiet by default; a phase may tint it. */
 .dl-tag {
@@ -778,14 +778,14 @@
   letter-spacing: 0.09em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 /* only the PHASE tag takes the ceremony colour; every other tag in the strip stays quiet. */
 .dl-strip[data-phase="armed"] .dl-tag-phase {
-  color: var(--r-commit);
+  color: var(--pe-commit);
 }
 .dl-strip[data-phase="refused"] .dl-tag-phase {
-  color: var(--r-alarm);
+  color: var(--pe-alarm);
 }
 
 .dl-strip {
@@ -795,22 +795,22 @@
   padding: 9px 11px;
   border-left: 2px solid var(--dl-strip-edge);
   background: var(--dl-strip-fill);
-  --r-on: var(--dl-strip-fill);
+  --pe-on: var(--dl-strip-fill);
 }
 /* UNARMED — no ceremony colour yet. The strip is present and legible, the commit verb is
    disabled with its reason on the surface, and the edge is the firm hairline: this is a thing
    that WILL be armed, not a thing that is. */
 .dl-strip[data-phase="unarmed"] {
-  --dl-strip-edge: var(--r-line-2);
-  --dl-strip-fill: var(--r-artifact);
+  --dl-strip-edge: var(--pe-line-2);
+  --dl-strip-fill: var(--pe-artifact);
 }
 .dl-strip[data-phase="armed"] {
-  --dl-strip-edge: var(--r-commit);
-  --dl-strip-fill: color-mix(in srgb, var(--r-commit) 9%, var(--r-artifact));
+  --dl-strip-edge: var(--pe-commit);
+  --dl-strip-fill: color-mix(in srgb, var(--pe-commit) 9%, var(--pe-artifact));
 }
 .dl-strip[data-phase="refused"] {
-  --dl-strip-edge: var(--r-alarm);
-  --dl-strip-fill: color-mix(in srgb, var(--r-alarm) 10%, var(--r-artifact));
+  --dl-strip-edge: var(--pe-alarm);
+  --dl-strip-fill: color-mix(in srgb, var(--pe-alarm) 10%, var(--pe-artifact));
 }
 .dl-strip-line {
   display: flex;
@@ -826,34 +826,34 @@
   font-family: var(--font-pe-mono);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 /* the reason is supplied BEFORE the verb arms and stays visible after — an armed strip that
    hides its own reason is a button with extra steps. */
 .dl-strip-reason {
   font-size: 12px;
   font-style: italic;
-  color: var(--r-ink);
+  color: var(--pe-ink);
   padding-left: 8px;
-  border-left: 1px solid var(--r-line-2);
+  border-left: 1px solid var(--pe-line-2);
 }
 .dl-strip-reason-input {
   width: 100%;
   font: inherit;
   font-size: 12px;
   font-style: italic;
-  color: var(--r-ink);
-  background: var(--r-on);
+  color: var(--pe-ink);
+  background: var(--pe-on);
   border: 0;
-  border-left: 1px solid var(--r-line-2);
+  border-left: 1px solid var(--pe-line-2);
   padding: 2px 0 2px 8px;
   outline: none;
 }
 .dl-strip-reason-input::placeholder {
-  color: var(--r-ink-mute);
+  color: var(--pe-ink-mute);
 }
 .dl-strip-reason-input:focus-visible {
-  background-image: linear-gradient(var(--r-veil), var(--r-veil));
+  background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
 }
 .dl-strip-refusal {
   margin: 0;
@@ -879,9 +879,9 @@
   grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
   gap: 9px 18px;
   padding: 8px 10px 9px;
-  background: var(--r-recess);
-  border-top: 1px solid var(--r-line);
-  --r-on: var(--r-recess);
+  background: var(--pe-recess);
+  border-top: 1px solid var(--pe-line);
+  --pe-on: var(--pe-recess);
 }
 .dl-key-axis {
   display: flex;
@@ -894,7 +894,7 @@
   align-items: baseline;
   gap: 5px;
   padding-bottom: 2px;
-  border-bottom: 1px solid var(--r-line);
+  border-bottom: 1px solid var(--pe-line);
 }
 /* the axis names stay QUIET — this is a key, not a legend poster. */
 .dl-key-axis-name {
@@ -902,13 +902,13 @@
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 .dl-key-axis-asks {
   min-width: 0;
   font-size: 10px;
   font-style: italic;
-  color: var(--r-ink-mute);
+  color: var(--pe-ink-mute);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -919,7 +919,7 @@
   align-items: baseline;
   gap: 7px;
   font-size: 11px;
-  color: var(--r-ink-2);
+  color: var(--pe-ink-2);
 }
 .dl-key-item .dl-cell,
 .dl-key-item .dl-sq,
@@ -931,5 +931,5 @@
    ink that IS its state, so the `--dl-cell-ink` escape hatch is left alone. */
 .dl-key-item .dl-sq,
 .dl-key-item .dl-cite {
-  color: var(--r-ink);
+  color: var(--pe-ink);
 }

@@ -1,3 +1,5 @@
+import { token } from "#/lib/token";
+
 /**
  * VARIANT B — the LINK is the product; the table is just a source substrate.
  *
@@ -39,7 +41,7 @@ import {
   FOM_HWCH_PLANT,
   PARAM_META,
   type FcRow,
-} from "#/param-tables/proto/fixture";
+} from "#/param-tables/variants/fixture";
 
 // ---------------------------------------------------------------------------
 // Domain: the far side (types × tags) and the binding definitions
@@ -221,11 +223,11 @@ const CAP_TOTAL = FC_UNITS.reduce((sum, fc) => sum + fc.heat.capTotal, 0);
 // component — cell.tsx's squiggle family is close but keyed to cell values, not linkages.
 // Borrowing the meaning tokens raw: drift wears the one alarm, stale/staged wear caution.
 const STATUS_INK: Record<BindingStatus, string> = {
-  fresh: "var(--r-ink-mute)",
-  drift: "var(--r-alarm)",
-  stale: "var(--r-caution)",
-  staged: "var(--r-caution)",
-  "staged-stale": "var(--r-caution)",
+  fresh: token("ink-mute"),
+  drift: token("alarm"),
+  stale: token("caution"),
+  staged: token("caution"),
+  "staged-stale": token("caution"),
 };
 
 const STATUS_TITLE: Record<BindingStatus, string> = {
@@ -388,16 +390,16 @@ export function VariantB() {
   return (
     <div
       className="flex h-screen flex-col overflow-hidden text-sm"
-      style={{ background: "var(--r-page)", color: "var(--r-ink)" }}
+      style={{ background: token("page"), color: token("ink") }}
     >
       <AddressingBar
         name="param tables · b"
         sentence={
           <span className="flex items-baseline gap-1.5">
             <span className="font-mono text-xs">ProjectA_Clone_Aug_11</span>
-            <span style={{ color: "var(--r-ink-mute)" }}>›</span>
+            <span style={{ color: token("ink-mute") }}>›</span>
             <span>M001 design tables</span>
-            <span style={{ color: "var(--r-ink-mute)" }}>›</span>
+            <span style={{ color: token("ink-mute") }}>›</span>
             <span className="font-medium">binding ledger</span>
           </span>
         }
@@ -452,8 +454,8 @@ export function VariantB() {
         <div className="flex w-[430px] shrink-0 flex-col gap-3 overflow-y-auto p-3">
           <div className="flex items-center gap-1.5">
             <span
-              className="text-[10px] font-medium uppercase tracking-widest"
-              style={{ color: "var(--r-ink-mute)" }}
+              className="t-caption font-medium uppercase tracking-widest"
+              style={{ color: token("ink-mute") }}
             >
               source substrate
             </span>
@@ -468,23 +470,23 @@ export function VariantB() {
             head={
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-medium">FOM HWCH Plant</span>
-                <span className="text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
+                <span className="t-caption" style={{ color: token("ink-mute") }}>
                   sheet exhibit — today a dead SXL header grid
                 </span>
               </div>
             }
           >
             <div className="overflow-x-auto p-2">
-              <table className="text-[10px]" style={{ borderCollapse: "collapse" }}>
+              <table className="t-caption" style={{ borderCollapse: "collapse" }}>
                 <tbody>
-                  <tr style={{ color: "var(--r-ink-mute)" }}>
+                  <tr style={{ color: token("ink-mute") }}>
                     {FOM_HWCH_PLANT.groupRow.map((c, i) => (
                       <td key={i} className="px-1.5 py-0.5 font-medium uppercase tracking-wide">
                         {c}
                       </td>
                     ))}
                   </tr>
-                  <tr style={{ color: "var(--r-ink-2)" }}>
+                  <tr style={{ color: token("ink-2") }}>
                     {FOM_HWCH_PLANT.headRow.map((c, i) => (
                       <td key={i} className="whitespace-nowrap px-1.5 py-0.5">
                         {c}
@@ -500,20 +502,17 @@ export function VariantB() {
                   </tr>
                 </tbody>
               </table>
-              <div
-                className="mt-1 px-1.5 italic text-[10px]"
-                style={{ color: "var(--r-ink-mute)" }}
-              >
+              <div className="mt-1 px-1.5 italic t-caption" style={{ color: token("ink-mute") }}>
                 {FOM_HWCH_PLANT.footnote}
               </div>
             </div>
 
             {/* Plant design temps — the bound cells. Gutter markers locate; the
                 decision (evaluate/apply) is made where the evidence is: the ledger. */}
-            <div className="border-t px-2 py-1.5" style={{ borderColor: "var(--r-line)" }}>
+            <div className="border-t px-2 py-1.5" style={{ borderColor: token("line") }}>
               <div
-                className="mb-1 text-[10px] font-medium uppercase tracking-widest"
-                style={{ color: "var(--r-ink-mute)" }}
+                className="mb-1 t-caption font-medium uppercase tracking-widest"
+                style={{ color: token("ink-mute") }}
               >
                 plant design temps · bound
               </div>
@@ -526,8 +525,8 @@ export function VariantB() {
                     style={
                       isSel
                         ? ({
-                            background: "var(--r-select)",
-                            "--r-on": "var(--r-select)",
+                            background: token("select"),
+                            "--pe-on": token("select"),
                           } as React.CSSProperties)
                         : undefined
                     }
@@ -536,8 +535,8 @@ export function VariantB() {
                         canon component; a raw ⇄ button carries locate + count here. */}
                     <button
                       type="button"
-                      className="w-9 shrink-0 text-left font-mono text-[10px]"
-                      style={{ color: "var(--r-nav)" }}
+                      className="w-9 shrink-0 text-left font-mono t-caption"
+                      style={{ color: token("nav") }}
                       title={`bound — 1 binding sources this cell (${def.addr}); click to find it in the ledger`}
                       onClick={() => setSelected(isSel ? null : def.id)}
                     >
@@ -545,7 +544,7 @@ export function VariantB() {
                     </button>
                     <span className="min-w-0 flex-1 truncate text-xs">{def.label}</span>
                     {boundCell(def)}
-                    <span className="w-5 text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
+                    <span className="w-5 t-caption" style={{ color: token("ink-mute") }}>
                       °F
                     </span>
                   </div>
@@ -557,16 +556,16 @@ export function VariantB() {
                 style={
                   selected === IN_DEF.id
                     ? ({
-                        background: "var(--r-select)",
-                        "--r-on": "var(--r-select)",
+                        background: token("select"),
+                        "--pe-on": token("select"),
                       } as React.CSSProperties)
                     : undefined
                 }
               >
                 <button
                   type="button"
-                  className="w-9 shrink-0 text-left font-mono text-[10px]"
-                  style={{ color: "var(--r-nav)" }}
+                  className="w-9 shrink-0 text-left font-mono t-caption"
+                  style={{ color: token("nav") }}
                   title={`bound (inbound) — the model feeds this cell (${IN_DEF.addr}); click to find the binding`}
                   onClick={() => setSelected(selected === IN_DEF.id ? null : IN_DEF.id)}
                 >
@@ -580,7 +579,7 @@ export function VariantB() {
                   capReason="machine-fed — an inbound binding reads Σ PE_M_PerfHeat_CapacityDesignTotal over 23 tags; edit the model, not the cell"
                   className="w-16 text-right"
                 />
-                <span className="w-5 text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
+                <span className="w-5 t-caption" style={{ color: token("ink-mute") }}>
                   Btu/h
                 </span>
               </div>
@@ -591,7 +590,7 @@ export function VariantB() {
             head={
               <div className="flex items-baseline gap-2">
                 <span className="text-xs font-medium">BOD MainHouse</span>
-                <span className="text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
+                <span className="t-caption" style={{ color: token("ink-mute") }}>
                   M001 · authored-only — no bindings yet
                 </span>
               </div>
@@ -607,8 +606,8 @@ export function VariantB() {
                   <div key={e.key} className="flex items-baseline gap-2 py-px">
                     <span className="w-9 shrink-0" />
                     <span
-                      className="min-w-0 flex-1 truncate text-[11px]"
-                      style={{ color: "var(--r-ink-2)" }}
+                      className="min-w-0 flex-1 truncate t-caption"
+                      style={{ color: token("ink-2") }}
                       title={e.label}
                     >
                       {e.label}
@@ -622,10 +621,7 @@ export function VariantB() {
                       note="no binding — authored value only; never leaves the page"
                       className="w-24 shrink-0 text-right"
                     />
-                    <span
-                      className="w-9 shrink-0 text-[10px]"
-                      style={{ color: "var(--r-ink-mute)" }}
-                    >
+                    <span className="w-9 shrink-0 t-caption" style={{ color: token("ink-mute") }}>
                       {e.unit ?? ""}
                     </span>
                   </div>
@@ -650,7 +646,7 @@ export function VariantB() {
                   any evaluation is stale — the gate is visible, not implied.
                 </HelpTip>
                 <span className="flex-1" />
-                <span className="font-mono text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
+                <span className="font-mono t-caption" style={{ color: token("ink-mute") }}>
                   {TYPE_GROUPS.length} types · {FC_UNITS.length} tags in scope
                 </span>
               </div>
@@ -658,7 +654,7 @@ export function VariantB() {
             foot={
               <div className="flex flex-col gap-0.5">
                 {outcomes.length === 0 ? (
-                  <span className="text-[11px] italic" style={{ color: "var(--r-ink-mute)" }}>
+                  <span className="t-caption italic" style={{ color: token("ink-mute") }}>
                     no verbs have run — edit a bound cell, evaluate, apply
                   </span>
                 ) : (
@@ -673,14 +669,14 @@ export function VariantB() {
                 lifecycle with live counts and the verbs between stations. Built raw; this
                 is the surface that makes the (previously invisible) freshness gate legible. */}
             <div
-              className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2 text-[11px]"
-              style={{ borderColor: "var(--r-line)" }}
+              className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2 t-caption"
+              style={{ borderColor: token("line") }}
             >
-              <Station word="fresh" n={nFresh} ink="var(--r-ink-mute)" title={STATUS_TITLE.fresh} />
+              <Station word="fresh" n={nFresh} ink={token("ink-mute")} title={STATUS_TITLE.fresh} />
               <Arrow label="source edit" />
-              <Station word="stale" n={nStale} ink="var(--r-caution)" title={STATUS_TITLE.stale} />
-              <span style={{ color: "var(--r-ink-mute)" }}>·</span>
-              <Station word="drift" n={nDrift} ink="var(--r-alarm)" title={STATUS_TITLE.drift} />
+              <Station word="stale" n={nStale} ink={token("caution")} title={STATUS_TITLE.stale} />
+              <span style={{ color: token("ink-mute") }}>·</span>
+              <Station word="drift" n={nDrift} ink={token("alarm")} title={STATUS_TITLE.drift} />
               <Arrow />
               <Verb
                 label="Evaluate"
@@ -696,26 +692,26 @@ export function VariantB() {
               <Station
                 word="staged"
                 n={nStaged}
-                ink="var(--r-caution)"
+                ink={token("caution")}
                 title={STATUS_TITLE.staged}
               />
               {nStagedStale > 0 ? (
                 <Station
                   word="staged·stale"
                   n={nStagedStale}
-                  ink="var(--r-alarm)"
+                  ink={token("alarm")}
                   title={STATUS_TITLE["staged-stale"]}
                 />
               ) : null}
               <Arrow label="Apply — the head verb" />
-              <span style={{ color: "var(--r-ink-mute)" }}>fresh</span>
+              <span style={{ color: token("ink-mute") }}>fresh</span>
             </div>
 
             <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr
-                  className="text-left text-[10px] uppercase tracking-wider"
-                  style={{ color: "var(--r-ink-mute)" }}
+                  className="text-left t-caption uppercase tracking-wider"
+                  style={{ color: token("ink-mute") }}
                 >
                   <th className="px-3 py-1.5 font-medium">dir</th>
                   <th className="px-2 py-1.5 font-medium">source</th>
@@ -737,11 +733,11 @@ export function VariantB() {
                       <tr
                         className="cursor-pointer border-t"
                         style={{
-                          borderColor: "var(--r-line)",
+                          borderColor: token("line"),
                           ...(isSel
                             ? ({
-                                background: "var(--r-select)",
-                                "--r-on": "var(--r-select)",
+                                background: token("select"),
+                                "--pe-on": token("select"),
                               } as React.CSSProperties)
                             : null),
                         }}
@@ -756,11 +752,11 @@ export function VariantB() {
                         </td>
                         <td className="px-2 py-1.5">
                           <span className="font-mono">{def.addr}</span>{" "}
-                          <span style={{ color: "var(--r-ink-mute)" }}>{def.label}</span>
+                          <span style={{ color: token("ink-mute") }}>{def.label}</span>
                         </td>
                         <td className="px-2 py-1.5">
                           <span className="font-mono">{def.paramName}</span>{" "}
-                          <span style={{ color: "var(--r-ink-mute)" }}>
+                          <span style={{ color: token("ink-mute") }}>
                             {meta?.label} · {meta?.scope} scope
                           </span>
                         </td>
@@ -802,11 +798,11 @@ export function VariantB() {
                   <tr
                     className="cursor-pointer border-t"
                     style={{
-                      borderColor: "var(--r-line)",
+                      borderColor: token("line"),
                       ...(selected === IN_DEF.id
                         ? ({
-                            background: "var(--r-select)",
-                            "--r-on": "var(--r-select)",
+                            background: token("select"),
+                            "--pe-on": token("select"),
                           } as React.CSSProperties)
                         : null),
                     }}
@@ -821,11 +817,11 @@ export function VariantB() {
                     </td>
                     <td className="px-2 py-1.5">
                       <span className="font-mono">{IN_DEF.addr}</span>{" "}
-                      <span style={{ color: "var(--r-ink-mute)" }}>{IN_DEF.label}</span>
+                      <span style={{ color: token("ink-mute") }}>{IN_DEF.label}</span>
                     </td>
                     <td className="px-2 py-1.5">
                       <span className="font-mono">{IN_DEF.paramName}</span>{" "}
-                      <span style={{ color: "var(--r-ink-mute)" }}>reduce: Σ {IN_DEF.reducer}</span>
+                      <span style={{ color: token("ink-mute") }}>reduce: Σ {IN_DEF.reducer}</span>
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 font-mono">
                       {FC_UNITS.length} tags · Σ
@@ -865,8 +861,8 @@ function Station({ word, n, ink, title }: { word: string; n: number; ink: string
     <span
       className="flex items-baseline gap-1 border px-1.5 py-0.5"
       style={{
-        borderColor: "var(--r-line)",
-        color: n > 0 ? ink : "var(--r-ink-mute)",
+        borderColor: token("line"),
+        color: n > 0 ? ink : token("ink-mute"),
         opacity: n > 0 ? 1 : 0.6,
       }}
       title={title}
@@ -879,7 +875,7 @@ function Station({ word, n, ink, title }: { word: string; n: number; ink: string
 
 function Arrow({ label }: { label?: string }) {
   return (
-    <span className="flex items-baseline gap-1 text-[10px]" style={{ color: "var(--r-ink-mute)" }}>
+    <span className="flex items-baseline gap-1 t-caption" style={{ color: token("ink-mute") }}>
       {label != null ? <span className="italic">{label}</span> : null}
       <span>→</span>
     </span>
@@ -906,18 +902,18 @@ function FarSide({
   unit: string;
 }) {
   return (
-    <div className="ml-5 border-l pl-3" style={{ borderColor: "var(--r-line-2)" }}>
+    <div className="ml-5 border-l pl-3" style={{ borderColor: token("line-2") }}>
       {stagedStale ? (
-        <div className="py-1 text-[11px]" style={{ color: "var(--r-alarm)" }}>
+        <div className="py-1 t-caption" style={{ color: token("alarm") }}>
           these verdicts were computed against a source value that has since moved — they will not
           be applied; re-evaluate
         </div>
       ) : null}
-      <table className="text-[11px]" style={{ borderCollapse: "collapse" }}>
+      <table className="t-caption" style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr
-            className="text-left text-[10px] uppercase tracking-wider"
-            style={{ color: "var(--r-ink-mute)" }}
+            className="text-left t-caption uppercase tracking-wider"
+            style={{ color: token("ink-mute") }}
           >
             <th className="py-0.5 pr-4 font-medium">type</th>
             <th className="py-0.5 pr-4 font-medium">tags hit</th>
@@ -939,7 +935,7 @@ function FarSide({
                   {v.tags.length}
                   {modelTags != null && modelTags > v.tags.length ? (
                     <span
-                      style={{ color: "var(--r-caution)" }}
+                      style={{ color: token("caution") }}
                       title={`the model holds ${modelTags} tags of this type; ${v.tags.length} are in this schedule (23 of 36 FC-* scheduled) — a type write hits them all`}
                     >
                       {" "}
@@ -960,20 +956,20 @@ function FarSide({
                 <td className="py-0.5">
                   {staged ? (
                     v.verdict === "write" ? (
-                      <span className="font-semibold" style={{ color: "var(--r-caution)" }}>
+                      <span className="font-semibold" style={{ color: token("caution") }}>
                         write
                       </span>
                     ) : v.verdict === "refuse" ? (
-                      <span style={{ color: "var(--r-alarm)" }} title={v.reason}>
+                      <span style={{ color: token("alarm") }} title={v.reason}>
                         refuse — {v.reason}
                       </span>
                     ) : (
-                      <span style={{ color: "var(--r-ink-mute)" }}>no-op — already equal</span>
+                      <span style={{ color: token("ink-mute") }}>no-op — already equal</span>
                     )
                   ) : v.readOnly ? (
-                    <span style={{ color: "var(--r-ink-mute)" }}>formula-owned (read-only)</span>
+                    <span style={{ color: token("ink-mute") }}>formula-owned (read-only)</span>
                   ) : (
-                    <span style={{ color: "var(--r-ink-mute)" }}>writable</span>
+                    <span style={{ color: token("ink-mute") }}>writable</span>
                   )}
                 </td>
               </tr>
@@ -988,12 +984,12 @@ function FarSide({
 /** The far side of the inbound binding: per-type contributions to the Σ. */
 function InboundFarSide() {
   return (
-    <div className="ml-5 border-l pl-3" style={{ borderColor: "var(--r-line-2)" }}>
-      <table className="text-[11px]" style={{ borderCollapse: "collapse" }}>
+    <div className="ml-5 border-l pl-3" style={{ borderColor: token("line-2") }}>
+      <table className="t-caption" style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr
-            className="text-left text-[10px] uppercase tracking-wider"
-            style={{ color: "var(--r-ink-mute)" }}
+            className="text-left t-caption uppercase tracking-wider"
+            style={{ color: token("ink-mute") }}
           >
             <th className="py-0.5 pr-4 font-medium">type</th>
             <th className="py-0.5 pr-4 font-medium">tags read</th>
@@ -1012,8 +1008,8 @@ function InboundFarSide() {
               </td>
             </tr>
           ))}
-          <tr className="border-t" style={{ borderColor: "var(--r-line)" }}>
-            <td className="py-0.5 pr-4" style={{ color: "var(--r-ink-mute)" }}>
+          <tr className="border-t" style={{ borderColor: token("line") }}>
+            <td className="py-0.5 pr-4" style={{ color: token("ink-mute") }}>
               total → {IN_DEF.addr}
             </td>
             <td className="py-0.5 pr-4 font-mono">{FC_UNITS.length}</td>

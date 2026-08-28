@@ -70,24 +70,24 @@ function FieldMetadataTooltip({
       <Tooltip.Root>
         <Tooltip.Trigger
           aria-label="Field details"
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-2 transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-line-2"
         >
           <CircleHelp className="h-4 w-4" />
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup className="z-50 max-w-sm rounded-md border border-border bg-background px-3 py-2 text-xs shadow-lg">
+            <Tooltip.Popup className="z-50 max-w-sm rounded-md border border-line bg-page px-3 py-2 text-xs shadow-lg">
               <div className="space-y-2">
                 {description ? (
                   <div className="space-y-1">
-                    <div className="font-medium text-foreground">Description</div>
-                    <p className="whitespace-pre-wrap text-muted-foreground">{description}</p>
+                    <div className="font-medium text-ink">Description</div>
+                    <p className="whitespace-pre-wrap text-ink-2">{description}</p>
                   </div>
                 ) : null}
                 {formattedDefault !== undefined ? (
                   <div className="space-y-1">
-                    <div className="font-medium text-foreground">Default</div>
-                    <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-muted px-2 py-1 face-mono text-foreground">
+                    <div className="font-medium text-ink">Default</div>
+                    <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-recess px-2 py-1 face-mono text-ink">
                       {formattedDefault}
                     </pre>
                   </div>
@@ -130,7 +130,7 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
           aria-label="View change details"
           className={cn(
             "t-caption t-upper inline-flex items-center rounded-[2px] border px-1.5 py-0.5 font-semibold",
-            "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]",
+            "border-caution/30 bg-caution/10 text-caution",
             // Compact buys tighter padding only — the tier already IS the small size.
             compact && "px-1 py-0",
           )}
@@ -139,23 +139,23 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup className="z-50 max-w-sm rounded-md border border-border bg-background px-3 py-2 text-xs shadow-lg">
+            <Tooltip.Popup className="z-50 max-w-sm rounded-md border border-line bg-page px-3 py-2 text-xs shadow-lg">
               <div className="space-y-2">
                 {change.isComposite && nestedChanges > 0 ? (
-                  <p className="text-muted-foreground">
+                  <p className="text-ink-2">
                     {nestedChanges} nested field
                     {nestedChanges === 1 ? "" : "s"} changed.
                   </p>
                 ) : null}
                 <div className="space-y-1">
-                  <div className="font-medium text-foreground">Before</div>
-                  <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-muted px-2 py-1 face-mono text-foreground">
+                  <div className="font-medium text-ink">Before</div>
+                  <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-recess px-2 py-1 face-mono text-ink">
                     {beforeDisplay}
                   </pre>
                 </div>
                 <div className="space-y-1">
-                  <div className="font-medium text-foreground">After</div>
-                  <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-muted px-2 py-1 face-mono text-foreground">
+                  <div className="font-medium text-ink">After</div>
+                  <pre className="t-label whitespace-pre-wrap break-words rounded-[2px] bg-recess px-2 py-1 face-mono text-ink">
                     {afterDisplay}
                   </pre>
                 </div>
@@ -183,7 +183,7 @@ export function FieldMessages({
     <div
       className={cn(
         "rounded-[2px] border px-3 py-2 text-xs",
-        "border-[var(--r-alarm)]/30 bg-[var(--r-alarm)]/10 text-[var(--r-alarm)]",
+        "border-alarm/30 bg-alarm/10 text-alarm",
         compact && "t-label px-2 py-1.5",
       )}
     >
@@ -207,11 +207,9 @@ function OptionMetadataChip({
     <span
       className={cn(
         "t-caption inline-flex max-w-full items-center truncate rounded-[2px] border px-1.5 py-0.5 font-medium",
-        tone === "neutral" && "border-[var(--r-line)] bg-muted/40 text-[var(--r-ink-mute)]",
-        tone === "warning" &&
-          "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]",
-        tone === "danger" &&
-          "border-[var(--r-alarm)]/30 bg-[var(--r-alarm)]/10 text-[var(--r-alarm)]",
+        tone === "neutral" && "border-line bg-recess/40 text-ink-mute",
+        tone === "warning" && "border-caution/30 bg-caution/10 text-caution",
+        tone === "danger" && "border-alarm/30 bg-alarm/10 text-alarm",
       )}
     >
       {children}
@@ -261,7 +259,7 @@ function RequiredBadge() {
   return (
     <span
       aria-label="Required"
-      className="t-caption t-upper inline-flex items-center rounded-[2px] bg-[var(--r-alarm)]/10 px-1.5 py-0.5 font-semibold text-[var(--r-alarm)]"
+      className="t-caption t-upper inline-flex items-center rounded-[2px] bg-alarm/10 px-1.5 py-0.5 font-semibold text-alarm"
     >
       Required
     </span>
@@ -309,7 +307,7 @@ export function FieldLegendRow({
   path?: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-2 px-2 text-sm text-muted-foreground">
+    <div className="inline-flex items-center gap-2 px-2 text-sm text-ink-2">
       <span>{label}</span>
       {required ? <RequiredBadge /> : null}
       <FieldChangeBadge path={path} />

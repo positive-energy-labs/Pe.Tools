@@ -184,11 +184,11 @@ export const MARK_TITLE: Record<Agreement, string> = {
 
 /**
  * The one alarm and nothing else. `drift` MEANS "the model disagrees", so it is the only member of
- * this vocabulary allowed on `--r-alarm`; every other word is either a gap in what the profile
+ * this vocabulary allowed on `--pe-alarm`; every other word is either a gap in what the profile
  * claims (caution) or a fact with no urgency (the ink ladder).
  *
  * `derived` deliberately spends NO colour: the language has no role for "a formula computed
- * this", and the `ƒ` glyph plus italic already carry it. Borrowing `--r-done` — which
+ * this", and the `ƒ` glyph plus italic already carry it. Borrowing `--pe-done` — which
  * is what the retired `--st-derived` shim resolved to — would have claimed the value LANDED.
  */
 export const AGREEMENT_TONE: Record<Agreement, VerdictTone> = {

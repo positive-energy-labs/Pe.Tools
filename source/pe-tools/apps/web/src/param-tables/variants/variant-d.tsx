@@ -1,3 +1,5 @@
+import { token } from "#/lib/token";
+
 /**
  * VARIANT D — "the named design fact is the product; tables and parameters both subscribe."
  *
@@ -38,7 +40,7 @@ import {
   FOM_HWCH_PLANT,
   PARAM_META,
   type FcRow,
-} from "#/param-tables/proto/fixture";
+} from "#/param-tables/variants/fixture";
 
 // ---------------------------------------------------------------------------
 // Static shape derived from the fixture (no invented data)
@@ -208,8 +210,8 @@ interface Receipt {
   says: string;
 }
 
-const MUTE = { color: "var(--r-ink-mute)" } as const;
-const INK2 = { color: "var(--r-ink-2)" } as const;
+const MUTE = { color: token("ink-mute") } as const;
+const INK2 = { color: token("ink-2") } as const;
 
 // ---------------------------------------------------------------------------
 // The page
@@ -327,7 +329,7 @@ export function VariantD() {
         // LANG GAP: cross-pane subscriber highlight — the selection fill is being applied
         // to every subscriber of the selected fact, not just the pressed control. The
         // language has "selection is a fill" but no ruling on selection PROPAGATION.
-        style={hot ? { background: "var(--r-select)" } : undefined}
+        style={hot ? { background: token("select") } : undefined}
         title={`subscribes to fact "${f.label}" — the cell is a projection; edit the fact in the registry`}
       >
         {/* LANG GAP: fact-subscription glyph — no canon mark says "this value flows in
@@ -375,8 +377,8 @@ export function VariantD() {
         <span className="inline-flex items-baseline gap-2">
           <span className="font-mono">{fmtNum(cur)}</span>
           <span
-            className="text-[10px]"
-            style={{ color: "var(--r-alarm)" }}
+            className="t-caption"
+            style={{ color: token("alarm") }}
             title={`write of ${fmtNum(to)} refused: ${p} is formula-owned on ${t.typeName} — the family formula computes this value; reconcile in the family, not here`}
           >
             refuses — formula-owned
@@ -417,7 +419,7 @@ export function VariantD() {
       <div
         key={p}
         className="flex cursor-pointer items-baseline justify-between gap-2 px-1 py-px text-xs"
-        style={hot ? { background: "var(--r-select)" } : undefined}
+        style={hot ? { background: token("select") } : undefined}
         onClick={() => toggleSelect(factKey)}
         title={p}
       >
@@ -451,8 +453,8 @@ export function VariantD() {
         key={f.key}
         className="border-b px-2 py-1"
         style={{
-          borderColor: "var(--r-line)",
-          ...(hot ? { background: "var(--r-select)" } : null),
+          borderColor: token("line"),
+          ...(hot ? { background: token("select") } : null),
         }}
         onClick={() => toggleSelect(f.key)}
       >
@@ -492,7 +494,7 @@ export function VariantD() {
             {f.unit != null ? <span style={MUTE}>{f.unit}</span> : null}
           </span>
           <span
-            className="font-mono text-[10px]"
+            className="font-mono t-caption"
             style={MUTE}
             title={`fan-out: ${f.tableCells} table cell${f.tableCells === 1 ? "" : "s"} subscribe${f.tableCells === 1 ? "s" : ""}${f.target != null ? `; ${f.target} on ${TYPE_GROUPS.length} types / ${TAG_TOTAL} tags` : "; no model parameter linked"}${inbound ? `; sourced from ${f.sourceParam ?? ""}` : ""}`}
           >
@@ -501,7 +503,7 @@ export function VariantD() {
           </span>
         </div>
         {fanout != null ? (
-          <div className="pl-6 font-mono text-[10px]" style={{ color: "var(--r-caution)" }}>
+          <div className="pl-6 font-mono t-caption" style={{ color: token("caution") }}>
             stages {fanout.ok.length} types · {fanout.tags} tags
             {fanout.no.length > 0
               ? ` — ${fanout.no.length} refuses (formula-owned: ${fanout.no.map((w) => w.typeName).join(", ")})`
@@ -509,7 +511,7 @@ export function VariantD() {
           </div>
         ) : null}
         {st != null && f.target == null ? (
-          <div className="pl-6 font-mono text-[10px]" style={MUTE}>
+          <div className="pl-6 font-mono t-caption" style={MUTE}>
             table subscribers only — settles on Commit, nothing leaves the page
           </div>
         ) : null}
@@ -531,7 +533,7 @@ export function VariantD() {
   return (
     <div
       className="flex h-screen flex-col overflow-hidden"
-      style={{ background: "var(--r-page)", color: "var(--r-ink)" }}
+      style={{ background: token("page"), color: token("ink") }}
     >
       <AddressingBar
         name="param-tables · d"
@@ -586,7 +588,7 @@ export function VariantD() {
         {/* ── LEFT WING · authored tables (subscriber world 1) ─────────────── */}
         <div
           className="min-h-0 overflow-y-auto border-r px-3 py-2"
-          style={{ borderColor: "var(--r-line)" }}
+          style={{ borderColor: token("line") }}
         >
           <Section
             label="Tables — subscribers"
@@ -621,14 +623,14 @@ export function VariantD() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-t" style={{ borderColor: "var(--r-line)" }}>
+                    <tr className="border-t" style={{ borderColor: token("line") }}>
                       <td className="px-2 py-1" style={INK2}>
                         EWT
                       </td>
                       <td className="px-2 py-1">{factRef("heat-ewt")}</td>
                       <td className="px-2 py-1">{factRef("cool-ewt")}</td>
                     </tr>
-                    <tr className="border-t" style={{ borderColor: "var(--r-line)" }}>
+                    <tr className="border-t" style={{ borderColor: token("line") }}>
                       <td className="px-2 py-1" style={INK2}>
                         LWT
                       </td>
@@ -648,7 +650,7 @@ export function VariantD() {
                 }
               >
                 <div className="overflow-x-auto">
-                  <table className="w-full text-[11px]">
+                  <table className="w-full t-caption">
                     <thead>
                       <tr style={MUTE}>
                         {FOM_HWCH_PLANT.groupRow.map((g, i) => (
@@ -666,7 +668,7 @@ export function VariantD() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="border-t" style={{ borderColor: "var(--r-line)" }}>
+                      <tr className="border-t" style={{ borderColor: token("line") }}>
                         {FOM_HWCH_PLANT.dataRow.map((v, i) => (
                           <td key={i} className="px-1 py-1">
                             {i === 3
@@ -679,7 +681,7 @@ export function VariantD() {
                       </tr>
                     </tbody>
                   </table>
-                  <div className="px-1 py-1 text-[10px]" style={MUTE}>
+                  <div className="px-1 py-1 t-caption" style={MUTE}>
                     {FOM_HWCH_PLANT.footnote}
                   </div>
                 </div>
@@ -696,7 +698,7 @@ export function VariantD() {
                 <table className="w-full text-xs">
                   <tbody>
                     {BOD_MAIN_HOUSE.map((e) => (
-                      <tr key={e.key} className="border-t" style={{ borderColor: "var(--r-line)" }}>
+                      <tr key={e.key} className="border-t" style={{ borderColor: token("line") }}>
                         <td className="max-w-64 px-2 py-1 align-baseline" style={INK2}>
                           {e.label}
                         </td>
@@ -713,7 +715,7 @@ export function VariantD() {
         {/* ── SPINE · the fact registry (the product) ──────────────────────── */}
         <div
           className="min-h-0 overflow-y-auto border-r px-3 py-2"
-          style={{ borderColor: "var(--r-line)" }}
+          style={{ borderColor: token("line") }}
         >
           <Section
             label="Design facts"
@@ -726,7 +728,7 @@ export function VariantD() {
               </HelpTip>
             }
             aside={
-              <span className="font-mono text-[10px]" style={MUTE}>
+              <span className="font-mono t-caption" style={MUTE}>
                 {stagedKeys.length > 0
                   ? `${landing.length} writes staged · ${refusing.length} will refuse`
                   : "nothing staged"}
@@ -735,7 +737,7 @@ export function VariantD() {
           >
             <ArtifactFrame
               foot={
-                <span className="font-mono text-[10px]" style={MUTE}>
+                <span className="font-mono t-caption" style={MUTE}>
                   {FACTS.length} facts · {FACTS.filter((f) => f.target != null).length} drive params
                   · 1 model-sourced
                 </span>
@@ -758,7 +760,7 @@ export function VariantD() {
               </HelpTip>
             }
             aside={
-              <span className="font-mono text-[10px]" style={MUTE}>
+              <span className="font-mono t-caption" style={MUTE}>
                 {TYPE_GROUPS.length} types · {TAG_TOTAL} tags
               </span>
             }
@@ -779,7 +781,7 @@ export function VariantD() {
                     <div
                       key={t.typeName}
                       className="border-b px-2 py-1.5"
-                      style={{ borderColor: "var(--r-line)" }}
+                      style={{ borderColor: token("line") }}
                     >
                       <div className="flex items-baseline gap-2">
                         <span className="font-mono text-xs">{t.typeName}</span>
@@ -799,14 +801,14 @@ export function VariantD() {
                               {(model[t.typeName]?.[CAP_PARAM] ?? 0).toLocaleString("en-US")}
                             </span>
                             <span style={MUTE}>Btu/h</span>
-                            <span className="text-[10px]" style={MUTE}>
+                            <span className="t-caption" style={MUTE}>
                               → feeds fact
                             </span>
                           </span>
                         </div>
                       </div>
                       <div
-                        className="mt-1 font-mono text-[10px]"
+                        className="mt-1 font-mono t-caption"
                         style={stagedHere ? { fontWeight: 600 } : MUTE}
                         title={
                           stagedHere

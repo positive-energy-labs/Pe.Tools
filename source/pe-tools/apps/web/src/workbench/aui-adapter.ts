@@ -125,9 +125,7 @@ function toolCallPart(call: {
 }): LikePart {
   const target = toolTarget(call.args);
   const args = readRecord(call.args) ?? (target ? { path: target } : undefined);
-  const gated = selectApprovals(call.display).some(
-    (approval) => approval.toolCallId === call.id,
-  );
+  const gated = selectApprovals(call.display).some((approval) => approval.toolCallId === call.id);
   // Built as a plain record then cast once at this boundary — the tool-call part's
   // `args`/`result` are JSON-typed and ours are `unknown`.
   const part: Record<string, unknown> = {

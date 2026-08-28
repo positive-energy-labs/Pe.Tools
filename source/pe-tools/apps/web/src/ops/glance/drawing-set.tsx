@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 import { useEffect, useMemo, useState } from "react";
 import type { RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "#/components/lang/empty";
@@ -94,10 +95,7 @@ function chooseDetailTargets(series: Series[]): string[] {
  * geometry behind it — the stand-in announces what the detail budget left out). */
 function EmptyFrame() {
   return (
-    <div
-      aria-hidden
-      className="aspect-[3/2] rounded-none border border-dashed border-[var(--r-line-2)]"
-    />
+    <div aria-hidden className="aspect-[3/2] rounded-none border border-dashed border-line-2" />
   );
 }
 
@@ -116,11 +114,11 @@ function Thumbnail({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex min-w-0 flex-col gap-1 rounded-[var(--radius)] border p-1.5 text-left hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] ${selected ? "border-[var(--r-line-2)]" : "border-[var(--r-line)]"}`}
-      /* selection is a fill, never a hue — the select rung, with --r-on re-declared. */
+      className={`flex min-w-0 flex-col gap-1 rounded-sm border p-1.5 text-left hover:veil ${selected ? "border-line-2" : "border-line"}`}
+      /* selection is a fill, never a hue — the select rung, with --pe-on re-declared. */
       style={
         selected
-          ? ({ background: "var(--r-select)", "--r-on": "var(--r-select)" } as React.CSSProperties)
+          ? ({ background: token("select"), "--pe-on": token("select") } as React.CSSProperties)
           : undefined
       }
       title={
@@ -131,7 +129,7 @@ function Thumbnail({
     >
       {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
       <span className="face-mono t-caption truncate">{sheet.sheetNumber}</span>
-      {entry && <span className="t-label truncate text-[var(--r-ink-2)]">{sheet.sheetName}</span>}
+      {entry && <span className="t-label truncate text-ink-2">{sheet.sheetName}</span>}
     </button>
   );
 }
@@ -201,9 +199,7 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
           key={group.prefix}
           label={`${group.prefix} series`}
           aside={
-            <span className="face-mono t-caption text-[var(--r-ink-2)]">
-              {group.sheets.length} sheets
-            </span>
+            <span className="face-mono t-caption text-ink-2">{group.sheets.length} sheets</span>
           }
         >
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">

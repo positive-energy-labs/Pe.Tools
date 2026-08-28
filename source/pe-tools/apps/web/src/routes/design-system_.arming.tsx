@@ -63,14 +63,14 @@ function ArmingRoute() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--r-page)] text-[13px] text-[var(--r-ink)]">
+    <div className="min-h-screen bg-page text-[13px] text-ink">
       <Header
         title="arming"
         note="unarmed → armed → refused → re-plan, driven live and frozen side by side"
       />
 
       <main className="page-wrap flex flex-col gap-10 pt-8 pb-24">
-        <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-[var(--r-ink-2)]">
+        <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-ink-2">
           The strip is the cell grammar at its largest scale: a tinted ground plus one edge, inside
           the artifact frame it draws itself. Round 1 found that only this treatment read as{" "}
           <em>ceremony</em> rather than as another component, and attributed it to border scarcity.
@@ -203,7 +203,7 @@ function ArmingRoute() {
         </section>
 
         <section className="flex flex-col gap-1.5">
-          <span className="t-caption t-upper text-[var(--r-ink)]">what this page found</span>
+          <span className="t-caption t-upper text-ink">what this page found</span>
           <Gap>
             the strip cannot say <strong>how old its own plan is</strong> — the one fact that
             decides whether to press it. It renders &ldquo;armed against a plan of unknown
@@ -248,9 +248,9 @@ function Frozen({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{phase}</span>
+      <span className="face-mono t-caption text-ink-mute">{phase}</span>
       {children}
-      <p className="text-[10.5px] leading-relaxed text-[var(--r-ink-2)]">{says}</p>
+      <p className="text-[10.5px] leading-relaxed text-ink-2">{says}</p>
     </div>
   );
 }
@@ -259,14 +259,14 @@ function Frozen({
 
 function Header({ title, note }: { title: string; note: string }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-[var(--r-line)] bg-[var(--r-page)]/90 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-line bg-page/90 backdrop-blur">
       <div className="page-wrap flex items-center justify-between py-2.5">
         <div className="flex min-w-0 items-baseline gap-3">
-          <Link to="/design-system" className="text-[11px] text-[var(--r-nav)] hover:underline">
+          <Link to="/design-system" className="text-[11px] text-nav hover:underline">
             ← design system
           </Link>
           <span className="font-pe-display text-sm font-semibold tracking-tight">{title}</span>
-          <span className="truncate text-[11px] text-[var(--r-ink-2)]">{note}</span>
+          <span className="truncate text-[11px] text-ink-2">{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no plan.">
             fixture
           </FactChip>
@@ -279,18 +279,18 @@ function Header({ title, note }: { title: string; note: string }) {
 
 function SectionHead({ n, title, note }: { n: string; title: string; note: string }) {
   return (
-    <div className="flex items-baseline gap-3 border-b border-[var(--r-line)] pb-1.5">
-      <span className="face-mono t-caption text-[var(--r-ink-mute)]">{n}</span>
+    <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
+      <span className="face-mono t-caption text-ink-mute">{n}</span>
       <span className="text-[11px] font-semibold tracking-[0.09em] uppercase">{title}</span>
-      <span className="min-w-0 flex-1 text-[11.5px] text-[var(--r-ink-2)]">{note}</span>
+      <span className="min-w-0 flex-1 text-[11.5px] text-ink-2">{note}</span>
     </div>
   );
 }
 
 function Gap({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-[86ch] border-l border-dashed border-[var(--r-line-2)] pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-[var(--r-ink-2)]">
-      <span className="text-[var(--r-caution)]">gap · </span>
+    <p className="max-w-[86ch] border-l border-dashed border-line-2 pl-2 font-[family-name:var(--font-pe-mono)] text-[10px] leading-relaxed text-ink-2">
+      <span className="text-caution">gap · </span>
       {children}
     </p>
   );

@@ -166,8 +166,8 @@ export function HostIssuePanel({
         "rounded-lg border p-3 text-sm",
         // a busy bridge / doc conflict is NOT the model disagreeing — caution, not alarm.
         issue.kind === "conflict" || issue.kind === "bridge_busy"
-          ? "border-[var(--r-caution)]/30 bg-[var(--r-caution)]/10 text-[var(--r-caution)]"
-          : "border-destructive/30 bg-destructive/10 text-destructive",
+          ? "border-caution/30 bg-caution/10 text-caution"
+          : "border-alarm/30 bg-alarm/10 text-alarm",
         compact && "p-2 text-xs",
       )}
     >
@@ -211,13 +211,8 @@ function HostIssueMeta({ children }: { children: ReactNode }) {
 
 export function HostConnectionPill({ connected, label }: { connected: boolean; label?: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-      <span
-        className={cn(
-          "size-2 rounded-full",
-          connected ? "bg-accent-foreground" : "bg-muted-foreground/50",
-        )}
-      />
+    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-ink-2">
+      <span className={cn("size-2 rounded-full", connected ? "bg-ink" : "bg-ink-2/50")} />
       {connected ? (label ?? "Connected") : "Disconnected"}
     </span>
   );

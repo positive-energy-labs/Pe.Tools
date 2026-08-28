@@ -178,7 +178,7 @@ function Seam({ op }: { op: string }) {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span className="t-label t-upper text-muted-foreground">{children}</span>;
+  return <span className="t-label t-upper text-ink-2">{children}</span>;
 }
 
 /**
@@ -224,18 +224,18 @@ function NamePicker({
       <ComboboxChips
         ref={anchor}
         title={title}
-        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-[var(--radius)] border-[var(--r-line-2)] bg-transparent py-0.5 t-label"
+        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-sm border-line-2 bg-transparent py-0.5 t-label"
       >
         {collapsed ? (
           <span
-            className="px-1 t-label text-muted-foreground"
+            className="px-1 t-label text-ink-2"
             title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
           >
             all {values.length}
           </span>
         ) : (
           values.map((name) => (
-            <ComboboxChip key={name} className="face-mono rounded-[var(--radius)] t-label">
+            <ComboboxChip key={name} className="face-mono rounded-sm t-label">
               {name}
             </ComboboxChip>
           ))
@@ -243,16 +243,14 @@ function NamePicker({
         <ComboboxChipsInput
           aria-label={ariaLabel}
           placeholder={values.length === 0 ? placeholder : "add…"}
-          className="face-mono t-label placeholder:text-muted-foreground"
+          className="face-mono t-label placeholder:text-ink-2"
         />
         <ComboboxTrigger />
       </ComboboxChips>
-      <ComboboxContent anchor={anchor} className="rounded-[var(--radius)]">
+      <ComboboxContent anchor={anchor} className="rounded-sm">
         {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
             "you typed a string that matched nothing" — plain muted text, no story/exit. */}
-        <ComboboxEmpty className="face-mono t-label text-[var(--r-ink-mute)]">
-          no matches
-        </ComboboxEmpty>
+        <ComboboxEmpty className="face-mono t-label text-ink-mute">no matches</ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
             <ComboboxItem key={name} value={name} className="face-mono pr-7 t-label">
@@ -532,7 +530,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                 return next;
               })
             }
-            className="face-mono t-value h-7 w-full px-1.5 text-left text-muted-foreground hover:text-foreground"
+            className="face-mono t-value h-7 w-full px-1.5 text-left text-ink-2 hover:text-ink"
           >
             {pickedIds.has(row.familyId) ? "▪" : "□"}
           </button>
@@ -620,9 +618,9 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                  "derived" role to move it to, so it drops to the ink ladder
                  and separates from a project binding by italic rather than by hue. */
               className={cn(
-                unresolved && "text-[var(--r-ink-mute)]/50",
-                scopeOf === "ProjectBindingOnly" && "text-[var(--r-ink-mute)] italic",
-                row.formulas[col.key] === "Present" && "text-[var(--r-ink-2)]",
+                unresolved && "text-ink-mute/50",
+                scopeOf === "ProjectBindingOnly" && "text-ink-mute italic",
+                row.formulas[col.key] === "Present" && "text-ink-2",
               )}
             />
           );
@@ -692,10 +690,10 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   );
 
   return (
-    <main className="flex h-screen flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
+    <main className="flex h-screen flex-col bg-page text-ink">
       <FamiliesHead store={store} />
       {selectedProfileQuery?.error && (
-        <div className="border-b border-[var(--r-line)] px-4 py-1.5">
+        <div className="border-b border-line px-4 py-1.5">
           <OutcomeLine
             kind="error"
             label="profile read failed"
@@ -705,7 +703,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
       )}
 
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-4 py-1.5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
         <SectionLabel>
           <span title="Which families the table loads at all. Scope is a DRAFT until you apply it — the matrix op is the expensive one, so it never fires on a click.">
             scope
@@ -719,11 +717,11 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
           <SelectTrigger
             aria-label="placement filter"
             title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-            className="face-mono h-6 w-32 shrink-0 rounded-[var(--radius)] border-[var(--r-line-2)] px-1.5 t-label"
+            className="face-mono h-6 w-32 shrink-0 rounded-sm border-line-2 px-1.5 t-label"
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-[var(--radius)]">
+          <SelectContent className="rounded-sm">
             {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
               <SelectItem
                 key={value}
@@ -798,7 +796,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         )}
       </div>
 
-      <div className="border-b border-[var(--r-line)] empty:border-0">
+      <div className="border-b border-line empty:border-0">
         <VerbLane atoms={store.atoms} className="px-4 py-1.5" />
       </div>
       {matrixIssue && (
@@ -808,7 +806,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
       )}
       {/* ── decision queue: the plan as a lens over the scope ────────────────────────────── */}
       {plan && (
-        <div className="max-h-56 shrink-0 overflow-auto border-b border-[var(--r-line)] px-4 py-2">
+        <div className="max-h-56 shrink-0 overflow-auto border-b border-line px-4 py-2">
           <div className="flex items-center gap-2">
             <SectionLabel>
               <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
@@ -828,7 +826,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                 const flag = familyFlag(entry);
                 const excluded = excludedIds.has(entry.familyId);
                 return (
-                  <tr key={entry.familyId} className="border-b border-[var(--r-line)]">
+                  <tr key={entry.familyId} className="border-b border-line">
                     <td className="w-8 py-0.5">
                       <button
                         type="button"
@@ -841,21 +839,21 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                               : `${entry.familyName} is in: apply will run its ${entry.plan.loweredActions.length} action(s) against the model. Click to hold it back without re-planning.`
                         }
                         onClick={() => void store.actions.exclude(entry.familyId)}
-                        className="face-mono t-value text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
+                        className="face-mono t-value text-ink-2 hover:text-ink disabled:cursor-not-allowed"
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </button>
                     </td>
                     <td className="face-mono py-0.5 t-label">{entry.familyName}</td>
                     <td
-                      className="face-mono w-24 py-0.5 t-label text-muted-foreground"
+                      className="face-mono w-24 py-0.5 t-label text-ink-2"
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className="face-mono truncate py-0.5 t-caption text-muted-foreground"
+                      className="face-mono truncate py-0.5 t-caption text-ink-2"
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
@@ -863,7 +861,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
                     <td
-                      className="face-mono w-64 truncate py-0.5 t-caption text-[var(--r-ink-mute)]"
+                      className="face-mono w-64 truncate py-0.5 t-caption text-ink-mute"
                       title={flag ?? ""}
                     >
                       {flag ?? ""}
@@ -872,16 +870,13 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                 );
               })}
               {outsideProfile.map((family) => (
-                <tr
-                  key={`outside-${family.familyId}`}
-                  className="border-b border-[var(--r-line)] opacity-60"
-                >
+                <tr key={`outside-${family.familyId}`} className="border-b border-line opacity-60">
                   <td className="w-8 py-0.5 text-center">
-                    <span className="face-mono t-value text-muted-foreground">✕</span>
+                    <span className="face-mono t-value text-ink-2">✕</span>
                   </td>
                   <td className="face-mono py-0.5 t-label">{family.familyName}</td>
-                  <td className="face-mono w-24 py-0.5 t-label text-muted-foreground">—</td>
-                  <td className="face-mono py-0.5 t-caption text-muted-foreground" colSpan={2}>
+                  <td className="face-mono w-24 py-0.5 t-label text-ink-2">—</td>
+                  <td className="face-mono py-0.5 t-caption text-ink-2" colSpan={2}>
                     in scope, but the bound profile does not claim this family
                   </td>
                 </tr>
@@ -907,7 +902,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
 
       {/* ── receipts ─────────────────────────────────────────────────────────────────────── */}
       {applyData && (
-        <div className="max-h-48 shrink-0 overflow-auto border-b border-[var(--r-line)] px-4 py-2">
+        <div className="max-h-48 shrink-0 overflow-auto border-b border-line px-4 py-2">
           <div className="flex items-center gap-2">
             <SectionLabel>
               <span title="What apply actually did, per family, as the op reported it. Receipts are the fleet lane's trust layer — the counts here are the evidence, not the plan's promise.">
@@ -927,7 +922,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
           <table className="mt-1 w-full border-collapse">
             <tbody>
               {applyData.receipts.map((entry) => (
-                <tr key={entry.familyId} className="border-b border-[var(--r-line)]">
+                <tr key={entry.familyId} className="border-b border-line">
                   <td className="face-mono w-56 truncate py-0.5 t-label">
                     {entry.familyName ?? `element ${entry.familyId}`}
                   </td>
@@ -945,14 +940,14 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                     </FactChip>
                   </td>
                   <td
-                    className="face-mono w-40 py-0.5 t-caption text-muted-foreground"
+                    className="face-mono w-40 py-0.5 t-caption text-ink-2"
                     title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
                   >
                     {entry.parametersChanged} changed · +{entry.diffSummary.added} −
                     {entry.diffSummary.removed} ~{entry.diffSummary.modified}
                   </td>
                   <td
-                    className="face-mono truncate py-0.5 t-caption text-muted-foreground"
+                    className="face-mono truncate py-0.5 t-caption text-ink-2"
                     title={
                       entry.operationsRun.length > 0
                         ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
@@ -998,7 +993,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
 
       {/* ── projection: a lazily-rendered document, copyable ─────────────────────────────── */}
       {projection && (
-        <details className="shrink-0 border-b border-[var(--r-line)] px-4 py-2" open>
+        <details className="shrink-0 border-b border-line px-4 py-2" open>
           <summary className="cursor-pointer">
             <SectionLabel>
               <span title="Each picked family read back out of the model as profile JSON. Nothing is written anywhere — copy it into a profile document if you want to keep it.">
@@ -1053,7 +1048,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-[var(--r-line)] p-2 t-caption text-muted-foreground">
+                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-[2px] border border-line p-2 t-caption text-ink-2">
                   {entry.profileJson}
                 </pre>
               )}
@@ -1079,7 +1074,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
             </span>
             <Verb
               label="project → profile"
-              onClick={() => void runProject()}
+              onClick={() => runProject()}
               busy={busy === "project"}
               disabled={pickedIds.size === 0}
               reason={

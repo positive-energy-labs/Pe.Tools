@@ -34,16 +34,6 @@ export const LABEL = `rgba(${law.label.rgba.join(",")})`;
 export const LABEL_SIZE = law.label.sizePx;
 export const HELD_HATCH = law.candidate.status.held.hatch;
 
-export const PAPER = "#fff";
-export const MIST = "rgba(100,116,139,0.14)";
-
-export function alarmColor(): string {
-  if (typeof document === "undefined") return "#8e4120";
-  return (
-    getComputedStyle(document.documentElement).getPropertyValue("--r-alarm").trim() || "#8e4120"
-  );
-}
-
 function hash(value: string): number {
   let result = 2166136261;
   for (let i = 0; i < value.length; i++) result = Math.imul(result ^ value.charCodeAt(i), 16777619);

@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * /grilles — the custom wood floor grille calculator.
  *
@@ -137,7 +138,7 @@ function GrillesRoute() {
       {active && (
         <div
           tabIndex={0}
-          className="outline-none focus-visible:ring-1 focus-visible:ring-[var(--r-line-2)]"
+          className="outline-none focus-visible:ring-1 focus-visible:ring-line-2"
           title="Focus, then arrow keys: left/right walk qty, up/down walk opening width"
           onKeyDown={(e) => {
             if (!e.key.startsWith("Arrow")) return;
@@ -148,7 +149,7 @@ function GrillesRoute() {
           }}
         >
           <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
-          <p className="face-mono px-2 text-[10px] text-[var(--r-ink-mute)]">
+          <p className="face-mono px-2 text-[10px] text-ink-mute">
             click a point, or focus and use arrow keys: ←→ qty · ↑↓ opening width
           </p>
         </div>
@@ -160,12 +161,10 @@ function GrillesRoute() {
     <main className="flex h-full min-h-0 flex-col">
       <header
         className="flex flex-wrap items-baseline gap-2 border-b px-3 py-2"
-        style={{ borderColor: "var(--r-line)" }}
+        style={{ borderColor: token("line") }}
       >
-        <span className="face-mono t-label t-upper text-[var(--r-ink-mute)]">
-          wood floor grille
-        </span>
-        <span className="t-value text-[var(--r-ink)]">free area calculator</span>
+        <span className="face-mono t-label t-upper text-ink-mute">wood floor grille</span>
+        <span className="t-value text-ink">free area calculator</span>
         <FactChip
           tone="caution"
           dashed

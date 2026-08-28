@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * PROTOTYPE (round 1) — the family review board's world.
  *
@@ -131,12 +132,12 @@ export const AGREEMENT_LABEL: Record<Agreement, string> = {
 /** Every agreement's meaning-band role token. `agrees` is deliberately quiet: the board's job is
  *  to make disagreement findable, and a page of green ticks hides the one that is not. */
 export const AGREEMENT_TONE: Record<Agreement, string> = {
-  agrees: "var(--r-ink-mute)",
-  differs: "var(--r-alarm)",
-  "authored-only": "var(--r-caution)",
-  "revit-only": "var(--r-caution)",
-  refused: "var(--r-alarm)",
-  unread: "var(--r-ink-mute)",
+  agrees: token("ink-mute"),
+  differs: token("alarm"),
+  "authored-only": token("caution"),
+  "revit-only": token("caution"),
+  refused: token("alarm"),
+  unread: token("ink-mute"),
 };
 
 export type RowKind =

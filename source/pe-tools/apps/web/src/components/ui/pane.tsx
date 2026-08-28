@@ -31,10 +31,10 @@ export interface PaneProps {
 /** Kind owns chrome and scroll behavior only. Borders are PLACEMENT and belong to the layout
  * (PaneWorkspace slots / PaneSplit divider) — a navigation pane can sit on either side. */
 const paneClasses: Record<PaneKind, string> = {
-  navigation: "bg-background",
-  visual: "bg-card",
-  content: "bg-background",
-  inspector: "bg-background",
+  navigation: "bg-page",
+  visual: "bg-artifact",
+  content: "bg-page",
+  inspector: "bg-page",
 };
 
 const bodyClasses: Record<PaneKind, string> = {
@@ -77,17 +77,15 @@ export function Pane({
       {hasHeader && (
         <div
           data-slot="pane-header"
-          className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-2"
+          className="flex h-8 shrink-0 items-center gap-2 border-b border-line px-2"
         >
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
             {title != null && (
               // Pane titles are human heads — small-caps tracked SANS, never mono (heads law).
-              <h2 className="t-label t-upper min-w-0 truncate text-muted-foreground">{title}</h2>
+              <h2 className="t-label t-upper min-w-0 truncate text-ink-2">{title}</h2>
             )}
             {meta != null && (
-              <span className="face-mono t-value min-w-0 truncate text-muted-foreground">
-                {meta}
-              </span>
+              <span className="face-mono t-value min-w-0 truncate text-ink-2">{meta}</span>
             )}
           </div>
           {actions != null && (
@@ -101,7 +99,7 @@ export function Pane({
       {toolbar != null && (
         <div
           data-slot="pane-toolbar"
-          className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1"
+          className="flex min-w-0 shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1"
         >
           {toolbar}
         </div>
@@ -342,14 +340,14 @@ function PaneResizeHandle({
       onDoubleClick={onReset}
       className={cn(
         // Hover buys no hue (the one hover law): the gutter lifts with the neutral veil.
-        "group z-20 flex touch-none items-center justify-center bg-muted/50 outline-none hover:bg-[var(--r-veil)] focus-visible:bg-[var(--r-veil)]",
+        "group z-20 flex touch-none items-center justify-center bg-recess/50 outline-none hover:veil focus-visible:veil",
         axis === "horizontal" ? "h-full w-2 cursor-col-resize" : "h-2 w-full cursor-row-resize",
         className,
       )}
     >
       <span
         className={cn(
-          "bg-[var(--r-line-2)] group-hover:bg-[var(--r-ink-2)] group-focus-visible:bg-[var(--r-ink-2)]",
+          "bg-line-2 group-hover:bg-ink-2 group-focus-visible:bg-ink-2",
           axis === "horizontal" ? "h-8 w-px" : "h-px w-8",
         )}
       />
@@ -393,7 +391,7 @@ export function PaneSplit({ axis, start, end, resize, className }: PaneSplitProp
           sized ? "shrink-0" : "flex-1",
           // A fixed split has no handle to draw the seam — the end side carries the hairline.
           resize == null && side === "end" && (horizontal ? "border-l" : "border-t"),
-          resize == null && side === "end" && "border-border",
+          resize == null && side === "end" && "border-line",
         )}
         style={sized ? targetStyle : undefined}
       >
@@ -497,7 +495,7 @@ export function PaneWorkspace({
     >
       {navigation != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden border-r border-border"
+          className="min-h-0 min-w-0 overflow-hidden border-r border-line"
           style={{ gridColumn: 1, gridRow: "1 / 4" }}
         >
           {navigation}
@@ -525,7 +523,7 @@ export function PaneWorkspace({
 
       {inspector != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden border-l border-border"
+          className="min-h-0 min-w-0 overflow-hidden border-l border-line"
           style={{ gridColumn: 5, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
         >
           {inspector}

@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * THE FIELD — every buildable (opening width × qty) for the active row's stock and borders,
  * free % on y (the outcome), qty on x, one line per opening width. Clicking a point writes
@@ -26,17 +27,17 @@ export function FieldChart({ field, active, onPick }: Props) {
   const Y = (f: number) => H - PAD.b - (f / maxFree) * (H - PAD.t - PAD.b);
   const widths = [...new Set(field.map((g) => g.opening))].sort((a, b) => a - b);
   return (
-    <svg width={W} height={H} className="face-mono text-[9px]" style={{ color: "var(--r-ink)" }}>
-      <line x1={PAD.l} x2={W - PAD.r} y1={H - PAD.b} y2={H - PAD.b} stroke="var(--r-line-2)" />
-      <line x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={H - PAD.b} stroke="var(--r-line-2)" />
-      <text x={(PAD.l + W - PAD.r) / 2} y={H - 6} textAnchor="middle" fill="var(--r-ink-2)">
+    <svg width={W} height={H} className="face-mono text-[9px]" style={{ color: token("ink") }}>
+      <line x1={PAD.l} x2={W - PAD.r} y1={H - PAD.b} y2={H - PAD.b} stroke={token("line-2")} />
+      <line x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={H - PAD.b} stroke={token("line-2")} />
+      <text x={(PAD.l + W - PAD.r) / 2} y={H - 6} textAnchor="middle" fill={token("ink-2")}>
         qty openings →
       </text>
-      <text x={4} y={PAD.t + 6} fill="var(--r-ink-2)">
+      <text x={4} y={PAD.t + 6} fill={token("ink-2")}>
         free %
       </text>
       {Array.from({ length: maxN }, (_, i) => i + 1).map((n) => (
-        <text key={n} x={X(n)} y={H - PAD.b + 10} textAnchor="middle" fill="var(--r-ink-mute)">
+        <text key={n} x={X(n)} y={H - PAD.b + 10} textAnchor="middle" fill={token("ink-mute")}>
           {n}
         </text>
       ))}
@@ -45,7 +46,7 @@ export function FieldChart({ field, active, onPick }: Props) {
         x2={W - PAD.r}
         y1={Y(active.freeArea)}
         y2={Y(active.freeArea)}
-        stroke="var(--r-line)"
+        stroke={token("line")}
         strokeDasharray="3 3"
       />
       {widths.map((w) => {
@@ -67,7 +68,7 @@ export function FieldChart({ field, active, onPick }: Props) {
               <text
                 x={X(last.openings) + 4}
                 y={Y(last.freeArea) + 3}
-                fill={hot ? "currentColor" : "var(--r-ink-mute)"}
+                fill={hot ? "currentColor" : token("ink-mute")}
                 fontWeight={hot ? 700 : 400}
               >
                 {frac(w)}″
@@ -81,7 +82,7 @@ export function FieldChart({ field, active, onPick }: Props) {
                   cx={X(g.openings)}
                   cy={Y(g.freeArea)}
                   r={on ? 5 : 2.5}
-                  fill={on ? "var(--r-page)" : "currentColor"}
+                  fill={on ? token("page") : "currentColor"}
                   stroke="currentColor"
                   strokeWidth={on ? 2 : 0}
                   style={{ cursor: "pointer" }}

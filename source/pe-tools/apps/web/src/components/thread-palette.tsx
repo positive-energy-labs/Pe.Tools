@@ -15,15 +15,15 @@ function ThreadDot({ active }: { active: boolean }) {
   return (
     <span
       aria-hidden
-      className={`size-1.5 shrink-0 rounded-full ${active ? "bg-[var(--r-ink)]" : "bg-[var(--r-line-2)]"}`}
+      className={`size-1.5 shrink-0 rounded-full ${active ? "bg-ink" : "bg-line-2"}`}
     />
   );
 }
 
 export function ThreadEmpty() {
   return (
-    <main className="grid min-h-screen place-items-center bg-[var(--r-page)] font-pe">
-      <a href="/chat" className="rounded-sm px-3 py-2 hover:bg-[var(--r-veil)]">
+    <main className="grid min-h-screen place-items-center bg-page font-pe">
+      <a href="/chat" className="rounded-sm px-3 py-2 hover:veil">
         <EmptyState story="scope" exit="open the thread palette">
           pick or start a thread
         </EmptyState>
@@ -65,22 +65,18 @@ export function ThreadList({
               key={thread.id}
               // The open thread is a SELECTION — the selection fill, never a hue or a frame.
               className={`group/row flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 t-prose ${
-                active
-                  ? "bg-[var(--r-select)] [--r-on:var(--r-select)]"
-                  : "hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                active ? "on-select" : "hover:veil"
               }`}
               onClick={() => onSelect(thread.id)}
             >
               <ThreadDot active={active} />
-              <span
-                className={`min-w-0 flex-1 truncate ${active ? "text-[var(--r-ink)]" : "text-[var(--r-ink-2)]"}`}
-              >
+              <span className={`min-w-0 flex-1 truncate ${active ? "text-ink" : "text-ink-2"}`}>
                 {thread.title}
               </span>
               <button
                 type="button"
                 title="Delete thread"
-                className="hidden shrink-0 rounded-sm p-0.5 text-[var(--r-ink-2)] group-hover/row:inline hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                className="hidden shrink-0 rounded-sm p-0.5 text-ink-2 group-hover/row:inline hover:veil"
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete(thread.id);
@@ -100,12 +96,12 @@ export function ThreadList({
         ) : null}
       </div>
 
-      <div className="mt-auto flex flex-col gap-1 border-t-[0.5px] border-[var(--r-line)] p-2">
+      <div className="mt-auto flex flex-col gap-1 border-t-[0.5px] border-line p-2">
         {/* page-scoped acts: neutral ink, veil on hover — no blue (blue = writes beyond / nav) */}
         <button
           type="button"
           title="Start a new thread — the current one stays in the list"
-          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-[var(--r-ink)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink hover:veil"
           onClick={onNew}
         >
           <Plus className="size-4" />
@@ -114,15 +110,13 @@ export function ThreadList({
         <button
           type="button"
           title="Search every thread by title (⌘K)"
-          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink-2 hover:veil"
           onClick={onSearch}
         >
           <Search className="size-3.5" />
           <span className="flex-1 text-left">Search all threads</span>
-          {rest > 0 ? (
-            <span className="t-value face-mono text-[var(--r-ink-2)]">+{rest}</span>
-          ) : null}
-          <kbd className="rounded-sm border border-[var(--r-line-2)] px-1 py-0.5 t-caption face-mono text-[var(--r-ink-2)]">
+          {rest > 0 ? <span className="t-value face-mono text-ink-2">+{rest}</span> : null}
+          <kbd className="rounded-sm border border-line-2 px-1 py-0.5 t-caption face-mono text-ink-2">
             ⌘K
           </kbd>
         </button>
@@ -159,7 +153,7 @@ export function ThreadPalette({
     >
       <CommandInput placeholder="Search threads by title…" className="h-12 text-[15px]" />
       <CommandList className="max-h-[60vh] p-1.5">
-        <CommandEmpty className="py-10 text-center text-sm text-muted-foreground">
+        <CommandEmpty className="py-10 text-center text-sm text-ink-2">
           No threads match.
         </CommandEmpty>
         <CommandItem
@@ -169,11 +163,11 @@ export function ThreadPalette({
             onOpenChange(false);
           }}
           // keyboard cursor = selection fill, never a hue
-          className="mb-1 gap-2.5 rounded-sm px-3 py-2.5 text-[var(--r-ink)] data-selected:bg-[var(--r-select)]"
+          className="mb-1 gap-2.5 rounded-sm px-3 py-2.5 text-ink data-selected:bg-select"
         >
           <Plus className="size-4" />
           <span className="flex-1">New thread</span>
-          <kbd className="rounded-sm border border-[var(--r-line-2)] px-1.5 py-0.5 t-caption face-mono text-[var(--r-ink-2)]">
+          <kbd className="rounded-sm border border-line-2 px-1.5 py-0.5 t-caption face-mono text-ink-2">
             ⌘K
           </kbd>
         </CommandItem>
@@ -191,18 +185,16 @@ export function ThreadPalette({
                   onSelect(thread.id);
                   onOpenChange(false);
                 }}
-                className="group/row gap-2.5 rounded-sm px-3 py-2.5 data-selected:bg-[var(--r-select)]"
+                className="group/row gap-2.5 rounded-sm px-3 py-2.5 data-selected:bg-select"
               >
                 <ThreadDot active={active} />
-                <span
-                  className={`flex-1 truncate ${active ? "text-[var(--r-ink)]" : "text-[var(--r-ink)]/85"}`}
-                >
+                <span className={`flex-1 truncate ${active ? "text-ink" : "text-ink/85"}`}>
                   {thread.title}
                 </span>
                 <button
                   type="button"
                   title="Delete thread"
-                  className="shrink-0 rounded-sm p-0.5 text-[var(--r-ink-2)] opacity-0 transition-opacity group-hover/row:opacity-100 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))] data-selected:opacity-100"
+                  className="shrink-0 rounded-sm p-0.5 text-ink-2 opacity-0 transition-opacity group-hover/row:opacity-100 hover:veil data-selected:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();
                     onDelete(thread.id);

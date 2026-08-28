@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * PROTOTYPE (round 3) — the HYBRID parameter surface: table skeleton × sentence vocabulary.
  *
@@ -42,10 +43,10 @@ const SOURCE_WORD: Record<ParamCell["source"], string> = {
 };
 
 const SOURCE_TONE: Record<ParamCell["source"], string> = {
-  override: "var(--r-ink)",
-  value: "var(--r-ink-mute)",
-  formula: "var(--r-ink-2)",
-  missing: "var(--r-caution)",
+  override: token("ink"),
+  value: token("ink-mute"),
+  formula: token("ink-2"),
+  missing: token("caution"),
 };
 
 const clamp = (value: number, hi: number) => Math.max(0, Math.min(value, hi));
@@ -89,8 +90,8 @@ export function ParamGrid({ editor }: { editor: Editor }) {
     <th
       key={label}
       scope="col"
-      className="t-caption t-upper px-2 py-1 text-left font-normal text-[var(--r-ink-mute)]"
-      style={{ borderBottom: "1px solid var(--r-line)", whiteSpace: "nowrap" }}
+      className="t-caption t-upper px-2 py-1 text-left font-normal text-ink-mute"
+      style={{ borderBottom: `1px solid ${token("line")}`, whiteSpace: "nowrap" }}
     >
       {sort == null ? (
         <span>{label}</span>
@@ -125,8 +126,8 @@ export function ParamGrid({ editor }: { editor: Editor }) {
   return (
     <section>
       <div className="mb-1 flex flex-wrap items-baseline gap-2">
-        <span className="t-label t-upper text-[var(--r-ink-2)]">parameters</span>
-        <span className="t-caption text-[var(--r-ink-mute)]">
+        <span className="t-label t-upper text-ink-2">parameters</span>
+        <span className="t-caption text-ink-mute">
           {rows.length} of {Object.keys(editor.model.familyParameters).length} · one column per type
         </span>
         <input
@@ -140,12 +141,12 @@ export function ParamGrid({ editor }: { editor: Editor }) {
             padding: "0 4px",
             background: "transparent",
             border: "none",
-            borderBottom: "0.5px solid var(--r-line-2)",
+            borderBottom: `0.5px solid ${token("line-2")}`,
             borderRadius: 0,
-            color: "var(--r-ink)",
+            color: token("ink"),
           }}
         />
-        <label className="t-caption flex items-baseline gap-1 text-[var(--r-ink-2)]">
+        <label className="t-caption flex items-baseline gap-1 text-ink-2">
           <input
             type="checkbox"
             checked={view.overriddenOnly}
@@ -155,7 +156,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
           />
           only rows a type overrides
         </label>
-        <span className="t-caption text-[var(--r-ink-mute)]">arrow keys move · enter edits</span>
+        <span className="t-caption text-ink-mute">arrow keys move · enter edits</span>
       </div>
 
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the grid owns
@@ -177,7 +178,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
         </thead>
         <tbody>
           {rows.map((row, r) => (
-            <tr key={row.name} style={{ borderBottom: "1px solid var(--r-line)" }}>
+            <tr key={row.name} style={{ borderBottom: `1px solid ${token("line")}` }}>
               <Cell
                 r={r}
                 c={0}
@@ -189,7 +190,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
                   (editor.focus?.startsWith(`${row.pointer}/`) ?? false)
                 }
               >
-                <span className="face-mono t-label text-[var(--r-ink)]">{row.name}</span>
+                <span className="face-mono t-label text-ink">{row.name}</span>
               </Cell>
 
               <Cell r={r} c={1} cursor={cursor} cells={cells} onPick={() => setCursor({ r, c: 1 })}>
@@ -252,7 +253,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
               })}
 
               <td
-                className="face-mono t-caption px-2 py-0.5 text-right tabular-nums text-[var(--r-ink-mute)]"
+                className="face-mono t-caption px-2 py-0.5 text-right tabular-nums text-ink-mute"
                 title="Authored constructs that read this parameter"
               >
                 {row.reads > 0 ? row.reads : ""}
@@ -262,9 +263,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
         </tbody>
       </table>
       {rows.length === 0 ? (
-        <p className="t-caption px-2 py-2 text-[var(--r-ink-mute)]">
-          no parameter matches — clear the filter
-        </p>
+        <p className="t-caption px-2 py-2 text-ink-mute">no parameter matches — clear the filter</p>
       ) : null}
     </section>
   );
@@ -299,7 +298,7 @@ function Cell({
       onClick={onPick}
       className="px-2 py-0.5 align-baseline"
       style={{
-        background: on || focused ? "var(--r-select)" : "transparent",
+        background: on || focused ? token("select") : "transparent",
         outline: "none",
         whiteSpace: "nowrap",
       }}
@@ -352,15 +351,15 @@ function GridText({
         style={{
           width: 84,
           padding: "0 2px",
-          background: editing ? "var(--r-page)" : "transparent",
+          background: editing ? token("page") : "transparent",
           border: "none",
-          borderBottom: editing ? "0.5px solid var(--r-ink)" : "0.5px solid transparent",
+          borderBottom: editing ? `0.5px solid ${token("ink")}` : "0.5px solid transparent",
           borderRadius: 0,
-          color: locked ? "var(--r-ink-mute)" : SOURCE_TONE[cell.source],
+          color: locked ? token("ink-mute") : SOURCE_TONE[cell.source],
           cursor: locked ? "not-allowed" : "text",
         }}
       />
-      <span className="t-caption text-[var(--r-ink-mute)]">
+      <span className="t-caption text-ink-mute">
         {locked ? "locked" : SOURCE_WORD[cell.source]}
       </span>
     </span>

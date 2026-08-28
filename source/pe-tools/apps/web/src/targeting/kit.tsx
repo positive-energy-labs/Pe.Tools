@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * TARGETING kit — the mechanics every rendering shares.
  *
@@ -277,9 +278,9 @@ export function freshnessWord<K extends string>(b: Bindings<K>, link: Link<K>): 
 const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
 
 const POP: React.CSSProperties = {
-  border: "1px solid var(--r-line-2)",
-  background: "var(--r-page)",
-  boxShadow: "0 2px 8px color-mix(in srgb, var(--r-ink) 8%, transparent)",
+  border: `1px solid ${token("line-2")}`,
+  background: token("page"),
+  boxShadow: `0 2px 8px color-mix(in srgb, ${token("ink")} 8%, transparent)`,
   minWidth: 320,
 };
 
@@ -376,9 +377,9 @@ export function Picker<K extends string>({
         style={{
           padding: 0,
           cursor: inert ? "not-allowed" : "pointer",
-          background: open ? "var(--r-select)" : "transparent",
-          borderBottom: `1px solid ${caution ? "var(--r-caution)" : "var(--r-ink)"}`,
-          color: caution ? "var(--r-caution)" : "var(--r-ink)",
+          background: open ? token("select") : "transparent",
+          borderBottom: `1px solid ${caution ? token("caution") : token("ink")}`,
+          color: caution ? token("caution") : token("ink"),
           whiteSpace: "nowrap",
           animation: lit ? "tp-pulse 0.9s ease-in-out infinite" : undefined,
         }}
@@ -390,7 +391,7 @@ export function Picker<K extends string>({
           {/* crumbs — the trunk, one segment per level; the current level is underlined */}
           <div
             className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"
-            style={{ borderBottom: "1px solid var(--r-line-2)" }}
+            style={{ borderBottom: `1px solid ${token("line-2")}` }}
           >
             {chain.map((l, i) => {
               const on = l.key === level;
@@ -398,7 +399,7 @@ export function Picker<K extends string>({
               return (
                 <span key={l.key} className="inline-flex items-baseline gap-1">
                   {i > 0 ? (
-                    <span className="face-mono t-caption" style={{ color: "var(--r-ink-mute)" }}>
+                    <span className="face-mono t-caption" style={{ color: token("ink-mute") }}>
                       ›
                     </span>
                   ) : null}
@@ -408,9 +409,9 @@ export function Picker<K extends string>({
                     className="face-mono t-caption"
                     style={{
                       padding: "0 3px",
-                      background: on ? "var(--r-select)" : "transparent",
-                      color: lab == null ? "var(--r-caution)" : "var(--r-ink)",
-                      borderBottom: on ? "1px solid var(--r-ink)" : "1px solid transparent",
+                      background: on ? token("select") : "transparent",
+                      color: lab == null ? token("caution") : token("ink"),
+                      borderBottom: on ? `1px solid ${token("ink")}` : "1px solid transparent",
                     }}
                   >
                     {lab ?? l.placeholder}
@@ -435,22 +436,22 @@ export function Picker<K extends string>({
             className="t-value w-full px-2 py-1"
             style={{
               background: "transparent",
-              borderBottom: "1px solid var(--r-line-2)",
+              borderBottom: `1px solid ${token("line-2")}`,
               outline: "none",
-              color: "var(--r-ink)",
+              color: token("ink"),
             }}
           />
           <div className="max-h-64 overflow-y-auto py-1">
             {opts === null ? (
-              <div className="t-caption px-2 py-1" style={{ color: "var(--r-caution)" }}>
+              <div className="t-caption px-2 py-1" style={{ color: token("caution") }}>
                 no legal options — needs {cur.needs}
               </div>
             ) : curFeed?.state === "error" ? (
-              <div className="t-caption px-2 py-1" style={{ color: "var(--r-caution)" }}>
+              <div className="t-caption px-2 py-1" style={{ color: token("caution") }}>
                 {curFeed.note ?? "read failed"}
               </div>
             ) : opts.length === 0 ? (
-              <div className="t-caption px-2 py-1" style={{ color: "var(--r-ink-2)" }}>
+              <div className="t-caption px-2 py-1" style={{ color: token("ink-2") }}>
                 {curFeed?.state === "loading"
                   ? "reading…"
                   : cur.under && b.bound[cur.under] == null
@@ -458,7 +459,7 @@ export function Picker<K extends string>({
                     : cur.needs}
               </div>
             ) : hits.length === 0 ? (
-              <div className="t-caption px-2 py-1" style={{ color: "var(--r-ink-2)" }}>
+              <div className="t-caption px-2 py-1" style={{ color: token("ink-2") }}>
                 no match
               </div>
             ) : (
@@ -473,16 +474,16 @@ export function Picker<K extends string>({
                       advance();
                     }}
                     className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                    style={{ background: on ? "var(--r-select)" : undefined }}
+                    style={{ background: on ? token("select") : undefined }}
                   >
                     {cur.multi ? (
                       <span className="face-mono t-caption">{on ? "☑" : "☐"}</span>
                     ) : null}
-                    <span className="t-value" style={{ color: "var(--r-ink)" }}>
+                    <span className="t-value" style={{ color: token("ink") }}>
                       {o.label}
                     </span>
                     {o.sub ? (
-                      <span className="t-caption" style={{ color: "var(--r-ink-2)" }}>
+                      <span className="t-caption" style={{ color: token("ink-2") }}>
                         {o.sub}
                       </span>
                     ) : null}
@@ -494,7 +495,7 @@ export function Picker<K extends string>({
               <>
                 <div
                   className="face-mono t-caption t-upper px-2 pt-1.5"
-                  style={{ color: "var(--r-ink-mute)", borderTop: "1px solid var(--r-line-2)" }}
+                  style={{ color: token("ink-mute"), borderTop: `1px solid ${token("line-2")}` }}
                 >
                   {b.labelOf(cur)} › {below!.key}
                 </div>
@@ -510,18 +511,18 @@ export function Picker<K extends string>({
                       setQ("");
                     }}
                     className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                    style={{ background: b.isPicked(below!, o.id) ? "var(--r-select)" : undefined }}
+                    style={{ background: b.isPicked(below!, o.id) ? token("select") : undefined }}
                   >
                     {below!.multi ? (
                       <span className="face-mono t-caption">
                         {b.isPicked(below!, o.id) ? "☑" : "☐"}
                       </span>
                     ) : null}
-                    <span className="t-value" style={{ color: "var(--r-ink)" }}>
+                    <span className="t-value" style={{ color: token("ink") }}>
                       {o.label}
                     </span>
                     {o.sub ? (
-                      <span className="t-caption" style={{ color: "var(--r-ink-2)" }}>
+                      <span className="t-caption" style={{ color: token("ink-2") }}>
                         {o.sub}
                       </span>
                     ) : null}
@@ -557,7 +558,10 @@ export function StageStrip<K extends string>({
     <div
       className="flex items-stretch"
       role="tablist"
-      style={{ borderTop: "1px solid var(--r-ink)", borderBottom: "1px solid var(--r-line-2)" }}
+      style={{
+        borderTop: `1px solid ${token("ink")}`,
+        borderBottom: `1px solid ${token("line-2")}`,
+      }}
     >
       {product.stages.map((s, i) => {
         const ready = s.verbs.filter((v) => runner.canRun(v).ok).length;
@@ -577,10 +581,10 @@ export function StageStrip<K extends string>({
               .join(" · ")}`}
             className="face-mono t-caption t-upper flex items-baseline gap-2 px-2.5 py-1"
             style={{
-              borderLeft: i > 0 ? "1px solid var(--r-line-2)" : undefined,
-              background: on ? "var(--r-select)" : "transparent",
-              boxShadow: on ? "inset 0 -2px 0 var(--r-ink)" : undefined,
-              color: on ? "var(--r-ink)" : "var(--r-ink-2)",
+              borderLeft: i > 0 ? `1px solid ${token("line-2")}` : undefined,
+              background: on ? token("select") : "transparent",
+              boxShadow: on ? `inset 0 -2px 0 ${token("ink")}` : undefined,
+              color: on ? token("ink") : token("ink-2"),
             }}
           >
             <span>{s.label}</span>
@@ -588,7 +592,7 @@ export function StageStrip<K extends string>({
               <span
                 style={{
                   fontVariantNumeric: "tabular-nums",
-                  color: ready === 0 ? "var(--r-ink-mute)" : "var(--r-ink)",
+                  color: ready === 0 ? token("ink-mute") : token("ink"),
                 }}
               >
                 {ready}/{s.verbs.length}
@@ -613,7 +617,7 @@ export function PaneStrip<K extends string>({
 }) {
   return (
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="face-mono t-caption t-upper" style={{ color: "var(--r-ink-mute)" }}>
+      <span className="face-mono t-caption t-upper" style={{ color: token("ink-mute") }}>
         panes
       </span>
       {product.panes.map((p) => {
@@ -627,9 +631,9 @@ export function PaneStrip<K extends string>({
             aria-disabled={!st.ok}
             className="face-mono t-caption"
             style={{
-              color: st.ok ? "var(--r-ink)" : "var(--r-ink-mute)",
+              color: st.ok ? token("ink") : token("ink-mute"),
               fontStyle: st.ok ? undefined : "italic",
-              borderBottom: st.ok ? "1px solid var(--r-line-2)" : "1px solid transparent",
+              borderBottom: st.ok ? `1px solid ${token("line-2")}` : "1px solid transparent",
               background: "transparent",
               padding: 0,
               pointerEvents: st.ok ? undefined : "none",

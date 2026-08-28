@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * EXPORT SHEET — what the mechanical engineer hands the architect: one page, one or many grille
  * drawings, a title block, the numbers that matter under each. Native-first: the browser's own
@@ -27,12 +28,11 @@ export function ExportSheet({
     if (!svg) return;
     const clone = svg.cloneNode(true) as SVGSVGElement;
     // bake the tokens: a standalone file has no design-lang.css
-    const cs = getComputedStyle(svg);
     for (const [k, v] of [
-      ["--r-ink", cs.getPropertyValue("--r-ink") || "#38352d"],
-      ["--r-ink-2", cs.getPropertyValue("--r-ink-2") || "#5f5a4e"],
-      ["--r-page", cs.getPropertyValue("--r-page") || "#fdfaf2"],
-      ["--r-alarm", cs.getPropertyValue("--r-alarm") || "#8e4120"],
+      ["--pe-ink", token("ink")],
+      ["--pe-ink-2", token("ink-2")],
+      ["--pe-page", token("page")],
+      ["--pe-alarm", token("alarm")],
     ])
       clone.setAttribute("style", `${clone.getAttribute("style") ?? ""};${k}:${v}`);
     const blob = new Blob([new XMLSerializer().serializeToString(clone)], {
@@ -46,7 +46,7 @@ export function ExportSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-auto bg-[var(--r-page)] text-[var(--r-ink)]">
+    <div className="fixed inset-0 z-50 overflow-auto bg-page text-ink">
       <style>{`@media print {
         body * { visibility: hidden; }
         #grille-export-sheet, #grille-export-sheet * { visibility: visible; }
@@ -55,24 +55,20 @@ export function ExportSheet({
       }`}</style>
       <div
         className="no-print flex items-center gap-3 border-b px-3 py-2"
-        style={{ borderColor: "var(--r-line)" }}
+        style={{ borderColor: token("line") }}
       >
-        <span className="face-mono t-label t-upper text-[var(--r-ink-mute)]">export sheet</span>
-        <span className="face-mono text-[11px] text-[var(--r-ink-2)]">
+        <span className="face-mono t-label t-upper text-ink-mute">export sheet</span>
+        <span className="face-mono text-[11px] text-ink-2">
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
         <button
           type="button"
-          className="face-mono ml-auto text-[11px] text-[var(--r-nav)]"
+          className="face-mono ml-auto text-[11px] text-nav"
           onClick={() => window.print()}
         >
           print / save PDF
         </button>
-        <button
-          type="button"
-          className="face-mono text-[11px] text-[var(--r-nav)]"
-          onClick={onClose}
-        >
+        <button type="button" className="face-mono text-[11px] text-nav" onClick={onClose}>
           close
         </button>
       </div>
@@ -81,10 +77,10 @@ export function ExportSheet({
         {/* title block */}
         <div
           className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 text-[11px]"
-          style={{ borderColor: "var(--r-ink)" }}
+          style={{ borderColor: token("ink") }}
         >
           <div>
-            <div className="t-label t-upper text-[var(--r-ink-mute)]">
+            <div className="t-label t-upper text-ink-mute">
               Positive Energy · custom wood floor grille
             </div>
             <input
@@ -94,14 +90,14 @@ export function ExportSheet({
               onChange={(e) => onProject(e.target.value)}
             />
           </div>
-          <div className="text-right text-[var(--r-ink-2)]">
+          <div className="text-right text-ink-2">
             <div>{new Date().toISOString().slice(0, 10)}</div>
             <div>free area per PE calculator · all dims inches</div>
           </div>
         </div>
 
         {rows.length === 0 && (
-          <p className="face-mono py-8 text-[12px] text-[var(--r-ink-2)]">
+          <p className="face-mono py-8 text-[12px] text-ink-2">
             nothing on the sheet — tick rows in the table first
           </p>
         )}
@@ -118,13 +114,13 @@ export function ExportSheet({
                   {frac(r.boardLength)} × {frac(r.boardWidth)} · {r.openings} × {frac(r.opening)}″
                   openings · {frac(r.rib)}″ ribs
                 </span>
-                <span className="ml-auto text-[var(--r-ink-2)]">
-                  free area <b className="text-[var(--r-ink)]">{pct(r.freeArea)}</b> ·{" "}
+                <span className="ml-auto text-ink-2">
+                  free area <b className="text-ink">{pct(r.freeArea)}</b> ·{" "}
                   {r.actualFreeArea.toFixed(1)} in²
                 </span>
                 <button
                   type="button"
-                  className="no-print text-[var(--r-nav)]"
+                  className="no-print text-nav"
                   onClick={() => downloadSvg(r.id)}
                 >
                   .svg

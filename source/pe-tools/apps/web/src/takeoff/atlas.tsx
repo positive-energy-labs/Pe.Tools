@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /** Atlas — the /takeoffs workspace: plan-dominant three-pane. */
 //
 // The PLAN is the scope master, the TABLE always answers "everything currently in scope". No zone
@@ -100,15 +101,15 @@ const createAtlasActions = (store: TakeoffStore): AtlasActions => ({
 // ── Room state — the one progress vocabulary ────────────────────────────────
 //
 // Derived from the room's own facts, never from its zone's stage label. Four states, spent on the
-// design language's MEANING BAND (`--r-*`) rather than the viz ladder: the old `--cat-*` spends
+// design language's MEANING BAND (`--pe-*`) rather than the viz ladder: the old `--cat-*` spends
 // were taxonomy colours carrying state, which is exactly the violation the route passes exist to
 // fix. The mapping is an argument, not a convenience:
-//   call      → --r-alarm     the one alarm: a person is required, because the model or the
+//   call      → --pe-alarm     the one alarm: a person is required, because the model or the
 //                             detector disagrees with what is recorded.
-//   unreviewed→ --r-ink-mute  the "never checked" rank — nothing has been entered here at all.
-//   data      → --r-caution   unsaved: the Manual J numbers exist only in this session's overlay
+//   unreviewed→ --pe-ink-mute  the "never checked" rank — nothing has been entered here at all.
+//   data      → --pe-caution   unsaved: the Manual J numbers exist only in this session's overlay
 //                             until a sync moves them into the .r10.
-//   synced    → --r-done      it landed.
+//   synced    → --pe-done      it landed.
 //
 // NOTE: these four are a
 // row-level PIPELINE VERDICT, not the cell grammar's state axes — the column rides the table's
@@ -160,16 +161,16 @@ const STAGE_BLURB: Record<Stage, string> = {
 };
 
 /**
- * SELECTION AND FOCUS ARE A FILL, NEVER A HUE. The plan used `--primary` (= `--r-commit`, the one
+ * SELECTION AND FOCUS ARE A FILL, NEVER A HUE. The plan used the commit role, the one
  * filled blue, reserved for writes that leave the page) as its cursor mark, which spent the commit
- * colour on "where am I". The legal fill — `--r-select` — is a page-adjacent ground and disappears
+ * colour on "where am I". The legal fill — `--pe-select` — is a page-adjacent ground and disappears
  * as an SVG stroke over the designer's own zone colours, so the cursor is drawn in NEUTRAL INK
  * instead: no hue bought, and still the highest-contrast mark on the plan.
  */
-const CURSOR_INK = "var(--r-ink)";
+const CURSOR_INK = token("ink");
 
 /** Held residue and the "no boundary" fallback both mean "nothing real is here". */
-const ABSENT_INK = "var(--r-ink-mute)";
+const ABSENT_INK = token("ink-mute");
 
 /**
  * Per-zone progress, derived: one equal segment per room, coloured by that room's own state. A
@@ -192,7 +193,7 @@ function ZoneStateBar({
     return (
       <span
         className={cn(
-          "inline-block h-2.5 w-10 shrink-0 rounded-[1px] border border-[var(--r-line-2)]",
+          "inline-block h-2.5 w-10 shrink-0 rounded-[1px] border border-line-2",
           className,
         )}
         title={`${zone.zone.key} — not partitioned: no rooms have been materialized yet`}
@@ -228,7 +229,7 @@ function ZoneStateBar({
  */
 function Swatch({ tone, label, seam }: { tone: string; label: string; seam?: boolean }) {
   return (
-    <span className="face-mono t-value inline-flex items-center gap-1 text-muted-foreground">
+    <span className="face-mono t-value inline-flex items-center gap-1 text-ink-2">
       <span
         className={cn(
           "inline-block size-2.5 rounded-[1px] border",
@@ -299,7 +300,7 @@ const hostReason = (live: boolean, busy: string | null, does: string, onFixture:
  *  element, so fallback, constraints, never-muting, and patch construction exist once.
  *
  *  A room with no Manual J data is the NEVER rung (R2): nothing was ever entered, so the value
- *  sits in `--r-ink-mute` — the grammar's own treatment, replacing the route-invented
+ *  sits in `--pe-ink-mute` — the grammar's own treatment, replacing the route-invented
  *  `opacity-50`. JUDGED during the adoption pass: the column STAYS on `NumberCell` rather than
  *  the editable `StateCell`, because `onCommit(text: string)` would re-implement the numeric
  *  contract (`parseCell`'s integer/min refusal, `inputMode="decimal"`, the right-aligned fmt)
@@ -319,7 +320,7 @@ function ManualJField({
       digits={0}
       integer
       min={0}
-      className={room.data === null ? "text-[var(--r-ink-mute)]" : undefined}
+      className={room.data === null ? "text-ink-mute" : undefined}
       onCommit={(v) => onPatch({ [field]: v })}
     />
   );
@@ -362,17 +363,15 @@ function RoomNameCell({
       title={state.join(" · ") || undefined}
       className={cn(
         "flex min-w-0 items-center",
-        entity.hovered && "[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
-        entity.selected && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+        entity.hovered && "veil",
+        entity.selected && "on-select",
       )}
     >
       <div className="min-w-0 flex-1">
         <TextCell value={row.room.name} onCommit={onCommit} className="text-left" />
       </div>
       {entity.dirty && (
-        <span
-          className={cn("face-mono t-caption pr-1", entity.conflict && "text-[var(--r-caution)]")}
-        >
+        <span className={cn("face-mono t-caption pr-1", entity.conflict && "text-caution")}>
           {entity.conflict ? "conflict" : "staged"}
         </span>
       )}
@@ -557,7 +556,7 @@ export function Atlas({ store }: AtlasProps) {
           <ReadCell
             value={`${STAGE_ORDER.indexOf(row.zone.stage) + 1} ${row.zone.stage}`}
             reason={`zone ${row.zone.zone.key} is at "${row.zone.stage}" — ${STAGE_BLURB[row.zone.stage]}. This is a ZONE label; the room's own state is the next column.`}
-            className="text-muted-foreground"
+            className="text-ink-2"
           />
         ),
       },
@@ -700,13 +699,13 @@ export function Atlas({ store }: AtlasProps) {
         cell: (row) =>
           row.open.length > 0 ? (
             <span
-              className="face-mono t-value block truncate px-1.5 text-muted-foreground"
+              className="face-mono t-value block truncate px-1.5 text-ink-2"
               title={row.open.join(", ")}
             >
               {row.open.join(", ")}
             </span>
           ) : row.room.decisions.length > 0 ? (
-            <span className="face-mono t-value block truncate px-1.5 text-muted-foreground">
+            <span className="face-mono t-value block truncate px-1.5 text-ink-2">
               {row.room.decisions.length} decided
             </span>
           ) : null,
@@ -760,7 +759,7 @@ export function Atlas({ store }: AtlasProps) {
     (cursorRow ? `&room=${shortId(cursorRow.room.guid)}` : "");
 
   return (
-    <main className="flex h-screen min-h-0 flex-col bg-background">
+    <main className="flex h-screen min-h-0 flex-col bg-page">
       {/* The head rail moved to the route's TargetingHead (bindings · stages · verbs · seam
           chip · busy receipt). What stays here is the one advisory only this pane can know. */}
       {!geoReady && (
@@ -791,23 +790,21 @@ export function Atlas({ store }: AtlasProps) {
           },
         }}
         navigation={
-          <Suspense fallback={<div className="p-2 text-muted-foreground">reading zones…</div>}>
+          <Suspense fallback={<div className="p-2 text-ink-2">reading zones…</div>}>
             <Pane
               kind="navigation"
               title="zones"
               meta={`${world.zones.length} declared`}
               /* adopt · refresh moved to the TargetingHead's stage verbs (they demand bindings). */
             >
-              <div className="shrink-0 border-b border-border px-2 py-1.5">
-                <div className="t-caption t-upper mb-1 text-muted-foreground">
-                  room states — one per room
-                </div>
+              <div className="shrink-0 border-b border-line px-2 py-1.5">
+                <div className="t-caption t-upper mb-1 text-ink-2">room states — one per room</div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   {ROOM_STATES.map((s) => (
                     <span
                       key={s}
                       title={STATE_META[s].note}
-                      className="face-mono t-value inline-flex items-center gap-1 text-muted-foreground"
+                      className="face-mono t-value inline-flex items-center gap-1 text-ink-2"
                     >
                       <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
                       {STATE_META[s].label}
@@ -816,8 +813,8 @@ export function Atlas({ store }: AtlasProps) {
                 </div>
               </div>
 
-              <div className="shrink-0 border-b border-border px-2 py-2">
-                <div className="t-caption t-upper mb-1 text-muted-foreground">
+              <div className="shrink-0 border-b border-line px-2 py-2">
+                <div className="t-caption t-upper mb-1 text-ink-2">
                   zone pipeline — global filter
                 </div>
                 <div className="flex flex-col">
@@ -833,28 +830,21 @@ export function Atlas({ store }: AtlasProps) {
                           setZoneKey(null);
                           setCursor(null);
                         }}
-                        // Selection is a FILL, never a hue: `bg-accent` resolves to `--r-select`,
-                        // the ground ladder's fourth rung. The old `bg-primary/[0.08]` spent the
+                        // Selection is a FILL, never a hue: `bg-select` resolves to `--pe-select`,
+                        // the ground ladder's fourth rung. The old `bg-commit/[0.08]` spent the
                         // one filled blue — reserved for writes that leave the page — on "what is lit".
                         className={cn(
-                          "flex items-baseline gap-1.5 rounded-[var(--radius)] px-1 py-0.5 text-left hover:bg-muted",
-                          on && "bg-accent",
+                          "flex items-baseline gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-recess",
+                          on && "bg-select",
                         )}
                       >
-                        <span className="face-mono t-value w-3 shrink-0 text-muted-foreground">
-                          {i + 1}
-                        </span>
+                        <span className="face-mono t-value w-3 shrink-0 text-ink-2">{i + 1}</span>
                         <span
-                          className={cn(
-                            "face-mono t-value flex-1 truncate",
-                            !on && "text-muted-foreground",
-                          )}
+                          className={cn("face-mono t-value flex-1 truncate", !on && "text-ink-2")}
                         >
                           {stage}
                         </span>
-                        <span className="face-mono t-value tabular-nums text-muted-foreground">
-                          {n}
-                        </span>
+                        <span className="face-mono t-value tabular-nums text-ink-2">{n}</span>
                       </button>
                     );
                   })}
@@ -862,7 +852,7 @@ export function Atlas({ store }: AtlasProps) {
                 {stageFilter && (
                   <button
                     type="button"
-                    className="t-caption mt-1 text-muted-foreground hover:text-foreground"
+                    className="t-caption mt-1 text-ink-2 hover:text-ink"
                     onClick={() => setStageFilter(null)}
                   >
                     clear filter — show all {world.zones.length}
@@ -877,7 +867,7 @@ export function Atlas({ store }: AtlasProps) {
                   if (zs.length === 0) return null;
                   return (
                     <div key={lane.label}>
-                      <div className="t-caption t-upper sticky top-0 z-10 border-y border-[var(--r-line)] bg-muted px-2 py-0.5 text-muted-foreground">
+                      <div className="t-caption t-upper sticky top-0 z-10 border-y border-line bg-recess px-2 py-0.5 text-ink-2">
                         {lane.label} · {zs.length}
                       </div>
                       <ul>
@@ -897,14 +887,14 @@ export function Atlas({ store }: AtlasProps) {
                                     : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
                                 }
                                 className={cn(
-                                  "flex w-full items-center gap-1.5 border-b border-[var(--r-line)] px-2 py-1 text-left hover:bg-muted",
-                                  on && "bg-accent",
+                                  "flex w-full items-center gap-1.5 border-b border-line px-2 py-1 text-left hover:bg-recess",
+                                  on && "bg-select",
                                   off && "opacity-55",
                                 )}
                               >
                                 <ZoneThumb zone={z.zone} className="size-5" />
                                 <span className="face-mono t-value shrink-0">{z.zone.key}</span>
-                                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                                <span className="min-w-0 flex-1 truncate text-xs text-ink-2">
                                   {off ? "off-plan scribble" : z.name}
                                 </span>
                                 {calls > 0 && (
@@ -930,7 +920,7 @@ export function Atlas({ store }: AtlasProps) {
           </Suspense>
         }
         visual={
-          <Suspense fallback={<div className="p-2 text-muted-foreground">reading plan…</div>}>
+          <Suspense fallback={<div className="p-2 text-ink-2">reading plan…</div>}>
             <Pane
               kind="visual"
               toolbar={
@@ -945,15 +935,15 @@ export function Atlas({ store }: AtlasProps) {
                         onClick={() => setLevel(lane.label)}
                         title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
                         className={cn(
-                          "face-mono t-value rounded-[var(--radius)] border px-2 py-0.5",
+                          "face-mono t-value rounded-sm border px-2 py-0.5",
                           lane.label === level
-                            ? "border-[var(--r-line-2)] bg-accent"
-                            : "border-transparent text-muted-foreground hover:bg-muted",
+                            ? "border-line-2 bg-select"
+                            : "border-transparent text-ink-2 hover:bg-recess",
                         )}
                       >
                         {lane.label}
                         <span className="ml-1 opacity-60">{zs.length}</span>
-                        {calls > 0 && <span className="ml-1 text-[var(--r-alarm)]">·{calls}</span>}
+                        {calls > 0 && <span className="ml-1 text-alarm">·{calls}</span>}
                       </button>
                     );
                   })}
@@ -963,8 +953,8 @@ export function Atlas({ store }: AtlasProps) {
                     onClick={() => setStatsOpen(!statsOpen)}
                     title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
                     className={cn(
-                      "face-mono t-value ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5",
-                      statsOpen ? "bg-accent" : "text-muted-foreground hover:bg-muted",
+                      "face-mono t-value ml-2 rounded-sm border border-line-2 px-1.5 py-0.5",
+                      statsOpen ? "bg-select" : "text-ink-2 hover:bg-recess",
                     )}
                   >
                     level stats
@@ -977,12 +967,12 @@ export function Atlas({ store }: AtlasProps) {
                         ? "collapse the plan — give the table the full height"
                         : "show the plan"
                     }
-                    className="face-mono t-value rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-0.5 text-muted-foreground hover:bg-muted"
+                    className="face-mono t-value rounded-sm border border-line-2 px-1.5 py-0.5 text-ink-2 hover:bg-recess"
                   >
                     {planOpen ? "▴ hide plan" : "▾ show plan"}
                   </button>
 
-                  <span className="face-mono t-value ml-auto text-muted-foreground">
+                  <span className="face-mono t-value ml-auto text-ink-2">
                     {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc
                     clears
                   </span>
@@ -1034,7 +1024,7 @@ export function Atlas({ store }: AtlasProps) {
           </Suspense>
         }
         content={
-          <Suspense fallback={<div className="p-2 text-muted-foreground">reading rooms…</div>}>
+          <Suspense fallback={<div className="p-2 text-ink-2">reading rooms…</div>}>
             <Pane kind="content" scroll="clip">
               {/* Room data sits BESIDE the rooms it describes. The panel exists exactly when a
                 room is under the cursor; Esc clears both. The table never unmounts (its filter
@@ -1067,10 +1057,7 @@ export function Atlas({ store }: AtlasProps) {
                       <>
                         {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
                         {scopeCalls > 0 && (
-                          <span className="text-[var(--r-alarm)]">
-                            {" "}
-                            · {scopeCalls} needing a call
-                          </span>
+                          <span className="text-alarm"> · {scopeCalls} needing a call</span>
                         )}
                         <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
                         {/* The fields-mode control lives HERE, not in the room panel — the panel
@@ -1088,7 +1075,7 @@ export function Atlas({ store }: AtlasProps) {
                               ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
                               : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
                           }
-                          className="ml-2 rounded-[var(--radius)] border border-[var(--r-line-2)] px-1.5 py-px text-muted-foreground hover:bg-muted"
+                          className="ml-2 rounded-sm border border-line-2 px-1.5 py-px text-ink-2 hover:bg-recess"
                         >
                           fields: {fieldsMode}
                         </button>
@@ -1330,7 +1317,7 @@ function LevelPlan({
                         y={labelY}
                         textAnchor="middle"
                         fontSize={font}
-                        fill="var(--foreground)"
+                        fill={token("ink")}
                         className="pointer-events-none select-none"
                       >
                         <tspan x={labelX} fontWeight={600}>
@@ -1351,7 +1338,7 @@ function LevelPlan({
                   y={zoneLabelY}
                   textAnchor="middle"
                   fontSize={font * 0.95}
-                  fill="var(--foreground)"
+                  fill={token("ink")}
                   fillOpacity={0.55}
                   className="pointer-events-none select-none"
                 >
@@ -1370,7 +1357,7 @@ function LevelPlan({
         <Swatch tone={ABSENT_INK} label="held residue" seam />
         <Swatch tone={CURSOR_INK} label="cursor" />
         {skipped > 0 && (
-          <span className="face-mono t-value text-muted-foreground">
+          <span className="face-mono t-value text-ink-2">
             {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
             rail
           </span>
@@ -1425,13 +1412,13 @@ function LevelStats({
   const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));
 
   return (
-    <div className="absolute top-2 right-2 z-20 w-64 rounded-[var(--radius)] border border-border bg-background/95 px-2 py-1.5 shadow-sm backdrop-blur">
+    <div className="absolute top-2 right-2 z-20 w-64 rounded-sm border border-line bg-page/95 px-2 py-1.5 shadow-sm backdrop-blur">
       <div className="mb-1 flex items-baseline gap-1.5">
-        <span className="t-label t-upper text-muted-foreground">{level} — level totals</span>
+        <span className="t-label t-upper text-ink-2">{level} — level totals</span>
         <button
           type="button"
           onClick={onClose}
-          className="face-mono t-value ml-auto text-muted-foreground hover:text-foreground"
+          className="face-mono t-value ml-auto text-ink-2 hover:text-ink"
         >
           ×
         </button>
@@ -1456,12 +1443,12 @@ function LevelStats({
         {unpartitionedSqft > 0 && (
           <span
             title={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}
-            className="border border-[var(--r-line-2)]"
+            className="border border-line-2"
             style={{ width: `${(unpartitionedSqft / Math.max(totalArea, 1)) * 100}%` }}
           />
         )}
       </div>
-      <p className="face-mono t-value mt-0.5 text-muted-foreground">
+      <p className="face-mono t-value mt-0.5 text-ink-2">
         {fmtNum(totalArea, 0)} sf declared on this level, by room state
       </p>
 
@@ -1475,7 +1462,7 @@ function LevelStats({
         <StatLine
           label="calls"
           value={calls === 0 ? "none open" : `${calls} rooms need a human`}
-          tone={calls > 0 ? "text-[var(--r-alarm)]" : "text-[var(--r-done)]"}
+          tone={calls > 0 ? "text-alarm" : "text-done"}
         />
         <StatLine label="held" value={`${fmtNum(held, 0)} sf residue`} />
         <StatLine
@@ -1485,7 +1472,7 @@ function LevelStats({
               ? "closed — every declared foot accounted"
               : `${fmtNum(residual, 0)} sf unaccounted`
           }
-          tone={Math.abs(residual) < 1 ? "text-[var(--r-done)]" : "text-[var(--r-alarm)]"}
+          tone={Math.abs(residual) < 1 ? "text-done" : "text-alarm"}
         />
       </div>
     </div>
@@ -1495,7 +1482,7 @@ function LevelStats({
 function StatLine({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <p className="face-mono t-value flex gap-1.5">
-      <span className="w-16 shrink-0 text-right text-muted-foreground">{label}</span>
+      <span className="w-16 shrink-0 text-right text-ink-2">{label}</span>
       <span className={cn("min-w-0 flex-1 truncate", tone)}>{value}</span>
     </p>
   );
@@ -1506,10 +1493,8 @@ function StatLine({ label, value, tone }: { label: string; value: string; tone?:
 function Line({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
     <p className="face-mono t-value flex gap-1.5">
-      <span className="w-16 shrink-0 text-right text-muted-foreground">{label}</span>
-      <span className={cn("min-w-0 flex-1 break-words", muted && "text-muted-foreground")}>
-        {value}
-      </span>
+      <span className="w-16 shrink-0 text-right text-ink-2">{label}</span>
+      <span className={cn("min-w-0 flex-1 break-words", muted && "text-ink-2")}>{value}</span>
     </p>
   );
 }
@@ -1560,23 +1545,21 @@ function ZoneCard({
       data-dirty={entity.dirty || undefined}
       data-conflict={entity.conflict || undefined}
       className={cn(
-        "absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-[var(--radius)] border border-border bg-background/95 shadow-sm backdrop-blur",
-        entity.hovered && "ring-1 ring-[var(--r-line-2)]",
-        entity.selected && "border-[var(--r-line-2)]",
-        entity.conflict && "border-[var(--r-caution)]",
+        "absolute top-2 left-2 z-20 max-h-[calc(100%-1rem)] w-64 overflow-y-auto rounded-sm border border-line bg-page/95 shadow-sm backdrop-blur",
+        entity.hovered && "ring-1 ring-line-2",
+        entity.selected && "border-line-2",
+        entity.conflict && "border-caution",
       )}
     >
       <div className="flex items-center gap-1.5 px-2 py-1.5">
         <ZoneThumb zone={zone.zone} className="size-5" />
         <span className="face-mono t-value">{zone.zone.key}</span>
-        <span className="face-mono t-value min-w-0 truncate text-muted-foreground">
-          {zone.name}
-        </span>
+        <span className="face-mono t-value min-w-0 truncate text-ink-2">{zone.name}</span>
         <button
           type="button"
           onClick={onClose}
           title="deselect this zone (Esc) — the table widens back to the whole house"
-          className="face-mono t-value ml-auto text-muted-foreground hover:text-foreground"
+          className="face-mono t-value ml-auto text-ink-2 hover:text-ink"
         >
           ×
         </button>
@@ -1605,7 +1588,7 @@ function ZoneCard({
         </div>
         <div className="flex items-center gap-1.5">
           <ZoneStateBar zone={zone} states={states} className="w-16" />
-          <span className="face-mono t-value text-muted-foreground" title={STAGE_BLURB[zone.stage]}>
+          <span className="face-mono t-value text-ink-2" title={STAGE_BLURB[zone.stage]}>
             {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
           </span>
         </div>
@@ -1623,7 +1606,7 @@ function ZoneCard({
           </FactChip>
         )}
         {zoneSystems.map((s) => (
-          <p key={s.tag} className="face-mono t-value text-muted-foreground">
+          <p key={s.tag} className="face-mono t-value text-ink-2">
             {s.tag} · {fmtNum(s.sensibleBtuh, 0)} Btu/h
             {s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""}
           </p>
@@ -1712,7 +1695,7 @@ function RoomPanel({
       meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
       bodyClassName="p-0"
     >
-      <div className="divide-y divide-[var(--r-line)]">
+      <div className="divide-y divide-line">
         <div className="px-2.5 py-2">
           <h2 className="font-pe-display text-base leading-tight font-semibold tracking-tight">
             {room.name}
@@ -1720,15 +1703,12 @@ function RoomPanel({
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
             <StateDot {...stateMeta(state)} />
             <span
-              className={cn(
-                "face-mono t-value",
-                state === "call" ? "text-[var(--r-alarm)]" : undefined,
-              )}
+              className={cn("face-mono t-value", state === "call" ? "text-alarm" : undefined)}
               title={STATE_META[state].note}
             >
               {STATE_META[state].label}
             </span>
-            <span className="face-mono t-value text-muted-foreground">
+            <span className="face-mono t-value text-ink-2">
               {room.sqft} sf · {fmtNum(room.ceilingFt, 1)} ft clg · {room.type}
             </span>
           </p>
@@ -1736,12 +1716,10 @@ function RoomPanel({
 
         {fieldsMode === "panel" && (
           <div className="px-2.5 py-2">
-            <p className="t-label t-upper mb-1 text-muted-foreground">manual j — this room</p>
+            <p className="t-label t-upper mb-1 text-ink-2">manual j — this room</p>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
-              <span className="face-mono t-value pr-1.5 text-right text-muted-foreground">
-                ceil ft
-              </span>
-              <span className="rounded-[1px] border border-[var(--r-line)]">
+              <span className="face-mono t-value pr-1.5 text-right text-ink-2">ceil ft</span>
+              <span className="rounded-[1px] border border-line">
                 <NumberCell
                   value={room.ceilingFt}
                   digits={1}
@@ -1751,10 +1729,8 @@ function RoomPanel({
               </span>
               {MANUAL_J.map((mj) => (
                 <Fragment key={mj.field}>
-                  <span className="face-mono t-value pr-1.5 text-right text-muted-foreground">
-                    {mj.label}
-                  </span>
-                  <span className="rounded-[1px] border border-[var(--r-line)]">
+                  <span className="face-mono t-value pr-1.5 text-right text-ink-2">{mj.label}</span>
+                  <span className="rounded-[1px] border border-line">
                     <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
                 </Fragment>
@@ -1765,14 +1741,12 @@ function RoomPanel({
 
         {open.length > 0 && (
           <div className="px-2.5 py-2">
-            <p className="t-label t-upper mb-1 text-muted-foreground">open calls — {open.length}</p>
+            <p className="t-label t-upper mb-1 text-ink-2">open calls — {open.length}</p>
             <ul className="space-y-2">
               {open.map((flag) => (
                 <li key={flag}>
-                  <p className="face-mono t-value text-[var(--r-alarm)]">{flag}</p>
-                  <p className="face-mono t-value text-muted-foreground">
-                    {FLAG_MEANING[flag] ?? "no blurb"}
-                  </p>
+                  <p className="face-mono t-value text-alarm">{flag}</p>
+                  <p className="face-mono t-value text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
                   {/* The verdict's TONE is derived from the lane, not maintained: on the live
                       lane it writes onto the Room Region provenance blob (a write beyond the
                       page — `commit`), on the fixture it only marks locally (`act`). The route
@@ -1826,7 +1800,7 @@ function RoomPanel({
         )}
 
         <div className="px-2.5 py-2">
-          <p className="t-label t-upper mb-1 text-muted-foreground">provenance</p>
+          <p className="t-label t-upper mb-1 text-ink-2">provenance</p>
           <Line label="run" value={room.provenance.runId} />
           <Line
             label="source sf"
@@ -1868,8 +1842,8 @@ function RoomPanel({
         </div>
 
         <div className="space-y-1 px-2.5 py-2">
-          <p className="t-label t-upper text-muted-foreground">addressable</p>
-          <p className="face-mono t-value rounded-[var(--radius)] border border-[var(--r-line)] bg-muted/60 px-1.5 py-1 break-all text-muted-foreground">
+          <p className="t-label t-upper text-ink-2">addressable</p>
+          <p className="face-mono t-value rounded-sm border border-line bg-recess/60 px-1.5 py-1 break-all text-ink-2">
             {url}
           </p>
         </div>
@@ -1912,7 +1886,7 @@ function ZonePeek({
 
   return (
     <div>
-      <div className="h-52 border-b border-[var(--r-line)] bg-card">
+      <div className="h-52 border-b border-line bg-artifact">
         <svg
           viewBox={`0 0 ${viewport.width} ${viewport.height}`}
           preserveAspectRatio="xMidYMid meet"
@@ -1999,7 +1973,7 @@ function ZonePeek({
               textAnchor="middle"
               fontSize={font}
               className="pointer-events-none select-none"
-              fill="var(--foreground)"
+              fill={token("ink")}
             >
               <tspan x={cursorX} fontWeight={600}>
                 {cursorRoom.name}
@@ -2018,7 +1992,7 @@ function ZonePeek({
         {zone.residues.length > 0 && (
           <Swatch tone={ABSENT_INK} label={`held ×${zone.residues.length}`} seam />
         )}
-        <span className="face-mono t-value text-muted-foreground">
+        <span className="face-mono t-value text-ink-2">
           {withGeometry.length}/{zone.rooms.length} with real boundaries
         </span>
       </div>

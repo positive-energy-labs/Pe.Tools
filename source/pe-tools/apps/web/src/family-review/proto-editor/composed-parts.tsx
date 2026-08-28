@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * PROTOTYPE (round 3) — the middle and bottom of the composed page.
  *
@@ -99,8 +100,8 @@ export function Triptych({
               role="img"
               aria-label={`${view.name} view — click a part to open it in the sidebar`}
               style={{
-                background: "var(--r-page)",
-                border: "0.5px solid var(--r-line)",
+                background: token("page"),
+                border: `0.5px solid ${token("line")}`,
                 borderRadius: 2,
               }}
             >
@@ -117,7 +118,7 @@ export function Triptych({
                       y1={vertical ? 0 : at}
                       x2={vertical ? at : SIZE}
                       y2={vertical ? SIZE : at}
-                      stroke={selected === id ? "var(--r-ink)" : "var(--r-line-2)"}
+                      stroke={selected === id ? token("ink") : token("line-2")}
                       strokeWidth={selected === id ? 1.4 : 0.75}
                     />
                   </Hit>
@@ -134,9 +135,9 @@ export function Triptych({
                   fill: geo.isVoid
                     ? "none"
                     : on
-                      ? "var(--r-select)"
-                      : "color-mix(in srgb, var(--r-ink) 10%, transparent)",
-                  stroke: on ? "var(--r-ink)" : "var(--r-ink-2)",
+                      ? token("select")
+                      : `color-mix(in srgb, ${token("ink")} 10%, transparent)`,
+                  stroke: on ? token("ink") : token("ink-2"),
                   strokeWidth: on ? 1.6 : 1,
                   strokeDasharray: geo.isVoid ? "4 3" : undefined,
                 };
@@ -165,7 +166,7 @@ export function Triptych({
                 const on = selected === id;
                 const cx = h(rv);
                 const cy = v(uv);
-                const ink = on ? "var(--r-ink)" : "var(--r-ink-2)";
+                const ink = on ? token("ink") : token("ink-2");
                 return (
                   <Hit key={id} label={`frame ${frame.slug}`} onClick={() => onSelect(id)}>
                     <line
@@ -207,7 +208,7 @@ export function Triptych({
                 );
               })}
             </svg>
-            <figcaption className="t-caption text-[var(--r-ink-mute)]">{view.name}</figcaption>
+            <figcaption className="t-caption text-ink-mute">{view.name}</figcaption>
           </figure>
         );
       })}
@@ -255,7 +256,7 @@ function ConnectorMark({
   scale: number;
   on: boolean;
 }) {
-  const stroke = on ? "var(--r-ink)" : "var(--r-ink-2)";
+  const stroke = on ? token("ink") : token("ink-2");
   const width = on ? 1.6 : 1;
   const axis = AXIS_VECTOR[conn.normal] ?? ([0, 0, 1] as const);
   const index: Record<Axis, 0 | 1 | 2> = { x: 0, y: 1, z: 2 };
@@ -315,9 +316,9 @@ export function PartSidebar({
       style={{
         background: "none",
         border: "none",
-        borderBottom: "0.5px solid var(--r-line-2)",
+        borderBottom: `0.5px solid ${token("line-2")}`,
         borderRadius: 0,
-        color: "var(--r-nav)",
+        color: token("nav"),
         cursor: "pointer",
         padding: 0,
       }}
@@ -328,12 +329,12 @@ export function PartSidebar({
 
   return (
     <div className="w-72 shrink-0 overflow-auto px-3">
-      <div className="face-mono t-value text-[var(--r-ink)]">{node.id}</div>
-      <div className="t-caption mb-2 text-[var(--r-ink-mute)]">{node.detail}</div>
+      <div className="face-mono t-value text-ink">{node.id}</div>
+      <div className="t-caption mb-2 text-ink-mute">{node.detail}</div>
 
-      <div className="t-caption t-upper mb-1 text-[var(--r-ink-2)]">its inputs</div>
+      <div className="t-caption t-upper mb-1 text-ink-2">its inputs</div>
       {fields.length === 0 ? (
-        <p className="t-caption text-[var(--r-ink-mute)]">
+        <p className="t-caption text-ink-mute">
           stock datum — the template owns it, nothing here is authored
         </p>
       ) : (
@@ -341,7 +342,7 @@ export function PartSidebar({
           <tbody>
             {fields.map((field) => (
               <tr key={field.key}>
-                <td className="face-mono t-caption w-20 py-0.5 align-baseline text-[var(--r-ink-mute)]">
+                <td className="face-mono t-caption w-20 py-0.5 align-baseline text-ink-mute">
                   {field.key}
                 </td>
                 <td className="py-0.5 align-baseline">
@@ -369,32 +370,32 @@ export function PartSidebar({
         </table>
       )}
 
-      <div className="t-caption t-upper mb-1 mt-3 text-[var(--r-ink-2)]">defined from</div>
+      <div className="t-caption t-upper mb-1 mt-3 text-ink-2">defined from</div>
       <ul className="space-y-0.5">
         {anchors(graph, node.id).map((edge) => (
           <li key={`${edge.field}->${edge.to}`} className="flex items-baseline gap-1">
-            <span className="face-mono t-caption text-[var(--r-ink-mute)]">{edge.field}</span>
+            <span className="face-mono t-caption text-ink-mute">{edge.field}</span>
             {walk(edge.to)}
-            <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+            <span className="face-mono t-caption text-ink-mute">
               {nodeValue(editor.model, editor.typeName, edge.to) ?? ""}
             </span>
           </li>
         ))}
         {anchors(graph, node.id).length === 0 ? (
-          <li className="t-caption text-[var(--r-ink-mute)]">nothing — it is a root</li>
+          <li className="t-caption text-ink-mute">nothing — it is a root</li>
         ) : null}
       </ul>
 
-      <div className="t-caption t-upper mb-1 mt-3 text-[var(--r-ink-2)]">defined off it</div>
+      <div className="t-caption t-upper mb-1 mt-3 text-ink-2">defined off it</div>
       <ul className="space-y-0.5">
         {dependents(graph, node.id).map((edge) => (
           <li key={`${edge.from}/${edge.field}`} className="flex items-baseline gap-1">
             {walk(edge.from)}
-            <span className="face-mono t-caption text-[var(--r-ink-mute)]">· {edge.field}</span>
+            <span className="face-mono t-caption text-ink-mute">· {edge.field}</span>
           </li>
         ))}
         {dependents(graph, node.id).length === 0 ? (
-          <li className="t-caption text-[var(--r-ink-mute)]">
+          <li className="t-caption text-ink-mute">
             nothing reads this — changing it moves nothing else
           </li>
         ) : null}
@@ -426,7 +427,7 @@ export function SentenceGrids({
     <div className="flex flex-col gap-3">
       {groups.map((group) => (
         <section key={group.key}>
-          <div className="t-label t-upper mb-1 text-[var(--r-ink-2)]">{group.label}</div>
+          <div className="t-label t-upper mb-1 text-ink-2">{group.label}</div>
           {group.rows.length === 0 ? (
             <EmptyState story="scope" exit={group.exit}>
               this family has no {group.label}
@@ -444,7 +445,7 @@ export function SentenceGrids({
                     style={{
                       background:
                         selected === row.id || focused(row.pointer)
-                          ? "var(--r-select)"
+                          ? token("select")
                           : "transparent",
                     }}
                   >
@@ -513,7 +514,7 @@ function SlotCell({
           border: "none",
           borderRadius: 0,
           cursor: "pointer",
-          color: "var(--r-ink)",
+          color: token("ink"),
           fontWeight: 600,
           padding: 0,
         }}
@@ -524,13 +525,7 @@ function SlotCell({
 
   if (cell.kind === "text" && cell.write == null)
     return (
-      <span
-        className={
-          cell.pointer
-            ? "face-mono t-label text-[var(--r-ink-2)]"
-            : "t-label text-[var(--r-ink-mute)]"
-        }
-      >
+      <span className={cell.pointer ? "face-mono t-label text-ink-2" : "t-label text-ink-mute"}>
         {cell.lead ? `${cell.lead} ` : ""}
         {cell.value}
       </span>
@@ -539,7 +534,7 @@ function SlotCell({
   if (cell.kind === "text")
     return (
       <>
-        {cell.lead ? <span className="t-label text-[var(--r-ink-mute)]">{cell.lead}</span> : null}
+        {cell.lead ? <span className="t-label text-ink-mute">{cell.lead}</span> : null}
         <TextToken
           value={cell.value}
           width={90}
@@ -551,7 +546,7 @@ function SlotCell({
 
   return (
     <>
-      {cell.lead ? <span className="t-label text-[var(--r-ink-mute)]">{cell.lead}</span> : null}
+      {cell.lead ? <span className="t-label text-ink-mute">{cell.lead}</span> : null}
       <RefToken
         editor={editor}
         value={cell.value}
@@ -564,7 +559,7 @@ function SlotCell({
         }}
       />
       {nodeValue(editor.model, editor.typeName, cell.value) != null ? (
-        <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+        <span className="face-mono t-caption text-ink-mute">
           {nodeValue(editor.model, editor.typeName, cell.value)}
         </span>
       ) : null}

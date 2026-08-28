@@ -459,7 +459,9 @@ export function docWriter<S extends RouteStateSpec<any>>(
       // replays the receipt instead of mutating Revit twice. expectedRevision orders; requestId is at-most-once.
       const gesture = JSON.stringify([name, input ?? {}]);
       const external = spec.commands[name]?.mutatesExternal === true;
-      const requestId = external ? (pendingRequestIds.get(gesture) ?? crypto.randomUUID()) : undefined;
+      const requestId = external
+        ? (pendingRequestIds.get(gesture) ?? crypto.randomUUID())
+        : undefined;
       if (requestId) pendingRequestIds.set(gesture, requestId);
       const result = await write("command", {
         command: name,

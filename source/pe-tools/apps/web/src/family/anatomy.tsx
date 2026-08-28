@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * /family — the anatomy triptych: true-scale FRONT / SIDE / PLAN of the profile.
  *
@@ -34,7 +35,7 @@
  * may wear a meaning role. Material is plain ink; connectors keep their taxonomy hue; the void's
  * dash is the one legal dash AMONG PARTS (declared volume with no material behind it) — the datum
  * crosshair and the room point's leader are annotation, not parts; that distinction still needs a
- * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--r-select` fill and
+ * ruling. FOCUS is page vocabulary, not drawing vocabulary: a `--pe-select` fill and
  * an ink stroke, exactly as the table's focused row does.
  */
 import { useMemo } from "react";
@@ -268,7 +269,7 @@ export function AnatomyDrawing({
       {views}
       <div className="min-w-0 flex-1 overflow-y-auto p-2">
         <p
-          className="face-mono mb-1 t-caption text-[var(--r-ink-2)]"
+          className="face-mono mb-1 t-caption text-ink-2"
           title="The profile's own constituent list. Hovering one lights both the shape and the table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it in the doc pane's lower half, where the half of it no parameter can drive — direction, system type, where its frame sits — is edited."
         >
           constituents · {typeName}
@@ -296,17 +297,17 @@ export function AnatomyDrawing({
                 // Selection is a FILL, not a hue: the open constituent sits in the selection rung,
                 // the hovered one wears a hairline. Neither is a state of the model.
                 inspecting === part.slug
-                  ? "border-[var(--r-line-2)] bg-[var(--r-select)] text-[var(--r-ink)]"
+                  ? "border-line-2 bg-select text-ink"
                   : focusedParts.has(part.slug)
-                    ? "border-[var(--r-line-2)] text-[var(--r-ink)]"
-                    : "border-transparent text-[var(--r-ink)]",
+                    ? "border-line-2 text-ink"
+                    : "border-transparent text-ink",
               )}
             >
-              <span className="text-[var(--r-ink-2)]">{part.kind} </span>
+              <span className="text-ink-2">{part.kind} </span>
               <span className="min-w-0 truncate">{part.slug}</span>
               {unbound > 0 && (
                 <span
-                  className="ml-auto shrink-0 t-caption text-[var(--r-caution)]"
+                  className="ml-auto shrink-0 t-caption text-caution"
                   title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
                 >
                   {unbound}⚠
@@ -357,11 +358,11 @@ function FixtureViews({
     .filter((name) => name !== typeName)
     .map((name) => ({ typeName: name, parts: buildParts(world, draft, name) }));
 
-  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--r-select)" : "transparent");
-  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--r-ink)" : "var(--r-ink-2)");
+  const partFill = (slug: string) => (focusedParts.has(slug) ? token("select") : "transparent");
+  const partStroke = (slug: string) => (focusedParts.has(slug) ? token("ink") : token("ink-2"));
   /** Connectors are a KIND, not a state — the one legitimate viz spend on this page. */
   const connectorStroke = (slug: string) =>
-    focusedParts.has(slug) ? "var(--r-ink)" : "var(--viz-4)";
+    focusedParts.has(slug) ? token("ink") : token("viz-4");
   const hover = (slug: string) => hoverProps(slug, onFocus, onInspect);
 
   return (
@@ -381,7 +382,7 @@ function FixtureViews({
           <svg
             key={view.key}
             viewBox={`0 0 ${BOX} ${BOX}`}
-            className="h-full border-r border-[var(--r-line)]"
+            className="h-full border-r border-line"
             role="img"
             aria-label={`family ${view.key} view`}
           >
@@ -394,7 +395,7 @@ function FixtureViews({
                 y1={Y(0)}
                 x2={BOX - M}
                 y2={Y(0)}
-                stroke="var(--r-line-2)"
+                stroke={token("line-2")}
                 strokeWidth={0.5}
               />
             ) : (
@@ -404,7 +405,7 @@ function FixtureViews({
                   y1={Y(0)}
                   x2={BOX - M}
                   y2={Y(0)}
-                  stroke="var(--r-line)"
+                  stroke={token("line")}
                   strokeWidth={0.5}
                   strokeDasharray="2 4"
                 />
@@ -413,7 +414,7 @@ function FixtureViews({
                   y1={M}
                   x2={X(0)}
                   y2={BOX - M}
-                  stroke="var(--r-line)"
+                  stroke={token("line")}
                   strokeWidth={0.5}
                   strokeDasharray="2 4"
                 />
@@ -430,7 +431,7 @@ function FixtureViews({
                 .map((part) => {
                   const shared = {
                     fill: "none",
-                    stroke: "var(--r-line-2)",
+                    stroke: token("line-2"),
                     strokeWidth: 0.75,
                     opacity: 0.5,
                     pointerEvents: "none" as const,
@@ -468,8 +469,8 @@ function FixtureViews({
                   fill: part.isVoid ? "none" : partFill(part.slug),
                   stroke: part.isVoid
                     ? active
-                      ? "var(--r-ink)"
-                      : "var(--r-line-2)"
+                      ? token("ink")
+                      : token("line-2")
                     : partStroke(part.slug),
                   strokeWidth: 0.8,
                   strokeDasharray: part.isVoid ? "3 2" : undefined,
@@ -574,7 +575,7 @@ function FixtureViews({
               x={M}
               y={BOX - 5}
               fontSize={7}
-              fill="var(--r-ink-2)"
+              fill={token("ink-2")}
               className="face-mono uppercase"
             >
               {view.label}
@@ -631,10 +632,10 @@ function ModelViews({
   const span = Math.max(...AXES.map((axis) => bounds[axis][1] - bounds[axis][0]));
   const scale = (BOX - 2 * M) / span;
 
-  const partFill = (slug: string) => (focusedParts.has(slug) ? "var(--r-select)" : "transparent");
-  const partStroke = (slug: string) => (focusedParts.has(slug) ? "var(--r-ink)" : "var(--r-ink-2)");
+  const partFill = (slug: string) => (focusedParts.has(slug) ? token("select") : "transparent");
+  const partStroke = (slug: string) => (focusedParts.has(slug) ? token("ink") : token("ink-2"));
   const connectorStroke = (slug: string) =>
-    focusedParts.has(slug) ? "var(--r-ink)" : "var(--viz-4)";
+    focusedParts.has(slug) ? token("ink") : token("viz-4");
   const hover = (slug: string) => hoverProps(slug, onFocus, onInspect);
 
   /** What the drawing cannot place, said in words below it rather than drawn at a guess. */
@@ -791,7 +792,7 @@ function ModelViews({
             <svg
               key={view.key}
               viewBox={`0 0 ${BOX} ${BOX}`}
-              className="h-full border-r border-[var(--r-line)]"
+              className="h-full border-r border-line"
               role="img"
               aria-label={`family ${view.key} view`}
             >
@@ -804,7 +805,7 @@ function ModelViews({
                   y1={Y(0)}
                   x2={BOX - M}
                   y2={Y(0)}
-                  stroke="var(--r-line-2)"
+                  stroke={token("line-2")}
                   strokeWidth={0.5}
                 />
               ) : (
@@ -814,7 +815,7 @@ function ModelViews({
                     y1={Y(0)}
                     x2={BOX - M}
                     y2={Y(0)}
-                    stroke="var(--r-line)"
+                    stroke={token("line")}
                     strokeWidth={0.5}
                     strokeDasharray="2 4"
                   />
@@ -823,7 +824,7 @@ function ModelViews({
                     y1={M}
                     x2={X(0)}
                     y2={BOX - M}
-                    stroke="var(--r-line)"
+                    stroke={token("line")}
                     strokeWidth={0.5}
                     strokeDasharray="2 4"
                   />
@@ -837,7 +838,7 @@ function ModelViews({
                   .map((geo) => {
                     const shared = {
                       fill: "none",
-                      stroke: "var(--r-line-2)",
+                      stroke: token("line-2"),
                       strokeWidth: 0.75,
                       opacity: 0.5,
                       pointerEvents: "none" as const,
@@ -875,8 +876,8 @@ function ModelViews({
                   fill: geo.isVoid ? "none" : partFill(geo.slug),
                   stroke: geo.isVoid
                     ? active
-                      ? "var(--r-ink)"
-                      : "var(--r-line-2)"
+                      ? token("ink")
+                      : token("line-2")
                     : partStroke(geo.slug),
                   strokeWidth: 0.8,
                   strokeDasharray: geo.isVoid ? "3 2" : undefined,
@@ -903,7 +904,7 @@ function ModelViews({
                 if (plane.axis !== view.u && plane.axis !== view.v) return null;
                 const param = plane.param;
                 const lit = param != null && focusedParams.has(param);
-                const stroke = lit ? "var(--r-ink)" : "var(--r-line-2)";
+                const stroke = lit ? token("ink") : token("line-2");
                 const line =
                   plane.axis === view.u
                     ? { x1: X(plane.offset), y1: M, x2: X(plane.offset), y2: BOX - M }
@@ -925,7 +926,7 @@ function ModelViews({
                       x={plane.axis === view.u ? line.x1 + 2 : M + 1}
                       y={plane.axis === view.u ? M + 6 : line.y1 - 2}
                       fontSize={6}
-                      fill={lit ? "var(--r-ink)" : "var(--r-ink-2)"}
+                      fill={lit ? token("ink") : token("ink-2")}
                       className="face-mono"
                     >
                       {plane.slug} {plane.text}
@@ -941,7 +942,7 @@ function ModelViews({
                 const v = frame.pos[view.v];
                 if (u == null || v == null) return null;
                 return (
-                  <g key={frame.slug} stroke="var(--r-ink-2)" strokeWidth={0.6}>
+                  <g key={frame.slug} stroke={token("ink-2")} strokeWidth={0.6}>
                     <title>{`frame ${frame.slug} — its origin, where the document's plane and face references intersect. Facing ${frame.normal}. Whatever sits on this frame is placed here.`}</title>
                     <line x1={X(u) - 2.5} y1={Y(v)} x2={X(u) + 2.5} y2={Y(v)} />
                     <line x1={X(u)} y1={Y(v) - 2.5} x2={X(u)} y2={Y(v) + 2.5} />
@@ -963,7 +964,7 @@ function ModelViews({
                     y1={Y(0)}
                     x2={X(sheet.rcp[view.u] as number)}
                     y2={Y(sheet.rcp[view.v] as number)}
-                    stroke="var(--viz-5)"
+                    stroke={token("viz-5")}
                     strokeWidth={0.8}
                     strokeDasharray="1.5 3"
                   />
@@ -971,7 +972,7 @@ function ModelViews({
                     cx={X(sheet.rcp[view.u] as number)}
                     cy={Y(sheet.rcp[view.v] as number)}
                     r={2.5}
-                    fill="var(--viz-5)"
+                    fill={token("viz-5")}
                   />
                 </g>
               )}
@@ -980,7 +981,7 @@ function ModelViews({
                 x={M}
                 y={BOX - 5}
                 fontSize={7}
-                fill="var(--r-ink-2)"
+                fill={token("ink-2")}
                 className="face-mono uppercase"
               >
                 {view.label}
@@ -991,20 +992,20 @@ function ModelViews({
       </div>
 
       {(unplottablePlanes.length > 0 || partialSolids.length > 0) && (
-        <div className="shrink-0 border-t border-[var(--r-line)] px-2 py-1">
+        <div className="shrink-0 border-t border-line px-2 py-1">
           {partialSolids.map((geo) => (
-            <p key={geo.slug} className="face-mono t-caption text-[var(--r-ink-2)]">
+            <p key={geo.slug} className="face-mono t-caption text-ink-2">
               ─ ─ solid {geo.slug} · {world.source.profile.solids[geo.slug] ?? geo.kind}{" "}
-              <span className="text-[var(--r-ink-mute)]">
+              <span className="text-ink-mute">
                 (a dimension does not resolve to a number at this type — named rather than drawn at
                 a guess)
               </span>
             </p>
           ))}
           {unplottablePlanes.map((plane) => (
-            <p key={plane.slug} className="face-mono t-caption text-[var(--r-ink-2)]">
+            <p key={plane.slug} className="face-mono t-caption text-ink-2">
               ─ ─ plane {plane.slug} · {plane.text}{" "}
-              <span className="text-[var(--r-ink-mute)]">
+              <span className="text-ink-mute">
                 {plane.offset == null
                   ? "(formula-driven — no resolvable offset, so it is named rather than drawn at a guess)"
                   : "(off a datum this drawing does not recognise)"}

@@ -290,7 +290,12 @@ describe("route store kit", () => {
       schema,
       agentWriteMask: [],
       commands: {
-        external: { description: "External", actor: "human", input: z.object({ n: z.number() }), mutatesExternal: true },
+        external: {
+          description: "External",
+          actor: "human",
+          input: z.object({ n: z.number() }),
+          mutatesExternal: true,
+        },
       },
     } satisfies RouteStateSpec<typeof schema>;
     const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
@@ -298,7 +303,14 @@ describe("route store kit", () => {
     const slice = core.owned(
       "slice/document",
       Atom.make<AsyncResult.AsyncResult<Slice<z.infer<typeof schema>>, Error>>(
-        AsyncResult.success({ doc: {}, revision: 1, hydrated: true, connected: true, error: null, peaActive: false }),
+        AsyncResult.success({
+          doc: {},
+          revision: 1,
+          hydrated: true,
+          connected: true,
+          error: null,
+          peaActive: false,
+        }),
       ),
     );
     const response = (body: unknown) => Response.json(body);
@@ -308,13 +320,22 @@ describe("route store kit", () => {
       .mockResolvedValueOnce(response({ ok: true, revision: 1 }))
       .mockResolvedValueOnce(response({ ok: true, revision: 1 }));
     const ids = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"];
-    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(() => ids.shift() as `${string}-${string}-${string}-${string}-${string}`);
-    const writer = docWriter(spec, { documentAddress: address("C:\\Models\\One.rvt") }, registry, slice);
+    vi.spyOn(globalThis.crypto, "randomUUID").mockImplementation(
+      () => ids.shift() as `${string}-${string}-${string}-${string}-${string}`,
+    );
+    const writer = docWriter(
+      spec,
+      { documentAddress: address("C:\\Models\\One.rvt") },
+      registry,
+      slice,
+    );
 
     await writer.command("external", { n: 1 });
     await writer.command("external", { n: 1 });
     await writer.command("external", { n: 1 });
-    const sent = request.mock.calls.slice(-3).map((call) => JSON.parse(call[1]!.body as string).requestId);
+    const sent = request.mock.calls
+      .slice(-3)
+      .map((call) => JSON.parse(call[1]!.body as string).requestId);
     expect(sent).toEqual([
       "00000000-0000-4000-8000-000000000001",
       "00000000-0000-4000-8000-000000000001",

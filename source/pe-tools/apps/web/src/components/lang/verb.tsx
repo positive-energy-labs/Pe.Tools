@@ -30,7 +30,7 @@
  *   nav so the split cannot be skipped.
  * - THE ONE HOVER LAW: a 10% ink veil composited as a background-IMAGE over whatever fill the
  *   control already carries, with a `:focus-visible` twin. Hover buys no hue. Disabled takes
- *   neither. Round 2 found four ad-hoc hover treatments, two of which lit `--r-select` — a token
+ *   neither. Round 2 found four ad-hoc hover treatments, two of which lit `--pe-select` — a token
  *   that means SELECTION. See lang.css.
  * - DISABLED IS GREYED-ITALIC AND STILL READABLE: recessed ground so the slot has a shape, firm
  *   hairline so the shape has an edge, italic secondary ink so it is plainly not for pressing.

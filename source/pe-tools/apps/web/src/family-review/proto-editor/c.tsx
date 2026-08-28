@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * PROTOTYPE (round 2 · piece 3) — PARADIGM C · SENTENCE BUILDER.
  *
@@ -41,7 +42,7 @@ export function ParadigmC({ editor }: { editor: Editor }) {
 
   return (
     <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-      <p className="t-caption mb-3 max-w-[720px] text-[var(--r-ink-2)]">
+      <p className="t-caption mb-3 max-w-[720px] text-ink-2">
         Every line below is one authored construct. Underlined words are tokens: click one and the
         picker offers only what is legal in that slot, read out of this document. Amber means
         unbound.
@@ -50,9 +51,9 @@ export function ParadigmC({ editor }: { editor: Editor }) {
       <Group label="parameters">
         {Object.entries(model.familyParameters).map(([name, spec]) => (
           <Line key={name} lead="param">
-            <b className="face-mono t-label text-[var(--r-ink)]">{name}</b>
+            <b className="face-mono t-label text-ink">{name}</b>
             <Word>is a</Word>
-            <span className="face-mono t-label text-[var(--r-ink-2)]">{spec.dataType}</span>
+            <span className="face-mono t-label text-ink-2">{spec.dataType}</span>
             <Word>parameter</Word>
             {spec.formula != null ? (
               <>
@@ -80,9 +81,7 @@ export function ParadigmC({ editor }: { editor: Editor }) {
               .map(([typeName, overrides]) => (
                 <span key={typeName} className="flex items-baseline gap-1">
                   <Word>·</Word>
-                  <span className="t-caption text-[var(--r-ink-mute)]">
-                    {typeName} overrides to
-                  </span>
+                  <span className="t-caption text-ink-mute">{typeName} overrides to</span>
                   <TextToken
                     value={overrides[name] ?? ""}
                     width={64}
@@ -100,7 +99,7 @@ export function ParadigmC({ editor }: { editor: Editor }) {
       <Group label="planes">
         {Object.entries(model.planes ?? {}).map(([slug, plane]) => (
           <Line key={slug} lead="plane">
-            <b className="face-mono t-label text-[var(--r-ink)]">{slug}</b>
+            <b className="face-mono t-label text-ink">{slug}</b>
             <Word>sits</Word>
             <RefToken
               editor={editor}
@@ -132,7 +131,7 @@ export function ParadigmC({ editor }: { editor: Editor }) {
       <Group label="frames">
         {Object.entries(model.frames ?? {}).map(([slug, frame]) => (
           <Line key={slug} lead="frame">
-            <b className="face-mono t-label text-[var(--r-ink)]">{slug}</b>
+            <b className="face-mono t-label text-ink">{slug}</b>
             <Word>sits where</Word>
             {frame.origin.map((ref, index) => (
               <span key={`${slug}-${index}`} className="flex items-baseline gap-1">
@@ -191,7 +190,7 @@ export function ParadigmC({ editor }: { editor: Editor }) {
                 title="The solid vocabulary ceiling — Prism, Cylinder and their voids. Sweeps and blends are unmodeled forever."
                 onPick={(ref) => write((next) => setField(next, "solids", slug, "kind", ref))}
               />
-              <b className="face-mono t-label text-[var(--r-ink)]">{slug}</b>
+              <b className="face-mono t-label text-ink">{slug}</b>
               <Word>on</Word>
               <RefToken
                 editor={editor}
@@ -201,7 +200,7 @@ export function ParadigmC({ editor }: { editor: Editor }) {
                 onPick={(ref) => write((next) => setField(next, "solids", slug, "frame", ref))}
               />
               {dims.length === 0 ? (
-                <span className="t-caption text-[var(--r-caution)]">
+                <span className="t-caption text-caution">
                   — pick a kind and the sentence will ask for the dimensions it needs
                 </span>
               ) : null}
@@ -252,7 +251,7 @@ export function ParadigmC({ editor }: { editor: Editor }) {
           const dims = connector.shape === "Round" ? ["diameter"] : ["width", "height"];
           return (
             <Line key={slug} lead={connector.domain.toLowerCase()}>
-              <b className="face-mono t-label text-[var(--r-ink)]">{slug}</b>
+              <b className="face-mono t-label text-ink">{slug}</b>
               <Word>
                 is a {connector.shape.toLowerCase()} {connector.domain.toLowerCase()} connector on
               </Word>
@@ -298,7 +297,7 @@ export function ParadigmC({ editor }: { editor: Editor }) {
                 </>
               ) : null}
               {connector.flowDirection ? (
-                <span className="t-caption text-[var(--r-ink-mute)]">
+                <span className="t-caption text-ink-mute">
                   · {connector.systemType} · flow {connector.flowDirection}
                 </span>
               ) : null}
@@ -314,8 +313,8 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   return (
     <section className="mb-4">
       <div
-        className="t-label t-upper mb-1 border-b pb-0.5 text-[var(--r-ink-2)]"
-        style={{ borderColor: "var(--r-line)" }}
+        className="t-label t-upper mb-1 border-b pb-0.5 text-ink-2"
+        style={{ borderColor: token("line") }}
       >
         {label}
       </div>
@@ -327,10 +326,7 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
 function Line({ lead, children }: { lead: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline gap-1">
-      <span
-        className="face-mono t-caption w-16 shrink-0 text-right text-[var(--r-ink-mute)]"
-        aria-hidden
-      >
+      <span className="face-mono t-caption w-16 shrink-0 text-right text-ink-mute" aria-hidden>
         {lead}
       </span>
       {children}
@@ -339,14 +335,12 @@ function Line({ lead, children }: { lead: string; children: React.ReactNode }) {
 }
 
 const Word = ({ children }: { children: React.ReactNode }) => (
-  <span className="t-label text-[var(--r-ink-2)]">{children}</span>
+  <span className="t-label text-ink-2">{children}</span>
 );
 
 /** The token's number, for the staged type — the sentence stays readable as prose and still
  *  answers "what is that, right now". */
 function Resolved({ editor, token }: { editor: Editor; token: string | undefined }) {
   const text = token ? nodeValue(editor.model, editor.typeName, token) : null;
-  return text == null ? null : (
-    <span className="face-mono t-caption text-[var(--r-ink-mute)]">{text}</span>
-  );
+  return text == null ? null : <span className="face-mono t-caption text-ink-mute">{text}</span>;
 }

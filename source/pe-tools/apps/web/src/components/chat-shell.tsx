@@ -81,8 +81,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
   const PluginPane = plugin ? selectRoutePane(plugin) : null;
 
   const status = selectRunStatus(chat);
-  const threadLabel =
-    threads.find((item) => item.id === currentThreadId)?.title ?? "new session";
+  const threadLabel = threads.find((item) => item.id === currentThreadId)?.title ?? "new session";
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
   const breakdown = useMemo(() => selectBreakdown(chat), [chat]);
@@ -121,19 +120,19 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
       ref={mainRef}
       data-mode={mode}
       data-plugin={plugin}
-      className="fixed inset-0 bg-background font-pe text-foreground"
+      className="fixed inset-0 bg-page font-pe text-ink"
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
       <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
-        <header className="flex items-center justify-between gap-4 border-b border-[var(--r-line)] px-5 py-2.5">
+        <header className="flex items-center justify-between gap-4 border-b border-line px-5 py-2.5">
           <div className="flex min-w-0 items-center gap-2.5">
             {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
                 your call is owed (caution), error = a bridge/run error (caution — NOT the
                 alarm), idle = muted. */}
             <span
               title={status}
-              className="size-2 shrink-0 rounded-full data-[s=error]:bg-[var(--r-caution)] data-[s=idle]:bg-[var(--r-ink-mute)] data-[s=running]:bg-[var(--r-pea)] data-[s=waiting]:bg-[var(--r-caution)]"
+              className="size-2 shrink-0 rounded-full data-[s=error]:bg-caution data-[s=idle]:bg-ink-mute data-[s=running]:bg-pea data-[s=waiting]:bg-caution"
               data-s={status}
             />
             <span className="truncate text-sm font-semibold">{threadLabel}</span>
@@ -147,8 +146,8 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
         <div aria-live="polite" className="min-h-0 px-5">
           {statusLine ? (
             <div
-              className={`border-b border-[var(--r-line)] py-1.5 t-label ${
-                error || operationError ? "text-[var(--r-caution)]" : "text-[var(--r-ink-2)]"
+              className={`border-b border-line py-1.5 t-label ${
+                error || operationError ? "text-caution" : "text-ink-2"
               }`}
             >
               {statusLine}

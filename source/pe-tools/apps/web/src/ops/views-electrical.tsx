@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 import type { ReactNode } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -27,7 +28,7 @@ function joinNonEmpty(parts: (string | undefined)[], sep = " · "): string {
 }
 
 function MonoAside({ children }: { children: ReactNode }) {
-  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+  return <span className="face-mono t-caption text-ink-2">{children}</span>;
 }
 
 /** Severity is STATE — caution ink, never alarm (not the model disagreeing). */
@@ -42,7 +43,7 @@ function IssuesNote({ data }: { data: Rec }) {
           <span
             key={i}
             className="face-mono t-caption"
-            style={{ color: severity === "Info" ? "var(--r-ink-2)" : "var(--r-caution)" }}
+            style={{ color: severity === "Info" ? token("ink-2") : token("caution") }}
           >
             {severity.toLowerCase()}: {asString(issue.code)} — {asString(issue.message)}
           </span>
@@ -108,7 +109,7 @@ function PanelsView({ data }: OpViewProps) {
             return (
               <article
                 key={asString(panel.panelUniqueId) ?? i}
-                className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line)] p-2"
+                className="min-w-0 rounded-sm border border-line p-2"
               >
                 <div className="mb-1.5 flex items-baseline justify-between gap-2">
                   <h3 className="face-mono t-value truncate" title={asString(panel.panelName)}>
@@ -194,9 +195,7 @@ function CircuitsView({ data }: OpViewProps) {
         <span title={asString(row.loadName)}>
           {asString(row.loadName) ??
             (row.isEmpty === true ? (
-              <span className="face-mono t-caption italic text-[var(--r-ink-mute)]">
-                spare/space
-              </span>
+              <span className="face-mono t-caption italic text-ink-mute">spare/space</span>
             ) : (
               "∅"
             ))}
@@ -323,8 +322,7 @@ function LoadClassificationsView({ data }: OpViewProps) {
       header: "Demand factor",
       cell: (row) => {
         const demand = asRecord(row.demandFactor);
-        if (!demand)
-          return <span className="face-mono t-caption italic text-[var(--r-ink-mute)]">none</span>;
+        if (!demand) return <span className="face-mono t-caption italic text-ink-mute">none</span>;
         return (
           <span title={asString(demand.name)}>
             {asString(demand.name)}{" "}
@@ -422,13 +420,13 @@ function extractBreakerSlots(body: Rec): BreakerSlot[] | undefined {
 function BreakerHalf({ slot, side }: { slot: BreakerSlot | undefined; side: "left" | "right" }) {
   const gutter = (
     <span
-      className={`face-mono t-label w-[34px] shrink-0 px-1.5 py-1 text-[var(--r-ink)] ${side === "left" ? "text-right" : "text-left"}`}
+      className={`face-mono t-label w-[34px] shrink-0 px-1.5 py-1 text-ink ${side === "left" ? "text-right" : "text-left"}`}
     >
       {slot?.num ?? ""}
     </span>
   );
   const facts = slot && (slot.trip || slot.poles) && (
-    <span className="face-mono t-caption shrink-0 px-1 text-[var(--r-ink-2)]">
+    <span className="face-mono t-caption shrink-0 px-1 text-ink-2">
       {joinNonEmpty([slot.trip, slot.poles ? `${slot.poles}P` : undefined], "/")}
     </span>
   );
@@ -437,7 +435,7 @@ function BreakerHalf({ slot, side }: { slot: BreakerSlot | undefined; side: "lef
       className={`t-value min-w-0 flex-1 truncate px-1.5 py-1 ${side === "right" ? "text-right" : ""}`}
       title={slot?.load}
     >
-      {slot ? (slot.load ?? <span className="text-[var(--r-ink-mute)]">—</span>) : ""}
+      {slot ? (slot.load ?? <span className="text-ink-mute">—</span>) : ""}
     </span>
   );
   const inner =
@@ -456,7 +454,7 @@ function BreakerHalf({ slot, side }: { slot: BreakerSlot | undefined; side: "lef
     );
   return (
     <div
-      className={`flex min-w-0 items-center ${side === "left" ? "border-r-[1.5px] border-r-[var(--r-line-2)]" : ""}`}
+      className={`flex min-w-0 items-center ${side === "left" ? "border-r-[1.5px] border-r-line-2" : ""}`}
     >
       {inner}
     </div>
@@ -472,10 +470,7 @@ function Panelboard({ slots }: { slots: BreakerSlot[] }) {
   return (
     <div>
       {Array.from({ length: rowCount }, (_, i) => (
-        <div
-          key={i}
-          className={`grid grid-cols-2 ${i > 0 ? "border-t border-[var(--r-line)]" : ""}`}
-        >
+        <div key={i} className={`grid grid-cols-2 ${i > 0 ? "border-t border-line" : ""}`}>
           <BreakerHalf slot={odds[i]} side="left" />
           <BreakerHalf slot={evens[i]} side="right" />
         </div>
@@ -551,13 +546,11 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
   const slots = body ? extractBreakerSlots(body) : undefined;
   const panelName = asString(entry.panelName) ?? asString(entry.scheduleName) ?? "(unnamed panel)";
   return (
-    <article className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)]">
-      {/* the head band is a recessed ground shift — --r-on re-declared with it. */}
+    <article className="min-w-0 rounded-sm border border-line-2">
+      {/* the head band is a recessed ground shift — --pe-on re-declared with it. */}
       <div
-        className="flex items-baseline justify-between gap-2 border-b border-[var(--r-line-2)] px-2 py-1.5"
-        style={
-          { background: "var(--r-recess)", "--r-on": "var(--r-recess)" } as React.CSSProperties
-        }
+        className="flex items-baseline justify-between gap-2 border-b border-line-2 px-2 py-1.5"
+        style={{ background: token("recess"), "--pe-on": token("recess") } as React.CSSProperties}
       >
         <h3 className="face-mono t-value truncate" title={panelName}>
           {panelName}
@@ -573,7 +566,7 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
       {header && <SectionLines section={header} />}
       {body ? (
         slots ? (
-          <div className={header ? "border-t border-[var(--r-line)]" : undefined}>
+          <div className={header ? "border-t border-line" : undefined}>
             <Panelboard slots={slots} />
           </div>
         ) : (
@@ -592,12 +585,12 @@ function PanelScheduleCard({ entry }: { entry: Rec }) {
         </div>
       )}
       {summary && (
-        <div className="border-t border-[var(--r-line)]">
+        <div className="border-t border-line">
           <SectionLines section={summary} />
         </div>
       )}
       {footer && (
-        <div className="border-t border-[var(--r-line)]">
+        <div className="border-t border-line">
           <SectionLines section={footer} />
         </div>
       )}

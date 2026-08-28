@@ -1,3 +1,5 @@
+import { token } from "#/lib/token";
+
 /**
  * PARAM TABLES — round 1, variant C: "the deliverable is the product; the page IS M001, alive."
  *
@@ -21,7 +23,7 @@
  * EXCEPT where the language's laws are about meaning, which cross the print boundary intact:
  * mono still means machine-measured literals (param names, type names, sourced figures),
  * bold still means unsaved, the one alarm is still the only "model disagrees" hue, and no
- * colour literal is named — everything resolves through --r-* tokens so the sheet re-papers
+ * colour literal is named — everything resolves through --pe-* tokens so the sheet re-papers
  * with the palette.
  */
 import { useEffect, useState } from "react";
@@ -34,7 +36,12 @@ import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { BOD_MAIN_HOUSE, FC_UNITS, FOM_HWCH_PLANT, PARAM_META } from "#/param-tables/proto/fixture";
+import {
+  BOD_MAIN_HOUSE,
+  FC_UNITS,
+  FOM_HWCH_PLANT,
+  PARAM_META,
+} from "#/param-tables/variants/fixture";
 
 // ---------------------------------------------------------------------------
 // Derived world — everything computed from the fixture, nothing remembered.
@@ -632,62 +639,62 @@ export function VariantC() {
 }
 
 // ---------------------------------------------------------------------------
-// Styles. All colour through --r-* tokens; the PRINT look is type + rules, not hues.
+// Styles. All colour through --pe-* tokens; the PRINT look is type + rules, not hues.
 // ---------------------------------------------------------------------------
 
 const CSS = `
-.ptc-root { height: 100vh; display: flex; flex-direction: column; background: var(--r-page); --r-on: var(--r-page); }
+.ptc-root { height: 100vh; display: flex; flex-direction: column; background: ${token("page")}; --pe-on: ${token("page")}; }
 .ptc-main { flex: 1; display: flex; min-height: 0; }
 .ptc-scroll { flex: 1; overflow: auto; padding: 24px; }
 .ptc-paper { max-width: 880px; margin: 0 auto; }
 .ptc-sentence { display: inline-flex; gap: 6px; align-items: baseline; }
-.ptc-noun { font-family: ui-monospace, monospace; font-size: 12px; color: var(--r-ink); }
-.ptc-sep { color: var(--r-ink-mute); font-size: 11px; }
+.ptc-noun { font-family: ui-monospace, monospace; font-size: 12px; color: ${token("ink")}; }
+.ptc-sep { color: ${token("ink-mute")}; font-size: 11px; }
 
 /* THE DOCUMENT — print typography, deliberately divergent (see file header). */
-.ptc-doc { font-family: Georgia, 'Times New Roman', serif; color: var(--r-ink); padding: 36px 48px 48px; font-size: 13.5px; line-height: 1.5; }
-.ptc-sheethead { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid var(--r-ink); padding-bottom: 8px; margin-bottom: 24px; }
-.ptc-sheetproj { font-family: ui-monospace, monospace; font-size: 11px; color: var(--r-ink-2); }
+.ptc-doc { font-family: Georgia, 'Times New Roman', serif; color: ${token("ink")}; padding: 36px 48px 48px; font-size: 13.5px; line-height: 1.5; }
+.ptc-sheethead { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid ${token("ink")}; padding-bottom: 8px; margin-bottom: 24px; }
+.ptc-sheetproj { font-family: ui-monospace, monospace; font-size: 11px; color: ${token("ink-2")}; }
 .ptc-sheettitle { font-size: 15px; letter-spacing: 0.14em; font-weight: 600; }
 .ptc-sheetno { font-family: ui-monospace, monospace; font-size: 14px; font-weight: 600; }
-.ptc-exh { font-size: 12px; letter-spacing: 0.12em; font-weight: 600; margin: 26px 0 10px; border-bottom: 1px solid var(--r-line); padding-bottom: 4px; display: flex; align-items: baseline; gap: 8px; }
+.ptc-exh { font-size: 12px; letter-spacing: 0.12em; font-weight: 600; margin: 26px 0 10px; border-bottom: 1px solid ${token("line")}; padding-bottom: 4px; display: flex; align-items: baseline; gap: 8px; }
 .ptc-bod { width: 100%; border-collapse: collapse; }
-.ptc-bod td { padding: 3px 0; vertical-align: baseline; border-bottom: 1px solid var(--r-line-2); }
-.ptc-bod-label { color: var(--r-ink-2); padding-right: 24px; }
+.ptc-bod td { padding: 3px 0; vertical-align: baseline; border-bottom: 1px solid ${token("line-2")}; }
+.ptc-bod-label { color: ${token("ink-2")}; padding-right: 24px; }
 .ptc-bod-value { text-align: right; font-variant-numeric: tabular-nums; white-space: pre-line; max-width: 340px; }
 .ptc-fom { width: 100%; border-collapse: collapse; font-size: 12px; }
-.ptc-fom th, .ptc-fom td { border: 1px solid var(--r-line); padding: 4px 6px; text-align: center; }
+.ptc-fom th, .ptc-fom td { border: 1px solid ${token("line")}; padding: 4px 6px; text-align: center; }
 .ptc-fom-group { letter-spacing: 0.1em; font-size: 11px; }
-.ptc-fom-head { font-weight: 400; color: var(--r-ink-2); font-size: 11px; }
+.ptc-fom-head { font-weight: 400; color: ${token("ink-2")}; font-size: 11px; }
 .ptc-fom-cell { font-variant-numeric: tabular-nums; }
-.ptc-footnote { font-size: 11px; color: var(--r-ink-2); font-style: italic; margin-top: 6px; }
-.ptc-legend { margin-top: 28px; border-top: 1px solid var(--r-line); padding-top: 8px; }
-.ptc-legendhead { font-size: 10px; letter-spacing: 0.14em; color: var(--r-ink-2); margin: 0 0 6px; }
-.ptc-legendline { font-size: 11px; margin: 2px 0; color: var(--r-ink-2); }
+.ptc-footnote { font-size: 11px; color: ${token("ink-2")}; font-style: italic; margin-top: 6px; }
+.ptc-legend { margin-top: 28px; border-top: 1px solid ${token("line")}; padding-top: 8px; }
+.ptc-legendhead { font-size: 10px; letter-spacing: 0.14em; color: ${token("ink-2")}; margin: 0 0 6px; }
+.ptc-legendline { font-size: 11px; margin: 2px 0; color: ${token("ink-2")}; }
 .ptc-revs { margin-top: 20px; }
 .ptc-revtable { width: 100%; border-collapse: collapse; font-size: 12px; }
-.ptc-revtable td { border-top: 1px solid var(--r-line-2); padding: 3px 8px 3px 0; }
+.ptc-revtable td { border-top: 1px solid ${token("line-2")}; padding: 3px 8px 3px 0; }
 .ptc-rev-n { font-family: ui-monospace, monospace; width: 2ch; }
 
 /* Live values in prose. LANG GAP (see LiveValue): raw marks, no canon primitive exists. */
 .ptc-live, .ptc-sourced { font: inherit; color: inherit; background: none; border: none; padding: 0 2px; cursor: pointer; font-variant-numeric: tabular-nums; }
-.ptc-live:hover, .ptc-sourced:hover { background: var(--r-select); }
+.ptc-live:hover, .ptc-sourced:hover { background: ${token("select")}; }
 .ptc-live[data-unsaved] { font-weight: 700; } /* bold is reserved for unsaved — crosses the print boundary */
-.ptc-live[data-drift] { text-decoration: underline wavy var(--r-alarm); text-decoration-thickness: 1px; text-underline-offset: 3px; } /* the one alarm: a target disagrees with the sheet */
-.ptc-mark-out { font-family: ui-monospace, monospace; font-size: 9px; color: var(--r-nav); margin-left: 1px; } /* nav ink: clicking drills in */
-.ptc-mark-in { font-family: ui-monospace, monospace; font-size: 9px; color: var(--r-ink-2); margin-left: 1px; }
-.ptc-edit { font: inherit; font-variant-numeric: tabular-nums; width: 6ch; text-align: right; border: 1px solid var(--r-line); background: var(--r-page); --r-on: var(--r-page); color: var(--r-ink); padding: 0 2px; }
+.ptc-live[data-drift] { text-decoration: underline wavy ${token("alarm")}; text-decoration-thickness: 1px; text-underline-offset: 3px; } /* the one alarm: a target disagrees with the sheet */
+.ptc-mark-out { font-family: ui-monospace, monospace; font-size: 9px; color: ${token("nav")}; margin-left: 1px; } /* nav ink: clicking drills in */
+.ptc-mark-in { font-family: ui-monospace, monospace; font-size: 9px; color: ${token("ink-2")}; margin-left: 1px; }
+.ptc-edit { font: inherit; font-variant-numeric: tabular-nums; width: 6ch; text-align: right; border: 1px solid ${token("line")}; background: ${token("page")}; --pe-on: ${token("page")}; color: ${token("ink")}; padding: 0 2px; }
 .ptc-mono { font-family: ui-monospace, monospace; font-size: 0.92em; }
 
 /* The binding panel — app grammar, not print. */
 .ptc-panel { width: 420px; flex-shrink: 0; overflow: auto; padding: 24px 24px 24px 0; }
 .ptc-panelhead { display: flex; flex-direction: column; gap: 2px; font-size: 12px; padding: 6px 0; }
 .ptc-panelfoot { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 6px 0; }
-.ptc-dim { color: var(--r-ink-2); font-size: 11px; }
+.ptc-dim { color: ${token("ink-2")}; font-size: 11px; }
 .ptc-fan { width: 100%; border-collapse: collapse; font-size: 11.5px; }
-.ptc-fan th { text-align: left; font-weight: 400; color: var(--r-ink-mute); font-size: 10.5px; padding: 4px 8px; border-bottom: 1px solid var(--r-line); }
-.ptc-fan td { padding: 3px 8px; border-bottom: 1px solid var(--r-line-2); vertical-align: baseline; }
-.ptc-fan tr[data-refused] td { color: var(--r-ink-2); }
-.ptc-fan-total td { border-top: 1px solid var(--r-line); font-weight: 600; }
-.ptc-panelhint { font-size: 10.5px; color: var(--r-ink-mute); margin-top: 8px; text-align: right; }
+.ptc-fan th { text-align: left; font-weight: 400; color: ${token("ink-mute")}; font-size: 10.5px; padding: 4px 8px; border-bottom: 1px solid ${token("line")}; }
+.ptc-fan td { padding: 3px 8px; border-bottom: 1px solid ${token("line-2")}; vertical-align: baseline; }
+.ptc-fan tr[data-refused] td { color: ${token("ink-2")}; }
+.ptc-fan-total td { border-top: 1px solid ${token("line")}; font-weight: 600; }
+.ptc-panelhint { font-size: 10.5px; color: ${token("ink-mute")}; margin-top: 8px; text-align: right; }
 `;

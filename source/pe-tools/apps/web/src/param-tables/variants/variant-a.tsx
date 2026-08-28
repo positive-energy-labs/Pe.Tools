@@ -1,3 +1,5 @@
+import { token } from "#/lib/token";
+
 /**
  * VARIANT A — "the table is the product; linking is a property of a cell."
  *
@@ -35,8 +37,8 @@ import {
   FC_UNITS,
   FOM_HWCH_PLANT,
   PARAM_META,
-} from "#/param-tables/proto/fixture";
-import type { FcRow, ParamMeta } from "#/param-tables/proto/fixture";
+} from "#/param-tables/variants/fixture";
+import type { FcRow, ParamMeta } from "#/param-tables/variants/fixture";
 
 // ─── the cell model ─────────────────────────────────────────────────────────
 // A link is a PROPERTY OF A CELL — one optional field, not a schema column.
@@ -266,12 +268,12 @@ function LinkMark({ dir, title }: { dir: LinkDir; title: string }) {
     >
       <title>{title}</title>
       {dir === "out" ? (
-        <path d="M8 0 L8 8 L0 8 Z" fill="var(--r-ink-2)" />
+        <path d="M8 0 L8 8 L0 8 Z" fill={token("ink-2")} />
       ) : (
         <path
           d="M7.3 1.4 L7.3 7.3 L1.4 7.3 Z"
           fill="none"
-          stroke="var(--r-ink-2)"
+          stroke={token("ink-2")}
           strokeWidth={1.2}
         />
       )}
@@ -412,12 +414,12 @@ export function VariantA() {
     <span className="flex min-w-0 items-center gap-2">
       <span
         className="face-mono t-label"
-        style={{ color: "var(--r-ink)" }}
+        style={{ color: token("ink") }}
         title="the host document these links read and write (fixture lane)"
       >
         ProjectA_Clone_Aug_11
       </span>
-      <span className="t-label" style={{ color: "var(--r-ink-mute)" }}>
+      <span className="t-label" style={{ color: token("ink-mute") }}>
         ·
       </span>
       {TABLES.map((tb) => (
@@ -434,11 +436,11 @@ export function VariantA() {
             padding: "0 2px",
             cursor: "pointer",
             border: "none",
-            borderBottom: "0.5px solid var(--r-ink)",
+            borderBottom: `0.5px solid ${token("ink")}`,
             borderRadius: 0,
             // selection is a FILL, never a hue
-            background: active === tb.key ? "var(--r-select)" : "transparent",
-            color: "var(--r-ink)",
+            background: active === tb.key ? token("select") : "transparent",
+            color: token("ink"),
             whiteSpace: "nowrap",
           }}
         >
@@ -459,7 +461,7 @@ export function VariantA() {
   return (
     <div
       className="flex h-screen flex-col"
-      style={{ background: "var(--r-page)", color: "var(--r-ink)" }}
+      style={{ background: token("page"), color: token("ink") }}
     >
       <AddressingBar
         name="param tables"
@@ -507,7 +509,7 @@ export function VariantA() {
           <ArtifactFrame
             head={
               <div className="flex items-center gap-2">
-                <span className="t-label t-upper" style={{ color: "var(--r-ink-2)" }}>
+                <span className="t-label t-upper" style={{ color: token("ink-2") }}>
                   {TABLES.find((x) => x.key === active)!.name}
                 </span>
                 <HelpTip>
@@ -522,7 +524,7 @@ export function VariantA() {
               </div>
             }
             foot={
-              <span className="t-caption face-mono truncate" style={{ color: "var(--r-ink-2)" }}>
+              <span className="t-caption face-mono truncate" style={{ color: token("ink-2") }}>
                 {sel != null && sel.t === active && selected != null
                   ? `${addr(sel.r, sel.c)} · ${
                       selected.kind != null
@@ -543,17 +545,17 @@ export function VariantA() {
               </colgroup>
               <thead>
                 <tr>
-                  <th style={{ borderBottom: "0.5px solid var(--r-line)" }} />
+                  <th style={{ borderBottom: `0.5px solid ${token("line")}` }} />
                   {Array.from({ length: cols }, (_, c) => (
                     <th
                       key={c}
                       className="t-caption face-mono"
                       style={{
-                        color: "var(--r-ink-mute)",
+                        color: token("ink-mute"),
                         fontWeight: 400,
                         textAlign: "center",
-                        borderBottom: "0.5px solid var(--r-line)",
-                        borderLeft: "0.5px solid var(--r-line)",
+                        borderBottom: `0.5px solid ${token("line")}`,
+                        borderLeft: `0.5px solid ${token("line")}`,
                         padding: "2px 0",
                       }}
                     >
@@ -572,10 +574,10 @@ export function VariantA() {
                       <td
                         className="t-caption face-mono"
                         style={{
-                          color: "var(--r-ink-mute)",
+                          color: token("ink-mute"),
                           textAlign: "center",
-                          borderRight: "0.5px solid var(--r-line)",
-                          borderBottom: "0.5px solid var(--r-line)",
+                          borderRight: `0.5px solid ${token("line")}`,
+                          borderBottom: `0.5px solid ${token("line")}`,
                         }}
                       >
                         {r + 1}
@@ -585,15 +587,15 @@ export function VariantA() {
                         const tdStyle: CSSProperties = {
                           padding: 0,
                           height: 28,
-                          borderLeft: "0.5px solid var(--r-line)",
-                          borderBottom: "0.5px solid var(--r-line)",
+                          borderLeft: `0.5px solid ${token("line")}`,
+                          borderBottom: `0.5px solid ${token("line")}`,
                           verticalAlign: "middle",
                           overflow: "hidden",
                           ...(isSel
-                            ? // selection is a FILL; re-declare --r-on so cell washes land right
+                            ? // selection is a FILL; re-declare --pe-on so cell washes land right
                               ({
-                                background: "var(--r-select)",
-                                "--r-on": "var(--r-select)",
+                                background: token("select"),
+                                "--pe-on": token("select"),
                               } as CSSProperties)
                             : {}),
                         };
@@ -602,7 +604,7 @@ export function VariantA() {
                           body = (
                             <span
                               className="t-label block truncate px-1.5"
-                              style={{ color: "var(--r-ink-2)" }}
+                              style={{ color: token("ink-2") }}
                             >
                               {cell.text}
                             </span>
@@ -611,7 +613,7 @@ export function VariantA() {
                           body = (
                             <span
                               className="t-caption block truncate px-1.5"
-                              style={{ color: "var(--r-ink-mute)" }}
+                              style={{ color: token("ink-mute") }}
                             >
                               {cell.text}
                             </span>
@@ -658,7 +660,7 @@ export function VariantA() {
             <ArtifactFrame
               head={
                 <div className="flex items-center gap-2">
-                  <span className="t-label t-upper" style={{ color: "var(--r-ink-2)" }}>
+                  <span className="t-label t-upper" style={{ color: token("ink-2") }}>
                     staged fan-out
                   </span>
                   <HelpTip>
@@ -688,14 +690,14 @@ export function VariantA() {
                   (g) => (
                     <div key={`${g.addr}-${g.meta.name}`} className="py-1">
                       <div className="t-caption flex items-baseline gap-1.5">
-                        <span className="face-mono" style={{ color: "var(--r-ink)" }}>
+                        <span className="face-mono" style={{ color: token("ink") }}>
                           {g.addr}
                         </span>
-                        <span style={{ color: "var(--r-ink-mute)" }}>→</span>
-                        <span className="face-mono" style={{ color: "var(--r-ink)" }}>
+                        <span style={{ color: token("ink-mute") }}>→</span>
+                        <span className="face-mono" style={{ color: token("ink") }}>
                           {g.meta.name}
                         </span>
-                        <span style={{ color: "var(--r-ink-mute)" }}>
+                        <span style={{ color: token("ink-mute") }}>
                           {g.meta.label}
                           {g.meta.unit != null ? ` · ${g.meta.unit}` : ""} · type scope
                         </span>
@@ -709,24 +711,24 @@ export function VariantA() {
                           >
                             <span
                               className="face-mono truncate"
-                              style={{ color: "var(--r-ink)", minWidth: 180 }}
+                              style={{ color: token("ink"), minWidth: 180 }}
                             >
                               {p.type}
                             </span>
-                            <span className="face-mono" style={{ color: "var(--r-ink-2)" }}>
+                            <span className="face-mono" style={{ color: token("ink-2") }}>
                               ×{p.tags.length} tag{p.tags.length > 1 ? "s" : ""}
                             </span>
                             {p.refusal != null ? (
-                              <span className="t-caption" style={{ color: "var(--r-alarm)" }}>
+                              <span className="t-caption" style={{ color: token("alarm") }}>
                                 refuses — {p.refusal}
                               </span>
                             ) : (
-                              <span className="face-mono" style={{ color: "var(--r-ink)" }}>
+                              <span className="face-mono" style={{ color: token("ink") }}>
                                 {fmtNum(p.cur)} → {fmtNum(p.next)}
                               </span>
                             )}
                             {OFF_SCHEDULE_NOTE[p.type] != null ? (
-                              <span className="t-caption" style={{ color: "var(--r-ink-mute)" }}>
+                              <span className="t-caption" style={{ color: token("ink-mute") }}>
                                 {OFF_SCHEDULE_NOTE[p.type]}
                               </span>
                             ) : null}
@@ -753,14 +755,14 @@ export function VariantA() {
                moves the grid ("affordances do not move content"). ── */}
         <div
           className="w-[300px] shrink-0 space-y-3 overflow-auto p-3"
-          style={{ borderLeft: "0.5px solid var(--r-line)" }}
+          style={{ borderLeft: `0.5px solid ${token("line")}` }}
         >
           <div className="flex items-center gap-2">
-            <span className="t-label t-upper" style={{ color: "var(--r-ink-2)" }}>
+            <span className="t-label t-upper" style={{ color: token("ink-2") }}>
               cell
             </span>
             {sel != null && sel.t === active ? (
-              <span className="face-mono t-label" style={{ color: "var(--r-ink)" }}>
+              <span className="face-mono t-label" style={{ color: token("ink") }}>
                 {addr(sel.r, sel.c)}
               </span>
             ) : null}
@@ -776,17 +778,17 @@ export function VariantA() {
               no cell selected
             </EmptyState>
           ) : selected.kind != null ? (
-            <div className="t-label" style={{ color: "var(--r-ink-2)" }}>
+            <div className="t-label" style={{ color: token("ink-2") }}>
               a {selected.kind === "head" ? "heading" : "caption"} cell — authored chrome, not data.
               It cannot carry a link.
             </div>
           ) : (
             <>
               <div className="space-y-1">
-                <div className="t-caption t-upper" style={{ color: "var(--r-ink-mute)" }}>
+                <div className="t-caption t-upper" style={{ color: token("ink-mute") }}>
                   value
                 </div>
-                <div className="face-mono t-value truncate" style={{ color: "var(--r-ink)" }}>
+                <div className="face-mono t-value truncate" style={{ color: token("ink") }}>
                   {selected.link?.dir === "in"
                     ? Math.round(inboundValue(selected.link.param)).toLocaleString("en-US")
                     : selected.text === ""
@@ -811,16 +813,13 @@ export function VariantA() {
                   const meta = metaOf(selected.link.param);
                   return (
                     <div className="space-y-1.5">
-                      <div className="t-caption t-upper" style={{ color: "var(--r-ink-mute)" }}>
+                      <div className="t-caption t-upper" style={{ color: token("ink-mute") }}>
                         link
                       </div>
-                      <div className="t-label" style={{ color: "var(--r-ink)" }}>
+                      <div className="t-label" style={{ color: token("ink") }}>
                         {selected.link.dir === "out" ? "this cell drives" : "this cell reads (Σ)"}
                       </div>
-                      <div
-                        className="face-mono t-label break-all"
-                        style={{ color: "var(--r-ink)" }}
-                      >
+                      <div className="face-mono t-label break-all" style={{ color: token("ink") }}>
                         {selected.link.param}
                       </div>
                       <div className="flex flex-wrap gap-1">
@@ -848,7 +847,7 @@ export function VariantA() {
                       </div>
                       {selected.link.dir === "out" &&
                       pending.some((p) => p.t === sel.t && p.r === sel.r && p.c === sel.c) ? (
-                        <div className="t-caption" style={{ color: "var(--r-ink-2)" }}>
+                        <div className="t-caption" style={{ color: token("ink-2") }}>
                           this cell has staged writes — their far side is the fan-out strip under
                           the grid
                         </div>
@@ -875,7 +874,7 @@ export function VariantA() {
                 })()
               ) : (
                 <div className="space-y-1.5">
-                  <div className="t-caption t-upper" style={{ color: "var(--r-ink-mute)" }}>
+                  <div className="t-caption t-upper" style={{ color: token("ink-mute") }}>
                     make a link
                   </div>
                   {/* LANG GAP: no parameter-picker primitive at cell scale — doc-picker is
@@ -886,9 +885,9 @@ export function VariantA() {
                     onChange={(e) => setPickParam(e.target.value)}
                     title="the target parameter — type-scope perf params only in this proto"
                     style={{
-                      background: "var(--r-artifact)",
-                      color: "var(--r-ink)",
-                      border: "0.5px solid var(--r-line-2)",
+                      background: token("artifact"),
+                      color: token("ink"),
+                      border: `0.5px solid ${token("line-2")}`,
                       borderRadius: 2,
                       padding: "3px 4px",
                     }}
@@ -923,7 +922,7 @@ export function VariantA() {
                       reason="inbound — this cell becomes a live Σ reading of the parameter across the 23 scheduled tags; it stops being editable"
                     />
                   </div>
-                  <div className="t-caption" style={{ color: "var(--r-ink-mute)" }}>
+                  <div className="t-caption" style={{ color: token("ink-mute") }}>
                     target set is fixed in this proto: the {FC_UNITS.length} scheduled fan coils, by
                     type
                   </div>

@@ -9,14 +9,12 @@
 // re-implements ZonePanel's layer order instead of calling a world-owned panel painter; still
 // ledgered as promotion debt in CLEANROOM's round-1 friction list.
 import {
-  alarmColor,
   candidateTone,
   CLOSE_M,
   HELD_HATCH,
   INK_M,
   LABEL,
   LABEL_SIZE,
-  PAPER,
   PLAN_LAW,
   RESIDUE_TREATMENT,
   type ResidueKind,
@@ -26,6 +24,7 @@ import {
   ZONE_STROKE,
   ZONE_WIDTH,
 } from "../palette";
+import { token } from "../../lib/token";
 import {
   loadPlan,
   loadRaster,
@@ -44,8 +43,8 @@ import {
 
 import { flagLabel, type StagedItem } from "./staging";
 
-const TEXT = "#44403c";
-const MUTED = "#78716c";
+const TEXT = token("ink");
+const MUTED = token("ink-2");
 
 const PANEL_W = 1024;
 const PANEL_H = 768;
@@ -69,7 +68,7 @@ function overlaySvg(
   geom: ZoneGeometry,
   flags: Set<string>,
 ): string {
-  const alarm = alarmColor();
+  const alarm = token("alarm");
   const defs: string[] = [];
   const parts: string[] = [];
   const hatch = (
@@ -190,7 +189,7 @@ async function paintPanelTile(
   tile.height = PANEL_H;
   const tctx = tile.getContext("2d");
   if (!tctx) throw new Error("2d context unavailable");
-  tctx.fillStyle = PAPER;
+  tctx.fillStyle = token("page");
   tctx.fillRect(0, 0, PANEL_W, PANEL_H);
 
   const inner = document.createElement("canvas");
@@ -198,7 +197,7 @@ async function paintPanelTile(
   inner.height = vp.heightPx;
   const ctx = inner.getContext("2d");
   if (!ctx) throw new Error("2d context unavailable");
-  ctx.fillStyle = PAPER;
+  ctx.fillStyle = token("page");
   ctx.fillRect(0, 0, vp.widthPx, vp.heightPx);
 
   const [geom, plan] = await Promise.all([
@@ -252,7 +251,7 @@ function missingTile(label: string): HTMLCanvasElement {
   tile.width = PANEL_W;
   tile.height = PANEL_H;
   const ctx = tile.getContext("2d")!;
-  ctx.fillStyle = "#f5f5f4";
+  ctx.fillStyle = token("page");
   ctx.fillRect(0, 0, PANEL_W, PANEL_H);
   ctx.fillStyle = MUTED;
   ctx.font = FONT;
@@ -319,7 +318,7 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
   out.width = w;
   out.height = h;
   const ctx = out.getContext("2d")!;
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = token("page");
   ctx.fillRect(0, 0, w, h);
 
   ctx.font = FONT;
@@ -333,11 +332,11 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
       GAP - 2,
     );
     ctx.drawImage(tile, x, GAP + 14);
-    ctx.strokeStyle = "#e7e5e4";
+    ctx.strokeStyle = token("line");
     ctx.strokeRect(x + 0.5, GAP + 14.5, PANEL_W - 1, PANEL_H - 1);
   });
 
-  const alarm = alarmColor();
+  const alarm = token("alarm");
   lines.forEach((line, i) => {
     ctx.fillStyle = line.tone === "alarm" ? alarm : line.tone === "muted" ? MUTED : TEXT;
     ctx.fillText(line.text, GAP, GAP + 14 + PANEL_H + 10 + i * LINE_H, w - 2 * GAP);
@@ -353,7 +352,7 @@ export function stitchSheet(canvases: HTMLCanvasElement[], header: string): HTML
   out.width = w;
   out.height = h;
   const ctx = out.getContext("2d")!;
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = token("page");
   ctx.fillRect(0, 0, w, h);
   ctx.font = FONT;
   ctx.textBaseline = "top";

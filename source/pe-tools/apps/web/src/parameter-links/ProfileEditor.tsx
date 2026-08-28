@@ -181,7 +181,7 @@ function DefinitionCard({
             value={definition.id}
             disabled={disabled}
             onChange={(event) => patch({ id: event.target.value })}
-            className="t-value face-mono min-w-0 flex-1 bg-transparent text-foreground outline-none"
+            className="t-value face-mono min-w-0 flex-1 bg-transparent text-ink outline-none"
             aria-label="definition id"
             title="The definition's id — how assignments and receipts refer to it"
           />
@@ -270,7 +270,7 @@ function DefinitionCard({
             onChange={(reducer) => patch({ reducer })}
           />
         </Field>
-        <label className="t-label flex items-center gap-1.5 text-muted-foreground sm:col-span-2">
+        <label className="t-label flex items-center gap-1.5 text-ink-2 sm:col-span-2">
           <input
             type="checkbox"
             checked={definition.targetOverride != null}
@@ -341,9 +341,9 @@ function DefinitionCard({
         ) : null}
       </div>
 
-      <div className="border-t border-border px-3 py-2">
+      <div className="border-t border-line px-3 py-2">
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="t-label t-upper text-muted-foreground">Assignments</span>
+          <span className="t-label t-upper text-ink-2">Assignments</span>
           <Verb
             label="add assignment"
             icon={Plus}
@@ -363,9 +363,9 @@ function DefinitionCard({
         ) : (
           <div>
             {assignments.map((assignment) => (
-              <div key={assignment.id} className="border-t border-border py-1.5 first:border-t-0">
+              <div key={assignment.id} className="border-t border-line py-1.5 first:border-t-0">
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <label className="t-label flex items-center gap-1.5 text-muted-foreground">
+                  <label className="t-label flex items-center gap-1.5 text-ink-2">
                     <input
                       type="checkbox"
                       checked={assignment.enabled}
@@ -380,7 +380,7 @@ function DefinitionCard({
                     />
                     enabled
                   </label>
-                  <span className="t-caption face-mono truncate text-[var(--r-ink-mute)]">
+                  <span className="t-caption face-mono truncate text-ink-mute">
                     {assignment.id}
                   </span>
                   <Verb
@@ -436,7 +436,7 @@ function parameterLabel(reference: ParameterReference) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="t-label text-muted-foreground">{label}</span>
+      <span className="t-label text-ink-2">{label}</span>
       {children}
     </label>
   );
@@ -458,7 +458,7 @@ function Enum<T extends string>({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value as T)}
-      className="t-value h-7 w-full rounded-[var(--radius)] border border-input bg-transparent px-2 outline-none focus-visible:outline-1 focus-visible:outline-[var(--r-line-2)] disabled:italic disabled:text-[var(--r-ink-mute)]"
+      className="t-value h-7 w-full rounded-sm border border-line bg-transparent px-2 outline-none focus-visible:outline-1 focus-visible:outline-line-2 disabled:italic disabled:text-ink-mute"
     >
       {options.map((option) => (
         <option key={option} value={option}>

@@ -10,6 +10,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { token } from "#/lib/token";
 import {
   useTable,
   type ColumnFiltersState,
@@ -380,9 +381,9 @@ export function MasterTable<Row extends RowData>({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--r-line)] px-2 py-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-2 py-1">
         <span
-          className="t-label t-upper text-[var(--r-ink-2)]"
+          className="t-label t-upper text-ink-2"
           title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
         >
           {scopeLabel}
@@ -393,19 +394,19 @@ export function MasterTable<Row extends RowData>({
             onChange={(event) => updateState((state) => ({ ...state, query: event.target.value }))}
             placeholder={searchPlaceholder}
             title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-            className="face-mono t-value h-6 w-44 rounded-[var(--radius)] border border-[var(--r-line-2)] bg-transparent px-1.5 outline-none focus:border-[var(--r-line-2)] focus:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+            className="face-mono t-value h-6 w-44 rounded-sm border border-line-2 bg-transparent px-1.5 outline-none focus:border-line-2 focus:veil"
           />
         )}
         {/* The search box says how much it cut, right where the typing happens. */}
         {resolvedState.query && (
           <span
-            className="face-mono t-value text-[var(--r-ink-2)]"
+            className="face-mono t-value text-ink-2"
             title="How many rows survive the free-text filter, out of every row in scope."
           >
             {visibleRows.length} of {rows.length}
           </span>
         )}
-        {summary && <span className="face-mono t-value text-[var(--r-ink-2)]">{summary}</span>}
+        {summary && <span className="face-mono t-value text-ink-2">{summary}</span>}
 
         {/* THE STRIP'S CHIPS ARE THE LANGUAGE'S NarrowChip (fit reviews, ruled 2026-08-16 —
             FilterChip stated the same fact on different tokens and is deleted). The count is
@@ -442,7 +443,7 @@ export function MasterTable<Row extends RowData>({
             type="button"
             onClick={() => updateState((state) => ({ ...state, filters: {} }))}
             title="Drop every column filter at once. Filters owned by the route have their own chips and are left alone."
-            className="t-label rounded-[var(--radius)] px-1 text-[var(--r-ink-2)] hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+            className="t-label rounded-sm px-1 text-ink-2 hover:veil"
           >
             clear column filters
           </button>
@@ -464,7 +465,7 @@ export function MasterTable<Row extends RowData>({
                     rowSpan={table.getHeaderGroups().length}
                     style={{ top: 0, width: GUTTER_PX, minWidth: GUTTER_PX }}
                     title="Rows marked in this gutter owe a person a decision — the mark's own title says what."
-                    className="sticky left-0 z-20 border-b border-[var(--r-line)] bg-[var(--r-recess)] p-0 [--r-on:var(--r-recess)]"
+                    className="sticky left-0 z-20 border-b border-line bg-recess p-0 on-recess"
                   />
                 )}
                 {headerGroup.headers.map((header) => {
@@ -498,7 +499,7 @@ export function MasterTable<Row extends RowData>({
                       colSpan={header.colSpan}
                       rowSpan={header.rowSpan}
                       style={{ top: stickyTop(rowIndex) }}
-                      className="t-caption t-upper sticky z-10 whitespace-nowrap border-b border-l border-[var(--r-line)] bg-[var(--r-recess)] px-1.5 py-px text-left text-[var(--r-ink-2)] [--r-on:var(--r-recess)] first:border-l-0"
+                      className="t-caption t-upper sticky z-10 whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-px text-left text-ink-2 on-recess first:border-l-0"
                     >
                       <table.FlexRender header={header} />
                     </th>
@@ -521,10 +522,10 @@ export function MasterTable<Row extends RowData>({
                   activeRowRef={activeRowRef}
                   className={cn(
                     // THE HOVER LAW: the one neutral veil, composited over whatever fill the row
-                    // carries. THE SELECTION LAW: the active row is a fill (--r-select), never a
-                    // hue, and re-declares --r-on so cell washes land on the right ground.
-                    "h-7 scroll-mt-12 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]",
-                    activeKey === key && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+                    // carries. THE SELECTION LAW: the active row is a fill (--pe-select), never a
+                    // hue, and re-declares --pe-on so cell washes land on the right ground.
+                    "h-7 scroll-mt-12 hover:veil",
+                    activeKey === key && "on-select",
                     rowClassName?.(tableRow.original),
                   )}
                   onRowClick={onRowClick}
@@ -538,12 +539,12 @@ export function MasterTable<Row extends RowData>({
                           data-master-gutter=""
                           title={owed?.title}
                           style={{ width: GUTTER_PX, minWidth: GUTTER_PX }}
-                          className="sticky left-0 z-[5] border-b border-[var(--r-line)] bg-[var(--r-on)] p-0 text-center align-middle"
+                          className="sticky left-0 z-[5] border-b border-line bg-on p-0 text-center align-middle"
                         >
                           {owed && (
                             <span
                               className="face-mono t-caption"
-                              style={{ color: `var(--r-${owed.tone ?? "caution"})` }}
+                              style={{ color: token(owed.tone ?? "caution") }}
                             >
                               {owed.count}
                             </span>
@@ -591,12 +592,12 @@ export function MasterTable<Row extends RowData>({
                             style={column.lock ? { left: gutter ? GUTTER_PX : 0 } : undefined}
                             className={cn(
                               // Focus is a firm hairline; selection is the select fill. Locked
-                              // columns sit on --r-on — the ground of whatever contains the table.
-                              "border-b border-l border-[var(--r-line)] p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--r-line-2)]",
-                              selection & 2 && "bg-[var(--r-select)] [--r-on:var(--r-select)]",
+                              // columns sit on --pe-on — the ground of whatever contains the table.
+                              "border-b border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
+                              selection & 2 && "on-select",
                               column.right && "text-right",
                               column.width,
-                              column.lock && "sticky z-[5] bg-[var(--r-on)]",
+                              column.lock && "sticky z-[5] bg-on",
                             )}
                           >
                             <CellNavigationProvider
@@ -656,11 +657,11 @@ export function MasterTable<Row extends RowData>({
             if (!focused || !cellState) return null;
             const facts = cellFactsText(cellState);
             return (
-              <div className="face-mono t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-[var(--r-line)] bg-[var(--r-recess)] px-2 whitespace-nowrap [--r-on:var(--r-recess)]">
-                <span className="dl-tag shrink-0 text-[var(--r-ink)]">
+              <div className="face-mono t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line bg-recess px-2 whitespace-nowrap on-recess">
+                <span className="dl-tag shrink-0 text-ink">
                   {column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}
                 </span>
-                <span className="truncate text-[var(--r-ink-2)]">
+                <span className="truncate text-ink-2">
                   {facts ?? "nothing further — the marks on the cell are the whole story"}
                 </span>
               </div>
@@ -704,7 +705,7 @@ function LeafHeader<Row>({
       rowSpan={rowSpan}
       style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
       className={cn(
-        "sticky z-10 align-top whitespace-nowrap border-b border-l border-[var(--r-line)] bg-[var(--r-recess)] px-1.5 py-1 font-normal [--r-on:var(--r-recess)] first:border-l-0",
+        "sticky z-10 align-top whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-1 font-normal on-recess first:border-l-0",
         column.right ? "text-right" : "text-left",
         column.width,
         column.lock && "z-20",
@@ -716,20 +717,18 @@ function LeafHeader<Row>({
           type="button"
           onClick={(event) => onSort(event.shiftKey)}
           title="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
-          className="t-caption t-upper block w-full text-left text-[var(--r-ink-2)] hover:text-[var(--r-ink)]"
+          className="t-caption t-upper block w-full text-left text-ink-2 hover:text-ink"
         >
           {column.header ?? column.label}
           {direction && (
-            <span className="ml-1 text-[var(--r-ink)]">
+            <span className="ml-1 text-ink">
               {direction === "asc" ? "↑" : "↓"}
               {sortCount > 1 && <span className="opacity-60">{rank + 1}</span>}
             </span>
           )}
         </button>
       ) : (
-        <span className="t-caption t-upper block text-[var(--r-ink-2)]">
-          {column.header ?? column.label}
-        </span>
+        <span className="t-caption t-upper block text-ink-2">{column.header ?? column.label}</span>
       )}
       {children}
     </th>
@@ -777,23 +776,23 @@ function ColFilter({
           aria-label={`${label} filter`}
           title="Narrow the table to one value of this column. The choices are every value present across ALL rows, so they stay put as other filters move."
           className={cn(
-            "face-mono t-caption flex h-5 w-full min-w-0 max-w-32 items-center justify-between gap-0.5 rounded-[var(--radius)] border bg-transparent px-1 font-normal outline-none",
+            "face-mono t-caption flex h-5 w-full min-w-0 max-w-32 items-center justify-between gap-0.5 rounded-sm border bg-transparent px-1 font-normal outline-none",
             // An active filter is "lit" — the select fill, never a hue.
             value
-              ? "border-[var(--r-line-2)] bg-[var(--r-select)] text-[var(--r-ink)]"
-              : "border-[var(--r-line)] text-[var(--r-ink-2)] hover:border-[var(--r-line-2)]",
+              ? "border-line-2 bg-select text-ink"
+              : "border-line text-ink-2 hover:border-line-2",
           )}
         >
           <span className="truncate normal-case">{value === null ? all : selected.label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent anchor={anchorRef} className="min-w-44 rounded-[var(--radius)]">
+      <ComboboxContent anchor={anchorRef} className="min-w-44 rounded-sm">
         {options.length > 7 && <ComboboxInput placeholder="filter values…" />}
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>
           {(choice: FacetChoice) => (
             <ComboboxItem key={choice.value ?? "\u0000all"} value={choice} className="pr-7">
-              <span className={cn("truncate", choice.value === null && "text-muted-foreground")}>
+              <span className={cn("truncate", choice.value === null && "text-ink-2")}>
                 {choice.label}
               </span>
             </ComboboxItem>

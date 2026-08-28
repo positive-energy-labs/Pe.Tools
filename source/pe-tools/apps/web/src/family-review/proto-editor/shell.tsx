@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * PROTOTYPE (round 2 · piece 3) — shared chrome for the three editing paradigms.
  *
@@ -135,17 +136,17 @@ export function StatePanel({
   return (
     <aside
       className="flex min-h-0 w-80 shrink-0 flex-col border-l"
-      style={{ borderColor: "var(--r-line)", background: "var(--r-artifact)" }}
+      style={{ borderColor: token("line"), background: token("artifact") }}
     >
-      <div className="border-b px-3 py-2" style={{ borderColor: "var(--r-line)" }}>
+      <div className="border-b px-3 py-2" style={{ borderColor: token("line") }}>
         <div className="flex items-baseline justify-between gap-2">
-          <span className="t-label t-upper text-[var(--r-ink-2)]">pending write</span>
-          <span className="face-mono t-caption text-[var(--r-ink-mute)]">
+          <span className="t-label t-upper text-ink-2">pending write</span>
+          <span className="face-mono t-caption text-ink-mute">
             {staged.length} pointer{staged.length === 1 ? "" : "s"}
           </span>
         </div>
         {staged.length === 0 ? (
-          <p className="t-caption mt-1 text-[var(--r-ink-mute)]">
+          <p className="t-caption mt-1 text-ink-mute">
             nothing to write — the edited document equals the json
           </p>
         ) : (
@@ -158,7 +159,7 @@ export function StatePanel({
                   title={`Show ${change.path} in the json pane`}
                   className="face-mono t-caption w-full text-left"
                   style={{
-                    background: editor.focus === change.path ? "var(--r-select)" : "transparent",
+                    background: editor.focus === change.path ? token("select") : "transparent",
                     border: "none",
                     borderRadius: 2,
                     cursor: "pointer",
@@ -167,13 +168,13 @@ export function StatePanel({
                 >
                   <span
                     style={{
-                      color: touched.has(change.path) ? "var(--r-caution)" : "var(--r-ink-2)",
+                      color: touched.has(change.path) ? token("caution") : token("ink-2"),
                     }}
                   >
                     {change.path}
                   </span>
-                  <span className="text-[var(--r-ink-mute)]"> {change.before ?? "∅"} → </span>
-                  <span className="text-[var(--r-ink)]">{change.after ?? "∅"}</span>
+                  <span className="text-ink-mute"> {change.before ?? "∅"} → </span>
+                  <span className="text-ink">{change.after ?? "∅"}</span>
                 </button>
               </li>
             ))}
@@ -204,8 +205,8 @@ export function StatePanel({
       </div>
       {showDocument ? (
         <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
-          <div className="t-label t-upper mb-1 text-[var(--r-ink-2)]">live document</div>
-          <pre className="face-mono t-caption whitespace-pre-wrap text-[var(--r-ink-2)]">
+          <div className="t-label t-upper mb-1 text-ink-2">live document</div>
+          <pre className="face-mono t-caption whitespace-pre-wrap text-ink-2">
             {JSON.stringify(editor.model, null, 2)}
           </pre>
         </div>
@@ -252,11 +253,11 @@ export function RefToken({
         style={{
           padding: "0 1px",
           cursor: "pointer",
-          background: open ? "var(--r-select)" : "transparent",
+          background: open ? token("select") : "transparent",
           border: "none",
-          borderBottom: `0.5px solid ${bound ? "var(--r-ink)" : "var(--r-caution)"}`,
+          borderBottom: `0.5px solid ${bound ? token("ink") : token("caution")}`,
           borderRadius: 0,
-          color: strays ? "var(--r-alarm)" : bound ? "var(--r-ink)" : "var(--r-caution)",
+          color: strays ? token("alarm") : bound ? token("ink") : token("caution"),
           whiteSpace: "nowrap",
         }}
       >
@@ -274,13 +275,13 @@ export function RefToken({
           <div
             className="absolute left-0 top-full z-30 mt-1 max-h-72 w-72 overflow-y-auto px-1 py-1"
             style={{
-              border: "0.5px solid var(--r-line-2)",
-              background: "var(--r-page)",
+              border: `0.5px solid ${token("line-2")}`,
+              background: token("page"),
               borderRadius: 2,
             }}
           >
             {options.length === 0 ? (
-              <p className="t-caption px-1 py-1 text-[var(--r-ink-mute)]">
+              <p className="t-caption px-1 py-1 text-ink-mute">
                 nothing legal here yet — author one first
               </p>
             ) : (
@@ -294,14 +295,14 @@ export function RefToken({
                   }}
                   className="face-mono t-label flex w-full items-baseline justify-between gap-2 px-1 py-0.5 text-left"
                   style={{
-                    background: option === value ? "var(--r-select)" : "transparent",
+                    background: option === value ? token("select") : "transparent",
                     border: "none",
                     cursor: "pointer",
-                    color: "var(--r-ink)",
+                    color: token("ink"),
                   }}
                 >
                   <span>{option}</span>
-                  <span className="text-[var(--r-ink-mute)]">
+                  <span className="text-ink-mute">
                     {nodeValue(editor.model, editor.typeName, option) ?? ""}
                   </span>
                 </button>
@@ -345,11 +346,11 @@ export function TextToken({
       style={{
         width,
         padding: "0 2px",
-        background: draft != null ? "var(--r-select)" : "transparent",
+        background: draft != null ? token("select") : "transparent",
         border: "none",
-        borderBottom: `0.5px solid ${value ? "var(--r-ink)" : "var(--r-caution)"}`,
+        borderBottom: `0.5px solid ${value ? token("ink") : token("caution")}`,
         borderRadius: 0,
-        color: "var(--r-ink)",
+        color: token("ink"),
       }}
     />
   );
@@ -359,7 +360,7 @@ export function TextToken({
 export function TypeStage({ editor }: { editor: Editor }) {
   return (
     <span className="flex items-baseline gap-1">
-      <span className="t-caption text-[var(--r-ink-mute)]">type</span>
+      <span className="t-caption text-ink-mute">type</span>
       {Object.keys(editor.model.types).map((name) => (
         <button
           key={name}
@@ -368,11 +369,11 @@ export function TypeStage({ editor }: { editor: Editor }) {
           onClick={() => editor.setTypeName(name)}
           className="face-mono t-label px-1"
           style={{
-            background: name === editor.typeName ? "var(--r-select)" : "transparent",
+            background: name === editor.typeName ? token("select") : "transparent",
             border: "none",
             borderRadius: 2,
             cursor: "pointer",
-            color: name === editor.typeName ? "var(--r-ink)" : "var(--r-ink-2)",
+            color: name === editor.typeName ? token("ink") : token("ink-2"),
           }}
         >
           {name}

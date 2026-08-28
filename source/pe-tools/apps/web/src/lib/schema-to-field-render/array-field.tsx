@@ -99,11 +99,9 @@ export function ArrayField({
           {(Array.isArray(field.value) ? (field.value as unknown[]) : []).map((_, index) => {
             const childPathPrefix = `${path}.${index}`;
             return (
-              <div key={childPathPrefix} className="space-y-3 rounded-md border border-border p-3">
+              <div key={childPathPrefix} className="space-y-3 rounded-md border border-line p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Item {index + 1}
-                  </span>
+                  <span className="text-xs font-medium text-ink-2">Item {index + 1}</span>
                   <Verb
                     label="remove"
                     reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
@@ -144,7 +142,7 @@ export function ArrayField({
           className="min-h-32 font-mono text-xs"
         />
       )}
-      <span className="text-xs text-muted-foreground">
+      <span className="text-xs text-ink-2">
         {isPrimitiveArray
           ? "Multi-value combobox with searchable suggestions and removable chips."
           : isObjectArray

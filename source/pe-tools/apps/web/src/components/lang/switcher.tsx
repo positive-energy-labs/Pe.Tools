@@ -4,7 +4,7 @@
  * CONSUMERS: /family workspace (overlay ⇄ live), /family doc pane (text ⇄ sheet),
  * /design-system/swatch.
  *
- * RULINGS EMBODIED: the active choice is a FILL (`--r-select`, the ground ladder's fourth
+ * RULINGS EMBODIED: the active choice is a FILL (`--pe-select`, the ground ladder's fourth
  * rung), never a hue — selection is a place you are standing, not a state of the data, so it
  * spends nothing from the meaning band and cannot be confused with commit or drift. Hover is
  * the one veil. Each option's `title` is REQUIRED: a mode whose consequence is not stated is

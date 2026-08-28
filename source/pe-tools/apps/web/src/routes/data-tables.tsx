@@ -106,12 +106,12 @@ function DataTablesRoute() {
       : "Upsert this draft into Revit by name + row key; rows missing from the draft are pruned";
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-background">
+    <main className="flex h-screen flex-col overflow-hidden bg-page">
       <AddressingBar
         name="data tables"
         sentence={
           <span className="flex items-center gap-2">
-            <span className="t-value face-mono text-foreground">
+            <span className="t-value face-mono text-ink">
               {draft ? draft.name : "no table open"}
             </span>
             <HelpTip>
@@ -135,12 +135,12 @@ function DataTablesRoute() {
             icon={CheckCheck}
             busy={busy === "apply"}
             disabled={!draft || draft.name.trim().length === 0}
-            onClick={() => void applyDraft()}
+            onClick={() => applyDraft()}
             reason={applyReason}
           />
         }
       />
-      <div className="shrink-0 border-b border-border empty:border-0">
+      <div className="shrink-0 border-b border-line empty:border-0">
         <VerbLane atoms={store.verbAtoms} className="px-4 py-0.5" />
       </div>
 
@@ -152,7 +152,7 @@ function DataTablesRoute() {
           defaultWidth={248}
           header={
             <div className="flex items-center justify-between gap-2">
-              <span className="t-label t-upper text-muted-foreground">
+              <span className="t-label t-upper text-ink-2">
                 Tables{" "}
                 <span className="t-label face-mono normal-case font-normal">{tables.length}</span>
               </span>
@@ -291,11 +291,11 @@ function DraftEditor({
         <table className="border-collapse">
           <thead>
             <tr>
-              <th className="border-b border-border bg-[var(--r-recess)]" />
+              <th className="border-b border-line bg-recess" />
               {draft.columns.map((column, columnIndex) => (
                 <th
                   key={columnIndex}
-                  className="min-w-36 border-b border-l border-border bg-[var(--r-recess)] px-1.5 py-1 text-left"
+                  className="min-w-36 border-b border-l border-line bg-recess px-1.5 py-1 text-left"
                 >
                   <div className="flex items-center gap-1">
                     <Input
@@ -308,13 +308,13 @@ function DraftEditor({
                           ),
                         }))
                       }
-                      className="t-label h-6 rounded-none border-transparent bg-transparent px-1 font-normal hover:border-border"
+                      className="t-label h-6 rounded-none border-transparent bg-transparent px-1 font-normal hover:border-line"
                       title="Column heading — written to the schedule on apply"
                     />
                     <select
                       value={column.kind}
                       title="Column type: txt = Text, num = Number"
-                      className="t-caption face-mono h-6 rounded-[var(--radius)] border border-transparent bg-transparent text-muted-foreground hover:border-border"
+                      className="t-caption face-mono h-6 rounded-sm border border-transparent bg-transparent text-ink-2 hover:border-line"
                       onChange={(e) =>
                         patch((d) => ({
                           ...d,
@@ -334,7 +334,7 @@ function DraftEditor({
                           ? "a table keeps at least one column"
                           : "Remove this column and its values from the draft"
                       }
-                      className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                      className="text-ink-2 hover:text-ink disabled:opacity-30"
                       disabled={draft.columns.length === 1}
                       onClick={() => removeColumn(columnIndex)}
                     >
@@ -343,7 +343,7 @@ function DraftEditor({
                   </div>
                 </th>
               ))}
-              <th className="border-b border-l border-border bg-[var(--r-recess)] px-1">
+              <th className="border-b border-l border-line bg-recess px-1">
                 <Verb
                   label="col"
                   icon={Plus}
@@ -357,30 +357,30 @@ function DraftEditor({
             {draft.rows.map((row, rowIndex) => (
               <tr key={row.key}>
                 <td
-                  className="t-caption face-mono whitespace-nowrap border-b border-border px-2 py-1 text-right text-muted-foreground"
+                  className="t-caption face-mono whitespace-nowrap border-b border-line px-2 py-1 text-right text-ink-2"
                   title={`row key: ${row.key} — the stable address apply upserts by`}
                 >
                   {rowIndex + 1}
                 </td>
                 {draft.columns.map((column, columnIndex) => (
-                  <td key={columnIndex} className="border-b border-l border-border p-0">
+                  <td key={columnIndex} className="border-b border-l border-line p-0">
                     <input
                       value={row.values[columnIndex] ?? ""}
                       placeholder={column.kind === "Number" ? "0" : ""}
                       inputMode={column.kind === "Number" ? "decimal" : undefined}
                       onChange={(e) => setCell(rowIndex, columnIndex, e.target.value)}
                       className={cn(
-                        "t-value face-mono h-7 w-full min-w-36 bg-transparent px-2 outline-none focus:bg-[var(--r-select)]",
+                        "t-value face-mono h-7 w-full min-w-36 bg-transparent px-2 outline-none focus:bg-select",
                         column.kind === "Number" && "text-right",
                       )}
                     />
                   </td>
                 ))}
-                <td className="border-b border-l border-border px-1 text-center">
+                <td className="border-b border-l border-line px-1 text-center">
                   <button
                     type="button"
                     title="Remove this row — it is deleted in Revit on apply"
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-ink-2 hover:text-ink"
                     onClick={() => removeRow(rowIndex)}
                   >
                     <Trash2 className="size-3" />

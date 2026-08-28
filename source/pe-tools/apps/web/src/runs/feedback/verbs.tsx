@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 // Shared feedback verb chrome: the export verb strip (all three verbs REAL), flag chips, the
 // one-line note input, and the post-export status block that proves what happened (dir, paths,
 // where the copy landed, the set's own ?set= URL).
@@ -23,11 +24,9 @@ export function ExportVerbs(props: {
       title={title}
       className={cn(
         "tele border px-2 py-0.5 text-[11px] disabled:opacity-40",
-        primary
-          ? "border-transparent bg-primary text-primary-foreground"
-          : "text-muted-foreground hover:text-foreground",
+        primary ? "border-transparent bg-commit text-on-commit" : "text-ink-2 hover:text-ink",
       )}
-      style={{ borderColor: primary ? undefined : "var(--line-2)", borderRadius: 2 }}
+      style={{ borderColor: primary ? undefined : token("line-2"), borderRadius: 2 }}
     >
       {exporting === verb ? "…" : label}
     </button>
@@ -58,29 +57,24 @@ export function ExportStatus(props: { className?: string }) {
   const { exporting, lastExport, exportError } = useFb();
   if (exporting) {
     return (
-      <div className={cn("tele text-[10px] text-muted-foreground", props.className)}>
+      <div className={cn("tele text-[10px] text-ink-2", props.className)}>
         compositing + writing export…
       </div>
     );
   }
   if (exportError) {
     return (
-      <div className={cn("tele text-[10px]", props.className)} style={{ color: "var(--r-alarm)" }}>
+      <div className={cn("tele text-[10px]", props.className)} style={{ color: token("alarm") }}>
         export failed: {exportError}
       </div>
     );
   }
   if (!lastExport) return null;
   return (
-    <div
-      className={cn(
-        "tele flex flex-col gap-0.5 text-[10px] text-muted-foreground",
-        props.className,
-      )}
-    >
+    <div className={cn("tele flex flex-col gap-0.5 text-[10px] text-ink-2", props.className)}>
       <span className="break-all">
         wrote {lastExport.files.length} file{lastExport.files.length === 1 ? "" : "s"} + clip.txt →{" "}
-        <span className="text-foreground">{lastExport.dir}</span>
+        <span className="text-ink">{lastExport.dir}</span>
       </span>
       <span>
         {lastExport.verb === "chat" &&
@@ -95,16 +89,16 @@ export function ExportStatus(props: { className?: string }) {
       <a
         href={`/runs?set=${lastExport.stamp}`}
         title="This export's rehydration link — open it (or paste it) to reload this staged set, editable. Re-exporting mints a new stamp."
-        className="break-all underline decoration-dotted hover:text-foreground"
+        className="break-all underline decoration-dotted hover:text-ink"
       >
         ?set={lastExport.stamp}
       </a>
-      {lastExport.warning && <span style={{ color: "var(--r-alarm)" }}>{lastExport.warning}</span>}
+      {lastExport.warning && <span style={{ color: token("alarm") }}>{lastExport.warning}</span>}
       <details>
         <summary className="cursor-pointer">view the clip block</summary>
         <pre
           className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5"
-          style={{ borderColor: "var(--line-2)", borderRadius: 2 }}
+          style={{ borderColor: token("line-2"), borderRadius: 2 }}
         >
           {lastExport.text}
         </pre>
@@ -117,7 +111,7 @@ export function ExportStatus(props: { className?: string }) {
 export function FlagChips(props: { item: StagedItem }) {
   if (props.item.flags.length === 0) {
     return (
-      <span className="tele text-[10px] text-muted-foreground/60">
+      <span className="tele text-[10px] text-ink-2/60">
         no flags — click rooms/residues on the staged B panel
       </span>
     );
@@ -133,7 +127,7 @@ export function FlagChips(props: { item: StagedItem }) {
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
           className="tele border px-1 text-[10px]"
-          style={{ borderColor: "var(--r-alarm)", color: "var(--r-alarm)", borderRadius: 2 }}
+          style={{ borderColor: token("alarm"), color: token("alarm"), borderRadius: 2 }}
         >
           ⚑ {flagLabel(el)} ✕
         </button>
@@ -158,10 +152,10 @@ export function NoteInput(props: {
       "One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block.",
     autoFocus: props.autoFocus,
     className: cn(
-      "tele w-full border bg-background px-1.5 py-0.5 text-[11px] placeholder:text-muted-foreground/50",
+      "tele w-full border bg-page px-1.5 py-0.5 text-[11px] placeholder:text-ink-2/50",
       props.className,
     ),
-    style: { borderColor: "var(--line-2)", borderRadius: 2 },
+    style: { borderColor: token("line-2"), borderRadius: 2 },
   };
   return props.multiline ? (
     <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} />

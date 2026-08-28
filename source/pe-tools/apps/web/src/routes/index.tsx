@@ -220,6 +220,14 @@ const TOOLS = [
       "Author synthetic data tables — draft columns and keyed rows, then upsert them in one apply; rows deleted here are pruned in Revit.",
   },
   {
+    to: "/param-tables",
+    title: "Parameter Tables",
+    label: "Incubating product",
+    icon: Table2,
+    description:
+      "Five mounted parameter-table variants for linked engineering data; switch between them while the product shape is incubating.",
+  },
+  {
     to: "/parameter-links",
     title: "Parameter Links",
     label: "Revit data",
@@ -268,13 +276,11 @@ function App() {
   const tools = import.meta.env.DEV ? [...TOOLS, ...DEV_TOOLS] : TOOLS;
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border">
+      <header className="border-b border-line">
         <div className="page-wrap flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-foreground" />
-            <span className="t-value font-semibold tracking-tight text-foreground">
-              Positive Energy
-            </span>
+            <span className="size-2 rounded-full bg-ink" />
+            <span className="t-value font-semibold tracking-tight text-ink">Positive Energy</span>
           </div>
           <div className="flex items-center gap-3">
             <UpdateButton />
@@ -285,14 +291,14 @@ function App() {
 
       <main className="page-wrap py-16">
         <section className="max-w-2xl">
-          <p className="t-label t-upper mb-3 text-muted-foreground">
+          <p className="t-label t-upper mb-3 text-ink-2">
             Internal tools ·{" "}
             <span className="face-mono normal-case font-normal">update proof 0.6.22</span>
           </p>
-          <h1 className="t-display font-pe-display tracking-tight text-foreground">
+          <h1 className="t-display font-pe-display tracking-tight text-ink">
             Healthy people, healthy planet.
           </h1>
-          <p className="t-prose mt-4 text-muted-foreground">
+          <p className="t-prose mt-4 text-ink-2">
             A small workbench of internal tools — the Pea agent, Revit data, and the host pipeline.
             Pick one to get started.
           </p>
@@ -303,28 +309,24 @@ function App() {
             <div key={tool.to} className="flex flex-col gap-1.5">
               <Card
                 render={<Link to={tool.to} />}
-                className="group flex flex-1 flex-col gap-3 p-5 hover:[background-image:linear-gradient(var(--r-veil),var(--r-veil))]"
+                className="group flex flex-1 flex-col gap-3 p-5 hover:veil"
               >
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex size-9 items-center justify-center rounded-[var(--radius)] bg-[var(--r-recess)] text-foreground">
+                  <span className="inline-flex size-9 items-center justify-center rounded-sm bg-recess text-ink">
                     <tool.icon className="size-4.5" />
                   </span>
-                  <ArrowUpRight className="size-4 text-muted-foreground group-hover:text-[var(--r-nav)]" />
+                  <ArrowUpRight className="size-4 text-ink-2 group-hover:text-nav" />
                 </div>
                 <div>
-                  <p className="t-caption t-upper text-muted-foreground">{tool.label}</p>
-                  <h2 className="t-title mt-0.5 tracking-tight text-foreground">{tool.title}</h2>
-                  <p className="t-prose mt-1.5 text-muted-foreground">{tool.description}</p>
+                  <p className="t-caption t-upper text-ink-2">{tool.label}</p>
+                  <h2 className="t-title mt-0.5 tracking-tight text-ink">{tool.title}</h2>
+                  <p className="t-prose mt-1.5 text-ink-2">{tool.description}</p>
                 </div>
               </Card>
               {"satellites" in tool && (
-                <p className="t-caption face-mono flex flex-wrap gap-x-2 px-1 text-muted-foreground">
+                <p className="t-caption face-mono flex flex-wrap gap-x-2 px-1 text-ink-2">
                   {tool.satellites.map((satellite) => (
-                    <Link
-                      key={satellite.to}
-                      to={satellite.to}
-                      className="text-[var(--r-nav)] hover:underline"
-                    >
+                    <Link key={satellite.to} to={satellite.to} className="text-nav hover:underline">
                       /{satellite.label}
                     </Link>
                   ))}

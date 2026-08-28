@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 import type { ReactNode } from "react";
 
 import { FactChip } from "#/components/lang/chip";
@@ -39,7 +40,7 @@ function laneOf(value: unknown): Lane | null {
 }
 
 function MonoAside({ children }: { children: ReactNode }) {
-  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+  return <span className="face-mono t-caption text-ink-2">{children}</span>;
 }
 
 /* ── host.status — host identity card ─────────────────────────────────────── */
@@ -85,7 +86,7 @@ function HostStatusView({ data }: OpViewProps) {
       />
       {!connected && disconnectReason && (
         <Provenance>
-          <span style={{ color: "var(--r-caution)" }}>disconnect: {disconnectReason}</span>
+          <span style={{ color: token("caution") }}>disconnect: {disconnectReason}</span>
         </Provenance>
       )}
       {agentRuntime && agentRuntime.available !== true && (
@@ -120,17 +121,17 @@ function SessionRow({
   openDocumentCount: number | undefined;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-2 border-b border-[var(--r-line)] px-2 py-1.5">
+    <div className="flex min-w-0 items-center gap-2 border-b border-line px-2 py-1.5">
       <LiveDot tone={connected ? "implicit" : "dangling"} lane={lane} />
       {lane ? <LaneBadge lane={lane} /> : null}
       <span className="t-value min-w-0 truncate font-medium" title={title}>
-        {title ?? <span className="italic text-[var(--r-ink-mute)]">no active document</span>}
+        {title ?? <span className="italic text-ink-mute">no active document</span>}
       </span>
-      <span className="face-mono t-caption ml-auto shrink-0 text-[var(--r-ink-2)]">
+      <span className="face-mono t-caption ml-auto shrink-0 text-ink-2">
         {revitVersion ? `revit ${revitVersion}` : "revit ∅"} · {openDocumentCount ?? 0} doc
         {openDocumentCount === 1 ? "" : "s"}
       </span>
-      <span className="face-mono t-caption shrink-0 text-[var(--r-ink-2)]" title={sessionId}>
+      <span className="face-mono t-caption shrink-0 text-ink-2" title={sessionId}>
         pid {processId ?? "∅"} · {sessionId ? `${sessionId.slice(0, 8)}…` : "∅"}
       </span>
     </div>
@@ -138,7 +139,7 @@ function SessionRow({
 }
 
 function sessionListFrame(children: ReactNode) {
-  return <div className="rounded-[var(--radius)] border border-[var(--r-line)]">{children}</div>;
+  return <div className="rounded-sm border border-line">{children}</div>;
 }
 
 function BridgeSessionsListView({ data }: OpViewProps) {
@@ -212,8 +213,8 @@ const LOG_TIMESTAMP = /^(\[?\d{4}-\d{2}-\d{2}[T ][\d:.,]+(?:Z|[+-]\d{2}:?\d{2})?
 /** error/warn lines go caution — a log line is never the model disagreeing, so no
  * alarm is spent; the word in the line carries the rank. */
 function logLineColor(line: string): string | undefined {
-  if (/\b(error|err|fatal)\b/i.test(line)) return "var(--r-caution)";
-  if (/\bwarn(ing)?\b/i.test(line)) return "var(--r-caution)";
+  if (/\b(error|err|fatal)\b/i.test(line)) return token("caution");
+  if (/\bwarn(ing)?\b/i.test(line)) return token("caution");
   return undefined;
 }
 
@@ -223,7 +224,7 @@ function LogLine({ line }: { line: string }) {
   const rest = timestamp ? line.slice(timestamp.length) : line;
   return (
     <div className="face-mono t-label whitespace-pre leading-[1.5]">
-      {timestamp && <span className="text-[var(--r-ink-2)]">{timestamp}</span>}
+      {timestamp && <span className="text-ink-2">{timestamp}</span>}
       <span style={{ color: logLineColor(rest) }}>{rest}</span>
     </div>
   );
@@ -262,7 +263,7 @@ function LogsTailView({ data }: OpViewProps) {
             ) : (
               <div
                 ref={scrollToBottom}
-                className="max-h-[18rem] overflow-auto rounded-[var(--radius)] border border-[var(--r-line)] px-2 py-1"
+                className="max-h-[18rem] overflow-auto rounded-sm border border-line px-2 py-1"
               >
                 {lines.map((line, index) => (
                   <LogLine key={index} line={line} />
@@ -299,7 +300,7 @@ function SettingsWorkspacesView({ data }: OpViewProps) {
           return (
             <div
               key={asString(workspace.workspaceKey) ?? String(i)}
-              className="rounded-[var(--radius)] border border-[var(--r-line)] px-3 py-2"
+              className="rounded-sm border border-line px-3 py-2"
             >
               <div className="flex items-baseline gap-2">
                 <span className="t-value font-medium">
@@ -318,7 +319,7 @@ function SettingsWorkspacesView({ data }: OpViewProps) {
                 const roots = asRecords(module.roots);
                 const defaultRootKey = asString(module.defaultRootKey);
                 return (
-                  <div key={j} className="face-mono t-caption mt-1 text-[var(--r-ink-2)]">
+                  <div key={j} className="face-mono t-caption mt-1 text-ink-2">
                     {asString(module.moduleKey)}:{" "}
                     {roots
                       .map((root) => {

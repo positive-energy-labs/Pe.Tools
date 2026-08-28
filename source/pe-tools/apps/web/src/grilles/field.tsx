@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 import { useEffect, useState } from "react";
 
 import { frac } from "./math";
@@ -40,7 +41,7 @@ export function InchField({
   return (
     <input
       className={`face-mono w-16 rounded border bg-transparent px-1 text-right text-[12px] ${className}`}
-      style={{ borderColor: "var(--r-line)", ...style }}
+      style={{ borderColor: token("line"), ...style }}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}

@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 /**
  * /family — the doc sidebar's contents: the spec in two modes, and pea's proposal cards.
  *
@@ -44,20 +45,20 @@ export function SpecText({
                 ? "This is the block the focused parameter is grounded in. That correspondence is the whole claim — if the text does not say what the cell says, the cell is wrong."
                 : `Page ${block.page} of ${spec.fileName}, as OCR read it. Hover a grounded row in the table to light the block it cites.`
             }
-            /* Lighting is a FILL and never a hue (SURFACE-PHILOSOPHY §5): `--r-select` is
+            /* Lighting is a FILL and never a hue (SURFACE-PHILOSOPHY §5): `--pe-select` is
                literally the ground ladder's selection rung, so the law is structural here. */
             className={cn(
               "rounded-[2px] border p-2",
-              lit ? "border-[var(--r-line-2)] bg-[var(--r-select)]" : "border-[var(--r-line)]",
+              lit ? "border-line-2 bg-select" : "border-line",
             )}
           >
-            <div className="face-mono flex items-baseline justify-between t-caption text-[var(--r-ink-2)]">
+            <div className="face-mono flex items-baseline justify-between t-caption text-ink-2">
               <span>
                 {block.id} · p{block.page}
               </span>
               <span>{block.kind}</span>
             </div>
-            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption leading-snug text-[var(--r-ink)]">
+            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption leading-snug text-ink">
               {block.md}
             </pre>
           </div>
@@ -129,10 +130,10 @@ export function SpecSheet({
           const blocks = spec.blocks.filter((block) => block.page === page);
           return (
             <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
-              <div className="face-mono mb-0.5 t-caption text-[var(--r-ink-2)]">page {page}</div>
+              <div className="face-mono mb-0.5 t-caption text-ink-2">page {page}</div>
               <svg
                 viewBox="0 0 100 130"
-                className="block w-full border border-[var(--r-line-2)] bg-[var(--r-page)]"
+                className="block w-full border border-line-2 bg-page"
                 role="img"
                 aria-label={`stand-in page ${page}`}
               >
@@ -150,10 +151,10 @@ export function SpecSheet({
                         y={y}
                         width={width}
                         height={height}
-                        fill={lit ? "var(--r-select)" : "transparent"}
+                        fill={lit ? token("select") : "transparent"}
                         /* A neutral mark, not a hue: a fill cannot separate at this size, so
                            the highest-contrast neutral is what lights it (takeoffs #8). */
-                        stroke={lit ? "var(--r-ink)" : "var(--r-line-2)"}
+                        stroke={lit ? token("ink") : token("line-2")}
                         strokeWidth={lit ? 1 : 0.4}
                       >
                         <title>
@@ -167,7 +168,7 @@ export function SpecSheet({
                           x={x}
                           y={y - 1.5}
                           fontSize={4}
-                          fill="var(--r-ink-2)"
+                          fill={token("ink-2")}
                           style={{ fontFamily: "ui-monospace, monospace" }}
                         >
                           {block.id}
@@ -218,20 +219,20 @@ export function ProposalCard({
       accepted: {
         mark: "✓",
         word: "accepted",
-        colour: "var(--r-done)",
+        colour: token("done"),
         note: `Accepted — the table now reads ${proposal.proposed} for ${target}. The proposal itself was never persisted; only the value it argued for is in the document, and its citation is still live.`,
       },
       denied: {
         mark: "—",
         word: "denied",
-        colour: "var(--r-ink-mute)",
+        colour: token("ink-mute"),
         note: `Denied — the profile keeps its own value for ${target}. Nothing was written, and the citation is unaffected: grounding is a fact about the spec, not about pea.`,
       },
       superseded: {
         mark: "—",
         word: "superseded by your edit",
-        colour: "var(--r-ink-mute)",
-        // MUTED, never `--r-done`: nothing of pea's was adopted. Accepted and superseded look
+        colour: token("ink-mute"),
+        // MUTED, never `--pe-done`: nothing of pea's was adopted. Accepted and superseded look
         // different because they ARE different — one is agreement, the other is being overtaken.
         // The CELL shows nothing at all; the grammar has no `severed` stage.
         note: `Superseded — you typed your own value into ${target}, so pea's ${proposal.proposed} has nothing left to argue for. There was no accept and no deny; the cell simply moved on. The grounding citation is untouched, because where a number came from is a separate fact from what pea read.`,
@@ -259,25 +260,25 @@ export function ProposalCard({
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       className="mb-1.5 py-1 pl-2"
-      /* Pea's identity, never the commit colour: the card edge is a MARK (`--r-pea`, the display
+      /* Pea's identity, never the commit colour: the card edge is a MARK (`--pe-pea`, the display
          rung) and the focus wash is mixed from pea's ink. */
       style={{
-        borderLeft: "1.5px solid var(--r-pea)",
+        borderLeft: `1.5px solid ${token("pea")}`,
         background: focused
-          ? "color-mix(in srgb, var(--r-pea-ink) 12%, transparent)"
+          ? `color-mix(in srgb, ${token("pea-ink")} 12%, transparent)`
           : "transparent",
         transition: "background 0.25s",
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
-      <div className="face-mono t-caption text-[var(--r-ink-2)]">{target}</div>
-      <div className="face-mono t-label text-[var(--r-pea-ink)]">
+      <div className="face-mono t-caption text-ink-2">{target}</div>
+      <div className="face-mono t-label text-pea-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 t-caption leading-snug text-[var(--r-ink)]">{proposal.note}</p>
+      <p className="mt-0.5 t-caption leading-snug text-ink">{proposal.note}</p>
       {blockMd && (
         <p
-          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-[var(--r-ink-2)]"
+          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption leading-snug text-ink-2"
           title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}

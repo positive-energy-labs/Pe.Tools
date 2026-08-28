@@ -1,3 +1,4 @@
+import { token } from "#/lib/token";
 import type { ReactNode } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { CoverageBar, type CoverageSegment } from "#/components/lang/coverage-bar";
@@ -54,7 +55,7 @@ function obs(observedAtUtc: string | undefined, fallbackMs: number): string {
 }
 
 function MonoAside({ children }: { children: ReactNode }) {
-  return <span className="face-mono t-caption text-[var(--r-ink-2)]">{children}</span>;
+  return <span className="face-mono t-caption text-ink-2">{children}</span>;
 }
 
 /** Stat band cell: mono value over a quiet sans label. `warn` is the only state a
@@ -72,13 +73,13 @@ function Stat({
 }) {
   return (
     <div
-      className="min-w-[64px] border-r border-[var(--r-line)] px-3 py-1.5"
+      className="min-w-[64px] border-r border-line px-3 py-1.5"
       title={warn ? warnTitle : undefined}
     >
-      <div className="face-mono t-value" style={warn ? { color: "var(--r-caution)" } : undefined}>
+      <div className="face-mono t-value" style={warn ? { color: token("caution") } : undefined}>
         {value ?? "∅"}
       </div>
-      <div className="t-caption text-[var(--r-ink-2)]">{label}</div>
+      <div className="t-caption text-ink-2">{label}</div>
     </div>
   );
 }
@@ -134,13 +135,13 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
   return (
     <div className="flex flex-col gap-5">
       {/* document hero: identity + discipline + levels, first 200px answers the question */}
-      <div className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)] px-3 py-2">
+      <div className="min-w-0 rounded-sm border border-line-2 px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-2">
           <span className="t-value min-w-0 truncate font-medium" title={path || undefined}>
             {doc ? text(doc.title) : "no active document"}
           </span>
           {doc && (
-            <span className="face-mono t-caption text-[var(--r-ink-2)]">
+            <span className="face-mono t-caption text-ink-2">
               {doc.isFamilyDocument === true
                 ? "family"
                 : isTemplateFile
@@ -183,7 +184,7 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
         </div>
         {levels.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <span className="t-label text-[var(--r-ink-2)]">{levels.length} levels</span>
+            <span className="t-label text-ink-2">{levels.length} levels</span>
             {levels.map((level, i) => (
               <MonoAside key={i}>
                 {text(level.name)} @ {(asNumber(level.elevationFeet) ?? 0).toFixed(1)}ft
@@ -194,7 +195,7 @@ function ModelGlanceView({ results, observedAtMs }: SyntheticViewProps) {
       </div>
 
       {/* stat band: true project totals + family totals */}
-      <div className="flex flex-wrap rounded-[var(--radius)] border border-[var(--r-line)]">
+      <div className="flex flex-wrap rounded-sm border border-line">
         <Stat label="views" value={text(totals.viewCount)} />
         <Stat label="sheets" value={text(totals.sheetCount)} />
         <Stat label="schedules" value={text(totals.scheduleCount)} />
@@ -336,7 +337,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           no active view reported
         </EmptyState>
       ) : (
-        <div className="min-w-0 rounded-[var(--radius)] border border-[var(--r-line-2)] px-3 py-2">
+        <div className="min-w-0 rounded-sm border border-line-2 px-3 py-2">
           <div className="flex min-w-0 flex-wrap items-baseline gap-2">
             <span className="t-value min-w-0 truncate font-medium" title={text(activeView.title)}>
               {text(activeView.title)}
@@ -358,7 +359,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
                 key={i}
                 className="face-mono t-caption"
                 style={{
-                  color: p.isActiveSheet === true ? "var(--r-ink)" : "var(--r-ink-2)",
+                  color: p.isActiveSheet === true ? token("ink") : token("ink-2"),
                 }}
                 title={p.isActiveSheet === true ? "this is the active sheet" : undefined}
               >
@@ -422,7 +423,7 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           ) : (
             <ul className="flex flex-col gap-1">
               {confidenceWarnings.map((warning, i) => (
-                <li key={i} className="face-mono t-caption" style={{ color: "var(--r-caution)" }}>
+                <li key={i} className="face-mono t-caption" style={{ color: token("caution") }}>
                   {warning}
                 </li>
               ))}
@@ -432,19 +433,12 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
             /* plain content, not enclosed (border budget) — the caution ink and the
                upper head carry the weight the old tinted box was buying. */
             <div>
-              <div
-                className="face-mono t-caption t-upper mb-1"
-                style={{ color: "var(--r-caution)" }}
-              >
+              <div className="face-mono t-caption t-upper mb-1" style={{ color: token("caution") }}>
                 api limitations (verbatim)
               </div>
               <ul className="flex flex-col gap-1">
                 {apiLimitations.map((limitation, i) => (
-                  <li
-                    key={i}
-                    className="t-label leading-snug"
-                    style={{ color: "var(--r-caution)" }}
-                  >
+                  <li key={i} className="t-label leading-snug" style={{ color: token("caution") }}>
                     {limitation}
                   </li>
                 ))}
@@ -453,12 +447,12 @@ function AttentionGlanceView({ results, observedAtMs }: SyntheticViewProps) {
           )}
           {notInspected.length > 0 && (
             <details>
-              <summary className="face-mono t-caption cursor-pointer select-none text-[var(--r-ink-2)]">
+              <summary className="face-mono t-caption cursor-pointer select-none text-ink-2">
                 {notInspected.length} things this packet did NOT inspect
               </summary>
               <ul className="mt-1 flex flex-col gap-1 pl-3">
                 {notInspected.map((item, i) => (
-                  <li key={i} className="t-label leading-snug text-[var(--r-ink-2)]">
+                  <li key={i} className="t-label leading-snug text-ink-2">
                     {item}
                   </li>
                 ))}

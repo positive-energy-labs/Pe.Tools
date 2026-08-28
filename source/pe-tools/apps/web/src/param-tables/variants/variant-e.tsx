@@ -1,3 +1,5 @@
+import { token } from "#/lib/token";
+
 /**
  * VARIANT E — "there is no new page".
  *
@@ -48,7 +50,7 @@ import {
   PARAM_META,
   type FcRow,
   type ParamMeta,
-} from "#/param-tables/proto/fixture";
+} from "#/param-tables/variants/fixture";
 
 // ---------------------------------------------------------------------------
 // Substrate shape — one state model; every lens is a lookup over it.
@@ -171,9 +173,9 @@ interface TypeWrite {
 
 const COLS = 10; // grid column count, for group-header colSpan
 
-const muted: React.CSSProperties = { color: "var(--r-ink-mute)" };
-const secondary: React.CSSProperties = { color: "var(--r-ink-2)" };
-const hairline = "1px solid var(--r-line)";
+const muted: React.CSSProperties = { color: token("ink-mute") };
+const secondary: React.CSSProperties = { color: token("ink-2") };
+const hairline = `1px solid ${token("line")}`;
 
 export function VariantE() {
   const [lens, setLens] = useState<Lens>("grid");
@@ -345,10 +347,10 @@ export function VariantE() {
         className="px-2 py-1 text-left align-top font-normal"
         title={`linked column — every value flows from the authored fact "${fact.label}"; edit it in the design-facts lane`}
       >
-        <span className="block text-[11px]" style={secondary}>
+        <span className="block t-caption" style={secondary}>
           {fact.label} ⟵ authored
         </span>
-        <span className="block font-mono text-[10px]" style={muted}>
+        <span className="block font-mono t-caption" style={muted}>
           {link.param.name}
         </span>
       </th>
@@ -357,15 +359,15 @@ export function VariantE() {
 
   const plainHead = (label: string, sub?: string) => (
     <th className="px-2 py-1 text-left align-top font-normal">
-      <span className="block text-[11px]" style={secondary}>
+      <span className="block t-caption" style={secondary}>
         {label}
       </span>
       {sub != null ? (
-        <span className="block font-mono text-[10px]" style={muted}>
+        <span className="block font-mono t-caption" style={muted}>
           {sub}
         </span>
       ) : (
-        <span className="block text-[10px]">&nbsp;</span>
+        <span className="block t-caption">&nbsp;</span>
       )}
     </th>
   );
@@ -373,7 +375,7 @@ export function VariantE() {
   const gridLens = (
     <table
       className="w-full border-collapse text-xs"
-      style={{ ["--r-on" as string]: "var(--r-artifact)" }}
+      style={{ ["--pe-on" as string]: token("artifact") }}
     >
       <thead>
         <tr
@@ -381,8 +383,8 @@ export function VariantE() {
             position: "sticky",
             top: 0,
             zIndex: 2,
-            background: "var(--r-artifact)",
-            boxShadow: `inset 0 -1px var(--r-line)`,
+            background: token("artifact"),
+            boxShadow: `inset 0 -1px ${token("line")}`,
           }}
         >
           {plainHead("Tag")}
@@ -405,17 +407,15 @@ export function VariantE() {
             <Fragment key={group.name}>
               {/* LANG GAP (4): no primitive for a type group-header row — this hand-rolled band
                   is what makes "one type write = N rows stage together" legible. */}
-              <tr
-                style={{ background: "var(--r-recess)", ["--r-on" as string]: "var(--r-recess)" }}
-              >
+              <tr style={{ background: token("recess"), ["--pe-on" as string]: token("recess") }}>
                 <td colSpan={COLS} className="px-2 py-1" style={{ borderTop: hairline }}>
-                  <span className="font-mono text-[11px]">{group.name}</span>
-                  <span className="ml-2 text-[11px]" style={muted}>
+                  <span className="font-mono t-caption">{group.name}</span>
+                  <span className="ml-2 t-caption" style={muted}>
                     {group.rows.length} row{group.rows.length === 1 ? "" : "s"} · perf params at
                     type scope
                   </span>
                   {groupWrites.length > 0 ? (
-                    <span className="ml-2 text-[11px]" style={{ color: "var(--r-caution)" }}>
+                    <span className="ml-2 t-caption" style={{ color: token("caution") }}>
                       one type write —{" "}
                       {groupWrites
                         .map((w) => w.link.param.name.replace("PE_M_PerfHeat_Fluid", ""))
@@ -424,7 +424,7 @@ export function VariantE() {
                     </span>
                   ) : null}
                   {groupRefusals.length > 0 ? (
-                    <span className="ml-2 text-[11px]" style={{ color: "var(--r-alarm)" }}>
+                    <span className="ml-2 t-caption" style={{ color: token("alarm") }}>
                       {groupRefusals
                         .map((w) => w.link.param.name.replace("PE_M_PerfHeat_Fluid", ""))
                         .join(" + ")}{" "}
@@ -440,7 +440,7 @@ export function VariantE() {
                   <td className="px-2 py-0.5" style={secondary}>
                     {row.location}
                   </td>
-                  <td className="px-2 py-0.5 font-mono text-[11px]" style={secondary}>
+                  <td className="px-2 py-0.5 font-mono t-caption" style={secondary}>
                     {row.model}
                   </td>
                   <td
@@ -470,7 +470,7 @@ export function VariantE() {
   // the fixture; the heating Load cell is INBOUND — recomputed from the grid's rows, not retyped.
   const fomLens = (
     <div className="p-6">
-      <div className="mb-2 text-[11px]" style={secondary}>
+      <div className="mb-2 t-caption" style={secondary}>
         <span className="font-mono">SXL - FOM HWCH Plant</span> → sheet exhibit · a saved projection
         of the same {FC_UNITS.length}-row substrate — switching lens re-projects, nothing is retyped
       </div>
@@ -503,7 +503,7 @@ export function VariantE() {
             {FOM_HWCH_PLANT.headRow.map((head, i) => (
               <td
                 key={i}
-                className="px-3 py-1 text-center text-[11px]"
+                className="px-3 py-1 text-center t-caption"
                 style={{ border: hairline, ...secondary }}
               >
                 {head}
@@ -545,7 +545,7 @@ export function VariantE() {
           <tr>
             <td
               colSpan={11}
-              className="px-3 py-1 text-left italic text-[11px]"
+              className="px-3 py-1 text-left italic t-caption"
               style={{ border: hairline, ...muted }}
             >
               {FOM_HWCH_PLANT.footnote}
@@ -553,7 +553,7 @@ export function VariantE() {
           </tr>
         </tbody>
       </table>
-      <div className="mt-2 text-[11px]" style={muted}>
+      <div className="mt-2 t-caption" style={muted}>
         heating Load reads live from the grid's rows — the printed exhibit disagreed, and the
         squiggle says so
       </div>
@@ -562,7 +562,7 @@ export function VariantE() {
 
   const bodLens = (
     <div className="p-6">
-      <div className="mb-2 text-[11px]" style={secondary}>
+      <div className="mb-2 t-caption" style={secondary}>
         <span className="font-mono">SXL - M_BOD_MainHouse</span> (sheet M001) · label × value
         projection of the same substrate — authored facts render through the same editor as the lane
       </div>
@@ -582,7 +582,7 @@ export function VariantE() {
                   </span>
                 )}
               </td>
-              <td className="px-2 py-1 text-[11px]" style={muted}>
+              <td className="px-2 py-1 t-caption" style={muted}>
                 {entry.unit ?? ""}
                 {entry.key === "odt-winter" ? " · authored design fact" : ""}
               </td>
@@ -702,12 +702,12 @@ export function VariantE() {
             </span>
           }
           foot={
-            <span className="flex w-full items-center gap-3 text-[11px]" style={secondary}>
+            <span className="flex w-full items-center gap-3 t-caption" style={secondary}>
               <span>
                 {FC_UNITS.length} rows · {GROUPS.length} type groups
               </span>
               {applicable.length > 0 ? (
-                <span style={{ color: "var(--r-caution)" }}>
+                <span style={{ color: token("caution") }}>
                   {applicable.length} type writes stage {stagedRows} rows
                   {refusals.length > 0 ? ` · ${refusals.length} will refuse` : ""}
                 </span>
@@ -724,22 +724,22 @@ export function VariantE() {
               machine-operated table — has no primitive; hand-rolled, hairline-separated,
               deliberately on the frame's own ground (border budget: no second enclosure). */}
           <div className="flex items-start gap-6 px-3 py-2" style={{ borderBottom: hairline }}>
-            <span className="pt-0.5 text-[11px]" style={secondary}>
+            <span className="pt-0.5 t-caption" style={secondary}>
               design facts
             </span>
             {(Object.keys(facts) as FactKey[]).map((key) => {
               const fact = facts[key];
               return (
                 <span key={key} className="flex items-baseline gap-1.5">
-                  <span className="text-[11px]" style={secondary}>
+                  <span className="t-caption" style={secondary}>
                     {fact.label}
                   </span>
                   <span className="w-14 font-mono text-xs">{factCell(key)}</span>
-                  <span className="text-[10px]" style={muted}>
+                  <span className="t-caption" style={muted}>
                     {fact.unit}
                   </span>
                   {fact.target != null ? (
-                    <span className="font-mono text-[10px]" style={muted}>
+                    <span className="font-mono t-caption" style={muted}>
                       → {fact.target}
                     </span>
                   ) : null}

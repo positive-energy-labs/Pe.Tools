@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
-import { VariantSwitcher } from "#/param-tables/proto/switcher";
-import { VariantA } from "#/param-tables/proto/variant-a";
-import { VariantB } from "#/param-tables/proto/variant-b";
-import { VariantC } from "#/param-tables/proto/variant-c";
-import { VariantD } from "#/param-tables/proto/variant-d";
-import { VariantE } from "#/param-tables/proto/variant-e";
+import { VariantSwitcher } from "#/param-tables/variants/switcher";
+import { VariantA } from "#/param-tables/variants/variant-a";
+import { VariantB } from "#/param-tables/variants/variant-b";
+import { VariantC } from "#/param-tables/variants/variant-c";
+import { VariantD } from "#/param-tables/variants/variant-d";
+import { VariantE } from "#/param-tables/variants/variant-e";
 
 /**
  * PROTOTYPE ROUTE — find-the-product round 1 for "param tables":

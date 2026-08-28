@@ -166,7 +166,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const runner = useRunner(product, bindings, busy?.id ?? null);
 
   return (
-    <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--r-page)]">
+    <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-page">
       <TargetingHead
         product={product}
         b={bindings}
@@ -211,7 +211,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
               </ArtifactFrame>
               {proposalRows.length ? (
                 <ArtifactFrame>
-                  <div className="divide-y divide-[var(--r-line)]">
+                  <div className="divide-y divide-line">
                     {proposalRows.map((row) => (
                       <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
                     ))}
@@ -221,7 +221,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
             </>
           ) : snapshot && rows.length ? (
             <ArtifactFrame>
-              <div className="divide-y divide-[var(--r-line)]">
+              <div className="divide-y divide-line">
                 {rows.map((row) => (
                   <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
                 ))}
@@ -286,7 +286,7 @@ function FieldRow({
   return (
     <div className="flex min-h-12 items-center gap-3 px-3 py-2">
       <div className="min-w-0 flex-1">
-        <div className="face-mono t-label truncate text-[var(--r-ink-2)]">{row.path}</div>
+        <div className="face-mono t-label truncate text-ink-2">{row.path}</div>
         <StateCell
           scale="row"
           className="face-mono t-value"
