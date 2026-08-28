@@ -67,21 +67,23 @@ const SKIP_FILES = new Set(["routeTree.gen.ts"]);
 
 type Entry = { rel: string; text: string };
 
-const collect = (dir: string, relBase: string, out: Entry[]): Entry[] => {
+const collect = (dir: string, relBase: string, out: Entry[], match: RegExp): Entry[] => {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const rel = relBase === "" ? e.name : `${relBase}/${e.name}`;
     if (e.isDirectory()) {
-      if (!SKIP_DIRS.has(e.name)) collect(join(dir, e.name), rel, out);
+      if (!SKIP_DIRS.has(e.name)) collect(join(dir, e.name), rel, out, match);
       continue;
     }
     if (SKIP_FILES.has(e.name)) continue;
-    if (!/\.(?:tsx?|css)$/.test(e.name)) continue;
+    if (!match.test(e.name)) continue;
     out.push({ rel, text: readFileSync(join(dir, e.name), "utf8") });
   }
   return out;
 };
 
-const FILES: Entry[] = collect(ROOT, "", []);
+const FILES: Entry[] = collect(ROOT, "", [], /\.(?:tsx?|css)$/);
+/** Data files are scanned only for the dash-authority rule — see the JSON gate below. */
+const JSON_FILES: Entry[] = collect(ROOT, "", [], /\.json$/);
 
 describe("design guard â€” current token authority", () => {
   it("has no retired --r-* tokens", () => {
@@ -200,6 +202,16 @@ describe("design guard — carried debt ratchets", () => {
     const re = /text-\[[0-9]px\]/g;
     const offences = scan(FILES, re);
     ratchet("sub10", offences);
+  });
+
+  it("no raw numeric dash pattern in maintained web JSON (roles only)", () => {
+    // A data file may NAME a dash role; base.css is the only place that says what it looks like.
+    // `runs/visual-law.json` carried `dash: [6, 4]` while the web surface had moved to
+    // `--dash-reference`, so its Python co-consumer drew a different boundary than /runs did.
+    // The law names `dashRole` now, and both surfaces resolve the number from base.css.
+    const re = /"(?:dash|dasharray|strokeDasharray|dashPattern)"\s*:\s*(?:\[[^\]]*\]|"[^"]*")/g;
+    const offences = scan(JSON_FILES, re);
+    expect(offences, report(offences)).toEqual([]);
   });
 
   it("no inline background shorthand in TypeScript/TSX", () => {

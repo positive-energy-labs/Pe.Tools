@@ -21,12 +21,35 @@ import overlay
 LAW_PATH = (Path(__file__).resolve().parents[2]
             / "source/pe-tools/apps/web/src/runs/visual-law.json")
 
+# base.css is the ONLY numeric dash authority (ruling 2026-08-28). The visual law names a
+# semantic role; both this renderer and the /runs TypeScript surface resolve the pattern from
+# here, so the two can no longer drift the way they did before 2026-08-23.
+BASE_CSS_PATH = (Path(__file__).resolve().parents[2]
+                 / "source/pe-tools/apps/web/src/base.css")
+
 
 def load_visual_law(path=LAW_PATH):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 LAW = load_visual_law()
+
+
+def dash_pattern(role, path=BASE_CSS_PATH):
+    """Resolve a semantic dash role to its numeric pattern from base.css. Fail fast: a missing
+    or unparseable role is a broken coupling, not a reason to draw a solid line."""
+    text = Path(path).read_text(encoding="utf-8")
+    match = re.search(rf"^\s*--dash-{re.escape(role)}\s*:\s*([^;]+);", text, re.MULTILINE)
+    if not match:
+        raise SystemExit(f"visual-law dashRole '{role}' has no --dash-{role} in {path}")
+    try:
+        pattern = tuple(float(value) for value in match.group(1).split())
+    except ValueError as error:
+        raise SystemExit(
+            f"--dash-{role} in {path} is not a numeric pattern: {match.group(1)!r}") from error
+    if not pattern or any(value < 0 for value in pattern):
+        raise SystemExit(f"--dash-{role} in {path} is not a usable dash pattern: {pattern}")
+    return pattern
 
 
 def rgb(value):
@@ -46,7 +69,7 @@ VOID = LAW["void"]
 EXCLUDED = LAW["excluded"]
 ZONE = rgba(LAW["zone"]["stroke"]["rgba"])
 ZONE_WIDTH = LAW["zone"]["stroke"]["widthPx"]
-ZONE_DASH = tuple(LAW["zone"]["stroke"]["dash"])
+ZONE_DASH = dash_pattern(LAW["zone"]["stroke"]["dashRole"])
 CANDIDATE_ALPHA = LAW["candidate"]["fill"]["alpha"]
 CANDIDATE_HUE = LAW["candidate"]["fill"]["hue"]
 CANDIDATE_SATURATION = LAW["candidate"]["fill"]["saturationPct"] / 100
@@ -1036,11 +1059,15 @@ def _adjacent_colors(candidates, pixel_feet):
 
 
 def _draw_dashed(draw, points, fill, width, dash):
+    """SVG dasharray semantics: the pattern alternates on/off and repeats, so an N-length role
+    (`reference` is on-off-on-off) draws the same here as it does in the browser. An odd-length
+    pattern doubles, exactly as SVG specifies."""
     points = [*points, points[0]]
     if dash is None:
         draw.line(points, fill=fill, width=width, joint="curve")
         return
-    on, off = dash
+    pattern = tuple(dash) if len(dash) % 2 == 0 else tuple(dash) * 2
+    index, remaining, drawing = 0, pattern[0], True
     for start, end in zip(points, points[1:]):
         length = math.dist(start, end)
         if not length:
@@ -1048,11 +1075,16 @@ def _draw_dashed(draw, points, fill, width, dash):
         dx, dy = (end[0] - start[0]) / length, (end[1] - start[1]) / length
         distance = 0.0
         while distance < length:
-            stop = min(distance + on, length)
-            draw.line((start[0] + dx * distance, start[1] + dy * distance,
-                       start[0] + dx * stop, start[1] + dy * stop),
-                      fill=fill, width=width)
-            distance += on + off
+            step = min(remaining, length - distance)
+            if drawing and step > 0:
+                draw.line((start[0] + dx * distance, start[1] + dy * distance,
+                           start[0] + dx * (distance + step), start[1] + dy * (distance + step)),
+                          fill=fill, width=width)
+            distance += step
+            remaining -= step
+            if remaining <= 1e-9:
+                index = (index + 1) % len(pattern)
+                remaining, drawing = pattern[index], not drawing
 
 
 def _atlas_label(draw, point, text, text_font):
@@ -1178,7 +1210,7 @@ def render_level_verdict(root, level, zones, output=None, law=None, target_size=
                 if len(loop) >= 2:
                     _draw_dashed(draw, [point(value) for value in loop],
                                  tuple(stroke["rgba"]), stroke["widthPx"],
-                                 tuple(stroke["dash"]))
+                                 dash_pattern(stroke["dashRole"]))
 
     def label_layer():
         draw, label_font = ImageDraw.Draw(image), font(law["label"]["sizePx"])

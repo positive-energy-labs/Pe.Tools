@@ -100,8 +100,8 @@
     }
   },
   "zone": {
-    "$comment": "kaitpw ruling 2026-08-23: zone authority stays visible in the verdict render, but hairline. It is an input, not a result, and it may never be the heaviest stroke in the image.",
-    "stroke": { "widthPx": 1, "dash": [6, 4], "rgba": [112, 44, 138, 230] }
+    "$comment": "kaitpw ruling 2026-08-23: zone authority stays visible in the verdict render, but hairline. It is an input, not a result, and it may never be the heaviest stroke in the image. Ruling 2026-08-28: this law owns the semantic dashRole; base.css owns the only numeric pattern. Both consumers resolve --dash-<role> there, so a raw dash array may never come back here.",
+    "stroke": { "widthPx": 1, "dashRole": "reference", "rgba": [112, 44, 138, 230] }
   },
   "invented": {
     "$comment": "Sealers manufacture obstruction. Forensic render only, translucent warm tint, never dithered.",
