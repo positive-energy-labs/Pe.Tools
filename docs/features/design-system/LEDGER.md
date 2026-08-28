@@ -177,8 +177,8 @@ here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`.
 
 ## Owed
 
-- ADR 0010 codemods, in order, before `goal/tailwind-foundation` merges: (1) `--r-*`→`--pe-*` across CSS/TSX/guard; (2) delete the 19 shadcn aliases in `base.css` and rewrite the 93 `bg-background`/`bg-muted`/… uses; (3) rewrite 717 bare `var(--r-*)` TSX sites to utilities (JS colour maps in `master-table/cells.tsx` become class maps); (4) move `dl-*` composition rules from `lang.css` to `@utility`; (5) `git mv components/mechanism components/mechanism`; (6) restore the band-math header from `design-lang.css@1455d25` into `base.css` (rename to `base.css`); (7) add `z-raised/z-sticky/z-popup/z-modal` and one `--pe-motion` duration, replace `z-1…z-50` and `zIndex: 9999`; (8) guard: app-wide arbitrary ratchet, hard zeros for `var(--pe-`, `shadow-*`, role utilities in `routes/**`, drop the 6-digit floor on the hex rule (`workbench/lens.css:115` `#999`).
-- The agent cheat sheet (one screen: roles, tiers, z, laws, link line) lives beside `base.css`; `triangulate`/`execute` isolated-HTML variants link `base.css` instead of inventing a palette.
+- ADR 0010 residue after the 2026-08-27 crusade (`a0472a0..64e184a`, evidence `.artifacts/runs/adr0010-crusade-20260827/`): `routeRoleColor` ratchet 333 → 0 (a route file names no role; each route pass lowers it); `appArbitrary` 207 → 0; `langCssLines` 868 may only fall; `lang.css` is component CSS and splits per component only when a component's rules are touched. Proto trees keep ~190 bare `var(--pe-*)` by ruling (internal-only, deleted not maintained).
+- Merge `goal/tailwind-foundation` into `main` (main is 159 commits ahead at `f929149`): rerun W5's `compare.mjs` on `/family`, `/takeoffs`, `/chat` after the merge; those three pairs were UNPROVEN pre-merge because the DOM differed by host state, not style.
 
 ### Cross-route language gaps (the single owners)
 
