@@ -2,6 +2,7 @@
   "//": "Ratchet baselines for design-guard.test.ts — counts may only FALL. Lower a number in the same commit as the win; never raise one. Seeded 2026-08-16 at sweep close.",
   "//merge-debt": "2026-08-19 PAID: textPx 49→41 and mechanismButtonImports 14→12, back to the pre-merge numbers. lib/schema-to-field-render — revived from pre-discipline code at the settings-branch merge — is on the tier ladder (all 8 text-[Npx] gone; one was a redundant no-op and was deleted rather than translated) and on lang Verb (6 controls, each carrying the required reason). The merge-era raise is settled; no other raise is ever legitimate.",
   "appArbitrary": 207,
+  "langCssLines": 868,
   "routeRoleColor": 333,
   "textPx": 37,
   "rawButton": 56,

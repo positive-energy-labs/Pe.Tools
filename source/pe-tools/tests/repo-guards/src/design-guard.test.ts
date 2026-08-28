@@ -473,6 +473,34 @@ describe("design guard — hard zeros", () => {
     const offences = scan(CODE_FILES, /duration-(?!\(--motion\)(?![-\w]))/g);
     expect(offences.length, `Non-canonical duration utilities:\n${report(offences)}`).toBe(0);
   });
+
+  it("no retired dl composition classes", () => {
+    const offences = scan(FILES, /(?<![-\w])(?:dl-sq|dl-ghost|dl-cite|dl-spin|dl-tag)(?![-\w])/g);
+    expect(offences.length, `Retired dl composition classes:\n${report(offences)}`).toBe(0);
+  });
+
+  it("every governed dl class still has a CSS selector", () => {
+    const defined = new Set(
+      CSS_FILES.flatMap((file) => [
+        ...stripComments(file.text).matchAll(/\.((?:dl-)[a-z0-9-]+)(?![-\w])/g),
+      ]).map((match) => match[1]),
+    );
+    const offences: Offence[] = [];
+    for (const file of CODE_FILES) {
+      const source = createSourceFile(file.rel, file.text, ScriptTarget.Latest, true, ScriptKind.TSX);
+      for (const literal of literalAuthoringTexts(source)) {
+        for (const match of literal.text.matchAll(/(?<![-\w])dl-[a-z0-9-]+(?![-\w])/g)) {
+          if (!defined.has(match[0]))
+            offences.push({
+              rel: file.rel,
+              line: lineOf(file.text, literal.index + (match.index ?? 0)),
+              match: match[0],
+            });
+        }
+      }
+    }
+    expect(offences, `Governed dl classes without CSS selectors:\n${report(offences)}`).toEqual([]);
+  });
 });
 
 describe("design guard — foundation topology", () => {
@@ -730,6 +758,18 @@ const ratchet = (name: string, offences: Offence[]) => {
 describe("design guard — ratchets (baselines may only fall)", () => {
   it("appArbitrary — literal arbitrary Tailwind utilities across the app", () => {
     ratchet("appArbitrary", appArbitrary());
+  });
+
+  it("langCssLines ratchets the surviving component stylesheet", () => {
+    const langCss = CSS_FILES.find((file) => file.rel === "components/lang/lang.css");
+    expect(langCss).toBeDefined();
+    const count = langCss!.text.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n").length;
+    const base = BASELINE.langCssLines;
+    if (count > base) expect.fail(`RATCHET "langCssLines" grew: ${count} > baseline ${base}.`);
+    if (count < base)
+      expect.fail(
+        `RATCHET "langCssLines" fell: ${count} < baseline ${base}. Lower "langCssLines" to ${count}.`,
+      );
   });
 
   it("routeRoleColor — role colour utilities in shipping routes", () => {
