@@ -10,8 +10,8 @@
  * NO STAND-INS. Where a component cannot express something the language needs, the page records a
  * `GAP:` at the call site and, where a reader would otherwise be misled, a visible gap-note. It
  * does NOT fork, wrap, or restyle the component to make the demo look finished. A workaround here
- * is worse than a defect: it is a defect that hides its own signal. The pair principle — this
- * route FINDS the gaps, the per-route crusade FIXES them — is what makes that rule affordable.
+ * is worse than a defect: it is a defect that hides its own signal. The route records gaps while
+ * the owning production component remains the place where they are fixed.
  *
  * THE ONE INTEGRATION THE PROTOTYPE COULD NOT DO: section 04 mounts the actual `MasterTable`
  * (the primitive atlas/takeoffs/families run on) with `StateCell` as its cell renderer. The
@@ -680,9 +680,9 @@ function Tokens() {
         <code className="face-mono t-label">--act-*</code> /{" "}
         <code className="face-mono t-label">--st-*</code> /{" "}
         <code className="face-mono t-label">--cat-*</code> role vocabulary in{" "}
-        <code className="face-mono t-label">styles.css</code> is superseded but still live: every
-        unmigrated route still runs on it, and the two coexist until the per-route crusade lands the
-        last one. Swatches below are read off <code className="face-mono t-label">:root</code> at
+        <code className="face-mono t-label">styles.css</code> is retired and removed. The repo guard
+        rejects its reintroduction; <code className="face-mono t-label">--pe-*</code> is the sole
+        authority. Swatches below are read off <code className="face-mono t-label">:root</code> at
         render and re-read when you flip the theme — this table cannot drift from the stylesheet.
       </p>
 
