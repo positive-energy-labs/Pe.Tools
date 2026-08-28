@@ -487,7 +487,13 @@ describe("design guard — hard zeros", () => {
     );
     const offences: Offence[] = [];
     for (const file of CODE_FILES) {
-      const source = createSourceFile(file.rel, file.text, ScriptTarget.Latest, true, ScriptKind.TSX);
+      const source = createSourceFile(
+        file.rel,
+        file.text,
+        ScriptTarget.Latest,
+        true,
+        ScriptKind.TSX,
+      );
       for (const literal of literalAuthoringTexts(source)) {
         for (const match of literal.text.matchAll(/(?<![-\w])dl-[a-z0-9-]+(?![-\w])/g)) {
           if (!defined.has(match[0]))
@@ -600,9 +606,8 @@ describe("design guard — foundation topology", () => {
     expect(base, "base.css must be collected").toBeDefined();
     const text = stripComments(base!.text);
     expect(text).not.toMatch(/@(apply|theme|utility|custom-variant|plugin)\b/);
-    expect(text).not.toMatch(
-      /@import\b|tailwindcss|tw-animate|url\(|<script\b|animation(?:-name)?\s*:/i,
-    );
+    expect(text).not.toMatch(/@import\b|tailwindcss|tw-animate|url\(|<script\b/i);
+    expect(text).toContain("@keyframes pe-spin");
     const baseLayer = /@layer base\s*\{([\s\S]*?)\n\}\s*\n\[data-pe\] \.page-wrap/.exec(text);
     expect(baseLayer, "base.css defaults must remain inside native @layer base").toBeTruthy();
     expect((text.match(/@layer base\b/g) ?? []).length).toBe(1);
@@ -662,6 +667,49 @@ describe("design guard — foundation topology", () => {
     const embedded = /<style id="pe-base">([\s\S]*?)<\/style>/.exec(reportText);
     expect(embedded, "report must contain the exact base.css embedding").toBeTruthy();
     expect(embedded![1]).toBe(base!.text);
+  });
+
+  it("keeps the documented type and composition grammar in standalone base.css", () => {
+    const base = CSS_FILES.find((file) => file.rel === "base.css");
+    expect(base).toBeDefined();
+    const design = readFileSync(join(ROOT, "DESIGN.md"), "utf8");
+    const type = design.slice(design.indexOf("## Type:"), design.indexOf("## Depth:"));
+    const composition = design.slice(
+      design.indexOf("## Composition utilities"),
+      design.indexOf("## The six laws"),
+    );
+    const grammar = [type, composition]
+      .flatMap((section) => [...section.matchAll(/`([^`]+)`/g)].map((match) => match[1]))
+      .map((name) => (name.startsWith("-") ? `squiggle${name}` : name))
+      .filter((name) =>
+        /^(?:t-(?:caption|label|value|prose|title|display|upper)|face-mono|on-(?:page|artifact|recess|select)|veil|hairline|(?:alarm|pea|caution)-wash(?:-artifact)?|seam-border|locked|unsaved|squiggle(?:-(?:drift|stale|unverified|unsettled))?|ghost-drift|citation|tag|spin|prose-pe)$/.test(
+          name,
+        ),
+      );
+    expect(grammar).toHaveLength(30);
+    expect(new Set(grammar).size).toBe(grammar.length);
+    for (const name of grammar) {
+      const state = name === "veil" ? ":hover" : "";
+      expect(base!.text, `base.css must define .${name}${state}`).toMatch(
+        new RegExp(`^\\.${name}${state}\\s*\\{`, "m"),
+      );
+    }
+  });
+
+  it("keeps standalone veil byte-identical to the Tailwind hover utility", () => {
+    const base = CSS_FILES.find((file) => file.rel === "base.css");
+    const lang = CSS_FILES.find((file) => file.rel === "design-lang.css");
+    expect(base).toBeDefined();
+    expect(lang).toBeDefined();
+    expect(base!.text).toContain("/* standalone twin of @utility veil; keep byte-identical */");
+    const standalone = /^\.veil:hover\s*\{([^}]*)\}/m.exec(base!.text);
+    const utility = /^@utility veil\s*\{([^}]*)\}/m.exec(lang!.text);
+    expect(standalone, "base.css must define .veil:hover").toBeTruthy();
+    expect(utility, "design-lang.css must define @utility veil").toBeTruthy();
+    expect(standalone![1]).toBe(utility![1]);
+    expect([...lang!.text.matchAll(/^@utility ([\w-]+)/gm)].map((match) => match[1])).toEqual([
+      "veil",
+    ]);
   });
 
   it("exempts prototype directories and *-proto.tsx files", () => {

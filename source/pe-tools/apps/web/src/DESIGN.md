@@ -8,7 +8,7 @@ Tailwind vocabulary. This file is the index; the rendered specimen is the `/desi
 | Surface | How you get it | What you get |
 |---|---|---|
 | The app (`apps/web`) | `styles.css` imports both files | every utility below |
-| A standalone HTML page | one `<link>` to `base.css` | roles, element defaults, `.page-wrap` |
+| A standalone HTML page | one `<link>` to `base.css` | roles, element defaults, tiers, composition grammar; utilities with variants (`hover:veil`) are app-only |
 
 ```html
 <html lang="en" data-pe>
@@ -18,9 +18,9 @@ Tailwind vocabulary. This file is the index; the rendered specimen is the `/desi
 ```
 
 `data-pe` goes on `<html>`, not on `<body>`: the defaults are written `[data-pe] body`. Standalone
-pages reach a role by `var(--pe-ink)` and get no utilities, because `@utility` needs the Tailwind
-build. In app TypeScript the rule inverts: a bare `var(--pe-*)` is a hard zero, and `lib/token.ts`
-is the one reader for a value no utility can express.
+pages reach a role by `var(--pe-ink)` and use the plain grammar classes below. Tailwind utilities
+with variants need the app build. In app TypeScript a bare `var(--pe-*)` is a hard zero, and
+`lib/token.ts` is the one reader for a value no utility can express.
 
 ## The 17 roles
 
