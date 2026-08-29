@@ -209,7 +209,7 @@ export function Triptych({
                 );
               })}
             </svg>
-            <figcaption className="t-caption text-ink-mute">{view.name}</figcaption>
+            <figcaption>{view.name}</figcaption>
           </figure>
         );
       })}
@@ -301,7 +301,7 @@ export function PartSidebar({
 
   if (!node)
     return (
-      <div className="w-72 shrink-0 px-3">
+      <div className="w-72 px-3">
         <EmptyState story="scope" exit="click a solid, plane, frame or connector in the drawing">
           nothing picked
         </EmptyState>
@@ -313,7 +313,6 @@ export function PartSidebar({
       type="button"
       onClick={() => onSelect(id)}
       title={`Open ${id} — same sidebar, one step along the graph`}
-      className="face-mono t-caption text-left"
       style={{
         backgroundColor: "transparent",
         backgroundImage: "none",
@@ -330,24 +329,20 @@ export function PartSidebar({
   );
 
   return (
-    <div className="w-72 shrink-0 overflow-auto px-3">
-      <div className="face-mono t-value text-ink">{node.id}</div>
-      <div className="t-caption mb-2 text-ink-mute">{node.detail}</div>
+    <div className="w-72 overflow-auto px-3">
+      <div>{node.id}</div>
+      <div className="mb-2">{node.detail}</div>
 
-      <div className="t-caption t-upper mb-1 text-ink-2">its inputs</div>
+      <div className="mb-1">its inputs</div>
       {fields.length === 0 ? (
-        <p className="t-caption text-ink-mute">
-          stock datum — the template owns it, nothing here is authored
-        </p>
+        <p>stock datum — the template owns it, nothing here is authored</p>
       ) : (
         <table className="w-full">
           <tbody>
             {fields.map((field) => (
               <tr key={field.key}>
-                <td className="face-mono t-caption w-20 py-0.5 align-baseline text-ink-mute">
-                  {field.key}
-                </td>
-                <td className="py-0.5 align-baseline">
+                <td className="w-20 py-0.5">{field.key}</td>
+                <td className="py-0.5">
                   {field.slot === "text" ? (
                     <TextToken
                       value={field.value}
@@ -372,34 +367,28 @@ export function PartSidebar({
         </table>
       )}
 
-      <div className="t-caption t-upper mb-1 mt-3 text-ink-2">defined from</div>
-      <ul className="space-y-0.5">
+      <div className="mb-1 mt-3">defined from</div>
+      <ul>
         {anchors(graph, node.id).map((edge) => (
           <li key={`${edge.field}->${edge.to}`} className="flex items-baseline gap-1">
-            <span className="face-mono t-caption text-ink-mute">{edge.field}</span>
+            <span>{edge.field}</span>
             {walk(edge.to)}
-            <span className="face-mono t-caption text-ink-mute">
-              {nodeValue(editor.model, editor.typeName, edge.to) ?? ""}
-            </span>
+            <span>{nodeValue(editor.model, editor.typeName, edge.to) ?? ""}</span>
           </li>
         ))}
-        {anchors(graph, node.id).length === 0 ? (
-          <li className="t-caption text-ink-mute">nothing — it is a root</li>
-        ) : null}
+        {anchors(graph, node.id).length === 0 ? <li>nothing — it is a root</li> : null}
       </ul>
 
-      <div className="t-caption t-upper mb-1 mt-3 text-ink-2">defined off it</div>
-      <ul className="space-y-0.5">
+      <div className="mb-1 mt-3">defined off it</div>
+      <ul>
         {dependents(graph, node.id).map((edge) => (
           <li key={`${edge.from}/${edge.field}`} className="flex items-baseline gap-1">
             {walk(edge.from)}
-            <span className="face-mono t-caption text-ink-mute">· {edge.field}</span>
+            <span>· {edge.field}</span>
           </li>
         ))}
         {dependents(graph, node.id).length === 0 ? (
-          <li className="t-caption text-ink-mute">
-            nothing reads this — changing it moves nothing else
-          </li>
+          <li>nothing reads this — changing it moves nothing else</li>
         ) : null}
       </ul>
     </div>
@@ -429,7 +418,7 @@ export function SentenceGrids({
     <div className="flex flex-col gap-3">
       {groups.map((group) => (
         <section key={group.key}>
-          <div className="t-label t-upper mb-1 text-ink-2">{group.label}</div>
+          <div className="mb-1">{group.label}</div>
           {group.rows.length === 0 ? (
             <EmptyState story="scope" exit={group.exit}>
               this family has no {group.label}
@@ -510,7 +499,6 @@ function SlotCell({
           editor.setFocus(cell.pointer ?? null);
         }}
         title={`Show ${rowId} in the drawing and the json`}
-        className="face-mono t-label"
         style={{
           backgroundColor: "transparent",
           backgroundImage: "none",
@@ -528,7 +516,7 @@ function SlotCell({
 
   if (cell.kind === "text" && cell.write == null)
     return (
-      <span className={cell.pointer ? "face-mono t-label text-ink-2" : "t-label text-ink-mute"}>
+      <span>
         {cell.lead ? `${cell.lead} ` : ""}
         {cell.value}
       </span>
@@ -537,7 +525,7 @@ function SlotCell({
   if (cell.kind === "text")
     return (
       <>
-        {cell.lead ? <span className="t-label text-ink-mute">{cell.lead}</span> : null}
+        {cell.lead ? <span>{cell.lead}</span> : null}
         <TextToken
           value={cell.value}
           width={90}
@@ -549,7 +537,7 @@ function SlotCell({
 
   return (
     <>
-      {cell.lead ? <span className="t-label text-ink-mute">{cell.lead}</span> : null}
+      {cell.lead ? <span>{cell.lead}</span> : null}
       <RefToken
         editor={editor}
         value={cell.value}
@@ -562,9 +550,7 @@ function SlotCell({
         }}
       />
       {nodeValue(editor.model, editor.typeName, cell.value) != null ? (
-        <span className="face-mono t-caption text-ink-mute">
-          {nodeValue(editor.model, editor.typeName, cell.value)}
-        </span>
+        <span>{nodeValue(editor.model, editor.typeName, cell.value)}</span>
       ) : null}
     </>
   );

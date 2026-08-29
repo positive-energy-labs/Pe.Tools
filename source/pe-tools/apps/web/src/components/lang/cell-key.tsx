@@ -33,7 +33,7 @@ export const cellStateKeyRecipe = tv({
     head: "flex items-baseline gap-[5px] border-b border-line pb-0.5",
     name: "face-mono t-caption t-upper text-ink-2",
     asks: "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap t-caption text-ink-mute italic",
-    item: "grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-baseline gap-[7px] t-label text-ink-2 [&_.dl-cell]:face-mono [&_.dl-cell]:t-value [&_.dl-sq]:face-mono [&_.dl-sq]:t-value [&_.dl-sq]:text-ink [&_.dl-cite]:face-mono [&_.dl-cite]:t-value [&_.dl-cite]:text-ink",
+    item: "cell-key-values grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-baseline gap-[7px] t-label text-ink-2 [&_.dl-cell]:t-value [&_.dl-sq]:t-value [&_.dl-sq]:text-ink [&_.dl-cite]:t-value [&_.dl-cite]:text-ink",
   },
 });
 

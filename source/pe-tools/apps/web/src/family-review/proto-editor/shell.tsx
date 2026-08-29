@@ -136,29 +136,27 @@ export function StatePanel({
 
   return (
     <aside
-      className="flex min-h-0 w-80 shrink-0 flex-col border-l"
+      className="flex min-h-0 w-80 flex-col"
       style={{ borderColor: token("line"), backgroundColor: token("artifact") }}
     >
-      <div className="border-b px-3 py-2" style={{ borderColor: token("line") }}>
+      <div className="px-3 py-2" style={{ borderColor: token("line") }}>
         <div className="flex items-baseline justify-between gap-2">
-          <span className="t-label t-upper text-ink-2">pending write</span>
-          <span className="face-mono t-caption text-ink-mute">
+          <span>pending write</span>
+          <span>
             {staged.length} pointer{staged.length === 1 ? "" : "s"}
           </span>
         </div>
         {staged.length === 0 ? (
-          <p className="t-caption mt-1 text-ink-mute">
-            nothing to write — the edited document equals the json
-          </p>
+          <p className="mt-1">nothing to write — the edited document equals the json</p>
         ) : (
-          <ul className="mt-1 space-y-0.5">
+          <ul className="mt-1">
             {staged.map((change) => (
               <li key={change.path}>
                 <Press
                   type="button"
                   onClick={() => editor.setFocus(change.path)}
                   title={`Show ${change.path} in the json pane`}
-                  className="face-mono t-caption w-full text-left"
+                  className="w-full"
                   style={{
                     backgroundColor: editor.focus === change.path ? token("select") : "transparent",
                     border: "none",
@@ -174,8 +172,8 @@ export function StatePanel({
                   >
                     {change.path}
                   </span>
-                  <span className="text-ink-mute"> {change.before ?? "∅"} → </span>
-                  <span className="text-ink">{change.after ?? "∅"}</span>
+                  <span> {change.before ?? "∅"} → </span>
+                  <span>{change.after ?? "∅"}</span>
                 </Press>
               </li>
             ))}
@@ -206,10 +204,8 @@ export function StatePanel({
       </div>
       {showDocument ? (
         <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
-          <div className="t-label t-upper mb-1 text-ink-2">live document</div>
-          <pre className="face-mono t-caption whitespace-pre-wrap text-ink-2">
-            {JSON.stringify(editor.model, null, 2)}
-          </pre>
+          <div className="mb-1">live document</div>
+          <pre>{JSON.stringify(editor.model, null, 2)}</pre>
         </div>
       ) : null}
     </aside>
@@ -245,12 +241,11 @@ export function RefToken({
   const strays = bound && !options.includes(value);
 
   return (
-    <span className="relative inline-block">
+    <span>
       <Press
         type="button"
         title={title}
         onClick={() => setOpen((prev) => !prev)}
-        className="face-mono t-label"
         style={{
           padding: "0 1px",
           cursor: "pointer",
@@ -270,11 +265,11 @@ export function RefToken({
             type="button"
             aria-label="close picker"
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-raised cursor-default"
+            className="z-raised"
             style={{ backgroundColor: "transparent", border: "none" }}
           />
           <div
-            className="absolute left-0 top-full z-popup mt-1 max-h-72 w-72 overflow-y-auto px-1 py-1"
+            className="z-popup mt-1 max-h-72 w-72 overflow-y-auto px-1 py-1"
             style={{
               border: `0.5px solid ${token("line-2")}`,
               backgroundColor: token("page"),
@@ -282,9 +277,7 @@ export function RefToken({
             }}
           >
             {options.length === 0 ? (
-              <p className="t-caption px-1 py-1 text-ink-mute">
-                nothing legal here yet — author one first
-              </p>
+              <p className="px-1 py-1">nothing legal here yet — author one first</p>
             ) : (
               options.map((option) => (
                 <Press
@@ -294,7 +287,7 @@ export function RefToken({
                     onPick(option);
                     setOpen(false);
                   }}
-                  className="face-mono t-label flex w-full items-baseline justify-between gap-2 px-1 py-0.5 text-left"
+                  className="flex w-full items-baseline justify-between gap-2 px-1 py-0.5"
                   style={{
                     backgroundColor: option === value ? token("select") : "transparent",
                     border: "none",
@@ -303,9 +296,7 @@ export function RefToken({
                   }}
                 >
                   <span>{option}</span>
-                  <span className="text-ink-mute">
-                    {nodeValue(editor.model, editor.typeName, option) ?? ""}
-                  </span>
+                  <span>{nodeValue(editor.model, editor.typeName, option) ?? ""}</span>
                 </Press>
               ))
             )}
@@ -343,7 +334,6 @@ export function TextToken({
         if (event.key === "Enter") event.currentTarget.blur();
         if (event.key === "Escape") setDraft(null);
       }}
-      className="face-mono t-label"
       style={{
         width,
         padding: "0 2px",
@@ -361,14 +351,14 @@ export function TextToken({
 export function TypeStage({ editor }: { editor: Editor }) {
   return (
     <span className="flex items-baseline gap-1">
-      <span className="t-caption text-ink-mute">type</span>
+      <span>type</span>
       {Object.keys(editor.model.types).map((name) => (
         <Press
           key={name}
           type="button"
           title={`Resolve every value on this surface for the ${name} type`}
           onClick={() => editor.setTypeName(name)}
-          className="face-mono t-label px-1"
+          className="px-1"
           style={{
             backgroundColor: name === editor.typeName ? token("select") : "transparent",
             border: "none",
