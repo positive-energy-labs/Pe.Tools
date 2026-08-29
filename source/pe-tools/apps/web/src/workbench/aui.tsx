@@ -29,7 +29,7 @@ import { APPROVAL_OPTIONS, toolTarget } from "./chat-state";
 import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
-import { annotation } from "#/anatomy";
+import { annotation } from "#/components/anatomy";
 import { Provenance } from "#/components/lang/section";
 
 const ThreadMessagesContext = createContext<ThreadMessageLike[]>([]);

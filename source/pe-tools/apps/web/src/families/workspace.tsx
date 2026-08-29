@@ -16,7 +16,7 @@ import {
   type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
 import { HOST_QUERY_KEY, useHostStatusQuery, useLoadedFamiliesMatrixQuery } from "#/host/queries";
-import { useTableChips } from "#/anatomy";
+import { useTableChips } from "#/components/anatomy";
 import { useFamiliesColumns, type ParamColumn, type TypeRow } from "#/families/matrix-columns";
 import { familyFlag } from "#/families/plan";
 import { FamiliesWorkspaceProvider } from "#/families/workspace-context";

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Key } from "#/anatomy";
+import { Key } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
 import { fmtNum } from "#/components/master-table/model";
 import { token } from "#/lib/token";

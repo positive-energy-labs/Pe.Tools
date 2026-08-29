@@ -1,4 +1,4 @@
-import { Workspace } from "#/anatomy";
+import { Workspace } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { VerbLane } from "#/components/lang/verb-lane";

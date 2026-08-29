@@ -1,4 +1,4 @@
-import { Workspace } from "#/anatomy";
+import { Workspace } from "#/components/anatomy";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { AtlasNavigation } from "#/takeoff/atlas-navigation";
 import { AtlasTable } from "#/takeoff/atlas-table";

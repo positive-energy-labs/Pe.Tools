@@ -1,4 +1,4 @@
-import { StatLine } from "#/anatomy";
+import { StatLine } from "#/components/anatomy";
 import { Press } from "#/components/lang/press";
 import { fmtNum } from "#/components/master-table/model";
 import { ROOM_STATES, STATE_META, stateInk, type RoomState } from "#/takeoff/room-state";

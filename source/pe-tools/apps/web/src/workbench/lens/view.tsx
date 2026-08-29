@@ -1,5 +1,5 @@
 import { token } from "#/lib/token";
-import { annotation } from "#/anatomy";
+import { annotation } from "#/components/anatomy";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { modeDepth } from "../depth";
 import { Moments } from "../aui";

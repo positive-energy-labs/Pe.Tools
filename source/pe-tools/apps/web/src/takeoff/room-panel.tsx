@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { StatLine } from "#/anatomy";
+import { StatLine } from "#/components/anatomy";
 import { FactChip } from "#/components/lang/chip";
 import { NumberCell, StateDot } from "#/components/master-table/cells";
 import { fmtNum } from "#/components/master-table/model";

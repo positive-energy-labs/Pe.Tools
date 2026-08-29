@@ -1,5 +1,5 @@
 import { token } from "#/lib/token";
-import { Workspace } from "#/anatomy";
+import { Workspace } from "#/components/anatomy";
 import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";

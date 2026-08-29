@@ -3,7 +3,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
 import type { MasterTableState } from "#/components/master-table/model";
-import { useTableChips } from "#/anatomy";
+import { useTableChips } from "#/components/anatomy";
 import { atlasRoomState, type AtlasRow as Row, type TakeoffStore } from "#/takeoff/store";
 import {
   STAGE_ORDER,
