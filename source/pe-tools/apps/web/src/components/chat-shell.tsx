@@ -207,8 +207,8 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
                 <div className="flex items-center justify-between">
                   <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
                   <Press
-                    icon
-                    className="size-6 text-ink hover:veil [&_svg:not([class*='size-'])]:size-3"
+                    tone="neutral"
+                    size="icon-sm"
                     title="Close workspace"
                     onClick={() => store.actions.setPlugin(undefined)}
                   >

@@ -114,7 +114,8 @@ export function DraftEditor({
                           ? "a table keeps at least one column"
                           : "Remove this column and its values from the draft"
                       }
-                      className="text-ink-2 hover:text-ink disabled:opacity-30"
+                      tone="quiet"
+                      state="disabled-faint"
                       disabled={draft.columns.length === 1}
                       onClick={() => removeColumn(columnIndex)}
                     >
@@ -160,7 +161,7 @@ export function DraftEditor({
                   <Press
                     type="button"
                     title="Remove this row — it is deleted in Revit on apply"
-                    className="text-ink-2 hover:text-ink"
+                    tone="quiet"
                     onClick={() => removeRow(rowIndex)}
                   >
                     <Trash2 className="size-3" />

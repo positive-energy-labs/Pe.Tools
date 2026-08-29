@@ -77,7 +77,8 @@ export function ThreadList({
               <Press
                 type="button"
                 title="Delete thread"
-                className="hidden shrink-0 rounded-sm p-0.5 text-ink-2 group-hover/row:inline hover:veil"
+                tone="quiet"
+                state="row-action-inline"
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete(thread.id);
@@ -102,7 +103,7 @@ export function ThreadList({
         <Press
           type="button"
           title="Start a new thread — the current one stays in the list"
-          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink hover:veil"
+          tone="neutral"
           onClick={onNew}
         >
           <Plus className="size-4" />
@@ -111,7 +112,7 @@ export function ThreadList({
         <Press
           type="button"
           title="Search every thread by title (⌘K)"
-          className="flex items-center gap-2 rounded-sm px-2 py-1.5 t-prose text-ink-2 hover:veil"
+          tone="quiet"
           onClick={onSearch}
         >
           <Search className="size-3.5" />
@@ -195,7 +196,8 @@ export function ThreadPalette({
                 <Press
                   type="button"
                   title="Delete thread"
-                  className="shrink-0 rounded-sm p-0.5 text-ink-2 opacity-0 transition-opacity group-hover/row:opacity-100 hover:veil data-selected:opacity-100"
+                  tone="quiet"
+                  state="row-action"
                   onClick={(event) => {
                     event.stopPropagation();
                     onDelete(thread.id);

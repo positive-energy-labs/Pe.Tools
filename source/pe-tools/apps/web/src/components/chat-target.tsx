@@ -72,9 +72,9 @@ export function TargetWorld() {
             type="button"
             onClick={() => pin(option.id)}
             // The resolved session is a SELECTION — the selection fill, never a hue.
-            className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-1.5 py-1 text-left hover:veil ${
-              isResolved ? "on-select" : ""
-            }`}
+            tone="neutral"
+            layout="row"
+            state={isResolved ? "selected" : "rest"}
             title="pin the chat here"
           >
             <span className="truncate t-value text-ink">{option.label}</span>

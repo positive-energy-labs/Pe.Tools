@@ -55,9 +55,9 @@ export function DocRow({
       type="button"
       disabled={disabled}
       onClick={onPick}
-      className={`flex w-full items-center gap-1.5 border-b-[0.5px] border-line px-2 py-1 text-left hover:veil disabled:opacity-40 disabled:italic ${
-        selected ? "on-select" : ""
-      }`}
+      tone="quiet"
+      layout="row"
+      state={selected ? "selected" : "disabled-faint"}
     >
       {ext ? (
         <span

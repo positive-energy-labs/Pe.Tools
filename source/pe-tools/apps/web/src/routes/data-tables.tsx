@@ -196,7 +196,6 @@ export function DataTablesRoute() {
                 </EmptyState>
               )
             }
-            className="h-full"
           />
         </SidePane>
 
