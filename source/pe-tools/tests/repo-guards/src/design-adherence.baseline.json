@@ -1,10 +1,10 @@
 {
   "rawTable": {
-    "total": 16,
+    "total": 14,
     "byArea": {
       "data-tables": 1,
       "families": 2,
-      "family-review": 5,
+      "family-review": 3,
       "lib": 1,
       "ops": 1,
       "param-tables": 3,
@@ -78,13 +78,13 @@
     }
   },
   "inlineColor": {
-    "total": 208,
+    "total": 200,
     "byArea": {
       "anatomy": 2,
       "components": 6,
       "design-system": 1,
       "family": 3,
-      "family-review": 49,
+      "family-review": 41,
       "grilles": 5,
       "host": 3,
       "ops": 28,
