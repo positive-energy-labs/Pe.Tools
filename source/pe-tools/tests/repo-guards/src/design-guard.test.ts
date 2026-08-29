@@ -804,6 +804,7 @@ const ALLOWLIST_BY_FILE = Object.fromEntries(
 const ALLOWLIST_BASELINE = JSON.parse(
   readFileSync(join(HERE, "design-allowlist.baseline.json"), "utf8"),
 ) as Record<string, number>;
+const ALLOWLIST_LIVE_JSON = JSON.stringify(ALLOWLIST_BY_FILE, null, 2) + "\n";
 
 const hasExport = (node: ts.Node): boolean =>
   ts.canHaveModifiers(node) &&
@@ -993,6 +994,19 @@ describe("design checks — code holds the boundary", () => {
       .map(([rel, count]) => `${rel}: ${count} > ${ALLOWLIST_BASELINE[rel] ?? 0}`);
     expect(increases).toEqual([]);
   });
+
+  for (const rel of [
+    ...new Set([...Object.keys(ALLOWLIST_BASELINE), ...Object.keys(ALLOWLIST_BY_FILE)]),
+  ].sort()) {
+    it(`${rel} allowlist baseline is not stale`, () => {
+      const was = ALLOWLIST_BASELINE[rel] ?? 0;
+      const now = ALLOWLIST_BY_FILE[rel] ?? 0;
+      expect(
+        now,
+        `${rel} dropped to ${now}; baseline still says ${was}.\nPaste this exact JSON into design-allowlist.baseline.json:\n${ALLOWLIST_LIVE_JSON}`,
+      ).toBeGreaterThanOrEqual(was);
+    });
+  }
 
   it("every lang component export is mounted by a specimen", () => {
     expect(MISSING_SWATCH).toEqual([]);
