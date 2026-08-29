@@ -8,7 +8,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 const workbench = vi.hoisted(() => ({ value: undefined as unknown }));
 
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => workbench.value }));
-vi.mock("#/components/control-chips", () => ({ ControlChips: () => null }));
+vi.mock("#/chat/control-chips", () => ({ ControlChips: () => null }));
 
 import { Composer } from "./composer";
 import { createChatPageStore } from "#/workbench/store";

@@ -22,7 +22,7 @@
  */
 import { useId } from "react";
 
-import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
+import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
 import { tv } from "#/lib/tv";
 
 import "./lang.css";
@@ -42,13 +42,12 @@ export interface HelpTipProps {
 
 export function HelpTip({ children }: HelpTipProps) {
   const noteId = useId();
-  const { mark, popup } = helpTipRecipe();
   return (
     <UiTooltipProvider>
       <Tooltip.Root>
         <Tooltip.Trigger
           type="button"
-          className={mark()}
+          kind="icon"
           aria-label="What is this?"
           aria-describedby={noteId}
         >
@@ -56,7 +55,7 @@ export function HelpTip({ children }: HelpTipProps) {
         </Tooltip.Trigger>
         <Tooltip.Portal keepMounted>
           <Tooltip.Positioner side="bottom" align="start" sideOffset={4}>
-            <Tooltip.Popup id={noteId} className={popup()} role="note">
+            <Tooltip.Popup id={noteId} role="note">
               {children}
             </Tooltip.Popup>
           </Tooltip.Positioner>

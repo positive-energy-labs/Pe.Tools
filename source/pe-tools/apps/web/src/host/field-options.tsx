@@ -12,7 +12,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/lang/combobox";
 import { useHostOp } from "#/host/queries";
 import type { ParameterReference } from "@pe/agent-contracts";
 
@@ -100,7 +100,7 @@ export function FieldOptionSelect({
         <ComboboxEmpty>No matching live document values</ComboboxEmpty>
         <ComboboxList>
           {(option: FieldOption) => (
-            <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
+            <ComboboxItem key={option.value} value={option}>
               <span>{option.label}</span>
               {option.description ? (
                 <span className="t-caption text-ink-2">{option.description}</span>
@@ -157,7 +157,7 @@ export function FieldOptionMultiSelect({
           <ComboboxEmpty>No matching live document elements</ComboboxEmpty>
           <ComboboxList>
             {(option: FieldOption) => (
-              <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
+              <ComboboxItem key={option.value} value={option}>
                 <span>{option.label}</span>
                 {option.description ? (
                   <span className="t-caption text-ink-2">{option.description}</span>

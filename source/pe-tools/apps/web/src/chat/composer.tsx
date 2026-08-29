@@ -1,3 +1,4 @@
+import { chatStyles } from "#/components/lang/chat-appearance";
 import {
   useMemo,
   useRef,
@@ -7,8 +8,8 @@ import {
 } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { ArrowUp, Paperclip, Square, X } from "lucide-react";
-import { ControlChips } from "#/components/control-chips";
-import { Textarea } from "#/components/ui/textarea";
+import { ControlChips } from "#/chat/control-chips";
+import { Textarea } from "#/components/lang/textarea";
 import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
 import { selectSkillCommands } from "#/workbench/chat-state";
 import type { Mode } from "#/workbench/depth";
@@ -137,13 +138,9 @@ export function Composer({
   };
 
   return (
-    <form onSubmit={submit} className="relative w-full">
+    <form onSubmit={submit} className={chatStyles.composer0()}>
       {showMenu ? (
-        <div
-          role="listbox"
-          aria-label="Commands"
-          className="absolute bottom-full mb-2 w-full overflow-hidden rounded-sm border-[0.5px] border-line-2 on-artifact"
-        >
+        <div role="listbox" aria-label="Commands" className={chatStyles.composer1()}>
           {matches.slice(0, 6).map((command) => (
             <Press
               key={`${command.kind}:${command.name}`}
@@ -152,8 +149,8 @@ export function Composer({
             >
               <PressContent geometry="baseline">
                 {/* a slash command is a machine identifier — mono */}
-                <span className="t-value face-mono text-ink">/{command.name}</span>
-                <span className="truncate t-label text-ink-2">{command.description}</span>
+                <span className={chatStyles.composer2()}>/{command.name}</span>
+                <span className={chatStyles.composer3()}>{command.description}</span>
               </PressContent>
             </Press>
           ))}
@@ -164,16 +161,13 @@ export function Composer({
           (draft, attachments, the in-flight run), so it wears the artifact treatment — one
           ground shift plus one quiet hairline. The card clips its children, so the budget bar
           stays a flush rectangle under the boundary. */}
-      <div className="overflow-hidden rounded-sm border-[0.5px] border-line-2 on-artifact">
+      <div className={chatStyles.composer4()}>
         {topBar}
 
         {attachments.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+          <div className={chatStyles.composer5()}>
             {attachments.map((attachment, index) => (
-              <span
-                key={index}
-                className="inline-flex items-center gap-1 rounded-sm border-[0.5px] border-line bg-recess px-2 py-0.5 t-label text-ink-2"
-              >
+              <span key={index} className={chatStyles.composer6()}>
                 {attachment.name ?? "attachment"}
                 <Press
                   type="button"
@@ -184,14 +178,14 @@ export function Composer({
                     )
                   }
                 >
-                  <X className="size-3" />
+                  <X className={chatStyles.composer7()} />
                 </Press>
               </span>
             ))}
           </div>
         ) : null}
 
-        <div className="p-2">
+        <div className={chatStyles.composer8()}>
           <Textarea
             name="input"
             placeholder="Ask Pea…  ( / for commands )"
@@ -200,17 +194,16 @@ export function Composer({
             value={text}
             onChange={(event) => setText(event.currentTarget.value)}
             onKeyDown={onKeyDown}
-            className="max-h-48 min-h-9 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
           {/* Control row: attachments + session controls (model/access) left, send right. */}
-          <div className="flex items-center gap-1 pt-1">
+          <div className={chatStyles.composer9()}>
             <Press
               tone="neutral"
               size="icon"
               title="Attach files"
               onClick={() => fileRef.current?.click()}
             >
-              <Paperclip className="size-4" />
+              <Paperclip className={chatStyles.composer10()} />
             </Press>
             <input
               ref={fileRef}
@@ -220,10 +213,10 @@ export function Composer({
               onChange={(event) => void onFiles(event.currentTarget.files)}
             />
             <ControlChips />
-            <span className="flex-1" />
+            <span className={chatStyles.composer11()} />
             {isRunning ? (
               <Press tone="neutral" size="icon" title="Stop" aria-label="Stop" onClick={cancel}>
-                <Square className="size-3.5" />
+                <Square className={chatStyles.composer12()} />
               </Press>
             ) : (
               <Press
@@ -235,15 +228,13 @@ export function Composer({
                 disabled={!canSend}
                 onClick={sendCurrent}
               >
-                <ArrowUp className="size-4" />
+                <ArrowUp className={chatStyles.composer13()} />
               </Press>
             )}
           </div>
         </div>
         {/* a failed operation is an ERROR (caution) — the alarm is reserved for disagreement */}
-        {operationError ? (
-          <span className="block px-3 pb-2 t-label text-caution">{operationError}</span>
-        ) : null}
+        {operationError ? <span className={chatStyles.composer14()}>{operationError}</span> : null}
       </div>
     </form>
   );

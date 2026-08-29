@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
 import { StateDot } from "#/components/master-table/cells";
-import { Pane } from "#/components/ui/pane";
+import { Pane } from "#/components/lang/pane";
 import { fmtNum } from "#/components/master-table/model";
 import { cn } from "#/lib/utils";
 import { ROOM_STATES, STATE_META, STAGE_BLURB } from "#/takeoff/room-state";

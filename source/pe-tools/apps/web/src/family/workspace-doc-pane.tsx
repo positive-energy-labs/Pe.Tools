@@ -4,7 +4,7 @@ import { HelpTip } from "#/components/lang/help";
 import { Press } from "#/components/lang/press";
 import { Switcher } from "#/components/lang/switcher";
 import { Verb } from "#/components/lang/verb";
-import { Pane } from "#/components/ui/pane";
+import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
 import { bindingOf, isFormula, type PageWorld } from "#/family/model";
@@ -280,7 +280,6 @@ export function FamilyWorkspaceDocPane() {
       // The pane is a COLUMN: the spec and its proposals scroll in the upper half, the inspector
       // docks under them. Neither displaces the other — an inspector that replaced the spec would
       // take away the evidence at the exact moment you edit the number it justifies.
-      bodyClassName="flex min-h-0 flex-col overflow-hidden p-0"
       title="doc"
       meta={
         world.spec

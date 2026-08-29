@@ -7,7 +7,7 @@ import { Cause } from "effect";
 import { useNavigate } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
-import { VerbLane } from "#/components/verb-lane";
+import { VerbLane } from "#/components/lang/verb-lane";
 import { Verb } from "#/components/lang/verb";
 import { fuseFleet, useFleet } from "#/host/fleet";
 import { resolveTarget } from "#/host/target";

@@ -1,6 +1,5 @@
 import { useRef, type CSSProperties, type ReactNode } from "react";
 
-import { cn } from "#/lib/utils";
 import { tv } from "#/lib/tv";
 
 import { PaneResizeHandle, type PaneSizeSpec, usePaneFit, usePaneSize } from "./pane-resize";
@@ -83,18 +82,19 @@ export function PaneWorkspace({
       )}
 
       {hasNavigationHandle && (
-        <PaneResizeHandle
-          axis="horizontal"
-          value={navigationState.renderedSize}
-          startValue={navigationState.collapsed ? navigationSpec.minSize : navigationState.size}
-          min={navigationSpec.minSize}
-          max={navigationSpec.maxSize}
-          growth={1}
-          containerSize={() => rootSize("horizontal")}
-          onResize={navigationState.resizeTo}
-          onReset={navigationState.reset}
-          className="col-start-2 row-start-1 row-span-3"
-        />
+        <div className="col-start-2 row-start-1 row-span-3">
+          <PaneResizeHandle
+            axis="horizontal"
+            value={navigationState.renderedSize}
+            startValue={navigationState.collapsed ? navigationSpec.minSize : navigationState.size}
+            min={navigationSpec.minSize}
+            max={navigationSpec.maxSize}
+            growth={1}
+            containerSize={() => rootSize("horizontal")}
+            onResize={navigationState.resizeTo}
+            onReset={navigationState.reset}
+          />
+        </div>
       )}
 
       <div className="min-h-0 min-w-0 overflow-hidden" style={{ gridColumn: 3, gridRow: 1 }}>
@@ -111,33 +111,47 @@ export function PaneWorkspace({
       )}
 
       {hasInspectorHandle && (
-        <PaneResizeHandle
-          axis="horizontal"
-          value={inspectorState.renderedSize}
-          startValue={inspectorState.collapsed ? inspectorSpec.minSize : inspectorState.size}
-          min={inspectorSpec.minSize}
-          max={inspectorSpec.maxSize}
-          growth={-1}
-          containerSize={() => rootSize("horizontal")}
-          onResize={inspectorState.resizeTo}
-          onReset={inspectorState.reset}
-          className={cn("col-start-4 row-start-1", inspectorSpan === "full" && "row-span-3")}
-        />
+        <div
+          className={
+            inspectorSpan === "full"
+              ? "col-start-4 row-start-1 row-span-3"
+              : "col-start-4 row-start-1"
+          }
+        >
+          <PaneResizeHandle
+            axis="horizontal"
+            value={inspectorState.renderedSize}
+            startValue={inspectorState.collapsed ? inspectorSpec.minSize : inspectorState.size}
+            min={inspectorSpec.minSize}
+            max={inspectorSpec.maxSize}
+            growth={-1}
+            containerSize={() => rootSize("horizontal")}
+            onResize={inspectorState.resizeTo}
+            onReset={inspectorState.reset}
+          />
+        </div>
       )}
 
       {hasVisualHandle && (
-        <PaneResizeHandle
-          axis="vertical"
-          value={visualState.renderedSize}
-          startValue={visualState.collapsed ? visualSpec.minSize : visualState.size}
-          min={visualSpec.minSize}
-          max={visualSpec.maxSize}
-          growth={1}
-          containerSize={() => rootSize("vertical")}
-          onResize={visualState.resizeTo}
-          onReset={visualState.reset}
-          className={cn("col-start-3 row-start-2", inspectorSpan === "visual" && "col-span-3")}
-        />
+        <div
+          className={
+            inspectorSpan === "visual"
+              ? "col-start-3 row-start-2 col-span-3"
+              : "col-start-3 row-start-2"
+          }
+        >
+          <PaneResizeHandle
+            axis="vertical"
+            value={visualState.renderedSize}
+            startValue={visualState.collapsed ? visualSpec.minSize : visualState.size}
+            min={visualSpec.minSize}
+            max={visualSpec.maxSize}
+            growth={1}
+            containerSize={() => rootSize("vertical")}
+            onResize={visualState.resizeTo}
+            onReset={visualState.reset}
+          />
+        </div>
       )}
 
       <div

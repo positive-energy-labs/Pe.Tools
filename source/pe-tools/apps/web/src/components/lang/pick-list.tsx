@@ -1,7 +1,16 @@
 import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { Input } from "#/components/ui/input";
-import { cn } from "#/lib/utils";
+import { Input } from "#/components/lang/input";
+import { tv } from "#/lib/tv";
+
+export const pickListRecipe = tv({
+  base: "flex w-full items-baseline gap-2 border-l-2 px-3 py-1 text-left t-value",
+  variants: {
+    active: { true: "border-ink bg-select text-ink", false: "border-transparent text-ink" },
+    cursored: { true: "bg-recess", false: "" },
+    disabled: { true: "opacity-50", false: "" },
+  },
+});
 
 /**
  * PickList — the workbench's "choose one from many" rail body. A filter field over a
@@ -126,14 +135,7 @@ export function PickList({
                     title={item.hint}
                     onClick={() => onPick(item.id)}
                     onMouseEnter={() => setCursor(itemIndex)}
-                    className={cn(
-                      "flex w-full items-baseline gap-2 border-l-2 px-3 py-1 text-left t-value",
-                      // Selection is a FILL, never a hue: the select rung plus a neutral
-                      // ink locate mark. No weight — chrome never buys weight.
-                      active ? "border-ink bg-select text-ink" : "border-transparent text-ink",
-                      cursored && !active && "bg-recess",
-                      disabled && "opacity-50",
-                    )}
+                    className={pickListRecipe({ active, cursored: cursored && !active, disabled })}
                   >
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     {item.meta != null && (

@@ -18,11 +18,11 @@ import {
   Terminal,
 } from "lucide-react";
 
-import { ThemeToggle } from "#/components/ThemeToggle";
+import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Card } from "#/components/ui/card";
+import { Card } from "#/components/lang/card";
 
 type InstallStatus = {
   installed: boolean;
@@ -308,10 +308,7 @@ function App() {
         <section className="mt-12 grid gap-4 sm:grid-cols-2">
           {tools.map((tool) => (
             <div key={tool.to} className="flex flex-col gap-1.5">
-              <Card
-                render={<Link to={tool.to} />}
-                className="group flex flex-1 flex-col gap-3 p-5 hover:veil"
-              >
+              <Card render={<Link to={tool.to} />}>
                 <div className="flex items-center justify-between">
                   <span className="inline-flex size-9 items-center justify-center rounded-sm bg-recess text-ink">
                     <tool.icon className="size-4.5" />

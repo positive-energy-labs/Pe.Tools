@@ -9,8 +9,8 @@ import {
   ComboboxItem,
   ComboboxList,
   ComboboxValue,
-} from "#/components/ui/combobox";
-import { Textarea } from "#/components/ui/textarea";
+} from "#/components/lang/combobox";
+import { Textarea } from "#/components/lang/textarea";
 import { FieldRenderer } from "./field-renderer";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
@@ -130,6 +130,7 @@ export function ArrayField({
         </div>
       ) : (
         <Textarea
+          size="tall"
           value={JSON.stringify(field.value ?? [], null, 2)}
           onChange={(event) => {
             try {
@@ -139,7 +140,6 @@ export function ArrayField({
               // Keep user input editable while JSON is invalid.
             }
           }}
-          className="min-h-32"
         />
       )}
       <span className="">

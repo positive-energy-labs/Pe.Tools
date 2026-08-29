@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
-import { ThemeToggle } from "#/components/ThemeToggle";
+import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { FactChip } from "#/components/lang/chip";
 
 import { LangCellSpecimens } from "./lang-cells";

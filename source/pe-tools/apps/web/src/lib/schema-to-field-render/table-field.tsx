@@ -1,5 +1,5 @@
 import { Verb } from "#/components/lang/verb";
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/lang/input";
 import type { SchemaNodeRef } from "@pe/schema-core";
 import {
   FieldChangeBadge,
@@ -122,7 +122,6 @@ function TableCellField({
         list={list}
         value={String(field.value ?? value ?? "")}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className={field.errors.length > 0 ? "" : undefined}
       />
       <div className="flex flex-wrap items-center gap-2">
         <FieldChangeBadge path={path} compact />
@@ -247,7 +246,6 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                     <Input
                       defaultValue={columnKey}
                       onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
-                      className="h-8 min-w-24"
                     />
                     <Verb
                       label="remove"

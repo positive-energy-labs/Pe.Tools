@@ -14,7 +14,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/lang/combobox";
 import { cn } from "#/lib/utils";
 import { PressContent } from "#/components/anatomy/press-content";
 
@@ -198,12 +198,6 @@ function ColFilter({
         <ComboboxTrigger
           aria-label={`${label} filter`}
           title="Narrow the table to one value of this column. The choices are every value present across ALL rows, so they stay put as other filters move."
-          className={cn(
-            "face-mono t-caption flex h-5 w-full min-w-0 max-w-32 items-center justify-between gap-0.5 rounded-sm border bg-transparent px-1 font-normal outline-none",
-            value
-              ? "border-line-2 bg-select text-ink"
-              : "border-line text-ink-2 hover:border-line-2",
-          )}
         >
           <span className="truncate normal-case">{value === null ? all : selected.label}</span>
         </ComboboxTrigger>
@@ -213,7 +207,7 @@ function ColFilter({
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>
           {(choice: FacetChoice) => (
-            <ComboboxItem key={choice.value ?? "\u0000all"} value={choice} className="pr-7">
+            <ComboboxItem key={choice.value ?? "\u0000all"} value={choice}>
               <span className={cn("truncate", choice.value === null && "text-ink-2")}>
                 {choice.label}
               </span>

@@ -10,7 +10,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/lang/combobox";
 
 export function Seam({ op }: { op: string }) {
   return (
@@ -67,11 +67,7 @@ export function NamePicker({
     >
       {/* ponytail: explicit anchor on the chips row — the chips input must not be the positioner
           anchor, or the popup roams as chips wrap (same law as control-chips.tsx). */}
-      <ComboboxChips
-        ref={anchor}
-        title={title}
-        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-sm border-line-2 bg-transparent py-0.5 t-label"
-      >
+      <ComboboxChips ref={anchor} title={title}>
         {collapsed ? (
           <span
             className="px-1 t-label text-ink-2"
@@ -80,26 +76,21 @@ export function NamePicker({
             all {values.length}
           </span>
         ) : (
-          values.map((name) => (
-            <ComboboxChip key={name} className="face-mono rounded-sm t-label">
-              {name}
-            </ComboboxChip>
-          ))
+          values.map((name) => <ComboboxChip key={name}>{name}</ComboboxChip>)
         )}
         <ComboboxChipsInput
           aria-label={ariaLabel}
           placeholder={values.length === 0 ? placeholder : "add…"}
-          className="face-mono t-label placeholder:text-ink-2"
         />
         <ComboboxTrigger />
       </ComboboxChips>
       <ComboboxContent anchor={anchor}>
         {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
             "you typed a string that matched nothing" — plain muted text, no story/exit. */}
-        <ComboboxEmpty className="face-mono t-label text-ink-mute">no matches</ComboboxEmpty>
+        <ComboboxEmpty>no matches</ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
-            <ComboboxItem key={name} value={name} className="face-mono pr-7 t-label">
+            <ComboboxItem key={name} value={name}>
               <span className="truncate">{name}</span>
             </ComboboxItem>
           )}

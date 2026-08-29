@@ -1,14 +1,14 @@
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/verb-lane";
+import { VerbLane } from "#/components/lang/verb-lane";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
+} from "#/components/lang/select";
 import { HostIssuePanel } from "#/host/issues";
 import { LoadedFamilyPlacementScope } from "#/host/loaded-families-view";
 import { NamePicker, SectionLabel } from "#/families/readout-primitives";
@@ -72,18 +72,12 @@ export function FamiliesScopeBand() {
           <SelectTrigger
             aria-label="placement filter"
             title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-            className="face-mono h-6 w-32 shrink-0 rounded-sm border-line-2 px-1.5 t-label"
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-sm">
+          <SelectContent>
             {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
-              <SelectItem
-                key={value}
-                value={value}
-                title={PLACEMENT_NOTES[value]}
-                className="face-mono t-label"
-              >
+              <SelectItem key={value} value={value} title={PLACEMENT_NOTES[value]}>
                 {PLACEMENT_LABELS[value]}
               </SelectItem>
             ))}
@@ -158,7 +152,7 @@ export function FamiliesScopeBand() {
       </div>
 
       <div className="border-b border-line empty:border-0">
-        <VerbLane atoms={store.atoms} className="px-4 py-1.5" />
+        <VerbLane atoms={store.atoms} />
       </div>
       {matrixIssue && (
         <div className="px-4 py-2">

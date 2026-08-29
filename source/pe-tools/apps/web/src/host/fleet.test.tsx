@@ -17,7 +17,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 
 vi.mock("#/workbench/provider", () => ({ useWorkbench: () => ({ revit: false }) }));
 
-import { ChatSentence } from "#/components/chat-sentence";
+import { ChatSentence } from "#/chat/chat-sentence";
 import { useFleet } from "./fleet";
 
 function FleetProbe({ enabled }: { enabled: boolean }) {

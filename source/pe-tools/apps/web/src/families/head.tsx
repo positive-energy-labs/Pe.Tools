@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useAtomValue } from "@effect/atom-react";
 
 import { FactChip } from "#/components/lang/chip";
-import { VerbLane } from "#/components/verb-lane";
+import { VerbLane } from "#/components/lang/verb-lane";
 import { FAMILIES_PRODUCT, type FamiliesSlot } from "#/families/product";
 import type { FamiliesStore } from "#/families/store";
 import { useFleet } from "#/host/fleet";

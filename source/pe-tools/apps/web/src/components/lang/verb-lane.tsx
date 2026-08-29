@@ -16,14 +16,7 @@ export interface VerbAtoms {
   receipt: Atom.Atom<VerbReceipt | null>;
 }
 
-export function VerbLane({
-  atoms,
-  standing,
-}: {
-  atoms: VerbAtoms;
-  standing?: ReactNode;
-  className?: string;
-}) {
+export function VerbLane({ atoms, standing }: { atoms: VerbAtoms; standing?: ReactNode }) {
   const busy = useAtomValue(atoms.busy);
   const failure = useAtomValue(atoms.failure);
   const receipt = useAtomValue(atoms.receipt);

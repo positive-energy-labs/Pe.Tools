@@ -4,7 +4,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { useThreadMessages } from "../aui";
 import { useCacheView } from "../world";
 import { useWorkbench } from "../provider";
-import { useChatTarget } from "#/components/chat-target";
+import { useChatTarget } from "#/chat/chat-target";
 import { chipDescriptor } from "#/host/target-ui";
 import { selectBreakdown } from "../chat-state";
 import {

@@ -5,7 +5,7 @@ import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "#/components/lang/dialog";
 import { fmtNum } from "#/components/master-table/model";
 import { type CandidateRegion } from "#/takeoff/model";
 import { type TakeoffStore } from "#/takeoff/store";
@@ -233,9 +233,9 @@ export function Panel({
 }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[calc(100vh-4rem)] w-[44rem] overflow-y-auto sm:max-w-[44rem]">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle className="face-display">{title}</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         {children}
       </DialogContent>

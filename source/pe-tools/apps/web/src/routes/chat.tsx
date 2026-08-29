@@ -2,7 +2,7 @@ import { createFileRoute, retainSearchParams, stripSearchParams } from "@tanstac
 import { z } from "zod";
 import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";
-import { ChatShell } from "#/components/chat-shell";
+import { ChatShell } from "#/chat/chat-shell";
 import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
 
 /**

@@ -5,7 +5,7 @@ import { FactChip } from "#/components/lang/chip";
 import { RouteDocument } from "#/workbench/route-document";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/verb-lane";
+import { VerbLane } from "#/components/lang/verb-lane";
 import { Provenance } from "#/components/lang/section";
 import { Press } from "#/components/lang/press";
 import { useFleet } from "#/host/fleet";

@@ -1,4 +1,4 @@
-import { Pane } from "#/components/ui/pane";
+import { Pane } from "#/components/lang/pane";
 import { Verb } from "#/components/lang/verb";
 import { AnatomyDrawing } from "#/family/anatomy";
 import { useFamilyWorkspace } from "#/family/workspace-context";

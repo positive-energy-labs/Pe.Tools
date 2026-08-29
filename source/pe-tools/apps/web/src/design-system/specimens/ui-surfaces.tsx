@@ -7,7 +7,8 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "#/components/ui/card";
+  cardRecipe,
+} from "#/components/lang/card";
 import {
   Dialog,
   DialogContent,
@@ -16,34 +17,38 @@ import {
   DialogTitle,
   DialogTrigger,
   dialogRecipe,
-} from "#/components/ui/dialog";
-import { ValueDiff } from "#/components/ui/value-diff";
-
-import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
+} from "#/components/lang/dialog";
+import { ValueDiff, valueDiffRecipe } from "#/components/lang/value-diff";
+import { RecipeGrid } from "./recipe-grid";
 
 export function UiSurfaceSpecimens() {
   return (
     <>
-      <SpecimenFrame name="Card" importPath="#/components/ui/card">
-        <div className="w-80">
-          <Card>
-            <CardHeader>
-              <div className="min-w-0">
-                <CardTitle>Overhead Coiling Door 421</CardTitle>
-                <CardDescription>13 params · 3 types</CardDescription>
-              </div>
-              <CardAction>
-                <Press size="label">open</Press>
-              </CardAction>
-            </CardHeader>
-            <CardContent>content</CardContent>
-            <CardFooter>footer</CardFooter>
-          </Card>
-        </div>
-      </SpecimenFrame>
+      <RecipeGrid
+        name="Card"
+        importPath="#/components/lang/card"
+        recipe={cardRecipe}
+        render={() => (
+          <div className="w-80">
+            <Card>
+              <CardHeader>
+                <div>
+                  <CardTitle>Overhead Coiling Door 421</CardTitle>
+                  <CardDescription>13 params</CardDescription>
+                </div>
+                <CardAction>
+                  <Press size="label">open</Press>
+                </CardAction>
+              </CardHeader>
+              <CardContent>content</CardContent>
+              <CardFooter>footer</CardFooter>
+            </Card>
+          </div>
+        )}
+      />
       <RecipeGrid
         name="Dialog"
-        importPath="#/components/ui/dialog"
+        importPath="#/components/lang/dialog"
         recipe={dialogRecipe}
         render={() => (
           <Dialog>
@@ -52,21 +57,19 @@ export function UiSurfaceSpecimens() {
               <DialogHeader>
                 <DialogTitle>Dialog</DialogTitle>
                 <DialogDescription>
-                  Backdrop, portal, close button, escape, and click-outside.
+                  Backdrop, portal, close, escape, and click-outside.
                 </DialogDescription>
               </DialogHeader>
             </DialogContent>
           </Dialog>
         )}
       />
-      <SpecimenFrame name="ValueDiff" importPath="#/components/ui/value-diff">
-        <div className="flex flex-col gap-3">
-          <ValueDiff from="100 VA" to="150 VA" />
-          <ValueDiff from={null} to="2 hr" />
-          <ValueDiff from="24 in" to="24 in" />
-          <ValueDiff from="" to="115 V" />
-        </div>
-      </SpecimenFrame>
+      <RecipeGrid
+        name="ValueDiff"
+        importPath="#/components/lang/value-diff"
+        recipe={valueDiffRecipe}
+        render={() => <ValueDiff from="100 VA" to="150 VA" />}
+      />
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { Workspace } from "#/anatomy";
 import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/verb-lane";
+import { VerbLane } from "#/components/lang/verb-lane";
 import { TargetingHead } from "#/targeting/head";
 import { FamilyWorkspaceAnatomy } from "#/family/workspace-anatomy";
 import { FamilyWorkspaceDocPane } from "#/family/workspace-doc-pane";

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { Press } from "#/components/lang/press";
-import { Pane } from "#/components/ui/pane";
+import { Pane } from "#/components/lang/pane";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelStats } from "#/takeoff/level-stats";
 import { ZoneCard } from "#/takeoff/zone-card";

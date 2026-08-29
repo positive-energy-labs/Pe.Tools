@@ -23,7 +23,7 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { ThemeToggle } from "#/components/ThemeToggle";
+import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { ArmingStrip } from "#/components/lang/arming-strip";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";

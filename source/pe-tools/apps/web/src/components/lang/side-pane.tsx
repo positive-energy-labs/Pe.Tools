@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
+import { tv } from "#/lib/tv";
 
 /**
  * SidePane — one width-adjustable flanking pane for the workbench. Replaces the ad-hoc
@@ -37,8 +37,22 @@ export interface SidePaneProps {
   /** Header slot, shown above the scrollable body when open. */
   header?: ReactNode;
   children: ReactNode;
-  className?: string;
 }
+
+export const sidePaneRecipe = tv({
+  slots: {
+    root: "relative flex shrink-0 flex-col border-line bg-page",
+    handle:
+      "absolute inset-y-0 z-raised w-[5px] cursor-col-resize touch-none hover:bg-line-2 active:bg-line-2",
+  },
+  variants: {
+    side: {
+      left: { root: "border-r", handle: "-right-[2px]" },
+      right: { root: "border-l", handle: "-left-[2px]" },
+    },
+    state: { open: {}, collapsed: { root: "items-center gap-1 py-2" } },
+  },
+});
 
 const RAIL = 40;
 
@@ -55,7 +69,6 @@ export function SidePane({
   rail,
   header,
   children,
-  className,
 }: SidePaneProps) {
   // Controlled if `open` is passed; otherwise track internally.
   const [openUncontrolled, setOpenUncontrolled] = useState(defaultOpen);
@@ -103,25 +116,16 @@ export function SidePane({
     [side, minWidth, maxWidth, storageKey, onWidthChange, width],
   );
 
-  const border = side === "left" ? "border-r" : "border-l";
   // Chevron points "outward when open" (collapse) / "inward when closed" (expand).
   const Collapse = side === "left" ? ChevronLeft : ChevronRight;
   const Expand = side === "left" ? ChevronRight : ChevronLeft;
 
   if (!open) {
+    const { root } = sidePaneRecipe({ side, state: "collapsed" });
     // Product default: chevron-only rail. The `rail` slot is optional — the owner dislikes
     // icon-stack rails, so callers should normally leave it unset and get just the expander.
     return (
-      <div
-        data-state="collapsed"
-        data-side={side}
-        style={{ width: RAIL }}
-        className={cn(
-          "flex shrink-0 flex-col items-center gap-1 border-line bg-page py-2",
-          border,
-          className,
-        )}
-      >
+      <div data-state="collapsed" data-side={side} style={{ width: RAIL }} className={root()}>
         <Press tone="neutral" size="icon" aria-label="Expand pane" onClick={() => setOpen(true)}>
           <Expand />
         </Press>
@@ -130,14 +134,9 @@ export function SidePane({
     );
   }
 
+  const { root, handle } = sidePaneRecipe({ side, state: "open" });
   return (
-    <div
-      ref={paneRef}
-      data-state="open"
-      data-side={side}
-      style={{ width }}
-      className={cn("relative flex shrink-0 flex-col border-line bg-page", border, className)}
-    >
+    <div ref={paneRef} data-state="open" data-side={side} style={{ width }} className={root()}>
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2.5">
         <Press tone="neutral" size="icon" aria-label="Collapse pane" onClick={() => setOpen(false)}>
           <Collapse />
@@ -153,11 +152,7 @@ export function SidePane({
         aria-orientation="vertical"
         aria-label="Resize pane"
         onPointerDown={onResizeDown}
-        className={cn(
-          "absolute inset-y-0 z-raised w-[5px] cursor-col-resize touch-none",
-          "hover:bg-line-2 active:bg-line-2",
-          side === "left" ? "-right-[2px]" : "-left-[2px]",
-        )}
+        className={handle()}
       />
     </div>
   );

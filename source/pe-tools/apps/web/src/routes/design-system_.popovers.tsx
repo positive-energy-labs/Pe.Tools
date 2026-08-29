@@ -27,7 +27,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { ThemeToggle } from "#/components/ThemeToggle";
+import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
 import {
@@ -39,14 +39,14 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/lang/combobox";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
+} from "#/components/lang/select";
 import { FieldOptionMultiSelect, FieldOptionSelect, type FieldOption } from "#/host/field-options";
 import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
 import { cn } from "#/lib/utils";
@@ -96,10 +96,7 @@ function FacetFilterSpecimen() {
       itemToStringLabel={(choice: { value: string | null; label: string }) => choice.label}
     >
       <div ref={anchorRef} className="flex">
-        <ComboboxTrigger
-          aria-label="category filter"
-          className="flex h-5 w-32 items-center justify-between gap-0.5 px-1"
-        >
+        <ComboboxTrigger aria-label="category filter">
           <span>{selected.label}</span>
         </ComboboxTrigger>
       </div>
@@ -108,7 +105,7 @@ function FacetFilterSpecimen() {
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>
           {(choice: { value: string | null; label: string }) => (
-            <ComboboxItem key={choice.value ?? "all"} value={choice} className="pr-7">
+            <ComboboxItem key={choice.value ?? "all"} value={choice}>
               <span>{choice.label}</span>
             </ComboboxItem>
           )}
@@ -146,7 +143,7 @@ function PickerChipSpecimen() {
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>
           {(option: (typeof CATEGORY_OPTIONS)[number]) => (
-            <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
+            <ComboboxItem key={option.value} value={option}>
               <span>{option.label}</span>
               {option.description ? <span>{option.description}</span> : null}
             </ComboboxItem>

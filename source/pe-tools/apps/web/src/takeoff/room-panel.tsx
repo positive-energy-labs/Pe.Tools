@@ -5,7 +5,7 @@ import { FactChip } from "#/components/lang/chip";
 import { NumberCell, StateDot } from "#/components/master-table/cells";
 import { fmtNum } from "#/components/master-table/model";
 import { Verb } from "#/components/lang/verb";
-import { Pane } from "#/components/ui/pane";
+import { Pane } from "#/components/lang/pane";
 import { ManualJField } from "#/takeoff/manual-j-field";
 import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";
@@ -49,12 +49,7 @@ function RoomPanel({
     .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
 
   return (
-    <Pane
-      kind="inspector"
-      title="room"
-      meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
-      bodyClassName="p-0"
-    >
+    <Pane kind="inspector" title="room" meta={`${zone.zone.key} · ${zone.zone.lane.label}`}>
       <div className="divide-y divide-line">
         <div className="px-2.5 py-2">
           <h2 className="face-display t-title font-semibold tracking-tight">{room.name}</h2>

@@ -24,7 +24,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Check, Save, Sparkles, Undo2, X } from "lucide-react";
 
-import { ThemeToggle } from "#/components/ThemeToggle";
+import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { CellStateKey } from "#/components/lang/cell-key";
 import { StateCell, type StateCellProps } from "#/components/lang/cell";

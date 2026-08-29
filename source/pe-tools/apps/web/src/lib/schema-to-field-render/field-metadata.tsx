@@ -1,6 +1,6 @@
 import { CircleHelp } from "lucide-react";
-import { Label } from "#/components/ui/label";
-import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
+import { Label } from "#/components/lang/label";
+import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
 import { cn } from "#/lib/utils";
 import { type FieldOptionState, useFieldChangeSummary } from "./shared";
 
@@ -68,15 +68,12 @@ function FieldMetadataTooltip({
   return (
     <UiTooltipProvider>
       <Tooltip.Root>
-        <Tooltip.Trigger
-          aria-label="Field details"
-          className="inline-flex h-5 w-5 items-center justify-center transition-colors"
-        >
+        <Tooltip.Trigger aria-label="Field details" kind="icon">
           <CircleHelp className="h-4 w-4" />
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup className="z-popup max-w-sm px-3 py-2">
+            <Tooltip.Popup>
               <div className="space-y-2">
                 {description ? (
                   <div className="space-y-1">
@@ -126,20 +123,12 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
   return (
     <UiTooltipProvider>
       <Tooltip.Root>
-        <Tooltip.Trigger
-          aria-label="View change details"
-          className={cn(
-            "inline-flex items-center px-1.5 py-0.5",
-            "",
-            // Compact buys tighter padding only — the tier already IS the small size.
-            compact && "px-1 py-0",
-          )}
-        >
+        <Tooltip.Trigger aria-label="View change details" size={compact ? "compact" : "default"}>
           {label}
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup className="z-popup max-w-sm px-3 py-2">
+            <Tooltip.Popup>
               <div className="space-y-2">
                 {change.isComposite && nestedChanges > 0 ? (
                   <p className="">
@@ -270,9 +259,7 @@ export function FieldLabelRow({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <Label htmlFor={htmlFor} className="">
-        {label}
-      </Label>
+      <Label htmlFor={htmlFor}>{label}</Label>
       {required ? <RequiredBadge /> : null}
       <FieldChangeBadge path={path} />
       <FieldMetadataTooltip description={description} defaultValue={defaultValue} />

@@ -1,4 +1,6 @@
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
+
+export const valueDiffRecipe = tv({ base: "face-mono t-value" });
 
 /**
  * ValueDiff — the one way a value change is written anywhere in the workbench:
@@ -6,18 +8,10 @@ import { cn } from "#/lib/utils";
  * whole atom is mono at the value tier. When `from` is unknown or unchanged, only
  * `to` renders. The new value inherits color from the caller (a meaning role).
  */
-export function ValueDiff({
-  from,
-  to,
-  className,
-}: {
-  from?: string | null;
-  to: string;
-  className?: string;
-}) {
+export function ValueDiff({ from, to }: { from?: string | null; to: string }) {
   const changed = from != null && from !== to;
   return (
-    <span className={cn("face-mono t-value", className)}>
+    <span className={valueDiffRecipe()}>
       {changed && (
         <>
           <span className="text-ink-2 line-through opacity-70">{from || "—"}</span>

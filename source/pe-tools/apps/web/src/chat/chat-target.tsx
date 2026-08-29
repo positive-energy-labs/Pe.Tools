@@ -1,3 +1,4 @@
+import { chatStyles } from "#/components/lang/chat-appearance";
 import { getRouteApi } from "@tanstack/react-router";
 
 import { EmptyState } from "#/components/lang/empty";
@@ -50,16 +51,14 @@ export function TargetWorld() {
   const chip = chipDescriptor(resolution);
   const options = worldTrunk.feed(fleet).options ?? [];
   return (
-    <div className="border-b-[0.5px] border-line px-3 py-3">
-      <div className="mb-1.5 flex items-baseline justify-between">
-        <span className="t-label t-upper text-ink-2">Target</span>
-        <span className="t-caption face-mono text-ink-2">{chip.tone}</span>
+    <div className={chatStyles.chatTarget0()}>
+      <div className={chatStyles.chatTarget1()}>
+        <span className={chatStyles.chatTarget2()}>Target</span>
+        <span className={chatStyles.chatTarget3()}>{chip.tone}</span>
       </div>
 
       {/* raw resolution — provenance, not decoration */}
-      <div className="mb-2 break-all t-caption face-mono text-ink-2">
-        {resolutionReadout(resolution)}
-      </div>
+      <div className={chatStyles.chatTarget4()}>{resolutionReadout(resolution)}</div>
 
       {options.map((option) => {
         const optionResolution = resolveTarget(sessions, option.id);
@@ -78,8 +77,8 @@ export function TargetWorld() {
             title="pin the chat here"
           >
             <PressContent geometry="row">
-              <span className="truncate t-value text-ink">{option.label}</span>
-              <span className="whitespace-nowrap t-caption face-mono text-ink-2">{option.sub}</span>
+              <span className={chatStyles.chatTarget5()}>{option.label}</span>
+              <span className={chatStyles.chatTarget6()}>{option.sub}</span>
             </PressContent>
           </Press>
         );
@@ -94,7 +93,7 @@ export function TargetWorld() {
       ) : null}
 
       {worldLog.length > 0 ? (
-        <div className="mt-2 border-t-[0.5px] border-line pt-1.5">
+        <div className={chatStyles.chatTarget7()}>
           {worldLog.slice(-5).map((event, i) => (
             <WorldLogLine key={`${event.atMs}-${i}`} event={event} />
           ))}
@@ -110,9 +109,9 @@ function WorldLogLine({ event }: { event: WorldEvent }) {
     minute: "2-digit",
   });
   return (
-    <div className="flex items-baseline gap-2 py-0.5 t-caption face-mono text-ink-2">
-      <span className="opacity-70">{time}</span>
-      <span className="truncate">{event.label}</span>
+    <div className={chatStyles.chatTarget8()}>
+      <span className={chatStyles.chatTarget9()}>{time}</span>
+      <span className={chatStyles.chatTarget10()}>{event.label}</span>
     </div>
   );
 }

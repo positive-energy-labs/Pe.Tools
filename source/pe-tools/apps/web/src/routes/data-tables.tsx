@@ -8,14 +8,14 @@ import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { PickList } from "#/components/ui/pick-list";
-import { SidePane } from "#/components/ui/side-pane";
+import { PickList } from "#/components/lang/pick-list";
+import { SidePane } from "#/components/lang/side-pane";
 import { callHostRpc } from "#/host/client";
 import { useHostOp } from "#/host/queries";
 import { appAtomRegistry } from "#/state/registry";
 import { createRouteStoreCore, fail } from "#/state/route-store";
 import { useRouteStore } from "#/state/use-route-store";
-import { VerbLane } from "#/components/verb-lane";
+import { VerbLane } from "#/components/lang/verb-lane";
 import { DraftEditor } from "#/data-tables/draft-editor";
 
 /**

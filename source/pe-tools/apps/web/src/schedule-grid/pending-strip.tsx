@@ -2,7 +2,7 @@ import { splitScheduleCellKey } from "@pe/agent-contracts";
 import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Verb } from "#/components/lang/verb";
-import { ValueDiff } from "#/components/ui/value-diff";
+import { ValueDiff } from "#/components/lang/value-diff";
 import { Press } from "#/components/lang/press";
 import type { CellState } from "#/schedule-grid/route";
 
@@ -76,15 +76,7 @@ export function PendingStrip({
                 </span>
                 <span className="face-mono t-caption text-ink-2">r{rowNumber}</span>
               </Press>
-              <ValueDiff
-                from={currentText(key)}
-                to={next}
-                className={
-                  isStaged
-                    ? "min-w-0 flex-1 truncate font-bold text-caution"
-                    : "min-w-0 flex-1 truncate text-pea-ink"
-                }
-              />
+              <ValueDiff from={currentText(key)} to={next} />
               {!isStaged && cell.proposal?.note && (
                 <span className="t-label hidden max-w-56 truncate text-ink-2 sm:block">
                   {cell.proposal.note}

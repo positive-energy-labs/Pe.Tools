@@ -1,7 +1,7 @@
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
-import { Pane, PaneSplit } from "#/components/ui/pane";
+import { Pane, PaneSplit } from "#/components/lang/pane";
 import { fb } from "../feedback/staging";
 import { NoteInput } from "../feedback/verbs";
 import { Tray, TrayCollapsed } from "../feedback/tray";

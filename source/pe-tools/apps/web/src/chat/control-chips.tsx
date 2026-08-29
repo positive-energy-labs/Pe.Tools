@@ -1,3 +1,4 @@
+import { chatStyles } from "#/components/lang/chat-appearance";
 import { Press } from "#/components/lang/press";
 import { EmptyState } from "#/components/lang/empty";
 import {
@@ -9,7 +10,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/lang/combobox";
 import { useWorkbench } from "#/workbench/provider";
 import { ACCESS_LEVELS, type AccessLevel } from "#/workbench/chat-state";
 
@@ -91,12 +92,12 @@ function Picker({
     >
       {/* ponytail: explicit anchor on the trigger — the in-popup search input can't be the
           positioner anchor or it feedback-loops (roaming/jittering popup). */}
-      <div ref={anchorRef} className="inline-flex">
+      <div ref={anchorRef} className={chatStyles.controlChips0()}>
         <ComboboxTrigger
           title={title}
           render={<Press tone="quiet" size="value" state="selected" />}
         >
-          <span className="t-value face-mono truncate">{label}</span>
+          <span className={chatStyles.controlChips1()}>{label}</span>
         </ComboboxTrigger>
       </div>
       <ComboboxContent align="end" anchor={anchorRef}>
@@ -104,9 +105,11 @@ function Picker({
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>
           {(option: PickerOption) => (
-            <ComboboxItem key={option.id} value={option} className="flex-col items-start pr-7">
-              <span className="text-ink">{option.name}</span>
-              {option.hint ? <span className="t-value text-ink-2">{option.hint}</span> : null}
+            <ComboboxItem key={option.id} value={option}>
+              <span className={chatStyles.controlChips2()}>{option.name}</span>
+              {option.hint ? (
+                <span className={chatStyles.controlChips3()}>{option.hint}</span>
+              ) : null}
             </ComboboxItem>
           )}
         </ComboboxList>

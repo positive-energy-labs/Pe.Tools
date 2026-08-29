@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/lang/input";
 import type { GroundedDocEngine } from "#/grounded-doc/engine";
 import { PROSE_CLASS } from "#/workbench/prose";
 import { cn } from "#/lib/utils";
@@ -161,7 +161,6 @@ export function UploadSurface({
                 if (event.key === "Enter") submitUrl();
               }}
               placeholder="…or paste a public PDF URL"
-              className="h-8 pl-7"
             />
           </div>
           <Verb

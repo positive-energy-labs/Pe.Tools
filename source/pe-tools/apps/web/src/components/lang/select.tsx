@@ -1,7 +1,7 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import { Check as RiCheckLine, ChevronDown as RiArrowDownSLine } from "lucide-react";
 
-import { recipeClass, tv } from "#/lib/tv";
+import { tv } from "#/lib/tv";
 
 export const selectRecipe = tv({
   slots: {
@@ -22,25 +22,15 @@ function Select<Value>(props: SelectPrimitive.Root.Props<Value>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
 
-function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
+function SelectValue(props: Omit<SelectPrimitive.Value.Props, "className">) {
   const { value } = selectRecipe();
-  return (
-    <SelectPrimitive.Value
-      data-slot="select-value"
-      className={recipeClass(value, className)}
-      {...props}
-    />
-  );
+  return <SelectPrimitive.Value data-slot="select-value" className={value()} {...props} />;
 }
 
-function SelectTrigger({ className, children, ...props }: SelectPrimitive.Trigger.Props) {
+function SelectTrigger({ children, ...props }: Omit<SelectPrimitive.Trigger.Props, "className">) {
   const { trigger, icon } = selectRecipe();
   return (
-    <SelectPrimitive.Trigger
-      data-slot="select-trigger"
-      className={recipeClass(trigger, className)}
-      {...props}
-    >
+    <SelectPrimitive.Trigger data-slot="select-trigger" className={trigger()} {...props}>
       {children}
       <SelectPrimitive.Icon className={icon()}>
         <RiArrowDownSLine />
@@ -50,20 +40,16 @@ function SelectTrigger({ className, children, ...props }: SelectPrimitive.Trigge
 }
 
 function SelectContent({
-  className,
   children,
   sideOffset = 4,
   ...props
-}: SelectPrimitive.Popup.Props & Pick<SelectPrimitive.Positioner.Props, "sideOffset">) {
+}: Omit<SelectPrimitive.Popup.Props, "className"> &
+  Pick<SelectPrimitive.Positioner.Props, "sideOffset">) {
   const { positioner, content } = selectRecipe();
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner className={positioner()} sideOffset={sideOffset}>
-        <SelectPrimitive.Popup
-          data-slot="select-content"
-          className={recipeClass(content, className)}
-          {...props}
-        >
+        <SelectPrimitive.Popup data-slot="select-content" className={content()} {...props}>
           {children}
         </SelectPrimitive.Popup>
       </SelectPrimitive.Positioner>
@@ -71,14 +57,10 @@ function SelectContent({
   );
 }
 
-function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Props) {
+function SelectItem({ children, ...props }: Omit<SelectPrimitive.Item.Props, "className">) {
   const { item, indicator, check } = selectRecipe();
   return (
-    <SelectPrimitive.Item
-      data-slot="select-item"
-      className={recipeClass(item, className)}
-      {...props}
-    >
+    <SelectPrimitive.Item data-slot="select-item" className={item()} {...props}>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
       <span className={indicator()}>
         <SelectPrimitive.ItemIndicator>

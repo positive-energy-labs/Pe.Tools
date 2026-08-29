@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 
-import { recipeClass, tv } from "#/lib/tv";
+import { tv } from "#/lib/tv";
 import { Press } from "#/components/lang/press";
 import { X as RiCloseLine } from "lucide-react";
 
@@ -24,7 +24,7 @@ function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
-function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+function DialogTrigger({ ...props }: Omit<DialogPrimitive.Trigger.Props, "className">) {
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
 
@@ -32,38 +32,23 @@ function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
 }
 
-function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
-}
-
-function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
+function DialogOverlay(props: Omit<DialogPrimitive.Backdrop.Props, "className">) {
   const { overlay } = dialogRecipe();
-  return (
-    <DialogPrimitive.Backdrop
-      data-slot="dialog-overlay"
-      className={recipeClass(overlay, className)}
-      {...props}
-    />
-  );
+  return <DialogPrimitive.Backdrop data-slot="dialog-overlay" className={overlay()} {...props} />;
 }
 
 function DialogContent({
-  className,
   children,
   showCloseButton = true,
   ...props
-}: DialogPrimitive.Popup.Props & {
+}: Omit<DialogPrimitive.Popup.Props, "className"> & {
   showCloseButton?: boolean;
 }) {
   const { content } = dialogRecipe();
   return (
     <DialogPortal>
       <DialogOverlay />
-      <DialogPrimitive.Popup
-        data-slot="dialog-content"
-        className={recipeClass(content, className)}
-        {...props}
-      >
+      <DialogPrimitive.Popup data-slot="dialog-content" className={content()} {...props}>
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close
@@ -84,44 +69,17 @@ function DialogHeader(props: Omit<React.ComponentProps<"div">, "className">) {
   return <div data-slot="dialog-header" className={header()} {...props} />;
 }
 
-function DialogFooter({
-  className,
-  showCloseButton = false,
-  children,
-  ...props
-}: React.ComponentProps<"div"> & {
-  showCloseButton?: boolean;
-}) {
-  const { footer } = dialogRecipe();
-  return (
-    <div data-slot="dialog-footer" className={footer({ className })} {...props}>
-      {children}
-      {showCloseButton && (
-        <DialogPrimitive.Close render={<Press tone="neutral" size="value" />}>
-          Close
-        </DialogPrimitive.Close>
-      )}
-    </div>
-  );
-}
-
-function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+function DialogTitle(props: Omit<DialogPrimitive.Title.Props, "className">) {
   const { title } = dialogRecipe();
-  return (
-    <DialogPrimitive.Title
-      data-slot="dialog-title"
-      className={recipeClass(title, className)}
-      {...props}
-    />
-  );
+  return <DialogPrimitive.Title data-slot="dialog-title" className={title()} {...props} />;
 }
 
-function DialogDescription({ className, ...props }: DialogPrimitive.Description.Props) {
+function DialogDescription(props: Omit<DialogPrimitive.Description.Props, "className">) {
   const { description } = dialogRecipe();
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={recipeClass(description, className)}
+      className={description()}
       {...props}
     />
   );
@@ -129,10 +87,8 @@ function DialogDescription({ className, ...props }: DialogPrimitive.Description.
 
 export {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogOverlay,
   DialogPortal,

@@ -3,7 +3,7 @@ import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
 import { Verb } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
-import { Pane } from "#/components/ui/pane";
+import { Pane } from "#/components/lang/pane";
 import { BuildStrip, BUILD_VERB, buildOutputPath } from "#/family/build";
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { cn } from "#/lib/utils";
@@ -195,7 +195,6 @@ export function FamilyWorkspaceTable() {
     <Pane
       kind="content"
       scroll="clip"
-      bodyClassName="flex min-h-0 flex-col"
       // The type's own NAME is the title while drilled in — a pane whose title still said
       // "parameters × types" would be claiming to show something it is not.
       title={drillType ?? "parameters × types"}

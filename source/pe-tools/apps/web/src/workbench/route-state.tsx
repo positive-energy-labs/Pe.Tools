@@ -23,7 +23,7 @@ import {
   type Scope,
   type VerbFailure,
 } from "#/state/route-store";
-import type { VerbAtoms } from "#/components/verb-lane";
+import type { VerbAtoms } from "#/components/lang/verb-lane";
 import { useRouteStore } from "#/state/use-route-store";
 
 type LastCommand = { command: string; input?: unknown } | null;

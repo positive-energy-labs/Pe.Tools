@@ -15,7 +15,7 @@ import { StateCell } from "#/components/lang/cell";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/verb-lane";
+import { VerbLane } from "#/components/lang/verb-lane";
 import { Verb } from "#/components/lang/verb";
 import { SchemaToFieldRender } from "#/lib/schema-to-field-render";
 import { timeAgo } from "#/lib/utils";

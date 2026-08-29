@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { ThemeToggle } from "#/components/ThemeToggle";
+import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { FactChip } from "#/components/lang/chip";
 import { Provenance, Section } from "#/components/lang/section";

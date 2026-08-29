@@ -1,17 +1,17 @@
 import type { OpsReceipt } from "@pe/agent-contracts";
 import { FactChip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
-import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
+import { Input } from "#/components/lang/input";
+import { Label } from "#/components/lang/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
-import { Switch } from "#/components/ui/switch";
-import { Textarea } from "#/components/ui/textarea";
+} from "#/components/lang/select";
+import { Switch } from "#/components/lang/switch";
+import { Textarea } from "#/components/lang/textarea";
 import { useFieldOptions } from "#/host/field-options";
 import { opViews } from "#/ops/op-views";
 import { type HostOperationCatalogEntry } from "#/ops/product";
@@ -115,10 +115,10 @@ export function OperationPane({
           />
         ) : (
           <Textarea
+            size="tall"
             value={args}
             onChange={(event) => setArgs(event.currentTarget.value)}
             spellCheck={false}
-            className="min-h-32"
           />
         )}
       </section>

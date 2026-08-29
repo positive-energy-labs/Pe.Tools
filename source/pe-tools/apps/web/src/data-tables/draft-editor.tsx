@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Verb } from "#/components/lang/verb";
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/lang/input";
 import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 import type { ColumnKind, Draft } from "#/routes/data-tables";
@@ -58,7 +58,6 @@ export function DraftEditor({
       <Input
         value={draft.name}
         onChange={(e) => patch((d) => ({ ...d, name: e.target.value }))}
-        className="t-value h-8 max-w-72"
         placeholder="Table name"
         title={
           draft.isNew
@@ -88,7 +87,6 @@ export function DraftEditor({
                           ),
                         }))
                       }
-                      className="t-label h-6 rounded-none border-transparent bg-transparent px-1 font-normal hover:border-line"
                       title="Column heading — written to the schedule on apply"
                     />
                     <select

@@ -10,7 +10,6 @@ import {
   type ReactNode,
 } from "react";
 
-import { cn } from "#/lib/utils";
 import { tv } from "#/lib/tv";
 
 /** Collapse leaves the pane's own chrome visible (`collapsedSize` ≈ toolbar height) so the
@@ -161,8 +160,20 @@ interface PaneResizeHandleProps {
   containerSize: () => number | undefined;
   onResize: (size: number, containerSize: number | undefined, commit: boolean) => void;
   onReset: () => void;
-  className?: string;
 }
+
+const paneResizeHandleRecipe = tv({
+  slots: {
+    root: "group z-raised flex touch-none items-center justify-center bg-recess/50 outline-none hover:veil focus-visible:veil",
+    bar: "bg-line-2 group-hover:bg-ink-2 group-focus-visible:bg-ink-2",
+  },
+  variants: {
+    axis: {
+      horizontal: { root: "h-full w-2 cursor-col-resize", bar: "h-8 w-px" },
+      vertical: { root: "h-2 w-full cursor-row-resize", bar: "h-px w-8" },
+    },
+  },
+});
 
 export function PaneResizeHandle({
   axis,
@@ -174,8 +185,8 @@ export function PaneResizeHandle({
   containerSize,
   onResize,
   onReset,
-  className,
 }: PaneResizeHandleProps) {
+  const { root, bar } = paneResizeHandleRecipe({ axis });
   const drag = useRef<{ point: number; size: number; latest: number } | null>(null);
   const coordinate = (event: Pick<PointerEvent<HTMLDivElement>, "clientX" | "clientY">) =>
     axis === "horizontal" ? event.clientX : event.clientY;
@@ -232,19 +243,9 @@ export function PaneResizeHandle({
       onPointerCancel={finishPointer}
       onKeyDown={onKeyDown}
       onDoubleClick={onReset}
-      className={cn(
-        // Hover buys no hue (the one hover law): the gutter lifts with the neutral veil.
-        "group z-raised flex touch-none items-center justify-center bg-recess/50 outline-none hover:veil focus-visible:veil",
-        axis === "horizontal" ? "h-full w-2 cursor-col-resize" : "h-2 w-full cursor-row-resize",
-        className,
-      )}
+      className={root()}
     >
-      <span
-        className={cn(
-          "bg-line-2 group-hover:bg-ink-2 group-focus-visible:bg-ink-2",
-          axis === "horizontal" ? "h-8 w-px" : "h-px w-8",
-        )}
-      />
+      <span className={bar()} />
     </div>
   );
 }
@@ -288,13 +289,15 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
     const sized = resize != null && side === target;
     return (
       <div
-        className={cn(
+        className={[
           "min-h-0 min-w-0 overflow-hidden",
           sized ? "shrink-0" : "flex-1",
           // A fixed split has no handle to draw the seam — the end side carries the hairline.
           resize == null && side === "end" && (horizontal ? "border-l" : "border-t"),
           resize == null && side === "end" && "border-line",
-        )}
+        ]
+          .filter(Boolean)
+          .join(" ")}
         style={sized ? targetStyle : undefined}
       >
         {child}

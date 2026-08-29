@@ -3,7 +3,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { Press } from "#/components/lang/press";
 import { MasterTable } from "#/components/master-table/master-table";
 import { fmtNum } from "#/components/master-table/model";
-import { Pane, PaneSplit } from "#/components/ui/pane";
+import { Pane, PaneSplit } from "#/components/lang/pane";
 import { RoomPanelFromStore } from "#/takeoff/room-panel";
 import type { AtlasRow as Row } from "#/takeoff/store";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";

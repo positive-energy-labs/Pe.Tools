@@ -1,6 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 
-import { PaneWorkspace } from "#/components/ui/pane";
+import { PaneWorkspace } from "#/components/lang/pane";
 import { cn } from "#/lib/utils";
 
 export interface WorkspaceProps {

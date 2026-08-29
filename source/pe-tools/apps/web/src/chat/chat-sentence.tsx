@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useChatTarget } from "#/components/chat-target";
+import { useChatTarget } from "#/chat/chat-target";
 import { useFleet } from "#/host/fleet";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingState } from "#/targeting/kit";

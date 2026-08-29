@@ -30,7 +30,7 @@
  * ── HARD ZERO (every category below must remain empty) ─────────────────────────────────────
  *  rawTextSize      any raw text-[Npx|Nrem]. Named off-system sizes emit no CSS and are caught
  *                   by the compiler census.
- *  rawButton        <button> outside components/ui + components/lang. World actions are
+ *  rawButton        <button> outside components/lang. World actions are
  *                   lang/Verb, surface machinery is lang/Press.
  *  uiButtonImports  import sites of ui/button. The file is deleted; this stops it returning.
  *  dashed           any broken line outside components/lang + design-lang.css + base.css whose
@@ -924,20 +924,20 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/section",
   "#/components/lang/switcher",
   "#/components/lang/verb",
-  "#/components/ui/card",
-  "#/components/ui/combobox",
-  "#/components/ui/command",
-  "#/components/ui/dialog",
-  "#/components/ui/input",
-  "#/components/ui/input-group",
-  "#/components/ui/label",
-  "#/components/ui/pane",
-  "#/components/ui/pick-list",
-  "#/components/ui/select",
-  "#/components/ui/side-pane",
-  "#/components/ui/switch",
-  "#/components/ui/textarea",
-  "#/components/ui/value-diff",
+  "#/components/lang/card",
+  "#/components/lang/combobox",
+  "#/components/lang/command",
+  "#/components/lang/dialog",
+  "#/components/lang/input",
+  "#/components/lang/input-group",
+  "#/components/lang/label",
+  "#/components/lang/pane",
+  "#/components/lang/pick-list",
+  "#/components/lang/select",
+  "#/components/lang/side-pane",
+  "#/components/lang/switch",
+  "#/components/lang/textarea",
+  "#/components/lang/value-diff",
 ] as const;
 const BAD_SPECIMEN_PATHS = REQUIRED_SPECIMEN_PATHS.filter(
   (importPath) => SPECIMEN_PATH_USES.get(importPath) !== 1,
@@ -1008,8 +1008,7 @@ describe("design checks — code holds the boundary", () => {
 });
 
 const isTsx = (f: Entry) => f.rel.endsWith(".tsx");
-const inUiOrLang = (f: Entry) =>
-  f.rel.startsWith("components/ui/") || f.rel.startsWith("components/lang/");
+const inLang = (f: Entry) => f.rel.startsWith("components/lang/");
 
 const assertZero = (name: string, offences: Offence[]) => {
   expect(
@@ -1027,11 +1026,11 @@ describe("design guard — maintained surface hard zeros", () => {
     assertZero("rawTextSize", scan(FILES, re));
   });
 
-  it("rawButton — <button> outside components/ui + components/lang", () => {
+  it("rawButton — <button> outside components/lang", () => {
     assertZero(
       "rawButton",
       scan(
-        FILES.filter((f) => isTsx(f) && !inUiOrLang(f)),
+        FILES.filter((f) => isTsx(f) && !inLang(f)),
         /<button\b/g,
       ),
     );
@@ -1049,7 +1048,7 @@ describe("design guard — maintained surface hard zeros", () => {
       /border-dashed|(?:\bborder(?:-(?:top|right|bottom|left|style)|Top|Right|Bottom|Left|Style)?|\boutline(?:-style|Style)?)\s*:\s*[^;\n]{0,40}\bdashed\b/g;
     const stroke = /stroke-?[Dd]asharray\s*[:=](?![^\n]{0,30}dash\()/g;
     const files = FILES.filter(
-      (f) => !inUiOrLang(f) && f.rel !== "design-lang.css" && f.rel !== "base.css",
+      (f) => !inLang(f) && f.rel !== "design-lang.css" && f.rel !== "base.css",
     ).map((f) => ({ ...f, text: stripComments(f.text) }));
     assertZero("dashed", [...scan(files, edge), ...scan(files, stroke)]);
   });
