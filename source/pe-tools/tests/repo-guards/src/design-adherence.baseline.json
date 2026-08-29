@@ -1,0 +1,126 @@
+{
+  "rawTable": {
+    "total": 30,
+    "byArea": {
+      "families": 2,
+      "family-review": 5,
+      "lib": 1,
+      "ops": 1,
+      "param-tables": 17,
+      "parameter-links": 1,
+      "routes": 1,
+      "runs": 2
+    }
+  },
+  "localChrome": {
+    "total": 6,
+    "byArea": {
+      "families": 1,
+      "routes": 5
+    }
+  },
+  "hostBelowRoute": {
+    "total": 8,
+    "byArea": {
+      "families": 1,
+      "grounded-doc": 1,
+      "ops": 2,
+      "rhvac": 1,
+      "runs": 2,
+      "workbench": 1
+    }
+  },
+  "escHandler": {
+    "total": 9,
+    "byArea": {
+      "components": 2,
+      "family-review": 2,
+      "param-tables": 2,
+      "runs": 1,
+      "takeoff": 1,
+      "targeting": 1
+    }
+  },
+  "opacityDim": {
+    "total": 48,
+    "byArea": {
+      "components": 24,
+      "families": 1,
+      "family": 5,
+      "grounded-doc": 1,
+      "host": 1,
+      "ops": 1,
+      "routes": 4,
+      "runs": 3,
+      "takeoff": 3,
+      "targeting": 2,
+      "workbench": 3
+    }
+  },
+  "longTitle": {
+    "total": 70,
+    "byArea": {
+      "components": 4,
+      "families": 15,
+      "family": 17,
+      "family-review": 6,
+      "grounded-doc": 1,
+      "param-tables": 8,
+      "routes": 10,
+      "runs": 6,
+      "takeoff": 3
+    }
+  },
+  "busyState": {
+    "total": 3,
+    "byArea": {
+      "ops": 1,
+      "routes": 1,
+      "runs": 1
+    }
+  },
+  "inlineColor": {
+    "total": 306,
+    "byArea": {
+      "components": 6,
+      "family": 3,
+      "family-review": 49,
+      "grilles": 5,
+      "host": 3,
+      "ops": 28,
+      "param-tables": 109,
+      "routes": 7,
+      "runs": 42,
+      "takeoff": 5,
+      "targeting": 40,
+      "workbench": 9
+    }
+  },
+  "rawMeaningColor": {
+    "total": 127,
+    "byArea": {
+      "family": 28,
+      "family-review": 5,
+      "grounded-doc": 3,
+      "host": 6,
+      "lib": 15,
+      "routes": 23,
+      "takeoff": 10,
+      "workbench": 37
+    }
+  },
+  "dlLeak": {
+    "total": 17,
+    "byArea": {
+      "components": 1,
+      "family": 1,
+      "routes": 15
+    }
+  },
+  "fatRoute": {
+    "total": 16,
+    "byArea": {
+      "routes": 16
+    }
+  }
+}
