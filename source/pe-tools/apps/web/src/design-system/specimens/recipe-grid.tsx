@@ -1,43 +1,9 @@
 import type { ReactNode } from "react";
 
-import { Tag } from "#/components/lang/chip";
 import { Section } from "#/components/lang/section";
 import type { RecipeMetadata } from "#/lib/tv";
 
-export const IMPORT_COUNTS = {
-  "#/components/lang/addressing-bar": 5,
-  "#/components/lang/arming-strip": 3,
-  "#/components/lang/artifact-frame": 10,
-  "#/components/lang/cell": 10,
-  "#/components/lang/cell-key": 1,
-  "#/components/lang/chip": 41,
-  "#/components/lang/coverage-bar": 2,
-  "#/components/lang/empty": 39,
-  "#/components/lang/help": 11,
-  "#/components/lang/outcome": 24,
-  "#/components/lang/press": 48,
-  "#/components/lang/section": 14,
-  "#/components/lang/switcher": 7,
-  "#/components/lang/verb": 37,
-  "#/components/ui/badge": 0,
-  "#/components/ui/card": 1,
-  "#/components/ui/combobox": 6,
-  "#/components/ui/command": 1,
-  "#/components/ui/dialog": 1,
-  "#/components/ui/input": 5,
-  "#/components/ui/input-group": 0,
-  "#/components/ui/label": 2,
-  "#/components/ui/pane": 10,
-  "#/components/ui/pick-list": 2,
-  "#/components/ui/select": 4,
-  "#/components/ui/side-pane": 5,
-  "#/components/ui/switch": 2,
-  "#/components/ui/textarea": 3,
-  "#/components/ui/toggle-group": 0,
-  "#/components/ui/value-diff": 2,
-} as const;
-
-type ImportPath = keyof typeof IMPORT_COUNTS;
+type ImportPath = `#/components/${"lang" | "ui"}/${string}`;
 export type GridVariantProps = Record<string, string | boolean>;
 type Axis = readonly [name: string, values: readonly string[]];
 
@@ -98,9 +64,8 @@ export function SpecimenFrame({
   importPath: ImportPath;
   children: ReactNode;
 }) {
-  const count = IMPORT_COUNTS[importPath];
   return (
-    <Section label={name} aside={<Tag>{`${count} static import${count === 1 ? "" : "s"}`}</Tag>}>
+    <Section label={name}>
       <code>{importPath}</code>
       <div className="overflow-x-auto py-2">{children}</div>
     </Section>

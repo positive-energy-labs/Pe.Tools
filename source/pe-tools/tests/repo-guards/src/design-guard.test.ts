@@ -910,73 +910,41 @@ const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
   .map((name) => `${name}: ${RECIPE_GRID_USES.get(name) ?? 0} grids`)
   .sort();
 
-const RECIPE_GRID_FILE = FILES.find(
-  (file) => file.rel === "design-system/specimens/recipe-grid.tsx",
-);
-const STATIC_IMPORT_COUNTS = new Map<string, number>();
-if (RECIPE_GRID_FILE) {
-  const source = ts.createSourceFile(
-    RECIPE_GRID_FILE.rel,
-    RECIPE_GRID_FILE.text,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX,
-  );
-  source.forEachChild((node) => {
-    if (!ts.isVariableStatement(node)) return;
-    for (const declaration of node.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== "IMPORT_COUNTS") continue;
-      let initializer = declaration.initializer;
-      if (initializer && ts.isAsExpression(initializer)) initializer = initializer.expression;
-      if (!initializer || !ts.isObjectLiteralExpression(initializer)) continue;
-      for (const property of initializer.properties)
-        if (
-          ts.isPropertyAssignment(property) &&
-          ts.isStringLiteral(property.name) &&
-          ts.isNumericLiteral(property.initializer)
-        )
-          STATIC_IMPORT_COUNTS.set(property.name.text, Number(property.initializer.text));
-    }
-  });
-}
-const ACTUAL_IMPORT_COUNTS = new Map(
-  [...STATIC_IMPORT_COUNTS].map(([importPath]) => {
-    const group = importPath.split("/")[2];
-    let count = 0;
-    for (const file of FILES.filter(
-      (entry) =>
-        !entry.rel.startsWith("design-system/specimens/") &&
-        !entry.rel.startsWith(`components/${group}/`) &&
-        (entry.rel.endsWith(".ts") || entry.rel.endsWith(".tsx")),
-    )) {
-      const source = ts.createSourceFile(
-        file.rel,
-        file.text,
-        ts.ScriptTarget.Latest,
-        true,
-        file.rel.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-      );
-      source.forEachChild((node) => {
-        if (
-          ts.isImportDeclaration(node) &&
-          ts.isStringLiteral(node.moduleSpecifier) &&
-          node.moduleSpecifier.text === importPath
-        )
-          count += 1;
-      });
-    }
-    return [importPath, count] as const;
-  }),
-);
-const STALE_IMPORT_COUNTS = [...STATIC_IMPORT_COUNTS]
-  .filter(([importPath, count]) => ACTUAL_IMPORT_COUNTS.get(importPath) !== count)
-  .map(
-    ([importPath, count]) =>
-      `${importPath}: ${count} recorded, ${ACTUAL_IMPORT_COUNTS.get(importPath) ?? 0} actual`,
-  );
-const BAD_SPECIMEN_PATHS = [...STATIC_IMPORT_COUNTS]
-  .filter(([importPath]) => SPECIMEN_PATH_USES.get(importPath) !== 1)
-  .map(([importPath]) => `${importPath}: ${SPECIMEN_PATH_USES.get(importPath) ?? 0} frames`);
+const REQUIRED_SPECIMEN_PATHS = [
+  "#/components/lang/addressing-bar",
+  "#/components/lang/arming-strip",
+  "#/components/lang/artifact-frame",
+  "#/components/lang/cell",
+  "#/components/lang/cell-key",
+  "#/components/lang/chip",
+  "#/components/lang/coverage-bar",
+  "#/components/lang/empty",
+  "#/components/lang/help",
+  "#/components/lang/outcome",
+  "#/components/lang/press",
+  "#/components/lang/section",
+  "#/components/lang/switcher",
+  "#/components/lang/verb",
+  "#/components/ui/badge",
+  "#/components/ui/card",
+  "#/components/ui/combobox",
+  "#/components/ui/command",
+  "#/components/ui/dialog",
+  "#/components/ui/input",
+  "#/components/ui/input-group",
+  "#/components/ui/label",
+  "#/components/ui/pane",
+  "#/components/ui/pick-list",
+  "#/components/ui/select",
+  "#/components/ui/side-pane",
+  "#/components/ui/switch",
+  "#/components/ui/textarea",
+  "#/components/ui/toggle-group",
+  "#/components/ui/value-diff",
+] as const;
+const BAD_SPECIMEN_PATHS = REQUIRED_SPECIMEN_PATHS.filter(
+  (importPath) => SPECIMEN_PATH_USES.get(importPath) !== 1,
+).map((importPath) => `${importPath}: ${SPECIMEN_PATH_USES.get(importPath) ?? 0} frames`);
 
 describe("design checks — code holds the boundary", () => {
   it("loads the app CSS graph before checking candidates", () => {
@@ -1035,10 +1003,6 @@ describe("design checks — code holds the boundary", () => {
 
   it("every swatch recipe is mounted once through the exhaustive recipe grid", () => {
     expect(BAD_RECIPE_GRIDS).toEqual([]);
-  });
-
-  it("swatch consumer lines match the static import census", () => {
-    expect(STALE_IMPORT_COUNTS).toEqual([]);
   });
 
   it("every catalogued lang and ui import path has one specimen frame", () => {
