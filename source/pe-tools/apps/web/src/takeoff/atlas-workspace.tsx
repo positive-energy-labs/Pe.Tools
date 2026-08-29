@@ -11,13 +11,14 @@ const PLAN_DEFAULT_PX = 340;
 const PLAN_CHROME_PX = 34;
 
 export function AtlasWorkspace() {
-  const { geoReady, planOpen, setPlanOpen } = useAtlasWorkspace();
+  const { geoReady, headRail, sidePanel, readoutBand, planOpen, setPlanOpen } = useAtlasWorkspace();
   return (
     <Workspace
       className="bg-page"
-      headRail={null}
+      headRail={headRail}
       readoutBand={
-        !geoReady ? (
+        readoutBand ??
+        (!geoReady ? (
           <div className="px-2 py-1">
             <OutcomeLine
               kind="busy"
@@ -25,11 +26,12 @@ export function AtlasWorkspace() {
               says="rooms draw as position dots until their boundaries land"
             />
           </div>
-        ) : null
+        ) : null)
       }
       navigation={<AtlasNavigation />}
       visual={<AtlasVisual />}
       table={<AtlasTable />}
+      sidePanel={sidePanel}
       pane={{
         resize: {
           visual: {

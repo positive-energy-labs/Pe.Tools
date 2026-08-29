@@ -1,18 +1,5 @@
 import type { ContextBreakdown, ContextItem, ContextSegment } from "./chat-state";
 
-/**
- * Pure cache-position logic for the World inspector — no JSX, so it's unit-testable.
- *
- * Request order is `tools → system → messages`, the same order that drives prompt-cache
- * reuse. Cache state is a FRONTEND inference: we diff this send's breakdown against the
- * previous send's and mark the highest layer that changed as the "cache horizon" —
- * everything from there down was reprocessed, everything above stayed cache-warm. The
- * provider only returns aggregate cache token counts, never a per-layer split, so this is
- * approximate by nature (surfaced with an "≈" marker, never as ground truth).
- */
-
-// Lower rank = closer to the front of the request = more cache-volatile. A change at rank r
-// busts r and everything below it (higher rank). Memory is treated as system-adjacent.
 export const REQUEST_RANK: Record<string, number> = {
   tools: 0,
   "system-prompt": 1,
@@ -31,12 +18,10 @@ export type CacheState = "cached" | "reprocessed" | "unknown";
 export interface CacheView {
   hasBaseline: boolean;
   changed: Set<string>;
-  /** Topmost (lowest) rank that changed this send; null if nothing changed / no baseline. */
   horizonRank: number | null;
   stateOf: (id: string) => CacheState;
 }
 
-/** Signature that changes whenever a layer's bytes change — tokens + named contents. */
 export function segSignature(segment: ContextSegment): string {
   const items = (segment.items ?? []).map((item) => `${item.name}:${item.tokens ?? ""}`).join("~");
   return `${Math.round(segment.tokens)}|${items}`;
@@ -48,7 +33,6 @@ export function signatureMap(breakdown: ContextBreakdown | undefined): Map<strin
   return map;
 }
 
-/** Diff the current segments against the prior send's signatures to infer cache state. */
 export function computeCacheView(
   breakdown: ContextBreakdown | undefined,
   baseline: Map<string, string> | null,
@@ -82,7 +66,6 @@ export interface Layer {
   items: ContextItem[];
 }
 
-/** Real layers (drops free), ordered by request position then size. */
 export function orderedLayers(breakdown: ContextBreakdown | undefined): Layer[] {
   return (breakdown?.segments ?? [])
     .filter((segment) => segment.id !== "free")
@@ -96,11 +79,6 @@ export function orderedLayers(breakdown: ContextBreakdown | undefined): Layer[] 
     .sort((a, b) => a.rank - b.rank || b.tokens - a.tokens);
 }
 
-/**
- * Blast radius of a change at a given request rank — how far down the cache it busts.
- * rank 0 (tools) busts the whole prefix; rank 1 (system/memory) busts system+messages;
- * rank ≥2 (messages) only adds new uncached tail. Frontend-only convenience.
- */
 export type Blast = "prefix" | "system" | "free";
 
 export function blastOf(rank: number): Blast {
@@ -115,7 +93,6 @@ export const BLAST_LABEL: Record<Blast, string> = {
   free: "~free",
 };
 
-/** Sum tokens that stayed cache-warm vs were reprocessed this send (≈ inferred). */
 export function cacheTotals(
   layers: Layer[],
   cache: CacheView,
@@ -131,18 +108,10 @@ export function cacheTotals(
 
 type MemoryWindows = NonNullable<ContextBreakdown["memoryWindows"]>;
 
-/** Fill width (%) of a window, clamped to [0,100]. cap<=0 → 0 (avoids divide-by-zero). */
 export function budgetFillPct(value: number, cap: number): number {
   return Math.max(0, Math.min(100, cap > 0 ? (value / cap) * 100 : 0));
 }
 
-/**
- * Geometry for the one budget bar (composer ribbon + World inspector). The bar is one linear
- * token scale in request/cache order: tools → system → observations window → messages window.
- * obsCap/msgCap are the window capacities (threshold-wide); horizon is the cache-break position
- * as a % of total, mapped from the inferred rank: 0/before tools, after tools (rank 1 = system
- * adjacent), or after the observations window (rank ≥ 2 = messages-only break). Pure — tested.
- */
 export function budgetBarModel(
   tools: number,
   system: number,

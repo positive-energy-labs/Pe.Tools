@@ -73,8 +73,7 @@ export function LevelStats({
             />
           ) : null,
         )}
-        {/* "Not partitioned" is a genuine empty, not a stand-in: firm hairline, never the
-            reserved dash. */}
+
         {unpartitionedSqft > 0 && (
           <span
             title={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}

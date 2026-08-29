@@ -1,13 +1,3 @@
-// Client-side PNG compositing for the /runs feedback export verbs: each staged item becomes
-// one PNG — registered plan + forensic evidence + the
-// serialized SVG decision overlay (flags in the alarm family) + a caption strip carrying the
-// DATA (zone, run ids, key stats, flagged element ids, the note). The caption makes each PNG
-// self-describing so an agent reading it off disk needs no manifest in-context.
-//
-// Palette is shared with the on-screen surface via ../palette (round-1 friction #1 resolved —
-// the export can no longer drift from the screen). Known residual duplication: this painter
-// re-implements ZonePanel's layer order instead of calling a world-owned panel painter; still
-// ledgered as promotion debt in CLEANROOM's round-1 friction list.
 import {
   candidateTone,
   CLOSE_M,
@@ -59,8 +49,6 @@ function svgEscape(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Serialize the decision overlay for one panel — same geometry the on-screen ZonePanel draws,
- * flags rendered in the alarm family. */
 function overlaySvg(
   vp: ZoneViewport,
   zone: ZoneRecord,
@@ -82,7 +70,6 @@ function overlaySvg(
     const rings = geom.polys.get(room.id);
     if (!rings) continue;
     const flagged = flags.has(`room:${room.id}`);
-    // Unflagged rooms wear their PERSISTED disposition, same as the screen — an unknown room is
     // a dashed neutral, never the accepted blue (SHIMS.md #3 close).
     const tone = candidateTone(zone.Zone, room.id);
     const residue = room.disposition === null ? RESIDUE_TREATMENT.void : null;
@@ -109,8 +96,6 @@ function overlaySvg(
       );
     }
     if (flagged) {
-      // Label the flagged element on the pixels too — the id in the manifest is the data,
-      // the label keeps the PNG readable standalone.
       const first = rings[0]?.points[0];
       if (first) {
         const [x, y] = [(first[0] - vp.minX) * vp.pxPerFt, (vp.maxY - first[1]) * vp.pxPerFt];
@@ -171,7 +156,6 @@ function svgToImage(svg: string): Promise<HTMLImageElement> {
   });
 }
 
-/** One panel tile: registered plan, forensic evidence, then the serialized decision SVG. */
 async function paintPanelTile(
   runId: string,
   zone: ZoneRecord,
@@ -234,9 +218,7 @@ async function paintPanelTile(
       paintClassRaster(ctx, sealClasses, vp, new Set([3]), SEAL_RUN);
     } else if (seals) paintRaster(ctx, seals, vp, SEAL_DOOR);
     if (ink) paintRaster(ctx, ink, vp, INK_M);
-  } catch {
-    // evidence layer failed — decisions stay visible
-  }
+  } catch {}
 
   const overlay = await svgToImage(overlaySvg(vp, zone, geom, flags));
   ctx.drawImage(overlay, 0, 0);
@@ -291,8 +273,6 @@ function captionLines(item: StagedItem): { text: string; tone: "text" | "muted" 
   return lines;
 }
 
-/** One staged item → one composited canvas: [A|B] panels (or a single B panel spanning) over
- * the caption strip. Flags draw on the B side — the flagged ids came from B's geometry. */
 export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement> {
   const flags = new Set(item.flags);
   const comparing = item.runA !== null;
@@ -343,7 +323,6 @@ export async function compositeItem(item: StagedItem): Promise<HTMLCanvasElement
   return out;
 }
 
-/** All staged items → one stitched contact sheet (the GUI-chat verb). */
 export function stitchSheet(canvases: HTMLCanvasElement[], header: string): HTMLCanvasElement {
   const w = Math.max(...canvases.map((c) => c.width));
   const h = canvases.reduce((s, c) => s + c.height, 0) + (canvases.length - 1) * GAP + 34;

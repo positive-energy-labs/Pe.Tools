@@ -10,13 +10,6 @@ import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 import { SheetCanvas } from "#/ops/views-detail";
 import { Press } from "#/components/lang/press";
 
-/**
- * glance.drawing-set — the wall of sheets an architect pins up. The full sheet
- * list comes from revit.catalog.project-index (Sheets section); a bounded
- * staged revit.detail.sheets call fetches anchor geometry for one sheet per
- * series (plus the richest remainder) to render mini titleblock thumbnails.
- */
-
 const DETAIL_BUDGET = 10;
 
 type SheetListing = {
@@ -29,7 +22,6 @@ type SheetListing = {
 
 type Series = { prefix: string; sheets: SheetListing[] };
 
-/** Series = leading non-digit run of the sheet number ("M", "E", "xP", "-"). */
 function seriesPrefix(sheetNumber: string): string {
   const m = /^[^\d]+/.exec(sheetNumber.trim());
   return m ? m[0] : sheetNumber.trim() || "?";
@@ -70,8 +62,6 @@ function groupBySeries(sheets: SheetListing[]): Series[] {
   return order.map((prefix) => ({ prefix, sheets: byPrefix.get(prefix) ?? [] }));
 }
 
-/** One sheet per series first (richest by placed content), then the richest
- * remainder, up to DETAIL_BUDGET — deterministic and honest about the cap. */
 function chooseDetailTargets(series: Series[]): string[] {
   const richness = (s: SheetListing) => s.placedViewCount + s.placedScheduleCount;
   const chosen: string[] = [];
@@ -91,9 +81,6 @@ function chooseDetailTargets(series: Series[]): string[] {
   return chosen;
 }
 
-/** Empty titleblock frame for sheets not in the detail budget — Arch D landscape.
- * DELIBERATE dashed spend: this is the SEAM slot (a declared sheet with no anchor
- * geometry behind it — the stand-in announces what the detail budget left out). */
 function EmptyFrame() {
   return <div aria-hidden className="seam-border aspect-[3/2] rounded-none border border-line-2" />;
 }
@@ -114,7 +101,6 @@ function Thumbnail({
       type="button"
       onClick={onSelect}
       className={`flex min-w-0 flex-col gap-1 rounded-sm border p-1.5 text-left hover:veil ${selected ? "border-line-2" : "border-line"}`}
-      /* selection is a fill, never a hue — the select rung, with --pe-on re-declared. */
       style={
         selected
           ? ({

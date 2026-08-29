@@ -26,12 +26,7 @@ export function AtlasNavigation() {
   } = useAtlasWorkspace();
   return (
     <Suspense fallback={<div className="p-2 text-ink-2">reading zones…</div>}>
-      <Pane
-        kind="navigation"
-        title="zones"
-        meta={`${world.zones.length} declared`}
-        /* adopt · refresh moved to the TargetingHead's stage verbs (they demand bindings). */
-      >
+      <Pane kind="navigation" title="zones" meta={`${world.zones.length} declared`}>
         <div className="shrink-0 border-b border-line px-2 py-1.5">
           <div className="t-caption t-upper mb-1 text-ink-2">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -63,9 +58,6 @@ export function AtlasNavigation() {
                     setZoneKey(null);
                     setCursor(null);
                   }}
-                  // Selection is a FILL, never a hue: `bg-select` resolves to `--pe-select`,
-                  // the ground ladder's fourth rung. The old `bg-commit/[0.08]` spent the
-                  // one filled blue — reserved for writes that leave the page — on "what is lit".
                   className={cn(
                     "flex items-baseline gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-recess",
                     on && "bg-select",
@@ -91,7 +83,6 @@ export function AtlasNavigation() {
           )}
         </div>
 
-        {/* Group by level only so the list stays consistent — level is never the organizer. */}
         <div>
           {world.lanes.map((lane) => {
             const zs = filteredZones.filter((z) => z.zone.lane.label === lane.label);

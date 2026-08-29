@@ -1,11 +1,3 @@
-/**
- * The takeoff pipeline's web-side vocabulary — the seven steps of
- * source/Pe.Revit.Takeoff/README.md as data the /takeoffs route can render.
- *
- * Nothing here is authoritative. Zone geometry belongs to the Zoning Region FR, identity to
- * the System registry blob, room geometry to the Room Region FR, and Manual J data to the
- * `.r10`. This module only names those things and computes display-side geometry.
- */
 import { ProjectA_ZONES, type DeclaredZone } from "#/takeoff/zones-project-a";
 import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
 import type { DetectedRoom, LiveRegion, PartitionRun, Resolution } from "@pe/agent-contracts";
@@ -20,17 +12,10 @@ export type {
   ViewFacts,
 } from "@pe/agent-contracts";
 
-// A zoning view, its Revit level, and the level-wide capture the partition replays. The capture
-// is the honesty boundary (DetectSnapshot's header): everything upstream of the .bin is baked.
-
 interface LevelLane {
-  /** Zoning view name — matched exactly against a non-template ViewPlan. */
   view: string;
-  /** Short label for the board. */
   label: string;
-  /** Substring that identifies the Revit Level (its Elevation is the FR sketch plane). */
   levelFragment: string;
-  /** replay_*.bin basename in the project artifact directory. */
   replayFile: string;
 }
 
@@ -61,29 +46,18 @@ const LEVEL_LANES: LevelLane[] = [
   },
 ];
 
-/** Default artifact directory — where the live runs dumped the replay snapshots. */
 export const DEFAULT_ARTIFACT_DIR = "%USERPROFILE%\\OneDrive\\Documents\\Pe.Tools\\takeoff";
 
 export interface Zone extends Omit<DeclaredZone, "color"> {
   color: string;
   lane: LevelLane;
-  /** "Main#06" — stable within the fixture, and what the deterministic GUID is derived from. */
   key: string;
-  /** 1-based ordinal within the level, as shown on the board. */
   ordinal: number;
-  /** Machine identity. seam: minted by register today, geometric-stamped on the FR tomorrow. */
   guid: string;
-  /** Declared area (shoelace over even-odd loops) — the accounting law's right-hand side. */
   declaredSqft: number;
   bounds: Bounds2;
 }
 
-/**
- * Deterministic per-zone GUID, so a browser reload (or a different machine) addresses the same
- * Room Regions. A real registration mints a random GUID and stamps it on the Zoning Region FR;
- * until zoning FRs carry that stamp, derivation from (level, ordinal) is the stand-in that keeps
- * rerun identity working. Namespace 7a4e0000-…-8000 is takeoff-MVP-only.
- */
 export const zoneGuid = (levelIndex: number, ordinal: number) =>
   `7a4e0000-0000-4000-8000-${String(levelIndex).padStart(6, "0")}${String(ordinal).padStart(6, "0")}`;
 
@@ -100,11 +74,6 @@ export const shoelace = (loop: readonly (readonly [number, number])[]) => {
 export const loopBounds = (loops: readonly (readonly (readonly [number, number])[])[]) =>
   boundsOf(loops.flat());
 
-/**
- * Even-odd containment over ALL loops together — the exact rule ZoneScope.ContainsEvenOdd uses,
- * so a room the solver placed inside a zone reads as inside here too. Used to bind a detected
- * room to the Room Region FR that carries its decisions.
- */
 export function containsEvenOdd(
   loops: readonly (readonly (readonly [number, number])[])[],
   x: number,
@@ -122,10 +91,6 @@ export function containsEvenOdd(
   return inside;
 }
 
-/**
- * SVG path in one shared affine frame. Preserving that frame is the whole point: a per-shape fit
- * would silently move rooms relative to their zone.
- */
 export function pathD(
   loops: readonly (readonly (readonly [number, number])[])[],
   frame: Pick<AffineFrame, "toViewport">,
@@ -144,7 +109,6 @@ export function pathD(
     .join("");
 }
 
-/** The zone board's source: the declared fixture, grouped and measured. */
 export function buildZones(declared: DeclaredZone[] = ProjectA_ZONES): Zone[] {
   const zones: Zone[] = [];
   LEVEL_LANES.forEach((lane, levelIndex) => {
@@ -172,13 +136,6 @@ type ZoneStage = "unregistered" | "registered" | "partitioned";
 export const zoneStage = (tags: string[], materializedRooms: number): ZoneStage =>
   materializedRooms > 0 ? "partitioned" : tags.length > 0 ? "registered" : "unregistered";
 
-/**
- * Two verbs, per README's review law: `accept` takes the recalculation's proposal, `dismiss`
- * keeps the designer's state. Written straight into the Room Region's provenance blob at
- * decision time — there is no batch commit and no sidecar.
- */
-/** Reads the `resolutions` array spliced onto a v1 RegionProvenance blob. Fail-soft: a blob we
- *  cannot parse reads as "no decisions", never as "decided". */
 export function readResolutions(blob: string): Resolution[] {
   try {
     const parsed = JSON.parse(blob) as { resolutions?: Resolution[] };
@@ -188,12 +145,10 @@ export function readResolutions(blob: string): Resolution[] {
   }
 }
 
-/** One decision per (subject, flag) — a later verb replaces the earlier one. */
 export function upsertResolution(existing: Resolution[], next: Resolution): Resolution[] {
   return [...existing.filter((r) => !(r.subject === next.subject && r.flag === next.flag)), next];
 }
 
-/** Binds a detected room to the Room Region FR that carries its decisions, by label containment. */
 export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRegion | undefined {
   return regions.find(
     (region) =>
@@ -203,22 +158,16 @@ export function regionForRoom(room: DetectedRoom, regions: LiveRegion[]): LiveRe
 }
 
 interface DecisionRow {
-  /** Stable row key. */
   key: string;
   kind: "flag" | "orphan" | "failure";
   subject: string;
   flag: string;
   detail: string;
   sqft: number | null;
-  /** Where the decision is written. Null = no home yet, so the row cannot be written through. */
   elementId: number | null;
   resolved: Resolution | null;
 }
 
-/**
- * The review surface is a decision queue, not a data browser: one row per thing a human must
- * call, with its home attached. Rooms the solver is confident about never appear.
- */
 export function decisionRows(run: PartitionRun): DecisionRow[] {
   const rows: DecisionRow[] = [];
   const claimed = new Set<number>();
@@ -266,7 +215,6 @@ export function decisionRows(run: PartitionRun): DecisionRow[] {
   return rows;
 }
 
-/** Detector flag vocabulary, spelled out so a row is readable without the source. */
 export const FLAG_MEANING: Record<string, string> = {
   seedless: "no seed room backs this space — verify it is a real room",
   "suspect:narrow": "narrow enough that the boundary may be a wall band, not a room",

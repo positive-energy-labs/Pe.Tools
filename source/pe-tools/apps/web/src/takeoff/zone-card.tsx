@@ -46,8 +46,6 @@ export function ZoneCard({
   const zoneSystems = systems.filter((s) => s.zoneKeys.includes(zone.zone.key));
 
   return (
-    // Capped to the plan body and scrolling internally — at the default plan height the verbs
-    // at the bottom must stay reachable without enlarging the plan first.
     <div
       data-hovered={entity.hovered || undefined}
       data-selected={entity.selected || undefined}
@@ -102,9 +100,6 @@ export function ZoneCard({
           </span>
         </div>
         {run && (
-          // Accounting closure is a machine-measured FACT about the run, so it is a chip, not
-          // prose: `done` when every declared foot is accounted for, `alarm` when it is not —
-          // unaccounted area IS the model disagreeing with the designer's declared scope.
           <FactChip
             tone={closure !== null && Math.abs(closure) < 1 ? "done" : "alarm"}
             title="Declared area minus rooms, claimed walls, held residue and exclusions. Anything left over is area this run neither claimed nor abstained from."
@@ -120,10 +115,7 @@ export function ZoneCard({
             {s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""}
           </p>
         ))}
-        {/* Both zone verbs run WriteTransaction scripts against the live document — capture
-            stamps cropped seed views, partition materializes Room Region elements — so both wear
-            `commit`, the language's one filled blue for writes that leave the page. Blast radius
-            is not a tone; it groups the lane, which is what the group head below says. */}
+
         {live && (
           <div className="pt-0.5">
             <VerbGroup title="zone verbs" radius="document · model">
@@ -162,7 +154,3 @@ export function ZoneCard({
     </div>
   );
 }
-
-/** Per-room data, living beside the rooms it narrates. Exists exactly while a row is under the
- *  cursor. In "panel" fields mode the Manual J fields render here and leave the table narrow;
- *  in "columns" mode they stay inline and this panel carries calls + provenance only. */

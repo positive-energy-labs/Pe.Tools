@@ -1,12 +1,3 @@
-/**
- * Parameter-links model — the pure, testable core the route-native workspace edits.
- *
- * The collaborative document lives at `route:parameter-links` (schema in
- * @pe/agent-contracts). Its `draftProfile` is the human/pea co-edited working copy;
- * `profile` is what Revit has stored. These helpers do the immutable draft edits and
- * the freshness math the workspace and the inline chat plugin both rely on — no React,
- * no I/O, so they can be unit-tested directly.
- */
 import type {
   ParameterLinkAssignment,
   ParameterLinkDefinition,
@@ -23,14 +14,12 @@ export const SOURCE_SCOPES: SourceScope[] = ["instance", "type", "instanceThenTy
 export const RELATIONSHIPS: Relationship[] = ["sameElement", "electricalEquipmentCircuits"];
 export const REDUCERS: Reducer[] = ["first", "min", "max"];
 
-/** The profile the workspace edits: the draft when present, else the stored profile. */
 export function editingProfile(
   document: ParameterLinksDocument | null,
 ): ParameterLinkProfile | null {
   return document?.draftProfile ?? document?.profile ?? null;
 }
 
-/** Structural equality over two profiles (order-sensitive; mirrors the command guard). */
 export function sameProfile(
   left: ParameterLinkProfile | null | undefined,
   right: ParameterLinkProfile | null | undefined,
@@ -38,7 +27,6 @@ export function sameProfile(
   return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
-/** Keep the revision where a local draft first diverged until that draft lands or is replaced. */
 export function retainDraftBasis(
   basis: number | null,
   hasUnsavedEdits: boolean,
@@ -47,22 +35,16 @@ export function retainDraftBasis(
   return hasUnsavedEdits ? basis : revision;
 }
 
-/** The draft diverges from what Revit stored — the workspace shows an unsaved-draft badge. */
 export function isDraftDirty(document: ParameterLinksDocument | null): boolean {
   const draft = document?.draftProfile;
   if (draft == null) return false;
   return !sameProfile(draft, document?.profile);
 }
 
-/** Error-severity issues block Apply; warnings do not. */
 export function errorIssueCount(evaluation: ParameterLinkEvaluation | null | undefined): number {
   return evaluation?.issues.filter((issue) => issue.severity === "error").length ?? 0;
 }
 
-/**
- * Apply is human-only and freshness-gated: the profile in hand must be exactly the one
- * last previewed (so the projected writes are trustworthy) and carry no blocking errors.
- */
 export function canApply(args: {
   editing: ParameterLinkProfile | null;
   previewed: ParameterLinkProfile | null;
@@ -74,7 +56,6 @@ export function canApply(args: {
   );
 }
 
-/** Split a free-text list (newlines and/or commas) of element unique-ids into a clean array. */
 export function parseUniqueIds(text: string): string[] {
   return text
     .split(/[\n,]/)
@@ -83,7 +64,6 @@ export function parseUniqueIds(text: string): string[] {
 }
 
 let sequence = 0;
-/** A short, collision-resistant id for a freshly-created definition/assignment. */
 export function freshId(prefix: string): string {
   sequence += 1;
   return `${prefix}-${Date.now().toString(36)}-${sequence.toString(36)}`;
@@ -108,12 +88,9 @@ export function blankAssignment(
   return { id, definitionId, enabled: true, sourceElementUniqueIds: [] };
 }
 
-/** A minimal, schema-valid profile seeded with one blank definition. */
 export function blankProfile(): ParameterLinkProfile {
   return { formatVersion: 1, definitions: [blankDefinition()], assignments: [] };
 }
-
-/* ── immutable draft edits (each returns a new profile) ──────────────────────── */
 
 export function addDefinition(profile: ParameterLinkProfile | null): ParameterLinkProfile {
   const base = profile ?? { formatVersion: 1, definitions: [], assignments: [] };
@@ -135,7 +112,6 @@ export function removeDefinition(profile: ParameterLinkProfile, id: string): Par
   return {
     ...profile,
     definitions: profile.definitions.filter((def) => def.id !== id),
-    // Orphaned assignments would fail evaluation — drop them with their definition.
     assignments: profile.assignments.filter((asn) => asn.definitionId !== id),
   };
 }

@@ -2,13 +2,13 @@
   "rawTable": {
     "total": 16,
     "byArea": {
+      "data-tables": 1,
       "families": 2,
       "family-review": 5,
       "lib": 1,
       "ops": 1,
       "param-tables": 3,
       "parameter-links": 1,
-      "routes": 1,
       "runs": 2
     }
   },
@@ -43,12 +43,13 @@
     "total": 47,
     "byArea": {
       "components": 24,
+      "data-tables": 1,
       "families": 1,
       "family": 5,
       "grounded-doc": 1,
       "host": 1,
       "ops": 1,
-      "routes": 3,
+      "routes": 2,
       "runs": 3,
       "takeoff": 3,
       "targeting": 2,
@@ -63,16 +64,17 @@
       "family": 17,
       "family-review": 6,
       "grounded-doc": 1,
-      "routes": 10,
+      "routes": 8,
       "runs": 6,
-      "takeoff": 3
+      "schedule-grid": 1,
+      "takeoff": 4
     }
   },
   "busyState": {
     "total": 3,
     "byArea": {
+      "instances": 1,
       "ops": 1,
-      "routes": 1,
       "runs": 1
     }
   },
@@ -87,9 +89,9 @@
       "host": 3,
       "ops": 28,
       "param-tables": 11,
-      "routes": 7,
+      "routes": 5,
       "runs": 42,
-      "takeoff": 3,
+      "takeoff": 5,
       "targeting": 40,
       "workbench": 9
     }
@@ -103,7 +105,8 @@
       "grounded-doc": 3,
       "host": 6,
       "lib": 15,
-      "routes": 19,
+      "routes": 17,
+      "schedule-grid": 2,
       "takeoff": 10,
       "workbench": 37
     }
@@ -113,9 +116,9 @@
     "byArea": {}
   },
   "fatRoute": {
-    "total": 16,
+    "total": 12,
     "byArea": {
-      "routes": 16
+      "routes": 12
     }
   }
 }

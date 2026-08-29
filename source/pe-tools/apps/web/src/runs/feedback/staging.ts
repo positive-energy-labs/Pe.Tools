@@ -1,23 +1,7 @@
-// The /runs feedback staging store — which zone A/B cards are staged for export, which
-// elements are flagged, and the one note per staged item. Promoted at feedback round 2
-// (kaitpw rulings 2026-08-17): the ?fb= variants died, staging is part of the one surface.
-//
-// STATE MODEL (round-2 ruling, verbatim law):
-// - A staged item PINS (zone, runA, runB, flags, note) at stage time. The page A/B selector is
-//   a viewing LENS only — switching it never alters the stage. Multi-run stage sets are normal.
-// - Persistence is the EXPORT MANIFEST, nothing else. In-memory here; ?set=<stamp> rehydrates
-//   (editable) from _exports/<stamp>/manifest.json; re-export mints a NEW stamp.
-//
-// Still an external store (useSyncExternalStore), but the singleton lives on globalThis so a
-// vite hot-swap re-instantiating this module reuses the same state (round-1 friction #5: the
-// plain module singleton split across HMR and exports lost their status line).
 import { useSyncExternalStore } from "react";
 
 import type { ZoneRecord } from "../world";
 
-/** A staged A/B card, snapshotted at stage time. If the user swings the lens to another run
- * pair the staged item keeps the pair it was staged FROM — a verdict is about a specific
- * comparison. */
 export type StagedItem = {
   key: string;
   zone: string;
@@ -26,10 +10,7 @@ export type StagedItem = {
   runB: string;
   a: ZoneRecord | null;
   b: ZoneRecord | null;
-  /** Flagged element ids — DATA, not pixels: "room:R06" | "residue:R03". Zone edges are not
-   * flaggable (ruled out round 1). Flags live on the B side — the run under judgment. */
   flags: string[];
-  /** One free-text note per staged item, TASTE.md-verdict shaped. No per-flag notes. */
   note: string;
   stagedAt: number;
 };
@@ -40,12 +21,8 @@ export type ExportRecord = {
   stamp: string;
   files: string[];
   manifestPath: string;
-  /** The set's own rehydration link — open it to reload this staging, editable. */
   setUrl: string;
-  /** The exact clip block (always built; clip.txt always holds it). */
   text: string;
-  /** Where the copy landed: "os" (Set-Clipboard, the primary), "browser" (navigator
-   * fallback), or null (both refused — copy from the block by hand). */
   copiedVia: "os" | "browser" | null;
   opened: string | null;
   warning: string | null;
@@ -54,9 +31,7 @@ export type ExportRecord = {
 
 type FbState = {
   items: StagedItem[];
-  /** `${itemKey}::${el}` of the flag chip under the cursor — the panel lights that shape. */
   hoverFlag: string | null;
-  /** The ?set= stamp this staging was rehydrated from, if any — provenance, not a lock. */
   loadedSet: string | null;
   exporting: ExportRecord["verb"] | null;
   lastExport: ExportRecord | null;
@@ -120,7 +95,6 @@ export const fb = {
     emit({ items: [], loadedSet: null });
   },
 
-  /** ?set= rehydration: the manifest's items become the staging, editable. */
   replaceAll(items: StagedItem[], loadedSet: string | null) {
     emit({ items, loadedSet });
   },
@@ -159,8 +133,6 @@ export const fb = {
   },
 };
 
-/** "room:R06" → "room R06"; "residue:R03" → "residue R03" (rooms and residues share the
- * R-number namespace in the TSVs, so the kind prefix is load-bearing). */
 export function flagLabel(el: string): string {
   const [kind, id] = el.split(":");
   return `${kind} ${id}`;

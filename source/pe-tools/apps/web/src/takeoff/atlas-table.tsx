@@ -43,9 +43,6 @@ export function AtlasTable() {
   return (
     <Suspense fallback={<div className="p-2 text-ink-2">reading rooms…</div>}>
       <Pane kind="content" scroll="clip">
-        {/* Room data sits BESIDE the rooms it describes. The panel exists exactly when a
-                room is under the cursor; Esc clears both. The table never unmounts (its filter
-                state must survive the cursor coming and going). */}
         <PaneSplit
           axis="horizontal"
           resize={{
@@ -62,10 +59,6 @@ export function AtlasTable() {
               rows={rows}
               columns={columns}
               rowKey={rowKey}
-              // THE OWED MARKER (fit reviews, ruled 2026-08-16): open detector calls owe a
-              // human verdict — the gutter locates them with the count in the one alarm.
-              // The flags column keeps the FILTER job; its cell dropped the duplicate
-              // alarm count when this landed.
               gutter={gutter}
               scopeLabel="rooms in scope"
               searchPlaceholder="name / type / zone…"
@@ -77,9 +70,6 @@ export function AtlasTable() {
                     <span className="text-alarm"> · {scopeCalls} needing a call</span>
                   )}
                   <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
-                  {/* The fields-mode control lives HERE, not in the room panel — the panel
-                          vanishes with the cursor, and a mode's off-switch must not vanish
-                          with it. */}
                   <Press
                     type="button"
                     onClick={() =>
@@ -99,8 +89,6 @@ export function AtlasTable() {
                 </>
               }
               empty={
-                // §4's two kinds, derived: the table's own narrowing (its filters, or the
-                // rail/plan scope) hid rooms that exist — or the world genuinely has none.
                 rows.length > 0 ? (
                   <EmptyState story="filter" exit="clear a column filter or the search">
                     the narrowing hid all {rows.length} rooms in scope

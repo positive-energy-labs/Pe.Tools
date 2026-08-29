@@ -9,21 +9,11 @@ import { LaneBadge, LiveDot } from "#/host/target-ui";
 import { UnrecognizedShape, asNumber, asRecord, asRecords, asString, text } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 
-/**
- * glance.session-topology — the operator's map. Host process on the left,
- * bridge sessions laned off it, open documents as leaves. Every edge is a
- * hairline; every measured value is mono; dead sessions stay visible, muted.
- */
-
 const DOC_FETCH_BOUND = 12;
 
-// The SDK's lane union, verbatim: payload SOURCE only. A value outside it is not a lane, and
-// renders as no lane badge rather than an invented "unknown" one.
 function asLane(value: unknown): Lane | null {
   return value === "dev" || value === "installed" ? value : null;
 }
-
-/* ── staged per-session document fetch ────────────────────────────────────── */
 
 type DocFetch =
   | { state: "loading" }
@@ -48,8 +38,6 @@ function useSessionDocuments(sessionIds: string[]): Record<string, DocFetch> {
       ),
     );
     for (const sessionId of bounded) {
-      // The synthetic `call` prop is bound to the page's session scope; topology
-      // needs per-session scope, so it goes to the client directly. Readonly op.
       void callHostRpc("revit.context.document-session", undefined, {
         bridgeSessionId: sessionId,
       })
@@ -85,8 +73,6 @@ function useSessionDocuments(sessionIds: string[]): Record<string, DocFetch> {
 
   return fetches;
 }
-
-/* ── nodes ────────────────────────────────────────────────────────────────── */
 
 function HostNode({ host }: { host: Record<string, unknown> }) {
   const connected = host.bridgeIsConnected === true;
@@ -137,7 +123,6 @@ function DocumentLeaf({ doc }: { doc: Record<string, unknown> }) {
   const isActive = doc.isActive === true;
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 py-0.5">
-      {/* the active mark is neutral ink (R13a's locate mark) — never a hue. */}
       <span
         className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "bg-ink" : "bg-line-2"}`}
       />
@@ -199,7 +184,6 @@ function SessionNode({
         {openCount !== undefined && ` · ${openCount} doc${openCount === 1 ? "" : "s"}`}
       </div>
 
-      {/* document leaves — staged fetch, graceful in every state */}
       <div className="mt-0.5 flex flex-col border-l border-line pl-2.5">
         {!connected && (
           <span className="face-mono t-caption text-ink-2">
@@ -240,8 +224,6 @@ function SessionNode({
   );
 }
 
-/* ── the map ──────────────────────────────────────────────────────────────── */
-
 function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
   const topology = asRecord(results["host.topology"]);
   const host = topology ? asRecord(topology.host) : undefined;
@@ -261,7 +243,6 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex min-w-0 items-start">
-        {/* host node */}
         <div className="w-64 shrink-0">
           {host ? (
             <HostNode host={host} />
@@ -272,7 +253,6 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
           )}
         </div>
 
-        {/* trunk + session lanes */}
         <div className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 border-l border-line py-1">
           {sessions.length === 0 ? (
             <div className="pl-5">
@@ -285,7 +265,6 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
               const id = asString(session.sessionId);
               return (
                 <div key={id ?? i} className="relative min-w-0 pl-5">
-                  {/* branch tick from trunk to session */}
                   <span
                     aria-hidden
                     className="absolute left-0 top-4 inline-block w-5 border-t border-line"

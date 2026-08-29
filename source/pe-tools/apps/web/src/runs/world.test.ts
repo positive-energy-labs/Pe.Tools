@@ -1,7 +1,6 @@
 // The honesty seams of the /runs data layer: the persisted ROOM disposition column (SHIMS.md #3),
 // stable-key A/B pairing with name-pairing only as a surfaced fallback (SHIMS.md #2), the
 // two-currency scores.json reading (SHIMS.md #1), and partial-run detection (the 20260817-161144
-// misattribution close). No solver logic here — parsing, pairing and partiality only.
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -81,7 +80,7 @@ describe("replay seed ink", () => {
     f64(1);
     f64(2);
     f64(0.25);
-    offset += 32; // FloorZ + CeilZ floats for four cells.
+    offset += 32;
     bytes[offset] = 0b1010;
 
     const raster = parseReplaySeedInk(buffer);
@@ -104,7 +103,6 @@ describe("parseZoneTsv disposition column", () => {
   it("reads the persisted 8th column and leaves its absence UNKNOWN, never accepted", () => {
     const geometry = parseZoneTsv(TSV);
     expect(geometry.rooms.find((room) => room.id === "R01")?.disposition).toBe("accepted");
-    // 7-column ROOM line = pre-column package: unknown is the only honest reading.
     expect(geometry.rooms.find((room) => room.id === "R02")?.disposition).toBeNull();
     expect(geometry.residues[0]).toMatchObject({ id: "R03", reason: "rejected" });
   });
@@ -129,7 +127,6 @@ describe("pairZones", () => {
       zone({ Zone: "Main Level#00", zoneKey: "aaa" }),
       zone({ Zone: "Main Level#01", zoneKey: "bbb" }),
     ]);
-    // Same geography, opposite ordinals: name pairing would cross the zones.
     const prev = report([
       zone({ Zone: "Main Level#01", zoneKey: "aaa" }),
       zone({ Zone: "Main Level#00", zoneKey: "bbb" }),
@@ -152,7 +149,7 @@ describe("pairZones", () => {
 
   it("falls back to name pairing when either package predates keys, and says so", () => {
     const cur = report([zone({ Zone: "Main Level#00", zoneKey: "aaa" })]);
-    const prev = report([zone({ Zone: "Main Level#00" })]); // pre-v4 package
+    const prev = report([zone({ Zone: "Main Level#00" })]);
     expect(reportKeyed(prev)).toBe(false);
     const pairs = pairZones(cur, prev);
     expect(pairs).toHaveLength(1);
@@ -176,10 +173,6 @@ describe("scoreBoards", () => {
     expect(scoreBoards(legacy).v1?.savedWork).toBe(0.38);
   });
 });
-
-// Partial-run honesty (the 20260817-161144 misattribution close): a zone-filtered package must
-// be detectable, a pre-field package must degrade to "possibly", and a full package must never
-// be dressed as partial.
 
 const filteredReport = (zones: number, zoneFilter?: string | null): RunReport => {
   const base = report(Array.from({ length: zones }, (_, i) => zone({ Zone: `Main Level#${i}` })));

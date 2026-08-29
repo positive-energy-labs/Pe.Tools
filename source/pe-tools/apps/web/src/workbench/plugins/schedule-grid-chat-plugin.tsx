@@ -17,13 +17,6 @@ import {
 } from "../route-chat-plugins";
 import { CellTrichotomyReviewer } from "../trichotomy-reviewer";
 
-/**
- * Inline chat card + reviewer for the /schedule-grid route. The compact card names the
- * schedule under edit (with snapshot freshness) and shows counts; when active (the
- * authoritative end-of-chat dock) it lists every proposal/staged cell as a
- * current → proposed diff resolved from the snapshot, and lets the human approve → stage,
- * deny, undo, and push — each a human-actor write through the route-state dispatcher.
- */
 export function ScheduleGridChatPlugin({
   toolName,
   args,
@@ -49,7 +42,6 @@ export function ScheduleGridChatPlugin({
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
     `col ${columnNumber}`;
 
-  /** What Revit currently shows in this cell — the "from" side of the diff. */
   const currentValue = (key: string): string | null => {
     if (!snapshot) return null;
     const { rowNumber, columnNumber } = splitScheduleCellKey(key);
