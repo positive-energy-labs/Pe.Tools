@@ -8,6 +8,7 @@ import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 import { SheetCanvas } from "#/ops/views-detail";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 const DETAIL_BUDGET = 10;
 
@@ -98,8 +99,7 @@ function Thumbnail({
   return (
     <Press
       type="button"
-      tone="bordered"
-      layout="stack"
+      tone="neutral"
       state={selected ? "selected" : "rest"}
       onClick={onSelect}
       title={
@@ -108,9 +108,11 @@ function Thumbnail({
           : `${sheet.sheetNumber} — ${sheet.sheetName} (not detailed: outside the ${DETAIL_BUDGET}-sheet budget)`
       }
     >
-      {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
-      <span className="truncate">{sheet.sheetNumber}</span>
-      {entry && <span className="truncate">{sheet.sheetName}</span>}
+      <PressContent geometry="stack">
+        {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
+        <span className="truncate">{sheet.sheetNumber}</span>
+        {entry && <span className="truncate">{sheet.sheetName}</span>}
+      </PressContent>
     </Press>
   );
 }

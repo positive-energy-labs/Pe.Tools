@@ -10,6 +10,7 @@ import {
 } from "../world-cache";
 import { Press } from "#/components/lang/press";
 import { fmtTok, tint, tone } from "./cap";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function whySentence(layers: Layer[], cache: CacheView, reprocessed: number): string {
   const front = layers.find((layer) => layer.rank === cache.horizonRank);
@@ -171,33 +172,34 @@ export function ContextRibbon({
     <div className="group/ribbon relative w-full">
       <Press
         type="button"
-        layout="block"
         onClick={onOpenWorld}
         title="What the agent sends the model — request order, token budget. Click to inspect."
         aria-label="Context budget"
       >
-        <BudgetBar
-          breakdown={breakdown}
-          cache={cache}
-          className="relative flex h-1.5 items-stretch overflow-hidden"
-        />
-        <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] px-2.5 py-2 group-hover/ribbon:flex group-focus-visible/ribbon:flex">
-          {rows.map((row) => (
-            <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
-              <span className="size-2 flex-none" style={{ backgroundColor: tone(row.id) }} />
-              {row.label}
+        <PressContent geometry="block">
+          <BudgetBar
+            breakdown={breakdown}
+            cache={cache}
+            className="relative flex h-1.5 items-stretch overflow-hidden"
+          />
+          <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] px-2.5 py-2 group-hover/ribbon:flex group-focus-visible/ribbon:flex">
+            {rows.map((row) => (
+              <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
+                <span className="size-2 flex-none" style={{ backgroundColor: tone(row.id) }} />
+                {row.label}
 
-              {row.active ? <span className="ml-1">⟲</span> : null}
-              <span className="ml-auto">
-                {fmtTok(row.tok)}
-                {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
+                {row.active ? <span className="ml-1">⟲</span> : null}
+                <span className="ml-auto">
+                  {fmtTok(row.tok)}
+                  {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
+                </span>
               </span>
+            ))}
+            <span className="mt-0.5">
+              {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
             </span>
-          ))}
-          <span className="mt-0.5">
-            {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
           </span>
-        </span>
+        </PressContent>
       </Press>
     </div>
   );

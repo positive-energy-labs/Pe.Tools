@@ -4,6 +4,7 @@ import type { GroundedBlock, ParsedPage } from "#/grounded-doc/types";
 import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 import { BlockMarkdown, VEIL_HOVER, laneAnchorRef, pageKey } from "./block-markdown";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function ImagesPane({
   engine,
@@ -36,8 +37,7 @@ export function ImagesPane({
                   return (
                     <Press
                       type="button"
-                      tone="locate-line"
-                      layout="stack"
+                      tone="neutral"
                       state={isFocused ? "focused" : "rest"}
                       key={image.id}
                       ref={laneAnchorRef(refs, image.id)}
@@ -45,16 +45,18 @@ export function ImagesPane({
                       onClick={() => engine.pinBlock(image.id, "image")}
                       style={{ overflow: "hidden" }}
                     >
-                      <img
-                        src={image.url}
-                        alt={`${image.category} figure on page ${image.page}`}
-                        loading="lazy"
-                        className="max-h-72 w-full object-contain"
-                      />
-                      <span className="flex items-center gap-1.5 px-1.5 py-0.5">
-                        <span className="">{image.category}</span>
-                        {isPinned && <Pin className="size-3" />}
-                      </span>
+                      <PressContent geometry="stack">
+                        <img
+                          src={image.url}
+                          alt={`${image.category} figure on page ${image.page}`}
+                          loading="lazy"
+                          className="max-h-72 w-full object-contain"
+                        />
+                        <span className="flex items-center gap-1.5 px-1.5 py-0.5">
+                          <span className="">{image.category}</span>
+                          {isPinned && <Pin className="size-3" />}
+                        </span>
+                      </PressContent>
                     </Press>
                   );
                 })}
@@ -184,8 +186,8 @@ export function PageCanvas({
           return block.bboxes.map((bbox, index) => (
             <Press
               type="button"
-              tone={isApprox ? "caution" : page.screenshotUrl ? "locate" : "locate-line"}
-              state={isFocused ? (isApprox ? "focused-caution" : "focused") : "rest"}
+              tone={isApprox ? "quiet" : page.screenshotUrl ? "neutral" : "neutral"}
+              state={isFocused ? (isApprox ? "focused" : "focused") : "rest"}
               key={`${block.id}-${index}`}
               ref={
                 index === 0
@@ -217,7 +219,7 @@ export function PageCanvas({
           return (
             <Press
               type="button"
-              tone="locate-viz"
+              tone="neutral"
               state={isFocused ? "focused" : "rest"}
               key={image.id}
               ref={laneAnchorRef(refs, image.id)}

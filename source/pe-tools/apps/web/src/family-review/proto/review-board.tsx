@@ -33,6 +33,7 @@ import {
 } from "#/family-review/proto/review-board-parts";
 import { ScaleNote, Triptych } from "#/family-review/proto/views";
 import { token } from "#/lib/token";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export { stages, useEdits, useVerdicts } from "#/family-review/proto/review-board-parts";
 
@@ -139,24 +140,25 @@ export function ReviewBoard({
               <div className="min-w-0 flex-1">
                 <Press
                   type="button"
-                  layout="stack"
                   state={selected === entry.key ? "selected" : "rest"}
                   onClick={() => setSelected(entry.key)}
                 >
-                  <span>{entry.family.name}</span>
-                  <span className="flex items-baseline gap-1.5">
-                    <span>{entry.typeName}</span>
-                    <AgreementWord agreement={headline(entry.rows)} />
-                    {verdicts.get(entry.key) !== "unjudged" ? (
-                      <span>{VERDICT_LABEL[verdicts.get(entry.key)]}</span>
-                    ) : null}
-                  </span>
+                  <PressContent geometry="stack">
+                    <span>{entry.family.name}</span>
+                    <span className="flex items-baseline gap-1.5">
+                      <span>{entry.typeName}</span>
+                      <AgreementWord agreement={headline(entry.rows)} />
+                      {verdicts.get(entry.key) !== "unjudged" ? (
+                        <span>{VERDICT_LABEL[verdicts.get(entry.key)]}</span>
+                      ) : null}
+                    </span>
+                  </PressContent>
                 </Press>
               </div>
               <Press
                 type="button"
-                size="sm"
-                state="expanded"
+                size="label"
+                state="selected"
                 aria-expanded={expanded === entry.key}
                 onClick={() => setExpanded(expanded === entry.key ? null : entry.key)}
                 title="Show what this family.json declares, and six small drawings of it. For recognising a family, not judging one — judging is the overlay on the right."

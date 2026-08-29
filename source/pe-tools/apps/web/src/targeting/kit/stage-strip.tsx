@@ -3,6 +3,7 @@ import { type Product } from "#/targeting/model";
 import { Press } from "#/components/lang/press";
 import type { Bindings, Runner } from "./direction-glyph";
 import { paneState } from "./direction-glyph";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function StageStrip<K extends string>({
   product,
@@ -34,7 +35,6 @@ export function StageStrip<K extends string>({
             key={s.key}
             type="button"
             tone="quiet"
-            layout="baseline"
             state={on ? "selected" : "rest"}
             role="tab"
             aria-selected={on}
@@ -49,17 +49,19 @@ export function StageStrip<K extends string>({
               borderLeft: i > 0 ? `1px solid ${token("line-2")}` : undefined,
             }}
           >
-            <span>{s.label}</span>
-            {meter ? (
-              <span
-                style={{
-                  fontVariantNumeric: "tabular-nums",
-                  color: ready === 0 ? token("ink-mute") : token("ink"),
-                }}
-              >
-                {ready}/{s.verbs.length}
-              </span>
-            ) : null}
+            <PressContent geometry="baseline">
+              <span>{s.label}</span>
+              {meter ? (
+                <span
+                  style={{
+                    fontVariantNumeric: "tabular-nums",
+                    color: ready === 0 ? token("ink-mute") : token("ink"),
+                  }}
+                >
+                  {ready}/{s.verbs.length}
+                </span>
+              ) : null}
+            </PressContent>
           </Press>
         );
       })}

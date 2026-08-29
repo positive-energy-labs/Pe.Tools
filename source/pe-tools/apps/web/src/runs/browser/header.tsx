@@ -88,8 +88,8 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
           {prevId ? (
             <Press
               type="button"
-              tone="firm"
-              size="chip-caption"
+              tone="neutral"
+              size="caption"
               onClick={() => setBaseline(null)}
               title="Clear the baseline — cards show the current run only, same footprint."
             >
@@ -98,8 +98,8 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
           ) : (
             <Press
               type="button"
-              tone="firm"
-              size="chip-caption"
+              tone="neutral"
+              size="caption"
               onClick={() => setBaseline("auto")}
               title="Restore the default baseline: the current run's chronological predecessor."
             >
@@ -108,8 +108,8 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
           )}
           <Press
             type="button"
-            tone="firm"
-            size="chip-caption"
+            tone="neutral"
+            size="caption"
             state={underlay ? "selected" : "rest"}
             onClick={() => setUnderlay((u) => !u)}
             title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
@@ -118,8 +118,8 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
           </Press>
           <Press
             type="button"
-            tone="firm"
-            size="chip-caption"
+            tone="neutral"
+            size="caption"
             state={changedOnly && comparing ? "selected" : "rest"}
             onClick={() => setChangedOnly((c) => !c)}
             disabled={!comparing}

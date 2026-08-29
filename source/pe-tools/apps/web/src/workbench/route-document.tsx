@@ -6,6 +6,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { useFleet } from "#/host/fleet";
 import { documentAddress, type SessionFacts } from "#/host/target";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export interface RouteDocumentChoice {
   at: Address;
@@ -116,14 +117,8 @@ export function RouteDocumentPicker({
     <div className="grid gap-2">
       <p className="">pick a document</p>
       {choices.map((choice) => (
-        <Press
-          key={choice.at}
-          type="button"
-          tone="quiet"
-          layout="row"
-          onClick={() => onPick(choice.at)}
-        >
-          {choice.label}
+        <Press key={choice.at} type="button" tone="quiet" onClick={() => onPick(choice.at)}>
+          <PressContent geometry="row">{choice.label}</PressContent>
         </Press>
       ))}
     </div>

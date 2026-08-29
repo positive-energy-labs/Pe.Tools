@@ -113,8 +113,8 @@ export function FlagChips(props: { item: StagedItem }) {
         <Press
           key={el}
           type="button"
-          tone="caution"
-          size="xs"
+          tone="quiet"
+          size="caption"
           onClick={() => fb.toggleFlag(props.item.key, el)}
           onMouseEnter={() => fb.setHoverFlag(`${props.item.key}::${el}`)}
           onMouseLeave={() => fb.setHoverFlag(null)}

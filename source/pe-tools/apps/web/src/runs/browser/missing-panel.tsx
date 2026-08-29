@@ -37,8 +37,8 @@ export function StageButton(props: {
       {otherPairs.length > 0 && (
         <Press
           type="button"
-          tone="caution"
-          size="icon-xs"
+          tone="quiet"
+          size="icon"
           onClick={() => props.onSwing(otherPairs[0]!)}
           title={`This zone is staged under ${otherPairs.length} other A/B pair${otherPairs.length === 1 ? "" : "s"} (pinned at stage time; the lens is only a view). Click to swing the lens to the pinned pair.`}
         >
@@ -47,8 +47,8 @@ export function StageButton(props: {
       )}
       <Press
         type="button"
-        tone={staged ? "caution" : "firm"}
-        size="chip-label"
+        tone={staged ? "quiet" : "neutral"}
+        size="label"
         onClick={() =>
           fb.toggleStage({
             key,
