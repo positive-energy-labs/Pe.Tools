@@ -40,14 +40,13 @@
     }
   },
   "opacityDim": {
-    "total": 37,
+    "total": 35,
     "byArea": {
       "components": 24,
-      "data-tables": 1,
       "families": 1,
       "family": 5,
       "host": 1,
-      "takeoff": 3,
+      "takeoff": 2,
       "targeting": 2
     }
   },
@@ -74,7 +73,7 @@
     }
   },
   "inlineColor": {
-    "total": 208,
+    "total": 189,
     "byArea": {
       "anatomy": 2,
       "components": 6,
@@ -86,16 +85,16 @@
       "ops": 28,
       "param-tables": 11,
       "routes": 4,
-      "runs": 42,
+      "runs": 28,
       "takeoff": 5,
-      "targeting": 40,
+      "targeting": 35,
       "workbench": 9
     }
   },
   "rawMeaningColor": {
-    "total": 61,
+    "total": 58,
     "byArea": {
-      "family": 27,
+      "family": 24,
       "host": 6,
       "routes": 3,
       "schedule-grid": 2,

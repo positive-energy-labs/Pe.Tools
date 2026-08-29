@@ -113,16 +113,12 @@ export function FlagChips(props: { item: StagedItem }) {
         <Press
           key={el}
           type="button"
+          tone="caution"
+          size="xs"
           onClick={() => fb.toggleFlag(props.item.key, el)}
           onMouseEnter={() => fb.setHoverFlag(`${props.item.key}::${el}`)}
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
-          className="px-1"
-          style={{
-            borderColor: token("caution"),
-            color: token("caution"),
-            borderRadius: "var(--radius)",
-          }}
         >
           ⚑ {flagLabel(el)} ✕
         </Press>

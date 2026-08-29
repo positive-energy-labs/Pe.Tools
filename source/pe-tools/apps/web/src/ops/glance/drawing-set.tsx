@@ -1,4 +1,3 @@
-import { token } from "#/lib/token";
 import { useEffect, useMemo, useState } from "react";
 import type { RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "#/components/lang/empty";
@@ -99,16 +98,10 @@ function Thumbnail({
   return (
     <Press
       type="button"
+      tone="bordered"
+      layout="stack"
+      state={selected ? "selected" : "rest"}
       onClick={onSelect}
-      className={`flex min-w-0 flex-col gap-1 rounded-sm border p-1.5 text-left hover:veil ${selected ? "" : ""}`}
-      style={
-        selected
-          ? ({
-              backgroundColor: token("select"),
-              "--pe-on": token("select"),
-            } as React.CSSProperties)
-          : undefined
-      }
       title={
         entry
           ? `${sheet.sheetNumber} — ${sheet.sheetName}`

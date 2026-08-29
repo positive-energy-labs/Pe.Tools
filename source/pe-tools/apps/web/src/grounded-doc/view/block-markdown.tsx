@@ -99,6 +99,10 @@ export function UploadSurface({
     <div className="flex w-full max-w-sm flex-col items-center gap-2">
       <Press
         type="button"
+        tone="bordered"
+        size="drop"
+        layout="block"
+        state={dragOver ? "highlighted" : "rest"}
         disabled={parsing}
         onClick={() => inputRef.current?.click()}
         onDragOver={(event) => {
@@ -111,28 +115,29 @@ export function UploadSurface({
           setDragOver(false);
           handleFiles(event.dataTransfer.files);
         }}
-        className={cn(
-          "flex w-full flex-col items-center gap-3 px-6 py-12 text-center",
-          dragOver && "",
-        )}
       >
-        {parsing ? (
-          <OutcomeLine
-            kind="busy"
-            label={`parsing ${engine.status.phase === "parsing" ? engine.status.fileName : "document"}`}
-            says="LlamaCloud is reading the document"
-          />
-        ) : (
-          <>
-            <FileUp className="size-6" />
-            <EmptyState story="scope" exit="drop a PDF here, paste a URL below, or load the sample">
-              no document loaded
-            </EmptyState>
-            {engine.status.phase === "error" && (
-              <OutcomeLine kind="error" label="parse failed" says={engine.status.message} />
-            )}
-          </>
-        )}
+        <span className="flex flex-col items-center gap-3 text-center">
+          {parsing ? (
+            <OutcomeLine
+              kind="busy"
+              label={`parsing ${engine.status.phase === "parsing" ? engine.status.fileName : "document"}`}
+              says="LlamaCloud is reading the document"
+            />
+          ) : (
+            <>
+              <FileUp className="size-6" />
+              <EmptyState
+                story="scope"
+                exit="drop a PDF here, paste a URL below, or load the sample"
+              >
+                no document loaded
+              </EmptyState>
+              {engine.status.phase === "error" && (
+                <OutcomeLine kind="error" label="parse failed" says={engine.status.message} />
+              )}
+            </>
+          )}
+        </span>
         <input
           ref={inputRef}
           type="file"

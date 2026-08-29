@@ -54,7 +54,6 @@ export function VariantSwitcher({
       <Press
         type="button"
         onClick={() => go(-1)}
-        className=""
         style={{
           cursor: "pointer",
           backgroundColor: "transparent",
@@ -71,7 +70,6 @@ export function VariantSwitcher({
       <Press
         type="button"
         onClick={() => go(1)}
-        className=""
         style={{
           cursor: "pointer",
           backgroundColor: "transparent",

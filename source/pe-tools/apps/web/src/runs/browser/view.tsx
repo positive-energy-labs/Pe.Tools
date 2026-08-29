@@ -110,10 +110,11 @@ export default function RunBrowser() {
             <span className="">each item at its pinned A/B pair · the lens is untouched</span>
             <Press
               type="button"
+              tone="firm"
+              size="chip-caption"
               onClick={() => setReview(false)}
               title="Back to the normal sheet."
-              className="ml-auto px-1.5 py-0.5"
-              style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
+              style={{ marginLeft: "auto" }}
             >
               ✕ exit review
             </Press>
@@ -128,13 +129,14 @@ export default function RunBrowser() {
                 <div className="flex items-baseline gap-2">
                   <Press
                     type="button"
+                    tone="quiet"
+                    layout="baseline"
                     onClick={() => swingLens(item)}
                     title={
                       onLens
                         ? "This item's pinned pair IS the current lens."
                         : "Pinned pair ≠ current lens — click to swing the lens to this pair (the stage is untouched)."
                     }
-                    className="flex items-baseline gap-2"
                   >
                     <span>
                       pinned A {item.runA ?? "(none)"} → B {item.runB}
@@ -150,9 +152,11 @@ export default function RunBrowser() {
                   </Press>
                   <Press
                     type="button"
+                    tone="quiet"
+                    size="xs"
                     onClick={() => fb.unstage(item.key)}
                     title="Remove this item from the staged set."
-                    className="ml-auto"
+                    style={{ marginLeft: "auto" }}
                   >
                     ✕ unstage
                   </Press>
@@ -255,7 +259,7 @@ export default function RunBrowser() {
     <div className="flex size-full min-h-0 flex-col">
       <PaneSplit
         axis="horizontal"
-        className="min-h-0 flex-1"
+        grow
         resize={{
           target: "end",
           defaultSize: 340,
@@ -325,13 +329,14 @@ export default function RunBrowser() {
               actions={
                 <Press
                   type="button"
+                  tone="firm"
+                  size="chip-label"
                   onClick={() => setPlanOpen((o) => !o)}
                   title={
                     planOpen
                       ? "Collapse the plan dock (drag the divider to resize it)."
                       : "Expand the plan dock."
                   }
-                  className="px-1.5"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}
                 </Press>

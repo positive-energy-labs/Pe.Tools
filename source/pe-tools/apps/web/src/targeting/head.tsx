@@ -121,6 +121,8 @@ export function TargetingHead<K extends string>({
   const expandToggle = (
     <Press
       type="button"
+      tone="quiet"
+      size="sm"
       onClick={() => setExpanded((x) => !x)}
       aria-expanded={expanded}
       title={
@@ -128,8 +130,6 @@ export function TargetingHead<K extends string>({
           ? "Collapse the verbs back to one row"
           : "Expand the verbs: what each one needs and why it is or is not ready"
       }
-      className="px-2.5"
-      style={{ borderLeft: `1px solid ${token("line-2")}`, color: token("ink-2") }}
     >
       {expanded ? "▴" : "▾"}
     </Press>

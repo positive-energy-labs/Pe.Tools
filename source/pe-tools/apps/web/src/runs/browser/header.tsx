@@ -1,7 +1,6 @@
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
-import { cn } from "#/lib/utils";
 import { Delta, PartialityChip, fmtSqft } from "./unknown";
 import { RunStrip } from "./zone-card";
 import { HeaderScores } from "./no-scores";
@@ -89,35 +88,39 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
           {prevId ? (
             <Press
               type="button"
+              tone="firm"
+              size="chip-caption"
               onClick={() => setBaseline(null)}
               title="Clear the baseline — cards show the current run only, same footprint."
-              className="px-1.5 py-0.5"
-              style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               clear A
             </Press>
           ) : (
             <Press
               type="button"
+              tone="firm"
+              size="chip-caption"
               onClick={() => setBaseline("auto")}
               title="Restore the default baseline: the current run's chronological predecessor."
-              className="px-1.5 py-0.5"
-              style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               A: auto
             </Press>
           )}
           <Press
             type="button"
+            tone="firm"
+            size="chip-caption"
+            state={underlay ? "selected" : "rest"}
             onClick={() => setUnderlay((u) => !u)}
             title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
-            className={cn("px-1.5 py-0.5", underlay ? "" : "")}
-            style={underlay ? undefined : { borderColor: token("line-2") }}
           >
             ink evidence
           </Press>
           <Press
             type="button"
+            tone="firm"
+            size="chip-caption"
+            state={changedOnly && comparing ? "selected" : "rest"}
             onClick={() => setChangedOnly((c) => !c)}
             disabled={!comparing}
             title={
@@ -125,8 +128,6 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
                 ? "Show only zones that materially changed between A and B (rooms moved, sf moved > 0.5, verdict flipped, or exists on one side only)."
                 : "Needs a baseline — pick A first."
             }
-            className={cn("px-1.5 py-0.5", changedOnly && comparing ? "" : "")}
-            style={changedOnly && comparing ? undefined : { borderColor: token("line-2") }}
           >
             changed only
           </Press>

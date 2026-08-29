@@ -1,6 +1,5 @@
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
-import { cn } from "#/lib/utils";
 import { itemKey, type StagedItem } from "../feedback/staging";
 import { type RunIndexEntry, type ZoneRecord } from "../world";
 import { Press } from "#/components/lang/press";
@@ -76,17 +75,15 @@ export function ZoneCard(props: {
           {locatable ? (
             <Press
               type="button"
+              tone="firm"
+              size="chip-label"
+              state={props.highlighted ? "selected" : "rest"}
               onClick={() => props.onToggleHighlight(locatable)}
               title={
                 props.highlighted
                   ? "Highlighted on the plan — click to clear the highlight."
                   : "Highlight this zone on the plan (opens + centers the plan dock). Stays lit until you click again, pick another zone, or hit esc."
               }
-              className={cn("shrink-0 px-1.5", props.highlighted ? "" : "")}
-              style={{
-                borderColor: props.highlighted ? token("ink-2") : token("line-2"),
-                borderRadius: "var(--radius)",
-              }}
             >
               ⌖ highlight
             </Press>
@@ -224,8 +221,9 @@ export function RunStrip(props: {
           >
             <Press
               type="button"
+              tone="quiet"
+              layout="stack"
               onClick={() => onPickCur(entry.id)}
-              className="flex flex-col items-start px-2 py-1 text-left"
               title={`${entry.id} — click to make this the CURRENT run (B).`}
             >
               <span className="">
@@ -244,14 +242,11 @@ export function RunStrip(props: {
             </Press>
             <Press
               type="button"
+              tone="quiet"
+              size="chip-label"
+              state={isPrev ? "selected" : isCur ? "disabled-faint" : "rest"}
               onClick={() => onPickBaseline(entry.id)}
               disabled={isCur}
-              className="px-1.5"
-              style={{
-                borderColor: token("line-2"),
-                backgroundColor: isPrev ? token("recess") : "transparent",
-                color: isCur ? token("line-2") : isPrev ? token("ink") : token("ink-2"),
-              }}
               title={
                 isPrev
                   ? "This is the baseline (A) — click to clear it."

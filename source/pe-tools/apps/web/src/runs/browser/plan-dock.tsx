@@ -118,9 +118,11 @@ export function PlanDock(props: {
             <Press
               key={l}
               type="button"
+              tone="quiet"
+              size="chip-caption"
+              state={l === level ? "selected" : "rest"}
               onClick={() => props.onPickLevel(l)}
               title="Show this level on the plan — the sheet scrolls to its section (and scrolling the sheet moves this tab)."
-              className={cn("px-2 py-0.5", l === level ? "" : "")}
             >
               {l.replace(" Level", "")}
             </Press>
@@ -129,19 +131,21 @@ export function PlanDock(props: {
         <span className="ml-auto flex items-center gap-1.5">
           <Press
             type="button"
+            tone="firm"
+            size="chip-caption"
+            state={showKey ? "selected" : "rest"}
             onClick={() => setShowKey((v) => !v)}
             title="Show/hide the key — what each mark on the plan means."
-            className={cn("px-1.5 py-0.5", showKey ? "" : "")}
-            style={{ borderColor: token("line-2") }}
           >
             key
           </Press>
           <Press
             type="button"
+            tone="firm"
+            size="chip-caption"
+            state={showStats ? "selected" : "rest"}
             onClick={() => setShowStats((v) => !v)}
             title="Show/hide the level-stats floater — solve counts, sf, loudest rejections, A/B deltas."
-            className={cn("px-1.5 py-0.5", showStats ? "" : "")}
-            style={{ borderColor: token("line-2") }}
           >
             stats
           </Press>

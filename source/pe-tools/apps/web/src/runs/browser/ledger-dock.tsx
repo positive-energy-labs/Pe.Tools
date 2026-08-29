@@ -87,13 +87,16 @@ export function LedgerDock(props: {
           return (
             <Press
               type="button"
+              tone="quiet"
+              layout="block"
+              state={isA ? "selected" : "rest"}
               onClick={() => onPickBaseline(row.id)}
               title={
                 (isA
                   ? "This is the baseline (A) — click to clear it."
                   : "Set this run as the baseline (A).") + caveat
               }
-              className={cn("h-7 w-full px-1.5 text-left", isA ? "" : "")}
+              style={{ height: "1.75rem" }}
             >
               {isA ? "A" : "set A"}
             </Press>
@@ -295,13 +298,14 @@ export function LedgerDock(props: {
     <div className="shrink-0" style={{ borderColor: token("line-2") }}>
       <Press
         type="button"
+        tone="quiet"
+        layout="baseline"
         onClick={onToggle}
         title={
           open
             ? "Collapse the run ledger."
             : "Expand the run ledger — rows are runs, marks drive the sheet's A/B."
         }
-        className="flex w-full items-baseline gap-2 px-3 py-1 text-left"
       >
         <span className="">ledger</span>
         <span className="">

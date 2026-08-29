@@ -37,16 +37,18 @@ export function StageButton(props: {
       {otherPairs.length > 0 && (
         <Press
           type="button"
+          tone="caution"
+          size="icon-xs"
           onClick={() => props.onSwing(otherPairs[0]!)}
           title={`This zone is staged under ${otherPairs.length} other A/B pair${otherPairs.length === 1 ? "" : "s"} (pinned at stage time; the lens is only a view). Click to swing the lens to the pinned pair.`}
-          className="shrink-0"
-          style={{ color: token("caution") }}
         >
           ⚑{otherPairs.length}≠
         </Press>
       )}
       <Press
         type="button"
+        tone={staged ? "caution" : "firm"}
+        size="chip-label"
         onClick={() =>
           fb.toggleStage({
             key,
@@ -63,12 +65,6 @@ export function StageButton(props: {
             ? "Staged for export (this exact A/B pair is pinned) — click to unstage. Click rooms/residues on the B panel to flag them."
             : "Stage this zone's current A/B pair for the feedback export. The pair is pinned at stage time; switching the lens afterwards never alters it."
         }
-        className="shrink-0 px-1.5"
-        style={{
-          borderRadius: "var(--radius)",
-          borderColor: staged ? token("alarm") : token("line-2"),
-          color: staged ? token("alarm") : token("ink-2"),
-        }}
       >
         {staged ? "staged ✓" : "＋ stage"}
       </Press>

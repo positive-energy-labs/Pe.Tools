@@ -89,7 +89,6 @@ export function Picker<K extends string>({
         }}
         disabled={inert}
         title={title}
-        className=""
         style={{
           padding: 0,
           cursor: inert ? "not-allowed" : "pointer",
@@ -121,7 +120,6 @@ export function Picker<K extends string>({
                   <Press
                     type="button"
                     onClick={() => (setLevel(l.key), setQ(""))}
-                    className=""
                     style={{
                       padding: "0 3px",
                       backgroundColor: on ? token("select") : "transparent",
@@ -184,12 +182,13 @@ export function Picker<K extends string>({
                   <Press
                     key={o.id}
                     type="button"
+                    tone="quiet"
+                    layout="baseline"
+                    state={on ? "selected" : "rest"}
                     onClick={() => {
                       b.pick(cur, o.id);
                       advance();
                     }}
-                    className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                    style={{ backgroundColor: on ? token("select") : undefined }}
                   >
                     {cur.multi ? <span className="">{on ? "☑" : "☐"}</span> : null}
                     <span className="" style={{ color: token("ink") }}>
@@ -216,16 +215,15 @@ export function Picker<K extends string>({
                   <Press
                     key={`below:${o.id}`}
                     type="button"
+                    tone="quiet"
+                    layout="baseline"
+                    state={b.isPicked(below!, o.id) ? "selected" : "rest"}
                     onClick={() => {
                       b.pick(below!, o.id);
                       const after = chain[chain.indexOf(below!) + 1];
                       if (after && !below!.multi) setLevel(after.key);
                       else if (!below!.multi) b.setOpen(null);
                       setQ("");
-                    }}
-                    className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
-                    style={{
-                      backgroundColor: b.isPicked(below!, o.id) ? token("select") : undefined,
                     }}
                   >
                     {below!.multi ? (

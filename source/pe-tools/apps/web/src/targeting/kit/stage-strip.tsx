@@ -33,6 +33,9 @@ export function StageStrip<K extends string>({
           <Press
             key={s.key}
             type="button"
+            tone="quiet"
+            layout="baseline"
+            state={on ? "selected" : "rest"}
             role="tab"
             aria-selected={on}
             onClick={() => b.setStage(s.key)}
@@ -42,12 +45,8 @@ export function StageStrip<K extends string>({
                 return c.ok ? `${v.label}: ready` : `${v.label}: ${c.reason}`;
               })
               .join(" · ")}`}
-            className="flex items-baseline gap-2 px-2.5 py-1"
             style={{
               borderLeft: i > 0 ? `1px solid ${token("line-2")}` : undefined,
-              backgroundColor: on ? token("select") : "transparent",
-              boxShadow: on ? `inset 0 -2px 0 ${token("ink")}` : undefined,
-              color: on ? token("ink") : token("ink-2"),
             }}
           >
             <span>{s.label}</span>

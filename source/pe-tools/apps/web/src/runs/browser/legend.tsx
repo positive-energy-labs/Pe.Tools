@@ -82,9 +82,11 @@ export function LegendFloater(props: { underlay: boolean; onClose: () => void })
         </span>
         <Press
           type="button"
+          tone="quiet"
+          size="icon-xs"
           onClick={props.onClose}
           title="Hide the key (the plan header's 'key' button brings it back)."
-          className="ml-auto"
+          style={{ marginLeft: "auto" }}
         >
           ×
         </Press>
@@ -178,9 +180,11 @@ export function LevelStatsFloater(props: {
         {level} — this run
         <Press
           type="button"
+          tone="quiet"
+          size="icon-xs"
           onClick={props.onClose}
           title="Hide the level stats (the plan header's 'stats' button brings them back)."
-          className="ml-auto normal-case tracking-normal"
+          style={{ marginLeft: "auto" }}
         >
           ×
         </Press>

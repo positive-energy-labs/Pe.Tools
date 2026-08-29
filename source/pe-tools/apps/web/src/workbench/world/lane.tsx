@@ -97,7 +97,9 @@ export function WorldLane({
 
           <Press
             type="button"
-            className="h-6 w-[26px] cursor-pointer hover:veil disabled:cursor-default"
+            tone="quiet"
+            size="icon-sm"
+            state="selectable"
             aria-pressed={diff}
             onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
             title={
@@ -154,27 +156,29 @@ export function WorldLane({
           const blast = blastOf(layer.rank);
           return (
             <div className={cn("", changed && "caution-wash-artifact")} key={layer.id}>
-              <Press
-                className={cn(
-                  WORLD_ROW,
-                  inspect ? "grid-cols-[9px_1fr_auto_auto_auto_auto]" : "grid-cols-[9px_1fr_auto]",
-                )}
-                type="button"
-                onClick={() => toggle(layer.id)}
-              >
-                <span className="size-[9px]" style={{ backgroundColor: tone(layer.id) }} />
-                <span className="">
-                  {layer.label}
-                  {inspect ? <span className="ml-1.5">pos {layer.rank}</span> : null}
-                </span>
-                {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
-                {inspect ? <span className="">{fmtTok(layer.tokens)}</span> : null}
-                {inspect ? (
-                  <span className="min-w-[30px] text-right">
-                    {((layer.tokens / used) * 100).toFixed(0)}%
+              <Press tone="quiet" layout="block" type="button" onClick={() => toggle(layer.id)}>
+                <span
+                  className={cn(
+                    WORLD_ROW,
+                    inspect
+                      ? "grid-cols-[9px_1fr_auto_auto_auto_auto]"
+                      : "grid-cols-[9px_1fr_auto]",
+                  )}
+                >
+                  <span className="size-[9px]" style={{ backgroundColor: tone(layer.id) }} />
+                  <span className="">
+                    {layer.label}
+                    {inspect ? <span className="ml-1.5">pos {layer.rank}</span> : null}
                   </span>
-                ) : null}
-                <span className={cn("transition-transform", isOpen && "rotate-90")}>▸</span>
+                  {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
+                  {inspect ? <span className="">{fmtTok(layer.tokens)}</span> : null}
+                  {inspect ? (
+                    <span className="min-w-[30px] text-right">
+                      {((layer.tokens / used) * 100).toFixed(0)}%
+                    </span>
+                  ) : null}
+                  <span className={cn("transition-transform", isOpen && "rotate-90")}>▸</span>
+                </span>
               </Press>
               {isOpen ? (
                 <div className="pt-0 pr-3.5 pb-[11px] pl-[31px]">
@@ -229,8 +233,9 @@ export function ItemRow({
   return (
     <li className={cn("overflow-hidden", blast ? "" : "")}>
       <Press
-        className="flex w-full cursor-pointer items-center gap-2 px-[9px] py-1.5 text-left [font:inherit] disabled:cursor-default"
         type="button"
+        tone="quiet"
+        layout="row"
         disabled={!hasBody}
         onClick={() => hasBody && onToggle()}
       >

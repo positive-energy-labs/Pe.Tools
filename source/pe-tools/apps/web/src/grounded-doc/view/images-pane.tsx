@@ -36,15 +36,14 @@ export function ImagesPane({
                   return (
                     <Press
                       type="button"
+                      tone="locate-line"
+                      layout="stack"
+                      state={isFocused ? "focused" : "rest"}
                       key={image.id}
                       ref={laneAnchorRef(refs, image.id)}
                       onMouseEnter={() => engine.hoverBlock(image.id, "image")}
                       onClick={() => engine.pinBlock(image.id, "image")}
-                      className={cn(
-                        "group flex flex-col overflow-hidden text-left",
-                        isFocused ? "" : "",
-                        !isFocused && VEIL_HOVER,
-                      )}
+                      style={{ overflow: "hidden" }}
                     >
                       <img
                         src={image.url}
@@ -185,6 +184,8 @@ export function PageCanvas({
           return block.bboxes.map((bbox, index) => (
             <Press
               type="button"
+              tone={isApprox ? "caution" : page.screenshotUrl ? "locate" : "locate-line"}
+              state={isFocused ? (isApprox ? "focused-caution" : "focused") : "rest"}
               key={`${block.id}-${index}`}
               ref={
                 index === 0
@@ -194,7 +195,7 @@ export function PageCanvas({
                     }
                   : undefined
               }
-              style={toPercent(bbox)}
+              style={{ ...toPercent(bbox), position: "absolute" }}
               title={
                 isApprox
                   ? `${block.kind} — approximate region (parser gave a sibling block the same box)`
@@ -202,19 +203,6 @@ export function PageCanvas({
               }
               onMouseEnter={() => engine.hoverBlock(block.id, "page")}
               onClick={() => engine.pinBlock(block.id, "page")}
-              className={cn(
-                "absolute",
-                isFocused
-                  ? isApprox
-                    ? "z-raised"
-                    : "z-raised"
-                  : page.screenshotUrl
-                    ? isApprox
-                      ? ""
-                      : cn("", VEIL_HOVER)
-                    : // Wireframe mode (no screenshot): keep boxes faintly visible.
-                      cn("", VEIL_HOVER),
-              )}
             >
               {!page.screenshotUrl && (
                 <span className="absolute left-0.5 top-0.5">{block.kind}</span>
@@ -229,13 +217,14 @@ export function PageCanvas({
           return (
             <Press
               type="button"
+              tone="locate-viz"
+              state={isFocused ? "focused" : "rest"}
               key={image.id}
               ref={laneAnchorRef(refs, image.id)}
-              style={toPercent(image.bbox)}
+              style={{ ...toPercent(image.bbox), position: "absolute" }}
               title={`${image.category} image — click to ${isPinned ? "unpin" : "pin"}`}
               onMouseEnter={() => engine.hoverBlock(image.id, "page")}
               onClick={() => engine.pinBlock(image.id, "page")}
-              className={cn("absolute", isFocused ? "z-raised" : cn("", VEIL_HOVER))}
             />
           );
         })}
