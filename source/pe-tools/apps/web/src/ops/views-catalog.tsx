@@ -1,1 +1,1 @@
-export { views } from "./views-catalog-field-options-view";
+export { views } from "./views/catalog/field-options";

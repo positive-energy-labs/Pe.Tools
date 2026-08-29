@@ -56,7 +56,7 @@ export function OperationPane({
     <section className="flex flex-col gap-4">
       <header>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="t-title">{operation.displayName ?? operation.key}</h1>
+          <h1 className="">{operation.displayName ?? operation.key}</h1>
           <FactChip
             tone={operation.intent.toLowerCase() === "mutate" ? "caution" : "meta"}
             title={operation.intent.toLowerCase() === "mutate" ? "writes to Revit" : "read-only"}
@@ -72,18 +72,18 @@ export function OperationPane({
             </FactChip>
           ) : null}
         </div>
-        <p className="face-mono t-caption text-ink-2">{operation.key}</p>
-        <p className="t-prose max-w-2xl text-ink-2">{operation.description}</p>
+        <p className="">{operation.key}</p>
+        <p className="max-w-2xl">{operation.description}</p>
       </header>
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h2 className="t-label t-upper text-ink-2">Request</h2>
+          <h2 className="">Request</h2>
           <span className="flex gap-1">
             {operation.requestExamples.map((example) => (
               <Press
                 key={example.name}
-                size="xs"
+                size="caption"
                 tone="neutral"
                 title={example.description}
                 onClick={() => {
@@ -96,8 +96,8 @@ export function OperationPane({
             ))}
             {schema ? (
               <Press
-                size="xs"
-                tone="bordered"
+                size="caption"
+                tone="neutral"
                 onClick={() => setMode(mode === "form" ? "raw" : "form")}
               >
                 {mode === "form" ? "raw" : "form"}
@@ -118,14 +118,14 @@ export function OperationPane({
             value={args}
             onChange={(event) => setArgs(event.currentTarget.value)}
             spellCheck={false}
-            className="min-h-32 face-mono"
+            className="min-h-32"
           />
         )}
       </section>
 
       {result ? (
         <section className="flex flex-col gap-2">
-          <h2 className="t-label t-upper text-ink-2">Result</h2>
+          <h2 className="">Result</h2>
           {Curated ? (
             <Curated data={result.value} opKey={operation.key} request={result.request} />
           ) : (
@@ -133,9 +133,7 @@ export function OperationPane({
           )}
           {Curated ? (
             <details>
-              <summary className="face-mono t-caption cursor-pointer text-ink-2">
-                raw response
-              </summary>
+              <summary className="cursor-pointer">raw response</summary>
               <OutputBlock value={result.value} />
             </details>
           ) : null}
@@ -159,10 +157,9 @@ export function JsonSchemaForm({
   bridgeSessionId?: string;
 }) {
   const fields = schemaProperties(schema);
-  if (!fields.length)
-    return <p className="t-label text-ink-2">This operation has no request fields.</p>;
+  if (!fields.length) return <p className="">This operation has no request fields.</p>;
   return (
-    <div className="grid gap-3 rounded-sm border border-line p-3">
+    <div className="grid gap-3 p-3">
       {fields.map(([name, field]) => (
         <div key={name} className="grid gap-1">
           <Label htmlFor={`op-field-${name}`}>{name}</Label>
@@ -270,7 +267,7 @@ export function SchemaInput({
 
 export function OutputBlock({ value }: { value: unknown }) {
   return (
-    <pre className="t-value max-h-[32rem] overflow-auto rounded-sm border border-line p-3">
+    <pre className="max-h-[32rem] overflow-auto p-3">
       {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
     </pre>
   );

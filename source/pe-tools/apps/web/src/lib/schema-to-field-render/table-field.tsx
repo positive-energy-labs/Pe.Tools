@@ -122,7 +122,7 @@ function TableCellField({
         list={list}
         value={String(field.value ?? value ?? "")}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className={field.errors.length > 0 ? "border-alarm" : undefined}
+        className={field.errors.length > 0 ? "" : undefined}
       />
       <div className="flex flex-wrap items-center gap-2">
         <FieldChangeBadge path={path} compact />
@@ -232,9 +232,9 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
         path={path}
       />
       <FieldMessages messages={field.errors} />
-      <div className="overflow-auto rounded-lg border border-line">
-        <table className="min-w-full border-collapse t-prose">
-          <thead className="bg-recess/50 text-left t-value t-upper text-ink-2">
+      <div className="overflow-auto">
+        <table className="min-w-full">
+          <thead className="text-left">
             <tr>
               {fixedColumns.map(([columnKey]) => (
                 <th key={columnKey} className="px-3 py-2">
@@ -247,7 +247,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                     <Input
                       defaultValue={columnKey}
                       onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
-                      className="h-8 min-w-24 bg-page"
+                      className="h-8 min-w-24"
                     />
                     <Verb
                       label="remove"
@@ -265,14 +265,14 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
               <tr>
                 <td
                   colSpan={fixedColumns.length + dynamicColumnKeys.length + 1}
-                  className="px-3 py-6 text-center t-prose text-ink-2"
+                  className="px-3 py-6 text-center"
                 >
                   No rows yet.
                 </td>
               </tr>
             ) : (
               rows.map((row, rowIndex) => (
-                <tr key={`${path}.${rowIndex}`} className="border-t border-line align-top">
+                <tr key={`${path}.${rowIndex}`} className="align-top">
                   {fixedColumns.map(([columnKey], fixedColumnIndex) => {
                     const cellPath = `${path}.${rowIndex}.${columnKey}`;
                     return (
@@ -323,7 +323,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
         ) : null}
       </div>
       <div className="flex items-center justify-between gap-3">
-        <span className="t-value text-ink-2">
+        <span className="">
           {primaryColumnOptions.isLoading
             ? "Loading table suggestions..."
             : "Schema-driven table with fixed and dynamic columns."}

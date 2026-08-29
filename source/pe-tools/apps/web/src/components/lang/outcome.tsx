@@ -8,16 +8,14 @@
  *   bars were simply not understood.
  * - EVERY KIND REUSES A MEANING ROLE ALREADY IN THE CONTRACT. No outcome gets a hue of its own,
  *   and the mapping is documented once, in design-lang.css, next to the tokens it spends:
- *     busy → ink-2 · receipt → done · refused → alarm · dropped → ink-mute (+italic) ·
- *     advisory → ink-2 · partial → caution · error → caution
+ *     busy → ink-2 · receipt → done · refused → alarm · advisory → ink-2 · error → caution
  *   Two of those are arguments, not conveniences: a plan-hash REFUSAL is the model disagreeing,
  *   so it earns the one alarm; a busy bridge is NOT the model disagreeing, so an ERROR gets
  *   caution instead.
  * - BOLD STAYS RESERVED FOR UNSAVED. Outcomes take their punch from colour, the icon, and the
  *   artifact frame they sit near — never from the type axis (round-2 scoping ruling).
- * - b's DONATION, under c's axis law: `partial` and `error` wear the squiggly-under — the SAME
- *   decoration family the cells use — which is why they read as unfinished without weight; and
- *   `dropped` goes italic and muted, because it never happened.
+ * - ERROR wears the squiggly-under — the same decoration family the cells use — which is why it
+ *   reads as unfinished without weight.
  * - BORDER BUDGET: an outcomes lane is PLAIN CONTENT. It reports on a machine-operated object;
  *   it is not one. Never wrap these in an `ArtifactFrame`.
  *
@@ -27,16 +25,7 @@
  * ruled for any of it, so no slot is taken here. Upgrade path: the state model grows the link
  * first, then this signature.
  */
-import {
-  Ban,
-  Check,
-  CircleOff,
-  Info,
-  Layers,
-  LoaderCircle,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
+import { Ban, Check, Info, LoaderCircle, TriangleAlert, type LucideIcon } from "lucide-react";
 
 import { tv } from "#/lib/tv";
 
@@ -54,12 +43,7 @@ export const outcomeLineRecipe = tv({
       busy: { base: "text-ink-2", icon: "animate-spin" },
       receipt: { base: "text-done" },
       refused: { base: "text-alarm" },
-      dropped: { base: "text-ink-mute italic" },
       advisory: { base: "text-ink-2" },
-      partial: {
-        base: "text-caution",
-        label: "decoration-caution underline decoration-wavy underline-offset-3",
-      },
       error: {
         base: "text-caution",
         label: "decoration-caution underline decoration-wavy underline-offset-3",
@@ -68,22 +52,13 @@ export const outcomeLineRecipe = tv({
   },
 });
 
-export type OutcomeKind =
-  | "busy"
-  | "receipt"
-  | "refused"
-  | "dropped"
-  | "advisory"
-  | "partial"
-  | "error";
+export type OutcomeKind = "busy" | "receipt" | "refused" | "advisory" | "error";
 
 const OUTCOME_ICON: Record<OutcomeKind, LucideIcon> = {
   busy: LoaderCircle,
   receipt: Check,
   refused: Ban,
-  dropped: CircleOff,
   advisory: Info,
-  partial: Layers,
   error: TriangleAlert,
 };
 

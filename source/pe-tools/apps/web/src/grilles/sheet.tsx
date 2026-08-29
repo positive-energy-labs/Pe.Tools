@@ -153,7 +153,7 @@ export function Sheet({
           : null
       }
       summary={
-        <Press type="button" tone="quiet" size="mono-label" onClick={add}>
+        <Press type="button" tone="quiet" size="label" onClick={add}>
           + profile
         </Press>
       }

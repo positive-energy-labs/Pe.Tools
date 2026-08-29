@@ -18,9 +18,7 @@ export function FieldRenderer(props: FieldRendererProps) {
   const CustomRenderer = resolveCustomRenderer(resolved.effectiveNodeRef.uiMetadata()?.renderer);
 
   return (
-    <Suspense
-      fallback={<div className="h-16 animate-pulse rounded-lg border border-line bg-recess/30" />}
-    >
+    <Suspense fallback={<div className="h-16 animate-pulse" />}>
       {CustomRenderer ? (
         <CustomRenderer {...nextProps} />
       ) : resolved.nodeType === "object" && resolved.effectiveNode.properties ? (

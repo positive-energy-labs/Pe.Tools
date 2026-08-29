@@ -122,7 +122,7 @@ export function SidePane({
           className,
         )}
       >
-        <Press tone="neutral" size="icon-sm" aria-label="Expand pane" onClick={() => setOpen(true)}>
+        <Press tone="neutral" size="icon" aria-label="Expand pane" onClick={() => setOpen(true)}>
           <Expand />
         </Press>
         {rail && <div className="mt-1 flex flex-col items-center gap-1">{rail}</div>}
@@ -139,12 +139,7 @@ export function SidePane({
       className={cn("relative flex shrink-0 flex-col border-line bg-page", border, className)}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2.5">
-        <Press
-          tone="neutral"
-          size="icon-sm"
-          aria-label="Collapse pane"
-          onClick={() => setOpen(false)}
-        >
+        <Press tone="neutral" size="icon" aria-label="Collapse pane" onClick={() => setOpen(false)}>
           <Collapse />
         </Press>
         <div className="min-w-0 flex-1">{header}</div>

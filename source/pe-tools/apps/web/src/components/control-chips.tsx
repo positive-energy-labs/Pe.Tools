@@ -92,11 +92,14 @@ function Picker({
       {/* ponytail: explicit anchor on the trigger — the in-popup search input can't be the
           positioner anchor or it feedback-loops (roaming/jittering popup). */}
       <div ref={anchorRef} className="inline-flex">
-        <ComboboxTrigger title={title} render={<Press tone="quiet" size="md" state="expanded" />}>
+        <ComboboxTrigger
+          title={title}
+          render={<Press tone="quiet" size="value" state="selected" />}
+        >
           <span className="t-value face-mono truncate">{label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent align="end" anchor={anchorRef} className="min-w-56">
+      <ComboboxContent align="end" anchor={anchorRef}>
         {searchable ? <ComboboxInput placeholder={`Search ${title.toLowerCase()}…`} /> : null}
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>

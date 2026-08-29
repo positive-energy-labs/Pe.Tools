@@ -1,5 +1,4 @@
 import { Press } from "#/components/lang/press";
-import { Badge, badgeVariants } from "#/components/ui/badge";
 import {
   Card,
   CardAction,
@@ -25,30 +24,6 @@ import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 export function UiSurfaceSpecimens() {
   return (
     <>
-      <RecipeGrid
-        name="Badge"
-        importPath="#/components/ui/badge"
-        recipe={badgeVariants}
-        render={(props) => (
-          <Badge
-            variant={
-              props.variant as
-                | "default"
-                | "secondary"
-                | "outline"
-                | "destructive"
-                | "blue"
-                | "green"
-                | "slate"
-                | "lichen"
-                | "clay"
-                | "kiln"
-            }
-          >
-            {String(props.variant)}
-          </Badge>
-        )}
-      />
       <SpecimenFrame name="Card" importPath="#/components/ui/card">
         <div className="w-80">
           <Card>
@@ -58,7 +33,7 @@ export function UiSurfaceSpecimens() {
                 <CardDescription>13 params · 3 types</CardDescription>
               </div>
               <CardAction>
-                <Press size="sm">open</Press>
+                <Press size="label">open</Press>
               </CardAction>
             </CardHeader>
             <CardContent>content</CardContent>
@@ -72,7 +47,7 @@ export function UiSurfaceSpecimens() {
         recipe={dialogRecipe}
         render={() => (
           <Dialog>
-            <DialogTrigger render={<Press size="sm" />}>open dialog</DialogTrigger>
+            <DialogTrigger render={<Press size="label" />}>open dialog</DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Dialog</DialogTitle>

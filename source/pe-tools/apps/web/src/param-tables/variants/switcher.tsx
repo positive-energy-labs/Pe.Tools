@@ -36,7 +36,7 @@ export function VariantSwitcher({
 
   return (
     <div
-      className="face-mono t-value z-dev shadow-modal"
+      className="z-dev"
       style={{
         position: "fixed",
         bottom: 16,
@@ -54,7 +54,6 @@ export function VariantSwitcher({
       <Press
         type="button"
         onClick={() => go(-1)}
-        size="title"
         style={{
           cursor: "pointer",
           backgroundColor: "transparent",
@@ -71,7 +70,6 @@ export function VariantSwitcher({
       <Press
         type="button"
         onClick={() => go(1)}
-        size="title"
         style={{
           cursor: "pointer",
           backgroundColor: "transparent",

@@ -11,6 +11,7 @@ import { bindingOf, isFormula, type PageWorld } from "#/family/model";
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function FamilyWorkspaceDocPane() {
   const {
@@ -76,8 +77,8 @@ export function FamilyWorkspaceDocPane() {
                     setPinnedParam(bound);
                   }}
                   title={`Driven by "${bound}", currently ${draft.authored[bound] ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
-                  tone="link"
-                  size="mono-caption"
+                  tone="nav"
+                  size="caption"
                 >
                   {bound}
                 </Press>
@@ -192,11 +193,12 @@ export function FamilyWorkspaceDocPane() {
                 type="button"
                 onClick={() => setInspect({ kind: "part", slug: entry.slug })}
                 title={`Open ${entry.slug} — its kind, its other dims, and the non-bindable metadata no parameter can drive.`}
-                tone="link"
-                size="mono-caption"
-                layout="block"
+                tone="nav"
+                size="caption"
               >
-                → {entry.slug}.{entry.property}
+                <PressContent geometry="block">
+                  → {entry.slug}.{entry.property}
+                </PressContent>
               </Press>
             ))
           )}

@@ -95,7 +95,7 @@ export function FieldOptionSelect({
       onValueChange={(option: FieldOption | null) => option && onChange(option)}
       itemToStringLabel={(option: FieldOption) => option.label}
     >
-      <ComboboxInput placeholder={placeholder} className="w-full" showClear={false} />
+      <ComboboxInput placeholder={placeholder} showClear={false} />
       <ComboboxContent>
         <ComboboxEmpty>No matching live document values</ComboboxEmpty>
         <ComboboxList>

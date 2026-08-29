@@ -6,6 +6,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { useFleet } from "#/host/fleet";
 import { documentAddress, type SessionFacts } from "#/host/target";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export interface RouteDocumentChoice {
   at: Address;
@@ -66,7 +67,7 @@ export function RouteDocumentSurface({ at, children }: { at: Address; children: 
         href={routeDocumentTabHref(href, at)}
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed right-3 top-3 z-raised t-label text-nav underline-offset-2 hover:underline"
+        className="fixed right-3 top-3 z-raised underline-offset-2"
       >
         open in another tab
       </a>
@@ -90,7 +91,7 @@ export function RouteDocumentEmpty() {
   const href = useLocation({ select: (location) => location.href });
   const choices = routeDocumentChoices(sessions);
   return (
-    <main className="grid min-h-screen place-items-center bg-page font-sans">
+    <main className="grid min-h-screen place-items-center">
       {choices.length > 1 ? (
         <RouteDocumentPicker
           choices={choices}
@@ -114,16 +115,10 @@ export function RouteDocumentPicker({
 }) {
   return (
     <div className="grid gap-2">
-      <p className="t-label text-ink-2">pick a document</p>
+      <p className="">pick a document</p>
       {choices.map((choice) => (
-        <Press
-          key={choice.at}
-          type="button"
-          tone="bordered"
-          size="value"
-          onClick={() => onPick(choice.at)}
-        >
-          {choice.label}
+        <Press key={choice.at} type="button" tone="quiet" onClick={() => onPick(choice.at)}>
+          <PressContent geometry="row">{choice.label}</PressContent>
         </Press>
       ))}
     </div>

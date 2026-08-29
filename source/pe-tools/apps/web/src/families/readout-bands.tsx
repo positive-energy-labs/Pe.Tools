@@ -48,7 +48,7 @@ export function FamiliesReadoutBands() {
                         }
                         onClick={() => void store.actions.exclude(entry.familyId)}
                         tone="quiet"
-                        size="mono-value"
+                        size="value"
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </Press>

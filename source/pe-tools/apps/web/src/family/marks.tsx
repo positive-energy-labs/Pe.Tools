@@ -99,7 +99,7 @@ function ProposalNotch({
       onClick={() => onLocate(first)}
       aria-label={`locate the proposal for ${where}`}
       title={`Pea proposes ${first.proposed} for ${where}${count > 1 ? ` (and ${count - 1} more on this cell)` : ""}. ${first.note} — click the notch to bring the card into the sidebar. The cell itself is ORDINARY: type your own value and the proposal is severed, with no verdict to give. The fold survives every overlay, because a proposal is a fact about the cell rather than about which reading is showing.`}
-      tone="pea"
+      tone="agent"
     />
   );
 }

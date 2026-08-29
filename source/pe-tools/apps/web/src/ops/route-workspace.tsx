@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Workspace } from "#/anatomy";
 import { useAtomValue } from "@effect/atom-react";
-import { createFileRoute } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
 import { RouteDocument } from "#/workbench/route-document";
 import { EmptyState } from "#/components/lang/empty";
@@ -26,16 +25,6 @@ import { OperationPane, parseSchema } from "#/ops/operation-pane";
 import { buildFormRequest, readFormSeed } from "#/ops/schema-form";
 
 export type HostOperationJsonSchema = Record<string, unknown>;
-
-export const str = (value: unknown) => (typeof value === "string" ? value : "");
-
-export const Route = createFileRoute("/ops")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    thread: str(search.thread) || undefined,
-    source: str(search.source) || undefined,
-  }),
-  component: OpsRoute,
-});
 
 export function OpsRoute() {
   return <RouteDocument>{(at) => <OpsStoreOwner key={at} documentAddress={at} />}</RouteDocument>;
@@ -175,7 +164,7 @@ export function OpsPage({ store }: { store: OpsStore }) {
 
   return (
     <Workspace
-      className="bg-page p-4 text-ink"
+      className="p-4"
       headRail={
         <div className="mx-auto w-full max-w-5xl">
           <TargetingHead
@@ -196,13 +185,13 @@ export function OpsPage({ store }: { store: OpsStore }) {
       table={
         <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 overflow-auto pt-4">
           <section className="flex flex-wrap items-center gap-1.5">
-            <span className="t-label t-upper mr-1 text-ink-2">Glance</span>
+            <span className="mr-1">Glance</span>
             {syntheticOps.map((glance) => (
               <Press
                 key={glance.key}
-                size="xs"
+                size="caption"
                 tone="neutral"
-                state="selectable"
+                state="selected"
                 aria-pressed={selectedGlanceKey === glance.key}
                 onClick={() => store.actions.setSelectedGlance(glance.key)}
               >
@@ -215,12 +204,12 @@ export function OpsPage({ store }: { store: OpsStore }) {
             <section className="flex flex-col gap-3">
               <header>
                 <div className="flex items-center gap-2">
-                  <h1 className="t-title">{selectedGlance.displayName}</h1>
+                  <h1 className="">{selectedGlance.displayName}</h1>
                   <FactChip dashed title="composed client-side from checked-in typed operations">
                     synthetic
                   </FactChip>
                 </div>
-                <p className="t-prose text-ink-2">{selectedGlance.blurb}</p>
+                <p className="">{selectedGlance.blurb}</p>
               </header>
               <SyntheticRunner op={selectedGlance} bridgeSessionId={session.sessionId} />
             </section>

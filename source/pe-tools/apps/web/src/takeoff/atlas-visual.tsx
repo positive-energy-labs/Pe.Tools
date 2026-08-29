@@ -46,8 +46,8 @@ export function AtlasVisual() {
                   key={lane.label}
                   type="button"
                   onClick={() => setLevel(lane.label)}
-                  size="chip-value"
-                  tone={lane.label === level ? "firm" : "quiet"}
+                  size="value"
+                  tone={lane.label === level ? "neutral" : "quiet"}
                   state={lane.label === level ? "selected" : "rest"}
                   title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
                 >
@@ -61,8 +61,8 @@ export function AtlasVisual() {
             <Press
               type="button"
               onClick={() => setStatsOpen(!statsOpen)}
-              size="chip-value"
-              tone="firm"
+              size="value"
+              tone="neutral"
               state={statsOpen ? "selected" : "rest"}
               title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
             >
@@ -74,8 +74,8 @@ export function AtlasVisual() {
               title={
                 planOpen ? "collapse the plan — give the table the full height" : "show the plan"
               }
-              tone="firm"
-              size="chip-value"
+              tone="neutral"
+              size="value"
             >
               {planOpen ? "▴ hide plan" : "▾ show plan"}
             </Press>

@@ -1,1 +1,1 @@
-export { ProfileEditor } from "./ProfileEditor-profile-editor";
+export { ProfileEditor } from "./profile-editor/view";

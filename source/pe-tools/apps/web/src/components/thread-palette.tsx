@@ -78,7 +78,7 @@ export function ThreadList({
                 type="button"
                 title="Delete thread"
                 tone="quiet"
-                state="row-action-inline"
+                state="rest"
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete(thread.id);
@@ -197,7 +197,7 @@ export function ThreadPalette({
                   type="button"
                   title="Delete thread"
                   tone="quiet"
-                  state="row-action"
+                  state="rest"
                   onClick={(event) => {
                     event.stopPropagation();
                     onDelete(thread.id);
