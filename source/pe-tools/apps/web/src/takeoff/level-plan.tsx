@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Key } from "#/anatomy";
+import { Key } from "#/components/anatomy";
 import { EmptyState } from "#/components/lang/empty";
 import { token } from "#/lib/token";
 import { contentViewport, fitFrame, type Bounds2, unionBounds } from "#/lib/affine-frame";

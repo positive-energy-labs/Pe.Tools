@@ -1,5 +1,5 @@
 import { token } from "#/lib/token";
-import { annotation } from "#/anatomy";
+import { annotation } from "#/components/anatomy";
 import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
 import { type ThreadMessageLike } from "@assistant-ui/react";

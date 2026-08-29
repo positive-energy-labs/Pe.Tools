@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { Key } from "#/anatomy";
+import { Key } from "#/components/anatomy";
 import type { ContextBreakdown, ContextItem } from "../chat-state";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";

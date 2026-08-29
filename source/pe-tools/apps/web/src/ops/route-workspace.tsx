@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Workspace } from "#/anatomy";
+import { Workspace } from "#/components/anatomy";
 import { useAtomValue } from "@effect/atom-react";
 import { FactChip } from "#/components/lang/chip";
 import { RouteDocument } from "#/workbench/route-document";

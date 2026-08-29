@@ -1,4 +1,4 @@
-import { Workspace } from "#/anatomy";
+import { Workspace } from "#/components/anatomy";
 import { FamiliesHead } from "#/families/head";
 import { FamiliesMatrix } from "#/families/matrix";
 import { FamiliesReadoutBands } from "#/families/readout-bands";
