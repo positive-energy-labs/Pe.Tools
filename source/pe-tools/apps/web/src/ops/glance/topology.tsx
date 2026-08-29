@@ -81,16 +81,16 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
   const agent = asRecord(host.agentRuntime);
   const disconnectReason = asString(host.disconnectReason);
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-sm border border-line-2 px-3 py-2.5">
+    <div className="flex min-w-0 flex-col gap-1.5 px-3 py-2.5">
       <div className="flex items-center gap-1.5">
         <LiveDot tone={connected ? "pinned" : "dangling"} lane={lane} />
-        <span className="t-value font-medium">host</span>
+        <span className="">host</span>
         {lane ? <LaneBadge lane={lane} /> : null}
       </div>
-      <div className="face-mono t-caption text-ink-2" title={exePath}>
+      <div className="" title={exePath}>
         {text(host.runtimeIdentity) || "∅"} · pid {text(host.processId) || "∅"}
       </div>
-      <div className="face-mono t-caption text-ink-2">
+      <div className="">
         contracts host v{text(host.hostContractVersion) || "?"} · bridge v
         {text(host.bridgeContractVersion) || "?"} · {text(host.bridgePath) || "∅"}
       </div>
@@ -111,7 +111,7 @@ function HostNode({ host }: { host: Record<string, unknown> }) {
         )}
       </div>
       {disconnectReason && (
-        <span className="face-mono t-caption" style={{ color: token("caution") }}>
+        <span className="" style={{ color: token("caution") }}>
           {disconnectReason}
         </span>
       )}
@@ -124,17 +124,15 @@ function DocumentLeaf({ doc }: { doc: Record<string, unknown> }) {
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 py-0.5">
       <span
-        className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "bg-ink" : "bg-line-2"}`}
+        className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "" : ""}`}
       />
       <span
-        className={`t-value min-w-0 truncate ${isActive ? "font-medium" : "text-ink-2"}`}
+        className={`t-value min-w-0 truncate ${isActive ? "" : ""}`}
         title={text(doc.path) || text(doc.title)}
       >
         {text(doc.title) || "∅"}
       </span>
-      <span className="face-mono t-caption shrink-0 text-ink-2">
-        {doc.isFamilyDocument === true ? "rfa" : "rvt"}
-      </span>
+      <span className="shrink-0">{doc.isFamilyDocument === true ? "rfa" : "rvt"}</span>
       {isActive && <FactChip title="this document has focus in Revit">active</FactChip>}
     </div>
   );
@@ -154,11 +152,11 @@ function SessionNode({
   const openCount = asNumber(session.openDocumentCount);
   return (
     <div
-      className={`flex min-w-0 flex-col gap-1 rounded-sm border px-3 py-2 ${connected ? "border-line" : "border-line opacity-60"}`}
+      className={`flex min-w-0 flex-col gap-1 rounded-sm border px-3 py-2 ${connected ? "" : ""}`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <LiveDot tone={connected ? "implicit" : "muted"} lane={lane} />
-        <span className="face-mono t-label min-w-0 truncate">{text(session.sessionId)}</span>
+        <span className="min-w-0 truncate">{text(session.sessionId)}</span>
         {lane ? <LaneBadge lane={lane} /> : null}
         {custody && (
           <FactChip
@@ -178,33 +176,33 @@ function SessionNode({
           </FactChip>
         )}
       </div>
-      <div className="face-mono t-caption text-ink-2">
+      <div className="">
         pid {text(session.processId) || "∅"} · Revit {text(session.revitVersion) || "?"} ·{" "}
         {text(session.runtimeFramework) || "?"}
         {openCount !== undefined && ` · ${openCount} doc${openCount === 1 ? "" : "s"}`}
       </div>
 
-      <div className="mt-0.5 flex flex-col border-l border-line pl-2.5">
+      <div className="mt-0.5 flex flex-col pl-2.5">
         {!connected && (
-          <span className="face-mono t-caption text-ink-2">
+          <span className="">
             not queried — last reported doc: {asString(session.activeDocumentTitle) ?? "∅"}
           </span>
         )}
         {connected && (!docFetch || docFetch.state === "loading") && (
-          <span className="face-mono t-caption text-ink-2">fetching documents…</span>
+          <span className="">fetching documents…</span>
         )}
         {connected && docFetch?.state === "skipped" && (
-          <span className="face-mono t-caption" style={{ color: token("caution") }}>
+          <span className="" style={{ color: token("caution") }}>
             not fetched — over the {DOC_FETCH_BOUND}-session bound
           </span>
         )}
         {connected && docFetch?.state === "error" && (
-          <span className="face-mono t-caption" style={{ color: token("caution") }}>
+          <span className="" style={{ color: token("caution") }}>
             documents unreachable: {docFetch.error}
           </span>
         )}
         {connected && docFetch?.state === "ok" && docFetch.docs.length === 0 && (
-          <span className="face-mono t-caption text-ink-2">no documents open</span>
+          <span className="">no documents open</span>
         )}
         {connected &&
           docFetch?.state === "ok" &&
@@ -215,7 +213,7 @@ function SessionNode({
           docFetch?.state === "ok" &&
           !docFetch.hasActive &&
           docFetch.docs.length > 0 && (
-            <span className="face-mono t-caption" style={{ color: token("caution") }}>
+            <span className="" style={{ color: token("caution") }}>
               no active document — open but none focused
             </span>
           )}
@@ -253,7 +251,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
           )}
         </div>
 
-        <div className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 border-l border-line py-1">
+        <div className="ml-5 flex min-w-0 flex-1 flex-col gap-2.5 py-1">
           {sessions.length === 0 ? (
             <div className="pl-5">
               <EmptyState story="scope" exit="start a Revit process with the bridge add-in loaded">
@@ -265,10 +263,7 @@ function SessionTopologyView({ results, observedAtMs }: SyntheticViewProps) {
               const id = asString(session.sessionId);
               return (
                 <div key={id ?? i} className="relative min-w-0 pl-5">
-                  <span
-                    aria-hidden
-                    className="absolute left-0 top-4 inline-block w-5 border-t border-line"
-                  />
+                  <span aria-hidden className="absolute left-0 top-4 inline-block w-5" />
                   <SessionNode session={session} docFetch={id ? docFetches[id] : undefined} />
                 </div>
               );

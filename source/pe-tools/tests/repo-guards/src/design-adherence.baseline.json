@@ -1,10 +1,10 @@
 {
   "rawTable": {
-    "total": 16,
+    "total": 14,
     "byArea": {
       "data-tables": 1,
       "families": 2,
-      "family-review": 5,
+      "family-review": 3,
       "lib": 1,
       "ops": 1,
       "param-tables": 3,
@@ -40,19 +40,14 @@
     }
   },
   "opacityDim": {
-    "total": 36,
+    "total": 35,
     "byArea": {
-      "components": 19,
+      "components": 24,
       "families": 1,
       "family": 5,
-      "grounded-doc": 1,
       "host": 1,
-      "ops": 1,
-      "runs": 2,
-      "schedule-grid": 2,
       "takeoff": 2,
-      "targeting": 2,
-      "workbench": 2
+      "targeting": 2
     }
   },
   "longTitle": {
@@ -78,35 +73,33 @@
     }
   },
   "inlineColor": {
-    "total": 208,
+    "total": 179,
     "byArea": {
       "anatomy": 2,
       "components": 6,
       "design-system": 1,
       "family": 3,
-      "family-review": 49,
+      "family-review": 39,
       "grilles": 5,
       "host": 3,
       "ops": 28,
       "param-tables": 11,
       "routes": 4,
-      "runs": 42,
+      "runs": 28,
       "takeoff": 5,
-      "targeting": 40,
+      "targeting": 35,
       "workbench": 9
     }
   },
   "rawMeaningColor": {
-    "total": 98,
+    "total": 58,
     "byArea": {
       "family": 24,
-      "grounded-doc": 1,
       "host": 6,
-      "lib": 15,
       "routes": 3,
       "schedule-grid": 2,
       "takeoff": 10,
-      "workbench": 37
+      "workbench": 13
     }
   },
   "dlLeak": {

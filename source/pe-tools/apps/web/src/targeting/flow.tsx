@@ -26,7 +26,7 @@ export function TargetCaption<K extends string>({ b, link }: { b: Bindings<K>; l
   const fresh = freshnessWord(b, link);
   return (
     <span
-      className="face-mono t-caption"
+      className=""
       style={{
         color: feed.stale || feed.state === "error" ? token("caution") : token("ink-mute"),
       }}
@@ -46,7 +46,7 @@ function Connector<K extends string>({ link, active }: { link: Link<K>; active: 
   return (
     <span
       aria-hidden
-      className="face-mono shrink-0 text-center t-value"
+      className="shrink-0 text-center"
       style={{ color: active ? token("ink") : token("line-2"), minWidth: 64 }}
     >
       {glyph}
@@ -73,7 +73,7 @@ function Terminal<K extends string>({
   const node = (
     <div
       className={cn(
-        "flex min-w-36 flex-col border px-2 py-1",
+        "flex min-w-36 flex-col px-2 py-1",
         side === "left" ? "items-end" : "items-start",
         b.feeds[link.key].seam ? "seam-border" : undefined,
       )}
@@ -84,7 +84,7 @@ function Terminal<K extends string>({
     >
       <TargetCaption b={b} link={link} />
       <span className="inline-flex items-baseline gap-1.5">
-        <span className="face-mono t-caption" style={{ color: token("ink-2") }}>
+        <span className="" style={{ color: token("ink-2") }}>
           {link.joiner}
         </span>
         <Picker product={product} link={link} b={b} runner={runner} extra={extra} inert={dim} />
@@ -121,7 +121,7 @@ function Rail<K extends string>({
     <div
       className={`flex min-w-0 flex-col justify-center gap-1.5 ${side === "left" ? "items-end" : "items-start"}`}
     >
-      <span className="face-mono t-caption t-upper px-1" style={{ color: token("ink-mute") }}>
+      <span className="px-1" style={{ color: token("ink-mute") }}>
         {side === "left" ? "reads" : "writes · syncs"}
       </span>
       {links.length ? (
@@ -137,7 +137,7 @@ function Rail<K extends string>({
           />
         ))
       ) : (
-        <span className="face-mono t-caption px-1" style={{ color: token("ink-mute") }}>
+        <span className="px-1" style={{ color: token("ink-mute") }}>
           none
         </span>
       )}
@@ -175,15 +175,11 @@ export function TargetingFlow<K extends string>({
           head={
             <>
               <span style={{ color: token("ink") }}>{product.name}</span>
-              <span className="face-mono t-caption t-upper" style={{ color: token("ink-mute") }}>
+              <span className="" style={{ color: token("ink-mute") }}>
                 trunks
               </span>
               {ends.map((end) => (
-                <span
-                  key={end.key}
-                  className="face-mono t-caption"
-                  style={{ color: token("ink-2") }}
-                >
+                <span key={end.key} className="" style={{ color: token("ink-2") }}>
                   {pathOf(product, end.key)
                     .filter((link) => link.dir === null)
                     .map((link) => b.labelOf(link) ?? link.placeholder)

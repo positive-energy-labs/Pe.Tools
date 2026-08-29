@@ -1,4 +1,3 @@
-import { token } from "#/lib/token";
 import { useEffect, useMemo, useState } from "react";
 import type { RevitDetailSheets } from "@pe/host-contracts/generated";
 import { EmptyState } from "#/components/lang/empty";
@@ -9,7 +8,6 @@ import { asNumber, asRecord, asRecords, asString } from "#/ops/registry";
 import type { SyntheticOp, SyntheticViewProps } from "#/ops/synthetic";
 import { SheetCanvas } from "#/ops/views-detail";
 import { Press } from "#/components/lang/press";
-import { PressContent } from "#/components/anatomy/press-content";
 
 const DETAIL_BUDGET = 10;
 
@@ -83,7 +81,7 @@ function chooseDetailTargets(series: Series[]): string[] {
 }
 
 function EmptyFrame() {
-  return <div aria-hidden className="seam-border aspect-[3/2] rounded-none border border-line-2" />;
+  return <div aria-hidden className="seam-border aspect-[3/2]" />;
 }
 
 function Thumbnail({
@@ -100,27 +98,19 @@ function Thumbnail({
   return (
     <Press
       type="button"
+      tone="bordered"
+      layout="stack"
+      state={selected ? "selected" : "rest"}
       onClick={onSelect}
-      tone="neutral"
-      style={
-        selected
-          ? ({
-              backgroundColor: token("select"),
-              "--pe-on": token("select"),
-            } as React.CSSProperties)
-          : undefined
-      }
       title={
         entry
           ? `${sheet.sheetNumber} — ${sheet.sheetName}`
           : `${sheet.sheetNumber} — ${sheet.sheetName} (not detailed: outside the ${DETAIL_BUDGET}-sheet budget)`
       }
     >
-      <PressContent geometry="stack">
-        {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
-        <span className="face-mono t-caption truncate">{sheet.sheetNumber}</span>
-        {entry && <span className="t-label truncate text-ink-2">{sheet.sheetName}</span>}
-      </PressContent>
+      {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
+      <span className="truncate">{sheet.sheetNumber}</span>
+      {entry && <span className="truncate">{sheet.sheetName}</span>}
     </Press>
   );
 }
