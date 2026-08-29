@@ -120,7 +120,6 @@ export function ViewPanel({
             y2={vertical ? size : at}
             stroke={muted ? token("line") : token("line-2")}
             strokeWidth={0.75}
-            className="dash-reference"
           />
           {labelPlanes && !muted ? (
             <text
@@ -225,7 +224,7 @@ export function Triptych({
             ghost={ghost}
             labelPlanes={labelPlanes}
           />
-          <figcaption className="face-mono t-caption text-ink-mute">
+          <figcaption>
             {captions === "short" ? view.title : `${view.title} · ${view.axes}`}
           </figcaption>
         </figure>
@@ -241,7 +240,7 @@ export function ScaleNote({ halfSpan, size }: { halfSpan: number; size: number }
     [1 / 12, 0.25, 0.5, 1, 2, 5, 10].filter((feet) => feet * scale <= size / 3).pop() ?? 1 / 12;
   const label = step < 1 ? `${Math.round(step * 12)}″` : `${step}′`;
   return (
-    <div className="flex items-center gap-1.5 face-mono t-caption text-ink-2">
+    <div className="flex items-center gap-1.5">
       <svg width={step * scale + 2} height={9}>
         <line
           x1={1}

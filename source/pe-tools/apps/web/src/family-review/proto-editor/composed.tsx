@@ -52,8 +52,8 @@ export function ParadigmD({ editor }: { editor: Editor }) {
 
         <section>
           <div className="mb-1 flex flex-wrap items-baseline gap-2">
-            <span className="t-label t-upper text-ink-2">geometry</span>
-            <span className="t-caption text-caution">
+            <span>geometry</span>
+            <span>
               drawn by `/family`&apos;s v1 evaluator: solids are centred on the family centre planes
               and a solid&apos;s `frame` is NOT applied. Planes, frames and connectors resolve for
               real. A view, never a form — the sidebar is the form.
@@ -93,13 +93,13 @@ function Chrome({
 }) {
   return (
     <header
-      className="flex flex-wrap items-baseline gap-2 border-b pb-2"
+      className="flex flex-wrap items-baseline gap-2 pb-2"
       style={{ borderColor: token("line") }}
     >
-      <span className="t-caption text-ink-mute">reads from</span>
-      <span className="face-mono t-label text-ink">family-model-showcase.family.json</span>
-      <span className="t-caption text-ink-mute">· writes to</span>
-      <span className="face-mono t-label text-ink">the same json</span>
+      <span>reads from</span>
+      <span>family-model-showcase.family.json</span>
+      <span>· writes to</span>
+      <span>the same json</span>
       <TypeStage editor={editor} />
       <FactChip
         tone="meta"
@@ -161,35 +161,26 @@ function JsonPane({ editor }: { editor: Editor }) {
   };
 
   return (
-    <div
-      className="flex min-h-0 w-[420px] shrink-0 flex-col border-l"
-      style={{ borderColor: token("line") }}
-    >
+    <div className="flex min-h-0 w-[420px] flex-col" style={{ borderColor: token("line") }}>
       <div
-        className="flex items-baseline justify-between gap-2 border-b px-3 py-2"
+        className="flex items-baseline justify-between gap-2 px-3 py-2"
         style={{ borderColor: token("line") }}
       >
-        <span className="t-label t-upper text-ink-2">family.json</span>
-        <span className="face-mono t-caption text-ink-mute">
-          {editor.focus ?? "click a field or the json"}
-        </span>
+        <span>family.json</span>
+        <span>{editor.focus ?? "click a field or the json"}</span>
       </div>
       {parseError ? (
-        <p
-          className="t-caption border-b px-3 py-1 text-alarm"
-          style={{ borderColor: token("line") }}
-        >
+        <p className="px-3 py-1" style={{ borderColor: token("line") }}>
           not valid json yet — {parseError}. The structured surfaces still show the last document
           that parsed.
         </p>
       ) : null}
       <div ref={pane} className="min-h-0 flex-1">
-        <div className="jsonpane jsonpane--editor face-mono t-value h-full">
-          <div ref={paint} className="jsonpane-paint fed-json-paint">
+        <div className="h-full">
+          <div ref={paint}>
             <JsonView code={`${text}\n`} decorations={decorations} />
           </div>
           <textarea
-            className="jsonpane-input"
             value={text}
             spellCheck={false}
             autoCapitalize="off"

@@ -98,23 +98,18 @@ function FacetFilterSpecimen() {
       <div ref={anchorRef} className="flex">
         <ComboboxTrigger
           aria-label="category filter"
-          className={cn(
-            "face-mono t-value flex h-5 w-32 items-center justify-between gap-0.5 rounded-sm border bg-transparent px-1 font-normal outline-none",
-            selected.value
-              ? "border-commit/40 bg-commit/[0.06] text-ink"
-              : "border-line text-ink-2",
-          )}
+          className="flex h-5 w-32 items-center justify-between gap-0.5 px-1"
         >
-          <span className="truncate normal-case">{selected.label}</span>
+          <span>{selected.label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent anchor={anchorRef} className="min-w-44 rounded-sm">
+      <ComboboxContent anchor={anchorRef} className="min-w-44">
         <ComboboxInput placeholder="filter values…" />
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>
           {(choice: { value: string | null; label: string }) => (
             <ComboboxItem key={choice.value ?? "all"} value={choice} className="pr-7">
-              <span className="truncate">{choice.label}</span>
+              <span>{choice.label}</span>
             </ComboboxItem>
           )}
         </ComboboxList>
@@ -139,10 +134,10 @@ function PickerChipSpecimen() {
         <ComboboxTrigger
           title="Category"
           render={
-            <Press className="inline-flex h-7 max-w-40 shrink-0 items-center justify-between gap-1 rounded-md px-2 t-value font-medium whitespace-nowrap text-ink-2 transition-all hover:veil aria-expanded:bg-recess aria-expanded:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0" />
+            <Press className="inline-flex h-7 max-w-40 items-center justify-between gap-1 px-2" />
           }
         >
-          <span className="face-mono t-value truncate">{picked?.label ?? "category"}</span>
+          <span>{picked?.label ?? "category"}</span>
         </ComboboxTrigger>
       </div>
       <ComboboxContent align="end" anchor={anchorRef} className="min-w-56">
@@ -151,10 +146,8 @@ function PickerChipSpecimen() {
         <ComboboxList>
           {(option: (typeof CATEGORY_OPTIONS)[number]) => (
             <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
-              <span className="text-ink">{option.label}</span>
-              {option.description ? (
-                <span className="t-value text-ink-2">{option.description}</span>
-              ) : null}
+              <span>{option.label}</span>
+              {option.description ? <span>{option.description}</span> : null}
             </ComboboxItem>
           )}
         </ComboboxList>
@@ -295,12 +288,10 @@ function PopoverHarness() {
     /* The grid IS the viewport — no page header, because a header would push the top row down and
        the top row is the whole point. The control panel lives in the centre cell, which is the one
        position with nothing to clamp against. */
-    <div className="fixed inset-0 grid grid-cols-3 grid-rows-3 gap-2 bg-page p-2 t-prose text-ink">
+    <div className="grid grid-cols-3 grid-rows-3 gap-2 p-2">
       {POSITIONS.map((p) => (
-        <div key={p.id} className={cn("relative flex min-h-0 min-w-0", p.cls)}>
-          <span className="face-mono t-caption t-upper pointer-events-none absolute top-0 left-0 text-ink-mute">
-            {p.id}
-          </span>
+        <div key={p.id} className={cn("flex min-h-0 min-w-0", p.cls)}>
+          <span>{p.id}</span>
           {p.id === "centre" ? (
             <div className="flex max-h-full min-h-0 flex-col items-center gap-3 overflow-auto">
               <Panel specimen={specimen} onPick={setId} />
@@ -317,29 +308,24 @@ function PopoverHarness() {
 
 function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) => void }) {
   return (
-    <div className="max-w-[34rem] min-w-0 border border-line bg-artifact p-3 on-artifact">
+    <div className="max-w-[34rem] min-w-0 p-3">
       <div className="flex flex-wrap items-baseline gap-2 pb-2">
-        <Link to="/design-system" className="t-label text-nav hover:underline">
-          ← design system
-        </Link>
-        <span className="face-display t-prose font-semibold">popover position harness</span>
+        <Link to="/design-system">← design system</Link>
+        <span>popover position harness</span>
         <FactChip dashed title="Fixture option lists — no host, no live catalogue call.">
           fixture
         </FactChip>
         <ThemeToggle />
       </div>
 
-      <div className="flex flex-wrap gap-1 border-t border-line pt-2">
+      <div className="flex flex-wrap gap-1 pt-2">
         {SPECIMENS.map((s) => (
           <Press
             key={s.id}
             type="button"
             onClick={() => onPick(s.id)}
             title={`Mount ${s.name} at all nine positions`}
-            className={cn(
-              "border px-1.5 py-0.5 face-mono t-caption",
-              s.id === specimen.id ? "border-line-2 bg-select text-ink" : "border-line text-ink-2",
-            )}
+            className="px-1.5 py-0.5"
           >
             {s.name}
           </Press>
@@ -347,23 +333,23 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
       </div>
 
       <div className="flex flex-col gap-1.5 pt-2.5">
-        <span className="t-caption text-ink-mute">consumers: {specimen.consumers}</span>
-        <span className="face-mono t-caption text-ink-2">shape: {specimen.shape}</span>
+        <span>consumers: {specimen.consumers}</span>
+        <span>shape: {specimen.shape}</span>
         {specimen.defects.map((d) => (
-          <p key={d} className="border-l border-line-2 pl-2 face-mono t-caption text-ink-2">
-            <span className="text-caution">observed · </span>
+          <p key={d} className="pl-2">
+            <span>observed · </span>
             {d}
           </p>
         ))}
-        <p className="border-l border-line-2 pl-2 face-mono t-caption text-ink-2">
-          <span className="text-alarm">the headline · </span>
+        <p className="pl-2">
+          <span>the headline · </span>
           three of the four combobox consumers ask for a wider popup than their anchor (
           <code>min-w-44</code>, <code>min-w-56</code>) and every one of them is overruled by{" "}
           <code>ComboboxContent</code>&apos;s own <code>w-(--anchor-width)</code>. Meanwhile{" "}
           <code>ui/select</code> grows to fit its content. Two dropdown families, opposite width
           laws, and the request the consumer wrote down is silently ignored.
         </p>
-        <p className="pt-1 t-caption text-ink-mute">
+        <p className="pt-1">
           Open the same specimen at all nine positions and compare. Nothing here is corrected — each
           is mounted exactly as its consumer mounts it, so the inconsistency you see is the
           inconsistency that ships. One popover foundation in <code>components/lang/</code>{" "}

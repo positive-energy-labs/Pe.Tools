@@ -57,7 +57,6 @@ import {
 } from "#/family-review/model";
 import { CompactTable, type CompactColumn } from "#/family-review/proto/compact-table";
 import { ScaleNote, Triptych } from "#/family-review/proto/views";
-import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 
 /** One family at one type — the unit the board judges. */
@@ -136,10 +135,7 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
           type="button"
           onClick={() => onPick(verdict)}
           title={`Record "${VERDICT_LABEL[verdict]}" for this family and type. Prototype: in memory only — the chrome says where a verdict would go, which is nowhere yet.`}
-          className={cn(
-            "border px-2.5 py-1 face-mono t-value",
-            value === verdict ? "text-ink" : "text-ink-mute",
-          )}
+          className="px-2.5 py-1"
           style={{
             borderRadius: "var(--radius)",
             borderColor: value === verdict ? token("line-2") : token("line"),
@@ -154,11 +150,7 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
 }
 
 function AgreementWord({ agreement }: { agreement: Agreement }) {
-  return (
-    <span className="face-mono t-label" style={{ color: AGREEMENT_TONE[agreement] }}>
-      {AGREEMENT_LABEL[agreement]}
-    </span>
-  );
+  return <span style={{ color: AGREEMENT_TONE[agreement] }}>{AGREEMENT_LABEL[agreement]}</span>;
 }
 
 function TallyChips({ rows }: { rows: ReviewRow[] }) {
@@ -190,14 +182,12 @@ function TallyChips({ rows }: { rows: ReviewRow[] }) {
 function RefusalPanel({ family, size }: { family: BoardFamily; size: number }) {
   return (
     <div
-      className="flex flex-col justify-center gap-1 border p-3"
+      className="flex flex-col justify-center gap-1 p-3"
       style={{ width: size * 3 + 16, borderRadius: "var(--radius)", borderColor: token("alarm") }}
     >
-      <span className="face-mono t-label" style={{ color: token("alarm") }}>
-        {family.refusal?.code ?? "refused"}
-      </span>
-      <p className="m-0 t-label text-ink-2">{family.refusal?.detail}</p>
-      <span className="t-caption text-ink-mute">
+      <span style={{ color: token("alarm") }}>{family.refusal?.code ?? "refused"}</span>
+      <p className="m-0">{family.refusal?.detail}</p>
+      <span>
         Revit never built this family, so there is no drawing to compare. That is the finding, not a
         gap in the board.
       </span>
@@ -229,18 +219,16 @@ function FamilySidebar({ stage }: { stage: Stage }) {
       {probe ? (
         <>
           <div className="flex flex-col gap-0.5">
-            <span className="face-mono t-caption text-ink-mute">
-              family.json · oracle prediction
-            </span>
+            <span>family.json · oracle prediction</span>
             <Triptych size={SIDEBAR_PANEL} halfSpan={halfSpan} ink={predicted} captions="short" />
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="face-mono t-caption text-ink-mute">Revit · runtime probe</span>
+            <span>Revit · runtime probe</span>
             <Triptych size={SIDEBAR_PANEL} halfSpan={halfSpan} ink={actual} captions="short" />
           </div>
         </>
       ) : (
-        <span className="t-caption text-ink-2">
+        <span>
           nothing was built, so there is nothing to draw — what the document declares, below, is the
           whole content
         </span>
@@ -249,10 +237,10 @@ function FamilySidebar({ stage }: { stage: Stage }) {
       <dl className="m-0 flex flex-col gap-1">
         {constituents(stage.family).map((group) => (
           <div key={group.kind} className="flex flex-col">
-            <dt className="face-mono t-label">
-              {group.kind} <span className="tabular-nums text-ink-2">{group.count}</span>
+            <dt>
+              {group.kind} <span>{group.count}</span>
             </dt>
-            <dd className="m-0 face-mono t-caption text-ink-2">{group.names.join(" · ")}</dd>
+            <dd className="m-0">{group.names.join(" · ")}</dd>
           </div>
         ))}
       </dl>
@@ -300,7 +288,7 @@ export function ReviewBoard({
       key: "kind",
       label: "kind",
       width: "w-[84px]",
-      cell: (row) => <span className="text-ink-mute">{row.kind}</span>,
+      cell: (row) => <span>{row.kind}</span>,
     },
     {
       key: "claim",
@@ -315,7 +303,7 @@ export function ReviewBoard({
     {
       key: "authored",
       label: "family.json says",
-      cell: (row) => <span className="text-ink-2">{row.authored}</span>,
+      cell: (row) => <span>{row.authored}</span>,
       edit: (row) => {
         const writable = claimEdit(row) != null;
         return {
@@ -329,7 +317,7 @@ export function ReviewBoard({
     {
       key: "actual",
       label: "Revit reports",
-      cell: (row) => <span className="text-ink-2">{row.actual}</span>,
+      cell: (row) => <span>{row.actual}</span>,
     },
     {
       key: "delta",
@@ -338,13 +326,11 @@ export function ReviewBoard({
       right: true,
       cell: (row) =>
         row.deviation == null ? (
-          <span className="text-ink-mute">—</span>
+          <span>—</span>
         ) : row.deviation <= 1e-6 ? (
-          <span className="text-ink-mute">·</span>
+          <span>·</span>
         ) : (
-          <span className="tabular-nums" style={{ color: token("alarm") }}>
-            {feet(row.deviation)}
-          </span>
+          <span style={{ color: token("alarm") }}>{feet(row.deviation)}</span>
         ),
     },
   ];
@@ -356,29 +342,24 @@ export function ReviewBoard({
           every family below it down the page, which is the one thing a library rail may not do —
           you lose your place in the list you were scanning. */}
       <nav
-        className="w-72 shrink-0 overflow-y-auto overflow-x-visible border-r"
+        className="w-72 overflow-y-auto overflow-x-visible"
         style={{ borderColor: token("line") }}
       >
         {board.map((entry) => (
-          <div key={entry.key} className="relative border-b" style={{ borderColor: token("line") }}>
+          <div key={entry.key} style={{ borderColor: token("line") }}>
             <div className="flex items-start">
               <Press
                 type="button"
                 onClick={() => setSelected(entry.key)}
-                className={cn(
-                  "flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5 text-left",
-                  entry.key === selected ? "bg-select" : "",
-                )}
+                className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5"
                 style={{ borderRadius: "var(--radius)" }}
               >
-                <span className="face-mono t-label">{entry.family.name}</span>
+                <span>{entry.family.name}</span>
                 <span className="flex items-baseline gap-1.5">
-                  <span className="face-mono t-caption text-ink-2">{entry.typeName}</span>
+                  <span>{entry.typeName}</span>
                   <AgreementWord agreement={headline(entry.rows)} />
                   {verdicts.get(entry.key) !== "unjudged" ? (
-                    <span className="t-caption text-ink-mute">
-                      {VERDICT_LABEL[verdicts.get(entry.key)]}
-                    </span>
+                    <span>{VERDICT_LABEL[verdicts.get(entry.key)]}</span>
                   ) : null}
                 </span>
               </Press>
@@ -387,14 +368,14 @@ export function ReviewBoard({
                 aria-expanded={expanded === entry.key}
                 onClick={() => setExpanded(expanded === entry.key ? null : entry.key)}
                 title="Show what this family.json declares, and six small drawings of it. For recognising a family, not judging one — judging is the overlay on the right."
-                className="shrink-0 px-2 py-1.5 face-mono t-caption text-ink-mute"
+                className="px-2 py-1.5"
               >
                 {expanded === entry.key ? "hide" : "open"}
               </Press>
             </div>
             {expanded === entry.key ? (
               <div
-                className="absolute left-full top-0 z-popup w-64 shadow-float"
+                className="z-popup w-64"
                 style={{
                   backgroundColor: token("artifact"),
                   border: `0.5px solid ${token("line-2")}`,
@@ -410,8 +391,8 @@ export function ReviewBoard({
 
       <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
         <header className="flex flex-wrap items-baseline gap-3">
-          <span className="face-mono t-prose font-semibold">{stage.family.name}</span>
-          <span className="face-mono t-label text-ink-2">{stage.typeName}</span>
+          <span>{stage.family.name}</span>
+          <span>{stage.typeName}</span>
           <TallyChips rows={stage.rows} />
           <span className="ml-auto">
             <VerdictStrip
@@ -423,7 +404,7 @@ export function ReviewBoard({
 
         {/* THE READING, named on the family it belongs to: one document, from one run. */}
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-caption text-ink-mute">this reading came from</span>
+          <span>this reading came from</span>
           <FactChip
             tone="meta"
             dashed
@@ -438,7 +419,7 @@ export function ReviewBoard({
             <Triptych size={PANEL} halfSpan={halfSpan} ink={actual} ghost={predicted} labelPlanes />
             <div className="flex items-center gap-4">
               <ScaleNote halfSpan={halfSpan} size={PANEL} />
-              <span className="face-mono t-caption text-ink-mute">
+              <span>
                 thin outline = the portable document&apos;s prediction · filled ink = what Revit
                 built · dashed = void. Daylight between them IS the disagreement.
               </span>
@@ -449,7 +430,7 @@ export function ReviewBoard({
         )}
 
         <div className="flex flex-col gap-1">
-          <span className="face-mono t-caption text-ink-mute">
+          <span>
             {shown.length} of {stage.rows.length} claims — everything that is not a plain agreement,
             plus every writable settings key. A cell that refuses the caret says why in its title.
           </span>

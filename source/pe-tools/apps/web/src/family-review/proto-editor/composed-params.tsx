@@ -91,7 +91,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
     <th
       key={label}
       scope="col"
-      className="t-caption t-upper px-2 py-1 text-left font-normal text-ink-mute"
+      className="px-2 py-1"
       style={{ borderBottom: `1px solid ${token("line")}`, whiteSpace: "nowrap" }}
     >
       {sort == null ? (
@@ -107,7 +107,6 @@ export function ParamGrid({ editor }: { editor: Editor }) {
               descending: prev.sort === sort ? !prev.descending : false,
             }))
           }
-          className="t-caption t-upper"
           style={{
             backgroundColor: "transparent",
             backgroundImage: "none",
@@ -121,15 +120,15 @@ export function ParamGrid({ editor }: { editor: Editor }) {
           {view.sort === sort ? (view.descending ? " ↓" : " ↑") : ""}
         </Press>
       )}
-      {span ? <span className="block font-normal normal-case">{span}</span> : null}
+      {span ? <span>{span}</span> : null}
     </th>
   );
 
   return (
     <section>
       <div className="mb-1 flex flex-wrap items-baseline gap-2">
-        <span className="t-label t-upper text-ink-2">parameters</span>
-        <span className="t-caption text-ink-mute">
+        <span>parameters</span>
+        <span>
           {rows.length} of {Object.keys(editor.model.familyParameters).length} · one column per type
         </span>
         <input
@@ -137,7 +136,6 @@ export function ParamGrid({ editor }: { editor: Editor }) {
           onChange={(event) => setView((prev) => ({ ...prev, query: event.target.value }))}
           placeholder="filter"
           title="Filter rows by name, data type or base value"
-          className="face-mono t-label"
           style={{
             width: 120,
             padding: "0 4px",
@@ -148,7 +146,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
             color: token("ink"),
           }}
         />
-        <label className="t-caption flex items-baseline gap-1 text-ink-2">
+        <label className="flex items-baseline gap-1">
           <input
             type="checkbox"
             checked={view.overriddenOnly}
@@ -158,7 +156,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
           />
           only rows a type overrides
         </label>
-        <span className="t-caption text-ink-mute">arrow keys move · enter edits</span>
+        <span>arrow keys move · enter edits</span>
       </div>
 
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the grid owns
@@ -192,7 +190,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
                   (editor.focus?.startsWith(`${row.pointer}/`) ?? false)
                 }
               >
-                <span className="face-mono t-label text-ink">{row.name}</span>
+                <span>{row.name}</span>
               </Cell>
 
               <Cell r={r} c={1} cursor={cursor} cells={cells} onPick={() => setCursor({ r, c: 1 })}>
@@ -254,10 +252,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
                 );
               })}
 
-              <td
-                className="face-mono t-caption px-2 py-0.5 text-right tabular-nums text-ink-mute"
-                title="Authored constructs that read this parameter"
-              >
+              <td className="px-2 py-0.5" title="Authored constructs that read this parameter">
                 {row.reads > 0 ? row.reads : ""}
               </td>
             </tr>
@@ -265,7 +260,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
         </tbody>
       </table>
       {rows.length === 0 ? (
-        <p className="t-caption px-2 py-2 text-ink-mute">no parameter matches — clear the filter</p>
+        <p className="px-2 py-2">no parameter matches — clear the filter</p>
       ) : null}
     </section>
   );
@@ -298,7 +293,7 @@ function Cell({
       tabIndex={on ? 0 : -1}
       onFocus={onPick}
       onClick={onPick}
-      className="px-2 py-0.5 align-baseline"
+      className="px-2 py-0.5"
       style={{
         backgroundColor: on || focused ? token("select") : "transparent",
         outline: "none",
@@ -349,7 +344,6 @@ function GridText({
           if (editing && draft !== cell.text) onCommit(draft ?? "");
           setDraft(null);
         }}
-        className="face-mono t-label"
         style={{
           width: 84,
           padding: "0 2px",
@@ -361,9 +355,7 @@ function GridText({
           cursor: locked ? "not-allowed" : "text",
         }}
       />
-      <span className="t-caption text-ink-mute">
-        {locked ? "locked" : SOURCE_WORD[cell.source]}
-      </span>
+      <span>{locked ? "locked" : SOURCE_WORD[cell.source]}</span>
     </span>
   );
 }

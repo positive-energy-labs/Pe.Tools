@@ -40,7 +40,7 @@
     }
   },
   "opacityDim": {
-    "total": 47,
+    "total": 45,
     "byArea": {
       "components": 24,
       "families": 1,
@@ -48,7 +48,7 @@
       "grounded-doc": 1,
       "host": 1,
       "ops": 1,
-      "routes": 3,
+      "routes": 1,
       "runs": 3,
       "takeoff": 3,
       "targeting": 2,
@@ -95,15 +95,13 @@
     }
   },
   "rawMeaningColor": {
-    "total": 123,
+    "total": 103,
     "byArea": {
-      "design-system": 1,
       "family": 27,
-      "family-review": 5,
       "grounded-doc": 3,
       "host": 6,
       "lib": 15,
-      "routes": 19,
+      "routes": 5,
       "takeoff": 10,
       "workbench": 37
     }
@@ -113,9 +111,9 @@
     "byArea": {}
   },
   "fatRoute": {
-    "total": 16,
+    "total": 14,
     "byArea": {
-      "routes": 16
+      "routes": 14
     }
   }
 }
