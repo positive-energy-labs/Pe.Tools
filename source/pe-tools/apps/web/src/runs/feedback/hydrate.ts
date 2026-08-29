@@ -1,9 +1,3 @@
-// ?set=<stamp> rehydration — the other half of the persistence law: the export manifest is the
-// ONLY persisted staging, and this reads one back through the pool file server
-// (/_exports/<stamp>/manifest.json) into the live, editable staging store. Zone records are
-// re-resolved from the pool's report.json (the manifest's a/b blocks are summaries, not the
-// source); a run that has since been wiped from the pool leaves that side null — the card
-// renders its honest missing panel.
 import { loadRunReport, type ZoneRecord } from "../world";
 
 import { fb, itemKey, type StagedItem } from "./staging";
@@ -26,7 +20,7 @@ async function zoneFrom(runId: string | null, zone: string): Promise<ZoneRecord 
     const report = await loadRunReport(runId);
     return report.Zones.find((z) => z.Zone === zone) ?? null;
   } catch {
-    return null; // run wiped from the pool since the export — the card shows a missing panel
+    return null;
   }
 }
 

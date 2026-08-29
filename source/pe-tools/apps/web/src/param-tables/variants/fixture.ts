@@ -1,40 +1,7 @@
-/**
- * PROTOTYPE FIXTURE — param-tables round 1 (find-the-product).
- *
- * Real data pulled live from ProjectA_Clone_Aug_11 (port 5180,
- * session-4152b5db3f63c250) on 2026-08-17:
- *   - "SXL - FOM HWCH Plant" (schedule 7199405) — a figures-of-merit grid that
- *     lives entirely in schedule HEADER cells: dead text, unlinkable in Revit.
- *   - "SXL - M_BOD_MainHouse" (schedule 11673741, placed on sheet M001) — a
- *     basis-of-design list whose label AND value are concatenated into one
- *     header cell per row. IDT/ODT live here as prose.
- *   - "Hydronic Fan Coil Unit Performance Schedule" (9553275) — a REAL
- *     schedule over OST_MechanicalEquipment driven by PE_* shared parameters.
- *
- * The product question this fixture serves: those design values (IDT, ODT,
- * plant temps) should be AUTHORED once in a table and FLOW into the PE_*
- * parameters on the fan coils, where the real schedule picks them up.
- * Native Revit cannot express that linkage at all — the SXL views are the
- * workaround this product replaces.
- *
- * Honesty notes baked in (do not sand off in variants):
- *   - Several temperature params are FORMULA-DRIVEN and read-only on some
- *     types (see PARAM_META); a write there must refuse per-target.
- *   - Perf params live at TYPE scope; tag/serves/location are instance scope.
- *     One type (Mortex MSVT18) is shared by 14 tags — writing "FC-4's EWT"
- *     actually writes the type and hits 13 siblings.
- *   - The model holds 36 FC-* instances; the Main House schedule shows 23.
- */
-
-// ---------------------------------------------------------------------------
-// Basis of Design (M001 · "SXL - M_BOD_MainHouse")
-// ---------------------------------------------------------------------------
-
 export interface BodEntry {
   key: string;
   label: string;
   value: string;
-  /** Numeric portion when the value is a single number. */
   numeric?: number;
   unit?: string;
 }
@@ -122,11 +89,6 @@ export const BOD_MAIN_HOUSE: BodEntry[] = [
   { key: "window-u-shgc", label: "Average Window Assembly U-value/SHGC", value: "0.28 / 0.41" },
 ];
 
-// ---------------------------------------------------------------------------
-// Figures of Merit (source: "SXL - FOM HWCH Plant")
-// ---------------------------------------------------------------------------
-
-/** The FOM grid exactly as it renders today (5 header rows × 11 columns). */
 export const FOM_HWCH_PLANT = {
   name: "FOM HWCH Plant",
   groupRow: ["Equipment", "", "", "Net Cooling", "", "", "", "Heating", "", "", ""],
@@ -159,14 +121,9 @@ export const FOM_HWCH_PLANT = {
   footnote: "* 20% propylene glycol mix for source side loop; 100% water for load side loop",
 } as const;
 
-// ---------------------------------------------------------------------------
-// Fan coils (the far side of the linkage)
-// ---------------------------------------------------------------------------
-
 export interface FcRow {
   tag: string;
   elementId: number;
-  /** Family type name — perf params live at TYPE scope and are shared. */
   typeName: string;
   serves: string;
   location: string;
@@ -439,21 +396,15 @@ export const FC_UNITS: FcRow[] = [
   ),
 ];
 
-// ---------------------------------------------------------------------------
-// Parameter identities (what a linkage actually targets)
-// ---------------------------------------------------------------------------
-
 export interface ParamMeta {
   name: string;
   scope: "type" | "instance";
   storage: "Double" | "String";
   unit?: string;
-  /** True on types where a family formula owns the value — a write must refuse. */
   readOnlyOn?: string[];
   label: string;
 }
 
-/** Verified live on FC-1's type (DVWHSA…RV2). Read-only flags are per-type facts. */
 export const PARAM_META: ParamMeta[] = [
   {
     name: "PE_M_PerfHeat_FluidEWT",
@@ -510,13 +461,6 @@ export const PARAM_META: ParamMeta[] = [
   { name: "PE_G___TagInstance", scope: "instance", storage: "String", label: "Tag" },
 ];
 
-/**
- * The demo linkage the round must express end-to-end:
- * FOM "Heating Source Temp" (30°F) and BOD ODT-winter (9.4°F) are design
- * facts; the concrete acceptance path is: edit heating EWT/LWT in the
- * authored table → staged writes on PE_M_PerfHeat_FluidEWT/LWT across the
- * FC types → the performance schedule columns move → one explicit apply.
- */
 export const DEMO_LINK = {
   sourceLabel: "Heating loop supply/return (design)",
   targets: ["PE_M_PerfHeat_FluidEWT", "PE_M_PerfHeat_FluidLWT"],

@@ -1,12 +1,4 @@
 import { token } from "#/lib/token";
-// The staging tray — the winner of feedback round 1 ("TRAY WINS"), promoted from cart-overlay
-// chrome to a COLLAPSIBLE RIGHT SIDE PANE of the A/B section (round-2 ruling: not page-height
-// chrome; the deck and ledger variants died, the deck's review UX survives as the sheet's
-// review-staged MODE, toggled from here).
-//
-// Lens vs pin: each row shows the pair it PINNED at stage time; a row whose pinned pair is not
-// the current lens carries a subtle ≠ mark, and clicking the row swings the lens to its pair
-// (the ruling's "clicking a staged card swings the lens to its pair").
 import { cn } from "#/lib/utils";
 
 import { fb, type StagedItem, useFb } from "./staging";
@@ -154,8 +146,6 @@ export function Tray(props: {
   );
 }
 
-/** The collapsed tray face — a slim vertical strip; the re-expand affordance lives IN the
- * pane (pane collapse law). */
 export function TrayCollapsed(props: { count: number; onExpand: () => void }) {
   return (
     <Press

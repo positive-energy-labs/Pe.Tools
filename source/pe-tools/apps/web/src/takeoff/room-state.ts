@@ -27,11 +27,8 @@ export const STATE_META: Record<RoomState, { tone: VerdictTone; label: string; n
   },
 };
 
-/** The CSS ink behind a room state — for the SVG plan fills and rail bars, which cannot take
- * a tone name. One derivation, so the three surfaces cannot diverge. */
 export const stateInk = (state: RoomState): string => VERDICT_INK[STATE_META[state].tone];
 
-/** The one alarm is `call` (tone carries it); `unreviewed` is the one dim. */
 export const stateMeta = (state: RoomState): RowVerdict => ({
   word: STATE_META[state].label,
   tone: STATE_META[state].tone,
@@ -49,26 +46,9 @@ export const STAGE_BLURB: Record<Stage, string> = {
   drifted: "hand-edit drift since last sync",
 };
 
-/**
- * SELECTION AND FOCUS ARE A FILL, NEVER A HUE. The plan used the commit role, the one
- * filled blue, reserved for writes that leave the page) as its cursor mark, which spent the commit
- * colour on "where am I". The legal fill — `--pe-select` — is a page-adjacent ground and disappears
- * as an SVG stroke over the designer's own zone colours, so the cursor is drawn in NEUTRAL INK
- * instead: no hue bought, and still the highest-contrast mark on the plan.
- */
 export const CURSOR_INK = token("ink");
 
-/** Held residue and the "no boundary" fallback both mean "nothing real is here". */
 export const ABSENT_INK = token("ink-mute");
-
-/**
- * Per-zone progress, derived: one equal segment per room, coloured by that room's own state. A
- * zone with no rooms gets an empty outlined bar — "not partitioned" is a real state, not a zero.
- * This replaces the seven-tick zone-stage pip, which said nothing about whether work was needed.
- *
- * The empty bar used a DASHED edge, which the language reserves for SEAM (a fixture/stand-in). An
- * unpartitioned zone is not a stand-in — it is a genuine empty — so it takes the firm hairline.
- */
 
 export {
   ATLAS_ROOM_STATES as ROOM_STATES,

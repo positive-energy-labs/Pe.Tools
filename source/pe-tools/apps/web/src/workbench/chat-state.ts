@@ -6,28 +6,11 @@ import type {
   PermissionRules,
 } from "@mastra/client-js";
 
-/**
- * Browser chat state over the native AgentController.
- *
- * `AgentControllerDisplayState` is the controller's own answer to "what should the UI show"
- * (running, active tools, pending approval/suspensions, tasks, OM progress). It arrives whole on
- * every `display_state_changed`, so this module assigns it instead of re-deriving it from ~20
- * event arms. What Pe still owns is here and nowhere else: the `/pe/inspect` transparency payload,
- * the context breakdown built from it, and the three-level collapse of native `PermissionRules`.
- *
- * Everything a view needs beyond those is a pure selector over `{ display, messages }`.
- */
-
-/** Native display state as it arrives after JSON (controller `Map`s become records). */
 export type ChatDisplay = Omit<
   Partial<Extract<KnownAgentControllerEvent, { type: "display_state_changed" }>["displayState"]>,
   "omProgress"
 > & { omProgress?: OmProgress };
 
-/**
- * OM progress as either source spells it: the live `display.omProgress` (which adds `buffered`)
- * and the `session.state()` snapshot agree on the window fields, so one type reads both.
- */
 export interface OmProgress {
   status?: string;
   pendingTokens?: number;
@@ -40,7 +23,6 @@ export interface OmProgress {
   };
 }
 
-/** The `/pe/inspect` transparency payload (Pe-owned). */
 export interface PeInspect {
   systemPrompt?: { content?: string; source?: string; updatedAt?: string };
   toolList?: { tools?: unknown[] };
@@ -106,13 +88,6 @@ export function hydrateChatState(inputs: HydrateInputs): ChatState {
   };
 }
 
-// --- Reducer ----------------------------------------------------------------------------------
-
-/**
- * Six arms. `display_state_changed` carries every fact the controller tracks, so the arms below
- * it exist only for what it does NOT carry: the message list, the session-state map, the model
- * id, and error text.
- */
 export function applyEvent(state: ChatState, event: KnownAgentControllerEvent): ChatState {
   switch (event.type) {
     case "display_state_changed":
@@ -128,7 +103,6 @@ export function applyEvent(state: ChatState, event: KnownAgentControllerEvent): 
     case "error":
       return pushError(state, errorText(event.error));
     case "agent_end":
-      // The `error` event carries the detail; this is the fallback when a run ends bad silently.
       return event.reason === "error" && state.errors.length === 0
         ? pushError(state, "Run failed.")
         : state;
@@ -140,12 +114,7 @@ export function applyEvent(state: ChatState, event: KnownAgentControllerEvent): 
 function upsertMessage(messages: MastraDBMessage[], next: MastraDBMessage): MastraDBMessage[] {
   const index = messages.findIndex((message) => message.id === next.id);
   if (index >= 0) return messages.map((message, at) => (at === index ? next : message));
-  // Reconcile the optimistic user echo: sendPrompt inserts a `local-user-*` turn immediately, then
-  // the server streams the same turn back with ITS canonical id. Match the local twin by role+text
-  // and adopt the server id IN PLACE — appending would render the user's message twice AND churn the
   // assistant-ui message array (id count changes under mounted rows). ponytail: text-equality twin
-  // match; if a user ever sends two identical turns before the first echoes, worst case is one twin
-  // collapse — replaced messages lose the `local-user-` prefix so the next echo finds the next twin.
   if (next.role === "user") {
     const twin = messages.findIndex(
       (message) =>
@@ -167,8 +136,6 @@ function errorText(error: unknown): string {
   return readString(readRecord(error)?.message) || stringify(error) || "Unknown error.";
 }
 
-// --- Selectors --------------------------------------------------------------------------------
-
 export type ToolStatus = "in_progress" | "completed" | "failed";
 
 export interface ToolCall {
@@ -182,11 +149,6 @@ export interface ToolCall {
   parentMessageId?: string;
 }
 
-/**
- * Every tool call in the thread. Persisted `tool-invocation` parts carry `state`/`args`/`result`/
- * `isError` — the whole story for a settled call — and `display.activeTools` covers the live ones
- * whose part has not landed yet.
- */
 export function selectToolCalls(state: ChatState): ToolCall[] {
   const calls: ToolCall[] = [];
   const seen = new Set<string>();
@@ -234,7 +196,6 @@ export function selectToolCalls(state: ChatState): ToolCall[] {
   return calls;
 }
 
-/** A tool call parked on the user: the single approval gate, plus every suspended tool. */
 export interface Approval {
   toolCallId: string;
   toolName: string;
@@ -270,7 +231,6 @@ export function selectRunStatus(state: ChatState): RunStatus {
   return state.display.isRunning ? "running" : "idle";
 }
 
-/** Skill catalog published by `/pe/inspect` — the composer's slash commands. */
 export function selectSkillCommands(inspect: PeInspect): { name: string; description: string }[] {
   return (inspect.skills ?? []).flatMap((skill) => {
     const record = readRecord(skill);
@@ -278,8 +238,6 @@ export function selectSkillCommands(inspect: PeInspect): { name: string; descrip
     return name ? [{ name, description: readString(record?.description) ?? "skill" }] : [];
   });
 }
-
-// --- Access levels ----------------------------------------------------------------------------
 
 export interface AccessLevelInfo {
   id: AccessLevel;
@@ -293,7 +251,6 @@ export const ACCESS_LEVELS: AccessLevelInfo[] = [
   { id: "trusted", name: "Trusted", description: "Run trusted workspace tools directly." },
 ];
 
-/** Pe's three named levels, each a full `PermissionRules.categories` map. */
 export const PERMISSION_LEVELS = {
   "read-only": { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
   ask: { read: "allow", edit: "ask", execute: "ask", mcp: "ask", other: "deny" },
@@ -311,29 +268,19 @@ export function accessLevelFromPermissions(rules: PermissionRules | undefined): 
   );
 }
 
-/** The approve/deny gate. assistant-ui's option kinds are hyphenated. */
 export const APPROVAL_OPTIONS = [
   { id: "allow_once", kind: "allow-once", label: "Approve" },
   { id: "reject_once", kind: "reject-once", label: "Deny" },
 ];
 
-// --- Context breakdown ------------------------------------------------------------------------
-
-/** One named constituent of a context segment — a tool, a prompt section, a skill. */
 export interface ContextItem {
-  /** Display name (tool name, prompt-section heading, `skill · name`). */
   name: string;
-  /** Provenance line, mono (e.g. "runtime/tools", "mcp · server-x", ".claude/skills"). */
   src?: string;
-  /** Approx tokens this item costs in-context. */
   tokens?: number;
-  /** Expandable content preview (tool description, prompt section body, skill description). */
   body?: string;
-  /** Load state: in-context, catalog-only (loads on demand), or configured-but-off. */
   state?: "in" | "on-demand" | "off";
 }
 
-/** One row of the context-window token breakdown (system prompt, tools, messages, …). */
 export interface ContextSegment {
   id: string;
   label: string;
@@ -341,24 +288,16 @@ export interface ContextSegment {
   items?: ContextItem[];
 }
 
-/**
- * The two observational-memory windows that govern the messages + memory categories.
- * `messages` fill toward `observationThreshold` then observe (compact into observations);
- * observations fill toward `reflectionThreshold` then reflect (compress in place down to a
- * floor). Sourced from the harness `omProgress` — config-derived, not hardcoded.
- */
 export interface MemoryWindows {
   messageTokens: number;
   observationThreshold: number;
   observationTokens: number;
   reflectionThreshold: number;
-  /** Post-reflect low-water (buffered reflection output), if a reflection has run. */
   reflectionFloor?: number;
   observing?: boolean;
   reflecting?: boolean;
 }
 
-/** Token breakdown of what fills the model's context window for this thread. */
 export interface ContextBreakdown {
   contextWindow?: number;
   totalTokens: number;
@@ -504,14 +443,10 @@ function breakdownSkills(skills: unknown[] | undefined): ContextItem[] {
   });
 }
 
-// --- Shared helpers ---------------------------------------------------------------------------
-
-/** char/4 token estimate — good enough for the inspector's relative proportions. */
 export function estimateTokens(text: string | undefined): number {
   return text ? Math.ceil(text.length / 4) : 0;
 }
 
-/** Joined text of a message's text + reasoning parts. */
 export function messageText(message: MastraDBMessage): string {
   return message.content.parts
     .map((part) => partText(part))
@@ -526,7 +461,6 @@ function partText(part: MastraMessagePart): string {
   return "";
 }
 
-/** Small label (path/file/query/command) for a tool's inline marker. */
 export function toolTarget(args: unknown): string | undefined {
   const record = readRecord(args);
   const candidate = record?.path ?? record?.file ?? record?.query ?? record?.command;
@@ -559,8 +493,6 @@ export function readString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-/** Normalize a provider image part to a render-ready URL: pass through data:/http/blob, else
- * wrap raw base64 in a data URL. */
 export function imageSource(
   direct: string | undefined,
   data: string | undefined,

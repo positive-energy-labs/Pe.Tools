@@ -10,7 +10,6 @@ import {
 } from "../route-chat-plugins";
 import { CellTrichotomyReviewer } from "../trichotomy-reviewer";
 
-/** Inline chat card + reviewer for the /settings route (mirrors FamilyTypesChatPlugin). */
 export function SettingsChatPlugin({
   toolName,
   args,

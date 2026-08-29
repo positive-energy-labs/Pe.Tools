@@ -1,4 +1,3 @@
-/** Thread-scoped route documents over the host RouteWorkspace API. */
 import { useAtomValue } from "@effect/atom-react";
 import { Cause, Option } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
@@ -34,7 +33,6 @@ export interface RouteStateHandle<T> {
   revision: number | null;
   hydrated: boolean;
   apply: (patches: RouteStatePatch[], expectedRevision?: number) => Promise<RouteStateWriteResult>;
-  /** `receipt` becomes the verb's receipt text when the command lands. */
   command: (command: string, input?: unknown, receipt?: string) => Promise<RouteStateWriteResult>;
   peaActive: boolean;
   connected: boolean | null;
@@ -86,7 +84,6 @@ function createRouteStateStore<TSchema extends z.ZodType>(
   const slice = core.owned("slice/document", docAtom(spec, scope));
   const writer = docWriter(spec, scope, registry, slice);
   const lastCommand = core.owned("page/last-command", Atom.make<LastCommand>(null));
-  /** A command that lands with per-item failures is a `partial`, not a success. */
   const run = (verb: string, write: () => Promise<RouteStateWriteResult>, receipt?: string) =>
     core.runVerb(verb, async (): Promise<RouteStateWriteResult & { text?: string }> => {
       const result = await write();
@@ -110,6 +107,6 @@ function createRouteStateStore<TSchema extends z.ZodType>(
       if (result.ok) registry.set(lastCommand, { command, input });
       return result;
     },
-    dispose: core.dispose,
+    dispose: () => core.dispose(),
   };
 }

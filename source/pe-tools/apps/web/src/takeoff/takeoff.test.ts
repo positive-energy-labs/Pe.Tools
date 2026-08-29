@@ -65,8 +65,6 @@ describe("zone stage", () => {
   });
 });
 
-// ── The write-through review law ─────────────────────────────────────────────
-
 const region = (elementId: number, blob: string, outer = square(0, 0, 10)): LiveRegion => ({
   elementId,
   role: "room-region",

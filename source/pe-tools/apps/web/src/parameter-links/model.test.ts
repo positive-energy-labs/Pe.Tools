@@ -68,13 +68,10 @@ test("canApply gates on a matching preview and no blocking errors", () => {
   const editing = profile();
   const previewedSame = structuredClone(editing);
   expect(canApply({ editing, previewed: previewedSame, errorCount: 0 })).toBe(true);
-  // stale preview (draft changed after previewing)
   expect(
     canApply({ editing: addDefinition(editing), previewed: previewedSame, errorCount: 0 }),
   ).toBe(false);
-  // never previewed
   expect(canApply({ editing, previewed: null, errorCount: 0 })).toBe(false);
-  // blocking error present
   expect(canApply({ editing, previewed: previewedSame, errorCount: 1 })).toBe(false);
 });
 
@@ -112,7 +109,7 @@ test("updateAssignment patches only the targeted assignment immutably", () => {
   const before = next.assignments[0];
   next = updateAssignment(next, asnId, { enabled: false });
   expect(next.assignments[0].enabled).toBe(false);
-  expect(before.enabled).toBe(true); // original untouched
+  expect(before.enabled).toBe(true);
 });
 
 test("parseUniqueIds splits on newlines and commas, trimming blanks", () => {

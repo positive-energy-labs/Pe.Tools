@@ -1,9 +1,3 @@
-/**
- * Read-only projection of the last evaluation: the projected target writes
- * (current → proposed; a pending write is UNSAVED, so it is bold — the reserved
- * weight), the issues (error = the host refusing the plan → refused/alarm;
- * warning → advisory), and the runtime status the host reported.
- */
 import type {
   ParameterLinkEvaluation,
   ParameterLinkValue,
@@ -161,8 +155,7 @@ export function EvaluationView({
                   <td className="t-value face-mono px-2 py-1 text-ink-mute">
                     {displayParameterLinkValue(write.linkedValue)}
                   </td>
-                  {/* A changed result is a PENDING write — unsaved until apply — so it takes
-                      the reserved weight. An unchanged one is a no-op and stays muted. */}
+
                   <td
                     className={
                       write.changed

@@ -1,14 +1,4 @@
-/**
- * Development fixture data retained behind the explicit /takeoffs fixture adapter.
- *
- * Deterministic synthesis over the real project-a zone fixture so every variant judges the same
- * dense, plausible mid-project state: some zones untouched, some mid-review, some synced, one
- * drifted, one system over the 32k Btu/hr sensible cap. Nothing here is authoritative or live.
- * Rooms carry label points + areas, not polygons — round 1 judges UX shape, not room geometry.
- */
 import { buildZones, containsEvenOdd, type Zone } from "#/takeoff/model";
-
-// ── Deterministic PRNG (mulberry32 seeded per zone key) ─────────────────────
 
 const hash = (s: string) => {
   let h = 2166136261;
@@ -24,18 +14,14 @@ const mulberry32 = (seed: number) => () => {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
 
-// ── Vocabulary ──────────────────────────────────────────────────────────────
-
-/** Mock lifecycle stage — richer than the derived ZoneStage on purpose: the progress-tracking
- *  dimension of the exploration needs states worth rendering. */
 type MockStage =
-  | "declared" // drawn, no tags typed
-  | "registered" // tags resolved against the registry
-  | "partitioned" // rooms materialized, decisions open
-  | "reviewed" // decision queue empty
-  | "data" // Manual J data entered, not yet exported
-  | "synced" // .r10 in sync
-  | "drifted"; // hand-edit drift against accepted state since last sync
+  | "declared"
+  | "registered"
+  | "partitioned"
+  | "reviewed"
+  | "data"
+  | "synced"
+  | "drifted";
 
 export const STAGE_ORDER: MockStage[] = [
   "declared",
@@ -83,8 +69,6 @@ const FLAG_POOL = [
   "low-evidence-boundary",
 ];
 
-// ── Shapes ──────────────────────────────────────────────────────────────────
-
 interface MockRoomData {
   people: number;
   lightingW: number;
@@ -106,23 +90,17 @@ export interface MockRoom {
   type: RoomType;
   sqft: number;
   ceilingFt: number;
-  /** Label point inside the zone, model feet — render rooms as dots/chips, not polygons. */
   label: [number, number];
-  /** Open detector flags — each is one row in the decision queue. */
   flags: string[];
-  /** Write-through decisions already taken (provenance of review). */
   decisions: MockDecision[];
   provenance: { runId: string; sourceSqft: number };
-  /** .r10 linkage — null until first export. lastSyncedSqft ≠ sqft means geometry drifted since. */
   r10: { identifier: number; syncedAt: string; lastSyncedSqft: number } | null;
-  /** Manual J data (assist-derived) — null until step 5. */
   data: MockRoomData | null;
 }
 
 interface MockRun {
   runId: string;
   at: string;
-  /** Rebind census — the accounting-closure story of one partition run. */
   created: number;
   rebound: number;
   held: number;
@@ -136,13 +114,11 @@ interface MockRun {
 export interface MockZone {
   zone: Zone;
   stage: MockStage;
-  /** System tags typed on the Zoning Region. */
   tags: string[];
   name: string;
   rooms: MockRoom[];
   heldSqft: number;
   runs: MockRun[];
-  /** Hand-edit drift vs accepted state, sqft (only meaningful on "drifted"). */
   driftSqft: number;
 }
 
@@ -152,7 +128,6 @@ interface MockSystem {
   zoneKeys: string[];
   sensibleBtuh: number;
   latentBtuh: number;
-  /** Firm law: sensible ≤ 32,000 Btu/hr per zone/system (equipment constraint). */
   overCap: boolean;
 }
 
@@ -164,8 +139,6 @@ export interface MockWorld {
 }
 
 export const SENSIBLE_CAP_BTUH = 32_000;
-
-// ── Assists (README step 5, deterministic) ──────────────────────────────────
 
 export function assistData(type: RoomType, sqft: number, bedroomsInZone: number): MockRoomData {
   const lightingW = Math.round(0.25 * sqft);
@@ -184,9 +157,6 @@ export function assistData(type: RoomType, sqft: number, bedroomsInZone: number)
   return { people, lightingW, equipSensible, equipLatent, ventilationCfm };
 }
 
-// ── World synthesis ─────────────────────────────────────────────────────────
-
-/** A grid-sampled interior point of the zone, for room labels. */
 function interiorPoints(zone: Zone, n: number, rand: () => number): [number, number][] {
   const pts: [number, number][] = [];
   const { minX, minY, maxX, maxY } = zone.bounds;
@@ -224,7 +194,6 @@ export function mockWorld(): MockWorld {
 
   const mockZones: MockZone[] = zones.map((zone, zi) => {
     const rand = mulberry32(hash(zone.key));
-    // Stage distribution: earlier levels are further along, a few stragglers everywhere.
     const roll = rand();
     const stage: MockStage =
       zone.declaredSqft < 60
@@ -246,7 +215,6 @@ export function mockWorld(): MockWorld {
     const stageIdx = STAGE_ORDER.indexOf(stage);
     const name = ZONE_NAMES[zi % ZONE_NAMES.length]!;
 
-    // Tags: 1 system usually, occasionally 2 (merged legend entry, "FC-8, FC-13").
     const tags: string[] = [];
     if (stageIdx >= 1) {
       const t1 = `FC-${++sysCounter}`;

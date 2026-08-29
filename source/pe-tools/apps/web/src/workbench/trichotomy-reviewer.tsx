@@ -1,17 +1,3 @@
-/**
- * CellTrichotomyReviewer — the shared inline reviewer for every trichotomy route
- * (settings fields, schedule-grid cells, family-types cells). It renders the list of
- * reviewable cells (open proposal → staged) with approve / deny / undo controls, the
- * summary/attention line, and the human-only commit button — plus the busy/error and
- * route-state write plumbing every plugin used to duplicate.
- *
- * Differences are prop-driven: the per-key label (`renderLabel`), value rendering
- * (`renderValue`), the state segment (`cells` vs `fields`), and the commit command /
- * labels. Summary counts come from `cellSummary` in @pe/agent-contracts — no local
- * summary logic. Staging is uniform now that `staged` is a `{ value } | null` presence
- * object: approve sets `staged` + review "good"; deny drops the proposal; undo drops
- * `staged` and clears the review.
- */
 import type { ReactNode } from "react";
 import { Check, RotateCcw, X } from "lucide-react";
 
@@ -20,11 +6,7 @@ import { type CellReview, cellSummary, stagedEntries } from "@pe/agent-contracts
 import { Verb } from "#/components/lang/verb";
 import type { RouteStateHandle } from "./route-state";
 
-/** The minimal cell shape the reviewer reads — every route cell satisfies it. */
 export interface ReviewerCell {
-  // `value` is optional because the settings/schedule schemas widen the proposal to an
-  // index-signature object (the trichotomy extension-spread wart); a required `value`
-  // would reject them. TrichotomyCellLike-compatible so `cellSummary` accepts these cells.
   proposal?: {
     value?: unknown;
     delete?: true;
@@ -37,21 +19,12 @@ export interface ReviewerCell {
 
 export interface CellTrichotomyReviewerProps {
   state: RouteStateHandle<unknown>;
-  /** State segment holding the cells: "cells" for most routes, "fields" for settings. */
   segment: string;
-  /** All cells in the segment (the reviewer filters/summarizes them). */
   cells: Record<string, ReviewerCell>;
-  /** The human-only commit command, e.g. "save" | "push". */
   commitCommand: string;
-  /** Commit verb label, given the staged count (e.g. `Save 3`, `Push 3 to Revit`). */
   commitLabel: (stagedCount: number) => string;
-  /** Idle hint shown in the summary line when nothing needs attention. */
   reviewHint: string;
-  /** Per-key row label (route-specific: field path / row·col / param·type). */
   renderLabel: (key: string, cell: ReviewerCell) => ReactNode;
-  /** Value renderer (defaults to a string cast; settings passes a JSON-aware display).
-   * Receives the key + cell so routes can render context-aware displays (e.g. a
-   * current → proposed diff resolved from their snapshot). */
   renderValue?: (value: unknown, key: string, cell: ReviewerCell) => ReactNode;
 }
 
@@ -76,7 +49,6 @@ export function CellTrichotomyReviewer({
   const approve = (key: string, cell: ReviewerCell) =>
     void state
       .apply([
-        // Stage the proposal's edit verbatim — settings proposals may be { delete: true }.
         {
           path: [segment, key, "staged"],
           value:
@@ -117,7 +89,7 @@ export function CellTrichotomyReviewer({
                 <div className="truncate text-ink-2">
                   {renderValue(staged ? cell.staged?.value : cell.proposal?.value, key, cell)}
                 </div>
-                {/* pea's confidence/note ride the proposal — agent testimony at text weight */}
+
                 {!staged && (cell.proposal?.confidence || cell.proposal?.note) ? (
                   <div className="truncate t-caption text-pea-ink">
                     {[cell.proposal.confidence, cell.proposal.note].filter(Boolean).join(" · ")}
@@ -162,7 +134,7 @@ export function CellTrichotomyReviewer({
               ? `${summary.attention} value${summary.attention === 1 ? " needs" : "s need"} review`
               : reviewHint)}
         </span>
-        {/* the one commit: writes beyond the page — the only filled blue */}
+
         <Verb
           tone="commit"
           label={commitLabel(stagedCount)}

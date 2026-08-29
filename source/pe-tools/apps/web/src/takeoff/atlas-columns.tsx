@@ -65,12 +65,6 @@ function RoomNameCell({
   );
 }
 
-/**
- * The .r10 column's cell-state derivation — one function, so the column's marks and its facet
- * word are read from the same facts. AUDIT #3 → RULED R2 (2026-08-16): `fresh: "never"` is the
- * epistemic ladder's bottom rung — nothing was ever attempted here. It draws NO squiggle
- * (nothing exists to distrust) and mutes the value; the borrowed `unverified` rung goes back.
- */
 function r10State(row: Row): StateCellProps {
   const r10 = row.room.r10;
   if (!r10) return { value: "not exported", fresh: "never" };
@@ -122,8 +116,6 @@ export function useAtlasColumns({
         title:
           "this ROOM's derived state — the same vocabulary the rail bars and the plan fills use",
         verdict: (row) => stateMeta(row.state),
-        // Pipeline order, not alphabetical: "needs a call" sorts before "in .r10" because that
-        // is the order the work happens in.
         sort: ATLAS_COLUMN_SEMANTICS.state.sort,
         facet: ATLAS_COLUMN_SEMANTICS.state.facet,
         options: ROOM_STATES.map((s) => ({

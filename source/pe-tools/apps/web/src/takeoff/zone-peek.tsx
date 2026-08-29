@@ -43,7 +43,6 @@ export function ZonePeek({
         >
           <title>{`${zone.zone.key} — declared zone, its rooms, and the cursor room`}</title>
 
-          {/* The designer's declared scope. Nothing may be claimed outside it. */}
           <path
             d={pathD(zone.zone.loops, frame)}
             fillRule="evenodd"
@@ -54,8 +53,6 @@ export function ZonePeek({
             vectorEffect="non-scaling-stroke"
           />
 
-          {/* Held residue: abstention stays visible; a held area beats a guessed one. Dashed is
-              legal — declared area with no element behind it is exactly the seam reading. */}
           {zone.residues.map((residue) => (
             <path
               key={residue.id}
@@ -75,8 +72,6 @@ export function ZonePeek({
           {zone.rooms.map((room) => {
             const on = cursorRoom?.guid === room.guid;
             const state = stateOf(room);
-            // `stateInk`, not the tone NAME — the tone is a token key ("alarm"), and feeding it
-            // to color-mix silently produced an invalid colour (found during the adoption pass).
             const accent = on ? CURSOR_INK : stateInk(state);
             const [labelX, labelY] = frame.toViewport(room.label);
             if (!room.outer) {
@@ -105,8 +100,6 @@ export function ZonePeek({
                 fill={`color-mix(in srgb, ${accent} ${on ? 32 : 10}%, transparent)`}
                 stroke={accent}
                 strokeOpacity={on ? 0.95 : 0.55}
-                // Not dashed: the reserved style means "no element behind this". A room needing
-                // a call is real — it separates on the alarm hue and stroke weight.
                 strokeWidth={on ? 2 : state === "call" ? 1.75 : 1}
                 vectorEffect="non-scaling-stroke"
               >

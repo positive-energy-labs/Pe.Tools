@@ -1,7 +1,4 @@
 import { token } from "#/lib/token";
-// Shared feedback verb chrome: the export verb strip (all three verbs REAL), flag chips, the
-// one-line note input, and the post-export status block that proves what happened (dir, paths,
-// where the copy landed, the set's own ?set= URL).
 import type { ChangeEvent } from "react";
 
 import { cn } from "#/lib/utils";
@@ -18,7 +15,6 @@ export function ExportVerbs(props: {
 }) {
   const { exporting } = useFb();
   const disabled = props.items.length === 0 || exporting !== null;
-  // A disabled commit Verb renders its reason visibly, so the refusal leads the sentence.
   const refusal =
     props.items.length === 0
       ? "Nothing is staged yet — stage at least one item first. "
@@ -111,7 +107,6 @@ export function ExportStatus(props: { className?: string }) {
   );
 }
 
-/** The staged item's flags as removable alarm chips. A flag is DATA — the element id shows. */
 export function FlagChips(props: { item: StagedItem }) {
   if (props.item.flags.length === 0) {
     return (
@@ -148,7 +143,6 @@ export function NoteInput(props: {
   item: StagedItem;
   className?: string;
   autoFocus?: boolean;
-  /** Tray gets a textarea (verdicts run long); the sheet's inline copy stays one line. */
   multiline?: boolean;
 }) {
   const shared = {

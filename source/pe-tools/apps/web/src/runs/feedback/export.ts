@@ -1,21 +1,3 @@
-// The /runs feedback export verbs, all REAL:
-//   chat  — write per-item PNGs + manifest.json + clip.txt to <pool>/_exports/<stamp>/, and
-//           put the compact text block (ids, flags, notes, absolute PNG paths, the set's own
-//           ?set= URL) on the clipboard. Text-with-paths is the lingua franca: agent TUIs
-//           can't paste images.
-//   sheet — one stitched contact-sheet PNG on the clipboard as an image (GUI chats); same
-//           files + clip.txt written for the record.
-//   snip  — same write, then the server opens the first PNG in Windows Snipping Tool
-//           (ms-screensketch:edit — verified live) for freehand annotation.
-//
-// Clipboard order (round-2 ruling): the server-side OS clipboard (Set-Clipboard / SetImage)
-// is the PRIMARY copy path — it needs no user-activation and works from embedded panes —
-// navigator.clipboard is the fallback. clip.txt is ALWAYS written, every verb: the export
-// dir carries its own paste-ready record.
-//
-// Persistence law: the manifest is the ONLY persistence. Re-export mints a NEW stamp (the
-// server suffixes on collision, never overwrites); each export's clip block carries its own
-// ?set= URL so any chat message that quotes it can reopen the staging.
 import { canvasToBlob, canvasToPngBase64, compositeItem, stitchSheet } from "./composite";
 import { type ExportRecord, fb, flagLabel, type StagedItem } from "./staging";
 
@@ -47,8 +29,6 @@ type ServerResult = {
   opened: string | null;
 };
 
-/** The clip block TEMPLATE. `{{DIR}}/<file>` and `{{SET}}` are resolved by the export server
- * (it owns the final stamp — collisions get suffixed — and the absolute paths). */
 function buildClipTemplate(items: StagedItem[], pool: string | null): string {
   const lines: string[] = [];
   lines.push(
@@ -106,7 +86,6 @@ function manifestFor(items: StagedItem[], pool: string | null, verb: string) {
       level: item.level,
       runA: item.runA,
       runB: item.runB,
-      // The flags ARE data: element ids from the run package (rooms/residues in B's TSV).
       flags: item.flags,
       note: item.note.trim() || null,
       stagedAt: item.stagedAt,
@@ -135,15 +114,12 @@ export async function runExport(
             `takeoff /runs feedback — ${items.length} staged — ${new Date().toISOString()}`,
           )
         : null;
-    // Blob made up-front so a navigator fallback still sits inside the user gesture's
-    // transient activation window when the server clipboard refuses.
     const sheetBlob = sheetCanvas ? await canvasToBlob(sheetCanvas) : null;
 
     const payload = {
       stamp: stamp(),
       origin: window.location.origin,
       openSnip: verb === "snip",
-      // OS clipboard is the PRIMARY copy path (round-2 ruling); clip.txt always written.
       clipboardVerb: verb === "chat" ? "text" : verb === "sheet" ? "image" : null,
       clipTemplate: buildClipTemplate(items, pool),
       items: await Promise.all(
@@ -164,8 +140,6 @@ export async function runExport(
     if (!res.ok) throw new Error(`export server: ${res.status} ${await res.text()}`);
     const server = (await res.json()) as ServerResult;
 
-    // Copy result: OS clipboard already attempted server-side. Fall back to the browser
-    // clipboard only if that refused — and never let a copy failure un-happen the export.
     let copiedVia: ExportRecord["copiedVia"] = server.clipboard?.ok ? "os" : null;
     let warning: string | null = null;
     if (payload.clipboardVerb && !server.clipboard?.ok) {
