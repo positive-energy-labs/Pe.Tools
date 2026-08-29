@@ -28,9 +28,11 @@ import { ThemeToggle } from "#/components/ThemeToggle";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { CellStateKey } from "#/components/lang/cell-key";
 import { StateCell, type StateCellProps } from "#/components/lang/cell";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { Section } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
+import { Gap } from "#/design-system/exhibit";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import {
@@ -112,12 +114,10 @@ function ProposalFlow() {
         </p>
 
         {/* ── scale 1 · pea's card, inline in the thread ───────────────────────────────── */}
-        <section className="flex flex-col gap-3">
-          <SectionHead
-            n="01"
-            title="scale one · pea's chat card"
-            note="a machine-operated object carrying state — it keeps its frame"
-          />
+        <Section label="01 · scale one · pea's chat card" className="flex flex-col gap-3">
+          <p className="t-label text-ink-2">
+            a machine-operated object carrying state — it keeps its frame
+          </p>
           <div className="max-w-[42rem]">
             {PROPOSAL_THREAD.map((m, i) => (
               <div key={i} className="flex gap-3 pb-2.5">
@@ -135,7 +135,7 @@ function ProposalFlow() {
               className="mt-1"
               head={
                 <>
-                  <span className="dl-tag">{PROPOSAL_TARGET}</span>
+                  <Tag>{PROPOSAL_TARGET}</Tag>
                   <FactChip tone="pea" title="Proposals pea is still waiting on you for.">
                     {open} open
                   </FactChip>
@@ -154,10 +154,10 @@ function ProposalFlow() {
               }
               foot={
                 <>
-                  <span className="dl-tag">
+                  <Tag>
                     {denied > 0 ? `${denied} denied · ` : ""}
                     {accepted} to write
-                  </span>
+                  </Tag>
                   <Verb
                     tone="commit"
                     label={`save ${accepted} to profile`}
@@ -245,23 +245,24 @@ function ProposalFlow() {
                 onClick={reset}
                 reason="Puts every proposal back to its fixture state"
               />
-              <span className="dl-tag">
+              <Tag>
                 {open} open · {accepted} accepted · {denied} denied
                 {committed ? " · committed" : ""}
-              </span>
+              </Tag>
             </div>
           </div>
-        </section>
+        </Section>
 
         {/* ── scale 2 · the same world, in the real table ─────────────────────────────── */}
-        <section className="flex flex-col gap-3">
-          <SectionHead
-            n="02"
-            title="scale two · the same values, in the real table"
-            note="the actual MasterTable — no second fixture, no second reader"
-          />
+        <Section
+          label="02 · scale two · the same values, in the real table"
+          className="flex flex-col gap-3"
+        >
+          <p className="t-label text-ink-2">
+            the actual MasterTable — no second fixture, no second reader
+          </p>
           <ProposalTable items={items} committed={committed} />
-        </section>
+        </Section>
 
         <section className="flex flex-col gap-1.5">
           <span className="t-caption t-upper text-ink">what this page found</span>
@@ -346,7 +347,7 @@ function ProposalTable({
       className="max-w-[46rem]"
       head={
         <>
-          <span className="dl-tag">{PROPOSAL_TARGET} · under review</span>
+          <Tag>{PROPOSAL_TARGET} · under review</Tag>
           <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
             fixture
           </FactChip>
@@ -386,24 +387,5 @@ function Header({ title, note }: { title: string; note: string }) {
         <ThemeToggle />
       </div>
     </header>
-  );
-}
-
-function SectionHead({ n, title, note }: { n: string; title: string; note: string }) {
-  return (
-    <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
-      <span className="face-mono t-caption text-ink-mute">{n}</span>
-      <span className="t-label t-upper">{title}</span>
-      <span className="min-w-0 flex-1 t-label text-ink-2">{note}</span>
-    </div>
-  );
-}
-
-function Gap({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="max-w-[86ch] border-l border-line-2 pl-2 face-mono t-caption text-ink-2">
-      <span className="text-caution">gap · </span>
-      {children}
-    </p>
   );
 }

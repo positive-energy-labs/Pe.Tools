@@ -28,8 +28,10 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { CellStateKey } from "#/components/lang/cell-key";
 import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "#/components/lang/cell";
 import type { StateCellProps } from "#/components/lang/cell";
-import { FactChip, NarrowChip } from "#/components/lang/chip";
+import { FactChip, NarrowChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
+import { Provenance, Section } from "#/components/lang/section";
+import { CounterExample, Demo, Gap } from "#/design-system/exhibit";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -44,90 +46,6 @@ const noop = () => {};
 /** One fixture row by key. The specimens cite the fixture rather than restating it — a law
  *  demonstrated on props written to flatter it is not demonstrated. */
 const row = (key: string) => PARAM_ROWS.filter((r) => r.key === key)[0];
-
-/* ═══ page chrome ═══════════════════════════════════════════════════════════════════════════
-   The page itself obeys the border budget it documents: sections are plain content under a
-   quiet head with a hairline under it, and NOTHING on this page is enclosed except the three
-   objects that are allowed to be — pea's card, the table, the arming strip. */
-
-function Section({
-  n,
-  title,
-  note,
-  help,
-  children,
-}: {
-  n: string;
-  title: string;
-  note: string;
-  /** Region orientation — the HelpTip paradigm, beside the title it orients. */
-  help?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
-        <span className="t-caption t-upper text-ink-mute">{n}</span>
-        <span className="t-label t-upper">{title}</span>
-        {help != null ? <HelpTip className="self-center">{help}</HelpTip> : null}
-        <span className="t-label min-w-0 flex-1 text-ink-2">{note}</span>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** Spec prose on the left, the living component on the right. The scaffold's whole framing. */
-function Demo({
-  label,
-  spec,
-  consumers,
-  children,
-}: {
-  label: string;
-  spec: React.ReactNode;
-  /** Named inline, always — the index law is enforced by having to write this down. */
-  consumers: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-1 items-start gap-x-8 gap-y-3 border-b border-line py-4 last:border-b-0 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="face-mono t-label text-ink">{label}</span>
-        <p className="t-prose text-ink-2">{spec}</p>
-        <span className="t-caption text-ink-mute">consumers: {consumers}</span>
-      </div>
-      <div className="flex min-w-0 flex-col gap-3">{children}</div>
-    </div>
-  );
-}
-
-/** A recorded gap, said out loud where a reader would otherwise think the demo was finished. */
-function GapNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="face-mono t-caption max-w-[86ch] border-l border-line-2 pl-2 text-ink-2">
-      <span className="text-caution">gap · </span>
-      {children}
-    </p>
-  );
-}
-
-/** The wrong way — a real component, used against its own ruling, quietly struck. */
-function CounterExample({ why, children }: { why: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1 opacity-55">
-      <div className="w-fit">{children}</div>
-      <span className="face-mono t-caption text-ink-mute">
-        <span className="line-through">the wrong way</span> — {why}
-      </span>
-    </div>
-  );
-}
-
-/** A quiet caption under a specimen. */
-function Cap({ children }: { children: React.ReactNode }) {
-  return <span className="face-mono t-caption text-ink-2">{children}</span>;
-}
 
 /* ═══ 00 · the page ═════════════════════════════════════════════════════════════════════════ */
 
@@ -268,7 +186,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
     text: "Plain content is never enclosed. The artifact frame is reserved for a machine-operated object that carries state — the table, pea's card, the arming strip, the sentence. A lane of plain controls or receipts sits on the page ground with nothing around it.",
     demo: (
       <div className="w-full max-w-sm">
-        <ArtifactFrame head={<span className="dl-tag">framed — carries state</span>}>
+        <ArtifactFrame head={<Tag>framed — carries state</Tag>}>
           <div className="px-2.5 py-2">
             <StateCell value="2 hr" stage="proposed" />
           </div>
@@ -296,14 +214,14 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
     name: "cell state, not columns",
     text: "A value's real dimensions — which attribute, which entity — are the grid. Everything else you know about it is a pseudo-dimension, and it is not a column: three columns that are all readings of the same coordinate pair are one column and a mode switch. Pseudo-dimensions render as cell state instead.",
     demo: (
-      // width is explicit because `.dl-foot` is `nowrap` and clamps only inside a bounded block —
+      // width is explicit because the foot rule is `nowrap` and clamps only inside a bounded block —
       // in the table the column supplies that bound; here nothing does.
       <span className="flex w-[19rem] max-w-full flex-col gap-1.5">
         <StateCell {...cellProps(row("connectedLoad"))} />
-        <Cap>
+        <Provenance>
           one coordinate, three readings — pea proposes, you hold, the model disagrees. The body,
           the squiggle and the struck ghost carry all three. None of them bought a column.
-        </Cap>
+        </Provenance>
       </span>
     ),
   },
@@ -327,10 +245,10 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
     name: "a filter's vocabulary is stable",
     text: "Facet options derive from ALL rows, never the visible subset, so an option never vanishes or reshuffles under the cursor and picking one can always widen the scope back out. The price is that a chosen option may resolve to zero visible rows — which the empty state says, and which is a better answer than an option that quietly disappeared.",
     demo: (
-      <Cap>
+      <Provenance>
         the exhibit is §04 below, live: filter it to instance scope, then open the value column's
         filter — every state word is still there, because facetOptions reads the whole row set.
-      </Cap>
+      </Provenance>
     ),
   },
   {
@@ -460,10 +378,10 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
         <Link to="/design-system/arming" className="t-value text-nav hover:underline">
           /design-system/arming
         </Link>
-        <Cap>
+        <Provenance>
           the satellite IS this law — freezing one frame here would teach the shape and hide the
           mechanism.
-        </Cap>
+        </Provenance>
       </span>
     ),
   },
@@ -471,11 +389,12 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
 
 function Laws() {
   return (
-    <Section
-      n="01"
-      title="the laws"
-      note="fifteen rules that decide every surface — each with the shipping component obeying it. A position lives here the moment a real component can render it; SURFACE-PHILOSOPHY keeps only what nothing can render yet"
-    >
+    <Section label="01 · the laws" className="flex flex-col gap-4">
+      <p className="t-label text-ink-2">
+        fifteen rules that decide every surface — each with the shipping component obeying it. A
+        position lives here the moment a real component can render it; SURFACE-PHILOSOPHY keeps only
+        what nothing can render yet
+      </p>
       <div className="border-t border-line">
         {LAWS.map((law) => (
           <div
@@ -670,11 +589,11 @@ function Tokens() {
   const values = useTokenValues(all);
 
   return (
-    <Section
-      n="02"
-      title="tokens"
-      note="eighteen, and every one of them is oklch(L C h) off a declared band — src/base.css is the one place a colour is decided"
-    >
+    <Section label="02 · tokens" className="flex flex-col gap-4">
+      <p className="t-label text-ink-2">
+        eighteen, and every one of them is oklch(L C h) off a declared band — src/base.css is the
+        one place a colour is decided
+      </p>
       <p className="t-prose max-w-[80ch] text-ink-2">
         <code className="face-mono t-label">--pe-*</code> is canon. The old{" "}
         <code className="face-mono t-label">--act-*</code> /{" "}
@@ -710,12 +629,12 @@ function Tokens() {
         </div>
       ))}
 
-      <GapNote>
+      <Gap>
         the swatch reads a resolved value for every token except the two hairlines, which are
         declared as <code>color-mix()</code> and read back unresolved. Nothing is wrong with the
         colour; the ledger of computed contrast lives in the header of <code>src/base.css</code>{" "}
         because no component can compute it.
-      </GapNote>
+      </Gap>
     </Section>
   );
 }
@@ -724,11 +643,11 @@ function Tokens() {
 
 function Catalogue() {
   return (
-    <Section
-      n="03"
-      title="the catalogue"
-      note="one block per components/lang primitive — the shipping component, the states that matter, and who consumes it"
-    >
+    <Section label="03 · the catalogue" className="flex flex-col gap-4">
+      <p className="t-label text-ink-2">
+        one block per components/lang primitive — the shipping component, the states that matter,
+        and who consumes it
+      </p>
       <ArtifactFrameBlock />
       <VerbBlock />
       <ChipBlock />
@@ -758,7 +677,7 @@ function ArtifactFrameBlock() {
         <ArtifactFrame
           head={
             <>
-              <span className="dl-tag">overhead coiling door 421</span>
+              <Tag>overhead coiling door 421</Tag>
               <FactChip title="Rows currently in scope.">13 params</FactChip>
               <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
                 fixture
@@ -767,7 +686,7 @@ function ArtifactFrameBlock() {
           }
           foot={
             <>
-              <span className="dl-tag">2 unsaved</span>
+              <Tag>2 unsaved</Tag>
               <Verb
                 tone="commit"
                 label="save profile"
@@ -793,12 +712,12 @@ function ArtifactFrameBlock() {
         </ArtifactFrame>
       </CounterExample>
 
-      <GapNote>
+      <Gap>
         the frame has a head slot, a foot slot and one undifferentiated children slot. A block that
         must sit last inside the frame — the cell-state key in §04 — gets there only because the
         author wrote it last, which the type cannot enforce. The foot band is a flex control bar and
         cannot hold a full-width block at all.
-      </GapNote>
+      </Gap>
     </Demo>
   );
 }
@@ -895,23 +814,23 @@ function VerbBlock() {
         </VerbGroup>
       </div>
 
-      <Cap>
+      <Provenance>
         left to right: the refused verb keeps a shape, an edge and its reason; the busy verb is
         inert but says nothing about refusal — &ldquo;in flight&rdquo; is not a no.
-      </Cap>
+      </Provenance>
 
       <CounterExample why="all three writes wear the same blue however far they reach. Tinting by blast radius mints hues the reader must learn, and the group head already said it.">
         <span className="flex items-center gap-2">
           <Verb tone="commit" label="save profile" icon={Save} onClick={noop} reason="document" />
-          <span className="dl-tag">…would need a second blue for model, a third for external</span>
+          <Tag>…would need a second blue for model, a third for external</Tag>
         </span>
       </CounterExample>
 
-      <GapNote>
+      <Gap>
         <code>busy</code> and <code>disabled</code> both render inert, and a busy verb that is ALSO
         refused cannot be expressed — the props compose but the surface has one state to show it
         with. No ruling exists; no slot was taken.
-      </GapNote>
+      </Gap>
     </Demo>
   );
 }
@@ -966,14 +885,16 @@ function ChipBlock() {
             title="Narrows the view. Removing it widens back out — it never reveals rows that were being concealed."
           />
         ))}
-        {narrowings.length === 0 ? <Cap>nothing narrowing — every row in scope</Cap> : null}
+        {narrowings.length === 0 ? (
+          <Provenance>nothing narrowing — every row in scope</Provenance>
+        ) : null}
       </div>
 
-      <GapNote>
+      <Gap>
         a removed narrowing has no way back on this surface: <code>NarrowChip</code> owns removal,
         and nothing owns re-adding. That belongs to the addressing sentence, which has no component
         yet — so this demo can only be widened, never re-narrowed.
-      </GapNote>
+      </Gap>
     </Demo>
   );
 }
@@ -1053,19 +974,19 @@ function StateCellBlock() {
         <StateCell value="84 in" cap="readonly" capReason="driven by formula" stage="proposed" />
       </CounterExample>
 
-      <GapNote>
+      <Gap>
         <code>stagedBy</code> exists because the RENDERING is ruled, but the state model has no
         author on <code>staged</code> — <code>trichotomy.ts</code> stores <code>by</code> and every
         consumer discards it, so production infers pea-vs-you from <code>origin</code>, which is the
         author of the VALUE. Both squares above are fixture-supplied; this is the round&apos;s
         strongest signal.
-      </GapNote>
-      <GapNote>
+      </Gap>
+      <Gap>
         <code>readonly</code> and <code>excluded</code> are two different refusals — a formula
         drives it · the model never bound it — and render as one greyed-italic body. The footline
         carries the difference in words; nothing carries it in marks. And &ldquo;typing beats
         proposing&rdquo; (severed) has no <code>stage</code> member at all and cannot be rendered.
-      </GapNote>
+      </Gap>
     </Demo>
   );
 }
@@ -1088,11 +1009,11 @@ function CellKeyBlock() {
       <div className="max-w-3xl border border-line">
         <CellStateKey />
       </div>
-      <GapNote>
+      <Gap>
         the axes are a fixed list, not a subset derived from the rows on screen. A key beside a
         table with no drift in it still teaches drift. Deriving it needs the table to know what its
         cells ARE — see the renderer-identity gap in §04.
-      </GapNote>
+      </Gap>
     </Demo>
   );
 }
@@ -1139,16 +1060,16 @@ function OutcomeBlock() {
           <OutcomeLine key={o.kind} kind={o.kind} label={o.label} says={o.says} />
         ))}
       </div>
-      <Cap>
+      <Provenance>
         an outcomes lane is plain content — it reports on a machine-operated object, it is not one.
         Never framed.
-      </Cap>
-      <GapNote>
+      </Provenance>
+      <Gap>
         an outcome carries no verb, no time, no target and no item list. &ldquo;4 staged for
         retry&rdquo; has nowhere for the 4 to live, and a lane of these cannot say which write
         produced which receipt. Outcomes are orphans; the state model moves first, then the
         signature.
-      </GapNote>
+      </Gap>
     </Demo>
   );
 }
@@ -1177,12 +1098,12 @@ function ArmingBlock() {
         </Link>
         .
       </p>
-      <GapNote>
+      <Gap>
         arming has no lifecycle or identity in the state model — no armed-at, no armed-by, no link
         from the verb it arms, and no link from a refusal to a fresh plan hash. The consequence is
         on the surface rather than hidden: the strip renders &ldquo;armed against a plan of unknown
         age&rdquo;, which is the one fact that decides whether to press it.
-      </GapNote>
+      </Gap>
     </Demo>
   );
 }
@@ -1254,11 +1175,20 @@ function RealTable() {
 
   return (
     <Section
-      n="04"
-      title="the real table"
-      note="the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell as its cell renderer"
-      help="The product table primitive, unmodified, with the cell grammar as its renderer. Rows never grow; click a cell and the readout band under the table speaks its facts. The gap notes below are the section's deliverable."
+      label="04 · the real table"
+      help={
+        <HelpTip>
+          The product table primitive, unmodified, with the cell grammar as its renderer. Rows never
+          grow; click a cell and the readout band under the table speaks its facts. The gap notes
+          below are the section's deliverable.
+        </HelpTip>
+      }
+      className="flex flex-col gap-4"
     >
+      <p className="t-label text-ink-2">
+        the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell
+        as its cell renderer
+      </p>
       <p className="t-prose max-w-[80ch] text-ink-2">
         The design-lang round hand-rolled its table, so the grammar was only ever proven against
         markup written to flatter it. This is the product primitive, unmodified, wrapped in an{" "}
@@ -1288,7 +1218,7 @@ function RealTable() {
       <ArtifactFrame
         head={
           <>
-            <span className="dl-tag">overhead coiling door 421 · parameters</span>
+            <Tag>overhead coiling door 421 · parameters</Tag>
             <FactChip title="Rows in scope before any narrowing.">
               {PARAM_ROWS.length} params
             </FactChip>
@@ -1305,7 +1235,7 @@ function RealTable() {
         }
         foot={
           <>
-            <span className="dl-tag">2 unsaved · 1 refused by Revit</span>
+            <Tag>2 unsaved · 1 refused by Revit</Tag>
             <Verb
               tone="commit"
               label="apply to Revit"
@@ -1351,35 +1281,35 @@ function RealTable() {
 
       <div className="flex flex-col gap-1.5 pt-1">
         <span className="t-caption t-upper text-ink">what MasterTable cannot express</span>
-        <GapNote>
+        <Gap>
           <strong>the clause&apos;s residue.</strong> The cell-state clause (ruled 2026-08-16)
           discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome —
           but <code>CellStateKey</code> still cannot derive its axes from the rows on screen, and a
           row holding a proposal is still marked through <code>rowClassName</code>, which knows
           nothing about the grammar. Row-level state is the clause&apos;s unfinished half.
-        </GapNote>
-        <GapNote>
+        </Gap>
+        <Gap>
           <strong>non-state cells own their own box.</strong> <code>td</code> is <code>p-0</code>;
           the table draws the box model for <code>state</code> columns, but every plain{" "}
           <code>cell</code> renderer still decides padding for itself — decided per column instead
           of once by the primitive.
-        </GapNote>
-        <GapNote>
+        </Gap>
+        <Gap>
           <strong>two heads.</strong> <code>scopeLabel</code> is required and MasterTable always
           draws its own scope/search/chip strip, so the artifact frame&apos;s head band and the
           table&apos;s head band stack. There is no way to hand the frame the scope label instead.
-        </GapNote>
-        <GapNote>
+        </Gap>
+        <Gap>
           <strong>one chip family now.</strong> The strip&apos;s chips ARE <code>NarrowChip</code>{" "}
           (fit reviews, ruled 2026-08-16 — <code>FilterChip</code> deleted). The honest residue: the
           strip has no per-narrowing denominator, so every chip&apos;s count is rows still in scope
           under ALL active narrowings, not what this one alone admits.
-        </GapNote>
-        <GapNote>
+        </Gap>
+        <Gap>
           <strong>no footline row.</strong> A receipt has nowhere in the grid: outcomes can only sit
           in the frame foot, outside the columns, so a partial write cannot align its &ldquo;4
           staged&rdquo; to the four rows it means.
-        </GapNote>
+        </Gap>
       </div>
     </Section>
   );
@@ -1416,11 +1346,11 @@ const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
 
 function Satellites() {
   return (
-    <Section
-      n="05"
-      title="satellites"
-      note="mocked complicated cases — sibling routes, not nested; each announces its fixture with a dashed seam"
-    >
+    <Section label="05 · satellites" className="flex flex-col gap-4">
+      <p className="t-label text-ink-2">
+        mocked complicated cases — sibling routes, not nested; each announces its fixture with a
+        dashed seam
+      </p>
       <div className="flex flex-col">
         {SATELLITES.map((s) => (
           <div

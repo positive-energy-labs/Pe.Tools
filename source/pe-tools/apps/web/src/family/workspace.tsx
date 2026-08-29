@@ -119,7 +119,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
 
-import { FactChip } from "#/components/lang/chip";
+import { FactChip, Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -1981,9 +1981,7 @@ export function FamilyWorkspace({
       <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-line">
         <div className="flex h-6 shrink-0 items-center gap-2 border-b border-line bg-recess px-2">
           {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
-          <span className="dl-tag shrink-0">
-            {inspect.kind === "part" ? "constituent" : "parameter"}
-          </span>
+          <Tag className="shrink-0">{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
           <span className="face-mono min-w-0 flex-1 truncate t-caption text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>

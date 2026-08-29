@@ -42,6 +42,7 @@ Ordinary building is not a stance. It is the primary's own work under whatever l
 |---|---|---|---|---|---|
 | route | `index` | Ganesha and the Wayfinder — invoked first, names the next island, paddles nothing | no | no |  |
 | lens | `delegate` | Abbot, Falconer, and Breeder — who does what, at what cost, down which line | no | no |  |
+| lens | `house` | Cartographer with the Instrument Maker's kit — a chart someone steers by where they cannot see the bottom | no | no |  |
 | lens | `prove` | Assayer striking the Hallmark, Thomas on another's claim — a claim is stamped with its lane or not at all | no | no |  |
 | lens | `purge` | Shiva at the winnowing floor, Occam, the Iconoclast, the burn boss — delete at least as much as you add | no | no |  |
 | pass | `ground` | Witness with the Chain-bearer — writes off; map and restate first | no | no | map, restatement, next stance named |

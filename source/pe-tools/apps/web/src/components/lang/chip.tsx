@@ -81,3 +81,9 @@ export function NarrowChip({ label, count, onRemove, title, className }: NarrowC
     </span>
   );
 }
+
+/** The small mono tag that names a state or an object (`.dl-tag`): quiet caption-size caps,
+ *  tabular numerals. A phase may tint it inside the arming strip; nowhere else. */
+export function Tag({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <span className={cn("dl-tag", className)}>{children}</span>;
+}

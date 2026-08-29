@@ -30,7 +30,7 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { CELL_STATE_ORDER, StateCell, cellStateLabel } from "#/components/lang/cell";
 import type { StateCellProps } from "#/components/lang/cell";
 import { CellStateKey } from "#/components/lang/cell-key";
-import { FactChip, NarrowChip, type FactTone } from "#/components/lang/chip";
+import { FactChip, NarrowChip, type FactTone, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { Verb, VerbGroup } from "#/components/lang/verb";
@@ -106,9 +106,6 @@ export const Route = createFileRoute("/design-system_/swatch")({ component: Swat
 
 const noop = () => {};
 
-/** The date every consumer count on this page was grepped. One string, so it cannot half-rot. */
-const COUNTED = "2026-08-16";
-
 /* ═══ page chrome ═══════════════════════════════════════════════════════════════════════════ */
 
 /** One component. Identity on the left — name, import path, consumer count — specimens right. */
@@ -138,9 +135,7 @@ function Block({
         <code className="w-fit face-mono t-caption break-all text-ink-2 select-all">
           #/components/{group}/{file}
         </code>
-        <span className="face-mono t-caption text-ink-mute">
-          {consumers} · {COUNTED}
-        </span>
+        <span className="face-mono t-caption text-ink-mute">{consumers}</span>
       </div>
       <div className="flex min-w-0 flex-col gap-3">{children}</div>
     </div>
@@ -506,7 +501,7 @@ function LangGroup() {
             </ArtifactFrame>
           </Spec>
           <Spec cap="head" className="w-52">
-            <ArtifactFrame head={<span className="dl-tag">door 421</span>}>
+            <ArtifactFrame head={<Tag>door 421</Tag>}>
               <div className="px-2.5 py-2">
                 <StateCell value="2 hr" stage="proposed" />
               </div>
@@ -514,10 +509,10 @@ function LangGroup() {
           </Spec>
           <Spec cap="head + foot" className="w-52">
             <ArtifactFrame
-              head={<span className="dl-tag">door 421</span>}
+              head={<Tag>door 421</Tag>}
               foot={
                 <>
-                  <span className="dl-tag">2 unsaved</span>
+                  <Tag>2 unsaved</Tag>
                   <Verb
                     tone="commit"
                     label="save"

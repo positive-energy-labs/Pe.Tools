@@ -25,9 +25,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { ArmingStrip } from "#/components/lang/arming-strip";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { Section } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
+import { Gap } from "#/design-system/exhibit";
 import { ARMING_FIXTURE } from "#/design-system/fixtures";
 
 export const Route = createFileRoute("/design-system_/arming")({ component: ArmingRoute });
@@ -79,12 +81,11 @@ function ArmingRoute() {
         </p>
 
         {/* ── live ─────────────────────────────────────────────────────────────────────── */}
-        <section className="flex flex-col gap-3">
-          <SectionHead
-            n="01"
-            title="live"
-            note="type a reason to arm it · the first commit takes a drift refusal · re-plan, then commit again"
-          />
+        <Section label="01 · live" className="flex flex-col gap-3">
+          <p className="t-label text-ink-2">
+            type a reason to arm it · the first commit takes a drift refusal · re-plan, then commit
+            again
+          </p>
           <div className="max-w-[44rem] flex flex-col gap-2.5">
             {phase === "written" ? (
               <>
@@ -99,7 +100,7 @@ function ArmingRoute() {
                     onClick={reset}
                     reason="Puts the strip back to unarmed with the original plan"
                   />
-                  <span className="dl-tag">the receipt is plain content — never framed</span>
+                  <Tag>the receipt is plain content — never framed</Tag>
                 </div>
               </>
             ) : (
@@ -124,10 +125,10 @@ function ArmingRoute() {
               <FactChip dashed title="Fixture data — nothing is planned, nothing is written.">
                 fixture
               </FactChip>
-              <span className="dl-tag">
+              <Tag>
                 phase {phase} · plan {planHash}
                 {replanned ? " (re-planned)" : ""}
-              </span>
+              </Tag>
               {reason.trim().length === 0 ? null : (
                 <Verb label="reset" onClick={reset} reason="Back to unarmed on the original plan" />
               )}
@@ -141,15 +142,13 @@ function ArmingRoute() {
               />
             ) : null}
           </div>
-        </section>
+        </Section>
 
         {/* ── frozen ───────────────────────────────────────────────────────────────────── */}
-        <section className="flex flex-col gap-3">
-          <SectionHead
-            n="02"
-            title="the three phases, frozen"
-            note="the same component, three states, so the sequence can be read without performing it"
-          />
+        <Section label="02 · the three phases, frozen" className="flex flex-col gap-3">
+          <p className="t-label text-ink-2">
+            the same component, three states, so the sequence can be read without performing it
+          </p>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <Frozen
               phase="unarmed"
@@ -200,7 +199,7 @@ function ArmingRoute() {
               />
             </Frozen>
           </div>
-        </section>
+        </Section>
 
         <section className="flex flex-col gap-1.5">
           <span className="t-caption t-upper text-ink">what this page found</span>
@@ -274,24 +273,5 @@ function Header({ title, note }: { title: string; note: string }) {
         <ThemeToggle />
       </div>
     </header>
-  );
-}
-
-function SectionHead({ n, title, note }: { n: string; title: string; note: string }) {
-  return (
-    <div className="flex items-baseline gap-3 border-b border-line pb-1.5">
-      <span className="face-mono t-caption text-ink-mute">{n}</span>
-      <span className="t-label t-upper">{title}</span>
-      <span className="min-w-0 flex-1 t-label text-ink-2">{note}</span>
-    </div>
-  );
-}
-
-function Gap({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="max-w-[86ch] border-l border-line-2 pl-2 face-mono t-caption text-ink-2">
-      <span className="text-caution">gap · </span>
-      {children}
-    </p>
   );
 }

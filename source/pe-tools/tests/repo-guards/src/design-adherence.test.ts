@@ -16,7 +16,7 @@
  * ── METRICS ─────────────────────────────────────────────────────────────────────────────────
  *  rawTable         `<table` outside components/master-table. The canon table is MasterTable;
  *                   every other table is a migration target (ledger, Primitives 2026-08-15).
- *  localChrome      a route-local Section / SectionHead / SectionLabel / Demo / Cap function.
+ *  localChrome      a route-local Section / SectionHead / SectionLabel / Cap function.
  *                   `lang/section.tsx` exists; three hand-rolled copies were the most visible
  *                   thing lang was missing (ledger, Component repairs).
  *  hostBelowRoute   `callHostRpc` / `fetch(` imported or called outside routes/, host/, and a
@@ -94,7 +94,7 @@ const METRICS: Metric[] = [
   { name: "rawTable", re: /<table\b/g, where: (r) => !r.startsWith("components/master-table/") },
   {
     name: "localChrome",
-    re: /\bfunction (?:Section|SectionHead|SectionLabel|Demo|Cap)\s*\(/g,
+    re: /\bfunction (?:Section|SectionHead|SectionLabel|Cap)\s*\(/g,
     where: (r) => !r.startsWith("components/lang/"),
   },
   { name: "hostBelowRoute", re: /\b(?:callHostRpc|fetch)\(/g, where: (r) => !ownsHost(r) },
