@@ -1,4 +1,5 @@
 import { token } from "#/lib/token";
+import { annotation } from "#/anatomy";
 import { useState } from "react";
 import { toolTitle } from "@pe/agent-contracts";
 import { type ThreadMessageLike } from "@assistant-ui/react";
@@ -81,7 +82,7 @@ export function TraceCellView({
   registerRef: (el: HTMLElement | null) => void;
 }) {
   return (
-    <div data-key={cell.key} className="lens-cell" ref={registerRef}>
+    <div data-key={cell.key} {...annotation("trace-cell")} ref={registerRef}>
       <CellHeader call={cell.call} />
     </div>
   );
@@ -89,9 +90,9 @@ export function TraceCellView({
 
 export function CellHeader({ call }: { call: ToolCall }) {
   return (
-    <div className="h">
-      <span className="h-title">{toolTitle(call.title)}</span>
-      <span className="h-meta">
+    <div {...annotation("cell-head")}>
+      <span {...annotation("cell-title")}>{toolTitle(call.title)}</span>
+      <span {...annotation("cell-meta")}>
         <span className="" style={{ color: statusColor(call.status) }}>
           {call.status.replace("_", " ")}
         </span>
@@ -110,19 +111,21 @@ export function ToolCellBody({ call }: { call: ToolCall }) {
       <CellHeader call={call} />
       {input !== undefined ? (
         <>
-          <div className="io-label">in</div>
+          <div {...annotation("io-label")}>in</div>
           <pre>{stringify(input, 2)}</pre>
         </>
       ) : null}
       {images.length > 0 ? (
-        images.map((src, index) => <img key={index} className="tool-img" src={src} alt="" />)
+        images.map((src, index) => (
+          <img key={index} {...annotation("tool-image")} src={src} alt="" />
+        ))
       ) : output !== undefined ? (
         <>
-          <div className="io-label">out</div>
+          <div {...annotation("io-label")}>out</div>
           <pre>{stringify(output, 2)}</pre>
         </>
       ) : null}
-      {error ? <pre className="io-error">{error}</pre> : null}
+      {error ? <pre {...annotation("io-error")}>{error}</pre> : null}
     </>
   );
 }

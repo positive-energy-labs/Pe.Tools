@@ -1,5 +1,6 @@
 import type { Column } from "#/components/master-table/model";
 import { ReadCell, TextCell } from "#/components/master-table/cells";
+import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
 import { NavStateCell, ProposedCell } from "#/family/marks";
 import {
@@ -12,9 +13,7 @@ import {
   savedValueAt,
   type PRow,
 } from "#/family/model";
-import { cn } from "#/lib/utils";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
-import { PressContent } from "#/components/anatomy/press-content";
 
 export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
   const {
@@ -24,7 +23,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     setOverlay,
     saved,
     setDrillType,
-    stageType,
     setStageType,
     proposalsAt,
     locate,
@@ -40,9 +38,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     group: "PROFILE",
     width: "w-28",
     right: options.align === "right",
-    /* The column on stage is lit by a FILL, never a hue — `--pe-select` is literally the ground
-       ladder's selection rung, so the law cannot be broken here by accident. */
-    headerClassName: options.header && stageType === typeName ? "bg-select" : undefined,
     header: options.header ? (
       <Press
         type="button"
@@ -59,7 +54,7 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         size="label"
       >
         <PressContent geometry="block">
-          {typeName} <span className="opacity-60">⤢</span>
+          {typeName} <span>⤢</span>
         </PressContent>
       </Press>
     ) : undefined,
@@ -85,7 +80,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         if (overlay === "live")
           return (
             <ReadCell
-              className="text-ink-mute"
               value="unread — not a parameter"
               reason={`UNREAD, not absent. Revit's family certainly carries this number — it is in the solid — but a parameter read cannot report it, because it is not a parameter. Nothing here can be compared, and silence is not agreement. Binding it is what makes it readable at all.`}
             />
@@ -93,20 +87,13 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         if (overlay === "saved")
           return (
             <ReadCell
-              className={cn(
-                diskLiteral === null
-                  ? "italic text-caution"
-                  : diskLiteral !== literal
-                    ? "text-caution"
-                    : "text-ink-2",
-              )}
               value={
                 diskLiteral === null ? (
                   "not on disk"
                 ) : (
                   <>
                     {diskLiteral}
-                    {diskLiteral !== literal && <span className="ml-1 text-caution">→</span>}
+                    {diskLiteral !== literal && <span className="ml-1">→</span>}
                   </>
                 )
               }
@@ -143,7 +130,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         const entry = draft.live[row.name]?.[typeName];
         return (
           <ReadCell
-            className="text-ink-mute"
             value={entry?.value ?? "—"}
             reason={`${MARK_TITLE["only-live"]} The last read listed "${row.name}" as present in the family but reported no per-type value for it, so there is nothing here to compare — only the fact that the parameter exists and the profile does not claim it.`}
           />
@@ -157,17 +143,8 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
       const diskValue = savedValueAt(saved, row, typeName);
       const draftValue = draftValueAt(world, draft, row, typeName);
       const unsaved = isUnsavedAt(world, draft, saved, row, typeName);
-      // The two marks that are facts about the CELL rather than about the reading, so they are
-      // applied identically in all three overlays. ONE DECORATION SLOT, RANKED — the language's
-      // squiggle law: drift outranks the citation, because a cell that is both is more urgently
-      // the first. The citation spends no meaning colour; it is a hairline.
-      const underline = drifted
-        ? "underline decoration-alarm decoration-dotted underline-offset-[3px]"
-        : grounded
-          ? "underline decoration-line-2 decoration-dotted underline-offset-[3px]"
-          : undefined;
       const groundedNote = grounded
-        ? ` Grounded in ${(world.grounding[row.name] ?? []).join(", ")} of ${world.spec?.fileName ?? "the spec"} — the hairline underline is that citation, and it stays put in every overlay unless drift outranks it.`
+        ? ` Grounded in ${(world.grounding[row.name] ?? []).join(", ")} of ${world.spec?.fileName ?? "the spec"}.`
         : "";
 
       const marks = (inner: React.ReactNode) => (
@@ -194,7 +171,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         if (world.missingInRevit.has(row.name))
           return marks(
             <ReadCell
-              className={cn("italic text-caution", underline)}
               value="not in Revit"
               reason={`${MARK_TITLE["only-profile"]}${groundedNote}`}
             />,
@@ -203,18 +179,12 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         if (!entry)
           return marks(
             <ReadCell
-              className={cn("text-ink-mute", underline)}
               value="·"
               reason={`${MARK_TITLE.unread} Re-read the family before treating this dot as a match.${groundedNote}`}
             />,
           );
         return marks(
           <ReadCell
-            className={cn(
-              drifted && "text-alarm",
-              entry.readOnly && "italic text-ink-2",
-              underline,
-            )}
             value={entry.value}
             reason={
               drifted
@@ -230,7 +200,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         if (diskValue === null)
           return marks(
             <ReadCell
-              className={cn("italic text-caution", underline)}
               value="new — not on disk"
               reason={`"${row.name}" is not in the saved profile at all: this page created it. Saving adds the whole parameter, and this type will resolve to ${draftValue}.${groundedNote}`}
             />,
@@ -238,7 +207,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         const willWrite = diskValue !== draftValue;
         return marks(
           <ReadCell
-            className={cn(willWrite ? "text-caution" : "text-ink-2", underline)}
             value={
               <>
                 {diskValue || "—"}
@@ -265,7 +233,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
       if (isFormula(authored))
         return (
           <ReadCell
-            className={cn("italic text-ink-2", options.align === "right" && "text-right")}
             value="ƒ driven"
             reason={`LOCKED — the family level drives this with ${authored}, so a type cannot override its result. The formula is shown on the parameter's own cell; change what feeds it instead. Switch to ⇄ live to see the number Revit computes for it.`}
           />
@@ -275,12 +242,6 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         <TextCell
           value={override ?? ""}
           placeholder={authored}
-          className={cn(
-            "placeholder:text-ink-mute",
-            proposals.length > 0 && "text-pea-ink",
-            options.align === "right" && "text-right",
-            underline,
-          )}
           title={
             proposals.length > 0
               ? `Pea proposes ${proposals[0]!.proposed} here — but this cell is ORDINARY. Type your own value and the proposal is severed on the spot: no accept, no deny, the card settles to "superseded by your edit". ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`

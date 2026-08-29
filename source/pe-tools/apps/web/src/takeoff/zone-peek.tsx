@@ -35,7 +35,7 @@ export function ZonePeek({
 
   return (
     <div>
-      <div className="h-52 border-b border-line bg-artifact">
+      <div className="h-52">
         <svg
           viewBox={`0 0 ${viewport.width} ${viewport.height}`}
           preserveAspectRatio="xMidYMid meet"
@@ -63,7 +63,6 @@ export function ZonePeek({
               strokeOpacity={0.4}
               strokeWidth={1}
               vectorEffect="non-scaling-stroke"
-              className="dash-seam"
             >
               <title>{`held residue · ${residue.reason} · ${fmtNum(residue.rawSqft, 0)} sf`}</title>
             </path>
@@ -86,7 +85,6 @@ export function ZonePeek({
                   stroke={accent}
                   strokeWidth={on ? 2 : 1}
                   vectorEffect="non-scaling-stroke"
-                  className="dash-seam"
                 >
                   <title>{`${room.name} · ${fmtNum(room.sqft, 0)} sf · position only, no boundary`}</title>
                 </circle>
@@ -109,14 +107,7 @@ export function ZonePeek({
           })}
 
           {cursorRoom && (
-            <text
-              x={cursorX}
-              y={cursorY}
-              textAnchor="middle"
-              fontSize={font}
-              className="pointer-events-none select-none"
-              fill={token("ink")}
-            >
+            <text x={cursorX} y={cursorY} textAnchor="middle" fontSize={font} fill={token("ink")}>
               <tspan x={cursorX} fontWeight="var(--weight-strong)">
                 {cursorRoom.name}
               </tspan>
@@ -134,7 +125,7 @@ export function ZonePeek({
         {zone.residues.length > 0 && (
           <Key tone={ABSENT_INK} label={`held ×${zone.residues.length}`} seam />
         )}
-        <span className="face-mono t-value text-ink-2">
+        <span>
           {withGeometry.length}/{zone.rooms.length} with real boundaries
         </span>
       </div>

@@ -89,7 +89,9 @@ export function MasterTableBody<Row extends RowData>({
   gutterWidth: number;
 }) {
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
-  useEffect(() => activeRowRef.current?.scrollIntoView({ block: "nearest" }), [activeKey]);
+  useEffect(() => {
+    activeRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeKey]);
 
   const moveFrom = useCallback(
     (origin: HTMLElement, direction: CellMove, wrapHorizontal = false): boolean => {

@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { dash, token } from "#/lib/token";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fb, useFb } from "../feedback/staging";
 import {
@@ -328,7 +328,7 @@ export function ZonePanel(props: {
             fill="none"
             stroke={ZONE_STROKE}
             strokeWidth={ZONE_WIDTH}
-            className="dash-reference"
+            strokeDasharray={dash("reference")}
           />
         </svg>
       </div>

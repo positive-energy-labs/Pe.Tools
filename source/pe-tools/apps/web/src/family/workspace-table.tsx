@@ -1,4 +1,5 @@
 import { EmptyState } from "#/components/lang/empty";
+import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
 import { Verb } from "#/components/lang/verb";
@@ -6,7 +7,6 @@ import { MasterTable } from "#/components/master-table/master-table";
 import { Pane } from "#/components/lang/pane";
 import { BuildStrip, BUILD_VERB, buildOutputPath } from "#/family/build";
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
-import { cn } from "#/lib/utils";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 
 export function FamilyWorkspaceTable() {
@@ -23,7 +23,6 @@ export function FamilyWorkspaceTable() {
     drillType,
     setDrillType,
     setFocus,
-    pinnedParam,
     rows,
     ghostCount,
     driftCells,
@@ -36,28 +35,9 @@ export function FamilyWorkspaceTable() {
     building,
     buildFacts,
     buildOutcome,
-    focusedParams,
-    focusedParts,
     columns,
-    firstGhostKey,
     drillColumns,
   } = useFamilyWorkspace();
-  const rowTint = (row: PRow) => {
-    const lit =
-      row.kind === "ghost"
-        ? focusedParts.has(row.slug ?? "")
-        : focusedParams.has(row.name) || pinnedParam === row.name;
-    return cn(
-      row.kind === "ghost" && "bg-caution/6",
-      // The hairline is drawn on whichever ghost is first IN VISIBLE ORDER, not on whichever one
-      // the fixture happened to list first — sorting reorders the ghosts among themselves, and a
-      // section rule that stayed on a row in the middle of the section would be drawing a boundary
-      // that is not there.
-      row.key === firstGhostKey && "[&>td]:border-t [&>td]:border-t-line-2",
-      // Focus is a FILL and never a hue.
-      lit && "bg-select",
-    );
-  };
 
   // A ghost row's focus is its CONSTITUENT — it has no parameter to light, and lighting nothing
   // would make the bottom of the table feel disconnected from the drawing it came out of.
@@ -90,22 +70,32 @@ export function FamilyWorkspaceTable() {
       scopeLabel="parameters"
       searchPlaceholder="parameter"
       onRowHover={hoverRow}
-      rowClassName={rowTint}
       tableState={tableState}
       onTableStateChange={setTableState}
       summary={
         <span>
           {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
           {world.typeNames.length} types ·{" "}
-          <span className={ghostCount > 0 ? "text-caution" : undefined}>{ghostCount} unbound</span>{" "}
+          <FactChip
+            tone={ghostCount > 0 ? "caution" : undefined}
+            title="Geometry rows without a parameter binding."
+          >
+            {ghostCount} unbound
+          </FactChip>{" "}
           ·{" "}
-          <span className={unsavedCount > 0 ? "text-caution" : undefined}>
+          <FactChip
+            tone={unsavedCount > 0 ? "caution" : undefined}
+            title="Cells the next profile save would write."
+          >
             {unsavedCount} unsaved
-          </span>{" "}
+          </FactChip>{" "}
           ·{" "}
-          <span className={driftCells.length > 0 ? "text-alarm" : undefined}>
+          <FactChip
+            tone={driftCells.length > 0 ? "alarm" : undefined}
+            title="Cells where Revit disagrees with the draft."
+          >
             {driftCells.length} drift
-          </span>{" "}
+          </FactChip>{" "}
           {/* Region orientation: how to read the counts, what an unbound geom row is, and what
               each of the two bind choices does. Every ghost row's title defers to this. */}
           <HelpTip>
@@ -161,19 +151,17 @@ export function FamilyWorkspaceTable() {
       scopeLabel={`${drillType} · parameters`}
       searchPlaceholder="parameter"
       onRowHover={hoverRow}
-      rowClassName={rowTint}
       tableState={drillState}
       onTableStateChange={setDrillState}
       summary={
         <span title="What this one type is asking of you. The same counts as the cross-type table, narrowed to this column of it.">
           {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
-          <span
-            className={
-              driftCells.some((cell) => cell.typeName === drillType) ? "text-alarm" : undefined
-            }
+          <FactChip
+            tone={driftCells.some((cell) => cell.typeName === drillType) ? "alarm" : undefined}
+            title="Cells where Revit disagrees with this type's draft."
           >
             {driftCells.filter((cell) => cell.typeName === drillType).length} drift
-          </span>
+          </FactChip>
         </span>
       }
       empty={
@@ -316,7 +304,7 @@ export function FamilyWorkspaceTable() {
           means the reason, the refusals and the receipt all get room at strip scale. The build is a
           whole-family write, so the slot is the same in the drill-in: no type is on the plan. */}
       <BuildStrip
-        className="mx-2 mt-2 shrink-0"
+        className="mx-2 mt-2"
         armed={armedBuild}
         building={building}
         said={buildOutcome}

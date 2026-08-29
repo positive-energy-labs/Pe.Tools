@@ -213,7 +213,7 @@ export function ConceptEvidenceView({ data }: OpViewProps) {
                 return (
                   <div
                     key={asString(identity?.key) ?? `${i}`}
-                    className={`flex min-w-0 items-baseline gap-2 px-2 py-1.5 hover:veil ${i > 0 ? "" : ""}`}
+                    className="flex min-w-0 items-baseline gap-2 px-2 py-1.5"
                   >
                     <span className="w-6 shrink-0 text-right">{i + 1}</span>
                     <div className="min-w-0 flex-1">

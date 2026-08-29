@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { scheduleCellKey } from "@pe/agent-contracts";
 import type { ScheduleGridDocument } from "@pe/agent-contracts";
-import type { StateCellProps } from "#/components/lang/cell";
+import { StateCell, type StateCellProps } from "#/components/lang/cell";
 import type { Column } from "#/components/master-table/model";
 import type { ScheduleRow, Snapshot } from "#/schedule-grid/route";
 
@@ -23,11 +23,12 @@ export function useScheduleGridColumns(
         sort: (row) => row.rowNumber,
         cell: (row) => (
           <span
-            className="face-mono t-caption block truncate px-1.5 text-right text-ink-2"
             title={`row ${row.rowNumber} · ${row.kind}${row.subjectIds.length > 0 ? ` · elements [${row.subjectIds.join(",")}]` : ""}`}
           >
-            {row.rowNumber}
-            {row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}
+            <StateCell
+              scale="row"
+              value={`${row.rowNumber}${row.subjectIds.length > 1 ? ` ×${row.subjectIds.length}` : ""}`}
+            />
           </span>
         ),
       },

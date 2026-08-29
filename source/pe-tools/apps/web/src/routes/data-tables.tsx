@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CheckCheck, List, Plus } from "lucide-react";
 import { useState } from "react";
 import { AddressingBar } from "#/components/lang/addressing-bar";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip, Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine } from "#/components/lang/outcome";
@@ -103,14 +103,12 @@ export function DataTablesRoute() {
       : "Upsert this draft into Revit by name + row key; rows missing from the draft are pruned";
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-page">
+    <main className="flex h-screen flex-col overflow-hidden">
       <AddressingBar
         name="data tables"
         sentence={
           <span>
-            <span className="t-value face-mono text-ink">
-              {draft ? draft.name : "no table open"}
-            </span>
+            <span>{draft ? draft.name : "no table open"}</span>
             <HelpTip>
               Data tables are freely editable key schedules whose cells stay addressable by a stable
               row key. Apply upserts by table name + row key, and prunes rows the draft no longer
@@ -137,7 +135,7 @@ export function DataTablesRoute() {
           />
         }
       />
-      <div className="shrink-0 border-b border-line empty:border-0">
+      <div className="shrink-0">
         <VerbLane atoms={store.verbAtoms} />
       </div>
 
@@ -149,10 +147,7 @@ export function DataTablesRoute() {
           defaultWidth={248}
           header={
             <div className="flex items-center justify-between gap-2">
-              <span className="t-label t-upper text-ink-2">
-                Tables{" "}
-                <span className="t-label face-mono normal-case font-normal">{tables.length}</span>
-              </span>
+              <Tag>tables · {tables.length}</Tag>
               <span className="flex items-center gap-1">
                 <Verb
                   label="re-read"

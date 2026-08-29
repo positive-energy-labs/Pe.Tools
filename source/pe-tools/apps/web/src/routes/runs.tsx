@@ -20,7 +20,7 @@ function RunsPage() {
     };
   }, []);
   if (!import.meta.env.DEV) {
-    return <div className="p-8 t-prose text-ink-2">/runs is a dev-only surface.</div>;
+    return <div className="p-8">/runs is a dev-only surface.</div>;
   }
   return <RunBrowser />;
 }

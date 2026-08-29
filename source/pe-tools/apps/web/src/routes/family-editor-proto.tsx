@@ -20,11 +20,11 @@ function FamilyEditorProto() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header
-        className="flex flex-wrap items-baseline gap-2 border-b px-3 py-2"
+        className="flex flex-wrap items-baseline gap-2 px-3 py-2"
         style={{ borderColor: token("line") }}
       >
-        <span className="face-mono t-label t-upper text-ink-mute">family editor</span>
-        <span className="t-value text-ink">{editor.model.family.name}</span>
+        <span>family editor</span>
+        <span>{editor.model.family.name}</span>
         <TypeStage editor={editor} />
         {/* The chip states the fact; the HelpTip beside it carries the provenance sentence. */}
         <FactChip

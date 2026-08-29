@@ -80,7 +80,7 @@ export function CellTrichotomyReviewer({
         {items.map(([key, cell]) => {
           const staged = cell.staged != null;
           return (
-            <div key={key} className="flex min-h-12 items-center gap-2 py-1.5 last:border-b-0">
+            <div key={key} className="flex min-h-12 items-center gap-2 py-1.5">
               <div className="min-w-0 flex-1">
                 <div className="truncate">{renderLabel(key, cell)}</div>
                 <div className="truncate">

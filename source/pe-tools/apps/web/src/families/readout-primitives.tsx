@@ -10,7 +10,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/lang/combobox";
+} from "#/components/ui/combobox";
 
 export function Seam({ op }: { op: string }) {
   return (
@@ -24,7 +24,7 @@ export function Seam({ op }: { op: string }) {
 }
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span className="t-label t-upper text-ink-2">{children}</span>;
+  return <span>{children}</span>;
 }
 
 /**
@@ -67,10 +67,14 @@ export function NamePicker({
     >
       {/* ponytail: explicit anchor on the chips row — the chips input must not be the positioner
           anchor, or the popup roams as chips wrap (same law as control-chips.tsx). */}
-      <ComboboxChips ref={anchor} title={title}>
+      <ComboboxChips
+        ref={anchor}
+        title={title}
+        className="max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto py-0.5"
+      >
         {collapsed ? (
           <span
-            className="px-1 t-label text-ink-2"
+            className="px-1"
             title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
           >
             all {values.length}
@@ -90,8 +94,8 @@ export function NamePicker({
         <ComboboxEmpty>no matches</ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
-            <ComboboxItem key={name} value={name}>
-              <span className="truncate">{name}</span>
+            <ComboboxItem key={name} value={name} className="pr-7">
+              <span>{name}</span>
             </ComboboxItem>
           )}
         </ComboboxList>

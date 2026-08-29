@@ -20,7 +20,7 @@ export function ZoneThumb({
     <svg
       viewBox={`0 0 ${viewport.width} ${viewport.height}`}
       preserveAspectRatio="xMidYMid meet"
-      className={cn("size-8 shrink-0", className)}
+      className={cn("size-8", className)}
       aria-hidden
     >
       <path

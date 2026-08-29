@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { VerbLane } from "#/components/lang/verb-lane";
@@ -19,12 +19,12 @@ import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/
 import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
 import { documentTrunk, worldTrunk } from "#/targeting/world";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { DIRS_KEY, PANES, Route, readDirs, resolvedWorldBinding } from "#/takeoff/route";
+import { DIRS_KEY, PANES, readDirs, resolvedWorldBinding } from "#/takeoff/route";
 import { AdoptPanel, SyncPanel } from "#/takeoff/adopt-panel";
 
 export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const navigate = useNavigate({ from: "/takeoffs" });
-  const { source, targeting } = Route.useSearch();
+  const { source, targeting } = useSearch({ from: "/takeoffs" });
   const views = useAtomValue(store.atoms.views);
   const zones = useAtomValue(store.atoms.zones);
   const dir = useAtomValue(store.atoms.dir);
@@ -259,7 +259,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         <input
           name="dir"
           placeholder={`add a folder — e.g. ${DEFAULT_ARTIFACT_DIR}`}
-          className="face-mono t-caption w-full bg-transparent px-1 py-0.5 outline-none"
+          className="w-full px-1 py-0.5"
           style={{ borderTop: `1px solid ${token("line-2")}`, color: token("ink") }}
         />
       </form>
@@ -301,7 +301,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const readoutBand = (
     <>
       {!live && (
-        <div className="absolute right-2 bottom-2 z-popup">
+        <div className="z-popup">
           <Verb
             label="leave fixture → live"
             onClick={() =>
@@ -319,7 +319,6 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   if (live && !session)
     return (
       <Workspace
-        className="bg-page"
         headRail={headRail}
         readoutBand={readoutBand}
         table={

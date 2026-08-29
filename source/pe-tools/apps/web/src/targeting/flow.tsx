@@ -71,25 +71,20 @@ function Terminal<K extends string>({
 }) {
   const dim = !b.demanded.has(link.key);
   const node = (
-    <div
-      className={cn(
-        "flex min-w-36 flex-col px-2 py-1",
-        side === "left" ? "items-end" : "items-start",
-        b.feeds[link.key].seam ? "seam-border" : undefined,
-      )}
-      style={{
-        backgroundColor: token("artifact"),
-        borderColor: b.feeds[link.key].seam ? token("caution") : token("line"),
-      }}
-    >
-      <TargetCaption b={b} link={link} />
-      <span className="inline-flex items-baseline gap-1.5">
-        <span className="" style={{ color: token("ink-2") }}>
-          {link.joiner}
+    <ArtifactFrame>
+      <div
+        className={cn(
+          "flex min-w-36 flex-col px-2 py-1",
+          side === "left" ? "items-end" : "items-start",
+        )}
+      >
+        <TargetCaption b={b} link={link} />
+        <span className="inline-flex items-baseline gap-1.5">
+          <span>{link.joiner}</span>
+          <Picker product={product} link={link} b={b} runner={runner} extra={extra} inert={dim} />
         </span>
-        <Picker product={product} link={link} b={b} runner={runner} extra={extra} inert={dim} />
-      </span>
-    </div>
+      </div>
+    </ArtifactFrame>
   );
   return (
     <div

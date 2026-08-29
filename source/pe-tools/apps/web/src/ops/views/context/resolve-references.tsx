@@ -76,19 +76,15 @@ export function ResolveReferencesView({ data }: OpViewProps) {
             const provenance = asRecords(candidate.provenance);
             const score = asNumber(candidate.score);
             const top = i === 0;
-            const edge = top ? token("ink") : ambiguous ? token("caution") : "transparent";
             return (
               <div
                 key={handle ? `${handleId(handle)}-${i}` : i}
-                className={`flex min-w-0 flex-col gap-1 border-l-2 px-2.5 py-2 ${i < candidates.length - 1 ? "" : ""}`}
-                style={{ borderLeftColor: edge }}
+                className="flex min-w-0 flex-col gap-1 px-2.5 py-2"
               >
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                   <span className="w-6 shrink-0">#{i + 1}</span>
                   {handle && <HandleChip handle={handle} />}
-                  <span className={`t-value min-w-0 truncate ${top ? "" : ""}`}>
-                    {text(candidate.label)}
-                  </span>
+                  <span className="min-w-0 truncate">{text(candidate.label)}</span>
                   {handle && <span className="">{handleId(handle)}</span>}
                   {score !== undefined && (
                     <span className="ml-auto">

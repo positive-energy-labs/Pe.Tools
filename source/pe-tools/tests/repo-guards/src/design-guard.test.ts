@@ -792,7 +792,7 @@ const TRUE_UNREGISTERED = REMAINDER.filter(
 );
 
 const GEOMETRY =
-  /^(?:flex(?:-.+)?|inline-flex|grid(?:-.+)?|inline-grid|gap(?:-[xy])?-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|overflow(?:-[xy])?(?:-.+)?|items-.+|justify-.+|self-.+|col-.+|row-.+|sticky|z-.+)$/;
+  /^(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+)$/;
 const ALLOWLIST_VIOLATIONS = CLASS_USES.filter(
   (use) => !use.rel.startsWith("components/") && !GEOMETRY.test(baseClass(use.token)),
 );
@@ -804,6 +804,7 @@ const ALLOWLIST_BY_FILE = Object.fromEntries(
 const ALLOWLIST_BASELINE = JSON.parse(
   readFileSync(join(HERE, "design-allowlist.baseline.json"), "utf8"),
 ) as Record<string, number>;
+const ALLOWLIST_LIVE_JSON = JSON.stringify(ALLOWLIST_BY_FILE, null, 2) + "\n";
 
 const hasExport = (node: ts.Node): boolean =>
   ts.canHaveModifiers(node) &&
@@ -993,6 +994,19 @@ describe("design checks — code holds the boundary", () => {
       .map(([rel, count]) => `${rel}: ${count} > ${ALLOWLIST_BASELINE[rel] ?? 0}`);
     expect(increases).toEqual([]);
   });
+
+  for (const rel of [
+    ...new Set([...Object.keys(ALLOWLIST_BASELINE), ...Object.keys(ALLOWLIST_BY_FILE)]),
+  ].sort()) {
+    it(`${rel} allowlist baseline is not stale`, () => {
+      const was = ALLOWLIST_BASELINE[rel] ?? 0;
+      const now = ALLOWLIST_BY_FILE[rel] ?? 0;
+      expect(
+        now,
+        `${rel} dropped to ${now}; baseline still says ${was}.\nPaste this exact JSON into design-allowlist.baseline.json:\n${ALLOWLIST_LIVE_JSON}`,
+      ).toBeGreaterThanOrEqual(was);
+    });
+  }
 
   it("every lang component export is mounted by a specimen", () => {
     expect(MISSING_SWATCH).toEqual([]);

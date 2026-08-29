@@ -3,6 +3,7 @@ import { type WorldFacts } from "#/host/fleet";
 import { type WorldStart } from "#/targeting/world";
 import { RouteDocument } from "#/workbench/route-document";
 import { AddressedInstancesPage } from "#/instances/workspace";
+import { Input } from "#/components/ui/input";
 
 export const YEARS = ["24", "25", "26"];
 
@@ -91,7 +92,7 @@ export function StartFields({
         value={year}
         onChange={(event) => setYear(event.target.value)}
         disabled={disabled}
-        className="face-mono t-caption rounded-sm border border-line-2 bg-transparent px-1 py-0.5"
+        className="px-1 py-0.5"
       >
         {YEARS.map((value) => (
           <option key={value} value={value}>
@@ -104,18 +105,18 @@ export function StartFields({
         value={lane}
         onChange={(event) => setLane(event.target.value as WorldStart["lane"])}
         disabled={disabled}
-        className="face-mono t-caption rounded-sm border border-line-2 bg-transparent px-1 py-0.5"
+        className="px-1 py-0.5"
       >
         <option value="installed">installed</option>
         <option value="dev">dev</option>
       </select>
-      <input
+      <Input
         aria-label="document"
         value={doc}
         onChange={(event) => setDoc(event.target.value)}
         disabled={disabled}
         placeholder="document (optional)"
-        className="face-mono t-caption w-44 rounded-sm border border-line-2 bg-transparent px-1 py-0.5"
+        className="w-44 px-1 py-0.5"
       />
     </span>
   );

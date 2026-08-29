@@ -67,7 +67,7 @@ export function RouteDocumentSurface({ at, children }: { at: Address; children: 
         href={routeDocumentTabHref(href, at)}
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed right-3 top-3 z-raised underline-offset-2"
+        className="fixed right-3 top-3 z-raised"
       >
         open in another tab
       </a>

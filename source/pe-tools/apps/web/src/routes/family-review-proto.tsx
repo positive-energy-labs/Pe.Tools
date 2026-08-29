@@ -44,20 +44,17 @@ function FamilyReviewProto() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header
-        className="flex flex-col gap-1 border-b px-3 py-2"
-        style={{ borderColor: token("line") }}
-      >
+      <header className="flex flex-col gap-1 px-3 py-2" style={{ borderColor: token("line") }}>
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-label t-upper text-ink-mute">FAMILY REVIEW</span>
-          <span className="t-value">
+          <span>FAMILY REVIEW</span>
+          <span>
             {families.length} portable families · {board.length} family × type
           </span>
         </div>
 
         {/* READS FROM — one run, one year, one lane, and a document named per family in the pane. */}
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-caption text-ink-mute">reads from</span>
+          <span>reads from</span>
           <FactChip
             tone="caution"
             dashed
@@ -81,7 +78,7 @@ function FamilyReviewProto() {
 
         {/* WRITES TO — nothing, and the two open questions that is standing in for. */}
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="face-mono t-caption text-ink-mute">writes to</span>
+          <span>writes to</span>
           <FactChip
             tone="caution"
             title="Where an edit or a verdict on this board would land: nowhere, by scope. The three unanswered questions behind that are stated in full beside the strip."

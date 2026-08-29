@@ -1,15 +1,16 @@
-import { Input } from "#/components/lang/input";
+import { Input } from "#/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/lang/select";
-import { Switch } from "#/components/lang/switch";
+} from "#/components/ui/select";
+import { Switch } from "#/components/ui/switch";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
   coercePrimitive,
+  primitiveInputValue,
   type ResolvedFieldRendererProps,
   useFieldOptions,
   useSettingsField,
@@ -51,8 +52,8 @@ export function ScalarField({
         path={path}
       />
       {shouldRenderSelect ? (
-        <Select value={String(field.value ?? "")} onValueChange={field.change}>
-          <SelectTrigger id={path}>
+        <Select value={primitiveInputValue(field.value)} onValueChange={field.change}>
+          <SelectTrigger id={path} className="h-9 w-full justify-between">
             <SelectValue placeholder="Select an option" />
           </SelectTrigger>
           <SelectContent>
@@ -79,7 +80,7 @@ export function ScalarField({
             id={path}
             type={isNumber ? "number" : "text"}
             list={datalistId}
-            value={String(field.value ?? "")}
+            value={primitiveInputValue(field.value)}
             onChange={(event) => {
               field.change(
                 isNumber
@@ -101,7 +102,7 @@ export function ScalarField({
         <Input
           id={path}
           type={isNumber ? "number" : "text"}
-          value={String(field.value ?? "")}
+          value={primitiveInputValue(field.value)}
           onChange={(event) => {
             field.change(
               isNumber

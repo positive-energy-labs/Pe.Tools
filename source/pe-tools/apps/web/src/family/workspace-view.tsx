@@ -26,7 +26,6 @@ export function FamilyWorkspaceView() {
   } = useFamilyWorkspace();
   return (
     <Workspace
-      className="bg-page text-ink"
       headRail={
         <TargetingHead
           product={product}

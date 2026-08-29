@@ -38,13 +38,13 @@
  * an ink stroke, exactly as the table's focused row does.
  */
 import { HelpTip } from "#/components/lang/help";
+import { PressContent } from "#/components/anatomy/press-content";
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type PageWorld } from "#/family/model";
 import { boundParam } from "#/family/world";
 import { Press } from "#/components/lang/press";
 import { FixtureViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
-import { PressContent } from "#/components/anatomy/press-content";
 
 export function AnatomyDrawing({
   world,
@@ -99,7 +99,7 @@ export function AnatomyDrawing({
     <div className="flex size-full min-h-0">
       {views}
       <div className="min-w-0 flex-1 overflow-y-auto p-2">
-        <p className="face-mono mb-1 flex items-center gap-1 t-caption text-ink-2">
+        <p className="mb-1 flex items-center gap-1">
           constituents · {typeName}
           <HelpTip>
             The profile&rsquo;s own constituent list. Hovering one lights both the shape and the
@@ -131,11 +131,11 @@ export function AnatomyDrawing({
               }`}
             >
               <PressContent geometry="row">
-                <span className="text-ink-2">{part.kind} </span>
-                <span className="min-w-0 truncate">{part.slug}</span>
+                <span>{part.kind} </span>
+                <span className="min-w-0">{part.slug}</span>
                 {unbound > 0 && (
                   <span
-                    className="ml-auto shrink-0 t-caption text-caution"
+                    className="ml-auto"
                     title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
                   >
                     {unbound}⚠

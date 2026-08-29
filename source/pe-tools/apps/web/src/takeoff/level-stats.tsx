@@ -47,15 +47,15 @@ export function LevelStats({
   const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));
 
   return (
-    <div className="absolute top-2 right-2 z-raised w-64 rounded-sm border border-line bg-page/95 px-2 py-1.5 shadow-sm backdrop-blur">
+    <div className="z-raised w-64 px-2 py-1.5">
       <div className="mb-1 flex items-baseline gap-1.5">
-        <span className="t-label t-upper text-ink-2">{level} — level totals</span>
+        <span>{level} — level totals</span>
         <Press type="button" onClick={onClose} tone="quiet" size="value">
           ×
         </Press>
       </div>
 
-      <div className="flex h-2 w-full items-stretch gap-px overflow-hidden rounded-[1px]">
+      <div className="flex h-2 w-full items-stretch gap-px overflow-hidden">
         {ROOM_STATES.map((s) =>
           area[s] > 0 ? (
             <span
@@ -73,16 +73,13 @@ export function LevelStats({
         {unpartitionedSqft > 0 && (
           <span
             title={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}
-            className="border border-line-2"
             style={{ width: `${(unpartitionedSqft / Math.max(totalArea, 1)) * 100}%` }}
           />
         )}
       </div>
-      <p className="face-mono t-value mt-0.5 text-ink-2">
-        {fmtNum(totalArea, 0)} sf declared on this level, by room state
-      </p>
+      <p className="mt-0.5">{fmtNum(totalArea, 0)} sf declared on this level, by room state</p>
 
-      <div className="mt-1.5 space-y-px">
+      <div className="mt-1.5">
         <StatLine
           label="partitioned"
           value={`${pct(partitioned)}% · ${partitioned}/${zones.length} zones`}

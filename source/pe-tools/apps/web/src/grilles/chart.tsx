@@ -27,7 +27,7 @@ export function FieldChart({ field, active, onPick }: Props) {
   const Y = (f: number) => H - PAD.b - (f / maxFree) * (H - PAD.t - PAD.b);
   const widths = [...new Set(field.map((g) => g.opening))].sort((a, b) => a - b);
   return (
-    <svg width={W} height={H} className="face-mono t-caption" style={{ color: token("ink") }}>
+    <svg width={W} height={H} style={{ color: token("ink") }}>
       <line x1={PAD.l} x2={W - PAD.r} y1={H - PAD.b} y2={H - PAD.b} stroke={token("line-2")} />
       <line x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={H - PAD.b} stroke={token("line-2")} />
       <text x={(PAD.l + W - PAD.r) / 2} y={H - 6} textAnchor="middle" fill={token("ink-2")}>
@@ -47,7 +47,6 @@ export function FieldChart({ field, active, onPick }: Props) {
         y1={Y(active.freeArea)}
         y2={Y(active.freeArea)}
         stroke={token("line")}
-        className="dash-reference"
       />
       {widths.map((w) => {
         const pts = field.filter((g) => g.opening === w).sort((a, b) => a.openings - b.openings);

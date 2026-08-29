@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { dash, token } from "#/lib/token";
 import {
   type CSSProperties,
   type Dispatch,
@@ -225,7 +225,7 @@ export function PlanPane(props: {
             fillRule="evenodd"
             fill={lit ? token("veil") : "transparent"}
             stroke={ZONE_STROKE}
-            className="dash-reference"
+            strokeDasharray={dash("reference")}
             style={{ strokeWidth: `calc(var(--sw) * ${ZONE_WIDTH}px)`, cursor: "pointer" }}
             onPointerEnter={() => props.onHover(zone.Zone)}
             onPointerLeave={() => props.onHover(null)}

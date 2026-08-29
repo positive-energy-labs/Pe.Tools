@@ -122,7 +122,7 @@ export function ModelViews({
             <svg
               key={view.key}
               viewBox={`0 0 ${BOX} ${BOX}`}
-              className="h-full border-r border-line"
+              className="h-full"
               role="img"
               aria-label={`family ${view.key} view`}
             >
@@ -147,7 +147,6 @@ export function ModelViews({
                     y2={Y(0)}
                     stroke={token("line")}
                     strokeWidth={0.5}
-                    className="dash-reference"
                   />
                   <line
                     x1={X(0)}
@@ -156,7 +155,6 @@ export function ModelViews({
                     y2={BOX - M}
                     stroke={token("line")}
                     strokeWidth={0.5}
-                    className="dash-reference"
                   />
                 </>
               )}
@@ -257,7 +255,6 @@ export function ModelViews({
                       y={plane.axis === view.u ? M + 6 : line.y1 - 2}
                       fontSize={6}
                       fill={lit ? token("ink") : token("ink-2")}
-                      className="face-mono"
                     >
                       {plane.slug} {plane.text}
                     </text>
@@ -296,7 +293,6 @@ export function ModelViews({
                     y2={Y(sheet.rcp[view.v] as number)}
                     stroke={token("viz-5")}
                     strokeWidth={0.8}
-                    className="dash-reference"
                   />
                   <circle
                     cx={X(sheet.rcp[view.u] as number)}
@@ -307,13 +303,7 @@ export function ModelViews({
                 </g>
               )}
 
-              <text
-                x={M}
-                y={BOX - 5}
-                fontSize={7}
-                fill={token("ink-2")}
-                className="face-mono t-upper"
-              >
+              <text x={M} y={BOX - 5} fontSize={7} fill={token("ink-2")}>
                 {view.label}
               </text>
             </svg>
@@ -322,20 +312,20 @@ export function ModelViews({
       </div>
 
       {(unplottablePlanes.length > 0 || partialSolids.length > 0) && (
-        <div className="shrink-0 border-t border-line px-2 py-1">
+        <div className="px-2 py-1">
           {partialSolids.map((geo) => (
-            <p key={geo.slug} className="face-mono t-caption text-ink-2">
+            <p key={geo.slug}>
               ─ ─ solid {geo.slug} · {world.source.profile.solids[geo.slug] ?? geo.kind}{" "}
-              <span className="text-ink-mute">
+              <span>
                 (a dimension does not resolve to a number at this type — named rather than drawn at
                 a guess)
               </span>
             </p>
           ))}
           {unplottablePlanes.map((plane) => (
-            <p key={plane.slug} className="face-mono t-caption text-ink-2">
+            <p key={plane.slug}>
               ─ ─ plane {plane.slug} · {plane.text}{" "}
-              <span className="text-ink-mute">
+              <span>
                 {plane.offset == null
                   ? "(formula-driven — no resolvable offset, so it is named rather than drawn at a guess)"
                   : "(off a datum this drawing does not recognise)"}

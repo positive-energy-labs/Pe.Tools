@@ -249,16 +249,29 @@ function useFamiliesWorkspaceModel(store: FamiliesStore) {
     [plan, planByFamilyId, receiptByFamilyId, excludedIds],
   );
 
-  const { columns, uncommonCount } = useFamiliesColumns({ familyState, params, pickedIds, setPickedIds, showUncommon, totalFamilies });
+  const { columns, uncommonCount } = useFamiliesColumns({
+    familyState,
+    params,
+    pickedIds,
+    setPickedIds,
+    showUncommon,
+    totalFamilies,
+  });
 
   const chips = useTableChips({
     categories:
       applied && applied.categoryNames.length > 0
-        ? { label: `categories: ${applied.categoryNames.length}`, onClear: () => setDraftCategories([]) }
+        ? {
+            label: `categories: ${applied.categoryNames.length}`,
+            onClear: () => setDraftCategories([]),
+          }
         : null,
     placement:
       placement !== LoadedFamilyPlacementScope.AllLoaded
-        ? { label: `placement: ${placement}`, onClear: () => setPlacement(LoadedFamilyPlacementScope.AllLoaded) }
+        ? {
+            label: `placement: ${placement}`,
+            onClear: () => setPlacement(LoadedFamilyPlacementScope.AllLoaded),
+          }
         : null,
     uncommon:
       !showUncommon && uncommonCount > 0
@@ -266,7 +279,10 @@ function useFamiliesWorkspaceModel(store: FamiliesStore) {
         : null,
     picked:
       pickedIds.size > 0
-        ? { label: `${pickedIds.size} picked for projection Â· esc clears`, onClear: () => setPickedIds(new Set()) }
+        ? {
+            label: `${pickedIds.size} picked for projection Â· esc clears`,
+            onClear: () => setPickedIds(new Set()),
+          }
         : null,
   });
 
@@ -292,7 +308,60 @@ function useFamiliesWorkspaceModel(store: FamiliesStore) {
     [plan, families, planByFamilyId],
   );
 
-  return { store, navigate, target, scope, draft, placement, draftCategories, pickedFamilies, setPlacement, setDraftCategories, setPickedFamilies, applied, profilePath, plan, excludedIds, pickedIds, setPickedIds, applyData, projection, showUncommon, setShowUncommon, tableState, busy, categoryFeed, familyFeed, profileFeed, status, connected, categories, draftFamilyNames, matrixRequest, matrix, families, allProfilePaths, profilePaths, profileDocs, selectedProfileIndex, selectedProfileQuery, rows, params, totalFamilies, planByFamilyId, receiptByFamilyId, familyState, columns, uncommonCount, chips, includedPlanned, runProject, matrixIssue, totalTypes, outsideProfile };
+  return {
+    store,
+    navigate,
+    target,
+    scope,
+    draft,
+    placement,
+    draftCategories,
+    pickedFamilies,
+    setPlacement,
+    setDraftCategories,
+    setPickedFamilies,
+    applied,
+    profilePath,
+    plan,
+    excludedIds,
+    pickedIds,
+    setPickedIds,
+    applyData,
+    projection,
+    showUncommon,
+    setShowUncommon,
+    tableState,
+    busy,
+    categoryFeed,
+    familyFeed,
+    profileFeed,
+    status,
+    connected,
+    categories,
+    draftFamilyNames,
+    matrixRequest,
+    matrix,
+    families,
+    allProfilePaths,
+    profilePaths,
+    profileDocs,
+    selectedProfileIndex,
+    selectedProfileQuery,
+    rows,
+    params,
+    totalFamilies,
+    planByFamilyId,
+    receiptByFamilyId,
+    familyState,
+    columns,
+    uncommonCount,
+    chips,
+    includedPlanned,
+    runProject,
+    matrixIssue,
+    totalTypes,
+    outsideProfile,
+  };
 }
 
 export type FamiliesWorkspaceModel = ReturnType<typeof useFamiliesWorkspaceModel>;

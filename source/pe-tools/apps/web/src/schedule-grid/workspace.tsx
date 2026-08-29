@@ -2,8 +2,10 @@ import { useState } from "react";
 import { scheduleCellKey, scheduleGridRouteState, splitScheduleCellKey } from "@pe/agent-contracts";
 import { AddressingBar } from "#/components/lang/addressing-bar";
 import { FactChip } from "#/components/lang/chip";
+import { Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
+import { Provenance } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import { PickList } from "#/components/lang/pick-list";
@@ -95,16 +97,14 @@ export function ScheduleGridWorkspace({
         : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-page">
+    <main className="flex h-screen flex-col overflow-hidden">
       <AddressingBar
         name="schedules"
         sentence={
           snapshot ? (
             <span>{snapshot.scheduleName}</span>
           ) : (
-            <span className="t-value italic text-ink-mute">
-              {hydrated ? "no schedule open" : "connecting"}
-            </span>
+            <Provenance>{hydrated ? "no schedule open" : "connecting"}</Provenance>
           )
         }
         facts={
@@ -169,12 +169,12 @@ export function ScheduleGridWorkspace({
           header={
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-baseline gap-1.5">
-                <span className="t-caption t-upper text-ink-2">schedules</span>
+                <Tag>schedules</Tag>
                 {catalog ? (
-                  <span className="face-mono t-caption normal-case text-ink-2">
+                  <FactChip title="Schedules returned by the current catalog read.">
                     {catalog.schedules.length}
                     {catalog.takenAt ? ` · ${timeAgo(catalog.takenAt)}` : ""}
-                  </span>
+                  </FactChip>
                 ) : null}
               </span>
               <Verb
@@ -223,7 +223,7 @@ export function ScheduleGridWorkspace({
         </SidePane>
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-1">
             <Verb
               label="re-read"
               busy={busy === "refresh"}

@@ -16,7 +16,6 @@ export function ManualJField({
       digits={0}
       integer
       min={0}
-      className={room.data === null ? "text-ink-mute" : undefined}
       onCommit={(value) => onPatch({ [field]: value })}
     />
   );

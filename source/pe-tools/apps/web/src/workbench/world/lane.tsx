@@ -1,9 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
+import { Key } from "#/anatomy";
 import type { ContextBreakdown, ContextItem } from "../chat-state";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
 import { Switcher } from "#/components/lang/switcher";
 import { cn } from "#/lib/utils";
+import { token } from "#/lib/token";
 import { useWorkbench } from "../provider";
 import {
   blastOf,
@@ -29,7 +31,6 @@ import {
   tone,
 } from "./cap";
 import { ContextBudgetBar, whySentence } from "./bar";
-import { PressContent } from "#/components/anatomy/press-content";
 
 export function WorldLane({
   breakdown,
@@ -136,8 +137,7 @@ export function WorldLane({
             <span className="ml-auto">{fmtTok(totals.cached)}</span>
           </div>
           <div className="flex items-center gap-[7px]">
-            <span className="size-[9px] flex-none caution-hatch" />
-            reprocessed · 1×
+            <Key tone={token("caution")} label="reprocessed · 1×" seam />
             <span className="ml-auto">{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
@@ -156,32 +156,35 @@ export function WorldLane({
           const changed = diff && cache.changed.has(layer.id);
           const blast = blastOf(layer.rank);
           return (
-            <div className={cn("", changed && "caution-wash-artifact")} key={layer.id}>
-              <Press tone="quiet" type="button" onClick={() => toggle(layer.id)}>
-                <PressContent geometry="block">
-                  <span
-                    className={cn(
-                      WORLD_ROW,
-                      inspect
-                        ? "grid-cols-[9px_1fr_auto_auto_auto_auto]"
-                        : "grid-cols-[9px_1fr_auto]",
-                    )}
-                  >
-                    <span className="size-[9px]" style={{ backgroundColor: tone(layer.id) }} />
-                    <span className="">
-                      {layer.label}
-                      {inspect ? <span className="ml-1.5">pos {layer.rank}</span> : null}
-                    </span>
-                    {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
-                    {inspect ? <span className="">{fmtTok(layer.tokens)}</span> : null}
-                    {inspect ? (
-                      <span className="min-w-[30px] text-right">
-                        {((layer.tokens / used) * 100).toFixed(0)}%
-                      </span>
-                    ) : null}
-                    <span className={cn("transition-transform", isOpen && "rotate-90")}>▸</span>
+            <div key={layer.id}>
+              <Press
+                tone={changed ? "quiet" : "quiet"}
+                state={changed ? "selected" : "rest"}
+                type="button"
+                onClick={() => toggle(layer.id)}
+              >
+                <span
+                  className={cn(
+                    WORLD_ROW,
+                    inspect
+                      ? "grid-cols-[9px_1fr_auto_auto_auto_auto]"
+                      : "grid-cols-[9px_1fr_auto]",
+                  )}
+                >
+                  <span className="size-[9px]" style={{ backgroundColor: tone(layer.id) }} />
+                  <span className="">
+                    {layer.label}
+                    {inspect ? <span className="ml-1.5">pos {layer.rank}</span> : null}
                   </span>
-                </PressContent>
+                  {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
+                  {inspect ? <span className="">{fmtTok(layer.tokens)}</span> : null}
+                  {inspect ? (
+                    <span className="min-w-[30px] text-right">
+                      {((layer.tokens / used) * 100).toFixed(0)}%
+                    </span>
+                  ) : null}
+                  <span className={cn("transition-transform", isOpen && "rotate-90")}>▸</span>
+                </span>
               </Press>
               {isOpen ? (
                 <div className="pt-0 pr-3.5 pb-[11px] pl-[31px]">
@@ -236,32 +239,28 @@ export function ItemRow({
   return (
     <li className={cn("overflow-hidden", blast ? "" : "")}>
       <Press type="button" tone="quiet" disabled={!hasBody} onClick={() => hasBody && onToggle()}>
-        <PressContent geometry="row">
-          <span className="min-w-0 flex-1">
-            <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
-              {item.name}
+        <span className="min-w-0 flex-1">
+          <span className="block overflow-hidden text-ellipsis whitespace-nowrap">{item.name}</span>
+          {item.src ? (
+            <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap">
+              {item.src}
             </span>
-            {item.src ? (
-              <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap">
-                {item.src}
-              </span>
-            ) : null}
-          </span>
-          <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
-            {blast ? (
-              <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
-            ) : null}
-            {item.state ? (
-              <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>
-                {PILL_LABEL[item.state]}
-              </span>
-            ) : null}
-            {item.tokens != null ? <span className="">{fmtTok(item.tokens)}</span> : null}
-            {hasBody ? (
-              <span className={cn("transition-transform", open && "rotate-90")}>▸</span>
-            ) : null}
-          </span>
-        </PressContent>
+          ) : null}
+        </span>
+        <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
+          {blast ? (
+            <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
+          ) : null}
+          {item.state ? (
+            <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>
+              {PILL_LABEL[item.state]}
+            </span>
+          ) : null}
+          {item.tokens != null ? <span className="">{fmtTok(item.tokens)}</span> : null}
+          {hasBody ? (
+            <span className={cn("transition-transform", open && "rotate-90")}>▸</span>
+          ) : null}
+        </span>
       </Press>
       {open && hasBody ? (
         <pre className="m-0 max-h-[220px] overflow-auto px-[9px] py-2 break-words whitespace-pre-wrap">

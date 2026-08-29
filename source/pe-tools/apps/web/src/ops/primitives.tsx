@@ -96,7 +96,7 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
         role={hasChildren ? "button" : undefined}
         onClick={hasChildren ? () => setOpen(!open) : undefined}
         className={cn(
-          "flex min-w-0 items-center gap-1 pr-2 hover:veil",
+          "flex min-w-0 items-center gap-1 pr-2",
           dense ? "py-px" : "py-0.5",
           hasChildren && "cursor-pointer select-none",
         )}
@@ -177,7 +177,7 @@ export function DataTable<Row>({
           </thead>
           <tbody>
             {rows.map((row, index) => (
-              <tr key={rowKey(row, index)} className="hover:veil">
+              <tr key={rowKey(row, index)}>
                 {columns.map((col) => (
                   <td
                     key={col.key}

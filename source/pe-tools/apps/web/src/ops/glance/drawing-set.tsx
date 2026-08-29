@@ -82,7 +82,13 @@ function chooseDetailTargets(series: Series[]): string[] {
 }
 
 function EmptyFrame() {
-  return <div aria-hidden className="seam-border aspect-[3/2]" />;
+  return (
+    <div className="aspect-[3/2]">
+      <EmptyState story="scope" exit="open a sheet inside the detail budget">
+        not detailed
+      </EmptyState>
+    </div>
+  );
 }
 
 function Thumbnail({

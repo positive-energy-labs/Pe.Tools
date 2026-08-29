@@ -5,7 +5,7 @@ import { FactChip } from "#/components/lang/chip";
 import { NumberCell, StateDot } from "#/components/master-table/cells";
 import { fmtNum } from "#/components/master-table/model";
 import { Verb } from "#/components/lang/verb";
-import { Pane } from "#/components/lang/pane";
+import { Pane } from "#/components/ui/pane";
 import { ManualJField } from "#/takeoff/manual-j-field";
 import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";
@@ -13,7 +13,6 @@ import { MANUAL_J, decideReason } from "#/takeoff/room-actions";
 import { STATE_META, stateMeta } from "#/takeoff/room-state";
 import type { AtlasRow as Row, TakeoffStore } from "#/takeoff/store";
 import type { RoomEdit, WorldRoom } from "#/takeoff/world";
-import { cn } from "#/lib/utils";
 
 export function RoomPanelFromStore({
   store,
@@ -49,19 +48,21 @@ function RoomPanel({
     .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
 
   return (
-    <Pane kind="inspector" title="room" meta={`${zone.zone.key} · ${zone.zone.lane.label}`}>
-      <div className="divide-y divide-line">
+    <Pane
+      kind="inspector"
+      title="room"
+      meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
+      bodyClassName="p-0"
+    >
+      <div>
         <div className="px-2.5 py-2">
-          <h2 className="face-display t-title font-semibold tracking-tight">{room.name}</h2>
+          <h2>{room.name}</h2>
           <p className="mt-1 flex flex-wrap items-center gap-x-1.5">
             <StateDot {...stateMeta(state)} />
-            <span
-              className={cn("face-mono t-value", state === "call" ? "text-alarm" : undefined)}
-              title={STATE_META[state].note}
-            >
+            <FactChip tone={state === "call" ? "alarm" : undefined} title={STATE_META[state].note}>
               {STATE_META[state].label}
-            </span>
-            <span className="face-mono t-value text-ink-2">
+            </FactChip>
+            <span>
               {room.sqft} sf · {fmtNum(room.ceilingFt, 1)} ft clg · {room.type}
             </span>
           </p>
@@ -69,10 +70,10 @@ function RoomPanel({
 
         {fieldsMode === "panel" && (
           <div className="px-2.5 py-2">
-            <p className="t-label t-upper mb-1 text-ink-2">manual j — this room</p>
+            <p className="mb-1">manual j — this room</p>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
-              <span className="face-mono t-value pr-1.5 text-right text-ink-2">ceil ft</span>
-              <span className="rounded-[1px] border border-line">
+              <span className="pr-1.5">ceil ft</span>
+              <span>
                 <NumberCell
                   value={room.ceilingFt}
                   digits={1}
@@ -82,8 +83,8 @@ function RoomPanel({
               </span>
               {MANUAL_J.map((mj) => (
                 <Fragment key={mj.field}>
-                  <span className="face-mono t-value pr-1.5 text-right text-ink-2">{mj.label}</span>
-                  <span className="rounded-[1px] border border-line">
+                  <span className="pr-1.5">{mj.label}</span>
+                  <span>
                     <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
                 </Fragment>
@@ -94,12 +95,12 @@ function RoomPanel({
 
         {open.length > 0 && (
           <div className="px-2.5 py-2">
-            <p className="t-label t-upper mb-1 text-ink-2">open calls — {open.length}</p>
-            <ul className="space-y-2">
+            <p className="mb-1">open calls — {open.length}</p>
+            <ul>
               {open.map((flag) => (
                 <li key={flag}>
-                  <p className="face-mono t-value text-alarm">{flag}</p>
-                  <p className="face-mono t-value text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
+                  <p>{flag}</p>
+                  <p>{FLAG_MEANING[flag] ?? "no blurb"}</p>
 
                   <span className="mt-0.5 flex gap-1">
                     <Verb
@@ -148,7 +149,7 @@ function RoomPanel({
         )}
 
         <div className="px-2.5 py-2">
-          <p className="t-label t-upper mb-1 text-ink-2">provenance</p>
+          <p className="mb-1">provenance</p>
           <StatLine truncate={false} label="run" value={room.provenance.runId} />
           <StatLine
             truncate={false}
@@ -198,11 +199,9 @@ function RoomPanel({
           )}
         </div>
 
-        <div className="space-y-1 px-2.5 py-2">
-          <p className="t-label t-upper text-ink-2">addressable</p>
-          <p className="face-mono t-value rounded-sm border border-line bg-recess/60 px-1.5 py-1 break-all text-ink-2">
-            {url}
-          </p>
+        <div className="px-2.5 py-2">
+          <p>addressable</p>
+          <p className="px-1.5 py-1">{url}</p>
         </div>
       </div>
     </Pane>

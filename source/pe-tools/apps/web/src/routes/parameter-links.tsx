@@ -192,14 +192,12 @@ function ParameterLinksWorkspace({
         };
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-page">
+    <main className="flex h-screen flex-col overflow-hidden">
       <AddressingBar
         name="parameter links"
         sentence={
           <span className="flex items-center gap-2">
-            <span className="t-value face-mono text-ink" title="bound Revit document">
-              {documentAddress}
-            </span>
+            <span title="bound Revit document">{documentAddress}</span>
             {/* The write's safety model lives ON the arming strip below (its one home) — this
                 tip only orients. */}
             <HelpTip>
@@ -254,7 +252,7 @@ function ParameterLinksWorkspace({
         // refusal) is the strip's payload and a second apply here would be a parallel path.
       />
 
-      <div className="shrink-0 border-b border-line empty:border-0">
+      <div>
         <VerbLane atoms={route.atoms} />
       </div>
 
@@ -335,7 +333,7 @@ function ParameterLinksWorkspace({
           minWidth={340}
           defaultWidth={520}
           maxWidth={760}
-          header={<span className="t-label t-upper text-ink-2">Evaluation</span>}
+          header={<span>Evaluation</span>}
         >
           <div className="flex h-full flex-col gap-4 px-4 py-3">
             <RuntimeStatusBar

@@ -62,7 +62,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <HeadContent />
       </head>
-      <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-select selection:text-ink">
+      <body>
         <RegistryContext.Provider value={appAtomRegistry}>
           {children}
           <RouteConflictBanner />
@@ -93,12 +93,10 @@ export function RouteConflictBanner() {
     <aside
       role="status"
       aria-live="polite"
-      className="fixed inset-x-0 top-0 z-notice flex items-center justify-center gap-3 border-b border-caution bg-page px-4 py-2 text-ink shadow-sm"
+      className="z-notice flex items-center justify-center gap-3 px-4 py-2"
     >
-      <strong className="t-label">Changed elsewhere</strong>
-      <span className="t-value">
-        Your edit did not land. Review the current document and retry.
-      </span>
+      <strong>Changed elsewhere</strong>
+      <span>Your edit did not land. Review the current document and retry.</span>
       <Verb label="dismiss" reason="Dismiss this conflict notice." onClick={() => dismiss(false)} />
     </aside>
   );

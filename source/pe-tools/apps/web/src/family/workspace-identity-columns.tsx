@@ -1,10 +1,10 @@
 import type { Column, MasterTableState } from "#/components/master-table/model";
 import { ReadCell } from "#/components/master-table/cells";
+import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
 import { ProposedCell } from "#/family/marks";
 import { bindingOf, isFormula, pinnedSort, sortDirOf, type PRow } from "#/family/model";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
-import { PressContent } from "#/components/anatomy/press-content";
 
 export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
   const { world, draft, setInspect, verdictOf, proposalsAt, proposalsOn, locate, consumers } = core;
@@ -23,7 +23,6 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
       if (open.length === 0)
         return accepted.length > 0 ? (
           <ReadCell
-            className="text-center text-done"
             value="✓"
             reason="Every proposal on this row is settled, and at least one was accepted — the value is in the profile, and its citation is still live in the sidebar."
           />
@@ -97,7 +96,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
             >
               <PressContent geometry="block">
                 {row.name}
-                <span className="ml-1 not-italic t-caption text-caution">geom</span>
+                <span className="ml-1">geom</span>
               </PressContent>
             </Press>
           </span>
@@ -133,10 +132,10 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
           onLocate={locate}
           where={`the family value of ${row.name}`}
         >
-          <span className="face-mono t-value block min-w-0 flex-1 truncate px-1.5" title={reason}>
-            <span className="block truncate">
+          <span className="min-w-0 flex-1 px-1.5" title={reason}>
+            <span>
               {row.kind === "live-only" ? (
-                <span className="text-ink-2">{row.name}</span>
+                <span>{row.name}</span>
               ) : (
                 <Press
                   type="button"
@@ -147,13 +146,9 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                   {row.name}
                 </Press>
               )}
-              {row.isInstance && <span className="ml-1 t-caption text-ink-mute">inst</span>}
-              {world.missingInRevit.has(row.name) && (
-                <span className="ml-1 t-caption text-caution">⊘</span>
-              )}
-              {blocks.length > 0 && (
-                <span className="ml-1 t-caption text-ink-mute">{blocks.join(" ")}</span>
-              )}
+              {row.isInstance && <span className="ml-1">inst</span>}
+              {world.missingInRevit.has(row.name) && <span className="ml-1">⊘</span>}
+              {blocks.length > 0 && <span className="ml-1">{blocks.join(" ")}</span>}
             </span>
             {/* The family level, on ONE line: the formula, and what the parameter DRIVES. A bound
                 geometry dim has no row of its own — it is represented by this parameter — so this
@@ -163,12 +158,10 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                 DERIVED SPENDS NO COLOUR: the language has no role for "a formula
                 computed this", and the leading `=` already says it. Italic carries the rest. */}
             {(isFormula(authored) || drives.length > 0) && (
-              <span className="block truncate t-caption">
-                {isFormula(authored) && <span className="italic text-ink-2">{authored}</span>}
-                {isFormula(authored) && drives.length > 0 && (
-                  <span className="text-ink-mute"> · </span>
-                )}
-                {drives.length > 0 && <span className="text-ink-mute">→ </span>}
+              <span>
+                {isFormula(authored) && <span>{authored}</span>}
+                {isFormula(authored) && drives.length > 0 && <span> · </span>}
+                {drives.length > 0 && <span>→ </span>}
                 {drives.map((entry, index) => (
                   <Press
                     key={`${entry.slug}.${entry.property}`}
@@ -178,7 +171,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                     title={`${row.name} drives ${entry.slug}.${entry.property}. Click to open ${entry.slug} in the inspector — its non-bindable metadata (direction, system type, where its frame sits) lives there, because no parameter can drive those.`}
                     tone="quiet"
                   >
-                    {index > 0 && <span className="text-ink-mute">, </span>}
+                    {index > 0 && <span>, </span>}
                     {entry.slug}.{entry.property}
                   </Press>
                 ))}

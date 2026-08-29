@@ -281,7 +281,7 @@ export function DefinitionCard({
         ) : (
           <div>
             {assignments.map((assignment) => (
-              <div key={assignment.id} className="py-1.5 first:border-t-0">
+              <div key={assignment.id} className="py-1.5">
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <label className="flex items-center gap-1.5">
                     <input

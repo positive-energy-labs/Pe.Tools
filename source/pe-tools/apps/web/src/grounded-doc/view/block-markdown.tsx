@@ -198,9 +198,7 @@ export function MarkdownPane({
       <div className="flex flex-col gap-1 p-3">
         {doc.pages.map((page) => (
           <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
-            <p className="sticky top-0 z-sticky -mx-3 mb-1 px-3 py-1 backdrop-blur">
-              Page {page.page}
-            </p>
+            <p className="sticky top-0 z-sticky -mx-3 mb-1 px-3 py-1">Page {page.page}</p>
             <div className="flex flex-col gap-1">
               {engine.blocksForPage(page.page).map((block) => (
                 <MarkdownBlock key={block.id} block={block} engine={engine} refs={refs} />

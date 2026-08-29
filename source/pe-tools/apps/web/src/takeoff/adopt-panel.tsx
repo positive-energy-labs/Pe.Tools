@@ -40,48 +40,40 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
       title={`adopt zoning regions — ${views.length} view${views.length === 1 ? "" : "s"}`}
       onClose={() => store.actions.openPanel(null)}
     >
-      <p className="face-mono t-value text-ink-2">
+      <p>
         tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
         name, system tag) — re-adopt to edit. legends are ignored.
       </p>
-      <div className="mt-2 max-h-96 overflow-y-auto rounded-sm border border-line">
+      <div className="mt-2 max-h-96 overflow-y-auto">
         {(listed ?? []).map((r) => (
           <div
             key={`${r.view}:${r.region.elementId}`}
-            className="flex items-center gap-2 border-b border-line px-2 py-1 last:border-b-0"
+            className="flex items-center gap-2 px-2 py-1"
           >
             <input
               type="checkbox"
               checked={r.checked}
               onChange={(e) => patchRow(r.view, r.region.elementId, { checked: e.target.checked })}
             />
-            <span className="face-mono t-value w-28 shrink-0 truncate text-ink-2" title={r.view}>
+            <span className="w-28" title={r.view}>
               {r.view}
             </span>
-            <span
-              className="inline-block size-2.5 shrink-0 rounded-[1px]"
-              style={{ backgroundColor: `rgb(${r.region.color})` }}
-            />
-            <span
-              className="face-mono t-value w-24 shrink-0 truncate text-ink-2"
-              title={r.region.typeName}
-            >
+            <span className="size-2.5" style={{ backgroundColor: `rgb(${r.region.color})` }} />
+            <span className="w-24" title={r.region.typeName}>
               {r.region.typeName}
             </span>
-            <span className="face-mono t-value w-16 shrink-0 text-right tabular-nums text-ink-2">
-              {fmtNum(r.region.sqft, 0)} sf
-            </span>
+            <span className="w-16">{fmtNum(r.region.sqft, 0)} sf</span>
             <input
               value={r.name}
               placeholder="zone name"
               onChange={(e) => patchRow(r.view, r.region.elementId, { name: e.target.value })}
-              className="face-mono t-value h-6 min-w-0 flex-1 rounded-sm border border-line bg-transparent px-1.5 outline-none focus:border-line-2"
+              className="h-6 min-w-0 flex-1 px-1.5"
             />
             <input
               value={r.systemTag}
               placeholder="system tag"
               onChange={(e) => patchRow(r.view, r.region.elementId, { systemTag: e.target.value })}
-              className="face-mono t-value h-6 w-24 shrink-0 rounded-sm border border-line bg-transparent px-1.5 outline-none focus:border-line-2"
+              className="h-6 w-24 px-1.5"
             />
             {r.region.role === "zoning-region" && (
               <FactChip
@@ -144,20 +136,20 @@ export function SyncPanel({ store }: { store: TakeoffStore }) {
 
   return (
     <Panel title={`sync to ${r10Path}`} onClose={() => store.actions.openPanel(null)}>
-      <p className="face-mono t-value text-ink-2">
+      <p>
         inserts reviewed rooms (with Manual J data) into the bound .r10 — always work on a COPY of
         the project template, never the original. systems are seeded by number + name only;
         everything else is filled in RHVAC.
       </p>
 
-      <p className="t-label t-upper mt-2 text-ink-2">systems to seed ({tags.length})</p>
+      <p className="mt-2">systems to seed ({tags.length})</p>
       {tags.map((tag) => (
-        <p key={tag} className="face-mono t-value py-0.5">
+        <p key={tag} className="py-0.5">
           {tag}
         </p>
       ))}
 
-      <p className="t-label t-upper mt-2 text-ink-2">
+      <p className="mt-2">
         rooms to insert ({inserts.length}
         {zoneGuids.length > 0
           ? ` · ${inScope.length} bound zone${inScope.length === 1 ? "" : "s"}`
@@ -166,10 +158,10 @@ export function SyncPanel({ store }: { store: TakeoffStore }) {
       </p>
       <div className="max-h-48 overflow-y-auto">
         {inserts.map(({ zone, room }, i) => (
-          <p key={room.guid} className="face-mono t-value flex gap-2 py-px">
-            <span className="w-8 shrink-0 text-right text-ink-2">{i + 1}</span>
-            <span className="min-w-0 flex-1 truncate">{room.name}</span>
-            <span className="shrink-0 text-ink-2">
+          <p key={room.guid} className="flex gap-2 py-px">
+            <span className="w-8">{i + 1}</span>
+            <span className="min-w-0 flex-1">{room.name}</span>
+            <span>
               {zone.zone.key} · {zone.tags[0] ?? "NO TAG"} · {fmtNum(room.sqft, 0)} sf
             </span>
           </p>

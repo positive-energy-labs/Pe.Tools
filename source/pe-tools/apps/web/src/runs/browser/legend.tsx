@@ -1,4 +1,4 @@
-import { token } from "#/lib/token";
+import { dash, token } from "#/lib/token";
 import { type CSSProperties, type ReactNode } from "react";
 import { cn } from "#/lib/utils";
 import {
@@ -28,7 +28,7 @@ export function LegendFloater(props: { underlay: boolean; onClose: () => void })
         y2={1}
         stroke={stroke}
         strokeWidth={2}
-        className={reference ? "dash-reference" : undefined}
+        strokeDasharray={reference ? dash("reference") : undefined}
       />
     </svg>
   );
@@ -77,9 +77,7 @@ export function LegendFloater(props: { underlay: boolean; onClose: () => void })
       style={{ borderRadius: "var(--radius)" }}
     >
       <span className="flex items-baseline">
-        <span className={cn("", !props.underlay && "line-through")}>
-          evidence — the run's raster
-        </span>
+        <span>evidence — the run's raster{props.underlay ? "" : " (hidden)"}</span>
         <Press
           type="button"
           tone="quiet"
