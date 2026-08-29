@@ -4,8 +4,7 @@
 @theme inline {
   /* Stock namespaces reset (ruled 2026-08-29): an off-system class (a stock palette colour,
      a named text size, a stock leading, elevation, or face) emits nothing. Only the roles
-     redeclared below exist. The design guard stays as the source lint until a candidate-drop
-     check replaces it. */
+     redeclared below exist. The design guard compiles authored candidates against this reset. */
   --color-*: initial;
   --text-*: initial;
   --leading-*: initial;
