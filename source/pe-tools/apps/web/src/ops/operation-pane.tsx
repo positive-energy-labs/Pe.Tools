@@ -83,7 +83,7 @@ export function OperationPane({
             {operation.requestExamples.map((example) => (
               <Press
                 key={example.name}
-                size="xs"
+                size="caption"
                 tone="neutral"
                 title={example.description}
                 onClick={() => {
@@ -96,8 +96,8 @@ export function OperationPane({
             ))}
             {schema ? (
               <Press
-                size="xs"
-                tone="bordered"
+                size="caption"
+                tone="neutral"
                 onClick={() => setMode(mode === "form" ? "raw" : "form")}
               >
                 {mode === "form" ? "raw" : "form"}

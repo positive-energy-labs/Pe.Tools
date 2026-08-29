@@ -137,12 +137,12 @@ function ComboboxSpecimen() {
       >
         <ComboboxTrigger
           title="Category"
-          render={<Press tone="quiet" size="md" state="expanded" />}
+          render={<Press tone="quiet" size="value" state="selected" />}
         >
           <span className="overflow-hidden">{picked?.label ?? "category"}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent anchor={anchorRef} className="min-w-52">
+      <ComboboxContent anchor={anchorRef}>
         <ComboboxInput placeholder="search category…" />
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>

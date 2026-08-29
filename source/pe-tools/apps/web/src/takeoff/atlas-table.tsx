@@ -41,7 +41,7 @@ export function AtlasTable() {
         }
       : null;
   return (
-    <Suspense fallback={<div className="p-2 text-ink-2">reading rooms…</div>}>
+    <Suspense fallback={<div className="p-2">reading rooms…</div>}>
       <Pane kind="content" scroll="clip">
         <PaneSplit
           axis="horizontal"
@@ -66,10 +66,8 @@ export function AtlasTable() {
               summary={
                 <>
                   {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
-                  {scopeCalls > 0 && (
-                    <span className="text-alarm"> · {scopeCalls} needing a call</span>
-                  )}
-                  <span className="ml-2 opacity-70">j/k cursor · a/d accept/dismiss</span>
+                  {scopeCalls > 0 && <span> · {scopeCalls} needing a call</span>}
+                  <span className="ml-2">j/k cursor · a/d accept/dismiss</span>
                   <Press
                     type="button"
                     onClick={() =>
@@ -82,7 +80,7 @@ export function AtlasTable() {
                         ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
                         : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
                     }
-                    tone="firm"
+                    tone="neutral"
                   >
                     fields: {fieldsMode}
                   </Press>

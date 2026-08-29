@@ -14,7 +14,6 @@ export function AtlasWorkspace() {
   const { geoReady, headRail, sidePanel, readoutBand, planOpen, setPlanOpen } = useAtlasWorkspace();
   return (
     <Workspace
-      className="bg-page"
       headRail={headRail}
       readoutBand={
         readoutBand ??

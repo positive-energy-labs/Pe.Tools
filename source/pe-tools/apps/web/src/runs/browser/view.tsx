@@ -12,6 +12,7 @@ import { PlanDock } from "./plan-dock";
 import { LedgerDock } from "./ledger-dock";
 import { useRunBrowserModel } from "./model";
 import { RunBrowserHeader } from "./header";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export default function RunBrowser() {
   const model = useRunBrowserModel();
@@ -110,8 +111,8 @@ export default function RunBrowser() {
             <span className="">each item at its pinned A/B pair · the lens is untouched</span>
             <Press
               type="button"
-              tone="firm"
-              size="chip-caption"
+              tone="neutral"
+              size="caption"
               onClick={() => setReview(false)}
               title="Back to the normal sheet."
               style={{ marginLeft: "auto" }}
@@ -130,7 +131,6 @@ export default function RunBrowser() {
                   <Press
                     type="button"
                     tone="quiet"
-                    layout="baseline"
                     onClick={() => swingLens(item)}
                     title={
                       onLens
@@ -138,22 +138,24 @@ export default function RunBrowser() {
                         : "Pinned pair ≠ current lens — click to swing the lens to this pair (the stage is untouched)."
                     }
                   >
-                    <span>
-                      pinned A {item.runA ?? "(none)"} → B {item.runB}
-                    </span>
-                    {!onLens && (
-                      <span
-                        style={{ color: token("caution") }}
-                        title="Pinned pair differs from the page lens."
-                      >
-                        ≠ lens
+                    <PressContent geometry="baseline">
+                      <span>
+                        pinned A {item.runA ?? "(none)"} → B {item.runB}
                       </span>
-                    )}
+                      {!onLens && (
+                        <span
+                          style={{ color: token("caution") }}
+                          title="Pinned pair differs from the page lens."
+                        >
+                          ≠ lens
+                        </span>
+                      )}
+                    </PressContent>
                   </Press>
                   <Press
                     type="button"
                     tone="quiet"
-                    size="xs"
+                    size="caption"
                     onClick={() => fb.unstage(item.key)}
                     title="Remove this item from the staged set."
                     style={{ marginLeft: "auto" }}
@@ -329,8 +331,8 @@ export default function RunBrowser() {
               actions={
                 <Press
                   type="button"
-                  tone="firm"
-                  size="chip-label"
+                  tone="neutral"
+                  size="label"
                   onClick={() => setPlanOpen((o) => !o)}
                   title={
                     planOpen

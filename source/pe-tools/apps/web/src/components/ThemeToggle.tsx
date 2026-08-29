@@ -58,7 +58,7 @@ export function ThemeToggle() {
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
   return (
-    <Press onClick={cycle} aria-label={label} title={label} size="sm" tone="bordered">
+    <Press onClick={cycle} aria-label={label} title={label} size="label" tone="neutral">
       <Icon className="size-3.5" />
       {LABEL[mode]}
     </Press>

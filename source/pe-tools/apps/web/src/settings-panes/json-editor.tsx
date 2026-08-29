@@ -14,7 +14,6 @@ import { useMemo } from "react";
 import { createHighlighter, type HighlightDecoration } from "@tanstack/highlight/core";
 import { json } from "@tanstack/highlight/languages/json";
 
-import { cn } from "#/lib/utils";
 import "./json-editor.css";
 
 const highlighter = createHighlighter({ languages: [json] });
@@ -25,12 +24,10 @@ export function JsonView({
   code,
   decorations,
   lineNumbers,
-  className,
 }: {
   code: string;
   decorations?: readonly HighlightDecoration[];
   lineNumbers?: boolean;
-  className?: string;
 }) {
   const html = useMemo(
     () => highlighter.highlightToHtml(code, { lang: "json", decorations, lineNumbers }),
@@ -38,7 +35,7 @@ export function JsonView({
   );
   return (
     <div
-      className={cn("jsonpane face-mono t-value", className)}
+      data-json-pane=""
       // eslint-disable-next-line react/no-danger -- highlighter output, escaped upstream
       dangerouslySetInnerHTML={{ __html: html }}
     />
@@ -50,12 +47,10 @@ export function JsonView({
 export function JsonEditor({
   value,
   onChange,
-  className,
   placeholder,
 }: {
   value: string;
   onChange: (next: string) => void;
-  className?: string;
   placeholder?: string;
 }) {
   const html = useMemo(
@@ -65,10 +60,10 @@ export function JsonEditor({
   );
 
   return (
-    <div className={cn("jsonpane jsonpane--editor face-mono t-value", className)}>
-      <div aria-hidden className="jsonpane-paint" dangerouslySetInnerHTML={{ __html: html }} />
+    <div data-json-pane="" data-json-editor="">
+      <div data-json-paint="" aria-hidden dangerouslySetInnerHTML={{ __html: html }} />
       <textarea
-        className="jsonpane-input"
+        data-json-input=""
         value={value}
         placeholder={placeholder}
         spellCheck={false}

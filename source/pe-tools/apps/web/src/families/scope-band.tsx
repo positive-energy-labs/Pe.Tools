@@ -48,7 +48,7 @@ export function FamiliesScopeBand() {
   return (
     <>
       {selectedProfileQuery?.error && (
-        <div className="border-b border-line px-4 py-1.5">
+        <div className="px-4 py-1.5">
           <OutcomeLine
             kind="error"
             label="profile read failed"
@@ -58,7 +58,7 @@ export function FamiliesScopeBand() {
       )}
 
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-1.5">
         <SectionLabel>
           <span title="Which families the table loads at all. Scope is a DRAFT until you apply it — the matrix op is the expensive one, so it never fires on a click.">
             scope
@@ -72,18 +72,13 @@ export function FamiliesScopeBand() {
           <SelectTrigger
             aria-label="placement filter"
             title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-            className="face-mono h-6 w-32 shrink-0 rounded-sm border-line-2 px-1.5 t-label"
+            className="h-6 w-32 px-1.5"
           >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="rounded-sm">
+          <SelectContent>
             {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
-              <SelectItem
-                key={value}
-                value={value}
-                title={PLACEMENT_NOTES[value]}
-                className="face-mono t-label"
-              >
+              <SelectItem key={value} value={value} title={PLACEMENT_NOTES[value]}>
                 {PLACEMENT_LABELS[value]}
               </SelectItem>
             ))}
@@ -145,7 +140,7 @@ export function FamiliesScopeBand() {
         {draftCategories.length === 0 ? null : (draftFamilyNames.length === 0 &&
             familyFeed.state === "loading") ||
           familyFeed.stale ? (
-          <div className="shrink-0">
+          <div>
             <OutcomeLine kind="busy" label="resolving families" />
           </div>
         ) : (
@@ -157,7 +152,7 @@ export function FamiliesScopeBand() {
         )}
       </div>
 
-      <div className="border-b border-line empty:border-0">
+      <div>
         <VerbLane atoms={store.atoms} className="px-4 py-1.5" />
       </div>
       {matrixIssue && (

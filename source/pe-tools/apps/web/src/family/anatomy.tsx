@@ -38,6 +38,7 @@
  * an ink stroke, exactly as the table's focused row does.
  */
 import { HelpTip } from "#/components/lang/help";
+import { PressContent } from "#/components/anatomy/press-content";
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type PageWorld } from "#/family/model";
 import { boundParam } from "#/family/world";
@@ -98,7 +99,7 @@ export function AnatomyDrawing({
     <div className="flex size-full min-h-0">
       {views}
       <div className="min-w-0 flex-1 overflow-y-auto p-2">
-        <p className="face-mono mb-1 flex items-center gap-1 t-caption text-ink-2">
+        <p className="mb-1 flex items-center gap-1">
           constituents · {typeName}
           <HelpTip>
             The profile&rsquo;s own constituent list. Hovering one lights both the shape and the
@@ -120,9 +121,8 @@ export function AnatomyDrawing({
               onMouseEnter={() => onFocus({ kind: "part", id: part.slug })}
               onMouseLeave={() => onFocus(null)}
               onClick={() => onInspect(part.slug)}
-              size="chip-caption"
-              tone={focusedParts.has(part.slug) ? "firm" : "neutral"}
-              layout="row"
+              size="caption"
+              tone="neutral"
               state={inspecting === part.slug ? "selected" : "rest"}
               title={`${part.text} — consumes ${part.params.length > 0 ? part.params.join(", ") : "no parameter the profile names, which is worth a second look"}.${
                 geom
@@ -130,16 +130,18 @@ export function AnatomyDrawing({
                   : ""
               }`}
             >
-              <span className="text-ink-2">{part.kind} </span>
-              <span className="min-w-0 truncate">{part.slug}</span>
-              {unbound > 0 && (
-                <span
-                  className="ml-auto shrink-0 t-caption text-caution"
-                  title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
-                >
-                  {unbound}⚠
-                </span>
-              )}
+              <PressContent geometry="row">
+                <span>{part.kind} </span>
+                <span className="min-w-0">{part.slug}</span>
+                {unbound > 0 && (
+                  <span
+                    className="ml-auto"
+                    title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
+                  >
+                    {unbound}⚠
+                  </span>
+                )}
+              </PressContent>
             </Press>
           );
         })}

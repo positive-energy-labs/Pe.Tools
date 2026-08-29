@@ -277,11 +277,11 @@ function App() {
   const tools = import.meta.env.DEV ? [...TOOLS, ...DEV_TOOLS] : TOOLS;
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line">
-        <div className="page-wrap flex items-center justify-between py-4">
+      <header>
+        <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-ink" />
-            <span className="t-value font-semibold tracking-tight text-ink">Positive Energy</span>
+            <span className="size-2" />
+            <span>Positive Energy</span>
           </div>
           <div className="flex items-center gap-3">
             <UpdateButton />
@@ -290,16 +290,13 @@ function App() {
         </div>
       </header>
 
-      <main className="page-wrap py-16">
+      <main className="py-16">
         <section className="max-w-2xl">
-          <p className="t-label t-upper mb-3 text-ink-2">
-            Internal tools ·{" "}
-            <span className="face-mono normal-case font-normal">update proof 0.6.22</span>
+          <p className="mb-3">
+            Internal tools · <span>update proof 0.6.22</span>
           </p>
-          <h1 className="t-display face-display tracking-tight text-ink">
-            Healthy people, healthy planet.
-          </h1>
-          <p className="t-prose mt-4 text-ink-2">
+          <h1>Healthy people, healthy planet.</h1>
+          <p className="mt-4">
             A small workbench of internal tools — the Pea agent, Revit data, and the host pipeline.
             Pick one to get started.
           </p>
@@ -308,26 +305,23 @@ function App() {
         <section className="mt-12 grid gap-4 sm:grid-cols-2">
           {tools.map((tool) => (
             <div key={tool.to} className="flex flex-col gap-1.5">
-              <Card
-                render={<Link to={tool.to} />}
-                className="group flex flex-1 flex-col gap-3 p-5 hover:veil"
-              >
+              <Card render={<Link to={tool.to} />} className="flex flex-1 flex-col gap-3 p-5">
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex size-9 items-center justify-center rounded-sm bg-recess text-ink">
+                  <span className="inline-flex size-9 items-center justify-center">
                     <tool.icon className="size-4.5" />
                   </span>
-                  <ArrowUpRight className="size-4 text-ink-2 group-hover:text-nav" />
+                  <ArrowUpRight className="size-4" />
                 </div>
                 <div>
-                  <p className="t-caption t-upper text-ink-2">{tool.label}</p>
-                  <h2 className="t-title mt-0.5 tracking-tight text-ink">{tool.title}</h2>
-                  <p className="t-prose mt-1.5 text-ink-2">{tool.description}</p>
+                  <p>{tool.label}</p>
+                  <h2 className="mt-0.5">{tool.title}</h2>
+                  <p className="mt-1.5">{tool.description}</p>
                 </div>
               </Card>
               {"satellites" in tool && (
-                <p className="t-caption face-mono flex flex-wrap gap-x-2 px-1 text-ink-2">
+                <p className="flex flex-wrap gap-x-2 px-1">
                   {tool.satellites.map((satellite) => (
-                    <Link key={satellite.to} to={satellite.to} className="text-nav hover:underline">
+                    <Link key={satellite.to} to={satellite.to}>
                       /{satellite.label}
                     </Link>
                   ))}

@@ -9,6 +9,7 @@ import { Press } from "#/components/lang/press";
 import type { RunRow } from "./plan-dock";
 import { Delta, PartialityChip, fmtTime, partialTitle, possiblyPartialTitle } from "./unknown";
 import { buildLedgerRows, runName, scoreCell } from "./no-scores";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function LedgerDock(props: {
   runs: RunIndexEntry[];
@@ -88,7 +89,6 @@ export function LedgerDock(props: {
             <Press
               type="button"
               tone="quiet"
-              layout="block"
               state={isA ? "selected" : "rest"}
               onClick={() => onPickBaseline(row.id)}
               title={
@@ -98,7 +98,7 @@ export function LedgerDock(props: {
               }
               style={{ height: "1.75rem" }}
             >
-              {isA ? "A" : "set A"}
+              <PressContent geometry="block">{isA ? "A" : "set A"}</PressContent>
             </Press>
           );
         },
@@ -299,7 +299,6 @@ export function LedgerDock(props: {
       <Press
         type="button"
         tone="quiet"
-        layout="baseline"
         onClick={onToggle}
         title={
           open
@@ -307,12 +306,14 @@ export function LedgerDock(props: {
             : "Expand the run ledger — rows are runs, marks drive the sheet's A/B."
         }
       >
-        <span className="">ledger</span>
-        <span className="">
-          {runs.length} runs · {optionSets} option sets · click a row = current (B), mark = baseline
-          (A)
-        </span>
-        <span className="ml-auto">{open ? "▾ collapse" : "▴ expand"}</span>
+        <PressContent geometry="baseline">
+          <span className="">ledger</span>
+          <span className="">
+            {runs.length} runs · {optionSets} option sets · click a row = current (B), mark =
+            baseline (A)
+          </span>
+          <span className="ml-auto">{open ? "▾ collapse" : "▴ expand"}</span>
+        </PressContent>
       </Press>
       {open && (
         <div className="flex flex-col" style={{ height: 320 }}>

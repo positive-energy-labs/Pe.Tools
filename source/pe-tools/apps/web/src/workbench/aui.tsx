@@ -112,8 +112,8 @@ function TurnTag({ id }: { id: string }) {
   return (
     <Press
       type="button"
-      tone="link"
-      size="mono-label"
+      tone="nav"
+      size="label"
       title={`Center turn ${turn} on the focal axis`}
       onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
     >
@@ -239,7 +239,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
       <Press
         type="button"
         tone="quiet"
-        size="chip-caption"
+        size="caption"
         title="Pea's chain of thought for this turn — collapsed so the spine stays calm"
         onClick={() => setOpen((value) => !value)}
       >

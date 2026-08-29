@@ -103,7 +103,7 @@ function FacetFilterSpecimen() {
           <span>{selected.label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent anchor={anchorRef} className="min-w-44">
+      <ComboboxContent anchor={anchorRef}>
         <ComboboxInput placeholder="filter values…" />
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>
@@ -136,12 +136,12 @@ function PickerChipSpecimen() {
       >
         <ComboboxTrigger
           title="Category"
-          render={<Press tone="quiet" size="md" state="expanded" />}
+          render={<Press tone="quiet" size="value" state="selected" />}
         >
           <span>{picked?.label ?? "category"}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent align="end" anchor={anchorRef} className="min-w-56">
+      <ComboboxContent align="end" anchor={anchorRef}>
         <ComboboxInput placeholder="Search category…" />
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>
@@ -326,8 +326,8 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
             type="button"
             onClick={() => onPick(s.id)}
             title={`Mount ${s.name} at all nine positions`}
-            size="chip-caption"
-            tone={s.id === specimen.id ? "firm" : "bordered-quiet"}
+            size="caption"
+            tone={s.id === specimen.id ? "neutral" : "quiet"}
             state={s.id === specimen.id ? "selected" : "rest"}
           >
             {s.name}

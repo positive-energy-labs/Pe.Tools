@@ -49,9 +49,8 @@ export const stateCellRecipe = tv({
   },
   variants: {
     size: { card: {}, row: {} },
-    state: { rest: {}, locate: { wrapper: "cursor-pointer", base: "cursor-pointer" } },
   },
-  defaultVariants: { size: "card", state: "rest" },
+  defaultVariants: { size: "card" },
 });
 
 import { cellFactsText, fmtNum, parseCell, readCell, type StateCellProps } from "./cell-state";
@@ -82,7 +81,6 @@ export function StateCell(props: StateCellProps) {
       : undefined;
   const slots = stateCellRecipe({
     size: props.scale ?? "card",
-    state: locate == null ? "rest" : "locate",
   });
 
   if (props.scale === "row") {

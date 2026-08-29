@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import { FactChip } from "#/components/lang/chip";
+import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
 import { StateDot } from "#/components/master-table/cells";
 import { Pane } from "#/components/ui/pane";
 import { fmtNum } from "#/components/master-table/model";
-import { cn } from "#/lib/utils";
 import { ROOM_STATES, STATE_META, STAGE_BLURB } from "#/takeoff/room-state";
 import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
@@ -25,17 +25,13 @@ export function AtlasNavigation() {
     stageCounts,
   } = useAtlasWorkspace();
   return (
-    <Suspense fallback={<div className="p-2 text-ink-2">reading zones…</div>}>
+    <Suspense fallback={<div className="p-2">reading zones…</div>}>
       <Pane kind="navigation" title="zones" meta={`${world.zones.length} declared`}>
-        <div className="shrink-0 border-b border-line px-2 py-1.5">
-          <div className="t-caption t-upper mb-1 text-ink-2">room states — one per room</div>
+        <div className="px-2 py-1.5">
+          <div className="mb-1">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {ROOM_STATES.map((s) => (
-              <span
-                key={s}
-                title={STATE_META[s].note}
-                className="face-mono t-value inline-flex items-center gap-1 text-ink-2"
-              >
+              <span key={s} title={STATE_META[s].note} className="inline-flex items-center gap-1">
                 <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
                 {STATE_META[s].label}
               </span>
@@ -43,8 +39,8 @@ export function AtlasNavigation() {
           </div>
         </div>
 
-        <div className="shrink-0 border-b border-line px-2 py-2">
-          <div className="t-caption t-upper mb-1 text-ink-2">zone pipeline — global filter</div>
+        <div className="px-2 py-2">
+          <div className="mb-1">zone pipeline — global filter</div>
           <div className="flex flex-col">
             {stageCounts.map(({ stage, n }, i) => {
               const on = stageFilter === stage;
@@ -59,14 +55,13 @@ export function AtlasNavigation() {
                     setCursor(null);
                   }}
                   tone="quiet"
-                  layout="baseline"
                   state={on ? "selected" : "rest"}
                 >
-                  <span className="face-mono t-value w-3 shrink-0 text-ink-2">{i + 1}</span>
-                  <span className={cn("face-mono t-value flex-1 truncate", !on && "text-ink-2")}>
-                    {stage}
-                  </span>
-                  <span className="face-mono t-value tabular-nums text-ink-2">{n}</span>
+                  <PressContent geometry="baseline">
+                    <span className="w-3">{i + 1}</span>
+                    <span className="flex-1">{stage}</span>
+                    <span>{n}</span>
+                  </PressContent>
                 </Press>
               );
             })}
@@ -84,7 +79,7 @@ export function AtlasNavigation() {
             if (zs.length === 0) return null;
             return (
               <div key={lane.label}>
-                <div className="t-caption t-upper sticky top-0 z-sticky border-y border-line bg-recess px-2 py-0.5 text-ink-2">
+                <div className="sticky z-sticky px-2 py-0.5">
                   {lane.label} · {zs.length}
                 </div>
                 <ul>
@@ -104,25 +99,26 @@ export function AtlasNavigation() {
                               : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
                           }
                           tone="quiet"
-                          layout="row"
-                          state={on ? "selected" : off ? "subdued" : "rest"}
+                          state={on ? "selected" : "rest"}
                         >
-                          <ZoneThumb zone={z.zone} className="size-5" />
-                          <span className="face-mono t-value shrink-0">{z.zone.key}</span>
-                          <span className="min-w-0 flex-1 truncate t-value text-ink-2">
-                            {off ? "off-plan scribble" : z.name}
-                          </span>
-                          {calls > 0 && (
-                            <span className="shrink-0">
-                              <FactChip
-                                tone="alarm"
-                                title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
-                              >
-                                {calls} call{calls === 1 ? "" : "s"}
-                              </FactChip>
+                          <PressContent geometry="row">
+                            <ZoneThumb zone={z.zone} className="size-5" />
+                            <span>{z.zone.key}</span>
+                            <span className="min-w-0 flex-1">
+                              {off ? "off-plan scribble" : z.name}
                             </span>
-                          )}
-                          <ZoneStateBar zone={z} states={states} />
+                            {calls > 0 && (
+                              <span>
+                                <FactChip
+                                  tone="alarm"
+                                  title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
+                                >
+                                  {calls} call{calls === 1 ? "" : "s"}
+                                </FactChip>
+                              </span>
+                            )}
+                            <ZoneStateBar zone={z} states={states} />
+                          </PressContent>
                         </Press>
                       </li>
                     );

@@ -11,6 +11,7 @@ import { PROSE_CLASS } from "#/workbench/prose";
 import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 import { ImagesPane, MarkdownBlock, PagePane } from "./images-pane";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export const BlockMarkdown = memo(function BlockMarkdown({ md }: { md: string }) {
   return (
@@ -99,10 +100,9 @@ export function UploadSurface({
     <div className="flex w-full max-w-sm flex-col items-center gap-2">
       <Press
         type="button"
-        tone="bordered"
-        size="drop"
-        layout="block"
-        state={dragOver ? "highlighted" : "rest"}
+        tone="neutral"
+        size="label"
+        state={dragOver ? "selected" : "rest"}
         disabled={parsing}
         onClick={() => inputRef.current?.click()}
         onDragOver={(event) => {
@@ -116,35 +116,37 @@ export function UploadSurface({
           handleFiles(event.dataTransfer.files);
         }}
       >
-        <span className="flex flex-col items-center gap-3 text-center">
-          {parsing ? (
-            <OutcomeLine
-              kind="busy"
-              label={`parsing ${engine.status.phase === "parsing" ? engine.status.fileName : "document"}`}
-              says="LlamaCloud is reading the document"
-            />
-          ) : (
-            <>
-              <FileUp className="size-6" />
-              <EmptyState
-                story="scope"
-                exit="drop a PDF here, paste a URL below, or load the sample"
-              >
-                no document loaded
-              </EmptyState>
-              {engine.status.phase === "error" && (
-                <OutcomeLine kind="error" label="parse failed" says={engine.status.message} />
-              )}
-            </>
-          )}
-        </span>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          onChange={(event) => handleFiles(event.target.files)}
-        />
+        <PressContent geometry="block">
+          <span className="flex flex-col items-center gap-3 text-center">
+            {parsing ? (
+              <OutcomeLine
+                kind="busy"
+                label={`parsing ${engine.status.phase === "parsing" ? engine.status.fileName : "document"}`}
+                says="LlamaCloud is reading the document"
+              />
+            ) : (
+              <>
+                <FileUp className="size-6" />
+                <EmptyState
+                  story="scope"
+                  exit="drop a PDF here, paste a URL below, or load the sample"
+                >
+                  no document loaded
+                </EmptyState>
+                {engine.status.phase === "error" && (
+                  <OutcomeLine kind="error" label="parse failed" says={engine.status.message} />
+                )}
+              </>
+            )}
+          </span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(event) => handleFiles(event.target.files)}
+          />
+        </PressContent>
       </Press>
 
       {!parsing && (

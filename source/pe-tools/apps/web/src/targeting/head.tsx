@@ -118,7 +118,7 @@ export function TargetingHead<K extends string>({
     <Press
       type="button"
       tone="quiet"
-      size="sm"
+      size="label"
       onClick={() => setExpanded((x) => !x)}
       aria-expanded={expanded}
       title={

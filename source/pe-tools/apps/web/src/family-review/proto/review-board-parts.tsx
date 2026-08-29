@@ -106,8 +106,8 @@ export function VerdictStrip({
         <Press
           key={verdict}
           type="button"
-          tone="bordered"
-          size="sm"
+          tone="neutral"
+          size="label"
           state={value === verdict ? "selected" : "rest"}
           onClick={() => onPick(verdict)}
           title={`Record "${VERDICT_LABEL[verdict]}" for this family and type. Prototype: in memory only — the chrome says where a verdict would go, which is nowhere yet.`}

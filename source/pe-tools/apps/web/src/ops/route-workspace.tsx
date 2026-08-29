@@ -189,9 +189,9 @@ export function OpsPage({ store }: { store: OpsStore }) {
             {syntheticOps.map((glance) => (
               <Press
                 key={glance.key}
-                size="xs"
+                size="caption"
                 tone="neutral"
-                state="selectable"
+                state="selected"
                 aria-pressed={selectedGlanceKey === glance.key}
                 onClick={() => store.actions.setSelectedGlance(glance.key)}
               >

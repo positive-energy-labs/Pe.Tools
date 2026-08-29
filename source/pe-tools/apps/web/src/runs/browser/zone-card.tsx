@@ -6,6 +6,7 @@ import { Press } from "#/components/lang/press";
 import { Delta, adaptedKnobs, fmtTime, partialTitle, zoneShort } from "./unknown";
 import { ZonePanel } from "./zone-panel";
 import { MissingPanel, STAT_ROWS, StageButton } from "./missing-panel";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function ZoneCard(props: {
   name: string;
@@ -75,8 +76,8 @@ export function ZoneCard(props: {
           {locatable ? (
             <Press
               type="button"
-              tone="firm"
-              size="chip-label"
+              tone="neutral"
+              size="label"
               state={props.highlighted ? "selected" : "rest"}
               onClick={() => props.onToggleHighlight(locatable)}
               title={
@@ -222,29 +223,30 @@ export function RunStrip(props: {
             <Press
               type="button"
               tone="quiet"
-              layout="stack"
               onClick={() => onPickCur(entry.id)}
               title={`${entry.id} — click to make this the CURRENT run (B).`}
             >
-              <span className="">
-                {isCur ? <b>B · </b> : null}
-                {meta?.label ?? entry.id.slice(0, 15)}
-              </span>
-              <span className="">
-                {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
-                {typeof meta?.zoneFilter === "string" ? (
-                  <span style={{ color: token("caution") }} title={partialTitle(meta.zoneFilter)}>
-                    {" "}
-                    · partial
-                  </span>
-                ) : null}
-              </span>
+              <PressContent geometry="stack">
+                <span className="">
+                  {isCur ? <b>B · </b> : null}
+                  {meta?.label ?? entry.id.slice(0, 15)}
+                </span>
+                <span className="">
+                  {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
+                  {typeof meta?.zoneFilter === "string" ? (
+                    <span style={{ color: token("caution") }} title={partialTitle(meta.zoneFilter)}>
+                      {" "}
+                      · partial
+                    </span>
+                  ) : null}
+                </span>
+              </PressContent>
             </Press>
             <Press
               type="button"
               tone="quiet"
-              size="chip-label"
-              state={isPrev ? "selected" : isCur ? "disabled-faint" : "rest"}
+              size="label"
+              state={isPrev ? "selected" : isCur ? "disabled" : "rest"}
               onClick={() => onPickBaseline(entry.id)}
               disabled={isCur}
               title={

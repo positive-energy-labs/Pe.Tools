@@ -95,16 +95,14 @@ export function FieldOptionSelect({
       onValueChange={(option: FieldOption | null) => option && onChange(option)}
       itemToStringLabel={(option: FieldOption) => option.label}
     >
-      <ComboboxInput placeholder={placeholder} className="w-full" showClear={false} />
+      <ComboboxInput placeholder={placeholder} showClear={false} />
       <ComboboxContent>
         <ComboboxEmpty>No matching live document values</ComboboxEmpty>
         <ComboboxList>
           {(option: FieldOption) => (
             <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
               <span>{option.label}</span>
-              {option.description ? (
-                <span className="t-caption text-ink-2">{option.description}</span>
-              ) : null}
+              {option.description ? <span>{option.description}</span> : null}
             </ComboboxItem>
           )}
         </ComboboxList>
@@ -159,15 +157,13 @@ export function FieldOptionMultiSelect({
             {(option: FieldOption) => (
               <ComboboxItem key={option.value} value={option} className="flex-col items-start pr-7">
                 <span>{option.label}</span>
-                {option.description ? (
-                  <span className="t-caption text-ink-2">{option.description}</span>
-                ) : null}
+                {option.description ? <span>{option.description}</span> : null}
               </ComboboxItem>
             )}
           </ComboboxList>
         </ComboboxContent>
       </Combobox>
-      <span className="t-caption text-ink-2">
+      <span>
         {values.length === 0
           ? "All elements in the category"
           : `${values.length} specific element(s)`}

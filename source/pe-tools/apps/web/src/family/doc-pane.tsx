@@ -11,12 +11,13 @@ import { token } from "#/lib/token";
  * the whole reason the table's rail and folds only ever LOCATE and never decide.
  */
 import { EmptyState } from "#/components/lang/empty";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Switcher } from "#/components/lang/switcher";
 import { hashOf, type CellVerdict } from "#/family/model";
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
-import { cn } from "#/lib/utils";
 
 export function SpecText({
   spec,
@@ -34,7 +35,7 @@ export function SpecText({
       </EmptyState>
     );
   return (
-    <div className="space-y-2 p-2">
+    <div className="p-2">
       {spec.blocks.map((block) => {
         const lit = litBlocks.has(block.id);
         return (
@@ -45,19 +46,24 @@ export function SpecText({
                 ? "This is the block the focused parameter is grounded in. That correspondence is the whole claim — if the text does not say what the cell says, the cell is wrong."
                 : `Page ${block.page} of ${spec.fileName}, as OCR read it. Hover a grounded row in the table to light the block it cites.`
             }
-            /* Lighting is a FILL and never a hue (SURFACE-PHILOSOPHY §5): `--pe-select` is
-               literally the ground ladder's selection rung, so the law is structural here. */
-            className={cn("rounded-sm border p-2", lit ? "border-line-2 bg-select" : "border-line")}
           >
-            <div className="face-mono flex items-baseline justify-between t-caption text-ink-2">
-              <span>
-                {block.id} · p{block.page}
-              </span>
-              <span>{block.kind}</span>
-            </div>
-            <pre className="mt-1 whitespace-pre-wrap break-words font-sans t-caption text-ink">
-              {block.md}
-            </pre>
+            <ArtifactFrame
+              head={
+                <>
+                  <Tag>
+                    {block.id} · p{block.page}
+                  </Tag>
+                  <Tag>{block.kind}</Tag>
+                  {lit ? (
+                    <FactChip title="The focused parameter cites this block.">
+                      focused citation
+                    </FactChip>
+                  ) : null}
+                </>
+              }
+            >
+              <pre className="mt-1 p-2">{block.md}</pre>
+            </ArtifactFrame>
           </div>
         );
       })}
@@ -121,15 +127,15 @@ export function SpecSheet({
         />
       </div>
 
-      <div className="space-y-3 overflow-x-auto">
+      <div className="overflow-x-auto">
         {pages.map((page) => {
           const blocks = spec.blocks.filter((block) => block.page === page);
           return (
             <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
-              <div className="face-mono mb-0.5 t-caption text-ink-2">page {page}</div>
+              <div className="mb-0.5">page {page}</div>
               <svg
                 viewBox="0 0 100 130"
-                className="block w-full border border-line-2 bg-page"
+                className="w-full"
                 role="img"
                 aria-label={`stand-in page ${page}`}
               >
@@ -160,13 +166,7 @@ export function SpecSheet({
                         </title>
                       </rect>
                       {lit && (
-                        <text
-                          x={x}
-                          y={y - 1.5}
-                          fontSize={4}
-                          fill={token("ink-2")}
-                          className="face-mono"
-                        >
+                        <text x={x} y={y - 1.5} fontSize={4} fill={token("ink-2")}>
                           {block.id}
                         </text>
                       )}
@@ -239,13 +239,13 @@ export function ProposalCard({
         ref={register}
         onMouseEnter={() => onHover(true)}
         onMouseLeave={() => onHover(false)}
-        className="face-mono flex items-baseline gap-1 py-0.5 t-caption"
+        className="flex items-baseline gap-1 py-0.5"
         title={settled.note}
         style={{ color: settled.colour }}
       >
         <span>{settled.mark}</span>
-        <span className="truncate">{target}</span>
-        <span className="ml-auto shrink-0 opacity-70">{settled.word}</span>
+        <span>{target}</span>
+        <span className="ml-auto">{settled.word}</span>
       </div>
     );
   }
@@ -267,14 +267,14 @@ export function ProposalCard({
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
-      <div className="face-mono t-caption text-ink-2">{target}</div>
-      <div className="face-mono t-label text-pea-ink">
+      <div>{target}</div>
+      <div>
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 t-caption text-ink">{proposal.note}</p>
+      <p className="mt-0.5">{proposal.note}</p>
       {blockMd && (
         <p
-          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption text-ink-2"
+          className="mt-1"
           title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}

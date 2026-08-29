@@ -166,7 +166,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const runner = useRunner(product, bindings, busy?.id ?? null);
 
   return (
-    <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-page">
+    <main className="flex h-screen min-h-0 flex-col overflow-hidden">
       <TargetingHead
         product={product}
         b={bindings}
@@ -175,7 +175,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
         aside={aside}
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-        <div className="mx-auto max-w-3xl space-y-3">
+        <div className="mx-auto max-w-3xl">
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           <VerbLane atoms={store.atoms} />
           {sliceError ? (
@@ -211,7 +211,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
               </ArtifactFrame>
               {proposalRows.length ? (
                 <ArtifactFrame>
-                  <div className="divide-y divide-line">
+                  <div>
                     {proposalRows.map((row) => (
                       <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
                     ))}
@@ -221,7 +221,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
             </>
           ) : snapshot && rows.length ? (
             <ArtifactFrame>
-              <div className="divide-y divide-line">
+              <div>
                 {rows.map((row) => (
                   <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
                 ))}
@@ -286,7 +286,7 @@ function FieldRow({
   return (
     <div className="flex min-h-12 items-center gap-3 px-3 py-2">
       <div className="min-w-0 flex-1">
-        <div className="face-mono t-label truncate text-ink-2">{row.path}</div>
+        <div>{row.path}</div>
         <StateCell
           scale="row"
           value={display(shown)}
@@ -310,7 +310,7 @@ function FieldRow({
           onClick={() => patchField(store, [{ path: ["fields", row.path, "staged"] }])}
         />
       ) : proposal ? (
-        <span className="flex shrink-0 gap-1.5">
+        <span className="flex gap-1.5">
           <Verb
             label="deny"
             disabled={busy}

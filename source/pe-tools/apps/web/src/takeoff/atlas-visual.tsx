@@ -33,7 +33,7 @@ export function AtlasVisual() {
     selectZone,
   } = useAtlasWorkspace();
   return (
-    <Suspense fallback={<div className="p-2 text-ink-2">reading plan…</div>}>
+    <Suspense fallback={<div className="p-2">reading plan…</div>}>
       <Pane
         kind="visual"
         toolbar={
@@ -46,14 +46,14 @@ export function AtlasVisual() {
                   key={lane.label}
                   type="button"
                   onClick={() => setLevel(lane.label)}
-                  size="chip-value"
-                  tone={lane.label === level ? "firm" : "quiet"}
+                  size="value"
+                  tone={lane.label === level ? "neutral" : "quiet"}
                   state={lane.label === level ? "selected" : "rest"}
                   title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
                 >
                   {lane.label}
-                  <span className="ml-1 opacity-60">{zs.length}</span>
-                  {calls > 0 && <span className="ml-1 text-alarm">·{calls}</span>}
+                  <span className="ml-1">{zs.length}</span>
+                  {calls > 0 && <span className="ml-1">·{calls}</span>}
                 </Press>
               );
             })}
@@ -61,8 +61,8 @@ export function AtlasVisual() {
             <Press
               type="button"
               onClick={() => setStatsOpen(!statsOpen)}
-              size="chip-value"
-              tone="firm"
+              size="value"
+              tone="neutral"
               state={statsOpen ? "selected" : "rest"}
               title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
             >
@@ -74,13 +74,13 @@ export function AtlasVisual() {
               title={
                 planOpen ? "collapse the plan — give the table the full height" : "show the plan"
               }
-              tone="firm"
-              size="chip-value"
+              tone="neutral"
+              size="value"
             >
               {planOpen ? "▴ hide plan" : "▾ show plan"}
             </Press>
 
-            <span className="face-mono t-value ml-auto text-ink-2">
+            <span className="ml-auto">
               {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc clears
             </span>
           </>

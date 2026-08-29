@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
+import { FactChip } from "#/components/lang/chip";
 import { CellSelect, NumberCell, ReadCell, TextCell } from "#/components/master-table/cells";
 import { cellStateLabel, type StateCellProps } from "#/components/lang/cell";
 import { fmtNum, type Column } from "#/components/master-table/model";
-import { cn } from "#/lib/utils";
 import type { AtlasActions } from "#/takeoff/atlas";
 import { ManualJField } from "#/takeoff/manual-j-field";
 import { MANUAL_J } from "#/takeoff/room-actions";
@@ -47,19 +47,22 @@ function RoomNameCell({
       data-dirty={entity.dirty || undefined}
       data-conflict={entity.conflict || undefined}
       title={state.join(" · ") || undefined}
-      className={cn(
-        "flex min-w-0 items-center",
-        entity.hovered && "veil",
-        entity.selected && "on-select",
-      )}
+      className="flex min-w-0 items-center"
     >
       <div className="min-w-0 flex-1">
-        <TextCell value={row.room.name} onCommit={onCommit} className="text-left" />
+        <TextCell value={row.room.name} onCommit={onCommit} />
       </div>
       {entity.dirty && (
-        <span className={cn("face-mono t-caption pr-1", entity.conflict && "text-caution")}>
+        <FactChip
+          tone={entity.conflict ? "caution" : undefined}
+          title={
+            entity.conflict
+              ? "Authority changed after this edit was staged."
+              : "This room has a staged edit."
+          }
+        >
           {entity.conflict ? "conflict" : "staged"}
-        </span>
+        </FactChip>
       )}
     </div>
   );
@@ -106,7 +109,6 @@ export function useAtlasColumns({
           <ReadCell
             value={`${STAGE_ORDER.indexOf(row.zone.stage) + 1} ${row.zone.stage}`}
             reason={`zone ${row.zone.zone.key} is at "${row.zone.stage}" — ${STAGE_BLURB[row.zone.stage]}. This is a ZONE label; the room's own state is the next column.`}
-            className="text-ink-2"
           />
         ),
       },
@@ -130,9 +132,9 @@ export function useAtlasColumns({
         sort: ATLAS_COLUMN_SEMANTICS.zone.sort,
         search: (row) => row.zone.zone.key,
         cell: (row) => (
-          <span className="face-mono t-value block truncate px-1.5">
+          <span className="px-1.5">
             <span
-              className="mr-1 inline-block size-2 rounded-[1px] align-middle"
+              className="mr-1 size-2"
               style={{ backgroundColor: `rgb(${row.zone.zone.color})` }}
             />
             {row.zone.zone.key}
@@ -246,16 +248,11 @@ export function useAtlasColumns({
         // the filterable words themselves: the open flag names, plain ink, no double mark.
         cell: (row) =>
           row.open.length > 0 ? (
-            <span
-              className="face-mono t-value block truncate px-1.5 text-ink-2"
-              title={row.open.join(", ")}
-            >
+            <span className="px-1.5" title={row.open.join(", ")}>
               {row.open.join(", ")}
             </span>
           ) : row.room.decisions.length > 0 ? (
-            <span className="face-mono t-value block truncate px-1.5 text-ink-2">
-              {row.room.decisions.length} decided
-            </span>
+            <span className="px-1.5">{row.room.decisions.length} decided</span>
           ) : null,
       },
       {

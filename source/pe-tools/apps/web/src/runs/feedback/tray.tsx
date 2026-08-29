@@ -3,6 +3,7 @@ import { token } from "#/lib/token";
 import { fb, type StagedItem, useFb } from "./staging";
 import { ExportStatus, ExportVerbs, FlagChips, NoteInput, runShort, zoneShort } from "./verbs";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export type Lens = { curId: string | null; prevId: string | null };
 
@@ -19,7 +20,6 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
         <Press
           type="button"
           tone="quiet"
-          layout="baseline"
           onClick={() => props.onSwing(item)}
           title={
             onLens
@@ -27,26 +27,28 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
               : "Pinned pair differs from the current lens — click to swing the lens to this item's pair (staging is untouched; the lens is a view)."
           }
         >
-          <span className="" title={item.zone}>
-            {zoneShort(item.zone)}
-          </span>
-          <span className="truncate" title={`pinned A=${item.runA ?? "(none)"} B=${item.runB}`}>
-            {item.level.replace(" Level", "")} · A {runShort(item.runA)} → B {runShort(item.runB)}
-          </span>
-          {!onLens && (
-            <span
-              className="shrink-0"
-              style={{ color: token("caution") }}
-              title="Pinned pair ≠ current lens. The stage keeps the pair it was staged from; click to view it."
-            >
-              ≠ lens
+          <PressContent geometry="baseline">
+            <span className="" title={item.zone}>
+              {zoneShort(item.zone)}
             </span>
-          )}
+            <span className="truncate" title={`pinned A=${item.runA ?? "(none)"} B=${item.runB}`}>
+              {item.level.replace(" Level", "")} · A {runShort(item.runA)} → B {runShort(item.runB)}
+            </span>
+            {!onLens && (
+              <span
+                className="shrink-0"
+                style={{ color: token("caution") }}
+                title="Pinned pair ≠ current lens. The stage keeps the pair it was staged from; click to view it."
+              >
+                ≠ lens
+              </span>
+            )}
+          </PressContent>
         </Press>
         <Press
           type="button"
           tone="quiet"
-          size="icon-xs"
+          size="icon"
           onClick={() => fb.unstage(item.key)}
           title="Remove this item from the staged set."
         >
@@ -79,8 +81,8 @@ export function Tray(props: {
           {items.length > 0 && (
             <Press
               type="button"
-              tone="firm"
-              size="chip-caption"
+              tone="neutral"
+              size="caption"
               state={props.review ? "selected" : "rest"}
               onClick={props.onToggleReview}
               title={
@@ -96,7 +98,7 @@ export function Tray(props: {
             <Press
               type="button"
               tone="quiet"
-              size="xs"
+              size="caption"
               onClick={() => fb.clear()}
               title="Unstage everything."
             >
@@ -140,17 +142,18 @@ export function TrayCollapsed(props: { count: number; onExpand: () => void }) {
     <Press
       type="button"
       tone="quiet"
-      layout="block"
       onClick={props.onExpand}
       title="Expand the staging tray."
       style={{ height: "100%" }}
     >
-      <span className="flex h-full flex-col items-center gap-2 pt-2">
-        <span className="">▸</span>
-        <span className="" style={{ writingMode: "vertical-rl" }}>
-          staging{props.count > 0 ? ` · ${props.count}` : ""}
+      <PressContent geometry="block">
+        <span className="flex h-full flex-col items-center gap-2 pt-2">
+          <span className="">▸</span>
+          <span className="" style={{ writingMode: "vertical-rl" }}>
+            staging{props.count > 0 ? ` · ${props.count}` : ""}
+          </span>
         </span>
-      </span>
+      </PressContent>
     </Press>
   );
 }

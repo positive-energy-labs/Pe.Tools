@@ -1,5 +1,6 @@
 import { token } from "#/lib/token";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 /**
  * DocPicker rows — the one visual vocabulary for picking a document, shared by every
  * mount (the sentence's doc slot, the .rvt/.rfa chips). The look is the poc/chip-a
@@ -56,33 +57,34 @@ export function DocRow({
       disabled={disabled}
       onClick={onPick}
       tone="quiet"
-      layout="row"
-      state={selected ? "selected" : "disabled-faint"}
+      state={selected ? "selected" : "disabled"}
     >
-      {ext ? (
-        <span
-          className="t-caption face-mono shrink-0 rounded-sm border-[0.5px] px-1"
-          style={{
-            borderColor: EXT_COLOR[ext] ?? token("line-2"),
-            color: EXT_COLOR[ext] ?? token("ink-2"),
-          }}
-        >
-          {ext}
-        </span>
-      ) : null}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate t-label text-ink">{label}</span>
-        {sub ? (
+      <PressContent geometry="row">
+        {ext ? (
           <span
-            className={`block truncate t-caption face-mono ${
-              subTone === "active" ? "text-ink" : "text-ink-2"
-            }`}
+            className="t-caption face-mono shrink-0 rounded-sm border-[0.5px] px-1"
+            style={{
+              borderColor: EXT_COLOR[ext] ?? token("line-2"),
+              color: EXT_COLOR[ext] ?? token("ink-2"),
+            }}
           >
-            {sub}
+            {ext}
           </span>
         ) : null}
-      </span>
-      {selected ? <span className="t-caption face-mono shrink-0 text-ink">◉</span> : null}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate t-label text-ink">{label}</span>
+          {sub ? (
+            <span
+              className={`block truncate t-caption face-mono ${
+                subTone === "active" ? "text-ink" : "text-ink-2"
+              }`}
+            >
+              {sub}
+            </span>
+          ) : null}
+        </span>
+        {selected ? <span className="t-caption face-mono shrink-0 text-ink">◉</span> : null}
+      </PressContent>
     </Press>
   );
 }

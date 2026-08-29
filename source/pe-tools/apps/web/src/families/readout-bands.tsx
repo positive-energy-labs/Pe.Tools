@@ -14,7 +14,7 @@ export function FamiliesReadoutBands() {
   return (
     <>
       {plan && (
-        <div className="max-h-56 shrink-0 overflow-auto border-b border-line px-4 py-2">
+        <div className="max-h-56 overflow-auto px-4 py-2">
           <div className="flex items-center gap-2">
             <SectionLabel>
               <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
@@ -28,13 +28,13 @@ export function FamiliesReadoutBands() {
                 : ""}
             </FactChip>
           </div>
-          <table className="mt-1 w-full border-collapse">
+          <table className="mt-1 w-full">
             <tbody>
               {plan.entries.map((entry) => {
                 const flag = familyFlag(entry);
                 const excluded = excludedIds.has(entry.familyId);
                 return (
-                  <tr key={entry.familyId} className="border-b border-line">
+                  <tr key={entry.familyId}>
                     <td className="w-8 py-0.5">
                       <Press
                         type="button"
@@ -48,44 +48,41 @@ export function FamiliesReadoutBands() {
                         }
                         onClick={() => void store.actions.exclude(entry.familyId)}
                         tone="quiet"
-                        size="mono-value"
+                        size="value"
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </Press>
                     </td>
-                    <td className="face-mono py-0.5 t-label">{entry.familyName}</td>
+                    <td className="py-0.5">{entry.familyName}</td>
                     <td
-                      className="face-mono w-24 py-0.5 t-label text-ink-2"
+                      className="w-24 py-0.5"
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className="face-mono truncate py-0.5 t-caption text-ink-2"
+                      className="py-0.5"
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
                     </td>
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
-                    <td
-                      className="face-mono w-64 truncate py-0.5 t-caption text-ink-mute"
-                      title={flag ?? ""}
-                    >
+                    <td className="w-64 py-0.5" title={flag ?? ""}>
                       {flag ?? ""}
                     </td>
                   </tr>
                 );
               })}
               {outsideProfile.map((family) => (
-                <tr key={`outside-${family.familyId}`} className="border-b border-line opacity-60">
-                  <td className="w-8 py-0.5 text-center">
-                    <span className="face-mono t-value text-ink-2">✕</span>
+                <tr key={`outside-${family.familyId}`}>
+                  <td className="w-8 py-0.5">
+                    <span>✕</span>
                   </td>
-                  <td className="face-mono py-0.5 t-label">{family.familyName}</td>
-                  <td className="face-mono w-24 py-0.5 t-label text-ink-2">—</td>
-                  <td className="face-mono py-0.5 t-caption text-ink-2" colSpan={2}>
+                  <td className="py-0.5">{family.familyName}</td>
+                  <td className="w-24 py-0.5">—</td>
+                  <td className="py-0.5" colSpan={2}>
                     in scope, but the bound profile does not claim this family
                   </td>
                 </tr>
@@ -112,7 +109,7 @@ export function FamiliesReadoutBands() {
 
       {/* ── receipts ─────────────────────────────────────────────────────────────────────── */}
       {applyData && (
-        <div className="max-h-48 shrink-0 overflow-auto border-b border-line px-4 py-2">
+        <div className="max-h-48 overflow-auto px-4 py-2">
           <div className="flex items-center gap-2">
             <SectionLabel>
               <span title="What apply actually did, per family, as the op reported it. Receipts are the fleet lane's trust layer — the counts here are the evidence, not the plan's promise.">
@@ -129,13 +126,11 @@ export function FamiliesReadoutBands() {
               </FactChip>
             )}
           </div>
-          <table className="mt-1 w-full border-collapse">
+          <table className="mt-1 w-full">
             <tbody>
               {applyData.receipts.map((entry) => (
-                <tr key={entry.familyId} className="border-b border-line">
-                  <td className="face-mono w-56 truncate py-0.5 t-label">
-                    {entry.familyName ?? `element ${entry.familyId}`}
-                  </td>
+                <tr key={entry.familyId}>
+                  <td className="w-56 py-0.5">{entry.familyName ?? `element ${entry.familyId}`}</td>
                   <td className="w-20 py-0.5">
                     <FactChip
                       tone={entry.success ? "done" : "alarm"}
@@ -150,14 +145,14 @@ export function FamiliesReadoutBands() {
                     </FactChip>
                   </td>
                   <td
-                    className="face-mono w-40 py-0.5 t-caption text-ink-2"
+                    className="w-40 py-0.5"
                     title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
                   >
                     {entry.parametersChanged} changed · +{entry.diffSummary.added} −
                     {entry.diffSummary.removed} ~{entry.diffSummary.modified}
                   </td>
                   <td
-                    className="face-mono truncate py-0.5 t-caption text-ink-2"
+                    className="py-0.5"
                     title={
                       entry.operationsRun.length > 0
                         ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
@@ -166,7 +161,7 @@ export function FamiliesReadoutBands() {
                   >
                     {entry.operationsRun.join(" · ") || (entry.error ?? "")}
                   </td>
-                  <td className="w-24 py-0.5 text-right">
+                  <td className="w-24 py-0.5">
                     {entry.artifactDirectoryPath && (
                       /* Leaving the app entirely — nav:out, which is the direction browsers
                          already taught. It writes nothing, so it is not blue-filled. */
@@ -204,8 +199,8 @@ export function FamiliesReadoutBands() {
 
       {/* ── projection: a lazily-rendered document, copyable ─────────────────────────────── */}
       {projection && (
-        <details className="shrink-0 border-b border-line px-4 py-2" open>
-          <summary className="cursor-pointer">
+        <details className="px-4 py-2" open>
+          <summary>
             <SectionLabel>
               <span title="Each picked family read back out of the model as profile JSON. Nothing is written anywhere — copy it into a profile document if you want to keep it.">
                 projected profiles
@@ -242,7 +237,7 @@ export function FamiliesReadoutBands() {
           {projection.projections.map((entry) => (
             <div key={entry.familyId} className="mt-2">
               <div className="flex items-center gap-2">
-                <span className="face-mono t-label">{entry.familyName ?? entry.familyId}</span>
+                <span>{entry.familyName ?? entry.familyId}</span>
                 {entry.profileJson && (
                   <Verb
                     label="copy"
@@ -259,9 +254,7 @@ export function FamiliesReadoutBands() {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="face-mono mt-1 max-h-40 overflow-auto rounded-sm border border-line p-2 t-caption text-ink-2">
-                  {entry.profileJson}
-                </pre>
+                <pre className="mt-1 max-h-40 overflow-auto p-2">{entry.profileJson}</pre>
               )}
             </div>
           ))}

@@ -11,6 +11,7 @@ import {
 import { Press } from "#/components/lang/press";
 import type { Bindings, Runner } from "./direction-glyph";
 import { DIR_GLYPH, POP, PULSE_CSS, freshnessWord, useClickAway } from "./direction-glyph";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function Picker<K extends string>({
   product,
@@ -183,22 +184,23 @@ export function Picker<K extends string>({
                     key={o.id}
                     type="button"
                     tone="quiet"
-                    layout="baseline"
                     state={on ? "selected" : "rest"}
                     onClick={() => {
                       b.pick(cur, o.id);
                       advance();
                     }}
                   >
-                    {cur.multi ? <span className="">{on ? "☑" : "☐"}</span> : null}
-                    <span className="" style={{ color: token("ink") }}>
-                      {o.label}
-                    </span>
-                    {o.sub ? (
-                      <span className="" style={{ color: token("ink-2") }}>
-                        {o.sub}
+                    <PressContent geometry="baseline">
+                      {cur.multi ? <span className="">{on ? "☑" : "☐"}</span> : null}
+                      <span className="" style={{ color: token("ink") }}>
+                        {o.label}
                       </span>
-                    ) : null}
+                      {o.sub ? (
+                        <span className="" style={{ color: token("ink-2") }}>
+                          {o.sub}
+                        </span>
+                      ) : null}
+                    </PressContent>
                   </Press>
                 );
               })
@@ -216,7 +218,6 @@ export function Picker<K extends string>({
                     key={`below:${o.id}`}
                     type="button"
                     tone="quiet"
-                    layout="baseline"
                     state={b.isPicked(below!, o.id) ? "selected" : "rest"}
                     onClick={() => {
                       b.pick(below!, o.id);
@@ -226,17 +227,19 @@ export function Picker<K extends string>({
                       setQ("");
                     }}
                   >
-                    {below!.multi ? (
-                      <span className="">{b.isPicked(below!, o.id) ? "☑" : "☐"}</span>
-                    ) : null}
-                    <span className="" style={{ color: token("ink") }}>
-                      {o.label}
-                    </span>
-                    {o.sub ? (
-                      <span className="" style={{ color: token("ink-2") }}>
-                        {o.sub}
+                    <PressContent geometry="baseline">
+                      {below!.multi ? (
+                        <span className="">{b.isPicked(below!, o.id) ? "☑" : "☐"}</span>
+                      ) : null}
+                      <span className="" style={{ color: token("ink") }}>
+                        {o.label}
                       </span>
-                    ) : null}
+                      {o.sub ? (
+                        <span className="" style={{ color: token("ink-2") }}>
+                          {o.sub}
+                        </span>
+                      ) : null}
+                    </PressContent>
                   </Press>
                 ))}
               </>

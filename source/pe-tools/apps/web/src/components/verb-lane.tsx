@@ -30,7 +30,11 @@ export function VerbLane({
   if (busy) return <OutcomeLine kind="busy" label={`${busy.id} · ${busy.seconds}s`} />;
   if (failure)
     return (
-      <OutcomeLine kind={failure.kind} label={`${failure.verb} failed`} says={failure.message} />
+      <OutcomeLine
+        kind={failure.kind === "partial" ? "error" : failure.kind}
+        label={`${failure.verb} failed`}
+        says={failure.message}
+      />
     );
   if (standing) return <>{standing}</>;
   return receipt ? <OutcomeLine kind="receipt" label={receipt.text} /> : null;

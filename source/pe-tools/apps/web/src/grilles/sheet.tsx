@@ -7,6 +7,7 @@
 import { NumberCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
+import { Tag } from "#/components/lang/chip";
 
 import type { Grille, GrilleInput } from "./math";
 import { SHEET_ROWS, frac, pct, solve } from "./math";
@@ -44,16 +45,13 @@ const read = (
   title: string,
   cell: (r: SheetRow) => string,
   sort: (r: SheetRow) => number,
-  bold = false,
 ): Column<SheetRow> => ({
   key,
   label,
   title,
   right: true,
   sort,
-  cell: (r) => (
-    <span className={`face-mono t-value ${bold ? "text-ink" : "text-ink-2"}`}>{cell(r)}</span>
-  ),
+  cell: (r) => <Tag>{cell(r)}</Tag>,
 });
 
 export function Sheet({
@@ -128,7 +126,6 @@ export function Sheet({
       "Overall free area",
       (r) => pct(r.freeArea),
       (r) => r.freeArea,
-      true,
     ),
     read(
       "area",
@@ -136,7 +133,6 @@ export function Sheet({
       "Actual free area = opening · qty · (L − 2·end)",
       (r) => r.actualFreeArea.toFixed(2),
       (r) => r.actualFreeArea,
-      true,
     ),
   ];
   return (
@@ -157,7 +153,7 @@ export function Sheet({
           : null
       }
       summary={
-        <Press type="button" tone="quiet" size="mono-label" onClick={add}>
+        <Press type="button" tone="quiet" size="label" onClick={add}>
           + profile
         </Press>
       }

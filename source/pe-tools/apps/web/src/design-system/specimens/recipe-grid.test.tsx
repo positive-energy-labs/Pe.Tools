@@ -14,7 +14,6 @@ import { pressRecipe } from "#/components/lang/press";
 import { sectionRecipe } from "#/components/lang/section";
 import { switcherRecipe } from "#/components/lang/switcher";
 import { verbRecipe } from "#/components/lang/verb";
-import { badgeVariants } from "#/components/ui/badge";
 import { dialogRecipe } from "#/components/ui/dialog";
 import { inputGroupRecipe } from "#/components/ui/input-group";
 import { selectRecipe } from "#/components/ui/select";
@@ -36,7 +35,6 @@ const RECIPES = {
   sectionRecipe,
   switcherRecipe,
   verbRecipe,
-  badgeVariants,
   dialogRecipe,
   inputGroupRecipe,
   selectRecipe,

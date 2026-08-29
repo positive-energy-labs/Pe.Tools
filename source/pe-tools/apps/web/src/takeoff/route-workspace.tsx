@@ -259,7 +259,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         <input
           name="dir"
           placeholder={`add a folder — e.g. ${DEFAULT_ARTIFACT_DIR}`}
-          className="face-mono t-caption w-full bg-transparent px-1 py-0.5 outline-none"
+          className="w-full px-1 py-0.5"
           style={{ borderTop: `1px solid ${token("line-2")}`, color: token("ink") }}
         />
       </form>
@@ -301,7 +301,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const readoutBand = (
     <>
       {!live && (
-        <div className="absolute right-2 bottom-2 z-popup">
+        <div className="z-popup">
           <Verb
             label="leave fixture → live"
             onClick={() =>
@@ -319,7 +319,6 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   if (live && !session)
     return (
       <Workspace
-        className="bg-page"
         headRail={headRail}
         readoutBand={readoutBand}
         table={

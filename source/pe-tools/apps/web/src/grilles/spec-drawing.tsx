@@ -80,7 +80,6 @@ export function SpecDrawing({
       width={width}
       height={height}
       viewBox={`${-M} ${-M} ${width} ${height}`}
-      className="face-mono"
       style={{ color: token("ink") }}
       xmlns="http://www.w3.org/2000/svg"
     >

@@ -30,6 +30,7 @@ import {
 } from "#/family-review/proto-editor/model";
 import type { FamilyModel } from "#/family/family-model";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 // ── the edit channel ────────────────────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ export function StatePanel({
                   type="button"
                   onClick={() => editor.setFocus(change.path)}
                   title={`Show ${change.path} in the json pane`}
-                  size="mono-caption"
+                  size="caption"
                   style={{
                     backgroundColor: editor.focus === change.path ? token("select") : "transparent",
                     border: "none",
@@ -288,8 +289,7 @@ export function RefToken({
                     onPick(option);
                     setOpen(false);
                   }}
-                  size="mono-label"
-                  layout="baseline"
+                  size="label"
                   style={{
                     backgroundColor: option === value ? token("select") : "transparent",
                     border: "none",
@@ -297,8 +297,10 @@ export function RefToken({
                     color: token("ink"),
                   }}
                 >
-                  <span>{option}</span>
-                  <span>{nodeValue(editor.model, editor.typeName, option) ?? ""}</span>
+                  <PressContent geometry="baseline">
+                    <span>{option}</span>
+                    <span>{nodeValue(editor.model, editor.typeName, option) ?? ""}</span>
+                  </PressContent>
                 </Press>
               ))
             )}
@@ -360,7 +362,7 @@ export function TypeStage({ editor }: { editor: Editor }) {
           type="button"
           title={`Resolve every value on this surface for the ${name} type`}
           onClick={() => editor.setTypeName(name)}
-          size="mono-label"
+          size="label"
           style={{
             backgroundColor: name === editor.typeName ? token("select") : "transparent",
             border: "none",

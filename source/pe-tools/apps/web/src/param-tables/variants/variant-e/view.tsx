@@ -97,7 +97,7 @@ export function VariantE() {
     const summary: Outcome =
       refusals.length > 0
         ? {
-            kind: "partial",
+            kind: "error",
             label: `${applicable.length}/${writes.length} type writes applied · ${stagedRows} rows moved · ${refusals.length} refused`,
             says: "refused targets keep their formula value — the disagreement now reads as drift",
           }

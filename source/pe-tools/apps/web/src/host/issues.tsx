@@ -1,9 +1,10 @@
-import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 import { HostCallError } from "@pe/host-contracts/operation-types";
-import { cn } from "#/lib/utils";
+import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { FactChip } from "#/components/lang/chip";
+import { OutcomeLine } from "#/components/lang/outcome";
 
 export type HostIssueKind =
   | "disconnected"
@@ -160,60 +161,54 @@ export function HostIssuePanel({
 }) {
   if (!issue) return null;
 
+  const caution = issue.kind === "conflict" || issue.kind === "bridge_busy";
   return (
-    <div
-      className={cn(
-        "rounded-lg border p-3 t-prose",
-        // a busy bridge / doc conflict is NOT the model disagreeing — caution, not alarm.
-        issue.kind === "conflict" || issue.kind === "bridge_busy"
-          ? "border-caution/30 bg-caution/10 text-caution"
-          : "border-alarm/30 bg-alarm/10 text-alarm",
-        compact && "p-2 t-value",
-      )}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 font-medium">
-            <AlertTriangle className="size-3.5 shrink-0" />
-            <span>{issue.title}</span>
-          </div>
-          <p className="mt-1 break-words">{issue.message}</p>
+    <ArtifactFrame
+      head={
+        <div className="flex w-full items-start justify-between gap-3">
+          <OutcomeLine
+            kind={caution ? "error" : "refused"}
+            label={issue.title}
+            says={issue.message}
+          />
+          {action}
         </div>
-        {action}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-1.5 t-caption opacity-80">
-        {issue.status ? <HostIssueMeta>status {issue.status}</HostIssueMeta> : null}
-        {issue.operationKey ? <HostIssueMeta>{issue.operationKey}</HostIssueMeta> : null}
-        {issue.activeOperation ? (
-          <HostIssueMeta>active {issue.activeOperation}</HostIssueMeta>
+      }
+    >
+      <div className={compact ? "p-2" : "p-3"}>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {issue.status ? <HostIssueMeta>status {issue.status}</HostIssueMeta> : null}
+          {issue.operationKey ? <HostIssueMeta>{issue.operationKey}</HostIssueMeta> : null}
+          {issue.activeOperation ? (
+            <HostIssueMeta>active {issue.activeOperation}</HostIssueMeta>
+          ) : null}
+          {issue.retryHint ? <HostIssueMeta>{issue.retryHint}</HostIssueMeta> : null}
+          {issue.bridgePrecondition ? (
+            <HostIssueMeta>{issue.bridgePrecondition}</HostIssueMeta>
+          ) : null}
+        </div>
+        {issue.fieldIssues?.length ? (
+          <ul className="mt-2">
+            {issue.fieldIssues.slice(0, 5).map((fieldIssue) => (
+              <li key={`${fieldIssue.path}:${fieldIssue.message}`}>
+                <code>{fieldIssue.path}</code>: {fieldIssue.message}
+              </li>
+            ))}
+          </ul>
         ) : null}
-        {issue.retryHint ? <HostIssueMeta>{issue.retryHint}</HostIssueMeta> : null}
-        {issue.bridgePrecondition ? (
-          <HostIssueMeta>{issue.bridgePrecondition}</HostIssueMeta>
-        ) : null}
       </div>
-      {issue.fieldIssues?.length ? (
-        <ul className="mt-2 space-y-1 t-value">
-          {issue.fieldIssues.slice(0, 5).map((fieldIssue) => (
-            <li key={`${fieldIssue.path}:${fieldIssue.message}`} className="break-words">
-              <code>{fieldIssue.path}</code>: {fieldIssue.message}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    </ArtifactFrame>
   );
 }
 
 function HostIssueMeta({ children }: { children: ReactNode }) {
-  return <span className="rounded-sm border border-current/20 px-1.5 py-0.5">{children}</span>;
+  return <FactChip title="Host diagnostic detail.">{children}</FactChip>;
 }
 
 export function HostConnectionPill({ connected, label }: { connected: boolean; label?: string }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap t-value text-ink-2">
-      <span className={cn("size-2 rounded-full", connected ? "bg-ink" : "bg-ink-2/50")} />
+    <FactChip tone={connected ? "done" : "meta"} title="Current host connection state.">
       {connected ? (label ?? "Connected") : "Disconnected"}
-    </span>
+    </FactChip>
   );
 }
