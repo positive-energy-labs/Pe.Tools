@@ -114,7 +114,7 @@ function ProposalFlow() {
         </p>
 
         {/* ── scale 1 · pea's card, inline in the thread ───────────────────────────────── */}
-        <Section label="01 · scale one · pea's chat card" className="flex flex-col gap-3">
+        <Section label="01 · scale one · pea's chat card">
           <p className="t-label text-ink-2">
             a machine-operated object carrying state — it keeps its frame
           </p>
@@ -132,7 +132,6 @@ function ProposalFlow() {
             ))}
 
             <ArtifactFrame
-              className="mt-1"
               head={
                 <>
                   <Tag>{PROPOSAL_TARGET}</Tag>
@@ -254,10 +253,7 @@ function ProposalFlow() {
         </Section>
 
         {/* ── scale 2 · the same world, in the real table ─────────────────────────────── */}
-        <Section
-          label="02 · scale two · the same values, in the real table"
-          className="flex flex-col gap-3"
-        >
+        <Section label="02 · scale two · the same values, in the real table">
           <p className="t-label text-ink-2">
             the actual MasterTable — no second fixture, no second reader
           </p>
@@ -344,7 +340,6 @@ function ProposalTable({
 
   return (
     <ArtifactFrame
-      className="max-w-[46rem]"
       head={
         <>
           <Tag>{PROPOSAL_TARGET} · under review</Tag>

@@ -289,7 +289,6 @@ function FieldRow({
         <div className="face-mono t-label truncate text-ink-2">{row.path}</div>
         <StateCell
           scale="row"
-          className="face-mono t-value"
           value={display(shown)}
           stage={staged ? "staged" : proposal ? "proposed" : "clean"}
           stagedBy="you"

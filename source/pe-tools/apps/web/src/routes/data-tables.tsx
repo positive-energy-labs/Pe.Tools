@@ -111,7 +111,7 @@ function DataTablesRoute() {
       <AddressingBar
         name="data tables"
         sentence={
-          <span className="flex items-center gap-2">
+          <span>
             <span className="t-value face-mono text-ink">
               {draft ? draft.name : "no table open"}
             </span>
@@ -142,7 +142,7 @@ function DataTablesRoute() {
         }
       />
       <div className="shrink-0 border-b border-line empty:border-0">
-        <VerbLane atoms={store.verbAtoms} className="px-4 py-0.5" />
+        <VerbLane atoms={store.verbAtoms} />
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -212,7 +212,6 @@ function DataTablesRoute() {
               <EmptyState
                 story="scope"
                 exit="pick a table from the rail, or start one with the new verb"
-                className="text-center"
               >
                 no table open
               </EmptyState>
@@ -288,7 +287,7 @@ function DraftEditor({
 
       {/* The draft grid is the machine-operated object this route exists to edit —
           it carries the state apply will write, so it takes the one enclosure. */}
-      <ArtifactFrame className="inline-block max-w-full overflow-auto">
+      <ArtifactFrame>
         <table className="border-collapse">
           <thead>
             <tr>

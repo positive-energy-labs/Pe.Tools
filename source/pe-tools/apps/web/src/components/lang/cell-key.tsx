@@ -20,11 +20,22 @@
  * would drop axes the table never exercises; nothing has ruled how to detect that, and the
  * five-axis block was what the round judged. Upgrade path: take the rendered rows and filter.
  */
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import { StateCell } from "./cell";
 
 import "./lang.css";
+
+export const cellStateKeyRecipe = tv({
+  slots: {
+    base: "grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-x-[18px] gap-y-[9px] border-t border-line on-recess px-2.5 pt-2 pb-[9px]",
+    axis: "flex min-w-0 flex-col gap-[3px]",
+    head: "flex items-baseline gap-[5px] border-b border-line pb-0.5",
+    name: "face-mono t-caption t-upper text-ink-2",
+    asks: "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap t-caption text-ink-mute italic",
+    item: "grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-baseline gap-[7px] t-label text-ink-2 [&_.dl-cell]:face-mono [&_.dl-cell]:t-value [&_.dl-sq]:face-mono [&_.dl-sq]:t-value [&_.dl-sq]:text-ink [&_.dl-cite]:face-mono [&_.dl-cite]:t-value [&_.dl-cite]:text-ink",
+  },
+});
 
 interface KeyAxis {
   axis: string;
@@ -100,17 +111,18 @@ const AXES: readonly KeyAxis[] = [
   },
 ];
 
-export function CellStateKey({ className }: { className?: string }) {
+export function CellStateKey() {
+  const slots = cellStateKeyRecipe();
   return (
-    <div className={cn("dl-key", className)}>
+    <div className={slots.base()}>
       {AXES.map((a) => (
-        <div key={a.axis} className="dl-key-axis">
-          <div className="dl-key-axis-head">
-            <span className="dl-key-axis-name">{a.axis}</span>
-            <span className="dl-key-axis-asks">{a.asks}</span>
+        <div key={a.axis} className={slots.axis()}>
+          <div className={slots.head()}>
+            <span className={slots.name()}>{a.axis}</span>
+            <span className={slots.asks()}>{a.asks}</span>
           </div>
           {a.items.map((it) => (
-            <span key={it.label} className="dl-key-item">
+            <span key={it.label} className={slots.item()}>
               {it.specimen}
               <span>{it.label}</span>
             </span>

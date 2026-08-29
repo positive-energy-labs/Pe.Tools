@@ -14,15 +14,22 @@
  * - The exit renders ON the surface, not in a title: "tooltips deepen; they never rescue" (§0),
  *   and an empty state with a hidden way out is a rescue.
  */
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const emptyStateRecipe = tv({
+  slots: {
+    base: "block t-label text-ink-mute italic",
+    exit: "text-ink-2 not-italic before:text-ink-mute before:content-['_—_']",
+  },
+  variants: { state: { scope: {}, filter: {} } },
+});
 
 export function EmptyState({
   story,
   exit,
   children,
-  className,
 }: {
   /** Whose emptiness this is: `scope` — the route's story (nothing exists yet); `filter` — the
    * surface's own (rows exist; the narrowing hid them). They have different exits. */
@@ -32,12 +39,12 @@ export function EmptyState({
   exit: string;
   /** What is empty, in the surface's own words — "no zones on this level". */
   children: React.ReactNode;
-  className?: string;
 }) {
+  const { base, exit: exitSlot } = emptyStateRecipe({ state: story });
   return (
-    <span className={cn("dl-empty", className)} data-story={story}>
+    <span className={base()} data-story={story}>
       {children}
-      <span className="dl-empty-exit">{exit}</span>
+      <span className={exitSlot()}>{exit}</span>
     </span>
   );
 }

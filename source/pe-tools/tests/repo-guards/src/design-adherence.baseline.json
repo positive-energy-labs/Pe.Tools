@@ -96,15 +96,15 @@
     }
   },
   "rawMeaningColor": {
-    "total": 125,
+    "total": 123,
     "byArea": {
       "design-system": 1,
-      "family": 28,
+      "family": 27,
       "family-review": 5,
       "grounded-doc": 3,
       "host": 6,
       "lib": 15,
-      "routes": 20,
+      "routes": 19,
       "takeoff": 10,
       "workbench": 37
     }

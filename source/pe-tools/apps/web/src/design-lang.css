@@ -4,8 +4,7 @@
 @theme inline {
   /* Stock namespaces reset (ruled 2026-08-29): an off-system class (a stock palette colour,
      a named text size, a stock leading, elevation, or face) emits nothing. Only the roles
-     redeclared below exist. The design guard stays as the source lint until a candidate-drop
-     check replaces it. */
+     redeclared below exist. The design guard compiles authored candidates against this reset. */
   --color-*: initial;
   --text-*: initial;
   --leading-*: initial;
@@ -108,6 +107,24 @@
 
 @utility veil {
   background-image: var(--fill-veil);
+}
+
+@utility ink-wash {
+  background: color-mix(in srgb, var(--pe-ink) 10%, var(--pe-on));
+}
+
+@utility commit-wash-artifact {
+  background: color-mix(in srgb, var(--pe-commit) 9%, var(--pe-artifact));
+  --pe-on: color-mix(in srgb, var(--pe-commit) 9%, var(--pe-artifact));
+}
+
+@utility alarm-wash-artifact {
+  background: color-mix(in srgb, var(--pe-alarm) 10%, var(--pe-artifact));
+  --pe-on: color-mix(in srgb, var(--pe-alarm) 10%, var(--pe-artifact));
+}
+
+@utility inset-ring {
+  box-shadow: inset 0 0 0 1px var(--pe-line);
 }
 
 @utility bg-document {

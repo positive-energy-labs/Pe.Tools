@@ -677,7 +677,7 @@ function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "tra
   return (
     <div className="mt-[14px] mr-6 ml-[34px] grid gap-2">
       {plan.length > 0 ? (
-        <ArtifactFrame head={<span className="t-label t-upper text-ink-2">Plan</span>}>
+        <ArtifactFrame head={<span>Plan</span>}>
           {plan.map((entry) => (
             <div
               className={`${PLAN_ITEM} ${
@@ -712,7 +712,6 @@ function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "tra
         <ArtifactFrame
           head={
             <Press
-              className="flex w-full cursor-pointer items-center justify-between border-0 bg-transparent p-0 t-label t-upper text-ink-2"
               type="button"
               title="Show or hide the resolved system prompt pea started with"
               onClick={() => setOpen((value) => !value)}

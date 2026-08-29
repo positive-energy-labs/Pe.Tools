@@ -19,7 +19,6 @@ export interface VerbAtoms {
 export function VerbLane({
   atoms,
   standing,
-  className,
 }: {
   atoms: VerbAtoms;
   standing?: ReactNode;
@@ -28,19 +27,11 @@ export function VerbLane({
   const busy = useAtomValue(atoms.busy);
   const failure = useAtomValue(atoms.failure);
   const receipt = useAtomValue(atoms.receipt);
-  if (busy)
-    return (
-      <OutcomeLine kind="busy" label={`${busy.id} · ${busy.seconds}s`} className={className} />
-    );
+  if (busy) return <OutcomeLine kind="busy" label={`${busy.id} · ${busy.seconds}s`} />;
   if (failure)
     return (
-      <OutcomeLine
-        kind={failure.kind}
-        label={`${failure.verb} failed`}
-        says={failure.message}
-        className={className}
-      />
+      <OutcomeLine kind={failure.kind} label={`${failure.verb} failed`} says={failure.message} />
     );
   if (standing) return <>{standing}</>;
-  return receipt ? <OutcomeLine kind="receipt" label={receipt.text} className={className} /> : null;
+  return receipt ? <OutcomeLine kind="receipt" label={receipt.text} /> : null;
 }

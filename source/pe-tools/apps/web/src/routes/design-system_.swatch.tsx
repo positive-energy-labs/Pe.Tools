@@ -404,7 +404,7 @@ function LangGroup() {
         <Bound className="w-full max-w-2xl">
           <AddressingBar
             name="family"
-            sentence={<span className="t-label text-ink-2">editing profiles/door.pea.json</span>}
+            sentence={<span>editing profiles/door.pea.json</span>}
             facts={
               <FactChip tone="caution" title="Unsaved draft — two edits not on disk.">
                 unsaved draft · 2
@@ -1325,7 +1325,6 @@ function NumericCellSpec() {
   return (
     <StateCell
       scale="row"
-      className="face-mono t-value text-right"
       value={value}
       numeric={{ min: 0, digits: 1 }}
       onCommit={(text) => setValue(text)}

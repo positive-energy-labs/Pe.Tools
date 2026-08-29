@@ -23,24 +23,32 @@
 import { useId } from "react";
 
 import { Tooltip, UiTooltipProvider } from "#/components/ui/tooltip";
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const helpTipRecipe = tv({
+  slots: {
+    mark: "grid size-[13px] cursor-help place-items-center rounded-sm border border-line-2 bg-transparent p-0 face-mono t-caption text-ink-2",
+    popup:
+      "z-popup w-max max-w-[38ch] border border-line-2 on-artifact px-2 py-[5px] t-label text-ink-2",
+  },
+});
 
 export interface HelpTipProps {
   /** The orientation prose. A few sentences at most — a HelpTip is not a manual. */
   children: React.ReactNode;
-  className?: string;
 }
 
-export function HelpTip({ children, className }: HelpTipProps) {
+export function HelpTip({ children }: HelpTipProps) {
   const noteId = useId();
+  const { mark, popup } = helpTipRecipe();
   return (
     <UiTooltipProvider>
       <Tooltip.Root>
         <Tooltip.Trigger
           type="button"
-          className={cn("dl-help-mark", className)}
+          className={mark()}
           aria-label="What is this?"
           aria-describedby={noteId}
         >
@@ -48,7 +56,7 @@ export function HelpTip({ children, className }: HelpTipProps) {
         </Tooltip.Trigger>
         <Tooltip.Portal keepMounted>
           <Tooltip.Positioner side="bottom" align="start" sideOffset={4}>
-            <Tooltip.Popup id={noteId} className="dl-help-pop" role="note">
+            <Tooltip.Popup id={noteId} className={popup()} role="note">
               {children}
             </Tooltip.Popup>
           </Tooltip.Positioner>

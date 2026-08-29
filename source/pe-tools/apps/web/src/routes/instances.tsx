@@ -388,13 +388,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
               )
             }
           />
-          {error ? (
-            <OutcomeLine
-              className="mt-2"
-              kind="error"
-              label={`fleet unreadable: ${error.message}`}
-            />
-          ) : null}
+          {error ? <OutcomeLine kind="error" label={`fleet unreadable: ${error.message}`} /> : null}
         </div>
         {ledgerOpen ? (
           <div className="flex w-72 flex-col pl-5">

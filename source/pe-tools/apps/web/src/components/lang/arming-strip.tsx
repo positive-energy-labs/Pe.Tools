@@ -14,7 +14,7 @@
  *   is the cell grammar at its largest scale: same fill-separates-not-borders move.
  * - THE STRIP CARRIES STATE, so it KEEPS its frame under the border budget. It draws its own
  *   `ArtifactFrame`; do not wrap it in a second one.
- * - `--pe-on` IS RE-DECLARED to the strip's own tinted fill (lang.css), which is what gives the
+ * - `--pe-on` IS RE-DECLARED to the strip's own tinted fill (design-lang.css), which gives the
  *   act verbs inside a resting shape against the ground they actually stand on. Round 2's note-4
  *   defect was exactly this: `cancel` and `re-plan` mixed against the artifact token computed to
  *   1.006 and 1.026 against their real ground, and in dark `cancel` was literally not there.
@@ -35,12 +35,41 @@
  * `armedBy` and `supersededBy`, then this signature takes them and the caveat line is deleted.
  */
 import { RefreshCw, Upload } from "lucide-react";
+import { tv } from "#/lib/tv";
 
 import { ArtifactFrame } from "./artifact-frame";
 import { FactChip } from "./chip";
 import { Verb } from "./verb";
 
 import "./lang.css";
+
+export const armingStripRecipe = tv({
+  slots: {
+    base: "flex flex-col gap-[7px] border-l-2 px-[11px] py-[9px]",
+    line: "flex flex-wrap items-baseline gap-2",
+    phase: "face-mono t-caption t-upper tabular-nums text-ink-2",
+    verb: "t-prose font-medium",
+    target: "face-mono t-label tabular-nums text-ink-2",
+    input:
+      "w-full border-0 border-l border-line-2 bg-on py-0.5 pr-0 pl-2 t-value text-ink italic outline-none placeholder:text-ink-mute focus-visible:veil",
+    refusal: "m-0 max-w-[72ch] t-value",
+    controls: "flex flex-wrap items-center gap-2",
+    caveat: "face-mono t-caption t-upper tabular-nums text-ink-2",
+  },
+  variants: {
+    state: {
+      unarmed: { base: "border-line-2 on-artifact" },
+      armed: {
+        base: "border-commit commit-wash-artifact",
+        phase: "text-commit",
+      },
+      refused: {
+        base: "border-alarm alarm-wash-artifact",
+        phase: "text-alarm",
+      },
+    },
+  },
+});
 
 export type ArmingState =
   /** Unarmed → armed, decided by whether a reason has been supplied. */
@@ -65,7 +94,6 @@ export interface ArmingStripProps {
   onCommit: () => void;
   /** Disarms — nothing is written. */
   onCancel: () => void;
-  className?: string;
 }
 
 const REASON_PLACEHOLDER = "why this write is happening — required before the verb arms";
@@ -80,18 +108,18 @@ export function ArmingStrip({
   state,
   onCommit,
   onCancel,
-  className,
 }: ArmingStripProps) {
   if (state.phase === "refused") {
+    const slots = armingStripRecipe({ state: "refused" });
     return (
-      <ArtifactFrame className={className}>
-        <div className="dl-strip" data-phase="refused">
-          <div className="dl-strip-line">
-            <span className="dl-tag dl-tag-phase">refused</span>
-            <span className="dl-strip-verb">{verb}</span>
+      <ArtifactFrame>
+        <div className={slots.base()} data-phase="refused">
+          <div className={slots.line()}>
+            <span className={slots.phase()}>refused</span>
+            <span className={slots.verb()}>{verb}</span>
           </div>
-          <p className="dl-strip-refusal">{state.refusal}</p>
-          <div className="dl-strip-controls">
+          <p className={slots.refusal()}>{state.refusal}</p>
+          <div className={slots.controls()}>
             <Verb
               label="re-plan"
               icon={RefreshCw}
@@ -105,13 +133,14 @@ export function ArmingStrip({
   }
 
   const armed = reason.trim().length > 0;
+  const slots = armingStripRecipe({ state: armed ? "armed" : "unarmed" });
   return (
-    <ArtifactFrame className={className}>
-      <div className="dl-strip" data-phase={armed ? "armed" : "unarmed"}>
-        <div className="dl-strip-line">
-          <span className="dl-tag dl-tag-phase">{armed ? "armed" : "unarmed"}</span>
-          <span className="dl-strip-verb">{verb}</span>
-          <span className="dl-strip-target">{target}</span>
+    <ArtifactFrame>
+      <div className={slots.base()} data-phase={armed ? "armed" : "unarmed"}>
+        <div className={slots.line()}>
+          <span className={slots.phase()}>{armed ? "armed" : "unarmed"}</span>
+          <span className={slots.verb()}>{verb}</span>
+          <span className={slots.target()}>{target}</span>
           <FactChip title="The plan this write was made against.">plan {planHash}</FactChip>
           <FactChip title="Parameters this write will touch, counted from the plan.">
             {count} params
@@ -119,14 +148,14 @@ export function ArmingStrip({
         </div>
 
         <input
-          className="dl-strip-reason-input"
+          className={slots.input()}
           value={reason}
           onChange={(e) => onReasonChange(e.target.value)}
           placeholder={REASON_PLACEHOLDER}
           aria-label="reason for this write"
         />
 
-        <div className="dl-strip-controls">
+        <div className={slots.controls()}>
           <Verb
             tone="commit"
             label={verb}
@@ -142,7 +171,9 @@ export function ArmingStrip({
           {armed ? (
             <Verb label="cancel" onClick={onCancel} reason="Disarms — nothing is written" />
           ) : null}
-          {armed ? <span className="dl-tag">armed against a plan of unknown age</span> : null}
+          {armed ? (
+            <span className={slots.caveat()}>armed against a plan of unknown age</span>
+          ) : null}
         </div>
       </div>
     </ArtifactFrame>

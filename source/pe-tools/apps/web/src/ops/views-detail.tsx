@@ -722,11 +722,7 @@ function ScheduleCoverageView({ data }: OpViewProps) {
     <div className="flex flex-col gap-3">
       <Section
         label="schedule coverage"
-        aside={
-          <span className="face-mono t-caption text-ink-2">
-            {res.scheduleCount} schedules considered
-          </span>
-        }
+        aside={<span>{res.scheduleCount} schedules considered</span>}
       >
         {res.totalElements > 0 ? (
           <CoverageBar

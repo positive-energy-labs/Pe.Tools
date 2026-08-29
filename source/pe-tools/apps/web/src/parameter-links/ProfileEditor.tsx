@@ -181,7 +181,6 @@ function DefinitionCard({
             value={definition.id}
             disabled={disabled}
             onChange={(event) => patch({ id: event.target.value })}
-            className="t-value face-mono min-w-0 flex-1 bg-transparent text-ink outline-none"
             aria-label="definition id"
             title="The definition's id — how assignments and receipts refer to it"
           />
@@ -353,11 +352,7 @@ function DefinitionCard({
           />
         </div>
         {assignments.length === 0 ? (
-          <EmptyState
-            story="scope"
-            exit="add an assignment and bind source elements"
-            className="py-1"
-          >
+          <EmptyState story="scope" exit="add an assignment and bind source elements">
             no assignments — this definition links nothing
           </EmptyState>
         ) : (

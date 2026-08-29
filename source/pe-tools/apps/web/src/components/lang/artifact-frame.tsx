@@ -17,27 +17,35 @@
  *   Both currently answer "no" — they are plain content.
  * - `--pe-on` PLUMBING: the frame declares the ground its children actually sit on, and the
  *   recessed bands re-declare it again, so every wash the cell grammar mixes lands on the right
- *   ground without any child naming its own container. See design-lang.css.
+ *   ground without any child naming its own container. See base.css.
  */
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const artifactFrameRecipe = tv({
+  slots: {
+    base: "on-artifact inset-ring",
+    head: "flex items-baseline gap-2 border-b border-line on-recess px-2.5 py-[5px]",
+    foot: "flex items-center justify-between gap-2 border-t border-line on-recess px-2.5 py-1.5",
+  },
+});
 
 export interface ArtifactFrameProps {
   /** Recessed band across the top — the object's name and its machine-measured facts. */
   head?: React.ReactNode;
   /** Recessed band across the bottom — counts, receipts, and the object's one commit verb. */
   foot?: React.ReactNode;
-  className?: string;
   children: React.ReactNode;
 }
 
-export function ArtifactFrame({ head, foot, className, children }: ArtifactFrameProps) {
+export function ArtifactFrame({ head, foot, children }: ArtifactFrameProps) {
+  const { base, head: headSlot, foot: footSlot } = artifactFrameRecipe();
   return (
-    <div className={cn("dl-artifact", className)}>
-      {head != null ? <div className="dl-artifact-head">{head}</div> : null}
+    <div className={base()}>
+      {head != null ? <div className={headSlot()}>{head}</div> : null}
       {children}
-      {foot != null ? <div className="dl-artifact-foot">{foot}</div> : null}
+      {foot != null ? <div className={footSlot()}>{foot}</div> : null}
     </div>
   );
 }

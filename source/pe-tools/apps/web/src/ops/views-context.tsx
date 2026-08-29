@@ -236,11 +236,7 @@ function ContextSummaryView({ data }: OpViewProps) {
 
       <Section
         label="visible categories"
-        aside={
-          <span className="face-mono t-caption text-ink-2">
-            {visibleCategories.length} categories
-          </span>
-        }
+        aside={<span>{visibleCategories.length} categories</span>}
       >
         {visibleCategories.length === 0 ? (
           <EmptyState story="scope" exit="open a view with model elements and re-run">
@@ -308,12 +304,7 @@ function DocumentSessionView({ data }: OpViewProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <Section
-        label="open documents"
-        aside={
-          <span className="face-mono t-caption text-ink-2">{text(res.openDocumentCount)} open</span>
-        }
-      >
+      <Section label="open documents" aside={<span>{text(res.openDocumentCount)} open</span>}>
         {docs.length === 0 ? (
           <EmptyState story="scope" exit="open a document in the connected Revit session">
             no documents open
@@ -562,10 +553,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
         </Section>
       )}
 
-      <Section
-        label="filters"
-        aside={<span className="face-mono t-caption text-ink-2">{filters.length}</span>}
-      >
+      <Section label="filters" aside={<span>{filters.length}</span>}>
         {filters.length === 0 ? (
           <span className="face-mono t-caption text-ink-2">no view filters applied</span>
         ) : (
@@ -588,10 +576,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
         )}
       </Section>
 
-      <Section
-        label="hidden categories"
-        aside={<span className="face-mono t-caption text-ink-2">{hiddenCategories.length}</span>}
-      >
+      <Section label="hidden categories" aside={<span>{hiddenCategories.length}</span>}>
         {hiddenCategories.length === 0 ? (
           <span className="face-mono t-caption text-ink-2">none hidden</span>
         ) : (
@@ -613,10 +598,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
       </Section>
 
       {links.length > 0 && (
-        <Section
-          label="links"
-          aside={<span className="face-mono t-caption text-ink-2">{links.length}</span>}
-        >
+        <Section label="links" aside={<span>{links.length}</span>}>
           <div className="flex flex-wrap gap-1">
             {links.map((link, i) => {
               const lh = asRecord(link.handle);
@@ -639,10 +621,7 @@ function ObservedViewCard({ view }: { view: Record<string, unknown> }) {
       )}
 
       {worksets.length > 0 && (
-        <Section
-          label="worksets"
-          aside={<span className="face-mono t-caption text-ink-2">{worksets.length}</span>}
-        >
+        <Section label="worksets" aside={<span>{worksets.length}</span>}>
           <div className="flex flex-wrap gap-1">
             {worksets.map((workset, i) => (
               <FactChip

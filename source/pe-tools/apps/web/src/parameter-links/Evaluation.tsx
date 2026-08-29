@@ -60,11 +60,7 @@ export function EvaluationView({
 }) {
   if (!evaluation) {
     return (
-      <EmptyState
-        story="scope"
-        exit="run Preview to project the draft's target writes"
-        className="px-1 py-6 text-center"
-      >
+      <EmptyState story="scope" exit="run Preview to project the draft's target writes">
         no evaluation yet
       </EmptyState>
     );
@@ -120,12 +116,11 @@ export function EvaluationView({
         <EmptyState
           story="scope"
           exit="add assignments that bind source elements, then preview again"
-          className="px-1 py-4"
         >
           the evaluation produced no target writes
         </EmptyState>
       ) : (
-        <ArtifactFrame className="overflow-x-auto">
+        <ArtifactFrame>
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-line">

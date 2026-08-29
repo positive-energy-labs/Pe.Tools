@@ -14,9 +14,23 @@
  *   the caller knows the exit ("run a read", "widen the scope") — a primitive cannot.
  */
 import { token } from "#/lib/token";
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const coverageBarRecipe = tv({
+  slots: {
+    base: "",
+    bar: "flex h-2.5 overflow-hidden border border-line",
+    segment: "border-r border-on",
+    rest: "bg-recess",
+    legend: "mt-1 flex flex-wrap gap-x-3 gap-y-0.5",
+    key: "inline-flex items-center gap-1 face-mono t-caption tabular-nums text-ink",
+    dot: "inline-block size-[7px] rounded-[1px]",
+    label: "text-ink-2",
+    total: "text-ink-2",
+  },
+});
 
 export interface CoverageSegment {
   label: string;
@@ -28,24 +42,33 @@ export interface CoverageSegment {
 export function CoverageBar({
   segments,
   total,
-  className,
 }: {
   segments: readonly CoverageSegment[];
   /** Denominator; defaults to the segment sum. A shortfall renders as an unaccounted tail. */
   total?: number;
-  className?: string;
 }) {
   const sum = segments.reduce((acc, s) => acc + s.count, 0);
   const denom = total ?? sum;
   if (denom <= 0) return null;
+  const {
+    base,
+    bar,
+    segment,
+    rest,
+    legend,
+    key,
+    dot,
+    label,
+    total: totalSlot,
+  } = coverageBarRecipe();
   return (
-    <div className={cn(className)}>
-      <div className="dl-coverage">
+    <div className={base()}>
+      <div className={bar()}>
         {segments.map((s) => (
           <div
             key={s.label}
             title={`${s.label}: ${s.count}`}
-            className="dl-coverage-seg"
+            className={segment()}
             style={{
               width: `${(s.count / denom) * 100}%`,
               backgroundColor: `color-mix(in srgb, ${token(`viz-${s.viz}`)} 55%, transparent)`,
@@ -55,19 +78,19 @@ export function CoverageBar({
         {sum < denom && (
           <div
             title={`unaccounted: ${denom - sum}`}
-            className="dl-coverage-rest"
+            className={rest()}
             style={{ width: `${((denom - sum) / denom) * 100}%` }}
           />
         )}
       </div>
-      <div className="dl-coverage-legend">
+      <div className={legend()}>
         {segments.map((s) => (
-          <span key={s.label} className="dl-coverage-key">
-            <span className="dl-coverage-dot" style={{ backgroundColor: token(`viz-${s.viz}`) }} />
-            <span className="dl-coverage-label">{s.label}</span> {s.count}
+          <span key={s.label} className={key()}>
+            <span className={dot()} style={{ backgroundColor: token(`viz-${s.viz}`) }} />
+            <span className={label()}>{s.label}</span> {s.count}
           </span>
         ))}
-        {typeof total === "number" && <span className="dl-coverage-of">of {total}</span>}
+        {typeof total === "number" && <span className={totalSlot()}>of {total}</span>}
       </div>
     </div>
   );

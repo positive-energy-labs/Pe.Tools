@@ -38,9 +38,32 @@
  */
 import { ArrowLeft, ArrowRight, ExternalLink, type LucideIcon } from "lucide-react";
 
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const verbRecipe = tv({
+  slots: {
+    base: "inline-flex h-6 cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-value font-medium text-ink enabled:hover:veil focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-recess disabled:text-ink-2 disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
+    reason: "max-w-[36ch] self-center t-caption text-ink-2 italic",
+    group: "",
+    groupHead: "mb-1.5 flex items-baseline gap-1.5 border-b border-line pb-[3px]",
+    groupTitle: "face-mono t-caption t-upper text-ink",
+    groupRadius: "t-caption text-ink-2",
+    row: "flex flex-wrap items-start gap-1.5",
+  },
+  variants: {
+    tone: {
+      act: { base: "ink-wash" },
+      commit: { base: "bg-commit text-on-commit" },
+      nav: { base: "px-1 text-nav enabled:hover:underline enabled:hover:underline-offset-3" },
+      agent: {
+        base: "text-pea-ink pea-wash",
+      },
+    },
+  },
+  defaultVariants: { tone: "act" },
+});
 
 /** `nav` is separated out at the type level because it alone requires a `direction`. */
 export type VerbTone = "act" | "commit" | "nav" | "agent";
@@ -69,7 +92,6 @@ interface VerbBase {
   disabled?: boolean;
   /** In flight. Inert, but not a refusal — no reason line renders. */
   busy?: boolean;
-  className?: string;
 }
 
 export type VerbProps =
@@ -86,18 +108,19 @@ export type VerbProps =
     });
 
 export function Verb(props: VerbProps) {
-  const { label, onClick, reason, disabled, busy, className } = props;
+  const { label, onClick, reason, disabled, busy } = props;
   // Narrow on `props.tone`, not on the defaulted local — the discriminant is what carries
   // `direction` into scope.
   const Icon = props.tone === "nav" ? NAV_ICON[props.direction] : props.icon;
   const tone = props.tone ?? "act";
   const inert = disabled === true || busy === true;
+  const slots = verbRecipe({ tone });
 
   return (
     <>
       <button
         type="button"
-        className={cn("dl-verb", className)}
+        className={slots.base()}
         data-tone={tone}
         disabled={inert}
         onClick={onClick}
@@ -109,7 +132,7 @@ export function Verb(props: VerbProps) {
       {/* THE UN-GAGGED COMMIT (fit reviews, ruled 2026-08-16): only a disabled commit verb says
           its reason on the surface; busy is not a refusal and every other tone keeps the title. */}
       {tone === "commit" && disabled === true ? (
-        <span className="dl-verb-reason">{reason}</span>
+        <span className={slots.reason()}>{reason}</span>
       ) : null}
     </>
   );
@@ -120,7 +143,6 @@ export interface VerbGroupProps {
   title: string;
   /** The blast radius in words, e.g. "document · model · external". Grouping's whole payload. */
   radius?: string;
-  className?: string;
   children: React.ReactNode;
 }
 
@@ -132,14 +154,15 @@ export interface VerbGroupProps {
  * BORDER BUDGET: a lane of plain controls carries no state, so it is deliberately NOT wrapped in
  * an `ArtifactFrame`. The group head is all the grouping it is allowed to buy.
  */
-export function VerbGroup({ title, radius, className, children }: VerbGroupProps) {
+export function VerbGroup({ title, radius, children }: VerbGroupProps) {
+  const slots = verbRecipe();
   return (
-    <div className={className}>
-      <div className="dl-verb-group-head">
-        <span className="dl-verb-group-title">{title}</span>
-        {radius != null ? <span className="dl-verb-group-radius">{radius}</span> : null}
+    <div className={slots.group()}>
+      <div className={slots.groupHead()}>
+        <span className={slots.groupTitle()}>{title}</span>
+        {radius != null ? <span className={slots.groupRadius()}>{radius}</span> : null}
       </div>
-      <div className="dl-verb-row">{children}</div>
+      <div className={slots.row()}>{children}</div>
     </div>
   );
 }

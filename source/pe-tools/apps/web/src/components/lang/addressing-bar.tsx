@@ -19,9 +19,17 @@
  * being asked to carry something with a better home. Under compression, identity outranks
  * controls: the rail wraps rather than shrinking the sentence to a sliver.
  */
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const addressingBarRecipe = tv({
+  slots: {
+    base: "flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2",
+    name: "face-mono t-caption t-upper tracking-[0.3em] text-ink-2",
+    seam: "ml-auto",
+  },
+});
 
 export function AddressingBar({
   name,
@@ -30,7 +38,6 @@ export function AddressingBar({
   verb,
   advisory,
   seam,
-  className,
 }: {
   /** The route's name — rendered as quiet tracked chrome. */
   name: string;
@@ -44,16 +51,16 @@ export function AddressingBar({
   advisory?: React.ReactNode;
   /** The fixture/seam chip. The component right-aligns it. */
   seam?: React.ReactNode;
-  className?: string;
 }) {
+  const { base, name: nameSlot, seam: seamSlot } = addressingBarRecipe();
   return (
-    <header className={cn("dl-addr", className)}>
-      <span className="dl-addr-name">{name}</span>
+    <header className={base()}>
+      <span className={nameSlot()}>{name}</span>
       {sentence}
       {facts}
       {verb}
       {advisory}
-      {seam != null ? <span className="dl-addr-seam">{seam}</span> : null}
+      {seam != null ? <span className={seamSlot()}>{seam}</span> : null}
     </header>
   );
 }

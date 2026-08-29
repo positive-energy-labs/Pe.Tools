@@ -81,7 +81,7 @@ function ArmingRoute() {
         </p>
 
         {/* ── live ─────────────────────────────────────────────────────────────────────── */}
-        <Section label="01 · live" className="flex flex-col gap-3">
+        <Section label="01 · live">
           <p className="t-label text-ink-2">
             type a reason to arm it · the first commit takes a drift refusal · re-plan, then commit
             again
@@ -145,7 +145,7 @@ function ArmingRoute() {
         </Section>
 
         {/* ── frozen ───────────────────────────────────────────────────────────────────── */}
-        <Section label="02 · the three phases, frozen" className="flex flex-col gap-3">
+        <Section label="02 · the three phases, frozen">
           <p className="t-label text-ink-2">
             the same component, three states, so the sequence can be read without performing it
           </p>

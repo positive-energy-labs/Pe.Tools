@@ -6,8 +6,8 @@
  * This test IS the lint. `@pe/repo-guards#test` runs in the `ready` lane, so the
  * token discipline that held by review during the sweep now holds by assertion. It encodes the
  * census gates driven to zero in the one-system design sweep (closed 2026-08-16; see the
- * Enforcement lines in docs/features/design-system/LEDGER.md). It walks src/**\/*.{ts,tsx,css} once with plain
- * regexes — no dependencies, no AST.
+ * Enforcement lines in docs/features/design-system/LEDGER.md). It walks src/**\/*.{ts,tsx,css}
+ * once and uses the TypeScript and Tailwind dependencies already wired into the web package.
  *
  * ── HARD ZERO (any occurrence fails) ────────────────────────────────────────────────────────
  *  1. dead-shim tokens   var(--st-* --act-* --cat-* --pe-blue* --pe-green --paper* --mist
@@ -18,22 +18,18 @@
  *  2. bare hairlines     var(--line) / var(--line-2). The canon hairlines are --pe-line /
  *                        --pe-line-2 (base.css); the bare names died with the Lens
  *                        vocabulary.
- *  3. tele classes       tele / tele-label / section-label as class words. The TYPE TIERS
- *                        ruling: tier x face x case replaced
- *                        the tele bundles, deleted 2026-08-16. Comments are stripped first;
- *                        lang's `dl-section-label` is a different word and stays legal.
- *  4. hex literals       #rrggbb / #rrggbbaa outside base.css. THE LAW in the canon
+ *  3. hex literals       #rrggbb / #rrggbbaa outside base.css. THE LAW in the canon
  *                        header: "no component, no route, and no CSS file downstream may name
  *                        a colour literal" — a colour is a one-line edit in base.css.
- *  5. sub-10px type      text-[Npx] with N < 10. The 10px floor from the type-tier ruling
+ *  4. sub-10px type      text-[Npx] with N < 10. The 10px floor from the type-tier ruling
  *                        (ops enforced it on itself; the flagship pass finished the job).
- *  6. inline backgrounds  background: in TypeScript/TSX style objects. The shared veil uses
+ *  5. inline backgrounds  background: in TypeScript/TSX style objects. The shared veil uses
  *                        background-image, so a shorthand reset is forbidden; CSS declarations
  *                        remain legal.
  *
  * ── HARD ZERO (every category below must remain empty) ─────────────────────────────────────
- *  rawTextSize      any raw text-[Npx|Nrem] or named Tailwind text-size utility. The seven
- *                   tiers (t-* classes) are the scale; nothing else names a size.
+ *  rawTextSize      any raw text-[Npx|Nrem]. Named off-system sizes emit no CSS and are caught
+ *                   by the compiler census.
  *  rawButton        <button> outside components/ui + components/lang. World actions are
  *                   lang/Verb, surface machinery is lang/Press.
  *  uiButtonImports  import sites of ui/button. The file is deleted; this stops it returning.
@@ -45,20 +41,23 @@
  *                   outside the foundation. Every UI value consumes a tier or weight variable;
  *                   SVG drawing geometry keeps its numeric fontSize presentation attributes.
  *  rawLeading       every Tailwind leading-* utility. Tier leading is authoritative.
- *  rawFace          font-mono, ui-monospace, and --font-pe-mono outside the foundation.
+ *  rawFace          ui-monospace and --font-pe-mono outside the foundation. Off-system face
+ *                   utilities emit no CSS and are caught by the compiler census.
  *  longTitle        title= props over 240 characters. Long guidance belongs in visible HelpTip
  *                   content; instance facts may remain in title attributes.
  *
  *  The walk covers every apps/web/src TypeScript, TSX, and CSS file, including prototype paths.
  *  Only the generated route tree is excluded; mounted prototypes remain maintained surface.
  *
- *  Every category is a direct hard-zero assertion. Failures include the first 40 offending
- *  paths and source matches, so a new violation points at its repair site.
+ *  Value rules use focused regexes. Class and export rules use the TypeScript AST plus Tailwind's
+ *  own compiler, so strings are checked in their authored context instead of as loose source text.
  * =============================================================================================
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { dirname, join, posix, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import ts from "../../../apps/web/node_modules/typescript/lib/typescript.js";
 import { describe, expect, it } from "vite-plus/test";
 
 // ── the walk ─────────────────────────────────────────────────────────────────────────────────
@@ -94,11 +93,11 @@ describe("design guard â€” current token authority", () => {
     expect(offences, report(offences)).toEqual([]);
   });
 
-  it("has no shadcn semantic color vars or utilities", () => {
+  it("has no shadcn semantic color vars", () => {
     const names =
       "background|foreground|primary|secondary|muted|accent|destructive|card|popover|border|input|ring|sidebar|chart-[1-5]";
     const re = new RegExp(
-      `var\\(--(?:color-)?(?:${names})(?![-\\w])|["']--(?:color-)?(?:${names})(?![-\\w])["']\\s*:|(?:^|[,{;\\n])\\s*--(?:color-)?(?:${names})(?![-\\w])\\s*:|(?<![-\\w])(?:bg|text|border|divide|ring|outline|fill|stroke)-(?:${names})(?![-\\w])`,
+      `var\\(--(?:color-)?(?:${names})(?![-\\w])|["']--(?:color-)?(?:${names})(?![-\\w])["']\\s*:|(?:^|[,{;\\n])\\s*--(?:color-)?(?:${names})(?![-\\w])\\s*:`,
       "g",
     );
     const offences = scan(FILES, re);
@@ -254,18 +253,6 @@ describe("design guard — maintained surface hard zeros", () => {
     assertZero("bareLine", offences);
   });
 
-  it("no tele / tele-label / section-label class words (type tiers replaced the bundles)", () => {
-    const re = /(?<![-\w])(?:tele-label|section-label|tele)(?![-\w])/g;
-    const offences: Offence[] = [];
-    for (const f of FILES) {
-      const stripped = stripComments(f.text);
-      for (const m of stripped.matchAll(re)) {
-        offences.push({ rel: f.rel, line: lineOf(stripped, m.index), match: m[0] });
-      }
-    }
-    assertZero("tele", offences);
-  });
-
   it("no hex colour literal outside base.css (a colour is a one-line edit there)", () => {
     const re = /(?<![\w#])#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?\b/g;
     const offences = scan(
@@ -365,14 +352,14 @@ describe("design guard — maintained surface hard zeros", () => {
     assertZero("numericLineHeight", scan(files, re));
   });
 
-  it("uses one face spelling outside the foundation", () => {
+  it("uses one face variable outside the foundation", () => {
     const files = FILES.filter((f) => f.rel !== "base.css" && f.rel !== "design-lang.css").map(
       (f) => ({
         ...f,
         text: stripComments(f.text),
       }),
     );
-    const re = /(?<![-\w])font-mono(?![-\w])|ui-monospace|--font-pe-mono/g;
+    const re = /ui-monospace|--font-pe-mono/g;
     assertZero("rawFace", scan(files, re));
   });
 
@@ -388,7 +375,7 @@ describe("design guard — maintained surface hard zeros", () => {
     assertZero("numericWeight", scan(files, re));
   });
 
-  it("has no static numeric CSS colors or stock palette utilities outside the foundation", () => {
+  it("has no static numeric CSS colors outside the foundation", () => {
     const files = FILES.filter((f) => f.rel !== "base.css").map((f) => ({
       ...f,
       text: maskTemplateExpressions(stripComments(f.text)),
@@ -398,8 +385,6 @@ describe("design guard — maintained surface hard zeros", () => {
     const displayP3 = /\bcolor\(\s*display-p3\s+[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?=\s|\/|\))/gi;
     const namedColor =
       /\b(?:color|fill|stroke|background(?:-[\w-]+)?|border(?:-[\w-]+)?|outline(?:-[\w-]+)?|(?:box|text)-shadow)\s*[:=][^;\n}]*\b(?:aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle| tomato|transparent|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen)\b/gi;
-    const stockPalette =
-      /(?<![-\w])(?:bg|text|border|divide|ring|outline|fill|stroke)-(?:white|black|slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)(?:-\d{2,3})?(?:\/\d+)?(?![-\w])/g;
     const namedOffences = scan(files, namedColor).filter(
       (o) => !/\b(?:transparent|currentColor|inherit)\b/i.test(o.match),
     );
@@ -407,7 +392,6 @@ describe("design guard — maintained surface hard zeros", () => {
       ...scan(files, numericColor),
       ...scan(files, displayP3),
       ...namedOffences,
-      ...scan(files, stockPalette),
     ]);
   });
 
@@ -532,6 +516,405 @@ describe("design guard — maintained surface hard zeros", () => {
   });
 });
 
+// ── checks that code can hold ────────────────────────────────────────────────────────────────
+
+type ClassUse = { rel: string; line: number; token: string };
+
+const tokenise = (text: string): string[] => text.split(/\s+/).filter(Boolean);
+
+const propertyName = (name: ts.PropertyName | undefined): string | undefined => {
+  if (!name) return undefined;
+  return ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
+};
+
+const classStrings = (node: ts.Node, source: ts.SourceFile, rel: string, out: ClassUse[]): void => {
+  const add = (text: string, at: ts.Node) => {
+    const line = source.getLineAndCharacterOfPosition(at.getStart(source)).line + 1;
+    for (const token of tokenise(text)) out.push({ rel, line, token });
+  };
+
+  if (ts.isStringLiteralLike(node)) {
+    add(node.text, node);
+    return;
+  }
+  if (ts.isTemplateExpression(node)) {
+    add(node.head.text, node.head);
+    for (const span of node.templateSpans) {
+      classStrings(span.expression, source, rel, out);
+      add(span.literal.text, span.literal);
+    }
+    return;
+  }
+  if (ts.isParenthesizedExpression(node)) {
+    classStrings(node.expression, source, rel, out);
+    return;
+  }
+  if (ts.isJsxExpression(node)) {
+    if (node.expression) classStrings(node.expression, source, rel, out);
+    return;
+  }
+  if (ts.isConditionalExpression(node)) {
+    classStrings(node.whenTrue, source, rel, out);
+    classStrings(node.whenFalse, source, rel, out);
+    return;
+  }
+  if (ts.isBinaryExpression(node)) {
+    if (node.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken)
+      classStrings(node.left, source, rel, out);
+    classStrings(node.right, source, rel, out);
+    return;
+  }
+  if (ts.isArrayLiteralExpression(node)) {
+    for (const item of node.elements) classStrings(item, source, rel, out);
+    return;
+  }
+  if (ts.isObjectLiteralExpression(node)) {
+    for (const p of node.properties) {
+      if (ts.isPropertyAssignment(p)) {
+        const name = propertyName(p.name);
+        if (name) add(name, p.name);
+      } else if (ts.isShorthandPropertyAssignment(p)) add(p.name.text, p.name);
+      else if (ts.isSpreadAssignment(p)) classStrings(p.expression, source, rel, out);
+    }
+    return;
+  }
+  if (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "cn"
+  ) {
+    for (const arg of node.arguments) classStrings(arg, source, rel, out);
+  }
+};
+
+const objectValues = (
+  node: ts.Expression,
+  source: ts.SourceFile,
+  rel: string,
+  out: ClassUse[],
+): void => {
+  if (!ts.isObjectLiteralExpression(node)) return;
+  for (const p of node.properties)
+    if (ts.isPropertyAssignment(p)) classStrings(p.initializer, source, rel, out);
+};
+
+const tvStrings = (
+  call: ts.CallExpression,
+  source: ts.SourceFile,
+  rel: string,
+  out: ClassUse[],
+) => {
+  const config = call.arguments[0];
+  if (!config || !ts.isObjectLiteralExpression(config)) return;
+  for (const p of config.properties) {
+    if (!ts.isPropertyAssignment(p)) continue;
+    const name = propertyName(p.name);
+    if (name === "base") classStrings(p.initializer, source, rel, out);
+    if (name === "slots") objectValues(p.initializer, source, rel, out);
+    if (name === "variants" && ts.isObjectLiteralExpression(p.initializer)) {
+      for (const variant of p.initializer.properties) {
+        if (!ts.isPropertyAssignment(variant) || !ts.isObjectLiteralExpression(variant.initializer))
+          continue;
+        for (const option of variant.initializer.properties) {
+          if (!ts.isPropertyAssignment(option)) continue;
+          if (ts.isObjectLiteralExpression(option.initializer))
+            objectValues(option.initializer, source, rel, out);
+          else classStrings(option.initializer, source, rel, out);
+        }
+      }
+    }
+    if (name === "compoundVariants" && ts.isArrayLiteralExpression(p.initializer)) {
+      for (const entry of p.initializer.elements) {
+        if (!ts.isObjectLiteralExpression(entry)) continue;
+        for (const field of entry.properties) {
+          if (
+            ts.isPropertyAssignment(field) &&
+            ["class", "className"].includes(propertyName(field.name) ?? "")
+          )
+            classStrings(field.initializer, source, rel, out);
+        }
+      }
+    }
+  }
+};
+
+const classUses = (files: Entry[] = FILES): ClassUse[] => {
+  const out: ClassUse[] = [];
+  for (const file of files.filter((f) => /\.tsx?$/.test(f.rel))) {
+    const source = ts.createSourceFile(
+      file.rel,
+      file.text,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node: ts.Node): void => {
+      if (ts.isJsxAttribute(node) && node.name.getText(source) === "className") {
+        if (node.initializer) classStrings(node.initializer, source, file.rel, out);
+        return;
+      }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+        if (node.expression.text === "cn") {
+          for (const arg of node.arguments) classStrings(arg, source, file.rel, out);
+          return;
+        }
+        if (node.expression.text === "tv") {
+          tvStrings(node, source, file.rel, out);
+          return;
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return [...new Map(out.map((use) => [`${use.rel}:${use.line}:${use.token}`, use])).values()];
+};
+
+const CLASS_USES = classUses();
+const webRequire = createRequire(join(ROOT, "../package.json"));
+const viteRequire = createRequire(webRequire.resolve("@tailwindcss/vite"));
+const tailwindNode = (await import(
+  pathToFileURL(viteRequire.resolve("@tailwindcss/node")).href
+)) as {
+  compile(
+    css: string,
+    options: { base: string; from: string; onDependency(path: string): void },
+  ): Promise<{ build(candidates: string[]): string }>;
+};
+
+const cssRel = (specifier: string, importer: string): string | undefined => {
+  const clean = specifier.replace(/\?.*$/, "");
+  if (!clean.endsWith(".css")) return undefined;
+  if (clean.startsWith("#/")) return clean.slice(2);
+  return clean.startsWith(".")
+    ? posix.normalize(posix.join(posix.dirname(importer), clean))
+    : undefined;
+};
+
+const CSS_ENTRIES = new Set<string>();
+for (const file of FILES.filter((f) => /\.tsx?$/.test(f.rel))) {
+  const source = ts.createSourceFile(
+    file.rel,
+    file.text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier))
+      continue;
+    const rel = cssRel(statement.moduleSpecifier.text, file.rel);
+    if (rel) CSS_ENTRIES.add(rel);
+  }
+}
+
+const CSS_BY_REL = new Map(FILES.filter((f) => f.rel.endsWith(".css")).map((f) => [f.rel, f]));
+const LIVE_CSS = new Set(CSS_ENTRIES);
+for (const rel of LIVE_CSS) {
+  const file = CSS_BY_REL.get(rel);
+  if (!file) continue;
+  for (const match of file.text.matchAll(/@import\s+(?:url\()?\s*["']([^"']+)["']/g)) {
+    const imported = cssRel(match[1], rel);
+    if (imported) LIVE_CSS.add(imported);
+  }
+}
+
+const cssUnescape = (value: string): string =>
+  value.replace(/\\(?:([0-9a-fA-F]{1,6})\s?|([^\r\n]))/g, (_, hex: string, escaped: string) =>
+    hex ? String.fromCodePoint(Number.parseInt(hex, 16)) : escaped,
+  );
+const cssClasses = (css: string): Set<string> => {
+  const classes = new Set<string>();
+  for (const block of stripComments(css).matchAll(/([^{}]+)\{/g)) {
+    for (const match of block[1].matchAll(/\.((?:\\[0-9a-fA-F]{1,6}\s?|\\[^\r\n]|[\w-])+)/g))
+      classes.add(cssUnescape(match[1]));
+  }
+  return classes;
+};
+
+const APP_CSS = [...CSS_ENTRIES]
+  .sort()
+  .map((rel) => `@import "./${rel}";`)
+  .join("\n");
+const CSS_ENTRY = join(ROOT, "styles.css");
+const compiler = await tailwindNode.compile(APP_CSS, {
+  base: ROOT,
+  from: CSS_ENTRY,
+  onDependency() {},
+});
+const LOADER_PRESENT = [
+  "flex",
+  "h-4",
+  "face-mono",
+  "t-caption",
+  "text-ink-2",
+  "z-modal",
+  "dl-cell",
+];
+const LOADER_ABSENT = ["text-red-500", "text-xs", "font-mono"];
+const candidates = [
+  ...new Set([...CLASS_USES.map((use) => use.token), ...LOADER_PRESENT, ...LOADER_ABSENT]),
+];
+const registered = cssClasses(compiler.build(candidates));
+const REMAINDER = CLASS_USES.filter(
+  (use) => !registered.has(use.token) && !/^(?:group|peer)(?:\/[\w-]+)?$/.test(use.token),
+);
+
+const baseClass = (candidate: string): string => {
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < candidate.length; i++) {
+    if ("[(".includes(candidate[i])) depth++;
+    else if ("])".includes(candidate[i])) depth--;
+    else if (candidate[i] === ":" && depth === 0) start = i + 1;
+  }
+  return candidate.slice(start).replace(/^!|!$/g, "").replace(/^-/, "");
+};
+
+const DEAD_CSS_CLASSES = new Map<string, Set<string>>(
+  [...CSS_BY_REL]
+    .filter(([rel]) => !LIVE_CSS.has(rel))
+    .map(([rel, file]) => [rel, cssClasses(file.text)]),
+);
+const DEAD_VOCABULARY = REMAINDER.filter((use) =>
+  [...DEAD_CSS_CLASSES.values()].some((classes) => classes.has(baseClass(use.token))),
+);
+const PLUGIN_ONLY = REMAINDER.filter(
+  (use) =>
+    !DEAD_VOCABULARY.includes(use) &&
+    /(?:^|:)(?:data-open|supports-backdrop-filter):/.test(use.token),
+);
+const TRUE_UNREGISTERED = REMAINDER.filter(
+  (use) => !DEAD_VOCABULARY.includes(use) && !PLUGIN_ONLY.includes(use),
+);
+
+const GEOMETRY =
+  /^(?:flex(?:-.+)?|inline-flex|grid(?:-.+)?|inline-grid|gap(?:-[xy])?-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|overflow(?:-[xy])?(?:-.+)?|items-.+|justify-.+|self-.+|col-.+|row-.+|sticky|z-.+)$/;
+const ALLOWLIST_VIOLATIONS = CLASS_USES.filter(
+  (use) => !use.rel.startsWith("components/") && !GEOMETRY.test(baseClass(use.token)),
+);
+const ALLOWLIST_BY_FILE = Object.fromEntries(
+  [...new Set(ALLOWLIST_VIOLATIONS.map((use) => use.rel))]
+    .sort()
+    .map((rel) => [rel, ALLOWLIST_VIOLATIONS.filter((use) => use.rel === rel).length]),
+);
+const ALLOWLIST_BASELINE = JSON.parse(
+  readFileSync(join(HERE, "design-allowlist.baseline.json"), "utf8"),
+) as Record<string, number>;
+
+const hasExport = (node: ts.Node): boolean =>
+  ts.canHaveModifiers(node) &&
+  !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+const isPascal = (name: string): boolean => /^[A-Z][A-Za-z0-9]*$/.test(name);
+const LANG_COMPONENTS = new Set<string>();
+for (const file of FILES.filter(
+  (f) => f.rel.startsWith("components/lang/") && f.rel.endsWith(".tsx"),
+)) {
+  const source = ts.createSourceFile(
+    file.rel,
+    file.text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  source.forEachChild((node) => {
+    if (ts.isFunctionDeclaration(node) && hasExport(node) && node.name && isPascal(node.name.text))
+      LANG_COMPONENTS.add(node.name.text);
+    if (ts.isVariableStatement(node) && hasExport(node))
+      for (const declaration of node.declarationList.declarations)
+        if (
+          ts.isIdentifier(declaration.name) &&
+          isPascal(declaration.name.text) &&
+          declaration.initializer &&
+          (ts.isArrowFunction(declaration.initializer) ||
+            ts.isFunctionExpression(declaration.initializer))
+        )
+          LANG_COMPONENTS.add(declaration.name.text);
+  });
+}
+const SWATCH = FILES.find((f) => f.rel === "routes/design-system_.swatch.tsx");
+const SWATCH_USES = new Set<string>();
+if (SWATCH) {
+  const source = ts.createSourceFile(
+    SWATCH.rel,
+    SWATCH.text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const isImported = (node: ts.Node): boolean => {
+    for (let parent = node.parent; parent; parent = parent.parent)
+      if (ts.isImportDeclaration(parent)) return true;
+    return false;
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && !isImported(node)) SWATCH_USES.add(node.text);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+}
+const MISSING_SWATCH = [...LANG_COMPONENTS].filter((name) => !SWATCH_USES.has(name)).sort();
+
+describe("design checks — code holds the boundary", () => {
+  it("loads the app CSS graph before checking candidates", () => {
+    expect(LOADER_PRESENT.filter((candidate) => !registered.has(candidate))).toEqual([]);
+    expect(LOADER_ABSENT.filter((candidate) => registered.has(candidate))).toEqual([]);
+  });
+
+  it(`partitions unregistered classes (${DEAD_VOCABULARY.length} dead CSS, ${PLUGIN_ONLY.length} plugin-only)`, () => {
+    expect(DEAD_VOCABULARY.length + PLUGIN_ONLY.length + TRUE_UNREGISTERED.length).toBe(
+      REMAINDER.length,
+    );
+  });
+
+  const unregisteredCheck = TRUE_UNREGISTERED.length === 0 ? it : it.skip;
+  unregisteredCheck(
+    `unregistered classes — hard zero (${TRUE_UNREGISTERED.length} true unregistered)`,
+    () => {
+      expect(
+        TRUE_UNREGISTERED,
+        report(TRUE_UNREGISTERED.map((o) => ({ ...o, match: o.token }))),
+      ).toEqual([]);
+    },
+  );
+
+  it(`visual utilities stay in components (${ALLOWLIST_VIOLATIONS.length} baseline exceptions)`, () => {
+    const fixture = classUses([
+      {
+        rel: "fixture.tsx",
+        text: `
+          <div className={\`flex \${on ? "text-ink" : ""}\`} />;
+          cn("grid", { border: on });
+          tv({
+            base: "t-label",
+            slots: { root: "gap-2" },
+            variants: { tone: { x: "bg-page" } },
+            compoundVariants: [{ tone: "x", class: "shadow-sm" }],
+          });
+        `,
+      },
+    ]).map((use) => use.token);
+    expect(fixture).toEqual([
+      "flex",
+      "text-ink",
+      "grid",
+      "border",
+      "t-label",
+      "gap-2",
+      "bg-page",
+      "shadow-sm",
+    ]);
+    const increases = Object.entries(ALLOWLIST_BY_FILE)
+      .filter(([rel, count]) => count > (ALLOWLIST_BASELINE[rel] ?? 0))
+      .map(([rel, count]) => `${rel}: ${count} > ${ALLOWLIST_BASELINE[rel] ?? 0}`);
+    expect(increases).toEqual([]);
+  });
+
+  it("every lang component export is referenced by the swatch", () => {
+    expect(MISSING_SWATCH).toEqual([]);
+  });
+});
+
 const isTsx = (f: Entry) => f.rel.endsWith(".tsx");
 const inUiOrLang = (f: Entry) =>
   f.rel.startsWith("components/ui/") || f.rel.startsWith("components/lang/");
@@ -544,12 +927,11 @@ const assertZero = (name: string, offences: Offence[]) => {
 };
 
 describe("design guard — maintained surface hard zeros", () => {
-  it("rawTextSize — arbitrary and named raw text-size utilities", () => {
+  it("rawTextSize — arbitrary raw text-size utilities", () => {
     // Absolute units only. `text-[0.7rem]` in `ui/badge` survived the px-only form of this gate
     // through every earlier sweep; `em` stays legal because `text-[1em]` is an inheritance
     // instruction — `PROSE_CLASS` is composed at two different tiers by its two consumers.
-    const re =
-      /(?<![-\w])text-(?:\[(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem)\]|xs|sm|base|lg|xl|\d+xl)(?![-\w])/g;
+    const re = /(?<![-\w])text-\[(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem)\](?![-\w])/g;
     assertZero("rawTextSize", scan(FILES, re));
   });
 

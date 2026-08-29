@@ -20,9 +20,34 @@
  */
 import { X } from "lucide-react";
 
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const chipRecipe = tv({
+  slots: {
+    base: "inline-flex h-[18px] max-w-[34ch] items-center gap-[5px] overflow-hidden whitespace-nowrap border border-line bg-artifact px-[5px] face-mono t-caption tracking-[0.03em] text-ink-2",
+    label: "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
+    count: "text-ink-2 tabular-nums",
+    remove:
+      "grid size-3 cursor-pointer place-items-center border-0 bg-transparent text-ink-2 enabled:hover:veil focus-visible:veil focus-visible:outline focus-visible:outline-line-2 [&>svg]:size-[9px]",
+    tag: "face-mono t-caption t-upper tabular-nums text-ink-2",
+  },
+  variants: {
+    tone: {
+      meta: {},
+      caution: { base: "text-caution" },
+      done: { base: "text-done" },
+      alarm: { base: "text-alarm" },
+      pea: { base: "text-pea-ink" },
+    },
+    state: {
+      solid: {},
+      seam: { base: "seam-border" },
+    },
+  },
+  defaultVariants: { tone: "meta", state: "solid" },
+});
 
 /** The meaning roles a fact may wear. No chip-only hues exist, by design. */
 export type FactTone = "meta" | "caution" | "done" | "alarm" | "pea";
@@ -35,19 +60,19 @@ export interface FactChipProps {
   dashed?: boolean;
   /** Required: what the fact means and what would change it. */
   title: string;
-  className?: string;
 }
 
 /** A state fact, machine-measured, so mono. Not a control — it has no press. */
-export function FactChip({ children, tone = "meta", dashed, title, className }: FactChipProps) {
+export function FactChip({ children, tone = "meta", dashed, title }: FactChipProps) {
+  const { base, label } = chipRecipe({ tone, state: dashed ? "seam" : "solid" });
   return (
     <span
-      className={cn("dl-chip", className)}
+      className={base()}
       data-tone={tone}
       data-seam={dashed === true ? "" : undefined}
       title={title}
     >
-      <span className="dl-chip-label">{children}</span>
+      <span className={label()}>{children}</span>
     </span>
   );
 }
@@ -61,18 +86,18 @@ export interface NarrowChipProps {
   onRemove: () => void;
   /** Required: what this narrowing does to the view. */
   title: string;
-  className?: string;
 }
 
 /** A removable narrowing control. Same shell as a fact, one affordance more. */
-export function NarrowChip({ label, count, onRemove, title, className }: NarrowChipProps) {
+export function NarrowChip({ label, count, onRemove, title }: NarrowChipProps) {
+  const { base, count: countSlot, remove } = chipRecipe();
   return (
-    <span className={cn("dl-chip", className)} title={title}>
+    <span className={base()} title={title}>
       {label}
-      <span className="dl-chip-count">{count}</span>
+      <span className={countSlot()}>{count}</span>
       <button
         type="button"
-        className="dl-chip-x"
+        className={remove()}
         onClick={onRemove}
         title={`Remove the "${label}" narrowing — widens the view back out`}
       >
@@ -82,8 +107,9 @@ export function NarrowChip({ label, count, onRemove, title, className }: NarrowC
   );
 }
 
-/** The small mono tag that names a state or an object (`.dl-tag`): quiet caption-size caps,
+/** The small mono tag that names a state or an object: quiet caption-size caps,
  *  tabular numerals. A phase may tint it inside the arming strip; nowhere else. */
-export function Tag({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <span className={cn("dl-tag", className)}>{children}</span>;
+export function Tag({ children }: { children: React.ReactNode }) {
+  const { tag } = chipRecipe();
+  return <span className={tag()}>{children}</span>;
 }

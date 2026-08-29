@@ -29,7 +29,7 @@ export function SpecText({
 }) {
   if (!spec)
     return (
-      <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
+      <EmptyState story="scope" exit="parse a cut sheet to attach one">
         no spec attached — every number in the profile is asserted rather than sourced
       </EmptyState>
     );
@@ -82,7 +82,7 @@ export function SpecSheet({
 }) {
   if (!spec)
     return (
-      <EmptyState story="scope" exit="parse a cut sheet to attach one" className="p-3">
+      <EmptyState story="scope" exit="parse a cut sheet to attach one">
         no spec attached to render — there are no block placements to draw
       </EmptyState>
     );
@@ -95,7 +95,6 @@ export function SpecSheet({
         {/* A stand-in announces itself AND says what would replace it (SURFACE-PHILOSOPHY §3).
             An advisory, not a warning: it blocks nothing and claims nothing about the model. */}
         <OutcomeLine
-          className="flex-1"
           kind="advisory"
           label="stand-in for the page camera"
           says="block placement only — the real surface renders the PDF here through the grounded-doc camera, at which point these outlines become the real text"
