@@ -1,4 +1,3 @@
-/** A route-local UI manifest. Live facts are total feeds; bindings stay in the route document. */
 import type { Feed } from "#/state/route-store";
 
 export type Dir = "read" | "write" | "sync" | "duplex";
@@ -56,7 +55,6 @@ export interface Product<K extends string> {
   panes: readonly Pane<K>[];
 }
 
-/** Infer the slot-key union once, then check feeds, demands, and draws against it. */
 export const product =
   <const S extends Record<string, Link>>(key: string, name: string, slots: S) =>
   (rest: Omit<Product<keyof S & string>, "key" | "name" | "slots">): Product<keyof S & string> => ({
@@ -77,14 +75,12 @@ export const terminals = <K extends string>(manifest: Product<K>) =>
 export const trunks = <K extends string>(manifest: Product<K>) =>
   slotValues(manifest).filter((slot) => slot.dir === null);
 
-/** Terminals print; a trunk prints only when this product declares no child beneath it. */
 export const prints = <K extends string>(manifest: Product<K>, key: K) =>
   manifest.slots[key].dir !== null || !slotValues(manifest).some((slot) => slot.under === key);
 
 export const targets = <K extends string>(manifest: Product<K>) =>
   slotValues(manifest).filter((slot) => prints(manifest, slot.key));
 
-/** Root to leaf chain for a slot. */
 export function pathOf<K extends string>(manifest: Product<K>, key: K): Link<K>[] {
   const out: Link<K>[] = [];
   let cursor: Link<K> | undefined = manifest.slots[key];
@@ -108,7 +104,6 @@ export const demandedKeys = <K extends string>(stage: Stage<K>) =>
 export const isBound = <K extends string>(link: Link<K>, bound: Bound<K>, multi: Multi<K>) =>
   link.multi ? (multi[link.key]?.size ?? 0) > 0 : bound[link.key] != null;
 
-/** Re-picking a parent clears everything downstream. */
 export function pickInto<K extends string>(
   manifest: Product<K>,
   bound: Bound<K>,
@@ -141,7 +136,6 @@ export function progress<K extends string>(
   return { complete: false, deepest: index > 0 ? chain[index - 1]! : null, next };
 }
 
-/** Why a verb cannot run. Ordered: unwired, unbound, stale, route gate. */
 export function refusal<K extends string>(
   manifest: Product<K>,
   verb: Verb<K>,

@@ -2,13 +2,13 @@
   "rawTable": {
     "total": 16,
     "byArea": {
+      "data-tables": 1,
       "families": 2,
       "family-review": 5,
       "lib": 1,
       "ops": 1,
       "param-tables": 3,
       "parameter-links": 1,
-      "routes": 1,
       "runs": 2
     }
   },
@@ -40,18 +40,19 @@
     }
   },
   "opacityDim": {
-    "total": 41,
+    "total": 45,
     "byArea": {
       "components": 24,
+      "data-tables": 1,
       "families": 1,
       "family": 5,
       "grounded-doc": 1,
       "host": 1,
       "ops": 1,
-      "runs": 2,
-      "takeoff": 2,
+      "runs": 3,
+      "takeoff": 3,
       "targeting": 2,
-      "workbench": 2
+      "workbench": 3
     }
   },
   "longTitle": {
@@ -62,16 +63,17 @@
       "family": 17,
       "family-review": 6,
       "grounded-doc": 1,
-      "routes": 10,
+      "routes": 8,
       "runs": 6,
-      "takeoff": 3
+      "schedule-grid": 1,
+      "takeoff": 4
     }
   },
   "busyState": {
     "total": 3,
     "byArea": {
+      "instances": 1,
       "ops": 1,
-      "routes": 1,
       "runs": 1
     }
   },
@@ -80,27 +82,29 @@
     "byArea": {
       "anatomy": 2,
       "components": 6,
+      "design-system": 1,
       "family": 3,
       "family-review": 49,
       "grilles": 5,
       "host": 3,
       "ops": 28,
       "param-tables": 11,
-      "routes": 7,
+      "routes": 4,
       "runs": 42,
-      "takeoff": 3,
+      "takeoff": 5,
       "targeting": 40,
       "workbench": 9
     }
   },
   "rawMeaningColor": {
-    "total": 98,
+    "total": 103,
     "byArea": {
-      "family": 24,
-      "grounded-doc": 1,
+      "family": 27,
+      "grounded-doc": 3,
       "host": 6,
       "lib": 15,
-      "routes": 5,
+      "routes": 3,
+      "schedule-grid": 2,
       "takeoff": 10,
       "workbench": 37
     }
@@ -110,9 +114,9 @@
     "byArea": {}
   },
   "fatRoute": {
-    "total": 14,
+    "total": 10,
     "byArea": {
-      "routes": 14
+      "routes": 10
     }
   }
 }

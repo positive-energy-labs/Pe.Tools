@@ -1,13 +1,3 @@
-/**
- * PROTOTYPE — mock world v2: the round-1 mock joined with REAL room geometry.
- *
- * Round-1 verdict: real shapes/positions are critical for understanding and identity-at-a-glance.
- * The rhvac fixture carries the actual project-a Partition replay per level (TakeoffRoomShape with
- * real outer loops, labels, and detector flags). This module assigns those shapes to mock zones
- * by label containment and rebuilds each covered zone's rooms from them — real geometry + real
- * flags, synthetic lifecycle metadata (stage, decisions, Manual J data, .r10 links) as before.
- * Zones the fixture doesn't cover keep their synthetic dot-rooms (outer stays null).
- */
 import { loadFixtureTakeoff } from "#/rhvac/fixture";
 import type { RhvacTakeoffData, TakeoffResidueShape, TakeoffRoomShape } from "#/rhvac/types";
 import { containsEvenOdd } from "#/takeoff/model";
@@ -22,7 +12,6 @@ import {
   type RoomType,
 } from "./mock";
 
-// Same deterministic hash as mock.ts (kept private there).
 const hash = (s: string) => {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
@@ -44,16 +33,13 @@ const ROOM_NAMES: [RoomType, string][] = [
   ["mechanical", "Mech"],
 ];
 
-/** MockRoom plus real geometry when the fixture covers it. */
 export interface GeoRoom extends MockRoom {
-  /** Real detector outer loop, model feet — null for zones the fixture doesn't cover. */
   outer: [number, number][] | null;
   holes: [number, number][][];
 }
 
 export interface GeoZone extends Omit<MockZone, "rooms"> {
   rooms: GeoRoom[];
-  /** Real held/void residue shapes that land inside this zone. */
   residues: TakeoffResidueShape[];
 }
 
@@ -98,7 +84,6 @@ function joinGeometry(world: MockWorld, takeoff: RhvacTakeoffData): GeoWorld {
   const zones: GeoZone[] = world.zones.map((z) => {
     const stageIdx = STAGE_ORDER.indexOf(z.stage);
     const shapes = byZone.get(z.zone.key) ?? [];
-    // Rooms only exist from "partitioned" on; a covered zone rebuilds them from real shapes.
     if (stageIdx < 2 || shapes.length === 0)
       return {
         ...z,

@@ -1,29 +1,13 @@
-// The canon data layer for /runs: the run pool, its packages, and the one registration transform
-// the canvas underlay and the SVG overlay both use (so they cannot drift).
-//
-// Data source: the dev-only run-pool file server at `src/routes/api/runs-data.$.ts` (the
-// `pe:takeoff-runs-pool` role; it is a TanStack Start API route, not a vite plugin). It serves
-// the pool at .artifacts/takeoff-runs or PE_TAKEOFF_RUNS_DIR, and reports which directory that
-// resolved to. A run package contains report.json, zone TSVs, registered plan sidecars, and
-// replay/closure rasters. The Revit plan is the substrate. Replay seed ink is optional evidence;
-// the separately persisted ink_*.bin can be stale. Rooms, residues, and zones draw on top.
-
 export type RunMeta = {
   runId: string;
   generatedUtc: string;
   optionsHash: string;
   label: string | null;
-  /** The PE_TAKEOFF_ZONE filter the run executed under. `null` = explicitly unfiltered (full
-   * scope); ABSENT = pre-field package, which can only be assessed heuristically. Duplicated
-   * from report.json so the index can mark partial packages without opening reports. */
   zoneFilter?: string | null;
 };
 
 export type RunIndexEntry = { id: string; meta: RunMeta | null };
 
-/** The index answers WHICH pool it read, not just what was in it — `pool` is the absolute
- * directory the server resolved (PE_TAKEOFF_RUNS_DIR, else <repo>/.artifacts/takeoff-runs). An
- * empty `runs` with a real `pool` is the honest "nothing captured here yet" state. */
 export type RunPool = { pool: string; runs: RunIndexEntry[] };
 
 export type ZoneRecord = {
@@ -53,10 +37,6 @@ export type ZoneRecord = {
   Contained: boolean;
   Rejections: Record<string, number>;
   RejectionDetails: Record<string, string>;
-  /** Per-zone adaptive-policy deviations: knob name → the value this zone actually ran with.
-   * Persisted on every zone (`ZonePolicy.AdaptedKnobs`, IReadOnlyDictionary<string,string>), but
-   * empty across the whole current pool — the adaptive seam carries no live rules yet
-   * (Contracts.cs `AdaptivePolicy = false`). Empty is a fact, not a missing field. */
   adaptedKnobs: Record<string, string>;
   census: { zoneSqft: number; inkSqft: number; inkRatio: number; edgeBandInkFraction: number };
   triage: { verdict: "solve" | "hold"; reason: string };
@@ -77,9 +57,6 @@ export type RunReport = {
   GeneratedUtc: string;
   optionsHash: string;
   options: Record<string, unknown>;
-  /** PE_TAKEOFF_ZONE the run executed under (additive on v4, 2026-08-17). `null` = explicitly
-   * unfiltered; ABSENT = pre-field package (see `partiality`). Since the same date the filter
-   * also lands in optionsHash, so a filtered run can no longer share the full baseline's hash. */
   zoneFilter?: string | null;
   Zones: ZoneRecord[];
   RejectionHistogram: Record<string, number>;
@@ -123,8 +100,6 @@ export type TsvRoom = {
 export type TsvResidue = { id: string; reason: string; sqft: number; loops: [number, number][][] };
 export type ZoneGeometry = {
   rooms: TsvRoom[];
-  // POLY ring kind is passed through from the TSV; treat the first ring per room as the outer
-  // boundary and any further rings as holes (matches eval/rhvac/overlay.py's consumption).
   polys: Map<string, Ring[]>;
   residues: TsvResidue[];
 };
@@ -135,7 +110,6 @@ export async function fetchRunIndex(): Promise<RunPool> {
   const res = await fetch(`${BASE}/index.json`);
   if (!res.ok) throw new Error(`run index: ${res.status}`);
   const body = (await res.json()) as RunPool;
-  // Newest first — ids are timestamp-prefixed by construction.
   return { pool: body.pool, runs: [...body.runs].sort((a, b) => (a.id < b.id ? 1 : -1)) };
 }
 
@@ -153,11 +127,7 @@ export function loadRunReport(runId: string): Promise<RunReport> {
 }
 
 // ---- scores.json (SHIMS.md #1 close) ---------------------------------------------------------
-// Written into the run package at persist time by the C# harness invoking
-// eval/rhvac/score-looks-good.py — the scorer stays the single measure authority, this layer only
-// READS its output. A missing scores.json is an explicit absent state (`null`), never a recompute.
 
-/** One board from the scorer. Field semantics belong to score-looks-good.py, not this file. */
 export type ScoreBoard = {
   oracleRoomsInZones: number;
   roomRecall: number | null;
@@ -171,15 +141,11 @@ export type ScoreBoard = {
 };
 
 export type RunScores = {
-  /** e.g. "v1.1 (cleaned oracle)". Absent on files written by the pre-v1.1 scorer. */
   currency?: string;
   board: ScoreBoard;
-  /** The raw-oracle v1 board, carried alongside during the currency transition. */
   boardV1RawOracle?: ScoreBoard;
 };
 
-/** The two currency boards of a scores.json. A pre-v1.1 file (no currency label) is a v1 board;
- * it never impersonates v1.1. */
 export function scoreBoards(scores: RunScores): { v11: ScoreBoard | null; v1: ScoreBoard | null } {
   const isV11 = scores.currency?.startsWith("v1.1") ?? false;
   return {
@@ -189,7 +155,6 @@ export function scoreBoards(scores: RunScores): { v11: ScoreBoard | null; v1: Sc
 }
 
 const scoresCache = new Map<string, Promise<RunScores | null>>();
-/** Resolves `null` when the package has no scores.json — the caller must SAY so, not substitute. */
 export function loadRunScores(runId: string): Promise<RunScores | null> {
   let cached = scoresCache.get(runId);
   if (!cached) {
@@ -203,22 +168,11 @@ export function loadRunScores(runId: string): Promise<RunScores | null> {
   return cached;
 }
 
-// ---- partial-run honesty (the 20260817-161144 misattribution close) --------------------------
-// A PE_TAKEOFF_ZONE run persists a package whose zones are a SUBSET of the baseline scope. Since
-// 2026-08-17 the filter lands in optionsHash AND as report/meta `zoneFilter` (null = explicitly
-// unfiltered). Pre-field packages can still lie — 161144 proved it — so absence degrades to a
-// cheap heuristic against the pool's modal zone count. Always inform, never block.
-
 export type Partiality =
   | { kind: "full" }
-  /** The package SAYS it was zone-filtered: report/meta `zoneFilter` is a string. */
   | { kind: "partial"; zone: string }
-  /** Pre-field package with suspiciously few zones vs the pool's modal count — it cannot say
-   * whether it was filtered, so the surface must say "possibly", not "is". */
   | { kind: "possibly-partial"; zones: number; modal: number };
 
-/** Partiality of one report. `modalZones` is the pool's modal zone count (null = unknown, which
- * disables the pre-field heuristic — an honest "cannot assess", never a guess). */
 export function partiality(report: RunReport, modalZones: number | null): Partiality {
   if (typeof report.zoneFilter === "string") return { kind: "partial", zone: report.zoneFilter };
   if ("zoneFilter" in report) return { kind: "full" }; // explicit null = explicitly unfiltered
@@ -228,8 +182,6 @@ export function partiality(report: RunReport, modalZones: number | null): Partia
   return { kind: "full" };
 }
 
-/** The pool's modal (most common) zone count — the cheap "what does a full run look like here"
- * yardstick for pre-field packages. Null on an empty pool. */
 export function modalZoneCount(reports: RunReport[]): number | null {
   const counts = new Map<number, number>();
   for (const report of reports) {
@@ -238,8 +190,6 @@ export function modalZoneCount(reports: RunReport[]): number | null {
   let best: number | null = null;
   let bestVotes = 0;
   for (const [zones, votes] of counts) {
-    // Ties break toward the LARGER zone count: a pool half-full of filtered runs must not vote
-    // the filtered size into "full".
     if (votes > bestVotes || (votes === bestVotes && best !== null && zones > best)) {
       best = zones;
       bestVotes = votes;
@@ -248,8 +198,6 @@ export function modalZoneCount(reports: RunReport[]): number | null {
   return best;
 }
 
-/** Modal zone count across the whole pool by run id. Reports are promise-cached, so the ledger
- * and the header share the fetches. Unreadable reports are skipped, not fatal. */
 export async function poolModalZones(runIds: string[]): Promise<number | null> {
   const reports = await Promise.all(runIds.map((id) => loadRunReport(id).catch(() => null)));
   return modalZoneCount(reports.filter((report): report is RunReport => report !== null));
@@ -258,27 +206,18 @@ export async function poolModalZones(runIds: string[]): Promise<number | null> {
 // ---- A/B zone pairing (SHIMS.md #2 close) ----------------------------------------------------
 
 export type ZonePair = {
-  /** Stable card identity: the shared zoneKey under key pairing, else the zone name. */
   id: string;
   level: string;
-  /** Display name — the B side's name wins when both exist (names are per-run ordinals). */
   name: string;
   a: ZoneRecord | null;
   b: ZoneRecord | null;
   pairedBy: "key" | "name";
 };
 
-/** True when every zone in the report carries the v4 stable zone key. */
 export function reportKeyed(report: RunReport | null): boolean {
   return !!report && report.Zones.length > 0 && report.Zones.every((zone) => !!zone.zoneKey);
 }
 
-/**
- * Pair the current run's zones against a baseline. Key pairing runs only when BOTH packages are
- * fully keyed: zones join on identity and anything unmatched is an honest orphan. Name pairing is
- * the pre-key fallback ONLY — names are positional ordinals, so a name pair can compare different
- * geography when zoning moved; callers must surface `pairedBy === "name"` as a caveat.
- */
 export function pairZones(cur: RunReport, prev: RunReport | null): ZonePair[] {
   const byKey = reportKeyed(cur) && reportKeyed(prev);
   const pairedBy: ZonePair["pairedBy"] = byKey ? "key" : "name";
@@ -298,7 +237,6 @@ export function pairZones(cur: RunReport, prev: RunReport | null): ZonePair[] {
       pairedBy,
     };
   });
-  // Baseline-only zones (geography the current run does not have) render as orphans.
   for (const zone of prevZones) {
     if (matched.has(zone)) continue;
     pairs.push({
@@ -313,8 +251,6 @@ export function pairZones(cur: RunReport, prev: RunReport | null): ZonePair[] {
   return pairs;
 }
 
-/** The A-side twin of one B zone (plan-dock peek): by key when both sides carry keys, by name
- * only as the pre-key fallback. A keyed miss is an orphan, not a name match. */
 export function matchZone(candidates: ZoneRecord[], target: ZoneRecord): ZoneRecord | null {
   const keyed =
     !!target.zoneKey && candidates.length > 0 && candidates.every((zone) => !!zone.zoneKey);
@@ -322,8 +258,6 @@ export function matchZone(candidates: ZoneRecord[], target: ZoneRecord): ZoneRec
   return candidates.find((zone) => zone.Zone === target.Zone) ?? null;
 }
 
-// INKP raster: magic "INKP" (0x504B4E49 LE), int32 w, int32 h, f64 minX/minY/cellFt, then a
-// row-major bitfield, LSB-first per byte (C# BitArray serialization order).
 const rasterCache = new Map<string, Promise<Raster>>();
 
 export function classesPathForSeals(sealsPath: string): string {
@@ -428,9 +362,6 @@ export function replayPathForInk(inkPath: string): string {
   return `${directory}replay_${file.slice(4)}`;
 }
 
-/** Parse the seed-ink portion of the gzipped DetectSnapshot (SKAT). This is intentionally the
- * same narrow read as eval/rhvac/overlay.py: skip level/elevation/options and floor/ceiling grids,
- * then expose the exact packed seed-ink bits as a Raster. */
 export function parseReplaySeedInk(buffer: ArrayBuffer): Raster {
   const view = new DataView(buffer);
   const bytes = new Uint8Array(buffer);
@@ -565,10 +496,6 @@ export function parseZoneTsv(text: string): ZoneGeometry {
   return { rooms, polys, residues };
 }
 
-// ---- registration helpers: model feet <-> zone-local pixels ----
-// One transform shared by the <canvas> underlay and the <svg> overlay so they cannot drift.
-// pxPerFt is the caller's zoom; y flips (model +Y up, screen +Y down).
-
 export type ZoneViewport = {
   minX: number;
   minY: number;
@@ -599,7 +526,6 @@ export function toPx(vp: ZoneViewport, xFt: number, yFt: number): [number, numbe
   return [(xFt - vp.minX) * vp.pxPerFt, (vp.maxY - yFt) * vp.pxPerFt];
 }
 
-/** Native plan pixels -> viewport pixels. Canvas setTransform consumes this tuple directly. */
 export function planCanvasTransform(
   plan: PlanRegistration,
   vp: ZoneViewport,
@@ -707,16 +633,6 @@ function blendPixel(
   data[offset + 3] = alpha * 255;
 }
 
-/**
- * Paint a raster's set cells into an ImageData-backed canvas, cropped to the viewport.
- *
- * Underlay-law revision (feedback round 2, kaitpw 2026-08-17): the checkerboard "screening"
- * this function used to apply to invented closures is DELETED — the dithering read as
- * confusion, not honesty. The received-vs-invented distinction now lives entirely in the
- * caller's rgba (palette.ts): received ink is the only near-opaque neutral, invented closures
- * are translucent warm tints. Solid dark = received/drawn; pale translucent = invented. The
- * honesty claim survives; only its volume treatment changed.
- */
 export function paintRaster(
   ctx: CanvasRenderingContext2D,
   raster: Raster,
@@ -785,9 +701,6 @@ export function paintClassRaster(
   ctx.putImageData(image, 0, 0);
 }
 
-// Convenience: the derived board line a run card shows. Kept minimal on purpose — report.json
-// facts only. Scorer numbers (savedWork et al.) come from the package's scores.json via
-// loadRunScores; they are never derived here (the scorer is the one measure authority).
 export function boardSummary(report: RunReport) {
   const zones = report.Zones;
   return {

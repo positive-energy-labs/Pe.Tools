@@ -11,8 +11,8 @@ function block(id: string, page: number, bbox: [number, number, number, number])
 test("flags two blocks sharing a near-identical bbox (the page-6 RSD/Env case)", () => {
   const flagged = findAmbiguousBlockIds([
     block("rsd", 6, [25, 300, 560, 401]),
-    block("env", 6, [26, 301, 559, 400]), // within tolerance of rsd
-    block("mech", 6, [25, 505, 559, 122]), // distinct → clean
+    block("env", 6, [26, 301, 559, 400]),
+    block("mech", 6, [25, 505, 559, 122]),
   ]);
   expect([...flagged].sort()).toEqual(["env", "rsd"]);
 });
@@ -21,7 +21,6 @@ test("does not flag distinct bboxes, or matching bboxes on different pages", () 
   expect(
     findAmbiguousBlockIds([block("a", 1, [0, 0, 10, 10]), block("b", 1, [0, 50, 10, 10])]).size,
   ).toBe(0);
-  // same box, different page → not ambiguous
   expect(
     findAmbiguousBlockIds([block("a", 1, [0, 0, 10, 10]), block("b", 2, [0, 0, 10, 10])]).size,
   ).toBe(0);

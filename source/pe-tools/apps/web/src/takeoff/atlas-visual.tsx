@@ -112,7 +112,7 @@ export function AtlasVisual() {
             onClose={() => setStatsOpen(false)}
           />
         )}
-        {/* Zone info lives ON the plan, where the zone is — not in a far-away rail. */}
+
         {selected && (
           <ZoneCard
             store={store}

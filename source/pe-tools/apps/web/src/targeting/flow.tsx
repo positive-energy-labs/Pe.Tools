@@ -1,9 +1,4 @@
 import { token } from "#/lib/token";
-/**
- * FLOW is the targeting manifest's geometric projection. Trunks stay in the page context;
- * terminals alone take sides: reads enter from the left, writes leave on the right, and
- * sync/duplex terminals keep both heads on the right.
- */
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { cn } from "#/lib/utils";
 import {

@@ -44,8 +44,3 @@ export function ZoneStateBar({
     </span>
   );
 }
-
-/**
- * A plan legend entry. `seam` is the ONLY reason a dashed edge may be drawn (design-lang.css: the
- * border style IS that meaning) — it marks a mark that stands in for geometry that does not exist.
- */

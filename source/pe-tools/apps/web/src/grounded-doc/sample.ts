@@ -1,16 +1,8 @@
 import type { ParsedDocView } from "#/grounded-doc/types";
 
-/**
- * Synthetic parse result for exercising the grounded-doc UX without a
- * LlamaCloud key or a live parse. No screenshots on purpose — the page pane
- * renders wireframe boxes, which is also the fallback for real parses that
- * come back without page images.
- */
 export const SAMPLE_DOC: ParsedDocView = {
   jobId: "sample",
   fileName: "sample-datasheet.pdf (synthetic)",
-  // No extracted images: the images lane only appears for real parses that
-  // return embedded/layout figures.
   images: [],
   pages: [
     { page: 1, width: 612, height: 792, screenshotUrl: null, markdown: "" },

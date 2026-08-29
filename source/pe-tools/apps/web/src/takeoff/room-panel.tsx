@@ -105,11 +105,7 @@ function RoomPanel({
                 <li key={flag}>
                   <p className="face-mono t-value text-alarm">{flag}</p>
                   <p className="face-mono t-value text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
-                  {/* The verdict's TONE is derived from the lane, not maintained: on the live
-                      lane it writes onto the Room Region provenance blob (a write beyond the
-                      page — `commit`), on the fixture it only marks locally (`act`). The route
-                      used to REFUSE SILENTLY when a room had no Room Region home; that refusal
-                      is now the verb's own visible reason. */}
+
                   <span className="mt-0.5 flex gap-1">
                     <Verb
                       tone={live ? "commit" : "act"}
@@ -217,11 +213,3 @@ function RoomPanel({
     </Pane>
   );
 }
-
-/**
- * The zone under the cursor, drawn from the real detector polygons: zone outline, held residues,
- * sibling rooms dim, the cursor room emphasized. Same Y-flipped frame as the level plan, so a
- * room's position here is its position in the model. Rooms the fixture does not cover fall back to
- * label dots, and say so. Ported from the ledger variant — the plan answers "where in the house",
- * this answers "where in the zone", and the second question survived the merge.
- */

@@ -36,8 +36,6 @@ export function LevelPlan({
   onCursor: (z: WorldZone, guid: string) => void;
   onClear: () => void;
 }) {
-  // Stray sub-60 sf zones are excluded from the frame fit AND the render — one of them sitting
-  // 100 ft off the cluster was the reason the real house drew as specks near the legend.
   const drawn = useMemo(() => zones.filter(onPlan), [zones]);
   const skipped = zones.length - drawn.length;
 
@@ -52,9 +50,6 @@ export function LevelPlan({
     return b;
   }, [drawn]);
 
-  // A labelled empty, not an absence (lang EmptyState, R9). §4's two kinds, told apart: zones
-  // that exist but are excluded by the plan's own sub-60 sf gate are the FILTER story; a level
-  // nothing was ever adopted on is the SCOPE story. Different exits.
   if (!bounds)
     return (
       <div className="flex size-full items-center justify-center px-4 text-center">
@@ -87,7 +82,7 @@ export function LevelPlan({
         className="size-full"
       >
         <title>Level plan — declared zones, detected rooms, held residue</title>
-        {/* Clicking nothing returns instantly to the whole house. */}
+
         <rect
           x={0}
           y={0}
@@ -127,9 +122,6 @@ export function LevelPlan({
                 }}
               />
 
-              {/* Held residue — abstention stays visible; a held area beats a guessed one. The
-                  dash is the SEAM reading and is legal here: a residue is declared area with NO
-                  element behind it, which is precisely what the reserved style means. */}
               {z.residues.map((s) => (
                 <path
                   key={s.id}
@@ -153,10 +145,6 @@ export function LevelPlan({
                   e.stopPropagation();
                   if (!dimmed) onCursor(z, room.guid);
                 };
-                // Zones the fixture doesn't cover have no polygon — a dot at the label point
-                // is the honest fallback: position is known, boundary is not. It carries the
-                // reserved DASH, because that is what "a mark standing in for geometry that does
-                // not exist" means in this language.
                 if (!room.outer)
                   return (
                     <circle
@@ -182,9 +170,6 @@ export function LevelPlan({
                       fill={`color-mix(in srgb, ${tone} ${isCursor ? 34 : state === "unreviewed" ? 7 : 13}%, transparent)`}
                       stroke={tone}
                       strokeOpacity={0.85}
-                      // A room needing a call used to be DASHED, which collided with the seam
-                      // reading (a room with an open flag is emphatically real). It separates on
-                      // the alarm hue plus stroke weight instead — the one alarm, doing its job.
                       strokeWidth={isCursor ? 2.5 : state === "call" ? 1.75 : 1}
                       vectorEffect="non-scaling-stroke"
                     >
@@ -245,5 +230,3 @@ export function LevelPlan({
     </div>
   );
 }
-
-// ── Level-wide stats: the surviving piece of the round-1 dashboard ──────────

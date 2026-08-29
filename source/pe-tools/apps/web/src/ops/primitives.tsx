@@ -2,36 +2,12 @@ import { token } from "#/lib/token";
 import { type CSSProperties, type ReactNode, useState } from "react";
 import { cn } from "#/lib/utils";
 
-/**
- * Readonly op-view primitives — the OPS-OWNED shapes that survive the design-language
- * migration (2026-08-16 ops pass): the Revit Project Browser tree, the schedule grid,
- * and the label/value palette. Everything else this file used to export (Chip, OpSection,
- * Provenance, MonoNote, EmptyState, CoverageBar, CatHue/catVar) dissolved onto
- * `components/lang/*` and the `--pe-*` canon.
- *
- * These stay ops-owned because their shape is Revit-familiar, not because their colours
- * are: every colour below is a `--pe-*` role or the viz ladder. No `--cat-*`, no `--line*`,
- * no Lens tokens.
- */
-
-/* ── VizChip — the taxonomy chip ──────────────────────────────────────────── */
-
-/** A rung of the viz ladder (design-lang.css). Indexed, not named: a viz colour asserts
- * "different from its neighbours" and nothing else. */
 export type VizIndex = 1 | 2 | 3 | 4 | 5 | 6;
 
 export function vizVar(viz: VizIndex): string {
   return token(`viz-${viz}`);
 }
 
-/**
- * Tinted TAXONOMY chip — colour by KIND (op kind, doc kind, Revit category, anchor kind),
- * spending the viz ladder by index: 12% bg wash, 25% border, full viz ink. Never a meaning
- * role: a chip whose colour carries STATE is a `FactChip` with a tone, not this.
- *
- * THE GRAYSCALE LAW: the label carries the meaning; the colour only speeds it up. A VizChip
- * whose distinction dies in grayscale is spending the wrong palette.
- */
 export function VizChip({
   viz,
   children,
@@ -57,18 +33,12 @@ export function VizChip({
   );
 }
 
-/* ── KVGrid — label/value pairs ───────────────────────────────────────────── */
-
-/** The only colour a value may buy here: a meaning role, or nothing. A one-member
- * union on purpose — no consumer has earned a second rung yet (§6: no
- * designed-but-unused slots), and widening it later is a type change, not a hunt. */
 export type KVTone = "caution";
 
 const KV_TONE: Record<KVTone, string> = {
   caution: token("caution"),
 };
 
-/** Label/value pairs; values are machine-measured so they read mono. */
 export function KVGrid({
   items,
   columns = 2,
@@ -97,19 +67,14 @@ export function KVGrid({
   );
 }
 
-/* ── TreeView — the Project Browser shape ─────────────────────────────────── */
-
 export type TreeNode = {
   id: string;
   label: ReactNode;
-  /** mono aside on the row's right edge (counts, ids). */
   meta?: ReactNode;
   children?: TreeNode[];
   defaultOpen?: boolean;
 };
 
-/** Collapsible hairline tree, Revit Project Browser flavored: disclosure carets,
- * guide lines, the one neutral hover veil. Leaf rows read as items, group rows as folders. */
 export function TreeView({ nodes, dense = false }: { nodes: TreeNode[]; dense?: boolean }) {
   return (
     <div className="max-h-[32rem] overflow-auto rounded-sm border border-line">
@@ -166,27 +131,19 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
   );
 }
 
-/* ── DataTable — the Revit schedule shape ─────────────────────────────────── */
-
 export type Column<Row> = {
   key: string;
   header: ReactNode;
   cell: (row: Row, index: number) => ReactNode;
-  /** numeric columns right-align and read mono/tabular. */
   numeric?: boolean;
   width?: number | string;
 };
 
-/** The head band shifts the ground, so `--pe-on` is re-declared on the same rule
- * (the design-lang plumbing convention). */
 const RECESS_GROUND = {
   backgroundColor: token("recess"),
   "--pe-on": token("recess"),
 } as CSSProperties;
 
-/** Readonly grid, Revit-schedule flavored: optional centered title band, recessed
- * header band, hairline gridlines, mono numerals. Data cells go square (radius 0
- * inside the 2px frame) — data surfaces may. */
 export function DataTable<Row>({
   title,
   columns,
@@ -244,8 +201,6 @@ export function DataTable<Row>({
           </tbody>
         </table>
         {rows.length === 0 && (
-          /* the caller usually guards and supplies a real EmptyState with an exit; this
-             is the primitive's last-resort labelled absence, quiet and italic. */
           <div className="t-label px-2 py-6 text-center italic text-ink-mute">no rows</div>
         )}
       </div>

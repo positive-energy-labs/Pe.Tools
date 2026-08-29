@@ -30,19 +30,6 @@ import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
 
-/**
- * assistant-ui mounted as a pure render-from view over ChatState. The runtime holds no state
- * of its own — it renders `toThreadMessages(chat)` and routes its actions (send, cancel) back
- * into the WorkbenchProvider. Approvals resolve through the native session's `approveTool` /
- * `respondToToolSuspension` directly from the tool part, so we don't double-plumb
- * assistant-ui's approval transport.
- *
- * `ThreadPrimitive.Messages` owns iteration (it's the consumer that binds the v0.14
- * message-store client), but each message renders inside a `.lens-moment` section WE own
- * (ref + data-key via `MomentRegistry`), so the Lens MapDial/wire/fisheye geometry keeps
- * measuring it exactly as before. The same projected `ThreadMessageLike[]` is exposed via
- * context for the MapDial bands — one array, aligned with the runtime's message order.
- */
 const ThreadMessagesContext = createContext<ThreadMessageLike[]>([]);
 
 export function useThreadMessages(): ThreadMessageLike[] {
@@ -51,9 +38,6 @@ export function useThreadMessages(): ThreadMessageLike[] {
 
 export function WorkbenchRuntimeProvider({ children }: { children: ReactNode }) {
   const { chat, isRunning, sendPrompt, cancel } = useWorkbench();
-  // Runtime gets EVERY turn (stable, append-only membership — see aui-adapter). The Lens bands
-  // consume only the renderable ones via context; empty turns render nothing (moment components
-  // return null), so there's no blank "you"/"pea" row despite the fuller runtime array.
   const messages = useMemo(() => toThreadMessages(chat), [chat]);
   const visible = useMemo(() => messages.filter(isRenderable), [messages]);
 
@@ -79,15 +63,9 @@ export function WorkbenchRuntimeProvider({ children }: { children: ReactNode }) 
   );
 }
 
-/** Lens hands down a callback to register each rendered moment's DOM node by message id. */
 type RegisterMoment = (id: string, el: HTMLElement | null) => void;
 const MomentRegistry = createContext<RegisterMoment>(() => {});
 
-/**
- * The assistant-ui-owned chat moments. Renders inside the Lens's `.lens-chat` (which is the
- * `ThreadPrimitive.Root`). Each message becomes a `.lens-moment` section registered with the
- * Lens so the scroll controller can measure it.
- */
 export function Moments({ register }: { register: RegisterMoment }) {
   return (
     <MomentRegistry.Provider value={register}>
@@ -108,13 +86,7 @@ function MomentSection({
   children: ReactNode;
 }) {
   const register = useContext(MomentRegistry);
-  // Stable ref callback: an inline `ref={el => register(id, el)}` is a NEW function every render,
-  // so React re-invokes it (detach+attach) on EVERY render — and each call schedules a Lens
-  // `bumpMeasure`, which re-renders us, which makes another new inline ref → infinite re-render
-  // loop (the "full page rerendering forever" jitter). Memoized per (register,id), React only fires
-  // it on real mount/unmount, so bumpMeasure runs when geometry actually changes, not every frame.
   const setRef = useCallback((el: HTMLElement | null) => register(id, el), [register, id]);
-  // Speaker-boundary hairlines live in lens.css (sibling selector on data-role).
   return (
     <section data-key={id} data-role={role} className="lens-moment" ref={setRef}>
       {children}
@@ -122,10 +94,6 @@ function MomentSection({
   );
 }
 
-/* The transcript speaks the SEMANTIC exchange turn: #N increments per user send, so a prompt and
-   its pea reply share one number — the same coordinate as the URL's ?turn=, the dial readout, and
-   the Lens geometry (mirrors toMoments in Lens.tsx). Clickable: centers the exchange on the focal
-   axis via pe:focus-turn. */
 function TurnTag({ id }: { id: string }) {
   const messages = useThreadMessages();
   let turn = 0;
@@ -152,9 +120,7 @@ function TurnTag({ id }: { id: string }) {
   );
 }
 
-/** Right-aligned send time on the role line — honest telemetry, same tier as the role label. */
 function MomentTime() {
-  // Select a stable primitive (epoch ms), not the Date object — fresh objects loop the selector.
   const at = useMessage((message) =>
     message.createdAt instanceof Date ? message.createdAt.getTime() : undefined,
   );
@@ -174,9 +140,6 @@ function UserMoment() {
       .join("")
       .trim(),
   );
-  // Image parts ride the user turn (composer attachments). Select a stable joined STRING — a fresh
-  // array from the selector compares unequal every render and loops setState ("max update depth").
-  // "|" never appears in a data: URL (base64 is alphanumeric + "+/="), so it's a safe delimiter.
   const imageBlob = useMessage((message) =>
     message.content
       .flatMap((part) =>
@@ -185,12 +148,9 @@ function UserMoment() {
       .join("|"),
   );
   const images = imageBlob ? imageBlob.split("|") : [];
-  // Empty user turn: render nothing (keeps the runtime array stable without a blank "you" row).
   if (!text && images.length === 0) return null;
   return (
     <MomentSection id={id} role="user">
-      {/* Role attribution: sans small-caps head (heads are sans by law). "you" is NEUTRAL INK —
-          the user has no identity hue; position + this label carry authorship (workbench ruling). */}
       <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-ink-2">
         <TurnTag id={id} />
         <span>you</span>
@@ -205,9 +165,7 @@ function UserMoment() {
             className="max-h-64 rounded-sm border-[0.5px] border-line-2 object-contain"
           />
         ))}
-        {/* Hard block, not a speech bubble — the radius law. Right alignment + a NEUTRAL ink
-            wash are the scan cue for "my turns": fills separate, and no hue is bought (the
-            "you" identity ruling). No border — plain prose is never enclosed. */}
+
         {text ? <div className="rounded-sm bg-ink/6 px-3 py-2 t-prose">{text}</div> : null}
       </div>
     </MomentSection>
@@ -225,11 +183,9 @@ function AssistantMoment() {
         part.type === "tool-call",
     ),
   );
-  // Empty, settled assistant turn: render nothing. A running-but-empty turn stays (the live caret).
   if (!hasContent && !running) return null;
   return (
     <MomentSection id={id} role="assistant">
-      {/* pea's name wears the agent identity at TEXT weight (--pe-pea-ink). */}
       <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-pea-ink">
         <TurnTag id={id} />
         <span>pea</span>
@@ -237,14 +193,13 @@ function AssistantMoment() {
       </div>
       <div className="grid gap-1">
         <AssistantParts />
-        {/* mg-caret kept as CSS: it's a keyframes blink animation (the user asked to keep those) */}
+
         {running ? <span className="mg-caret" aria-hidden="true" /> : null}
       </div>
     </MomentSection>
   );
 }
 
-/** Render the assistant message's parts (text, reasoning, tools) through assistant-ui. */
 function AssistantParts(): ReactNode {
   return (
     <PartsBoundary>
@@ -259,7 +214,6 @@ function AssistantParts(): ReactNode {
   );
 }
 
-/** One bad message part must not blank the whole transcript. */
 class PartsBoundary extends Component<{ children: ReactNode }, { error?: string }> {
   state: { error?: string } = {};
   static getDerivedStateFromError(error: unknown) {
@@ -269,26 +223,18 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
     console.error("[workbench] message-part render failed", error, info.componentStack);
   }
   render(): ReactNode {
-    // A render fault is an ERROR (caution), not the model disagreeing (alarm).
     if (this.state.error) return <div className="t-prose text-caution">{this.state.error}</div>;
     return this.props.children;
   }
 }
 
-/**
- * Assistant text → assistant-ui markdown, styled via the shared {@link PROSE_CLASS}
- * (Tailwind typography plugin tuned to the Lens palette). See ./prose.
- */
 const MarkdownText: TextMessagePartComponent = () => (
   <MarkdownTextPrimitive className={PROSE_CLASS} />
 );
 
-/** Collapsible chain-of-thought (collapsed by default so the spine stays calm). */
 const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
-  // Reasoning is quiet secondary prose behind a neutral disclosure — the old viz-hue rail
-  // (kiln/lichen) spent taxonomy colours on chrome. Chrome buys no weight, no hue.
   return (
     <div className="border-l-2 border-line-2">
       <Press
@@ -310,11 +256,6 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   );
 };
 
-/**
- * Inline tool marker (one line in the spine; full I/O lives in the trace lane). When the
- * call carries a pending approval gate, the HITL approve/deny buttons render here and
- * resolve through the WorkbenchProvider's `/workbench/approve` route.
- */
 const ToolCallPart: ToolCallMessagePartComponent = ({
   toolCallId,
   toolName,
@@ -328,15 +269,11 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   const target = toolTarget(args);
   const pending = approval && approval.approved === undefined && !approval.resolution;
   return (
-    // data-tool-id lets the Lens anchor this tool's trace card to the marker's real chat
-    // position, so the focal card tracks the tool actually at the focal axis.
     <div className="grid gap-1" data-tool-id={toolCallId}>
-      {/* lens-marker kept as CSS: focal/hover emphasis is driven by `.lens-moment.focal` (geometry).
-          Hybrid row: identifiers left, machine-measured status right-aligned in the telemetry tier. */}
       <div className={`lens-marker tool ${tone}`}>
         <span>⌗ {toolTitle(toolName)}</span>
         {target ? <code>{target}</code> : null}
-        {/* outcome mapping: error → caution, in flight → busy ink-2, landed → done */}
+
         <span
           className={`t-label face-mono ml-auto ${
             isError ? "text-caution" : status?.type === "running" ? "text-ink-2" : "text-done"
@@ -353,8 +290,6 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         running={status?.type === "running"}
       />
       {pending ? (
-        // The HITL gate is a verb lane: approving lets pea write beyond the page (the one
-        // filled blue); denying is a safe, page-scoped act. Reasons ride the titles.
         <div className="flex flex-wrap gap-[7px]">
           {(approval.options ?? APPROVAL_OPTIONS).map((option) => {
             const allow = option.kind.startsWith("allow");

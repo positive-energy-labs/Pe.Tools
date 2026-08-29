@@ -9,14 +9,10 @@ export interface WorkbenchEndpointConfig {
  * ponytail: window.location read kept as the one exception; revisit if prod ever needs it typed.
  */
 export function resolveWorkbenchConfig(): WorkbenchEndpointConfig {
-  if (typeof window === "undefined") return { origin: "" }; // SSR guard
+  if (typeof window === "undefined") return { origin: "" };
   return { origin: window.location.origin };
 }
 
-/**
- * Build a URL against the workbench origin. Native @mastra/server routes live under `/api`
- * (`/api/agent-controller/...`); the Pe handshake + transparency endpoints under `/pe`.
- */
 export function workbenchUrl(
   config: WorkbenchEndpointConfig,
   path: string,
@@ -27,8 +23,6 @@ export function workbenchUrl(
   return url.toString();
 }
 
-/** Pe transparency endpoints such as `/pe/inspect`. The
- * native @mastra/server routes are driven by `@mastra/client-js` (MastraClient), not these helpers. */
 export function peUrl(config: WorkbenchEndpointConfig, path: string): string {
   return workbenchUrl(config, `/pe${path}`);
 }

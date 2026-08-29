@@ -1,13 +1,4 @@
 import { token } from "#/lib/token";
-/**
- * TARGETING HEAD — the one artifact a route mounts to say what it reaches and what it can do.
- *
- * Head: the sentence — one clause `joiner <Picker>` per TERMINAL, nothing else (trunks live
- * inside the pickers). Body: the stage strip with its readiness meter, then the current
- * stage's verbs as a compact rail; the rail's trailing `▾` expands it in place into the
- * vertical grid (verb · needs · state) when the user wants context. Foot: panes
- * (demand-gated) + the last receipt.
- */
 import { useState } from "react";
 
 import { cn } from "#/lib/utils";
@@ -82,11 +73,8 @@ export function TargetingHead<K extends string>({
   product: Product<K>;
   b: Bindings<K>;
   runner: Runner<K>;
-  /** Last receipt / busy line for the foot. */
   receipt?: React.ReactNode;
-  /** Route-owned control appended inside a level's option list. */
   extra?: (link: Link<K>) => React.ReactNode;
-  /** Route-owned chips for the head's right edge (fixture lane, etc.). */
   aside?: React.ReactNode;
   mode?: "sentence" | "flow" | "line";
 }) {

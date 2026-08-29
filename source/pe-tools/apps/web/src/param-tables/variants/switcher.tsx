@@ -1,7 +1,3 @@
-/**
- * PROTOTYPE-ONLY variant switcher — deliberately alien chrome (design-lang §5
- * exemption) so it cannot read as part of the design under review.
- */
 import { useEffect } from "react";
 
 import { token } from "#/lib/token";

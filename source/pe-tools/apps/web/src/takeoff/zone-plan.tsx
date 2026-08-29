@@ -1,13 +1,3 @@
-/**
- * The zone's own shape, at glyph size — SHAPE IS IDENTITY (SURFACE-PHILOSOPHY §4: real outlines,
- * not colour squares), so a zone in the rail and the same zone on the plan are recognisably one
- * thing. Y-flipped and fitted to its own bounds; geometry changes happen in Revit, never here.
- *
- * The full-size `ZonePlan` and its legend lived here too and were deleted in the design-language
- * sweep: nothing had imported them since the atlas absorbed both questions (`LevelPlan` answers
- * "where in the house", `ZonePeek` answers "where in the zone"), and they carried three
- * old-vocabulary spends plus a dashed border meaning "needs a decision".
- */
 import { contentViewport, fitFrame, type Bounds2 } from "#/lib/affine-frame";
 import { pathD } from "#/takeoff/model";
 import { cn } from "#/lib/utils";
