@@ -94,6 +94,7 @@ const config = defineConfig(({ mode }) => {
       },
     },
     fmt: {},
+    test: { setupFiles: ["./src/test-setup.ts"] },
   };
 });
 
