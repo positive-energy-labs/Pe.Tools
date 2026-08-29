@@ -749,7 +749,7 @@ const LOADER_PRESENT = [
   "t-caption",
   "text-ink-2",
   "z-modal",
-  "dl-verb",
+  "dl-cell",
 ];
 const LOADER_ABSENT = ["text-red-500", "text-xs", "font-mono"];
 const candidates = [
