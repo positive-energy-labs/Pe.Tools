@@ -10,7 +10,7 @@ import {
   ComboboxList,
   ComboboxTrigger,
   useComboboxAnchor,
-} from "#/components/ui/combobox";
+} from "#/components/lang/combobox";
 
 export function Seam({ op }: { op: string }) {
   return (
@@ -67,34 +67,36 @@ export function NamePicker({
     >
       {/* ponytail: explicit anchor on the chips row — the chips input must not be the positioner
           anchor, or the popup roams as chips wrap (same law as control-chips.tsx). */}
-      <ComboboxChips
+      <div
         ref={anchor}
         title={title}
-        className="max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto py-0.5"
+        className="max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto"
       >
-        {collapsed ? (
-          <span
-            className="px-1"
-            title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
-          >
-            all {values.length}
-          </span>
-        ) : (
-          values.map((name) => <ComboboxChip key={name}>{name}</ComboboxChip>)
-        )}
-        <ComboboxChipsInput
-          aria-label={ariaLabel}
-          placeholder={values.length === 0 ? placeholder : "add…"}
-        />
-        <ComboboxTrigger />
-      </ComboboxChips>
+        <ComboboxChips>
+          {collapsed ? (
+            <span
+              className="px-1"
+              title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
+            >
+              all {values.length}
+            </span>
+          ) : (
+            values.map((name) => <ComboboxChip key={name}>{name}</ComboboxChip>)
+          )}
+          <ComboboxChipsInput
+            aria-label={ariaLabel}
+            placeholder={values.length === 0 ? placeholder : "add…"}
+          />
+          <ComboboxTrigger />
+        </ComboboxChips>
+      </div>
       <ComboboxContent anchor={anchor}>
         {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
             "you typed a string that matched nothing" — plain muted text, no story/exit. */}
         <ComboboxEmpty>no matches</ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
-            <ComboboxItem key={name} value={name} className="pr-7">
+            <ComboboxItem key={name} value={name}>
               <span>{name}</span>
             </ComboboxItem>
           )}

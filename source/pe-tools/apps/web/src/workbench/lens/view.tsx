@@ -5,9 +5,9 @@ import { modeDepth } from "../depth";
 import { Moments } from "../aui";
 import { RouteChatPluginDock } from "../route-chat-plugins";
 import { WorldLane } from "../world";
-import { SidePane } from "#/components/ui/side-pane";
+import { SidePane } from "#/components/lang/side-pane";
 import { EmptyState } from "#/components/lang/empty";
-import { TargetWorld } from "#/components/chat-target";
+import { TargetWorld } from "#/chat/chat-target";
 import { chipDescriptor, laneVar } from "#/host/target-ui";
 import { Press } from "#/components/lang/press";
 import {
@@ -171,51 +171,52 @@ export function Lens({
             </div>
           </ThreadPrimitive.Root>
 
-          <SidePane
-            side="left"
-            storageKey="pe.sideWidth"
-            minWidth={240}
-            defaultWidth={300}
-            open={sideOpen}
-            onOpenChange={onSideOpenChange}
-            onWidthChange={onSideResize}
-            header={sideHead}
-            {...annotation("side-pane")}
-            className="col-start-1 sticky top-0"
-          >
-            {mode === "trace" ? (
-              <div {...annotation("trace-frame")}>
-                <div {...annotation("trace-pin")} ref={traceInnerRef}>
-                  {traceCells.map((cell) => (
-                    <TraceCellView
-                      key={cell.key}
-                      cell={cell}
-                      registerRef={(el) => {
-                        if (el) cardRefs.current.set(cell.key, el);
-                        else cardRefs.current.delete(cell.key);
-                      }}
-                    />
-                  ))}
-                </div>
+          <div className="col-start-1 sticky top-0">
+            <SidePane
+              side="left"
+              storageKey="pe.sideWidth"
+              minWidth={240}
+              defaultWidth={300}
+              open={sideOpen}
+              onOpenChange={onSideOpenChange}
+              onWidthChange={onSideResize}
+              header={sideHead}
+              {...annotation("side-pane")}
+            >
+              {mode === "trace" ? (
+                <div {...annotation("trace-frame")}>
+                  <div {...annotation("trace-pin")} ref={traceInnerRef}>
+                    {traceCells.map((cell) => (
+                      <TraceCellView
+                        key={cell.key}
+                        cell={cell}
+                        registerRef={(el) => {
+                          if (el) cardRefs.current.set(cell.key, el);
+                          else cardRefs.current.delete(cell.key);
+                        }}
+                      />
+                    ))}
+                  </div>
 
-                {(() => {
-                  const cell = traceCells.find((c) => c.key === inspectKey);
-                  return cell ? (
-                    <div {...annotation("inspect")}>
-                      <ToolCellBody call={cell.call} />
-                    </div>
-                  ) : null;
-                })()}
-              </div>
-            ) : mode === "world" ? (
-              <>
-                <TargetWorld />
-                <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
-              </>
-            ) : (
-              threadList
-            )}
-          </SidePane>
+                  {(() => {
+                    const cell = traceCells.find((c) => c.key === inspectKey);
+                    return cell ? (
+                      <div {...annotation("inspect")}>
+                        <ToolCellBody call={cell.call} />
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              ) : mode === "world" ? (
+                <>
+                  <TargetWorld />
+                  <WorldLane breakdown={breakdown} cache={cache} sendNumber={userTurns} />
+                </>
+              ) : (
+                threadList
+              )}
+            </SidePane>
+          </div>
         </div>
       </div>
       {moments.length > 0 ? <div {...annotation("scrim")} aria-hidden="true" /> : null}

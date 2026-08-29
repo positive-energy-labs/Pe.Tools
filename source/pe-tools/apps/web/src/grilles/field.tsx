@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/lang/input";
 
 import { frac } from "./math";
 
@@ -20,13 +20,11 @@ export function parseInches(s: string): number | null {
 export function InchField({
   value,
   onChange,
-  className = "",
   int,
   style,
 }: {
   value: number;
   onChange: (v: number) => void;
-  className?: string;
   int?: boolean;
   style?: React.CSSProperties;
 }) {
@@ -40,7 +38,6 @@ export function InchField({
   };
   return (
     <Input
-      className={`w-16 ${className}`}
       style={style}
       value={text}
       onChange={(e) => setText(e.target.value)}

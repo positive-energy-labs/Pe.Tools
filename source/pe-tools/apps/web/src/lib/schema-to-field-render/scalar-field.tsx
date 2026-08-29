@@ -1,12 +1,12 @@
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/lang/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
-import { Switch } from "#/components/ui/switch";
+} from "#/components/lang/select";
+import { Switch } from "#/components/lang/switch";
 import { FieldLabelRow, FieldMessages, FieldOptionsMetadata } from "./field-metadata";
 import {
   coercePrimitive,
@@ -53,7 +53,7 @@ export function ScalarField({
       />
       {shouldRenderSelect ? (
         <Select value={primitiveInputValue(field.value)} onValueChange={field.change}>
-          <SelectTrigger id={path} className="h-9 w-full justify-between">
+          <SelectTrigger id={path}>
             <SelectValue placeholder="Select an option" />
           </SelectTrigger>
           <SelectContent>

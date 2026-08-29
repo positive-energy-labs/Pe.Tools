@@ -2,8 +2,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { Tag } from "#/components/lang/chip";
 import { Verb } from "#/components/lang/verb";
-import { Input } from "#/components/ui/input";
-import { cn } from "#/lib/utils";
+import { Input } from "#/components/lang/input";
 import { Press } from "#/components/lang/press";
 import type { ColumnKind, Draft } from "#/routes/data-tables";
 import { rowKey } from "#/routes/data-tables";
@@ -56,17 +55,18 @@ export function DraftEditor({
 
   return (
     <div className="space-y-3">
-      <Input
-        value={draft.name}
-        onChange={(e) => patch((d) => ({ ...d, name: e.target.value }))}
-        className="h-8 max-w-72"
-        placeholder="Table name"
-        title={
-          draft.isNew
-            ? "The table's name — apply upserts by name"
-            : "Renaming creates a NEW table on apply — upserts match by name"
-        }
-      />
+      <div className="max-w-72">
+        <Input
+          value={draft.name}
+          onChange={(e) => patch((d) => ({ ...d, name: e.target.value }))}
+          placeholder="Table name"
+          title={
+            draft.isNew
+              ? "The table's name — apply upserts by name"
+              : "Renaming creates a NEW table on apply — upserts match by name"
+          }
+        />
+      </div>
 
       <ArtifactFrame>
         <table className="border-collapse">
@@ -86,7 +86,6 @@ export function DraftEditor({
                           ),
                         }))
                       }
-                      className="h-6 px-1"
                       title="Column heading — written to the schedule on apply"
                     />
                     <select
@@ -142,16 +141,12 @@ export function DraftEditor({
                   <Tag>{rowIndex + 1}</Tag>
                 </td>
                 {draft.columns.map((column, columnIndex) => (
-                  <td key={columnIndex} className="p-0">
+                  <td key={columnIndex} className="min-w-36 p-0">
                     <Input
                       value={row.values[columnIndex] ?? ""}
                       placeholder={column.kind === "Number" ? "0" : ""}
                       inputMode={column.kind === "Number" ? "decimal" : undefined}
                       onChange={(e) => setCell(rowIndex, columnIndex, e.target.value)}
-                      className={cn(
-                        "h-7 w-full min-w-36 px-2",
-                        column.kind === "Number" && "text-right",
-                      )}
                     />
                   </td>
                 ))}

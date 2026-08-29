@@ -3,7 +3,7 @@ import { type WorldFacts } from "#/host/fleet";
 import { type WorldStart } from "#/targeting/world";
 import { RouteDocument } from "#/workbench/route-document";
 import { AddressedInstancesPage } from "#/instances/workspace";
-import { Input } from "#/components/ui/input";
+import { Input } from "#/components/lang/input";
 
 export const YEARS = ["24", "25", "26"];
 
@@ -86,7 +86,7 @@ export function StartFields({
   setDoc: (doc: string) => void;
 }) {
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center gap-2 [&>input]:w-44">
       <select
         aria-label="Revit year"
         value={year}
@@ -116,7 +116,6 @@ export function StartFields({
         onChange={(event) => setDoc(event.target.value)}
         disabled={disabled}
         placeholder="document (optional)"
-        className="w-44 px-1 py-0.5"
       />
     </span>
   );

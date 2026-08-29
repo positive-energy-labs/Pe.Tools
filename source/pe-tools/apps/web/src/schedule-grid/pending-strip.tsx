@@ -4,7 +4,7 @@ import { StateCell } from "#/components/lang/cell";
 import { HelpTip } from "#/components/lang/help";
 import { Provenance, Section } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
-import { ValueDiff } from "#/components/ui/value-diff";
+import { ValueDiff } from "#/components/lang/value-diff";
 import { Press } from "#/components/lang/press";
 import type { CellState } from "#/schedule-grid/route";
 

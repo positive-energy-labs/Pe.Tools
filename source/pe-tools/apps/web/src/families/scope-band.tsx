@@ -1,14 +1,14 @@
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
-import { VerbLane } from "#/components/verb-lane";
+import { VerbLane } from "#/components/lang/verb-lane";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "#/components/ui/select";
+} from "#/components/lang/select";
 import { HostIssuePanel } from "#/host/issues";
 import { LoadedFamilyPlacementScope } from "#/host/loaded-families-view";
 import { NamePicker, SectionLabel } from "#/families/readout-primitives";
@@ -64,26 +64,29 @@ export function FamiliesScopeBand() {
             scope
           </span>
         </SectionLabel>
-        <Select
-          items={PLACEMENT_LABELS}
-          value={placement}
-          onValueChange={(value: LoadedFamilyPlacementScope | null) => value && setPlacement(value)}
-        >
-          <SelectTrigger
-            aria-label="placement filter"
-            title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
-            className="h-6 w-32 px-1.5"
+        <div className="w-32">
+          <Select
+            items={PLACEMENT_LABELS}
+            value={placement}
+            onValueChange={(value: LoadedFamilyPlacementScope | null) =>
+              value && setPlacement(value)
+            }
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
-              <SelectItem key={value} value={value} title={PLACEMENT_NOTES[value]}>
-                {PLACEMENT_LABELS[value]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              aria-label="placement filter"
+              title="Whether to include families that are loaded but never placed. It filters BOTH pickers beside it, so narrowing here changes which families the draft resolves to."
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(PLACEMENT_LABELS) as LoadedFamilyPlacementScope[]).map((value) => (
+                <SelectItem key={value} value={value} title={PLACEMENT_NOTES[value]}>
+                  {PLACEMENT_LABELS[value]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {!connected ? (
           /* A disconnected bridge is not the model disagreeing — it is the machine being
              unavailable, which the outcome lane calls `error` (caution, never alarm). */
@@ -152,8 +155,8 @@ export function FamiliesScopeBand() {
         )}
       </div>
 
-      <div>
-        <VerbLane atoms={store.atoms} className="px-4 py-1.5" />
+      <div className="px-4 py-1.5">
+        <VerbLane atoms={store.atoms} />
       </div>
       {matrixIssue && (
         <div className="px-4 py-2">
