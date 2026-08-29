@@ -53,10 +53,9 @@ export function ExportSheet({
         body * { visibility: hidden; }
         #grille-export-sheet, #grille-export-sheet * { visibility: visible; }
         #grille-export-sheet { position: absolute; inset: 0; margin: 0; }
-        .no-print { display: none !important; }
       }`}</style>
       <div
-        className="no-print flex items-center gap-3 border-b px-3 py-2"
+        className="flex items-center gap-3 border-b px-3 py-2 print:hidden"
         style={{ borderColor: token("line") }}
       >
         <span className="face-mono t-label t-upper text-ink-mute">export sheet</span>

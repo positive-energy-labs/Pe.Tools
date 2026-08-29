@@ -726,7 +726,9 @@ const cssUnescape = (value: string): string =>
 const cssClasses = (css: string): Set<string> => {
   const classes = new Set<string>();
   for (const block of stripComments(css).matchAll(/([^{}]+)\{/g)) {
-    for (const match of block[1].matchAll(/\.((?:\\[0-9a-fA-F]{1,6}\s?|\\[^\r\n]|[\w-])+)/g))
+    for (const match of block[1].matchAll(
+      /\.((?:\\[0-9a-fA-F]{1,6}\s?|\\[^\r\n]|[\w\u0080-\uFFFF-])+)/g,
+    ))
       classes.add(cssUnescape(match[1]));
   }
   return classes;
@@ -755,7 +757,8 @@ const LOADER_ABSENT = ["text-red-500", "text-xs", "font-mono"];
 const candidates = [
   ...new Set([...CLASS_USES.map((use) => use.token), ...LOADER_PRESENT, ...LOADER_ABSENT]),
 ];
-const registered = cssClasses(compiler.build(candidates));
+const builtCss = compiler.build(candidates);
+const registered = cssClasses(builtCss);
 const REMAINDER = CLASS_USES.filter(
   (use) => !registered.has(use.token) && !/^(?:group|peer)(?:\/[\w-]+)?$/.test(use.token),
 );
@@ -832,28 +835,28 @@ for (const file of FILES.filter(
           LANG_COMPONENTS.add(declaration.name.text);
   });
 }
-const SWATCH = FILES.find((f) => f.rel === "routes/design-system_.swatch.tsx");
-const SWATCH_USES = new Set<string>();
-if (SWATCH) {
+const SPECIMEN_JSX = new Set<string>();
+for (const specimen of FILES.filter(
+  (file) => file.rel.startsWith("design-system/specimens/") && file.rel.endsWith(".tsx"),
+)) {
   const source = ts.createSourceFile(
-    SWATCH.rel,
-    SWATCH.text,
+    specimen.rel,
+    specimen.text,
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TSX,
   );
-  const isImported = (node: ts.Node): boolean => {
-    for (let parent = node.parent; parent; parent = parent.parent)
-      if (ts.isImportDeclaration(parent)) return true;
-    return false;
-  };
   const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node) && !isImported(node)) SWATCH_USES.add(node.text);
+    if (
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      ts.isIdentifier(node.tagName)
+    )
+      SPECIMEN_JSX.add(node.tagName.text);
     ts.forEachChild(node, visit);
   };
   visit(source);
 }
-const MISSING_SWATCH = [...LANG_COMPONENTS].filter((name) => !SWATCH_USES.has(name)).sort();
+const MISSING_SWATCH = [...LANG_COMPONENTS].filter((name) => !SPECIMEN_JSX.has(name)).sort();
 
 describe("design checks — code holds the boundary", () => {
   it("loads the app CSS graph before checking candidates", () => {
@@ -867,16 +870,12 @@ describe("design checks — code holds the boundary", () => {
     );
   });
 
-  const unregisteredCheck = TRUE_UNREGISTERED.length === 0 ? it : it.skip;
-  unregisteredCheck(
-    `unregistered classes — hard zero (${TRUE_UNREGISTERED.length} true unregistered)`,
-    () => {
-      expect(
-        TRUE_UNREGISTERED,
-        report(TRUE_UNREGISTERED.map((o) => ({ ...o, match: o.token }))),
-      ).toEqual([]);
-    },
-  );
+  it(`unregistered classes — hard zero (${TRUE_UNREGISTERED.length} true unregistered)`, () => {
+    expect(
+      TRUE_UNREGISTERED,
+      report(TRUE_UNREGISTERED.map((o) => ({ ...o, match: o.token }))),
+    ).toEqual([]);
+  });
 
   it(`visual utilities stay in components (${ALLOWLIST_VIOLATIONS.length} baseline exceptions)`, () => {
     const fixture = classUses([
@@ -910,7 +909,7 @@ describe("design checks — code holds the boundary", () => {
     expect(increases).toEqual([]);
   });
 
-  it("every lang component export is referenced by the swatch", () => {
+  it("every lang component export is mounted by a specimen", () => {
     expect(MISSING_SWATCH).toEqual([]);
   });
 });

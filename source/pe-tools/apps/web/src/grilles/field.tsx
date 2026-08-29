@@ -40,7 +40,7 @@ export function InchField({
   };
   return (
     <input
-      className={`face-mono w-16 rounded border bg-transparent px-1 text-right t-value ${className}`}
+      className={`face-mono w-16 rounded-sm border bg-transparent px-1 text-right t-value ${className}`}
       style={{ borderColor: token("line"), ...style }}
       value={text}
       onChange={(e) => setText(e.target.value)}

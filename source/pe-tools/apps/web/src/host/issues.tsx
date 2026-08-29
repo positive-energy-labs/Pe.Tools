@@ -206,7 +206,7 @@ export function HostIssuePanel({
 }
 
 function HostIssueMeta({ children }: { children: ReactNode }) {
-  return <span className="rounded border border-current/20 px-1.5 py-0.5">{children}</span>;
+  return <span className="rounded-sm border border-current/20 px-1.5 py-0.5">{children}</span>;
 }
 
 export function HostConnectionPill({ connected, label }: { connected: boolean; label?: string }) {

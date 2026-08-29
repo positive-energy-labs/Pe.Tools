@@ -76,38 +76,26 @@ export function CompactTable<Row>({
         document.activeElement instanceof HTMLElement && moveFrom(document.activeElement, direction)
       }
     >
-      <table className="w-full table-fixed face-mono t-label">
+      <table className="w-full">
         <colgroup>
           {columns.map((column) => (
             <col key={column.key} className={column.width} />
           ))}
         </colgroup>
         <thead>
-          <tr className="t-caption text-ink-mute">
+          <tr>
             {columns.map((column) => (
-              <th
-                key={column.key}
-                className={cn("font-normal", column.right ? "text-right" : "text-left")}
-              >
-                {column.label}
-              </th>
+              <th key={column.key}>{column.label}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr
-              key={rowKey(row)}
-              className="border-t border-line align-top"
-              title={rowTitle?.(row)}
-            >
+            <tr key={rowKey(row)} title={rowTitle?.(row)}>
               {columns.map((column) => {
                 const edit = column.edit?.(row) ?? null;
                 return (
-                  <td
-                    key={column.key}
-                    className={cn("truncate pr-2", column.right && "pr-0 text-right")}
-                  >
+                  <td key={column.key} className={cn("pr-2", column.right && "pr-0")}>
                     {edit ? (
                       <NavStateCell
                         value={edit.value}

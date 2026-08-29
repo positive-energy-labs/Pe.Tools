@@ -97,37 +97,34 @@ function ProposalFlow() {
   const attention = items.filter((i) => i.review !== "denied" && i.confidence === "low").length;
 
   return (
-    <div className="min-h-screen bg-page t-prose text-ink">
+    <div className="min-h-screen">
       <Header
         title="proposal flow"
         note="one in-memory world, two scales — the card and the table are the same values"
       />
 
-      <main className="page-wrap flex flex-col gap-10 pt-8 pb-24">
-        <p className="max-w-[78ch] t-prose text-ink-2">
+      <main className="flex flex-col gap-10 pt-8 pb-24">
+        <p className="max-w-[78ch]">
           Accept, deny or undo anything in pea&apos;s card and watch the row below it move. Both
           surfaces render every value through one function, so the card cannot teach a mark the
-          table does not draw. <strong className="font-normal text-ink">Connected Load</strong> is
-          the crucible the design-lang round never forced: pea proposes a value <em>and</em> the
-          model disagrees with what is on record — two marks on one cell, which precedence asserts
-          and nothing had ever proven.
+          table does not draw. <strong>Connected Load</strong> is the crucible the design-lang round
+          never forced: pea proposes a value <em>and</em> the model disagrees with what is on record
+          — two marks on one cell, which precedence asserts and nothing had ever proven.
         </p>
 
         {/* ── scale 1 · pea's card, inline in the thread ───────────────────────────────── */}
         <Section label="01 · scale one · pea's chat card">
-          <p className="t-label text-ink-2">
-            a machine-operated object carrying state — it keeps its frame
-          </p>
+          <p>a machine-operated object carrying state — it keeps its frame</p>
           <div className="max-w-[42rem]">
             {PROPOSAL_THREAD.map((m, i) => (
               <div key={i} className="flex gap-3 pb-2.5">
                 <span
-                  className="w-8 shrink-0 pt-0.5 face-mono t-caption t-upper"
+                  className="w-8 pt-0.5"
                   style={{ color: m.who === "pea" ? token("pea-ink") : token("ink-2") }}
                 >
                   {m.who}
                 </span>
-                <p className="min-w-0 t-prose">{m.text}</p>
+                <p className="min-w-0">{m.text}</p>
               </div>
             ))}
 
@@ -176,9 +173,9 @@ function ProposalFlow() {
                 {items.map((item) => (
                   <div
                     key={item.key}
-                    className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 border-b border-line px-2.5 py-2 last:border-b-0"
+                    className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 px-2.5 py-2"
                   >
-                    <span className="truncate face-mono t-caption text-ink-2">{item.param}</span>
+                    <span>{item.param}</span>
                     <span className="flex min-w-0 flex-wrap items-baseline gap-2">
                       {/* GAP (StateCell): the card knows the PRIOR value and the cell has no slot
                           for it — `current → proposed` is renderable in a chat card and physically
@@ -187,11 +184,11 @@ function ProposalFlow() {
                           beside the cell rather than smuggled into `value`, so the two scales stay
                           honestly different where the model is honestly incomplete. */}
                       {item.review === "open" && item.current != null ? (
-                        <span className="face-mono t-caption text-ink-mute">{item.current} →</span>
+                        <span>{item.current} →</span>
                       ) : null}
                       <StateCell {...itemCell(item, committed)} />
                     </span>
-                    <span className="flex shrink-0 items-center gap-1">
+                    <span className="flex items-center gap-1">
                       {item.review === "open" ? (
                         <>
                           <Verb
@@ -254,14 +251,12 @@ function ProposalFlow() {
 
         {/* ── scale 2 · the same world, in the real table ─────────────────────────────── */}
         <Section label="02 · scale two · the same values, in the real table">
-          <p className="t-label text-ink-2">
-            the actual MasterTable — no second fixture, no second reader
-          </p>
+          <p>the actual MasterTable — no second fixture, no second reader</p>
           <ProposalTable items={items} committed={committed} />
         </Section>
 
         <section className="flex flex-col gap-1.5">
-          <span className="t-caption t-upper text-ink">what this page found</span>
+          <span>what this page found</span>
           <Gap>
             a <strong>denied</strong> proposal has no representation in the language or the model:
             no reason, no author, no <code>denied</code> member on the cell. The card can only put
@@ -309,14 +304,14 @@ function ProposalTable({
         sort: (r) => r.param,
         search: (r) => r.param,
         // GAP (MasterTable): `td` is `p-0`, `Column` has no cell-class hook — see /design-system §04.
-        cell: (r) => <span className="block px-1.5 py-1">{r.param}</span>,
+        cell: (r) => <span className="px-1.5 py-1">{r.param}</span>,
       },
       {
         key: "value",
         label: "value",
         search: (r) => r.proposed,
         cell: (r) => (
-          <span className="block px-1.5 py-1">
+          <span className="px-1.5 py-1">
             <StateCell {...itemCell(r, committed)} />
           </span>
         ),
@@ -329,7 +324,7 @@ function ProposalTable({
         width: "w-24",
         facet: (r) => r.review,
         cell: (r) => (
-          <span className="block px-1.5 py-1 face-mono t-caption text-ink-mute">
+          <span className="px-1.5 py-1">
             {committed && r.review === "accepted" ? "written" : r.review}
           </span>
         ),
@@ -367,14 +362,12 @@ function ProposalTable({
 
 function Header({ title, note }: { title: string; note: string }) {
   return (
-    <header className="sticky top-0 z-sticky border-b border-line bg-page/90 backdrop-blur">
-      <div className="page-wrap flex items-center justify-between py-2.5">
+    <header className="sticky z-sticky">
+      <div className="flex items-center justify-between py-2.5">
         <div className="flex min-w-0 items-baseline gap-3">
-          <Link to="/design-system" className="t-label text-nav hover:underline">
-            ← design system
-          </Link>
-          <span className="t-title face-display">{title}</span>
-          <span className="truncate t-label text-ink-2">{note}</span>
+          <Link to="/design-system">← design system</Link>
+          <span>{title}</span>
+          <span>{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no document.">
             fixture
           </FactChip>

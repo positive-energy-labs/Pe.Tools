@@ -105,6 +105,24 @@
   text-transform: uppercase;
 }
 
+@utility cell-key-values {
+  & .dl-cell,
+  & .dl-sq,
+  & .dl-cite {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @utility veil {
   background-image: var(--fill-veil);
 }

@@ -65,14 +65,14 @@ function ArmingRoute() {
   };
 
   return (
-    <div className="min-h-screen bg-page t-prose text-ink">
+    <div className="min-h-screen">
       <Header
         title="arming"
         note="unarmed → armed → refused → re-plan, driven live and frozen side by side"
       />
 
-      <main className="page-wrap flex flex-col gap-10 pt-8 pb-24">
-        <p className="max-w-[78ch] t-prose text-ink-2">
+      <main className="flex flex-col gap-10 pt-8 pb-24">
+        <p className="max-w-[78ch]">
           The strip is the cell grammar at its largest scale: a tinted ground plus one edge, inside
           the artifact frame it draws itself. Round 1 found that only this treatment read as{" "}
           <em>ceremony</em> rather than as another component, and attributed it to border scarcity.
@@ -82,7 +82,7 @@ function ArmingRoute() {
 
         {/* ── live ─────────────────────────────────────────────────────────────────────── */}
         <Section label="01 · live">
-          <p className="t-label text-ink-2">
+          <p>
             type a reason to arm it · the first commit takes a drift refusal · re-plan, then commit
             again
           </p>
@@ -146,9 +146,7 @@ function ArmingRoute() {
 
         {/* ── frozen ───────────────────────────────────────────────────────────────────── */}
         <Section label="02 · the three phases, frozen">
-          <p className="t-label text-ink-2">
-            the same component, three states, so the sequence can be read without performing it
-          </p>
+          <p>the same component, three states, so the sequence can be read without performing it</p>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <Frozen
               phase="unarmed"
@@ -202,7 +200,7 @@ function ArmingRoute() {
         </Section>
 
         <section className="flex flex-col gap-1.5">
-          <span className="t-caption t-upper text-ink">what this page found</span>
+          <span>what this page found</span>
           <Gap>
             the strip cannot say <strong>how old its own plan is</strong> — the one fact that
             decides whether to press it. It renders &ldquo;armed against a plan of unknown
@@ -247,9 +245,9 @@ function Frozen({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <span className="face-mono t-caption text-ink-mute">{phase}</span>
+      <span>{phase}</span>
       {children}
-      <p className="t-caption text-ink-2">{says}</p>
+      <p>{says}</p>
     </div>
   );
 }
@@ -258,14 +256,12 @@ function Frozen({
 
 function Header({ title, note }: { title: string; note: string }) {
   return (
-    <header className="sticky top-0 z-sticky border-b border-line bg-page/90 backdrop-blur">
-      <div className="page-wrap flex items-center justify-between py-2.5">
+    <header className="sticky z-sticky">
+      <div className="flex items-center justify-between py-2.5">
         <div className="flex min-w-0 items-baseline gap-3">
-          <Link to="/design-system" className="t-label text-nav hover:underline">
-            ← design system
-          </Link>
-          <span className="t-title face-display">{title}</span>
-          <span className="truncate t-label text-ink-2">{note}</span>
+          <Link to="/design-system">← design system</Link>
+          <span>{title}</span>
+          <span>{note}</span>
           <FactChip dashed title="Everything on this page is fixture data — no host, no plan.">
             fixture
           </FactChip>

@@ -88,7 +88,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
   return (
     <div className="flex min-h-0 flex-1">
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-        <p className="t-caption mb-2 max-w-[640px] text-caution">
+        <p className="mb-2 max-w-[640px]">
           This drawing is `/family`&apos;s v1 evaluator: every solid is centred on the family centre
           planes and sits on Bottom, and a solid&apos;s `frame` is NOT applied. Frames, planes and
           connectors resolve for real. Fidelity is not this round&apos;s question — pointing is.
@@ -130,7 +130,6 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                         <text
                           x={vertical ? at + 3 : 4}
                           y={vertical ? 12 : at - 3}
-                          className="face-mono"
                           fontSize={10}
                           fill={token("ink-mute")}
                         >
@@ -200,7 +199,6 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                             x={(mark.x1 + mark.x2) / 2}
                             y={(mark.y1 + mark.y2) / 2 - 3}
                             textAnchor="middle"
-                            className="face-mono"
                             fontSize={10}
                             fill={token("nav")}
                           >
@@ -266,7 +264,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                     );
                   })}
                 </svg>
-                <figcaption className="t-caption text-ink-mute">{view.name}</figcaption>
+                <figcaption>{view.name}</figcaption>
               </figure>
             );
           })}
@@ -274,31 +272,22 @@ export function ParadigmB({ editor }: { editor: Editor }) {
       </div>
 
       {/* the one small editor for the thing that drives what you clicked */}
-      <div
-        className="min-h-0 w-80 shrink-0 overflow-auto border-l px-3 py-3"
-        style={{ borderColor: token("line") }}
-      >
+      <div className="min-h-0 w-80 overflow-auto px-3 py-3" style={{ borderColor: token("line") }}>
         {node == null ? (
-          <p className="t-caption text-ink-mute">
-            Click a solid, a plane, a frame or a connector in the drawing.
-          </p>
+          <p>Click a solid, a plane, a frame or a connector in the drawing.</p>
         ) : (
           <>
-            <div className="face-mono t-value text-ink">{node.id}</div>
-            <div className="t-caption mb-2 text-ink-mute">{node.detail}</div>
+            <div>{node.id}</div>
+            <div className="mb-2">{node.detail}</div>
             {fields.length === 0 ? (
-              <p className="t-caption text-ink-mute">
-                stock datum — the template owns it, nothing here is authored
-              </p>
+              <p>stock datum — the template owns it, nothing here is authored</p>
             ) : (
               <table className="w-full">
                 <tbody>
                   {fields.map((field) => (
                     <tr key={field.key}>
-                      <td className="face-mono t-label w-24 py-0.5 align-baseline text-ink-mute">
-                        {field.key}
-                      </td>
-                      <td className="py-0.5 align-baseline">
+                      <td className="w-24 py-0.5">{field.key}</td>
+                      <td className="py-0.5">
                         {field.slot === "text" ? (
                           <TextToken
                             value={field.value}
@@ -317,7 +306,7 @@ export function ParadigmB({ editor }: { editor: Editor }) {
                           />
                         )}
                       </td>
-                      <td className="face-mono t-caption py-0.5 pl-1 align-baseline text-ink-mute">
+                      <td className="py-0.5 pl-1">
                         {nodeValue(editor.model, editor.typeName, field.value) ?? ""}
                       </td>
                     </tr>
@@ -392,7 +381,7 @@ function ConnectorMark({
         strokeWidth={width}
       />
       <circle cx={x} cy={y} r={Math.max(2, half)} fill="none" stroke={stroke} strokeWidth={width} />
-      <text x={x + 6} y={y - 4} className="face-mono" fontSize={10} fill={token("ink-mute")}>
+      <text x={x + 6} y={y - 4} fontSize={10} fill={token("ink-mute")}>
         {conn.slug}
       </text>
     </>
