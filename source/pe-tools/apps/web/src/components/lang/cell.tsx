@@ -31,9 +31,28 @@
  */
 import { useRef, useState } from "react";
 
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const stateCellRecipe = tv({
+  slots: {
+    wrapper: "",
+    base: "dl-cell",
+    line: "dl-cell-line",
+    input: "dl-cell-input",
+    unsettled: "dl-sq",
+    refusal: "dl-refuse",
+    ghost: "dl-ghost",
+    foot: "dl-foot",
+    citation: "dl-cite",
+  },
+  variants: {
+    size: { card: {}, row: {} },
+    state: { rest: {}, locate: { wrapper: "cursor-pointer", base: "cursor-pointer" } },
+  },
+  defaultVariants: { size: "card", state: "rest" },
+});
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
  * nothing exists to distrust, so it draws no squiggle (ruled 2026-08-16, consolidation batch). */
@@ -116,7 +135,6 @@ export interface StateCellProps {
   onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
   onNavigate?: (dir: "up" | "down" | "left" | "right") => boolean;
-  className?: string;
 }
 
 /** Round for display without float noise: 22.200000762 -> "22.2", 599.99994 -> "600". */
@@ -224,7 +242,7 @@ export function cellFactsText(p: StateCellProps): string | null {
 }
 
 export function StateCell(props: StateCellProps) {
-  const { value, modelValue, capReason, grounding, confidence, note, className } = props;
+  const { value, modelValue, capReason, grounding, confidence, note } = props;
   const read = readCell(props);
   // Refusal machinery lives here so hooks run unconditionally; it only ever fires on an
   // editable row-scale cell. A refused edit restores the input's value IMPERATIVELY (the same
@@ -244,6 +262,10 @@ export function StateCell(props: StateCellProps) {
           props.onLocate?.();
         }
       : undefined;
+  const slots = stateCellRecipe({
+    size: props.scale ?? "card",
+    state: locate == null ? "rest" : "locate",
+  });
 
   if (props.scale === "row") {
     const commit = (el: HTMLInputElement) => {
@@ -273,7 +295,7 @@ export function StateCell(props: StateCellProps) {
     };
     return (
       <span
-        className={cn("dl-cell", locate != null && "cursor-pointer", className)}
+        className={slots.base()}
         data-scale="row"
         onClick={locate}
         data-body={read.body ?? undefined}
@@ -289,7 +311,9 @@ export function StateCell(props: StateCellProps) {
             placeholder={props.placeholder}
             inputMode={props.numeric != null ? "decimal" : undefined}
             tabIndex={-1}
-            className={cn("dl-cell-input", read.unsettled != null && "dl-sq")}
+            className={
+              read.unsettled != null ? slots.unsettled({ className: slots.input() }) : slots.input()
+            }
             data-state={read.unsettled ?? undefined}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -311,7 +335,7 @@ export function StateCell(props: StateCellProps) {
             onBlur={(e) => commit(e.currentTarget)}
           />
         ) : read.unsettled != null ? (
-          <span className="dl-sq" data-state={read.unsettled}>
+          <span className={slots.unsettled()} data-state={read.unsettled}>
             {value}
           </span>
         ) : (
@@ -320,7 +344,7 @@ export function StateCell(props: StateCellProps) {
         {refusal != null ? (
           <button
             type="button"
-            className="dl-refuse"
+            className={slots.refusal()}
             title={`${refusal} — click to dismiss`}
             // "do not steal the caret": the note must never take focus from the input under it.
             onMouseDown={(e) => e.preventDefault()}
@@ -341,23 +365,23 @@ export function StateCell(props: StateCellProps) {
   else if (confidence === "low") facts.push("low confidence");
   if (grounding != null)
     facts.push(
-      <span className="dl-cite" key="cite">
+      <span className={slots.citation()} key="cite">
         {grounding.doc} p.{grounding.page}
       </span>,
     );
 
   return (
-    <span className={cn(locate != null && "cursor-pointer", className)} onClick={locate}>
-      <span className="dl-cell-line">
+    <span className={slots.wrapper()} onClick={locate}>
+      <span className={slots.line()}>
         <span
-          className="dl-cell"
+          className={slots.base()}
           data-body={read.body ?? undefined}
           data-seam={read.seam ? "" : undefined}
           data-never={read.never ? "" : undefined}
           data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
         >
           {read.unsettled != null ? (
-            <span className="dl-sq" data-state={read.unsettled}>
+            <span className={slots.unsettled()} data-state={read.unsettled}>
               {value}
             </span>
           ) : (
@@ -365,13 +389,13 @@ export function StateCell(props: StateCellProps) {
           )}
         </span>
         {read.unsettled === "drift" && modelValue != null ? (
-          <span className="dl-ghost" title="the value the model currently holds">
+          <span className={slots.ghost()} title="the value the model currently holds">
             {modelValue}
           </span>
         ) : null}
       </span>
       {facts.length > 0 ? (
-        <span className="dl-foot">
+        <span className={slots.foot()}>
           {facts.map((f, i) => (
             <span key={i}>
               {i > 0 ? " · " : null}

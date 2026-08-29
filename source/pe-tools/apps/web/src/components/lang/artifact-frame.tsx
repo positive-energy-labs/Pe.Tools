@@ -19,25 +19,33 @@
  *   recessed bands re-declare it again, so every wash the cell grammar mixes lands on the right
  *   ground without any child naming its own container. See design-lang.css.
  */
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const artifactFrameRecipe = tv({
+  slots: {
+    base: "bg-artifact shadow-[inset_0_0_0_1px_var(--pe-line)] [--pe-on:var(--pe-artifact)]",
+    head: "flex items-baseline gap-2 border-b border-line bg-recess px-2.5 py-[5px] [--pe-on:var(--pe-recess)]",
+    foot: "flex items-center justify-between gap-2 border-t border-line bg-recess px-2.5 py-1.5 [--pe-on:var(--pe-recess)]",
+  },
+});
 
 export interface ArtifactFrameProps {
   /** Recessed band across the top — the object's name and its machine-measured facts. */
   head?: React.ReactNode;
   /** Recessed band across the bottom — counts, receipts, and the object's one commit verb. */
   foot?: React.ReactNode;
-  className?: string;
   children: React.ReactNode;
 }
 
-export function ArtifactFrame({ head, foot, className, children }: ArtifactFrameProps) {
+export function ArtifactFrame({ head, foot, children }: ArtifactFrameProps) {
+  const { base, head: headSlot, foot: footSlot } = artifactFrameRecipe();
   return (
-    <div className={cn("dl-artifact", className)}>
-      {head != null ? <div className="dl-artifact-head">{head}</div> : null}
+    <div className={base()}>
+      {head != null ? <div className={headSlot()}>{head}</div> : null}
       {children}
-      {foot != null ? <div className="dl-artifact-foot">{foot}</div> : null}
+      {foot != null ? <div className={footSlot()}>{foot}</div> : null}
     </div>
   );
 }

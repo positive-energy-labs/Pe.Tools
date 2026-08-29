@@ -38,9 +38,35 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const outcomeLineRecipe = tv({
+  slots: {
+    base: "grid grid-cols-[14px_minmax(0,auto)_minmax(0,1fr)] items-baseline gap-[7px] py-0.5 face-mono t-value tracking-[0.02em] tabular-nums [&>svg]:size-[11px] [&>svg]:self-center",
+    icon: "",
+    label: "",
+    says: "overflow-hidden text-ellipsis whitespace-nowrap t-label text-ink-2 italic",
+  },
+  variants: {
+    state: {
+      busy: { base: "text-ink-2", icon: "animate-spin" },
+      receipt: { base: "text-done" },
+      refused: { base: "text-alarm" },
+      dropped: { base: "text-ink-mute italic" },
+      advisory: { base: "text-ink-2" },
+      partial: {
+        base: "text-caution",
+        label: "decoration-caution underline decoration-wavy underline-offset-3",
+      },
+      error: {
+        base: "text-caution",
+        label: "decoration-caution underline decoration-wavy underline-offset-3",
+      },
+    },
+  },
+});
 
 export type OutcomeKind =
   | "busy"
@@ -67,16 +93,16 @@ export interface OutcomeLineProps {
   label: string;
   /** What it means, in a person's terms. Italic, secondary, clamped to one line. */
   says?: string;
-  className?: string;
 }
 
-export function OutcomeLine({ kind, label, says, className }: OutcomeLineProps) {
+export function OutcomeLine({ kind, label, says }: OutcomeLineProps) {
   const Icon = OUTCOME_ICON[kind];
+  const slots = outcomeLineRecipe({ state: kind });
   return (
-    <div className={cn("dl-outcome", className)} data-kind={kind}>
-      <Icon className={kind === "busy" ? "dl-spin" : undefined} />
-      <span className="dl-outcome-label">{label}</span>
-      {says != null ? <span className="dl-outcome-says">{says}</span> : <span />}
+    <div className={slots.base()} data-kind={kind}>
+      <Icon className={slots.icon()} />
+      <span className={slots.label()}>{label}</span>
+      {says != null ? <span className={slots.says()}>{says}</span> : <span />}
     </div>
   );
 }

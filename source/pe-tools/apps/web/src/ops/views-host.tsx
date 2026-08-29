@@ -55,7 +55,7 @@ function HostStatusView({ data }: OpViewProps) {
     <Section
       label="host"
       aside={
-        <span className="flex items-center gap-1.5">
+        <span>
           <LiveDot tone="implicit" lane={connected ? "dev" : null} />
           <FactChip
             tone={connected ? "done" : "caution"}

@@ -351,7 +351,6 @@ function FixtureViews({
       <EmptyState
         story="scope"
         exit="give Body Width and Body Height literal values at this type, or stage a type that has them"
-        className="p-3"
       >
         no shape to draw — the body&apos;s width or height is not a literal at this type, and
         nothing here guesses
@@ -625,7 +624,6 @@ function ModelViews({
       <EmptyState
         story="scope"
         exit="give the document's solids values that resolve to numbers at this type, or stage a type where they do"
-        className="p-3"
       >
         no shape to draw — no solid&apos;s dimensions resolve to numbers at this type, and nothing
         here guesses

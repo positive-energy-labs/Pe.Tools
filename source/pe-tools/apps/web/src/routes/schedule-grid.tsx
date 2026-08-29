@@ -248,7 +248,7 @@ function ScheduleGridWorkspace({
         name="schedules"
         sentence={
           snapshot ? (
-            <span className="t-value text-ink">{snapshot.scheduleName}</span>
+            <span>{snapshot.scheduleName}</span>
           ) : (
             <span className="t-value italic text-ink-mute">
               {hydrated ? "no schedule open" : "connecting"}

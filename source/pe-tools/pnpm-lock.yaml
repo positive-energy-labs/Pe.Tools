@@ -185,9 +185,6 @@ importers:
       '@tanstack/react-table':
         specifier: 9.1.2
         version: 9.1.2(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      class-variance-authority:
-        specifier: ^0.7.1
-        version: 0.7.1
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -4249,9 +4246,6 @@ packages:
     resolution: {integrity: sha512-qmFR5PLMzHyuNJHwOloHPAHhbaNglkfeV/xDtt5b7xiFFyU1I+AZZX0PYseMuhenJSSirgxELYIbswcoc+5H4A==}
     engines: {node: '>=12.13.0'}
     hasBin: true
-
-  class-variance-authority@0.7.1:
-    resolution: {integrity: sha512-Ka+9Trutv7G8M6WT6SeiRWz792K5qEqIGEGzXKhAE6xOWAY6pPH8U+9IY3oCMv6kqTmLsv7Xh/2w2RigkePMsg==}
 
   classnames@2.5.1:
     resolution: {integrity: sha512-saHYOzhIQs6wy2sVxTM6bUDsQO4F50V9RQ22qBpEdCW+I+/Wmke2HOl6lS6dTpdxVhb88/I6+Hs+438c3lfUow==}
@@ -11215,10 +11209,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
     optional: true
-
-  class-variance-authority@0.7.1:
-    dependencies:
-      clsx: 2.1.1
 
   classnames@2.5.1: {}
 

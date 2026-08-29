@@ -539,7 +539,6 @@ function AdoptPanel({ store }: { store: TakeoffStore }) {
             {r.region.role === "zoning-region" && (
               <FactChip
                 tone="done"
-                className="shrink-0"
                 title="This region is already stamped as a Zoning Region. Re-adopting edits its name and system tag in place."
               >
                 stamped
@@ -642,7 +641,6 @@ function SyncPanel({ store }: { store: TakeoffStore }) {
 
       {untagged > 0 && (
         <OutcomeLine
-          className="mt-1"
           kind="advisory"
           label={`${untagged} room(s) in untagged zones`}
           says="re-adopt those zones with a system tag first — a room cannot land in a .r10 system that has no name"
@@ -650,7 +648,6 @@ function SyncPanel({ store }: { store: TakeoffStore }) {
       )}
       {blockedZones.length > 0 && (
         <OutcomeLine
-          className="mt-1"
           kind="advisory"
           label={`${blockedZones.length} zone(s) excluded`}
           says="resolve room flags, orphaned regions, materialization failures, or post-sync area drift first"

@@ -383,7 +383,6 @@ export function VariantB() {
         stage={authored[def.key] !== applied[def.key] ? "staged" : "clean"}
         agree={status === "drift" ? "drift" : "agree"}
         modelValue={status === "drift" ? driftSummary(def, authored, typeVals) : undefined}
-        className="w-16 text-right"
       />
     );
   };
@@ -396,7 +395,7 @@ export function VariantB() {
       <AddressingBar
         name="param tables · b"
         sentence={
-          <span className="flex items-baseline gap-1.5">
+          <span>
             <span className="face-mono t-value">ProjectA_Clone_Aug_11</span>
             <span style={{ color: token("ink-mute") }}>›</span>
             <span>M001 design tables</span>
@@ -466,7 +465,7 @@ export function VariantB() {
 
           <ArtifactFrame
             head={
-              <div className="flex items-baseline gap-2">
+              <div>
                 <span className="t-value font-medium">FOM HWCH Plant</span>
                 <span className="t-caption" style={{ color: token("ink-mute") }}>
                   sheet exhibit — today a dead SXL header grid
@@ -572,7 +571,6 @@ export function VariantB() {
                   value={CAP_TOTAL.toLocaleString("en-US")}
                   cap="readonly"
                   capReason="machine-fed — an inbound binding reads Σ PE_M_PerfHeat_CapacityDesignTotal over 23 tags; edit the model, not the cell"
-                  className="w-16 text-right"
                 />
                 <span className="w-5 t-caption" style={{ color: token("ink-mute") }}>
                   Btu/h
@@ -583,7 +581,7 @@ export function VariantB() {
 
           <ArtifactFrame
             head={
-              <div className="flex items-baseline gap-2">
+              <div>
                 <span className="t-value font-medium">BOD MainHouse</span>
                 <span className="t-caption" style={{ color: token("ink-mute") }}>
                   M001 · authored-only — no bindings yet
@@ -614,7 +612,6 @@ export function VariantB() {
                       onCommit={(t) => setBodVals((s) => ({ ...s, [e.key]: t }))}
                       stage={edited ? "staged" : "clean"}
                       note="no binding — authored value only; never leaves the page"
-                      className="w-24 shrink-0 text-right"
                     />
                     <span className="w-9 shrink-0 t-caption" style={{ color: token("ink-mute") }}>
                       {e.unit ?? ""}
@@ -632,7 +629,7 @@ export function VariantB() {
         <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-y-auto p-3 pl-0">
           <ArtifactFrame
             head={
-              <div className="flex items-center gap-2">
+              <div>
                 <span className="t-value font-medium">Binding ledger</span>
                 <HelpTip>
                   One row per linkage. Direction is a property of the binding: → writes the model

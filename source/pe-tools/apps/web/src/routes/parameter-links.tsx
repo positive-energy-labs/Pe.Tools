@@ -255,16 +255,16 @@ function ParameterLinksWorkspace({
       />
 
       <div className="shrink-0 border-b border-line empty:border-0">
-        <VerbLane atoms={route.atoms} className="px-4 py-0.5" />
+        <VerbLane atoms={route.atoms} />
       </div>
 
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
           {!route.hydrated ? (
-            <OutcomeLine kind="busy" label="hydrating route state" className="py-10" />
+            <OutcomeLine kind="busy" label="hydrating route state" />
           ) : (
             <>
-              <VerbGroup title="draft" radius="shared document · revit read" className="mb-4">
+              <VerbGroup title="draft" radius="shared document · revit read">
                 <Verb
                   label="refresh"
                   icon={RefreshCw}
@@ -305,7 +305,6 @@ function ParameterLinksWorkspace({
                   the reason input is the last gate before the one commit. */}
               {editing != null ? (
                 <ArmingStrip
-                  className="mb-4"
                   verb="apply"
                   target={documentAddress}
                   count={evaluation?.changedWriteCount ?? 0}

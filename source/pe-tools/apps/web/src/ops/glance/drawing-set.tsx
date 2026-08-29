@@ -200,9 +200,7 @@ function DrawingSetView({ results, observedAtMs, call }: SyntheticViewProps) {
         <Section
           key={group.prefix}
           label={`${group.prefix} series`}
-          aside={
-            <span className="face-mono t-caption text-ink-2">{group.sheets.length} sheets</span>
-          }
+          aside={<span>{group.sheets.length} sheets</span>}
         >
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
             {group.sheets.map((sheet) => (

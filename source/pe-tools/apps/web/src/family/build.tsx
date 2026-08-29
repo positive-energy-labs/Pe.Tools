@@ -247,12 +247,10 @@ export function BuildStrip({
   onCommit,
   onCancel,
   onReplan,
-  className,
 }: BuildStripProps) {
   if (building)
     return (
       <OutcomeLine
-        className={className}
         kind="busy"
         label={BUILD_VERB}
         says={`opening ${facts.relativePath ?? "the document"} inside Revit and writing the .rfa — this write leaves the page, so nothing here can be undone by cancelling`}
@@ -273,7 +271,6 @@ export function BuildStrip({
 
   return (
     <ArmingStrip
-      className={className}
       verb={BUILD_VERB}
       target={buildTarget(facts, familyName)}
       count={count}

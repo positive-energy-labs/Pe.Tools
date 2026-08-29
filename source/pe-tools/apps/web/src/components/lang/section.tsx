@@ -11,16 +11,25 @@
  * legal home for region orientation) and an optional right-aligned aside for counts and
  * controls. Plain content is never enclosed — a section is a head and a hairline, not a box.
  */
-import { cn } from "#/lib/utils";
+import { tv } from "#/lib/tv";
 
 import "./lang.css";
+
+export const sectionRecipe = tv({
+  slots: {
+    base: "min-w-0",
+    head: "mb-1.5 flex items-baseline gap-2 border-b border-line pb-[3px]",
+    label: "m-0 t-label t-upper font-semibold text-ink",
+    aside: "ml-auto flex items-center gap-1.5",
+    provenance: "mt-1.5 mb-0 face-mono t-caption tracking-[0.02em] text-ink-2",
+  },
+});
 
 export function Section({
   label,
   help,
   aside,
   children,
-  className,
 }: {
   label: string;
   /** Region orientation — a HelpTip node, beside the title it orients. */
@@ -28,14 +37,14 @@ export function Section({
   /** Right-aligned counts/controls for the head row. */
   aside?: React.ReactNode;
   children: React.ReactNode;
-  className?: string;
 }) {
+  const slots = sectionRecipe();
   return (
-    <section className={cn("dl-section", className)}>
-      <div className="dl-section-head">
-        <h2 className="dl-section-label">{label}</h2>
+    <section className={slots.base()}>
+      <div className={slots.head()}>
+        <h2 className={slots.label()}>{label}</h2>
         {help}
-        {aside != null ? <div className="dl-section-aside">{aside}</div> : null}
+        {aside != null ? <div className={slots.aside()}>{aside}</div> : null}
       </div>
       {children}
     </section>
@@ -49,5 +58,6 @@ export function Section({
  * receipt of how the view was assembled (SURFACE-PHILOSOPHY §3).
  */
 export function Provenance({ children }: { children: React.ReactNode }) {
-  return <p className="dl-provenance">{children}</p>;
+  const { provenance } = sectionRecipe();
+  return <p className={provenance()}>{children}</p>;
 }

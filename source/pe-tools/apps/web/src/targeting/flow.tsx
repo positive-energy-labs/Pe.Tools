@@ -179,9 +179,7 @@ export function TargetingFlow<K extends string>({
         <ArtifactFrame
           head={
             <>
-              <span className="t-label t-upper" style={{ color: token("ink") }}>
-                {product.name}
-              </span>
+              <span style={{ color: token("ink") }}>{product.name}</span>
               <span className="face-mono t-caption t-upper" style={{ color: token("ink-mute") }}>
                 trunks
               </span>

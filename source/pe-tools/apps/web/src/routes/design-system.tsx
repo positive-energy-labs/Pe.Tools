@@ -389,7 +389,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
 
 function Laws() {
   return (
-    <Section label="01 · the laws" className="flex flex-col gap-4">
+    <Section label="01 · the laws">
       <p className="t-label text-ink-2">
         fifteen rules that decide every surface — each with the shipping component obeying it. A
         position lives here the moment a real component can render it; SURFACE-PHILOSOPHY keeps only
@@ -589,7 +589,7 @@ function Tokens() {
   const values = useTokenValues(all);
 
   return (
-    <Section label="02 · tokens" className="flex flex-col gap-4">
+    <Section label="02 · tokens">
       <p className="t-label text-ink-2">
         eighteen, and every one of them is oklch(L C h) off a declared band — src/base.css is the
         one place a colour is decided
@@ -643,7 +643,7 @@ function Tokens() {
 
 function Catalogue() {
   return (
-    <Section label="03 · the catalogue" className="flex flex-col gap-4">
+    <Section label="03 · the catalogue">
       <p className="t-label text-ink-2">
         one block per components/lang primitive — the shipping component, the states that matter,
         and who consumes it
@@ -1183,7 +1183,6 @@ function RealTable() {
           below are the section's deliverable.
         </HelpTip>
       }
-      className="flex flex-col gap-4"
     >
       <p className="t-label text-ink-2">
         the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell
@@ -1346,7 +1345,7 @@ const SATELLITES: readonly { to: string; name: string; purpose: string }[] = [
 
 function Satellites() {
   return (
-    <Section label="05 · satellites" className="flex flex-col gap-4">
+    <Section label="05 · satellites">
       <p className="t-label text-ink-2">
         mocked complicated cases — sibling routes, not nested; each announces its fixture with a
         dashed seam

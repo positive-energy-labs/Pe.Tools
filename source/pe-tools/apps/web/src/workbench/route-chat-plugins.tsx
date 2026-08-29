@@ -403,7 +403,7 @@ export function InlineRoutePlugin({
   return (
     <ArtifactFrame
       head={
-        <div className="flex w-full items-baseline justify-between gap-3">
+        <div>
           <span className="t-label t-upper text-ink-2">{title}</span>
           <span className="t-caption face-mono text-ink-2">{action}</span>
         </div>

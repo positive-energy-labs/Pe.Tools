@@ -299,7 +299,7 @@ export function VariantC() {
       <AddressingBar
         name="param tables"
         sentence={
-          <span className="ptc-sentence">
+          <span>
             <span className="ptc-noun">ProjectA_Clone_Aug_11</span>
             <span className="ptc-sep">›</span>
             <span className="ptc-noun">Sheet M001</span>
@@ -347,7 +347,7 @@ export function VariantC() {
         {/* ── THE DOCUMENT — the M001 sheet, WYSIWYG. ArtifactFrame is earned: the sheet is a
             machine-operated object carrying state (live values, staged edits, revisions). */}
         <div className="ptc-scroll">
-          <ArtifactFrame className="ptc-paper">
+          <ArtifactFrame>
             <div className="ptc-doc">
               <header className="ptc-sheethead">
                 <span className="ptc-sheetproj">ProjectA_CLONE_AUG_11</span>
@@ -513,7 +513,7 @@ export function VariantC() {
           <aside className="ptc-panel">
             <ArtifactFrame
               head={
-                <div className="ptc-panelhead">
+                <div>
                   {open === "ewt" || open === "lwt" ? (
                     <>
                       <span>{BINDINGS[open].docLabel}</span>

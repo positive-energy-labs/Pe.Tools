@@ -66,7 +66,6 @@ export function ExportSheet({
         <Verb
           label="print / save PDF"
           reason="Hands this sheet to the browser's print dialog, where it becomes a PDF. Nothing in the model or the row set changes."
-          className="ml-auto"
           onClick={() => window.print()}
         />
         <Press
@@ -126,7 +125,6 @@ export function ExportSheet({
                 <Verb
                   label=".svg"
                   reason="Saves this one drawing as a standalone .svg file, tokens baked in. Nothing in the model or the row set changes."
-                  className="no-print"
                   onClick={() => downloadSvg(r.id)}
                 />
               </figcaption>

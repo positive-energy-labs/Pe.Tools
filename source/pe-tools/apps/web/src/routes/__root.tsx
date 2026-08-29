@@ -99,12 +99,7 @@ export function RouteConflictBanner() {
       <span className="t-value">
         Your edit did not land. Review the current document and retry.
       </span>
-      <Verb
-        label="dismiss"
-        reason="Dismiss this conflict notice."
-        className="t-label text-nav hover:underline"
-        onClick={() => dismiss(false)}
-      />
+      <Verb label="dismiss" reason="Dismiss this conflict notice." onClick={() => dismiss(false)} />
     </aside>
   );
 }

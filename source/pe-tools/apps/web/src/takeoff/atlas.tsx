@@ -901,7 +901,6 @@ export function Atlas({ store }: AtlasProps) {
                                 {calls > 0 && (
                                   <FactChip
                                     tone="alarm"
-                                    className="shrink-0"
                                     title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
                                   >
                                     {calls} call{calls === 1 ? "" : "s"}
@@ -1615,7 +1614,7 @@ function ZoneCard({
             `commit`, the language's one filled blue for writes that leave the page. Blast radius
             is not a tone; it groups the lane, which is what the group head below says. */}
         {live && (
-          <VerbGroup className="pt-0.5" title="zone verbs" radius="document · model">
+          <VerbGroup title="zone verbs" radius="document · model">
             <Verb
               tone="commit"
               label={zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
@@ -1771,7 +1770,6 @@ function RoomPanel({
             {!live ? (
               <FactChip
                 dashed
-                className="mt-1.5"
                 title="The fixture lane has no document. Verdicts mark this session only and are lost when the tab closes."
               >
                 fixture · verdicts stay local
@@ -1779,7 +1777,6 @@ function RoomPanel({
             ) : room.elementId === null ? (
               <FactChip
                 dashed
-                className="mt-1.5"
                 title="This room was detected but never materialized, so there is no element to write a verdict onto. Partition the zone first."
               >
                 no Room Region home
@@ -1787,7 +1784,6 @@ function RoomPanel({
             ) : (
               <FactChip
                 tone="done"
-                className="mt-1.5"
                 title="Verdicts are persisted onto this room's Room Region provenance blob before the UI shows them as decided."
               >
                 writes through to the blob

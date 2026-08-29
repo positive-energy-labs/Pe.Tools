@@ -18,7 +18,6 @@ import { cn } from "#/lib/utils";
 export function TextCell({
   value,
   onCommit,
-  className,
   placeholder,
   title,
 }: {
@@ -37,7 +36,6 @@ export function TextCell({
       note={title}
       onCommit={(text) => onCommit(text)}
       onNavigate={(direction) => move?.(direction) ?? false}
-      className={cn("face-mono t-value", className)}
     />
   );
 }
@@ -48,7 +46,6 @@ export function NumberCell({
   digits = 2,
   integer = false,
   min,
-  className,
   title,
 }: {
   value: number;
@@ -69,7 +66,6 @@ export function NumberCell({
       // `numeric` already parsed, clamped and normalized — a refused parse never reaches here.
       onCommit={(text) => onCommit(Number(text))}
       onNavigate={(direction) => move?.(direction) ?? false}
-      className={cn("face-mono t-value text-right", className)}
     />
   );
 }

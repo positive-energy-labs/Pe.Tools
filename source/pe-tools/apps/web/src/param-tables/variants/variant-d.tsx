@@ -409,7 +409,6 @@ export function VariantD() {
           value={fmtNum(cur)}
           agree="drift"
           note={`fact "${f.label}" says ${fmtNum(committedFact)} — this type holds ${fmtNum(cur)}${ro ? " · formula-owned, so a write would refuse; reconcile in the family" : ""}`}
-          className="face-mono"
         />
       );
     } else {
@@ -490,7 +489,6 @@ export function VariantD() {
               }
               onCommit={inbound ? undefined : (text) => stageFactEdit(f, text)}
               numeric={f.numeric}
-              className="min-w-16"
             />
             {f.unit != null ? <span style={MUTE}>{f.unit}</span> : null}
           </span>
@@ -539,7 +537,7 @@ export function VariantD() {
       <AddressingBar
         name="param-tables · d"
         sentence={
-          <span className="t-prose">
+          <span>
             ProjectA_Clone_Aug_11 · Main House · <span className="font-medium">design facts</span>
           </span>
         }
@@ -604,7 +602,7 @@ export function VariantD() {
             <div className="flex flex-col gap-3">
               <ArtifactFrame
                 head={
-                  <div className="flex items-center gap-2 t-value">
+                  <div>
                     <span className="font-medium">Hydronic Loop Temperatures</span>
                     <FactChip
                       dashed
@@ -644,7 +642,7 @@ export function VariantD() {
 
               <ArtifactFrame
                 head={
-                  <div className="flex items-center gap-2 t-value">
+                  <div>
                     <span className="font-medium">{FOM_HWCH_PLANT.name}</span>
                     <span style={MUTE}>SXL header cells today — two cells fact-linked</span>
                   </div>
@@ -690,7 +688,7 @@ export function VariantD() {
 
               <ArtifactFrame
                 head={
-                  <div className="flex items-center gap-2 t-value">
+                  <div>
                     <span className="font-medium">BOD MainHouse</span>
                     <span style={MUTE}>M001 · every row subscribes to its fact</span>
                   </div>
@@ -729,7 +727,7 @@ export function VariantD() {
               </HelpTip>
             }
             aside={
-              <span className="face-mono t-caption" style={MUTE}>
+              <span style={MUTE}>
                 {stagedKeys.length > 0
                   ? `${landing.length} writes staged · ${refusing.length} will refuse`
                   : "nothing staged"}
@@ -738,7 +736,7 @@ export function VariantD() {
           >
             <ArtifactFrame
               foot={
-                <span className="face-mono t-caption" style={MUTE}>
+                <span style={MUTE}>
                   {FACTS.length} facts · {FACTS.filter((f) => f.target != null).length} drive params
                   · 1 model-sourced
                 </span>
@@ -761,17 +759,13 @@ export function VariantD() {
               </HelpTip>
             }
             aside={
-              <span className="face-mono t-caption" style={MUTE}>
+              <span style={MUTE}>
                 {TYPE_GROUPS.length} types · {TAG_TOTAL} tags
               </span>
             }
           >
             <ArtifactFrame
-              head={
-                <span className="t-value font-medium">
-                  Hydronic Fan Coil Unit Performance Schedule — by type
-                </span>
-              }
+              head={<span>Hydronic Fan Coil Unit Performance Schedule — by type</span>}
             >
               <div>
                 {TYPE_GROUPS.map((t) => {

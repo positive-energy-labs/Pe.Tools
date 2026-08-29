@@ -600,7 +600,7 @@ export function VariantE() {
       <AddressingBar
         name="param tables"
         sentence={
-          <span className="flex items-center gap-1.5 t-value">
+          <span>
             <span className="face-mono">ProjectA_Clone_Aug_11</span>
             <span style={muted}>›</span>
             <span>Mechanical Equipment</span>
@@ -666,7 +666,6 @@ export function VariantE() {
 
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2">
         <ArtifactFrame
-          className="flex min-h-0 flex-1 flex-col"
           head={
             <span className="flex w-full items-center gap-3">
               <span className="t-value">Main House fan coils × PE_* parameters</span>

@@ -1226,7 +1226,6 @@ export function FamilyWorkspace({
     return (
       <Verb
         label="bind…"
-        className={cn("h-4 px-1 t-caption", className)}
         onClick={() => setBinding({ slug, property })}
         reason={`Bind ${slug}.${property} to a parameter — its one crossing, and the only verb that changes what CAN be said about this number. Offers every ${dataType} parameter already in the profile, or a new one named "${newName}" seeded with ${literal}. The ghost row then disappears into the parameter row that now represents it. Nothing leaves the page.`}
       />
@@ -1825,7 +1824,6 @@ export function FamilyWorkspace({
                         refusal (an emptied literal) is the cell's own note in both places. */}
                     <NavStateCell
                       value={bindingOf(world, draft, part.slug, dim.property)}
-                      className="rounded-sm border border-line-2 t-caption text-caution"
                       note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
                       onCommit={(next) => editLiteral(part.slug, dim.property, next)}
                     />
@@ -1900,10 +1898,6 @@ export function FamilyWorkspace({
                   : "clean"
             }
             stagedBy={family.length > 0 ? "pea" : "you"}
-            className={cn(
-              "rounded-sm border border-line-2 t-label",
-              isFormula(authored) && "italic",
-            )}
             note={
               isFormula(authored)
                 ? `A FORMULA — ${authored}. Its result is derived, so no type may override it and Revit's number for it is an output rather than a competing value. Edit the expression here; change what feeds it to change the result.`
@@ -1981,7 +1975,7 @@ export function FamilyWorkspace({
       <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-line">
         <div className="flex h-6 shrink-0 items-center gap-2 border-b border-line bg-recess px-2">
           {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
-          <Tag className="shrink-0">{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
+          <Tag>{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
           <span className="face-mono min-w-0 flex-1 truncate t-caption text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
@@ -2022,7 +2016,6 @@ export function FamilyWorkspace({
         <>
           <FactChip
             tone="pea"
-            className="mr-1"
             title="Open proposals waiting on a verdict. They are ephemeral — page-scoped, never written, gone on reload. Only accept makes one real."
           >
             {openProposals.length} open

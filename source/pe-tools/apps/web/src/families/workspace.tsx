@@ -739,18 +739,16 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
           /* A disconnected bridge is not the model disagreeing — it is the machine being
              unavailable, which the outcome lane calls `error` (caution, never alarm). */
           <OutcomeLine
-            className="min-w-0 flex-1"
             kind="error"
             label="bridge disconnected"
             says="nothing can be read — open Revit with the host connected, then bind that world in the sentence above"
           />
         ) : categoryFeed.state === "loading" ? (
-          <OutcomeLine className="min-w-0 flex-1" kind="busy" label="reading categories" />
+          <OutcomeLine kind="busy" label="reading categories" />
         ) : categories.length === 0 ? (
           <EmptyState
             story="scope"
             exit="load a family in Revit, or bind a different world in the sentence above"
-            className="min-w-0 flex-1"
           >
             no loaded families in this project — the catalog read succeeded and reported nothing
           </EmptyState>
@@ -787,7 +785,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         {draftCategories.length === 0 ? null : (draftFamilyNames.length === 0 &&
             familyFeed.state === "loading") ||
           familyFeed.stale ? (
-          <OutcomeLine className="shrink-0" kind="busy" label="resolving families" />
+          <OutcomeLine kind="busy" label="resolving families" />
         ) : (
           <FactChip title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated.">
             {pickedFamilies.length === draftFamilyNames.length
@@ -798,7 +796,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
       </div>
 
       <div className="border-b border-line empty:border-0">
-        <VerbLane atoms={store.atoms} className="px-4 py-1.5" />
+        <VerbLane atoms={store.atoms} />
       </div>
       {matrixIssue && (
         <div className="px-4 py-2">
@@ -888,7 +886,6 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                     <EmptyState
                       story="scope"
                       exit="widen the categories above, or bind a profile that covers this project"
-                      className="py-1"
                     >
                       no family in this scope is claimed by the bound profile — the plan compiled
                       cleanly and matched nothing
@@ -980,7 +977,6 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                     <EmptyState
                       story="scope"
                       exit="re-plan and read the decision queue before retrying"
-                      className="py-1"
                     >
                       no receipts — apply ran and reported nothing
                     </EmptyState>
@@ -1001,10 +997,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
                 projected profiles
               </span>
             </SectionLabel>
-            <FactChip
-              className="ml-2"
-              title="How many picked families the projection read back out of the model."
-            >
+            <FactChip title="How many picked families the projection read back out of the model.">
               {projection.projections.length} famil
               {projection.projections.length === 1 ? "y" : "ies"}
             </FactChip>
@@ -1013,7 +1006,6 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
             <EmptyState
               story="scope"
               exit="re-pick families in the table's pick column and run it again"
-              className="mt-1"
             >
               nothing projected — the picked set read back empty
             </EmptyState>
@@ -1023,7 +1015,6 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
           {projection.diagnostics.map((diagnostic) => (
             <OutcomeLine
               key={`${diagnostic.code}:${diagnostic.path}`}
-              className="mt-1"
               kind="advisory"
               label={diagnosticLine(diagnostic)}
               says={diagnostic.suggestion ?? undefined}

@@ -377,7 +377,6 @@ export function VariantA() {
         fresh: "fresh",
         cap: "readonly",
         capReason: `inbound link — the model owns this value (Σ ${cell.link.param} across ${FC_UNITS.length} scheduled tags${meta?.unit != null ? `, ${meta.unit}` : ""})`,
-        className: "face-mono",
       };
     }
     if (cell.link?.dir === "out") {
@@ -395,14 +394,12 @@ export function VariantA() {
         note: `outbound link — drives ${cell.link.param} on ${TYPE_ROWS.length} fan-coil types (${FC_UNITS.length} scheduled tags)`,
         onCommit: (text: string) => patchCell(t, r, c, { text }),
         numeric: { digits: cell.digits ?? 1 },
-        className: "face-mono",
       };
     }
     return {
       value: cell.text,
       scale: "row",
       onCommit: (text: string) => patchCell(t, r, c, { text }),
-      ...(cell.mono ? { className: "face-mono" } : {}),
     };
   };
 
@@ -509,7 +506,7 @@ export function VariantA() {
         <div className="min-w-0 flex-1 space-y-3 overflow-auto p-3">
           <ArtifactFrame
             head={
-              <div className="flex items-center gap-2">
+              <div>
                 <span className="t-label t-upper" style={{ color: token("ink-2") }}>
                   {TABLES.find((x) => x.key === active)!.name}
                 </span>
@@ -660,7 +657,7 @@ export function VariantA() {
           {pending.length > 0 ? (
             <ArtifactFrame
               head={
-                <div className="flex items-center gap-2">
+                <div>
                   <span className="t-label t-upper" style={{ color: token("ink-2") }}>
                     staged fan-out
                   </span>
