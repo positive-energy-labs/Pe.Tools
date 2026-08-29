@@ -24,7 +24,7 @@ export function Seam({ op }: { op: string }) {
 }
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span className="t-label t-upper text-ink-2">{children}</span>;
+  return <span>{children}</span>;
 }
 
 /**
@@ -70,37 +70,32 @@ export function NamePicker({
       <ComboboxChips
         ref={anchor}
         title={title}
-        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto rounded-sm border-line-2 bg-transparent py-0.5 t-label"
+        className="max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto py-0.5"
       >
         {collapsed ? (
           <span
-            className="px-1 t-label text-ink-2"
+            className="px-1"
             title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
           >
             all {values.length}
           </span>
         ) : (
-          values.map((name) => (
-            <ComboboxChip key={name} className="face-mono rounded-sm t-label">
-              {name}
-            </ComboboxChip>
-          ))
+          values.map((name) => <ComboboxChip key={name}>{name}</ComboboxChip>)
         )}
         <ComboboxChipsInput
           aria-label={ariaLabel}
           placeholder={values.length === 0 ? placeholder : "add…"}
-          className="face-mono t-label placeholder:text-ink-2"
         />
         <ComboboxTrigger />
       </ComboboxChips>
-      <ComboboxContent anchor={anchor} className="rounded-sm">
+      <ComboboxContent anchor={anchor}>
         {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
             "you typed a string that matched nothing" — plain muted text, no story/exit. */}
-        <ComboboxEmpty className="face-mono t-label text-ink-mute">no matches</ComboboxEmpty>
+        <ComboboxEmpty>no matches</ComboboxEmpty>
         <ComboboxList>
           {(name: string) => (
-            <ComboboxItem key={name} value={name} className="face-mono pr-7 t-label">
-              <span className="truncate">{name}</span>
+            <ComboboxItem key={name} value={name} className="pr-7">
+              <span>{name}</span>
             </ComboboxItem>
           )}
         </ComboboxList>

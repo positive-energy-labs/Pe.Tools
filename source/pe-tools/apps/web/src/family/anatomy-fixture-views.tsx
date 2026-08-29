@@ -74,7 +74,7 @@ export function FixtureViews({
           <svg
             key={view.key}
             viewBox={`0 0 ${BOX} ${BOX}`}
-            className="h-full border-r border-line"
+            className="h-full"
             role="img"
             aria-label={`family ${view.key} view`}
           >
@@ -99,7 +99,6 @@ export function FixtureViews({
                   y2={Y(0)}
                   stroke={token("line")}
                   strokeWidth={0.5}
-                  className="dash-reference"
                 />
                 <line
                   x1={X(0)}
@@ -108,7 +107,6 @@ export function FixtureViews({
                   y2={BOX - M}
                   stroke={token("line")}
                   strokeWidth={0.5}
-                  className="dash-reference"
                 />
               </>
             )}
@@ -263,13 +261,7 @@ export function FixtureViews({
               );
             })}
 
-            <text
-              x={M}
-              y={BOX - 5}
-              fontSize={7}
-              fill={token("ink-2")}
-              className="face-mono t-upper"
-            >
+            <text x={M} y={BOX - 5} fontSize={7} fill={token("ink-2")}>
               {view.label}
             </text>
           </svg>

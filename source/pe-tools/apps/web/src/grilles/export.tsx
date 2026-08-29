@@ -48,18 +48,15 @@ export function ExportSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-modal overflow-auto bg-page text-ink">
+    <div className="z-modal overflow-auto">
       <style>{`@media print {
         body * { visibility: hidden; }
         #grille-export-sheet, #grille-export-sheet * { visibility: visible; }
         #grille-export-sheet { position: absolute; inset: 0; margin: 0; }
       }`}</style>
-      <div
-        className="flex items-center gap-3 border-b px-3 py-2 print:hidden"
-        style={{ borderColor: token("line") }}
-      >
-        <span className="face-mono t-label t-upper text-ink-mute">export sheet</span>
-        <span className="face-mono t-label text-ink-2">
+      <div className="flex items-center gap-3 px-3 py-2" style={{ borderColor: token("line") }}>
+        <span>export sheet</span>
+        <span>
           {rows.length} grille{rows.length === 1 ? "" : "s"} · print → PDF, or save each as .svg
         </span>
         <Verb
@@ -74,31 +71,24 @@ export function ExportSheet({
 
       <div id="grille-export-sheet" className="mx-auto max-w-[1100px] p-8">
         {/* title block */}
-        <div
-          className="face-mono grid grid-cols-[1fr_auto] gap-4 border-b-2 pb-2 t-label"
-          style={{ borderColor: token("ink") }}
-        >
+        <div className="grid grid-cols-[1fr_auto] gap-4 pb-2" style={{ borderColor: token("ink") }}>
           <div>
-            <div className="t-label t-upper text-ink-mute">
-              Positive Energy · custom wood floor grille
-            </div>
+            <div>Positive Energy · custom wood floor grille</div>
             <input
-              className="mt-1 w-full bg-transparent t-title outline-none"
+              className="mt-1 w-full"
               placeholder="project / location"
               value={project}
               onChange={(e) => onProject(e.target.value)}
             />
           </div>
-          <div className="text-right text-ink-2">
+          <div>
             <div>{new Date().toISOString().slice(0, 10)}</div>
             <div>free area per PE calculator · all dims inches</div>
           </div>
         </div>
 
         {rows.length === 0 && (
-          <p className="face-mono py-8 t-value text-ink-2">
-            nothing on the sheet — tick rows in the table first
-          </p>
+          <p className="py-8">nothing on the sheet — tick rows in the table first</p>
         )}
 
         <div
@@ -106,16 +96,15 @@ export function ExportSheet({
           style={{ gridTemplateColumns: rows.length > 1 ? "1fr 1fr" : "1fr" }}
         >
           {rows.map((r, i) => (
-            <figure key={r.id} id={`export-${r.id}`} className="min-w-0 break-inside-avoid">
-              <figcaption className="face-mono flex items-baseline gap-3 t-label">
+            <figure key={r.id} id={`export-${r.id}`} className="min-w-0">
+              <figcaption className="flex items-baseline gap-3">
                 <b>G-{i + 1}</b>
                 <span>
                   {frac(r.boardLength)} × {frac(r.boardWidth)} · {r.openings} × {frac(r.opening)}″
                   openings · {frac(r.rib)}″ ribs
                 </span>
-                <span className="ml-auto text-ink-2">
-                  free area <b className="text-ink">{pct(r.freeArea)}</b> ·{" "}
-                  {r.actualFreeArea.toFixed(1)} in²
+                <span className="ml-auto">
+                  free area <b>{pct(r.freeArea)}</b> · {r.actualFreeArea.toFixed(1)} in²
                 </span>
                 <Verb
                   label=".svg"

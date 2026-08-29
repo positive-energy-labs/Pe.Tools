@@ -8,10 +8,9 @@ export function FamilyMetaControl({ slug, meta }: { slug: string; meta: GeomMeta
   if (meta.control === "read")
     return (
       <span
-        className="face-mono t-caption text-ink-2"
         title={`${meta.note} READ-ONLY — a box you could type in would be claiming an edit that nothing downstream would actually make.`}
       >
-        {value} <span className="t-caption opacity-50">reported</span>
+        {value} <span>reported</span>
       </span>
     );
   if (meta.control === "toggle")
@@ -36,7 +35,7 @@ export function FamilyMetaControl({ slug, meta }: { slug: string; meta: GeomMeta
       onChange={(event) => editMeta(slug, meta.key, event.target.value)}
       title={meta.note}
       aria-label={meta.label}
-      className="face-mono h-5 w-full rounded-sm border border-line-2 bg-transparent px-1 t-caption outline-none"
+      className="h-5 w-full px-1"
     >
       {(meta.options ?? []).map((option) => (
         <option key={option} value={option}>

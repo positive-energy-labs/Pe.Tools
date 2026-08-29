@@ -52,7 +52,7 @@ export function LevelPlan({
 
   if (!bounds)
     return (
-      <div className="flex size-full items-center justify-center px-4 text-center">
+      <div className="flex size-full items-center justify-center px-4">
         {zones.length > 0 ? (
           <EmptyState story="filter" exit="see the rail — they stay listed there, marked">
             all {zones.length} zone{zones.length === 1 ? "" : "s"} on this level are sub-
@@ -115,7 +115,6 @@ export function LevelPlan({
                 strokeWidth={on ? 2.5 : 1}
                 strokeOpacity={on ? 1 : 0.55}
                 vectorEffect="non-scaling-stroke"
-                className={dimmed ? undefined : "cursor-pointer"}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!dimmed) onSelectZone(z);
@@ -132,7 +131,6 @@ export function LevelPlan({
                   strokeOpacity={0.35}
                   strokeWidth={1}
                   vectorEffect="non-scaling-stroke"
-                  className="dash-seam pointer-events-none"
                 />
               ))}
 
@@ -156,14 +154,13 @@ export function LevelPlan({
                       stroke={tone}
                       strokeWidth={isCursor ? 2 : 1}
                       vectorEffect="non-scaling-stroke"
-                      className="dash-seam cursor-pointer"
                       onClick={click}
                     >
                       <title>{`${room.name} — ${room.sqft} sf · ${STATE_META[state].label} (no detected boundary)`}</title>
                     </circle>
                   );
                 return (
-                  <g key={room.guid} className="cursor-pointer" onClick={click}>
+                  <g key={room.guid} onClick={click}>
                     <path
                       d={pathD([room.outer, ...room.holes], frame)}
                       fillRule="evenodd"
@@ -182,7 +179,6 @@ export function LevelPlan({
                         textAnchor="middle"
                         fontSize={font}
                         fill={token("ink")}
-                        className="pointer-events-none select-none"
                       >
                         <tspan x={labelX} fontWeight="var(--weight-strong)">
                           {room.name}
@@ -204,7 +200,6 @@ export function LevelPlan({
                   fontSize={font * 0.95}
                   fill={token("ink")}
                   fillOpacity={0.55}
-                  className="pointer-events-none select-none"
                 >
                   {z.zone.key}
                 </text>
@@ -214,14 +209,14 @@ export function LevelPlan({
         })}
       </svg>
 
-      <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
         {ROOM_STATES.map((s) => (
           <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
         ))}
         <Key tone={ABSENT_INK} label="held residue" seam />
         <Key tone={CURSOR_INK} label="cursor" />
         {skipped > 0 && (
-          <span className="face-mono t-value text-ink-2">
+          <span>
             {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
             rail
           </span>

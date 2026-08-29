@@ -9,7 +9,6 @@ export function FamiliesWorkspaceView() {
   const { store } = useFamiliesWorkspace();
   return (
     <Workspace
-      className="bg-page text-ink"
       headRail={<FamiliesHead store={store} />}
       readoutBand={
         <>

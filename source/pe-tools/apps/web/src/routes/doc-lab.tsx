@@ -28,9 +28,9 @@ function DocLabRoute() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2.5">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <h1 className="t-title face-display tracking-tight text-ink">Doc Lab</h1>
+          <h1>Doc Lab</h1>
           <HelpTip>
             The grounded-document engine in isolation. Parse a PDF: markdown blocks land on the
             left, the original pages on the right. Hovering either side highlights (and scrolls) the
@@ -66,10 +66,10 @@ function DocLabRoute() {
         </div>
       </header>
 
-      <div className="flex min-h-8 shrink-0 items-center gap-3 border-b border-line px-4 py-1">
+      <div className="flex min-h-8 items-center gap-3 px-4 py-1">
         {focused ? (
           <>
-            <span className="t-label face-mono truncate text-ink-2">
+            <span>
               {engine.pinned ? "pinned" : "focused"} · page {focused.page} · {focused.kind} ·{" "}
               {focused.id}
             </span>
@@ -84,9 +84,7 @@ function DocLabRoute() {
         ) : (
           // RULED not-an-empty-state (fit reviews, 2026-08-16): a hover readout at rest is
           // idle chrome, not a missing scope — plain muted text, no story/exit ceremony.
-          <span className="t-label text-ink-mute">
-            nothing focused — hover a block, image, or page region; click to pin
-          </span>
+          <span>nothing focused — hover a block, image, or page region; click to pin</span>
         )}
       </div>
 

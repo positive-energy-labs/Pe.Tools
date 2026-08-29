@@ -67,17 +67,11 @@ export function ProposedCell({
 
   return (
     <span
-      className="relative flex min-h-7 w-full items-center"
+      className="flex min-h-7 w-full items-center"
       style={first ? { boxShadow: `inset 0 -1.5px 0 0 ${token("pea")}` } : undefined}
     >
       {children}
-      {unsaved && (
-        <span
-          aria-hidden
-          title={unsaved}
-          className="absolute bottom-px left-px z-raised size-1 rounded-[1px] bg-caution"
-        />
-      )}
+      {unsaved && <span aria-hidden title={unsaved} className="z-raised size-1" />}
       {first && (
         <ProposalNotch first={first} count={proposals.length} where={where} onLocate={onLocate} />
       )}

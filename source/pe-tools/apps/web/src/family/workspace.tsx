@@ -176,12 +176,30 @@ function useFamilyWorkspaceModel(store: FamilyStore, requestedFamily?: string) {
   );
   const runner = useRunner(product, bindings, busy?.id ?? null);
 
-  return { ...core, ...columnModel, requestedFamily, picker, fleet, feeds, product, bindingState, setBindingState, bindings, runner };
+  return {
+    ...core,
+    ...columnModel,
+    requestedFamily,
+    picker,
+    fleet,
+    feeds,
+    product,
+    bindingState,
+    setBindingState,
+    bindings,
+    runner,
+  };
 }
 
 export type FamilyWorkspaceModel = ReturnType<typeof useFamilyWorkspaceModel>;
 
-export function FamilyWorkspace({ store, requestedFamily }: { store: FamilyStore; requestedFamily?: string }) {
+export function FamilyWorkspace({
+  store,
+  requestedFamily,
+}: {
+  store: FamilyStore;
+  requestedFamily?: string;
+}) {
   const model = useFamilyWorkspaceModel(store, requestedFamily);
   return (
     <FamilyWorkspaceProvider value={model}>

@@ -14,7 +14,6 @@ import {
   sortDirOf,
   type PRow,
 } from "#/family/model";
-import { cn } from "#/lib/utils";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyIdentityColumns } from "#/family/workspace-identity-columns";
 import { useFamilyTypeColumn } from "#/family/workspace-type-column";
@@ -116,10 +115,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
             else if (choice === "#new") bindToNew(slug, property, dataType);
             else bindTo(slug, property, choice);
           }}
-          className={cn(
-            "face-mono h-6 w-full min-w-0 truncate rounded-sm border-0 bg-recess px-1 t-caption text-ink outline-none",
-            className,
-          )}
+          className={className}
         >
           <option value="">bind to… (Esc cancels)</option>
           <option value="#new">{`＋ new parameter "${newName}", seeded ${literal}`}</option>
@@ -164,7 +160,6 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
       <span className="flex h-7 items-center gap-1 px-1.5">
         <StateDot tone="caution" />
         <span
-          className="face-mono t-caption text-caution"
           title={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}
         >
           unbound
@@ -251,7 +246,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
           const state = agreementOf(world, draft, row, typeName);
           return (
             <span
-              className="face-mono t-value block px-1.5 text-center"
+              className="px-1.5"
               style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
               title={MARK_TITLE[state]}
             >
@@ -268,22 +263,11 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
         title: `What Revit carries for the ${typeName} type right now. The profile's number right-aligns and this one left-aligns, so the two meet at the spine and each row reads as ONE diff. Reconciling them is the pane header's job — capture pulls Revit's numbers into the profile, apply writes the profile's numbers into Revit.`,
         cell: (row) => {
           if (world.missingInRevit.has(row.name))
-            return (
-              <ReadCell
-                className="italic text-caution"
-                value="missing"
-                reason={MARK_TITLE["only-profile"]}
-              />
-            );
+            return <ReadCell value="missing" reason={MARK_TITLE["only-profile"]} />;
           const entry = draft.live[row.name]?.[typeName];
           const state = agreementOf(world, draft, row, typeName);
           return (
             <ReadCell
-              className={cn(
-                entry == null && "text-ink-mute",
-                state === "drift" && "text-alarm",
-                entry?.readOnly && "italic text-ink-2",
-              )}
               value={entry?.value ?? "—"}
               reason={
                 entry

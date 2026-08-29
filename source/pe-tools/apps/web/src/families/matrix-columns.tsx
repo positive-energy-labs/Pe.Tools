@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { ReadCell } from "#/components/master-table/cells";
 import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
-import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 import type { FamiliesStore } from "#/families/store";
 
@@ -215,11 +214,6 @@ export function useFamiliesColumns({
                  `--cat-lichen`, a TAXONOMY colour carrying a value fact; the language has no
                  "derived" role to move it to, so it drops to the ink ladder
                  and separates from a project binding by italic rather than by hue. */
-              className={cn(
-                unresolved && "text-ink-mute/50",
-                scopeOf === "ProjectBindingOnly" && "text-ink-mute italic",
-                row.formulas[col.key] === "Present" && "text-ink-2",
-              )}
             />
           );
         },

@@ -40,13 +40,11 @@
     }
   },
   "opacityDim": {
-    "total": 41,
+    "total": 34,
     "byArea": {
       "components": 24,
-      "families": 1,
-      "family": 5,
+      "family": 2,
       "grounded-doc": 1,
-      "host": 1,
       "ops": 1,
       "runs": 2,
       "schedule-grid": 2,
@@ -78,34 +76,31 @@
     }
   },
   "inlineColor": {
-    "total": 198,
+    "total": 196,
     "byArea": {
       "anatomy": 2,
       "components": 6,
       "design-system": 1,
       "family": 3,
       "family-review": 39,
-      "grilles": 5,
+      "grilles": 4,
       "host": 3,
       "ops": 28,
       "param-tables": 11,
       "routes": 4,
       "runs": 42,
-      "takeoff": 5,
+      "takeoff": 4,
       "targeting": 40,
       "workbench": 9
     }
   },
   "rawMeaningColor": {
-    "total": 98,
+    "total": 59,
     "byArea": {
-      "family": 24,
       "grounded-doc": 1,
-      "host": 6,
       "lib": 15,
-      "routes": 3,
       "schedule-grid": 2,
-      "takeoff": 10,
+      "takeoff": 4,
       "workbench": 37
     }
   },

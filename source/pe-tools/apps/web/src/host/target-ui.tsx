@@ -74,18 +74,12 @@ export function LiveDot({ tone, lane }: { tone: ChipTone; lane?: Lane | null }) 
           : tone === "dangling"
             ? token("caution")
             : token("line-2");
-  return (
-    <span
-      className="inline-block shrink-0"
-      style={{ width: 6, height: 6, borderRadius: 1, backgroundColor: color }}
-    />
-  );
+  return <span style={{ width: 6, height: 6, borderRadius: 1, backgroundColor: color }} />;
 }
 
 export function LaneBadge({ lane }: { lane: Lane }) {
   return (
     <span
-      className="face-mono t-caption"
       style={{
         padding: "0 4px",
         borderRadius: "var(--radius)",

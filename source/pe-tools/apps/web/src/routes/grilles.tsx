@@ -138,7 +138,6 @@ function GrillesRoute() {
       {active && (
         <div
           tabIndex={0}
-          className="outline-none focus-visible:ring-1 focus-visible:ring-line-2"
           title="Focus, then arrow keys: left/right walk qty, up/down walk opening width"
           onKeyDown={(e) => {
             if (!e.key.startsWith("Arrow")) return;
@@ -149,7 +148,7 @@ function GrillesRoute() {
           }}
         >
           <FieldChart field={field} active={active} onPick={(p) => set(active.id, p)} />
-          <p className="face-mono px-2 t-caption text-ink-mute">
+          <p className="px-2">
             click a point, or focus and use arrow keys: ←→ qty · ↑↓ opening width
           </p>
         </div>
@@ -160,11 +159,11 @@ function GrillesRoute() {
   return (
     <main className="flex h-full min-h-0 flex-col">
       <header
-        className="flex flex-wrap items-baseline gap-2 border-b px-3 py-2"
+        className="flex flex-wrap items-baseline gap-2 px-3 py-2"
         style={{ borderColor: token("line") }}
       >
-        <span className="face-mono t-label t-upper text-ink-mute">wood floor grille</span>
-        <span className="t-value text-ink">free area calculator</span>
+        <span>wood floor grille</span>
+        <span>free area calculator</span>
         <FactChip
           tone="caution"
           dashed
