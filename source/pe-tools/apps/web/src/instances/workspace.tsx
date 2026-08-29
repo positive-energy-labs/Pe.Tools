@@ -265,7 +265,12 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
                 <Tag>ledger</Tag>
                 <HelpTip>Settled SDK envelopes merged with bridge-observed world events.</HelpTip>
               </span>
-              <Press type="button" onClick={() => setLedgerOpen(false)} tone="firm" size="caption">
+              <Press
+                type="button"
+                onClick={() => setLedgerOpen(false)}
+                tone="neutral"
+                size="caption"
+              >
                 ›
               </Press>
             </div>
@@ -286,7 +291,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
           </div>
         ) : (
           <div className="ml-2 flex w-6 flex-col items-center gap-2 self-stretch py-2">
-            <Press type="button" onClick={() => setLedgerOpen(true)} tone="firm">
+            <Press type="button" onClick={() => setLedgerOpen(true)} tone="neutral">
               <span className="[writing-mode:vertical-rl]">
                 <Tag>ledger · {ledger.length}</Tag>
               </span>

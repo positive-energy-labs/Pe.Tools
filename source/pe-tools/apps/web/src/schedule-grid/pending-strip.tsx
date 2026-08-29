@@ -76,7 +76,6 @@ export function PendingStrip({
                 <Press
                   type="button"
                   tone="quiet"
-                  layout="baseline"
                   title="Highlight this cell's row in the grid and scroll it into view."
                   onClick={() => locate(key)}
                 >

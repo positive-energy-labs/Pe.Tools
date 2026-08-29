@@ -100,8 +100,8 @@ export function WorldLane({
           <Press
             type="button"
             tone="quiet"
-            size="icon-sm"
-            state="selectable"
+            size="icon"
+            state="selected"
             aria-pressed={diff}
             onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
             title={
@@ -158,9 +158,8 @@ export function WorldLane({
           return (
             <div key={layer.id}>
               <Press
-                tone={changed ? "caution" : "quiet"}
-                state={changed ? "highlighted" : "rest"}
-                layout="block"
+                tone={changed ? "quiet" : "quiet"}
+                state={changed ? "selected" : "rest"}
                 type="button"
                 onClick={() => toggle(layer.id)}
               >
@@ -239,13 +238,7 @@ export function ItemRow({
   const hasBody = Boolean(item.body);
   return (
     <li className={cn("overflow-hidden", blast ? "" : "")}>
-      <Press
-        type="button"
-        tone="quiet"
-        layout="row"
-        disabled={!hasBody}
-        onClick={() => hasBody && onToggle()}
-      >
+      <Press type="button" tone="quiet" disabled={!hasBody} onClick={() => hasBody && onToggle()}>
         <span className="min-w-0 flex-1">
           <span className="block overflow-hidden text-ellipsis whitespace-nowrap">{item.name}</span>
           {item.src ? (
