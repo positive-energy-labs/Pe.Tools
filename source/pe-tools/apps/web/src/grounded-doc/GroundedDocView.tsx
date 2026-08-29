@@ -132,13 +132,10 @@ function UploadSurface({ engine, extra }: { engine: GroundedDocEngine; extra?: R
           setDragOver(false);
           handleFiles(event.dataTransfer.files);
         }}
-        className={cn(
-          // A firm hairline, not a dashed one: dashed is the seam slot and an empty
-          // upload target is "nothing in scope", not a stand-in (takeoffs #9 precedent).
-          "flex w-full flex-col items-center gap-3 rounded-sm border border-line-2 px-6 py-12 text-center",
-          // The drop target lights as the selection fill — a place you are standing.
-          dragOver && "bg-select",
-        )}
+        size="drop"
+        tone="firm"
+        layout="stack"
+        state={dragOver ? "selected" : "rest"}
       >
         {parsing ? (
           <OutcomeLine
@@ -278,12 +275,9 @@ function ImagesPane({
                       ref={laneAnchorRef(refs, image.id)}
                       onMouseEnter={() => engine.hoverBlock(image.id, "image")}
                       onClick={() => engine.pinBlock(image.id, "image")}
-                      className={cn(
-                        "group flex flex-col overflow-hidden rounded-sm border bg-document text-left",
-                        // Over imagery a fill cannot separate: the locate mark is ink (R13a).
-                        isFocused ? "border-ink" : "border-line",
-                        !isFocused && VEIL_HOVER,
-                      )}
+                      tone="document"
+                      layout="stack"
+                      state={isFocused ? "focused" : "rest"}
                     >
                       <img
                         src={image.url}
@@ -436,7 +430,9 @@ function PageCanvas({
                     }
                   : undefined
               }
-              style={toPercent(bbox)}
+              style={{ ...toPercent(bbox), position: "absolute", borderRadius: "1px" }}
+              tone={isApprox ? "caution" : page.screenshotUrl ? "locate" : "locate-line"}
+              state={isFocused ? (isApprox ? "focused-caution" : "focused") : "rest"}
               title={
                 isApprox
                   ? `${block.kind} — approximate region (parser gave a sibling block the same box)`
@@ -444,23 +440,6 @@ function PageCanvas({
               }
               onMouseEnter={() => engine.hoverBlock(block.id, "page")}
               onClick={() => engine.pinBlock(block.id, "page")}
-              className={cn(
-                // Marks over page imagery: a fill cannot separate here, so the locate mark
-                // is a solid ink stroke (R13a). An approximate region is a DISTRUSTED value
-                // and wears caution — solid, because dashed is the seam slot and this box
-                // stands in for nothing (the block exists; its address is doubted).
-                "absolute rounded-[1px] border",
-                isFocused
-                  ? isApprox
-                    ? "z-raised border-2 border-caution"
-                    : "z-raised border-2 border-ink"
-                  : page.screenshotUrl
-                    ? isApprox
-                      ? "border-caution"
-                      : cn("border-transparent hover:border-ink", VEIL_HOVER)
-                    : // Wireframe mode (no screenshot): keep boxes faintly visible.
-                      cn("border-line hover:border-ink", VEIL_HOVER),
-              )}
             >
               {!page.screenshotUrl && (
                 <span className="t-caption face-mono absolute left-0.5 top-0.5 text-ink-mute">
@@ -483,16 +462,12 @@ function PageCanvas({
               type="button"
               key={image.id}
               ref={laneAnchorRef(refs, image.id)}
-              style={toPercent(image.bbox)}
+              style={{ ...toPercent(image.bbox), position: "absolute", borderRadius: "1px" }}
+              tone="locate-viz"
+              state={isFocused ? "focused" : "rest"}
               title={`${image.category} image — click to ${isPinned ? "unpin" : "pin"}`}
               onMouseEnter={() => engine.hoverBlock(image.id, "page")}
               onClick={() => engine.pinBlock(image.id, "page")}
-              className={cn(
-                "absolute rounded-[1px] border",
-                isFocused
-                  ? "z-raised border-2 border-ink"
-                  : cn("border-viz-4 hover:border-ink", VEIL_HOVER),
-              )}
             />
           );
         })}

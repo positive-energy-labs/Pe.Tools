@@ -799,10 +799,6 @@ const BADGE_VARIANTS = [
   "kiln",
 ] as const;
 
-/** The shape the exhibit's own trigger/action specimens wear. */
-const SPEC_PRESS =
-  "inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border border-line px-2 t-value font-medium whitespace-nowrap text-ink transition-all hover:veil";
-
 const PANE_KINDS = ["navigation", "visual", "content", "inspector"] as const;
 
 const PICK_ITEMS = CATEGORY_OPTIONS.slice(0, 6).map((o, i) => ({
@@ -843,20 +839,17 @@ function UiGroup() {
       >
         <Lane>
           <Spec cap="neutral · the call site owns its layout">
-            <Press className="inline-flex h-6 items-center rounded-md border border-line px-2 t-value font-medium text-ink">
+            <Press tone="bordered" size="sm">
               raw json
             </Press>
           </Spec>
           <Spec cap="icon · the one shape Press draws">
-            <Press icon aria-label="refresh" className="size-6 text-ink">
+            <Press aria-label="refresh" tone="neutral" size="icon-sm">
               <RefreshCw className="size-3" />
             </Press>
           </Spec>
           <Spec cap="disabled · no reason, and none is claimed">
-            <Press
-              disabled
-              className="inline-flex h-6 items-center rounded-md border border-line px-2 t-value font-medium text-ink disabled:opacity-50"
-            >
+            <Press disabled tone="bordered" size="sm" state="disabled-faint">
               raw json
             </Press>
           </Spec>
@@ -884,7 +877,9 @@ function UiGroup() {
                   <CardDescription>13 params · 3 types</CardDescription>
                 </div>
                 <CardAction>
-                  <Press className={cn(SPEC_PRESS, "h-5 rounded-sm t-caption")}>open</Press>
+                  <Press size="xs" tone="bordered">
+                    open
+                  </Press>
                 </CardAction>
               </CardHeader>
               <CardContent>content</CardContent>
@@ -952,7 +947,9 @@ function UiGroup() {
         <Lane>
           <Spec cap="trigger → portalled popup">
             <Dialog>
-              <DialogTrigger render={<Press className={SPEC_PRESS} />}>open dialog</DialogTrigger>
+              <DialogTrigger render={<Press size="sm" tone="bordered" />}>
+                open dialog
+              </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Dialog</DialogTitle>
@@ -1052,11 +1049,7 @@ function UiGroup() {
                   title={k}
                   meta="4"
                   actions={
-                    <Press
-                      icon
-                      aria-label="refresh"
-                      className="size-5 rounded-sm text-ink hover:veil"
-                    >
+                    <Press aria-label="refresh" tone="neutral" size="icon-sm">
                       <RefreshCw className="size-2.5" />
                     </Press>
                   }
@@ -1257,7 +1250,7 @@ function ComboboxSpec() {
       <div ref={anchorRef} className="inline-flex">
         <ComboboxTrigger
           title="Category"
-          render={<Press className={cn(SPEC_PRESS, "h-7 w-40 justify-between")} />}
+          render={<Press size="md" tone="bordered" state="expanded" />}
         >
           <span className="truncate">{picked?.label ?? "category"}</span>
         </ComboboxTrigger>

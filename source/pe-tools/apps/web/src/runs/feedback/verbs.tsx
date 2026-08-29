@@ -130,7 +130,8 @@ export function FlagChips(props: { item: StagedItem }) {
           onMouseEnter={() => fb.setHoverFlag(`${props.item.key}::${el}`)}
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
-          className="face-mono border px-1 t-caption"
+          tone="bordered"
+          size="mono-caption"
           style={{
             borderColor: token("caution"),
             color: token("caution"),

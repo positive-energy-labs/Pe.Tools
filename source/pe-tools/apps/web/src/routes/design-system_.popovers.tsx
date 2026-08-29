@@ -138,9 +138,7 @@ function PickerChipSpecimen() {
       <div ref={anchorRef} className="inline-flex">
         <ComboboxTrigger
           title="Category"
-          render={
-            <Press className="inline-flex h-7 max-w-40 shrink-0 items-center justify-between gap-1 rounded-md px-2 t-value font-medium whitespace-nowrap text-ink-2 transition-all hover:veil aria-expanded:bg-recess aria-expanded:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0" />
-          }
+          render={<Press tone="quiet" size="md" state="expanded" />}
         >
           <span className="face-mono t-value truncate">{picked?.label ?? "category"}</span>
         </ComboboxTrigger>
@@ -335,11 +333,10 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
             key={s.id}
             type="button"
             onClick={() => onPick(s.id)}
+            size="chip-caption"
+            tone={s.id === specimen.id ? "firm" : "bordered-quiet"}
+            state={s.id === specimen.id ? "selected" : "rest"}
             title={`Mount ${s.name} at all nine positions`}
-            className={cn(
-              "border px-1.5 py-0.5 face-mono t-caption",
-              s.id === specimen.id ? "border-line-2 bg-select text-ink" : "border-line text-ink-2",
-            )}
           >
             {s.name}
           </Press>

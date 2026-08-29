@@ -10,11 +10,8 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { VerbLane } from "#/components/verb-lane";
 import { Provenance } from "#/components/lang/section";
 import { Press } from "#/components/lang/press";
-import { cn } from "#/lib/utils";
 
 /** This route's own chip shape — a dense picker rail, used by its glances, examples and mode. */
-const OPS_CHIP =
-  "inline-flex h-5 shrink-0 items-center justify-center gap-1 rounded-sm px-2 t-caption font-medium whitespace-nowrap transition-all hover:veil";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import {
@@ -216,10 +213,9 @@ function OpsPage({ store }: { store: OpsStore }) {
           {syntheticOps.map((glance) => (
             <Press
               key={glance.key}
-              className={cn(
-                OPS_CHIP,
-                selectedGlanceKey === glance.key ? "bg-recess text-ink" : "text-ink",
-              )}
+              size="xs"
+              tone="neutral"
+              state={selectedGlanceKey === glance.key ? "highlighted" : "rest"}
               onClick={() => store.actions.setSelectedGlance(glance.key)}
             >
               {glance.displayName}
@@ -323,7 +319,8 @@ function OperationPane({
             {operation.requestExamples.map((example) => (
               <Press
                 key={example.name}
-                className={cn(OPS_CHIP, "text-ink")}
+                size="xs"
+                tone="neutral"
                 title={example.description}
                 onClick={() => {
                   setArgs(example.json);
@@ -335,7 +332,8 @@ function OperationPane({
             ))}
             {schema ? (
               <Press
-                className={cn(OPS_CHIP, "border border-line text-ink")}
+                size="xs"
+                tone="bordered"
                 onClick={() => setMode(mode === "form" ? "raw" : "form")}
               >
                 {mode === "form" ? "raw" : "form"}

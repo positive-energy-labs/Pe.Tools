@@ -41,7 +41,6 @@ import { HelpTip } from "#/components/lang/help";
 import type { FamilyModel } from "#/family/family-model";
 import { bindingOf, type Draft, type Focus, type PageWorld } from "#/family/model";
 import { boundParam } from "#/family/world";
-import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 import { FixtureViews } from "#/family/anatomy-fixture-views";
 import { ModelViews } from "#/family/anatomy-model-views";
@@ -121,21 +120,15 @@ export function AnatomyDrawing({
               onMouseEnter={() => onFocus({ kind: "part", id: part.slug })}
               onMouseLeave={() => onFocus(null)}
               onClick={() => onInspect(part.slug)}
+              size="chip-caption"
+              tone={focusedParts.has(part.slug) ? "firm" : "neutral"}
+              layout="row"
+              state={inspecting === part.slug ? "selected" : "rest"}
               title={`${part.text} — consumes ${part.params.length > 0 ? part.params.join(", ") : "no parameter the profile names, which is worth a second look"}.${
                 geom
                   ? ` Click to open it: ${geom.kind}, ${geom.dims.length} bindable dims${unbound > 0 ? ` (${unbound} of them UNBOUND — frozen literals, waiting at the bottom of the table)` : " (all bound)"}, and ${geom.meta.length} non-bindable properties that live only in the inspector.`
                   : ""
               }`}
-              className={cn(
-                "face-mono flex w-full items-center gap-1 truncate rounded-sm border px-1 py-0.5 text-left t-caption",
-                // Selection is a FILL, not a hue: the open constituent sits in the selection rung,
-                // the hovered one wears a hairline. Neither is a state of the model.
-                inspecting === part.slug
-                  ? "border-line-2 bg-select text-ink"
-                  : focusedParts.has(part.slug)
-                    ? "border-line-2 text-ink"
-                    : "border-transparent text-ink",
-              )}
             >
               <span className="text-ink-2">{part.kind} </span>
               <span className="min-w-0 truncate">{part.slug}</span>

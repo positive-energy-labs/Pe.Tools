@@ -313,7 +313,7 @@ export function PartSidebar({
       type="button"
       onClick={() => onSelect(id)}
       title={`Open ${id} — same sidebar, one step along the graph`}
-      className="face-mono t-caption text-left"
+      size="mono-caption"
       style={{
         backgroundColor: "transparent",
         backgroundImage: "none",
@@ -510,7 +510,7 @@ function SlotCell({
           editor.setFocus(cell.pointer ?? null);
         }}
         title={`Show ${rowId} in the drawing and the json`}
-        className="face-mono t-label"
+        size="mono-label"
         style={{
           backgroundColor: "transparent",
           backgroundImage: "none",

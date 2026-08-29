@@ -666,7 +666,7 @@ function StageButton(props: {
           type="button"
           onClick={() => props.onSwing(otherPairs[0]!)}
           title={`This zone is staged under ${otherPairs.length} other A/B pair${otherPairs.length === 1 ? "" : "s"} (pinned at stage time; the lens is only a view). Click to swing the lens to the pinned pair.`}
-          className="face-mono shrink-0 t-caption"
+          size="mono-caption"
           style={{ color: token("caution") }}
         >
           ⚑{otherPairs.length}≠
@@ -690,7 +690,8 @@ function StageButton(props: {
             ? "Staged for export (this exact A/B pair is pinned) — click to unstage. Click rooms/residues on the B panel to flag them."
             : "Stage this zone's current A/B pair for the feedback export. The pair is pinned at stage time; switching the lens afterwards never alters it."
         }
-        className="face-mono shrink-0 border px-1.5 t-caption"
+        tone="bordered"
+        size="chip-caption"
         style={{
           borderRadius: "var(--radius)",
           borderColor: staged ? token("alarm") : token("line-2"),
@@ -842,10 +843,9 @@ function ZoneCard(props: {
                   ? "Highlighted on the plan — click to clear the highlight."
                   : "Highlight this zone on the plan (opens + centers the plan dock). Stays lit until you click again, pick another zone, or hit esc."
               }
-              className={cn(
-                "face-mono shrink-0 border px-1.5 t-caption",
-                props.highlighted ? "bg-recess text-ink" : "text-ink-2 hover:text-ink",
-              )}
+              size="chip-caption"
+              tone="bordered-quiet"
+              state={props.highlighted ? "highlighted" : "rest"}
               style={{
                 borderColor: props.highlighted ? token("ink-2") : token("line-2"),
                 borderRadius: "var(--radius)",
@@ -996,7 +996,6 @@ function RunStrip(props: {
             <Press
               type="button"
               onClick={() => onPickCur(entry.id)}
-              className="flex flex-col items-start px-2 py-1 text-left"
               title={`${entry.id} — click to make this the CURRENT run (B).`}
             >
               <span className="face-mono t-value">
@@ -1017,7 +1016,7 @@ function RunStrip(props: {
               type="button"
               onClick={() => onPickBaseline(entry.id)}
               disabled={isCur}
-              className="border-l px-1.5 t-caption"
+              size="caption"
               style={{
                 borderColor: token("line-2"),
                 backgroundColor: isPrev ? token("recess") : "transparent",
@@ -1590,7 +1589,7 @@ function LegendFloater(props: { underlay: boolean; onClose: () => void }) {
           type="button"
           onClick={props.onClose}
           title="Hide the key (the plan header's 'key' button brings it back)."
-          className="face-mono ml-auto text-ink-2 hover:text-ink"
+          tone="quiet"
         >
           ×
         </Press>
@@ -1688,7 +1687,6 @@ function LevelStatsFloater(props: {
           type="button"
           onClick={props.onClose}
           title="Hide the level stats (the plan header's 'stats' button brings them back)."
-          className="face-mono ml-auto normal-case tracking-normal hover:text-ink"
         >
           ×
         </Press>
@@ -1922,10 +1920,9 @@ function PlanDock(props: {
               type="button"
               onClick={() => props.onPickLevel(l)}
               title="Show this level on the plan — the sheet scrolls to its section (and scrolling the sheet moves this tab)."
-              className={cn(
-                "face-mono rounded-sm px-2 py-0.5 t-label",
-                l === level ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
-              )}
+              size="chip-label"
+              tone="quiet"
+              state={l === level ? "highlighted" : "rest"}
             >
               {l.replace(" Level", "")}
             </Press>
@@ -1936,10 +1933,9 @@ function PlanDock(props: {
             type="button"
             onClick={() => setShowKey((v) => !v)}
             title="Show/hide the key — what each mark on the plan means."
-            className={cn(
-              "face-mono rounded-sm border px-1.5 py-0.5 t-caption",
-              showKey ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
-            )}
+            size="chip-caption"
+            tone="bordered-quiet"
+            state={showKey ? "highlighted" : "rest"}
             style={{ borderColor: token("line-2") }}
           >
             key
@@ -1948,10 +1944,9 @@ function PlanDock(props: {
             type="button"
             onClick={() => setShowStats((v) => !v)}
             title="Show/hide the level-stats floater — solve counts, sf, loudest rejections, A/B deltas."
-            className={cn(
-              "face-mono rounded-sm border px-1.5 py-0.5 t-caption",
-              showStats ? "bg-recess text-ink" : "text-ink-2 hover:bg-recess",
-            )}
+            size="chip-caption"
+            tone="bordered-quiet"
+            state={showStats ? "highlighted" : "rest"}
             style={{ borderColor: token("line-2") }}
           >
             stats
@@ -2269,10 +2264,10 @@ function LedgerDock(props: {
                   ? "This is the baseline (A) — click to clear it."
                   : "Set this run as the baseline (A).") + caveat
               }
-              className={cn(
-                "face-mono h-7 w-full px-1.5 text-left",
-                isA ? "font-semibold text-ink" : "text-ink-2/60 hover:text-ink-2",
-              )}
+              size="mono-value"
+              tone="quiet"
+              layout="block"
+              state={isA ? "emphasis" : "rest"}
             >
               {isA ? "A" : "set A"}
             </Press>
@@ -2491,7 +2486,7 @@ function LedgerDock(props: {
             ? "Collapse the run ledger."
             : "Expand the run ledger — rows are runs, marks drive the sheet's A/B."
         }
-        className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-recess"
+        layout="baseline"
       >
         <span className="face-mono t-caption t-upper text-ink-2">ledger</span>
         <span className="face-mono t-label text-ink-2">
@@ -2900,7 +2895,8 @@ export default function RunBrowser() {
               type="button"
               onClick={() => setReview(false)}
               title="Back to the normal sheet."
-              className="face-mono ml-auto border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
+              tone="bordered-quiet"
+              size="chip-caption"
               style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               ✕ exit review
@@ -2924,7 +2920,8 @@ export default function RunBrowser() {
                         ? "This item's pinned pair IS the current lens."
                         : "Pinned pair ≠ current lens — click to swing the lens to this pair (the stage is untouched)."
                     }
-                    className="face-mono flex items-baseline gap-2 t-label text-ink-2 hover:text-ink"
+                    tone="quiet"
+                    size="mono-label"
                   >
                     <span>
                       pinned A {item.runA ?? "(none)"} → B {item.runB}
@@ -2942,7 +2939,8 @@ export default function RunBrowser() {
                     type="button"
                     onClick={() => fb.unstage(item.key)}
                     title="Remove this item from the staged set."
-                    className="face-mono ml-auto t-caption text-ink-2 hover:text-ink"
+                    tone="quiet"
+                    size="mono-caption"
                   >
                     ✕ unstage
                   </Press>
@@ -3049,7 +3047,7 @@ export default function RunBrowser() {
           the tray won; it is NOT page-height chrome). */}
       <PaneSplit
         axis="horizontal"
-        className="min-h-0 flex-1"
+        grow
         resize={{
           target: "end",
           defaultSize: 340,
@@ -3152,7 +3150,8 @@ export default function RunBrowser() {
                 type="button"
                 onClick={() => setBaseline(null)}
                 title="Clear the baseline — cards show the current run only, same footprint."
-                className="face-mono border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
+                tone="bordered-quiet"
+                size="chip-caption"
                 style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
               >
                 clear A
@@ -3162,7 +3161,8 @@ export default function RunBrowser() {
                 type="button"
                 onClick={() => setBaseline("auto")}
                 title="Restore the default baseline: the current run's chronological predecessor."
-                className="face-mono border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
+                tone="bordered-quiet"
+                size="chip-caption"
                 style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
               >
                 A: auto
@@ -3172,10 +3172,9 @@ export default function RunBrowser() {
               type="button"
               onClick={() => setUnderlay((u) => !u)}
               title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
-              className={cn(
-                "face-mono rounded-sm px-1.5 py-0.5 t-caption",
-                underlay ? "bg-recess text-ink" : "border text-ink-2",
-              )}
+              size="chip-caption"
+              tone={underlay ? "neutral" : "bordered-quiet"}
+              state={underlay ? "highlighted" : "rest"}
               style={underlay ? undefined : { borderColor: token("line-2") }}
             >
               ink evidence
@@ -3189,12 +3188,9 @@ export default function RunBrowser() {
                   ? "Show only zones that materially changed between A and B (rooms moved, sf moved > 0.5, verdict flipped, or exists on one side only)."
                   : "Needs a baseline — pick A first."
               }
-              className={cn(
-                "face-mono rounded-sm px-1.5 py-0.5 t-caption",
-                changedOnly && comparing
-                  ? "bg-recess text-ink"
-                  : "border text-ink-2 disabled:opacity-40",
-              )}
+              size="chip-caption"
+              tone="bordered-quiet"
+              state={changedOnly && comparing ? "highlighted" : "disabled-faint"}
               style={changedOnly && comparing ? undefined : { borderColor: token("line-2") }}
             >
               changed only
@@ -3240,7 +3236,8 @@ export default function RunBrowser() {
                       ? "Collapse the plan dock (drag the divider to resize it)."
                       : "Expand the plan dock."
                   }
-                  className="face-mono px-1.5 t-label text-ink-2 hover:text-ink"
+                  tone="quiet"
+                  size="chip-label"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}
                 </Press>

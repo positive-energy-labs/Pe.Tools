@@ -7,7 +7,6 @@ import { token } from "#/lib/token";
 // Lens vs pin: each row shows the pair it PINNED at stage time; a row whose pinned pair is not
 // the current lens carries a subtle ≠ mark, and clicking the row swings the lens to its pair
 // (the ruling's "clicking a staged card swings the lens to its pair").
-import { cn } from "#/lib/utils";
 
 import { fb, type StagedItem, useFb } from "./staging";
 import { ExportStatus, ExportVerbs, FlagChips, NoteInput, runShort, zoneShort } from "./verbs";
@@ -36,7 +35,6 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
               ? "This item's pinned A/B pair IS the current lens."
               : "Pinned pair differs from the current lens — click to swing the lens to this item's pair (staging is untouched; the lens is a view)."
           }
-          className="flex min-w-0 items-baseline gap-2 text-left"
         >
           <span className="face-mono t-value font-semibold" title={item.zone}>
             {zoneShort(item.zone)}
@@ -61,7 +59,8 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
           type="button"
           onClick={() => fb.unstage(item.key)}
           title="Remove this item from the staged set."
-          className="face-mono ml-auto t-caption text-ink-2 hover:text-ink"
+          tone="quiet"
+          size="mono-caption"
         >
           ✕
         </Press>
@@ -100,10 +99,9 @@ export function Tray(props: {
                   ? "Back to the normal sheet — every zone, two columns."
                   : "Review the staged set: the sheet switches to single-column (bigger images), staged items only, each at its pinned A/B pair. Same cards, bigger layout."
               }
-              className={cn(
-                "face-mono rounded-sm px-1.5 py-0.5 t-caption",
-                props.review ? "bg-recess text-ink" : "border text-ink-2 hover:text-ink",
-              )}
+              size="chip-caption"
+              tone={props.review ? "neutral" : "bordered-quiet"}
+              state={props.review ? "highlighted" : "rest"}
               style={props.review ? undefined : { borderColor: token("line-2") }}
             >
               {props.review ? "✕ exit review" : "review staged"}
@@ -114,7 +112,8 @@ export function Tray(props: {
               type="button"
               onClick={() => fb.clear()}
               title="Unstage everything."
-              className="face-mono t-caption text-ink-2 hover:text-ink"
+              tone="quiet"
+              size="mono-caption"
             >
               clear
             </Press>
@@ -158,19 +157,16 @@ export function Tray(props: {
  * pane (pane collapse law). */
 export function TrayCollapsed(props: { count: number; onExpand: () => void }) {
   return (
-    <Press
-      type="button"
-      onClick={props.onExpand}
-      title="Expand the staging tray."
-      className="flex size-full flex-col items-center gap-2 bg-page pt-2 hover:bg-recess"
-    >
-      <span className="face-mono t-label text-ink-2">▸</span>
-      <span
-        className="face-mono t-caption t-upper text-ink-2"
-        style={{ writingMode: "vertical-rl" }}
-      >
-        staging{props.count > 0 ? ` · ${props.count}` : ""}
-      </span>
-    </Press>
+    <div className="size-full [&>button]:size-full">
+      <Press type="button" onClick={props.onExpand} title="Expand the staging tray.">
+        <span className="face-mono t-label text-ink-2">▸</span>
+        <span
+          className="face-mono t-caption t-upper text-ink-2"
+          style={{ writingMode: "vertical-rl" }}
+        >
+          staging{props.count > 0 ? ` · ${props.count}` : ""}
+        </span>
+      </Press>
+    </div>
   );
 }

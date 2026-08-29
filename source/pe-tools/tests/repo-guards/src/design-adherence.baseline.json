@@ -40,7 +40,7 @@
     }
   },
   "opacityDim": {
-    "total": 47,
+    "total": 41,
     "byArea": {
       "components": 24,
       "families": 1,
@@ -48,11 +48,10 @@
       "grounded-doc": 1,
       "host": 1,
       "ops": 1,
-      "routes": 3,
-      "runs": 3,
-      "takeoff": 3,
+      "runs": 2,
+      "takeoff": 2,
       "targeting": 2,
-      "workbench": 3
+      "workbench": 2
     }
   },
   "longTitle": {
@@ -95,12 +94,12 @@
     }
   },
   "rawMeaningColor": {
-    "total": 123,
+    "total": 118,
     "byArea": {
       "design-system": 1,
-      "family": 27,
+      "family": 24,
       "family-review": 5,
-      "grounded-doc": 3,
+      "grounded-doc": 1,
       "host": 6,
       "lib": 15,
       "routes": 19,

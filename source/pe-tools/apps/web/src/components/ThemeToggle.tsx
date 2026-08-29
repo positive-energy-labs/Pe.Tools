@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 
 import { Press } from "#/components/lang/press";
-import { cn } from "#/lib/utils";
 
 type ThemeMode = "light" | "dark" | "auto";
 
@@ -31,7 +30,7 @@ const NEXT: Record<ThemeMode, ThemeMode> = { light: "dark", dark: "auto", auto: 
 const ICON = { light: Sun, dark: Moon, auto: Monitor } as const;
 const LABEL = { light: "Light", dark: "Dark", auto: "Auto" } as const;
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle() {
   const [mode, setMode] = useState<ThemeMode>("auto");
 
   // Sync to whatever the inline root script already applied (avoids a flash / mismatch).
@@ -59,15 +58,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
   return (
-    <Press
-      onClick={cycle}
-      aria-label={label}
-      title={label}
-      className={cn(
-        "inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md border border-line px-2 t-value font-medium whitespace-nowrap text-ink transition-all hover:veil [&_svg]:pointer-events-none [&_svg]:shrink-0",
-        className,
-      )}
-    >
+    <Press onClick={cycle} aria-label={label} title={label} size="sm" tone="bordered">
       <Icon className="size-3.5" />
       {LABEL[mode]}
     </Press>

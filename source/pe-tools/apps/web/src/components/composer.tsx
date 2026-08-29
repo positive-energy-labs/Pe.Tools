@@ -148,7 +148,7 @@ export function Composer({
               key={`${command.kind}:${command.name}`}
               type="button"
               onClick={() => pick(command)}
-              className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left hover:veil"
+              layout="baseline"
             >
               {/* a slash command is a machine identifier — mono */}
               <span className="t-value face-mono text-ink">/{command.name}</span>
@@ -203,8 +203,8 @@ export function Composer({
           {/* Control row: attachments + session controls (model/access) left, send right. */}
           <div className="flex items-center gap-1 pt-1">
             <Press
-              icon
-              className="size-7 text-ink hover:veil"
+              tone="neutral"
+              size="icon-sm"
               title="Attach files"
               onClick={() => fileRef.current?.click()}
             >
@@ -220,19 +220,14 @@ export function Composer({
             <ControlChips />
             <span className="flex-1" />
             {isRunning ? (
-              <Press
-                icon
-                className="size-7 border border-line bg-artifact text-ink hover:veil"
-                title="Stop"
-                aria-label="Stop"
-                onClick={cancel}
-              >
+              <Press tone="artifact" size="icon-sm" title="Stop" aria-label="Stop" onClick={cancel}>
                 <Square className="size-3.5" />
               </Press>
             ) : (
               <Press
-                icon
-                className="size-7 border border-line bg-artifact text-ink hover:veil disabled:pointer-events-none disabled:opacity-50"
+                tone="artifact"
+                size="icon-sm"
+                state="disabled-faint"
                 title="Send"
                 aria-label="Send message"
                 disabled={!canSend}

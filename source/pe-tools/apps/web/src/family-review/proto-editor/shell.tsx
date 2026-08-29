@@ -158,7 +158,7 @@ export function StatePanel({
                   type="button"
                   onClick={() => editor.setFocus(change.path)}
                   title={`Show ${change.path} in the json pane`}
-                  className="face-mono t-caption w-full text-left"
+                  size="mono-caption"
                   style={{
                     backgroundColor: editor.focus === change.path ? token("select") : "transparent",
                     border: "none",
@@ -250,7 +250,7 @@ export function RefToken({
         type="button"
         title={title}
         onClick={() => setOpen((prev) => !prev)}
-        className="face-mono t-label"
+        size="mono-label"
         style={{
           padding: "0 1px",
           cursor: "pointer",
@@ -270,7 +270,6 @@ export function RefToken({
             type="button"
             aria-label="close picker"
             onClick={() => setOpen(false)}
-            className="fixed inset-0 z-raised cursor-default"
             style={{ backgroundColor: "transparent", border: "none" }}
           />
           <div
@@ -294,7 +293,8 @@ export function RefToken({
                     onPick(option);
                     setOpen(false);
                   }}
-                  className="face-mono t-label flex w-full items-baseline justify-between gap-2 px-1 py-0.5 text-left"
+                  size="mono-label"
+                  layout="baseline"
                   style={{
                     backgroundColor: option === value ? token("select") : "transparent",
                     border: "none",
@@ -368,7 +368,7 @@ export function TypeStage({ editor }: { editor: Editor }) {
           type="button"
           title={`Resolve every value on this surface for the ${name} type`}
           onClick={() => editor.setTypeName(name)}
-          className="face-mono t-label px-1"
+          size="mono-label"
           style={{
             backgroundColor: name === editor.typeName ? token("select") : "transparent",
             border: "none",

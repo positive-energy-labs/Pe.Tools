@@ -107,7 +107,7 @@ export function ParamGrid({ editor }: { editor: Editor }) {
               descending: prev.sort === sort ? !prev.descending : false,
             }))
           }
-          className="t-caption t-upper"
+          size="caption"
           style={{
             backgroundColor: "transparent",
             backgroundImage: "none",

@@ -274,10 +274,7 @@ const LAWS: readonly { name: string; text: string; demo: React.ReactNode }[] = [
           />
         </span>
         <CounterExample why="the same refusal as surface machinery. Press is the right control for a tab or a close ×, and it takes no reason — so the greying is unfalsifiable and a reader cannot tell a rule from a bug. A control that acts on the world is a Verb, and requiring the string is the enforcement.">
-          <Press
-            disabled
-            className="inline-flex h-6 shrink-0 items-center rounded-md border border-line px-2 t-value font-medium text-ink disabled:opacity-50"
-          >
+          <Press disabled tone="bordered" size="sm" state="disabled-faint">
             sync to .r10
           </Press>
         </CounterExample>

@@ -574,7 +574,6 @@ export function Lens({
             {!following && moments.length > 0 ? (
               <Press
                 type="button"
-                className="mapdial-tail"
                 title="Jump to latest"
                 aria-label="Jump to latest"
                 onPointerDown={(e) => e.stopPropagation()}

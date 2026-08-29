@@ -85,7 +85,7 @@ export function ParadigmA({ editor }: { editor: Editor }) {
       type="button"
       title={`Make ${id} the anchor — the same two-direction view, one step along the graph`}
       onClick={() => setAnchor(id)}
-      className="face-mono t-label"
+      size="mono-label"
       style={{
         backgroundColor: "transparent",
         border: "none",
@@ -293,7 +293,7 @@ function RailRow({
       type="button"
       title={`${node.id} — ${node.detail}`}
       onClick={onPick}
-      className="flex w-full items-baseline justify-between gap-2 px-1 py-0.5 text-left"
+      layout="baseline"
       style={{
         backgroundColor: current ? token("select") : "transparent",
         border: "none",

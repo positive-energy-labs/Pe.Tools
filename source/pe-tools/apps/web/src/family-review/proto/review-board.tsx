@@ -57,7 +57,6 @@ import {
 } from "#/family-review/model";
 import { CompactTable, type CompactColumn } from "#/family-review/proto/compact-table";
 import { ScaleNote, Triptych } from "#/family-review/proto/views";
-import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 
 /** One family at one type — the unit the board judges. */
@@ -135,11 +134,10 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
           key={verdict}
           type="button"
           onClick={() => onPick(verdict)}
+          size="chip-value"
+          tone={value === verdict ? "neutral" : "muted"}
+          state={value === verdict ? "selected" : "rest"}
           title={`Record "${VERDICT_LABEL[verdict]}" for this family and type. Prototype: in memory only — the chrome says where a verdict would go, which is nowhere yet.`}
-          className={cn(
-            "border px-2.5 py-1 face-mono t-value",
-            value === verdict ? "text-ink" : "text-ink-mute",
-          )}
           style={{
             borderRadius: "var(--radius)",
             borderColor: value === verdict ? token("line-2") : token("line"),
@@ -365,10 +363,9 @@ export function ReviewBoard({
               <Press
                 type="button"
                 onClick={() => setSelected(entry.key)}
-                className={cn(
-                  "flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5 text-left",
-                  entry.key === selected ? "bg-select" : "",
-                )}
+                tone="neutral"
+                layout="stack"
+                state={entry.key === selected ? "selected" : "rest"}
                 style={{ borderRadius: "var(--radius)" }}
               >
                 <span className="face-mono t-label">{entry.family.name}</span>
@@ -387,7 +384,8 @@ export function ReviewBoard({
                 aria-expanded={expanded === entry.key}
                 onClick={() => setExpanded(expanded === entry.key ? null : entry.key)}
                 title="Show what this family.json declares, and six small drawings of it. For recognising a family, not judging one — judging is the overlay on the right."
-                className="shrink-0 px-2 py-1.5 face-mono t-caption text-ink-mute"
+                tone="muted"
+                size="mono-caption"
               >
                 {expanded === entry.key ? "hide" : "open"}
               </Press>

@@ -92,7 +92,7 @@ export function AtlasTable() {
                         ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
                         : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
                     }
-                    className="ml-2 rounded-sm border border-line-2 px-1.5 py-px text-ink-2 hover:bg-recess"
+                    tone="firm"
                   >
                     fields: {fieldsMode}
                   </Press>

@@ -237,7 +237,7 @@ function ComboboxChip({
       {children}
       {showRemove && (
         <ComboboxPrimitive.ChipRemove
-          render={<Press icon className="size-5 rounded-sm text-ink hover:veil" />}
+          render={<Press tone="neutral" size="icon-sm" />}
           className="-ml-1 opacity-50 hover:opacity-100"
           data-slot="combobox-chip-remove"
         >

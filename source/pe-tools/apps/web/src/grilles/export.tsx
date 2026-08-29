@@ -68,11 +68,7 @@ export function ExportSheet({
           reason="Hands this sheet to the browser's print dialog, where it becomes a PDF. Nothing in the model or the row set changes."
           onClick={() => window.print()}
         />
-        <Press
-          type="button"
-          className="face-mono t-label text-ink-2 hover:text-ink"
-          onClick={onClose}
-        >
+        <Press type="button" tone="quiet" size="mono-label" onClick={onClose}>
           close
         </Press>
       </div>

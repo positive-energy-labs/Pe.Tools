@@ -30,7 +30,6 @@ export interface PickListProps {
   disabled?: boolean;
   /** Shown when `items` itself is empty (distinct from "filter matched nothing"). */
   emptyNote?: ReactNode;
-  className?: string;
 }
 
 export function PickList({
@@ -40,7 +39,6 @@ export function PickList({
   placeholder = "Filter…",
   disabled = false,
   emptyNote,
-  className,
 }: PickListProps) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -90,7 +88,7 @@ export function PickList({
 
   let index = -1;
   return (
-    <div className={cn("flex min-h-0 flex-col", className)} onKeyDown={onKeyDown}>
+    <div className="flex h-full min-h-0 flex-col" onKeyDown={onKeyDown}>
       <div className="shrink-0 border-b border-line p-2">
         <Input
           value={query}

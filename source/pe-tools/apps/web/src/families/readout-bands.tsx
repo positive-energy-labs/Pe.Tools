@@ -47,7 +47,8 @@ export function FamiliesReadoutBands() {
                               : `${entry.familyName} is in: apply will run its ${entry.plan.loweredActions.length} action(s) against the model. Click to hold it back without re-planning.`
                         }
                         onClick={() => void store.actions.exclude(entry.familyId)}
-                        className="face-mono t-value text-ink-2 hover:text-ink disabled:cursor-not-allowed"
+                        tone="quiet"
+                        size="mono-value"
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </Press>

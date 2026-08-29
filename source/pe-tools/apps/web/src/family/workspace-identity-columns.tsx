@@ -3,7 +3,6 @@ import { ReadCell } from "#/components/master-table/cells";
 import { Press } from "#/components/lang/press";
 import { ProposedCell } from "#/family/marks";
 import { bindingOf, isFormula, pinnedSort, sortDirOf, type PRow } from "#/family/model";
-import { cn } from "#/lib/utils";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 
 export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
@@ -40,6 +39,8 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
           <Press
             type="button"
             onClick={() => locate(open[0]!)}
+            size={open.length === 1 ? "icon-xs" : "chip-caption"}
+            tone="pea"
             aria-label={`locate ${open.length} proposal(s) on ${row.name}`}
             title={
               open.length === 1
@@ -48,12 +49,6 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
             }
             /* Pea's identity, never the commit colour: a MARK takes `--pe-pea` (the display rung),
                a counted chip is text and takes pea's ink. */
-            className={cn(
-              "face-mono flex items-center justify-center",
-              open.length === 1
-                ? "size-2 rounded-[1px] bg-pea"
-                : "h-3.5 min-w-3.5 rounded-sm border border-pea px-0.5 t-caption text-pea-ink",
-            )}
           >
             {open.length > 1 ? open.length : null}
           </Press>
@@ -96,7 +91,9 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
               onClick={() => setInspect({ kind: "part", slug })}
               // Row-specific facts only; what a geom row IS lives on the table's HelpTip.
               title={`${slug}.${property} — a bindable ${row.dataType} dimension that no parameter drives; it is ${literal} for every type. ${dim?.note ?? ""} Click to open ${slug} in the inspector.`}
-              className="face-mono block w-full truncate text-left t-caption italic text-ink-mute hover:text-ink"
+              tone="muted"
+              size="mono-caption"
+              layout="block"
             >
               {row.name}
               <span className="ml-1 not-italic t-caption text-caution">geom</span>
@@ -143,7 +140,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                   type="button"
                   onClick={() => setInspect({ kind: "param", name: row.name })}
                   title={`Open ${row.name} in the inspector below the spec — where its FAMILY-LEVEL value is edited, along with its formula, its consumers, and its citation. The type columns on this row only ever hold overrides; the value they inherit lives there.`}
-                  className="hover:underline"
+                  tone="link"
                 >
                   {row.name}
                 </Press>
@@ -177,7 +174,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => setInspect({ kind: "part", slug: entry.slug })}
                     title={`${row.name} drives ${entry.slug}.${entry.property}. Click to open ${entry.slug} in the inspector — its non-bindable metadata (direction, system type, where its frame sits) lives there, because no parameter can drive those.`}
-                    className="text-ink-mute hover:text-ink"
+                    tone="muted"
                   >
                     {index > 0 && <span className="text-ink-mute">, </span>}
                     {entry.slug}.{entry.property}

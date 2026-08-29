@@ -54,7 +54,9 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           setOverlay("draft");
         }}
         title={`Drill into "${typeName}". The table pane swaps to the same table, narrowed to this one type and opened up with the spine and the crossing verbs. "← all types" in the pane header, or Esc, comes back.`}
-        className="face-mono t-label block w-full text-left text-ink-2 hover:text-ink"
+        tone="quiet"
+        size="mono-label"
+        layout="block"
       >
         {typeName} <span className="opacity-60">⤢</span>
       </Press>

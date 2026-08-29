@@ -157,7 +157,7 @@ export function Sheet({
           : null
       }
       summary={
-        <Press type="button" className="face-mono t-label text-ink-2 hover:text-ink" onClick={add}>
+        <Press type="button" tone="quiet" size="mono-label" onClick={add}>
           + profile
         </Press>
       }

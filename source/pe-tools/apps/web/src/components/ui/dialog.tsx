@@ -68,7 +68,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            render={<Press icon className="absolute top-2 right-2 size-6 text-ink hover:veil" />}
+            render={<Press tone="neutral" size="icon-sm" />}
           >
             <RiCloseLine />
             <span className="sr-only">Close</span>
@@ -97,11 +97,7 @@ function DialogFooter({
     <div data-slot="dialog-footer" className={footer({ className })} {...props}>
       {children}
       {showCloseButton && (
-        <DialogPrimitive.Close
-          render={
-            <Press className="inline-flex h-7 shrink-0 items-center justify-center rounded-md border border-line px-2 t-value font-medium text-ink hover:veil" />
-          }
-        >
+        <DialogPrimitive.Close render={<Press tone="bordered" size="md" />}>
           Close
         </DialogPrimitive.Close>
       )}

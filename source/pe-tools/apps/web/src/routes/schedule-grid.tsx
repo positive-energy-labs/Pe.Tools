@@ -366,7 +366,6 @@ function ScheduleGridWorkspace({
               placeholder="Filter schedules…"
               disabled={busy != null}
               emptyNote="No schedules in the document."
-              className="h-full"
             />
           )}
         </SidePane>
@@ -525,7 +524,6 @@ function PendingStrip({
             >
               <Press
                 type="button"
-                className="flex min-w-0 shrink-0 items-baseline gap-1.5 rounded-sm px-0.5 text-left hover:veil"
                 title="Highlight this cell's row in the grid and scroll it into view."
                 onClick={() => locate(key)}
               >
