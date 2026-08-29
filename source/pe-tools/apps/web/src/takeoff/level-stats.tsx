@@ -50,7 +50,7 @@ export function LevelStats({
     <div className="absolute top-2 right-2 z-raised w-64 rounded-sm border border-line bg-page/95 px-2 py-1.5 shadow-sm backdrop-blur">
       <div className="mb-1 flex items-baseline gap-1.5">
         <span className="t-label t-upper text-ink-2">{level} — level totals</span>
-        <Press type="button" onClick={onClose} tone="quiet" size="mono-value">
+        <Press type="button" onClick={onClose} tone="quiet" size="value">
           ×
         </Press>
       </div>

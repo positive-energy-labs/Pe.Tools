@@ -52,7 +52,7 @@ function TrayRow(props: { item: StagedItem; lens: Lens; onSwing: (item: StagedIt
           onClick={() => fb.unstage(item.key)}
           title="Remove this item from the staged set."
           tone="quiet"
-          size="mono-caption"
+          size="caption"
         >
           ✕
         </Press>
@@ -91,9 +91,9 @@ export function Tray(props: {
                   ? "Back to the normal sheet — every zone, two columns."
                   : "Review the staged set: the sheet switches to single-column (bigger images), staged items only, each at its pinned A/B pair. Same cards, bigger layout."
               }
-              size="chip-caption"
-              tone={props.review ? "neutral" : "bordered-quiet"}
-              state={props.review ? "highlighted" : "rest"}
+              size="caption"
+              tone={props.review ? "neutral" : "quiet"}
+              state={props.review ? "selected" : "rest"}
               style={props.review ? undefined : { borderColor: token("line-2") }}
             >
               {props.review ? "✕ exit review" : "review staged"}
@@ -105,7 +105,7 @@ export function Tray(props: {
               onClick={() => fb.clear()}
               title="Unstage everything."
               tone="quiet"
-              size="mono-caption"
+              size="caption"
             >
               clear
             </Press>

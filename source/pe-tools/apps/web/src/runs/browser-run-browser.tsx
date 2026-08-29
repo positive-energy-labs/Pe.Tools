@@ -114,8 +114,8 @@ export default function RunBrowser() {
               type="button"
               onClick={() => setReview(false)}
               title="Back to the normal sheet."
-              tone="bordered-quiet"
-              size="chip-caption"
+              tone="quiet"
+              size="caption"
               style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               ✕ exit review
@@ -140,7 +140,7 @@ export default function RunBrowser() {
                         : "Pinned pair ≠ current lens — click to swing the lens to this pair (the stage is untouched)."
                     }
                     tone="quiet"
-                    size="mono-label"
+                    size="label"
                   >
                     <span>
                       pinned A {item.runA ?? "(none)"} → B {item.runB}
@@ -159,7 +159,7 @@ export default function RunBrowser() {
                     onClick={() => fb.unstage(item.key)}
                     title="Remove this item from the staged set."
                     tone="quiet"
-                    size="mono-caption"
+                    size="caption"
                   >
                     ✕ unstage
                   </Press>
@@ -339,7 +339,7 @@ export default function RunBrowser() {
                       : "Expand the plan dock."
                   }
                   tone="quiet"
-                  size="chip-label"
+                  size="label"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}
                 </Press>

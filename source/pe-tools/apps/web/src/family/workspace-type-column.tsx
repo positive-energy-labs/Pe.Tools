@@ -14,6 +14,7 @@ import {
 } from "#/family/model";
 import { cn } from "#/lib/utils";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
   const {
@@ -55,10 +56,11 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         }}
         title={`Drill into "${typeName}". The table pane swaps to the same table, narrowed to this one type and opened up with the spine and the crossing verbs. "← all types" in the pane header, or Esc, comes back.`}
         tone="quiet"
-        size="mono-label"
-        layout="block"
+        size="label"
       >
-        {typeName} <span className="opacity-60">⤢</span>
+        <PressContent geometry="block">
+          {typeName} <span className="opacity-60">⤢</span>
+        </PressContent>
       </Press>
     ) : undefined,
     title: `What "${typeName}" overrides in the DRAFT. An empty cell INHERITS — the family value shows through as the grey placeholder, which is the only place the family level appears now that it has no column of its own. Typing creates the override; clearing hands the type back to the family. Under the ⇄ live and ⇄ saved overlays this same column shows Revit's number and the disk's number instead, read-only, in place.`,

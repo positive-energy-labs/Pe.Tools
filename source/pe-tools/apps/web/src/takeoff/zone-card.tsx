@@ -67,7 +67,7 @@ export function ZoneCard({
           onClick={onClose}
           title="deselect this zone (Esc) — the table widens back to the whole house"
           tone="quiet"
-          size="mono-value"
+          size="value"
         >
           ×
         </Press>

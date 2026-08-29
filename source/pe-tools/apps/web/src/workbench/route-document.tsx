@@ -119,7 +119,7 @@ export function RouteDocumentPicker({
         <Press
           key={choice.at}
           type="button"
-          tone="bordered"
+          tone="neutral"
           size="value"
           onClick={() => onPick(choice.at)}
         >

@@ -93,7 +93,7 @@ export function NamePicker({
         />
         <ComboboxTrigger />
       </ComboboxChips>
-      <ComboboxContent anchor={anchor} className="rounded-sm">
+      <ComboboxContent anchor={anchor}>
         {/* RULED not-an-empty-state (fit reviews, 2026-08-16): a combobox no-match slot is
             "you typed a string that matched nothing" — plain muted text, no story/exit. */}
         <ComboboxEmpty className="face-mono t-label text-ink-mute">no matches</ComboboxEmpty>

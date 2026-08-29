@@ -6,7 +6,6 @@ import { Pane } from "#/components/ui/pane";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
 import { Switch } from "#/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
 
 import { SpecimenFrame } from "./recipe-grid";
@@ -25,7 +24,6 @@ export function UiLayoutSpecimens() {
       <PickListSpecimen />
       <SidePaneSpecimens />
       <SwitchSpecimens />
-      <ToggleSpecimen />
     </>
   );
 }
@@ -41,7 +39,7 @@ function PaneSpecimens() {
               title={kind}
               meta="4"
               actions={
-                <Press size="icon-xs" aria-label="refresh">
+                <Press size="icon" aria-label="refresh">
                   <RefreshCw className="size-3" />
                 </Press>
               }
@@ -116,19 +114,6 @@ function SwitchSpecimens() {
         <Switch disabled />
         <Switch disabled defaultChecked />
       </div>
-    </SpecimenFrame>
-  );
-}
-
-function ToggleSpecimen() {
-  const [mode, setMode] = useState("plan");
-  return (
-    <SpecimenFrame name="ToggleGroup" importPath="#/components/ui/toggle-group">
-      <ToggleGroup value={mode} onValueChange={setMode}>
-        <ToggleGroupItem value="plan">plan</ToggleGroupItem>
-        <ToggleGroupItem value="section">section</ToggleGroupItem>
-        <ToggleGroupItem value="3d">3d</ToggleGroupItem>
-      </ToggleGroup>
     </SpecimenFrame>
   );
 }

@@ -11,6 +11,7 @@ import {
 import { Press } from "#/components/lang/press";
 import type { Bindings, Runner } from "./kit-dir-glyph";
 import { DIR_GLYPH, POP, PULSE_CSS, freshnessWord, useClickAway } from "./kit-dir-glyph";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function Picker<K extends string>({
   product,
@@ -89,7 +90,7 @@ export function Picker<K extends string>({
         }}
         disabled={inert}
         title={title}
-        size="mono-label"
+        size="label"
         style={{
           padding: 0,
           cursor: inert ? "not-allowed" : "pointer",
@@ -124,7 +125,7 @@ export function Picker<K extends string>({
                   <Press
                     type="button"
                     onClick={() => (setLevel(l.key), setQ(""))}
-                    size="mono-caption"
+                    size="caption"
                     style={{
                       padding: "0 3px",
                       backgroundColor: on ? token("select") : "transparent",
@@ -191,20 +192,21 @@ export function Picker<K extends string>({
                       b.pick(cur, o.id);
                       advance();
                     }}
-                    layout="baseline"
                     style={{ backgroundColor: on ? token("select") : undefined }}
                   >
-                    {cur.multi ? (
-                      <span className="face-mono t-caption">{on ? "☑" : "☐"}</span>
-                    ) : null}
-                    <span className="t-value" style={{ color: token("ink") }}>
-                      {o.label}
-                    </span>
-                    {o.sub ? (
-                      <span className="t-caption" style={{ color: token("ink-2") }}>
-                        {o.sub}
+                    <PressContent geometry="baseline">
+                      {cur.multi ? (
+                        <span className="face-mono t-caption">{on ? "☑" : "☐"}</span>
+                      ) : null}
+                      <span className="t-value" style={{ color: token("ink") }}>
+                        {o.label}
                       </span>
-                    ) : null}
+                      {o.sub ? (
+                        <span className="t-caption" style={{ color: token("ink-2") }}>
+                          {o.sub}
+                        </span>
+                      ) : null}
+                    </PressContent>
                   </Press>
                 );
               })
@@ -228,24 +230,25 @@ export function Picker<K extends string>({
                       else if (!below!.multi) b.setOpen(null);
                       setQ("");
                     }}
-                    layout="baseline"
                     style={{
                       backgroundColor: b.isPicked(below!, o.id) ? token("select") : undefined,
                     }}
                   >
-                    {below!.multi ? (
-                      <span className="face-mono t-caption">
-                        {b.isPicked(below!, o.id) ? "☑" : "☐"}
+                    <PressContent geometry="baseline">
+                      {below!.multi ? (
+                        <span className="face-mono t-caption">
+                          {b.isPicked(below!, o.id) ? "☑" : "☐"}
+                        </span>
+                      ) : null}
+                      <span className="t-value" style={{ color: token("ink") }}>
+                        {o.label}
                       </span>
-                    ) : null}
-                    <span className="t-value" style={{ color: token("ink") }}>
-                      {o.label}
-                    </span>
-                    {o.sub ? (
-                      <span className="t-caption" style={{ color: token("ink-2") }}>
-                        {o.sub}
-                      </span>
-                    ) : null}
+                      {o.sub ? (
+                        <span className="t-caption" style={{ color: token("ink-2") }}>
+                          {o.sub}
+                        </span>
+                      ) : null}
+                    </PressContent>
                   </Press>
                 ))}
               </>

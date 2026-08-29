@@ -40,9 +40,9 @@
     }
   },
   "opacityDim": {
-    "total": 41,
+    "total": 36,
     "byArea": {
-      "components": 24,
+      "components": 19,
       "families": 1,
       "family": 5,
       "grounded-doc": 1,

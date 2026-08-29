@@ -140,7 +140,7 @@ export function Lens({
                 <Press
                   type="button"
                   tone="quiet"
-                  size="icon-xs"
+                  size="icon"
                   title="Jump to latest"
                   aria-label="Jump to latest"
                   onPointerDown={(e) => e.stopPropagation()}

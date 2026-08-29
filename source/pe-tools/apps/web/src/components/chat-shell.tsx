@@ -208,7 +208,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
                   <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
                   <Press
                     tone="neutral"
-                    size="icon-sm"
+                    size="icon"
                     title="Close workspace"
                     onClick={() => store.actions.setPlugin(undefined)}
                   >

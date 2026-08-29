@@ -111,7 +111,7 @@ function TurnTag({ id }: { id: string }) {
     <Press
       type="button"
       tone="quiet"
-      size="mono-label"
+      size="label"
       title={`Center turn ${turn} on the focal axis`}
       onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
     >

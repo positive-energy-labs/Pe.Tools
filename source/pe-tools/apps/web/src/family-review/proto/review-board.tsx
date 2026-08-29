@@ -58,6 +58,7 @@ import {
 import { CompactTable, type CompactColumn } from "#/family-review/proto/compact-table";
 import { ScaleNote, Triptych } from "#/family-review/proto/views";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 /** One family at one type — the unit the board judges. */
 export interface Stage {
@@ -126,8 +127,8 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
           type="button"
           onClick={() => onPick(verdict)}
           title={`Record "${VERDICT_LABEL[verdict]}" for this family and type. Prototype: in memory only — the chrome says where a verdict would go, which is nowhere yet.`}
-          size="chip-value"
-          tone={value === verdict ? "neutral" : "muted"}
+          size="value"
+          tone={value === verdict ? "neutral" : "quiet"}
           state={value === verdict ? "selected" : "rest"}
           style={{
             borderRadius: "var(--radius)",
@@ -341,26 +342,27 @@ export function ReviewBoard({
                 type="button"
                 onClick={() => setSelected(entry.key)}
                 tone="neutral"
-                layout="stack"
                 state={entry.key === selected ? "selected" : "rest"}
                 style={{ borderRadius: "var(--radius)" }}
               >
-                <span>{entry.family.name}</span>
-                <span className="flex items-baseline gap-1.5">
-                  <span>{entry.typeName}</span>
-                  <AgreementWord agreement={headline(entry.rows)} />
-                  {verdicts.get(entry.key) !== "unjudged" ? (
-                    <span>{VERDICT_LABEL[verdicts.get(entry.key)]}</span>
-                  ) : null}
-                </span>
+                <PressContent geometry="stack">
+                  <span>{entry.family.name}</span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span>{entry.typeName}</span>
+                    <AgreementWord agreement={headline(entry.rows)} />
+                    {verdicts.get(entry.key) !== "unjudged" ? (
+                      <span>{VERDICT_LABEL[verdicts.get(entry.key)]}</span>
+                    ) : null}
+                  </span>
+                </PressContent>
               </Press>
               <Press
                 type="button"
                 aria-expanded={expanded === entry.key}
                 onClick={() => setExpanded(expanded === entry.key ? null : entry.key)}
                 title="Show what this family.json declares, and six small drawings of it. For recognising a family, not judging one — judging is the overlay on the right."
-                tone="muted"
-                size="mono-caption"
+                tone="quiet"
+                size="caption"
               >
                 {expanded === entry.key ? "hide" : "open"}
               </Press>

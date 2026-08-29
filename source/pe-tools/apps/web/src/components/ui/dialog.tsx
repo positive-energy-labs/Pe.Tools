@@ -68,7 +68,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            render={<Press tone="neutral" size="icon-sm" />}
+            render={<Press tone="neutral" size="icon" />}
           >
             <RiCloseLine />
             <span className="sr-only">Close</span>
@@ -79,9 +79,9 @@ function DialogContent({
   );
 }
 
-function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+function DialogHeader(props: Omit<React.ComponentProps<"div">, "className">) {
   const { header } = dialogRecipe();
-  return <div data-slot="dialog-header" className={header({ className })} {...props} />;
+  return <div data-slot="dialog-header" className={header()} {...props} />;
 }
 
 function DialogFooter({
@@ -97,7 +97,7 @@ function DialogFooter({
     <div data-slot="dialog-footer" className={footer({ className })} {...props}>
       {children}
       {showCloseButton && (
-        <DialogPrimitive.Close render={<Press tone="bordered" size="md" />}>
+        <DialogPrimitive.Close render={<Press tone="neutral" size="value" />}>
           Close
         </DialogPrimitive.Close>
       )}

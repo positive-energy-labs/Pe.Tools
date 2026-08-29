@@ -11,6 +11,7 @@ import { PROSE_CLASS } from "#/workbench/prose";
 import { cn } from "#/lib/utils";
 import { Press } from "#/components/lang/press";
 import { ImagesPane, MarkdownBlock, PagePane } from "./GroundedDocView-images-pane";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export const BlockMarkdown = memo(function BlockMarkdown({ md }: { md: string }) {
   return (
@@ -111,35 +112,39 @@ export function UploadSurface({
           setDragOver(false);
           handleFiles(event.dataTransfer.files);
         }}
-        size="drop"
-        tone="firm"
-        layout="stack"
+        size="label"
+        tone="neutral"
         state={dragOver ? "selected" : "rest"}
       >
-        {parsing ? (
-          <OutcomeLine
-            kind="busy"
-            label={`parsing ${engine.status.phase === "parsing" ? engine.status.fileName : "document"}`}
-            says="LlamaCloud is reading the document"
+        <PressContent geometry="stack">
+          {parsing ? (
+            <OutcomeLine
+              kind="busy"
+              label={`parsing ${engine.status.phase === "parsing" ? engine.status.fileName : "document"}`}
+              says="LlamaCloud is reading the document"
+            />
+          ) : (
+            <>
+              <FileUp className="size-6 text-ink-2" />
+              <EmptyState
+                story="scope"
+                exit="drop a PDF here, paste a URL below, or load the sample"
+              >
+                no document loaded
+              </EmptyState>
+              {engine.status.phase === "error" && (
+                <OutcomeLine kind="error" label="parse failed" says={engine.status.message} />
+              )}
+            </>
+          )}
+          <input
+            ref={inputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(event) => handleFiles(event.target.files)}
           />
-        ) : (
-          <>
-            <FileUp className="size-6 text-ink-2" />
-            <EmptyState story="scope" exit="drop a PDF here, paste a URL below, or load the sample">
-              no document loaded
-            </EmptyState>
-            {engine.status.phase === "error" && (
-              <OutcomeLine kind="error" label="parse failed" says={engine.status.message} />
-            )}
-          </>
-        )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          onChange={(event) => handleFiles(event.target.files)}
-        />
+        </PressContent>
       </Press>
 
       {!parsing && (

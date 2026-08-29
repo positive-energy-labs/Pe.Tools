@@ -115,7 +115,7 @@ export function DraftEditor({
                           : "Remove this column and its values from the draft"
                       }
                       tone="quiet"
-                      state="disabled-faint"
+                      state="disabled"
                       disabled={draft.columns.length === 1}
                       onClick={() => removeColumn(columnIndex)}
                     >

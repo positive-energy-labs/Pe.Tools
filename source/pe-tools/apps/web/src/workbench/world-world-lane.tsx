@@ -29,6 +29,7 @@ import {
   tone,
 } from "./world-plain-cap";
 import { ContextBudgetBar, whySentence } from "./world-bar";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function WorldLane({
   breakdown,
@@ -97,8 +98,8 @@ export function WorldLane({
 
           <Press
             type="button"
-            tone="firm"
-            state="selectable"
+            tone="neutral"
+            state="selected"
             aria-pressed={diff}
             onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
             title={
@@ -158,42 +159,47 @@ export function WorldLane({
               className={cn("border-b-[0.5px] border-line", changed && "caution-wash-artifact")}
               key={layer.id}
             >
-              <Press tone="neutral" layout="block" type="button" onClick={() => toggle(layer.id)}>
-                <span
-                  className={cn(
-                    WORLD_ROW,
-                    inspect
-                      ? "grid-cols-[9px_1fr_auto_auto_auto_auto]"
-                      : "grid-cols-[9px_1fr_auto]",
-                  )}
-                >
+              <Press tone="neutral" type="button" onClick={() => toggle(layer.id)}>
+                <PressContent geometry="block">
                   <span
-                    className="size-[9px] rounded-sm"
-                    style={{ backgroundColor: tone(layer.id) }}
-                  />
-                  <span className="t-value text-ink">
-                    {layer.label}
+                    className={cn(
+                      WORLD_ROW,
+                      inspect
+                        ? "grid-cols-[9px_1fr_auto_auto_auto_auto]"
+                        : "grid-cols-[9px_1fr_auto]",
+                    )}
+                  >
+                    <span
+                      className="size-[9px] rounded-sm"
+                      style={{ backgroundColor: tone(layer.id) }}
+                    />
+                    <span className="t-value text-ink">
+                      {layer.label}
+                      {inspect ? (
+                        <span className="ml-1.5 t-caption face-mono text-ink-2">
+                          pos {layer.rank}
+                        </span>
+                      ) : null}
+                    </span>
+                    {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
                     {inspect ? (
-                      <span className="ml-1.5 t-caption face-mono text-ink-2">
-                        pos {layer.rank}
+                      <span className="t-value face-mono text-ink-2">{fmtTok(layer.tokens)}</span>
+                    ) : null}
+                    {inspect ? (
+                      <span className="min-w-[30px] text-right t-value face-mono text-ink-2">
+                        {((layer.tokens / used) * 100).toFixed(0)}%
                       </span>
                     ) : null}
-                  </span>
-                  {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
-                  {inspect ? (
-                    <span className="t-value face-mono text-ink-2">{fmtTok(layer.tokens)}</span>
-                  ) : null}
-                  {inspect ? (
-                    <span className="min-w-[30px] text-right t-value face-mono text-ink-2">
-                      {((layer.tokens / used) * 100).toFixed(0)}%
+                    <span
+                      className={cn(
+                        "t-label text-ink-2 transition-transform",
+                        isOpen && "rotate-90",
+                      )}
+                    >
+                      ▸
                     </span>
-                  ) : null}
-                  <span
-                    className={cn("t-label text-ink-2 transition-transform", isOpen && "rotate-90")}
-                  >
-                    ▸
                   </span>
-                </span>
+                </PressContent>
               </Press>
               {isOpen ? (
                 <div className="pt-0 pr-3.5 pb-[11px] pl-[31px]">
@@ -254,35 +260,39 @@ export function ItemRow({
         blast ? "border-caution/45" : "border-line",
       )}
     >
-      <Press layout="row" type="button" disabled={!hasBody} onClick={() => hasBody && onToggle()}>
-        <span className="min-w-0 flex-1">
-          <span className="block overflow-hidden text-ellipsis whitespace-nowrap t-value text-ink">
-            {item.name}
+      <Press type="button" disabled={!hasBody} onClick={() => hasBody && onToggle()}>
+        <PressContent geometry="row">
+          <span className="min-w-0 flex-1">
+            <span className="block overflow-hidden text-ellipsis whitespace-nowrap t-value text-ink">
+              {item.name}
+            </span>
+            {item.src ? (
+              <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap t-caption face-mono text-ink-2">
+                {item.src}
+              </span>
+            ) : null}
           </span>
-          {item.src ? (
-            <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap t-caption face-mono text-ink-2">
-              {item.src}
-            </span>
-          ) : null}
-        </span>
-        <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
-          {blast ? (
-            <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
-          ) : null}
-          {item.state ? (
-            <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>
-              {PILL_LABEL[item.state]}
-            </span>
-          ) : null}
-          {item.tokens != null ? (
-            <span className="t-value face-mono text-ink-2">{fmtTok(item.tokens)}</span>
-          ) : null}
-          {hasBody ? (
-            <span className={cn("t-caption text-ink-2 transition-transform", open && "rotate-90")}>
-              ▸
-            </span>
-          ) : null}
-        </span>
+          <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
+            {blast ? (
+              <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
+            ) : null}
+            {item.state ? (
+              <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>
+                {PILL_LABEL[item.state]}
+              </span>
+            ) : null}
+            {item.tokens != null ? (
+              <span className="t-value face-mono text-ink-2">{fmtTok(item.tokens)}</span>
+            ) : null}
+            {hasBody ? (
+              <span
+                className={cn("t-caption text-ink-2 transition-transform", open && "rotate-90")}
+              >
+                ▸
+              </span>
+            ) : null}
+          </span>
+        </PressContent>
       </Press>
       {open && hasBody ? (
         <pre className="m-0 max-h-[220px] overflow-auto border-t-[0.5px] border-line on-recess px-[9px] py-2 t-caption face-mono break-words whitespace-pre-wrap text-ink-2">

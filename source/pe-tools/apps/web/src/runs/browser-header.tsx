@@ -90,8 +90,8 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
               type="button"
               onClick={() => setBaseline(null)}
               title="Clear the baseline — cards show the current run only, same footprint."
-              tone="bordered-quiet"
-              size="chip-caption"
+              tone="quiet"
+              size="caption"
               style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               clear A
@@ -101,8 +101,8 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
               type="button"
               onClick={() => setBaseline("auto")}
               title="Restore the default baseline: the current run's chronological predecessor."
-              tone="bordered-quiet"
-              size="chip-caption"
+              tone="quiet"
+              size="caption"
               style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               A: auto
@@ -112,9 +112,9 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
             type="button"
             onClick={() => setUnderlay((u) => !u)}
             title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
-            size="chip-caption"
-            tone={underlay ? "neutral" : "bordered-quiet"}
-            state={underlay ? "highlighted" : "rest"}
+            size="caption"
+            tone={underlay ? "neutral" : "quiet"}
+            state={underlay ? "selected" : "rest"}
             style={underlay ? undefined : { borderColor: token("line-2") }}
           >
             ink evidence
@@ -128,9 +128,9 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
                 ? "Show only zones that materially changed between A and B (rooms moved, sf moved > 0.5, verdict flipped, or exists on one side only)."
                 : "Needs a baseline — pick A first."
             }
-            size="chip-caption"
-            tone="bordered-quiet"
-            state={changedOnly && comparing ? "highlighted" : "disabled-faint"}
+            size="caption"
+            tone="quiet"
+            state={changedOnly && comparing ? "selected" : "disabled"}
             style={changedOnly && comparing ? undefined : { borderColor: token("line-2") }}
           >
             changed only

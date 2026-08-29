@@ -9,6 +9,7 @@ import {
   laneAnchorRef,
   pageKey,
 } from "./GroundedDocView-block-markdown";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function ImagesPane({
   engine,
@@ -45,20 +46,21 @@ export function ImagesPane({
                       ref={laneAnchorRef(refs, image.id)}
                       onMouseEnter={() => engine.hoverBlock(image.id, "image")}
                       onClick={() => engine.pinBlock(image.id, "image")}
-                      tone="document"
-                      layout="stack"
+                      tone="neutral"
                       state={isFocused ? "focused" : "rest"}
                     >
-                      <img
-                        src={image.url}
-                        alt={`${image.category} figure on page ${image.page}`}
-                        loading="lazy"
-                        className="max-h-72 w-full object-contain"
-                      />
-                      <span className="flex items-center gap-1.5 border-t border-line bg-recess px-1.5 py-0.5">
-                        <span className="t-caption face-mono text-ink-2">{image.category}</span>
-                        {isPinned && <Pin className="size-3 text-ink" />}
-                      </span>
+                      <PressContent geometry="stack">
+                        <img
+                          src={image.url}
+                          alt={`${image.category} figure on page ${image.page}`}
+                          loading="lazy"
+                          className="max-h-72 w-full object-contain"
+                        />
+                        <span className="flex items-center gap-1.5 border-t border-line bg-recess px-1.5 py-0.5">
+                          <span className="t-caption face-mono text-ink-2">{image.category}</span>
+                          {isPinned && <Pin className="size-3 text-ink" />}
+                        </span>
+                      </PressContent>
                     </Press>
                   );
                 })}
@@ -205,8 +207,8 @@ export function PageCanvas({
               }
               onMouseEnter={() => engine.hoverBlock(block.id, "page")}
               onClick={() => engine.pinBlock(block.id, "page")}
-              tone={isApprox ? "caution" : page.screenshotUrl ? "locate" : "locate-line"}
-              state={isFocused ? (isApprox ? "focused-caution" : "focused") : "rest"}
+              tone={isApprox ? "quiet" : "neutral"}
+              state={isFocused ? "focused" : "rest"}
             >
               {!page.screenshotUrl && (
                 <span className="t-caption face-mono absolute left-0.5 top-0.5 text-ink-mute">
@@ -229,7 +231,7 @@ export function PageCanvas({
               title={`${image.category} image — click to ${isPinned ? "unpin" : "pin"}`}
               onMouseEnter={() => engine.hoverBlock(image.id, "page")}
               onClick={() => engine.pinBlock(image.id, "page")}
-              tone="locate-viz"
+              tone="neutral"
               state={isFocused ? "focused" : "rest"}
             />
           );

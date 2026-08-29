@@ -16,6 +16,7 @@ import {
   useComboboxAnchor,
 } from "#/components/ui/combobox";
 import { cn } from "#/lib/utils";
+import { PressContent } from "#/components/anatomy/press-content";
 
 type Table<Row extends RowData> = ReactTable<MasterTableFeatures, Row, unknown>;
 
@@ -143,15 +144,16 @@ function LeafHeader<Row>({
           title="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
           tone="quiet"
           size="caption"
-          layout="block"
         >
-          {column.header ?? column.label}
-          {direction && (
-            <span className="ml-1 text-ink">
-              {direction === "asc" ? "↑" : "↓"}
-              {sortCount > 1 && <span className="opacity-60">{rank + 1}</span>}
-            </span>
-          )}
+          <PressContent geometry="block">
+            {column.header ?? column.label}
+            {direction && (
+              <span className="ml-1 text-ink">
+                {direction === "asc" ? "↑" : "↓"}
+                {sortCount > 1 && <span className="opacity-60">{rank + 1}</span>}
+              </span>
+            )}
+          </PressContent>
         </Press>
       ) : (
         <span className="t-caption t-upper block text-ink-2">{column.header ?? column.label}</span>
@@ -206,7 +208,7 @@ function ColFilter({
           <span className="truncate normal-case">{value === null ? all : selected.label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent anchor={anchorRef} className="min-w-44 rounded-sm">
+      <ComboboxContent anchor={anchorRef}>
         {options.length > 7 && <ComboboxInput placeholder="filter values…" />}
         <ComboboxEmpty>No matching values</ComboboxEmpty>
         <ComboboxList>

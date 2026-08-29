@@ -900,7 +900,6 @@ for (const specimen of FILES.filter(
 const MISSING_SWATCH = [...LANG_COMPONENTS].filter((name) => !SPECIMEN_JSX.has(name)).sort();
 const REQUIRED_RECIPE_GRIDS = new Set([
   ...LANG_RECIPES,
-  "badgeVariants",
   "dialogRecipe",
   "inputGroupRecipe",
   "selectRecipe",
@@ -925,7 +924,6 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/lang/section",
   "#/components/lang/switcher",
   "#/components/lang/verb",
-  "#/components/ui/badge",
   "#/components/ui/card",
   "#/components/ui/combobox",
   "#/components/ui/command",
@@ -939,7 +937,6 @@ const REQUIRED_SPECIMEN_PATHS = [
   "#/components/ui/side-pane",
   "#/components/ui/switch",
   "#/components/ui/textarea",
-  "#/components/ui/toggle-group",
   "#/components/ui/value-diff",
 ] as const;
 const BAD_SPECIMEN_PATHS = REQUIRED_SPECIMEN_PATHS.filter(

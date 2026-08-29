@@ -128,7 +128,7 @@ export function useFamiliesColumns({
               })
             }
             tone="quiet"
-            size="mono-value"
+            size="value"
           >
             {pickedIds.has(row.familyId) ? "▪" : "□"}
           </Press>

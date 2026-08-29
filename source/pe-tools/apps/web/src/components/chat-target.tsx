@@ -9,6 +9,7 @@ import { useWorldLog, type WorldEvent } from "#/host/use-target";
 import { worldTrunk } from "#/targeting/world";
 import { useWorkbench } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 /**
  * Chat-wired target surfaces. The pin is the `target` search param (a selector, retained like
@@ -73,12 +74,13 @@ export function TargetWorld() {
             onClick={() => pin(option.id)}
             // The resolved session is a SELECTION — the selection fill, never a hue.
             tone="neutral"
-            layout="row"
             state={isResolved ? "selected" : "rest"}
             title="pin the chat here"
           >
-            <span className="truncate t-value text-ink">{option.label}</span>
-            <span className="whitespace-nowrap t-caption face-mono text-ink-2">{option.sub}</span>
+            <PressContent geometry="row">
+              <span className="truncate t-value text-ink">{option.label}</span>
+              <span className="whitespace-nowrap t-caption face-mono text-ink-2">{option.sub}</span>
+            </PressContent>
           </Press>
         );
       })}

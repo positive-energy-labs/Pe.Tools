@@ -34,6 +34,7 @@ import {
 } from "#/family-review/proto-editor/model";
 import { RefToken, TextToken, type Editor } from "#/family-review/proto-editor/shell";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 const RAIL_ORDER: NodeKind[] = [
   "param",
@@ -277,7 +278,6 @@ function RailRow({
       type="button"
       title={`${node.id} — ${node.detail}`}
       onClick={onPick}
-      layout="baseline"
       style={{
         backgroundColor: current ? token("select") : "transparent",
         border: "none",
@@ -285,8 +285,10 @@ function RailRow({
         cursor: "pointer",
       }}
     >
-      <span>{node.label}</span>
-      <span>{count > 0 ? count : ""}</span>
+      <PressContent geometry="baseline">
+        <span>{node.label}</span>
+        <span>{count > 0 ? count : ""}</span>
+      </PressContent>
     </Press>
   );
 }

@@ -15,6 +15,7 @@ import {
   possiblyPartialTitle,
 } from "./browser-unknown-title";
 import { buildLedgerRows, runName, scoreCell } from "./browser-no-scores-title";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function LedgerDock(props: {
   runs: RunIndexEntry[];
@@ -101,12 +102,11 @@ export function LedgerDock(props: {
                   ? "This is the baseline (A) — click to clear it."
                   : "Set this run as the baseline (A).") + caveat
               }
-              size="mono-value"
+              size="value"
               tone="quiet"
-              layout="block"
-              state={isA ? "emphasis" : "rest"}
+              state={isA ? "selected" : "rest"}
             >
-              {isA ? "A" : "set A"}
+              <PressContent geometry="block">{isA ? "A" : "set A"}</PressContent>
             </Press>
           );
         },
@@ -320,16 +320,17 @@ export function LedgerDock(props: {
             ? "Collapse the run ledger."
             : "Expand the run ledger — rows are runs, marks drive the sheet's A/B."
         }
-        layout="baseline"
       >
-        <span className="face-mono t-caption t-upper text-ink-2">ledger</span>
-        <span className="face-mono t-label text-ink-2">
-          {runs.length} runs · {optionSets} option sets · click a row = current (B), mark = baseline
-          (A)
-        </span>
-        <span className="face-mono ml-auto t-label text-ink-2">
-          {open ? "▾ collapse" : "▴ expand"}
-        </span>
+        <PressContent geometry="baseline">
+          <span className="face-mono t-caption t-upper text-ink-2">ledger</span>
+          <span className="face-mono t-label text-ink-2">
+            {runs.length} runs · {optionSets} option sets · click a row = current (B), mark =
+            baseline (A)
+          </span>
+          <span className="face-mono ml-auto t-label text-ink-2">
+            {open ? "▾ collapse" : "▴ expand"}
+          </span>
+        </PressContent>
       </Press>
       {open && (
         <div className="flex flex-col" style={{ height: 320 }}>

@@ -13,6 +13,7 @@ import { useWorkbench, type WorkbenchAttachment } from "#/workbench/provider";
 import { selectSkillCommands } from "#/workbench/chat-state";
 import type { Mode } from "#/workbench/depth";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 
 interface SlashCommand {
   name: string;
@@ -148,11 +149,12 @@ export function Composer({
               key={`${command.kind}:${command.name}`}
               type="button"
               onClick={() => pick(command)}
-              layout="baseline"
             >
-              {/* a slash command is a machine identifier — mono */}
-              <span className="t-value face-mono text-ink">/{command.name}</span>
-              <span className="truncate t-label text-ink-2">{command.description}</span>
+              <PressContent geometry="baseline">
+                {/* a slash command is a machine identifier — mono */}
+                <span className="t-value face-mono text-ink">/{command.name}</span>
+                <span className="truncate t-label text-ink-2">{command.description}</span>
+              </PressContent>
             </Press>
           ))}
         </div>
@@ -204,7 +206,7 @@ export function Composer({
           <div className="flex items-center gap-1 pt-1">
             <Press
               tone="neutral"
-              size="icon-sm"
+              size="icon"
               title="Attach files"
               onClick={() => fileRef.current?.click()}
             >
@@ -220,14 +222,14 @@ export function Composer({
             <ControlChips />
             <span className="flex-1" />
             {isRunning ? (
-              <Press tone="artifact" size="icon-sm" title="Stop" aria-label="Stop" onClick={cancel}>
+              <Press tone="neutral" size="icon" title="Stop" aria-label="Stop" onClick={cancel}>
                 <Square className="size-3.5" />
               </Press>
             ) : (
               <Press
-                tone="artifact"
-                size="icon-sm"
-                state="disabled-faint"
+                tone="neutral"
+                size="icon"
+                state="disabled"
                 title="Send"
                 aria-label="Send message"
                 disabled={!canSend}

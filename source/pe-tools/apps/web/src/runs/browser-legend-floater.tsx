@@ -88,7 +88,7 @@ export function LegendFloater(props: { underlay: boolean; onClose: () => void })
           onClick={props.onClose}
           title="Hide the key (the plan header's 'key' button brings it back)."
           tone="quiet"
-          size="mono-caption"
+          size="caption"
         >
           ×
         </Press>

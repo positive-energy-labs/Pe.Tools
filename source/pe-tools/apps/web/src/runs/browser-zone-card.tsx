@@ -6,6 +6,7 @@ import { Press } from "#/components/lang/press";
 import { Delta, adaptedKnobs, fmtTime, partialTitle, zoneShort } from "./browser-unknown-title";
 import { ZonePanel } from "./browser-zone-panel";
 import { MissingPanel, STAT_ROWS, StageButton } from "./browser-missing-panel";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function ZoneCard(props: {
   name: string;
@@ -81,9 +82,9 @@ export function ZoneCard(props: {
                   ? "Highlighted on the plan — click to clear the highlight."
                   : "Highlight this zone on the plan (opens + centers the plan dock). Stays lit until you click again, pick another zone, or hit esc."
               }
-              size="chip-caption"
-              tone="bordered-quiet"
-              state={props.highlighted ? "highlighted" : "rest"}
+              size="caption"
+              tone="quiet"
+              state={props.highlighted ? "selected" : "rest"}
               style={{
                 borderColor: props.highlighted ? token("ink-2") : token("line-2"),
                 borderRadius: "var(--radius)",
@@ -226,22 +227,23 @@ export function RunStrip(props: {
             <Press
               type="button"
               onClick={() => onPickCur(entry.id)}
-              layout="stack"
               title={`${entry.id} — click to make this the CURRENT run (B).`}
             >
-              <span className="face-mono t-value">
-                {isCur ? <b>B · </b> : null}
-                {meta?.label ?? entry.id.slice(0, 15)}
-              </span>
-              <span className="face-mono t-caption text-ink-2">
-                {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
-                {typeof meta?.zoneFilter === "string" ? (
-                  <span style={{ color: token("caution") }} title={partialTitle(meta.zoneFilter)}>
-                    {" "}
-                    · partial
-                  </span>
-                ) : null}
-              </span>
+              <PressContent geometry="stack">
+                <span className="face-mono t-value">
+                  {isCur ? <b>B · </b> : null}
+                  {meta?.label ?? entry.id.slice(0, 15)}
+                </span>
+                <span className="face-mono t-caption text-ink-2">
+                  {meta?.optionsHash.slice(0, 8) ?? "?"} · {meta ? fmtTime(meta.generatedUtc) : ""}
+                  {typeof meta?.zoneFilter === "string" ? (
+                    <span style={{ color: token("caution") }} title={partialTitle(meta.zoneFilter)}>
+                      {" "}
+                      · partial
+                    </span>
+                  ) : null}
+                </span>
+              </PressContent>
             </Press>
             <Press
               type="button"

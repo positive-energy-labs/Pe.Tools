@@ -10,6 +10,7 @@ import { onPlan } from "#/takeoff/room-actions";
 import { ZoneStateBar } from "#/takeoff/zone-state-bar";
 import { ZoneThumb } from "#/takeoff/zone-plan";
 import { useAtlasWorkspace } from "#/takeoff/atlas-context";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function AtlasNavigation() {
   const {
@@ -59,14 +60,15 @@ export function AtlasNavigation() {
                     setCursor(null);
                   }}
                   tone="quiet"
-                  layout="baseline"
                   state={on ? "selected" : "rest"}
                 >
-                  <span className="face-mono t-value w-3 shrink-0 text-ink-2">{i + 1}</span>
-                  <span className={cn("face-mono t-value flex-1 truncate", !on && "text-ink-2")}>
-                    {stage}
-                  </span>
-                  <span className="face-mono t-value tabular-nums text-ink-2">{n}</span>
+                  <PressContent geometry="baseline">
+                    <span className="face-mono t-value w-3 shrink-0 text-ink-2">{i + 1}</span>
+                    <span className={cn("face-mono t-value flex-1 truncate", !on && "text-ink-2")}>
+                      {stage}
+                    </span>
+                    <span className="face-mono t-value tabular-nums text-ink-2">{n}</span>
+                  </PressContent>
                 </Press>
               );
             })}
@@ -104,25 +106,26 @@ export function AtlasNavigation() {
                               : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
                           }
                           tone="quiet"
-                          layout="row"
-                          state={on ? "selected" : off ? "subdued" : "rest"}
+                          state={on ? "selected" : off ? "disabled" : "rest"}
                         >
-                          <ZoneThumb zone={z.zone} className="size-5" />
-                          <span className="face-mono t-value shrink-0">{z.zone.key}</span>
-                          <span className="min-w-0 flex-1 truncate t-value text-ink-2">
-                            {off ? "off-plan scribble" : z.name}
-                          </span>
-                          {calls > 0 && (
-                            <span className="shrink-0">
-                              <FactChip
-                                tone="alarm"
-                                title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
-                              >
-                                {calls} call{calls === 1 ? "" : "s"}
-                              </FactChip>
+                          <PressContent geometry="row">
+                            <ZoneThumb zone={z.zone} className="size-5" />
+                            <span className="face-mono t-value shrink-0">{z.zone.key}</span>
+                            <span className="min-w-0 flex-1 truncate t-value text-ink-2">
+                              {off ? "off-plan scribble" : z.name}
                             </span>
-                          )}
-                          <ZoneStateBar zone={z} states={states} />
+                            {calls > 0 && (
+                              <span className="shrink-0">
+                                <FactChip
+                                  tone="alarm"
+                                  title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
+                                >
+                                  {calls} call{calls === 1 ? "" : "s"}
+                                </FactChip>
+                              </span>
+                            )}
+                            <ZoneStateBar zone={z} states={states} />
+                          </PressContent>
                         </Press>
                       </li>
                     );

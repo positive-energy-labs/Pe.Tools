@@ -77,12 +77,12 @@ function InputGroupButton({
   ...props
 }: Omit<PressProps, "size"> & Pick<VariantProps<typeof inputGroupRecipe>, "size">) {
   const pressSize = {
-    xs: "xs",
-    sm: "sm",
-    "icon-xs": "icon-sm",
-    "icon-sm": "icon-md",
-  }[size] as "xs" | "sm" | "icon-sm" | "icon-md";
-  return <Press data-size={size} size={pressSize} tone="input" {...props} />;
+    xs: "caption",
+    sm: "label",
+    "icon-xs": "icon",
+    "icon-sm": "icon",
+  }[size] as "caption" | "label" | "icon";
+  return <Press data-size={size} size={pressSize} tone="neutral" {...props} />;
 }
 
 function InputGroupText({ className, ...props }: React.ComponentProps<"span">) {
