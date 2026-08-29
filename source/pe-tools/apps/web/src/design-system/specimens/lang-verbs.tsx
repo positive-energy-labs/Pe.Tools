@@ -1,49 +1,63 @@
-import { RefreshCw, Save, Sparkles, Upload } from "lucide-react";
+import { RefreshCw, Save } from "lucide-react";
 
-import { Press } from "#/components/lang/press";
-import { Section } from "#/components/lang/section";
-import { Verb, VerbGroup } from "#/components/lang/verb";
+import { Press, pressRecipe } from "#/components/lang/press";
+import { Verb, VerbGroup, verbRecipe } from "#/components/lang/verb";
+
+import { RecipeGrid } from "./recipe-grid";
 
 const noop = () => {};
 
 export function LangVerbSpecimens() {
   return (
-    <Section label="lang · verbs and controls">
-      <div className="flex flex-col gap-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <Verb label="collapse" reason="Collapses this region" onClick={noop} />
-          <Verb tone="agent" label="ask pea" icon={Sparkles} reason="Asks Pea" onClick={noop} />
-          <Verb
-            tone="commit"
-            label="apply"
-            icon={Upload}
-            reason="Writes to the model"
-            onClick={noop}
-          />
-          <Verb tone="nav" direction="back" label="all types" reason="Returns" onClick={noop} />
-          <Verb label="refresh" icon={RefreshCw} reason="Re-reads the model" onClick={noop} busy />
-          <Verb label="open" reason="No target is bound" onClick={noop} disabled />
-        </div>
-        <VerbGroup title="writes beyond the page" radius="document · model · external">
-          <Verb
-            tone="commit"
-            label="save profile"
-            icon={Save}
-            reason="Writes the profile"
-            onClick={noop}
-          />
-          <Verb label="refresh" icon={RefreshCw} reason="Re-reads the model" onClick={noop} />
-        </VerbGroup>
-        <div className="flex items-center gap-3">
-          <Press className="inline-flex h-6 items-center px-2">raw json</Press>
-          <Press icon aria-label="refresh" className="size-6">
-            <RefreshCw className="size-3" />
+    <>
+      <RecipeGrid
+        name="Press"
+        importPath="#/components/lang/press"
+        recipe={pressRecipe}
+        render={(props) => (
+          <Press
+            tone={props.tone as "bare" | "neutral" | "quiet" | "bordered"}
+            size={
+              props.size as "auto" | "xs" | "sm" | "md" | "icon-xs" | "icon-sm" | "icon-md" | "row"
+            }
+            state={props.state as "rest" | "selectable"}
+            aria-pressed={props.state === "selectable"}
+          >
+            {String(props.size).startsWith("icon") ? <RefreshCw className="size-3" /> : "raw json"}
           </Press>
-          <Press disabled className="inline-flex h-6 items-center px-2">
-            disabled
-          </Press>
-        </div>
-      </div>
-    </Section>
+        )}
+      />
+      <RecipeGrid
+        name="Verb · VerbGroup"
+        importPath="#/components/lang/verb"
+        recipe={verbRecipe}
+        render={(props) => {
+          const tone = props.tone as "act" | "commit" | "nav" | "agent";
+          const verb =
+            tone === "nav" ? (
+              <Verb
+                tone="nav"
+                direction="forward"
+                label="open"
+                reason="Opens the selected item"
+                onClick={noop}
+              />
+            ) : (
+              <Verb
+                tone={tone}
+                label={tone === "commit" ? "save profile" : tone}
+                icon={tone === "commit" ? Save : RefreshCw}
+                reason={`Runs the ${tone} action`}
+                onClick={noop}
+              />
+            );
+          return (
+            <VerbGroup title="writes beyond the page" radius="document · model · external">
+              {verb}
+            </VerbGroup>
+          );
+        }}
+      />
+    </>
   );
 }

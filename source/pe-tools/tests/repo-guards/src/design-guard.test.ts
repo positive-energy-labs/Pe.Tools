@@ -810,6 +810,7 @@ const hasExport = (node: ts.Node): boolean =>
   !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 const isPascal = (name: string): boolean => /^[A-Z][A-Za-z0-9]*$/.test(name);
 const LANG_COMPONENTS = new Set<string>();
+const LANG_RECIPES = new Set<string>();
 for (const file of FILES.filter(
   (f) => f.rel.startsWith("components/lang/") && f.rel.endsWith(".tsx"),
 )) {
@@ -833,9 +834,22 @@ for (const file of FILES.filter(
             ts.isFunctionExpression(declaration.initializer))
         )
           LANG_COMPONENTS.add(declaration.name.text);
+    if (ts.isVariableStatement(node) && hasExport(node))
+      for (const declaration of node.declarationList.declarations)
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text.endsWith("Recipe") &&
+          declaration.initializer &&
+          ts.isCallExpression(declaration.initializer) &&
+          ts.isIdentifier(declaration.initializer.expression) &&
+          declaration.initializer.expression.text === "tv"
+        )
+          LANG_RECIPES.add(declaration.name.text);
   });
 }
 const SPECIMEN_JSX = new Set<string>();
+const RECIPE_GRID_USES = new Map<string, number>();
+const SPECIMEN_PATH_USES = new Map<string, number>();
 for (const specimen of FILES.filter(
   (file) => file.rel.startsWith("design-system/specimens/") && file.rel.endsWith(".tsx"),
 )) {
@@ -847,16 +861,122 @@ for (const specimen of FILES.filter(
     ts.ScriptKind.TSX,
   );
   const visit = (node: ts.Node): void => {
-    if (
-      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      ts.isIdentifier(node.tagName)
-    )
-      SPECIMEN_JSX.add(node.tagName.text);
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      if (ts.isIdentifier(node.tagName)) SPECIMEN_JSX.add(node.tagName.text);
+      if (
+        ts.isIdentifier(node.tagName) &&
+        (node.tagName.text === "RecipeGrid" || node.tagName.text === "SpecimenFrame")
+      ) {
+        const importPath = node.attributes.properties.find(
+          (attribute): attribute is ts.JsxAttribute =>
+            ts.isJsxAttribute(attribute) && attribute.name.getText(source) === "importPath",
+        );
+        if (importPath?.initializer && ts.isStringLiteral(importPath.initializer)) {
+          const path = importPath.initializer.text;
+          SPECIMEN_PATH_USES.set(path, (SPECIMEN_PATH_USES.get(path) ?? 0) + 1);
+        }
+      }
+      if (ts.isIdentifier(node.tagName) && node.tagName.text === "RecipeGrid") {
+        const recipe = node.attributes.properties.find(
+          (attribute): attribute is ts.JsxAttribute =>
+            ts.isJsxAttribute(attribute) && attribute.name.getText(source) === "recipe",
+        );
+        const expression = recipe?.initializer;
+        if (
+          expression &&
+          ts.isJsxExpression(expression) &&
+          expression.expression &&
+          ts.isIdentifier(expression.expression)
+        ) {
+          const name = expression.expression.text;
+          RECIPE_GRID_USES.set(name, (RECIPE_GRID_USES.get(name) ?? 0) + 1);
+        }
+      }
+    }
     ts.forEachChild(node, visit);
   };
   visit(source);
 }
 const MISSING_SWATCH = [...LANG_COMPONENTS].filter((name) => !SPECIMEN_JSX.has(name)).sort();
+const REQUIRED_RECIPE_GRIDS = new Set([
+  ...LANG_RECIPES,
+  "badgeVariants",
+  "dialogRecipe",
+  "inputGroupRecipe",
+  "selectRecipe",
+]);
+const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
+  .filter((name) => RECIPE_GRID_USES.get(name) !== 1)
+  .map((name) => `${name}: ${RECIPE_GRID_USES.get(name) ?? 0} grids`)
+  .sort();
+
+const RECIPE_GRID_FILE = FILES.find(
+  (file) => file.rel === "design-system/specimens/recipe-grid.tsx",
+);
+const STATIC_IMPORT_COUNTS = new Map<string, number>();
+if (RECIPE_GRID_FILE) {
+  const source = ts.createSourceFile(
+    RECIPE_GRID_FILE.rel,
+    RECIPE_GRID_FILE.text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  source.forEachChild((node) => {
+    if (!ts.isVariableStatement(node)) return;
+    for (const declaration of node.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== "IMPORT_COUNTS") continue;
+      let initializer = declaration.initializer;
+      if (initializer && ts.isAsExpression(initializer)) initializer = initializer.expression;
+      if (!initializer || !ts.isObjectLiteralExpression(initializer)) continue;
+      for (const property of initializer.properties)
+        if (
+          ts.isPropertyAssignment(property) &&
+          ts.isStringLiteral(property.name) &&
+          ts.isNumericLiteral(property.initializer)
+        )
+          STATIC_IMPORT_COUNTS.set(property.name.text, Number(property.initializer.text));
+    }
+  });
+}
+const ACTUAL_IMPORT_COUNTS = new Map(
+  [...STATIC_IMPORT_COUNTS].map(([importPath]) => {
+    const group = importPath.split("/")[2];
+    let count = 0;
+    for (const file of FILES.filter(
+      (entry) =>
+        !entry.rel.startsWith("design-system/specimens/") &&
+        !entry.rel.startsWith(`components/${group}/`) &&
+        (entry.rel.endsWith(".ts") || entry.rel.endsWith(".tsx")),
+    )) {
+      const source = ts.createSourceFile(
+        file.rel,
+        file.text,
+        ts.ScriptTarget.Latest,
+        true,
+        file.rel.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+      );
+      source.forEachChild((node) => {
+        if (
+          ts.isImportDeclaration(node) &&
+          ts.isStringLiteral(node.moduleSpecifier) &&
+          node.moduleSpecifier.text === importPath
+        )
+          count += 1;
+      });
+    }
+    return [importPath, count] as const;
+  }),
+);
+const STALE_IMPORT_COUNTS = [...STATIC_IMPORT_COUNTS]
+  .filter(([importPath, count]) => ACTUAL_IMPORT_COUNTS.get(importPath) !== count)
+  .map(
+    ([importPath, count]) =>
+      `${importPath}: ${count} recorded, ${ACTUAL_IMPORT_COUNTS.get(importPath) ?? 0} actual`,
+  );
+const BAD_SPECIMEN_PATHS = [...STATIC_IMPORT_COUNTS]
+  .filter(([importPath]) => SPECIMEN_PATH_USES.get(importPath) !== 1)
+  .map(([importPath]) => `${importPath}: ${SPECIMEN_PATH_USES.get(importPath) ?? 0} frames`);
 
 describe("design checks — code holds the boundary", () => {
   it("loads the app CSS graph before checking candidates", () => {
@@ -911,6 +1031,18 @@ describe("design checks — code holds the boundary", () => {
 
   it("every lang component export is mounted by a specimen", () => {
     expect(MISSING_SWATCH).toEqual([]);
+  });
+
+  it("every swatch recipe is mounted once through the exhaustive recipe grid", () => {
+    expect(BAD_RECIPE_GRIDS).toEqual([]);
+  });
+
+  it("swatch consumer lines match the static import census", () => {
+    expect(STALE_IMPORT_COUNTS).toEqual([]);
+  });
+
+  it("every catalogued lang and ui import path has one specimen frame", () => {
+    expect(BAD_SPECIMEN_PATHS).toEqual([]);
   });
 });
 

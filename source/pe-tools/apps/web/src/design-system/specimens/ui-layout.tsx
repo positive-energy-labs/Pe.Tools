@@ -2,13 +2,14 @@ import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 
 import { Press } from "#/components/lang/press";
-import { Section } from "#/components/lang/section";
 import { Pane } from "#/components/ui/pane";
 import { PickList } from "#/components/ui/pick-list";
 import { SidePane } from "#/components/ui/side-pane";
 import { Switch } from "#/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "#/components/ui/toggle-group";
 import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
+
+import { SpecimenFrame } from "./recipe-grid";
 
 const PICK_ITEMS = CATEGORY_OPTIONS.slice(0, 6).map((option, index) => ({
   id: option.value,
@@ -18,25 +19,26 @@ const PICK_ITEMS = CATEGORY_OPTIONS.slice(0, 6).map((option, index) => ({
 }));
 
 export function UiLayoutSpecimens() {
-  const [active, setActive] = useState<string | null>(PICK_ITEMS[0]?.id ?? null);
-  const [mode, setMode] = useState("plan");
   return (
-    <Section label="ui · layout and selection">
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div className="flex h-48">
-          <SidePane
-            side="left"
-            storageKey="swatch.side-pane.open"
-            defaultWidth={180}
-            minWidth={120}
-            header={<span>header</span>}
-          >
-            <div className="p-2">body</div>
-          </SidePane>
-          <div className="min-w-0 flex-1">
+    <>
+      <PaneSpecimens />
+      <PickListSpecimen />
+      <SidePaneSpecimens />
+      <SwitchSpecimens />
+      <ToggleSpecimen />
+    </>
+  );
+}
+
+function PaneSpecimens() {
+  return (
+    <SpecimenFrame name="Pane" importPath="#/components/ui/pane">
+      <div className="grid grid-cols-2 gap-3">
+        {(["navigation", "visual", "content", "inspector"] as const).map((kind) => (
+          <div key={kind} className="h-32 w-56">
             <Pane
-              kind="content"
-              title="content"
+              kind={kind}
+              title={kind}
               meta="4"
               actions={
                 <Press icon aria-label="refresh" className="size-5">
@@ -47,22 +49,86 @@ export function UiLayoutSpecimens() {
               <div className="p-2">body</div>
             </Pane>
           </div>
-        </div>
-        <div className="h-48">
+        ))}
+      </div>
+    </SpecimenFrame>
+  );
+}
+
+function PickListSpecimen() {
+  const [active, setActive] = useState<string | null>(PICK_ITEMS[0]?.id ?? null);
+  return (
+    <SpecimenFrame name="PickList" importPath="#/components/ui/pick-list">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="h-48 w-64">
           <PickList items={PICK_ITEMS} activeId={active} onPick={setActive} />
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Switch />
-          <Switch defaultChecked />
-          <Switch size="sm" />
-          <Switch size="sm" defaultChecked />
+        <div className="h-48 w-64">
+          <PickList items={[]} onPick={() => {}} emptyNote="nothing in scope" />
         </div>
-        <ToggleGroup value={mode} onValueChange={setMode}>
-          <ToggleGroupItem value="plan">plan</ToggleGroupItem>
-          <ToggleGroupItem value="section">section</ToggleGroupItem>
-          <ToggleGroupItem value="3d">3d</ToggleGroupItem>
-        </ToggleGroup>
       </div>
-    </Section>
+    </SpecimenFrame>
+  );
+}
+
+function SidePaneSpecimens() {
+  return (
+    <SpecimenFrame name="SidePane" importPath="#/components/ui/side-pane">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex h-40 w-72">
+          <SidePane
+            side="left"
+            storageKey="swatch.side-pane.open"
+            defaultWidth={180}
+            minWidth={120}
+            header={<span>open</span>}
+          >
+            <div className="p-2">body</div>
+          </SidePane>
+          <div className="flex-1" />
+        </div>
+        <div className="flex h-40 w-72">
+          <SidePane
+            side="left"
+            storageKey="swatch.side-pane.closed"
+            defaultOpen={false}
+            defaultWidth={180}
+            minWidth={120}
+            header={<span>closed</span>}
+          >
+            <div className="p-2">body</div>
+          </SidePane>
+          <div className="flex-1" />
+        </div>
+      </div>
+    </SpecimenFrame>
+  );
+}
+
+function SwitchSpecimens() {
+  return (
+    <SpecimenFrame name="Switch" importPath="#/components/ui/switch">
+      <div className="flex flex-wrap items-center gap-4">
+        <Switch />
+        <Switch defaultChecked />
+        <Switch size="sm" />
+        <Switch size="sm" defaultChecked />
+        <Switch disabled />
+        <Switch disabled defaultChecked />
+      </div>
+    </SpecimenFrame>
+  );
+}
+
+function ToggleSpecimen() {
+  const [mode, setMode] = useState("plan");
+  return (
+    <SpecimenFrame name="ToggleGroup" importPath="#/components/ui/toggle-group">
+      <ToggleGroup value={mode} onValueChange={setMode}>
+        <ToggleGroupItem value="plan">plan</ToggleGroupItem>
+        <ToggleGroupItem value="section">section</ToggleGroupItem>
+        <ToggleGroupItem value="3d">3d</ToggleGroupItem>
+      </ToggleGroup>
+    </SpecimenFrame>
   );
 }
