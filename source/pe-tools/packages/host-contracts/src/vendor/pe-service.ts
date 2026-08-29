@@ -1,27 +1,7 @@
 /* eslint-disable no-control-regex -- Windows rejects ASCII control characters in service names. */
-// pe-service.ts — the SDK-owned TypeScript client for the Pe service primitive (SDK-LEDGER A10).
-//
-// Service-file schema version: 3
-// OWNED BY Pe.Revit.Sdk — DO NOT FORK. Copy this file verbatim into a consumer; the SDK ships it
-// inside the Pe.Revit.Sdk nupkg under clients/ts/ so there is exactly ONE implementation per language
-// (this mirrors Pe.Revit.Loader's C# InstalledProduct.EnsureRunning / TakeOver / ServiceFile byte-for-byte
-// in behaviour). Dependency-free — Node stdlib only (fs/promises, path, child_process, crypto) plus the
-// global fetch/AbortSignal (Node 18+).
-//
-// The runtime service file the SERVICE writes when it binds and deletes on graceful shutdown:
-//   <appBase>/state/service/<name>.json =
-//     { schemaVersion, instanceId, pid, processStartUtc, port, version, lane, token,
-//       executablePath?, sourceRoot?, health?, sessionId? }
-//   <appBase>/state/service/<name>.log  = spawned stdout+stderr plus supervisor breadcrumbs (append-only)
-// Discovery is file-based: the port the service actually bound is authoritative; a manifest's
-// preferredPort is only a hint and is never hardcoded by a client. The shutdown endpoint is authorized
-// by the file's per-launch token, sent BOTH as the header `X-Pe-Service-Token` and in the JSON body
-// `{ "token": … }` (the proven host-ownership.ts wire shape, generalized).
-//
-// LOOPBACK MANDATE: a service under this contract MUST bind 127.0.0.1 only. The supervisor probes
-// health and authenticates shutdown on loopback; binding a wider interface exposes the
-// token-authenticated shutdown endpoint to the LAN and trips a Windows Firewall prompt per versioned
-// exe path. Loopback-only, always.
+// SDK-owned copy-in primitive. Keep this file byte-identical across consumers.
+// The service file owns discovery: its bound port is authoritative and its per-launch token authorizes shutdown.
+// FOOTGUN: Bind services to 127.0.0.1. A wider bind exposes shutdown to the LAN and prompts Windows Firewall per versioned executable.
 
 import { spawn } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";

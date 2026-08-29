@@ -221,7 +221,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
       {
         key: "lifecycle",
         label: "lifecycle",
-        verbs: (["converge", "restart", "stop"] as const).map((key) => ({
+        verbs: (["restart", "stop"] as const).map((key) => ({
           ...lifecycleVerbs[key],
           label: key === "stop" && selectedWorld?.phase === "unresponsive" ? "force stop" : key,
         })),

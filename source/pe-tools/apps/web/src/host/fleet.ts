@@ -1,11 +1,7 @@
 /** Fuses SDK registry custody/lifecycle with bridge-observed documents. */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  Envelope,
-  SessionRow,
-  SessionStatusResult,
-} from "@pe/host-contracts/pe-revit-contract";
+import type { Envelope, SessionRow, SessionListResult } from "@pe/host-contracts/pe-revit-contract";
 
 import { HOST_QUERY_KEY, useBridgeSessionsListQuery } from "#/host/queries";
 import { fromBridgeSessions, type Custody, type SessionFacts } from "#/host/target";
@@ -101,7 +97,7 @@ function useSessionStatusQuery({ all = false, enabled = true }: FleetOptions) {
       // The route relays the CLI envelope untouched, so this is the SDK's own result shape. No
       // `?? []` fallback: an envelope without `sessions` means the contract moved underneath us,
       // and a silent empty fleet is exactly the failure this cutover exists to end.
-      const body = (await response.json()) as Envelope<SessionStatusResult>;
+      const body = (await response.json()) as Envelope<SessionListResult>;
       const sessions = body.result?.sessions;
       if (!Array.isArray(sessions))
         throw new Error("session status envelope carried no result.sessions[]");
@@ -125,7 +121,7 @@ export function useFleet(options: FleetOptions = {}) {
       stale: sessionsQuery.isFetching || status.isFetching,
       error: sessionsQuery.error ?? status.error,
       at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
-      basis: ["sessions.status", "bridge.sessions.list"],
+      basis: ["sessions.list", "bridge.sessions.list"],
     };
   }, [
     sessionsQuery.data?.sessions,

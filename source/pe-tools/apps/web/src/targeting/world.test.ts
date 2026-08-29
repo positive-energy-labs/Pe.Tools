@@ -106,7 +106,7 @@ describe("targeting world", () => {
       stale: false,
       error: null,
       at: 123,
-      basis: ["sessions.status", "bridge.sessions.list"],
+      basis: ["sessions.list", "bridge.sessions.list"],
     });
 
     expect(result).toMatchObject({
@@ -117,7 +117,7 @@ describe("targeting world", () => {
       ],
       lane: "live",
       at: 123,
-      basis: ["sessions.status", "bridge.sessions.list"],
+      basis: ["sessions.list", "bridge.sessions.list"],
     });
     for (const option of result.options ?? [])
       expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
@@ -174,7 +174,6 @@ describe("targeting world", () => {
     const bound = { world: "session:pe.app-25" };
 
     await verbs.start.run({ world: null }, { world: empty });
-    await verbs.converge.run(bound, { world: ready });
     await verbs.restart.run(bound, { world: ready });
     await verbs.stop.run(bound, { world: ready });
     await verbs.stop.run(bound, { world: unresponsive });
@@ -183,7 +182,6 @@ describe("targeting world", () => {
       request.mock.calls.map(([, init]) => JSON.parse(init?.body as string) as unknown),
     ).toEqual([
       { action: "start", lane: "installed", year: "25", doc: "Model.rvt" },
-      { action: "converge", id: "pe.app-25" },
       { action: "restart", id: "pe.app-25" },
       { action: "stop", id: "pe.app-25" },
       { action: "stop", id: "pe.app-25", force: true },

@@ -28,7 +28,7 @@ const fleet = vi.hoisted(() => ({
     stale: false,
     error: null,
     at: 123,
-    basis: ["sessions.status", "bridge.sessions.list"],
+    basis: ["sessions.list", "bridge.sessions.list"],
   })),
 }));
 
@@ -120,14 +120,14 @@ describe("instances route", () => {
       error: null,
       basis: [],
     });
-    const pending = verbs.converge.run({ world: "session:pe.app-25" }, { world: feed });
+    const pending = verbs.restart.run({ world: "session:pe.app-25" }, { world: feed });
 
     expect(record).not.toHaveBeenCalled();
     answer(
       new Response(
         JSON.stringify({
           result: { state: "refused" },
-          diagnostics: [{ code: "session.failed", detail: "converge was refused" }],
+          diagnostics: [{ code: "session.failed", detail: "restart was refused" }],
         }),
         { status: 409, headers: { "content-type": "application/json" } },
       ),
@@ -136,12 +136,12 @@ describe("instances route", () => {
 
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: "converge",
+        action: "restart",
         ok: false,
         state: "refused",
-        diagnostics: ["converge was refused"],
+        diagnostics: ["restart was refused"],
       }),
     );
-    expect(worldTrunk.describe(record.mock.calls[0]![0])).toContain("converge was refused");
+    expect(worldTrunk.describe(record.mock.calls[0]![0])).toContain("restart was refused");
   });
 });

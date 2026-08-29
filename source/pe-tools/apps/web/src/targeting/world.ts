@@ -30,7 +30,7 @@ interface FleetFeed {
   readonly basis: readonly string[];
 }
 
-type WorldLifecycleAction = "start" | "converge" | "restart" | "stop";
+type WorldLifecycleAction = "start" | "restart" | "stop";
 
 export interface WorldStart {
   readonly lane: "installed" | "dev";
@@ -178,7 +178,6 @@ export const worldTrunk = {
     };
     return {
       start: verb("start"),
-      converge: verb("converge"),
       restart: verb("restart"),
       stop: verb("stop"),
     };

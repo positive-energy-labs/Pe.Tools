@@ -61,7 +61,7 @@ test("start on an installed-lane host passes NO --project: project-less start IS
     },
   );
   // The retired flags must never reappear: lane is derived from the payload source, and start
-  // blocks to ready by default (the opt-out is --no-wait, which this route never wants).
+  // blocks to ready by default.
   expect(args).not.toContain("--installed");
   expect(args).not.toContain("--wait");
 });
@@ -82,7 +82,7 @@ test("start carries an optional --doc for the end-user case", () => {
   ]);
 });
 
-test("stop/restart/converge map to --id verbs; stop honors force", () => {
+test("stop/restart map to --id verbs; stop honors force", () => {
   expect(sessionCliArgs(parsed({ action: "restart", id: "scratch" }), undefined)).toEqual([
     "session",
     "restart",
@@ -93,14 +93,11 @@ test("stop/restart/converge map to --id verbs; stop honors force", () => {
   expect(sessionCliArgs(parsed({ action: "stop", id: "scratch", force: true }), undefined)).toEqual(
     ["session", "stop", "--id", "scratch", "--force", "--json"],
   );
-  expect(
-    sessionCliArgs(parsed({ action: "converge", id: "scratch", timeoutSeconds: 300 }), undefined),
-  ).toEqual(["session", "converge", "--id", "scratch", "--timeout-seconds", "300", "--json"]);
 });
 
-test("status args pass an optional id filter", () => {
-  expect(sessionStatusArgs()).toEqual(["session", "status", "--json"]);
-  expect(sessionStatusArgs(undefined, true)).toEqual(["session", "status", "--all", "--json"]);
+test("fleet reads use list and exact reads use status", () => {
+  expect(sessionStatusArgs()).toEqual(["session", "list", "--json"]);
+  expect(sessionStatusArgs(undefined, true)).toEqual(["session", "list", "--all", "--json"]);
   expect(sessionStatusArgs("scratch")).toEqual(["session", "status", "--id", "scratch", "--json"]);
 });
 
@@ -142,16 +139,14 @@ test("action body validation mirrors the CLI invocation contract", () => {
   expect(parseSessionActionRequest({ action: "start" })).toMatchObject({ ok: false }); // no year
   expect(parseSessionActionRequest({ action: "stop" })).toMatchObject({ ok: false }); // no id
   expect(parseSessionActionRequest({ action: "start", year: 25 })).toMatchObject({ ok: true });
-  // converge with no id is legal: the SDK resolver owns implicit-single resolution and this
-  // route must not re-implement a stricter one.
-  expect(parseSessionActionRequest({ action: "converge" })).toMatchObject({ ok: true });
+  expect(parseSessionActionRequest({ action: "converge" })).toMatchObject({ ok: false });
 });
 
 test("caller-provided timeouts get a margin over the CLI's own budget", () => {
-  expect(sessionActionTimeoutMs(parsed({ action: "converge", id: "s", timeoutSeconds: 300 }))).toBe(
+  expect(sessionActionTimeoutMs(parsed({ action: "restart", id: "s", timeoutSeconds: 300 }))).toBe(
     360_000,
   );
-  expect(sessionActionTimeoutMs(parsed({ action: "converge", id: "s" }))).toBe(600_000);
+  expect(sessionActionTimeoutMs(parsed({ action: "restart", id: "s" }))).toBe(600_000);
 });
 
 // --- launcher / envelope validation ------------------------------------------------------------
@@ -175,7 +170,7 @@ test("dev host selects its checkout CLI even when an installed shim exists", () 
 
 test("session CLI rejects empty, invalid, and non-envelope output", () => {
   const launch = { cmd: "dotnet", args: ["pe-revit"] } as const;
-  const args = ["session", "status", "--json"];
+  const args = ["session", "list", "--json"];
   expect(() => validatePeRevitEnvelope("", args, launch)).toThrow("no output");
   expect(() => validatePeRevitEnvelope("not json", args, launch)).toThrow("invalid JSON");
   expect(() => validatePeRevitEnvelope("{}", args, launch)).toThrow("non-envelope");
@@ -183,14 +178,12 @@ test("session CLI rejects empty, invalid, and non-envelope output", () => {
   // pre-session-CLI output it exists to reject.
   const guideless = '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[]}';
   expect(() => validatePeRevitEnvelope(guideless, args, launch)).toThrow("non-envelope");
-  // The seventh field, `binary`, arrived with the beta.121 envelope and the vendored validator
-  // now checks it. A six-field envelope no longer passes — which is the whole point of vendoring
-  // the validator instead of restating the shape here.
-  const sixField =
-    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[]}';
-  expect(() => validatePeRevitEnvelope(sixField, args, launch)).toThrow("non-envelope");
+  // The generated validator checks all eight required envelope fields instead of restating them.
+  const sevenField =
+    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":{}}';
+  expect(() => validatePeRevitEnvelope(sevenField, args, launch)).toThrow("non-envelope");
   const envelope =
-    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":null}';
+    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":{},"command":{}}';
   expect(validatePeRevitEnvelope(envelope, args, launch)).toBe(envelope);
 });
 
@@ -211,7 +204,7 @@ test("CLI stdout (the JSON envelope) relays verbatim, even for failed verdicts",
     ),
   );
 
-  expect(seen).toEqual([["session", "status", "--json"]]);
+  expect(seen).toEqual([["session", "list", "--json"]]);
   expect(outcome).toEqual({ status: 200, bodyJson: envelope });
 });
 
@@ -280,7 +273,7 @@ for (const verdict of existingIdVerdicts) {
 test("a spawn failure is a plain 500", async () => {
   const outcome = await Effect.runPromise(
     executeSessionCli(
-      ["session", "status", "--json"],
+      ["session", "list", "--json"],
       () => Effect.fail("pe-revit not found"),
       1_000,
       {
@@ -295,15 +288,10 @@ test("a spawn failure is a plain 500", async () => {
 
 test("a hung CLI is a 504 that forges no envelope", async () => {
   const outcome = await Effect.runPromise(
-    executeSessionCli(
-      ["session", "converge", "--id", "scratch", "--json"],
-      () => Effect.never,
-      50,
-      {
-        action: "converge",
-        id: "scratch",
-      },
-    ),
+    executeSessionCli(["session", "restart", "--id", "scratch", "--json"], () => Effect.never, 50, {
+      action: "restart",
+      id: "scratch",
+    }),
   );
 
   expect(outcome.status).toBe(504);
