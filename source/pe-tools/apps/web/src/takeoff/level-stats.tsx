@@ -50,7 +50,7 @@ export function LevelStats({
     <div className="z-raised w-64 px-2 py-1.5">
       <div className="mb-1 flex items-baseline gap-1.5">
         <span>{level} — level totals</span>
-        <Press type="button" onClick={onClose} tone="quiet" size="mono-value">
+        <Press type="button" onClick={onClose} tone="quiet" size="value">
           ×
         </Press>
       </div>

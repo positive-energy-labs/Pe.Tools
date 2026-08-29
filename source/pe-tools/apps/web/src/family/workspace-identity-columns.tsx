@@ -1,5 +1,6 @@
 import type { Column, MasterTableState } from "#/components/master-table/model";
 import { ReadCell } from "#/components/master-table/cells";
+import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
 import { ProposedCell } from "#/family/marks";
 import { bindingOf, isFormula, pinnedSort, sortDirOf, type PRow } from "#/family/model";
@@ -38,8 +39,8 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
           <Press
             type="button"
             onClick={() => locate(open[0]!)}
-            size={open.length === 1 ? "icon-xs" : "chip-caption"}
-            tone="pea"
+            size={open.length === 1 ? "icon" : "caption"}
+            tone="agent"
             aria-label={`locate ${open.length} proposal(s) on ${row.name}`}
             title={
               open.length === 1
@@ -90,12 +91,13 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
               onClick={() => setInspect({ kind: "part", slug })}
               // Row-specific facts only; what a geom row IS lives on the table's HelpTip.
               title={`${slug}.${property} — a bindable ${row.dataType} dimension that no parameter drives; it is ${literal} for every type. ${dim?.note ?? ""} Click to open ${slug} in the inspector.`}
-              tone="muted"
-              size="mono-caption"
-              layout="block"
+              tone="quiet"
+              size="caption"
             >
-              {row.name}
-              <span className="ml-1">geom</span>
+              <PressContent geometry="block">
+                {row.name}
+                <span className="ml-1">geom</span>
+              </PressContent>
             </Press>
           </span>
         );
@@ -139,7 +141,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                   type="button"
                   onClick={() => setInspect({ kind: "param", name: row.name })}
                   title={`Open ${row.name} in the inspector below the spec — where its FAMILY-LEVEL value is edited, along with its formula, its consumers, and its citation. The type columns on this row only ever hold overrides; the value they inherit lives there.`}
-                  tone="link"
+                  tone="nav"
                 >
                   {row.name}
                 </Press>
@@ -167,7 +169,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => setInspect({ kind: "part", slug: entry.slug })}
                     title={`${row.name} drives ${entry.slug}.${entry.property}. Click to open ${entry.slug} in the inspector — its non-bindable metadata (direction, system type, where its frame sits) lives there, because no parameter can drive those.`}
-                    tone="muted"
+                    tone="quiet"
                   >
                     {index > 0 && <span>, </span>}
                     {entry.slug}.{entry.property}

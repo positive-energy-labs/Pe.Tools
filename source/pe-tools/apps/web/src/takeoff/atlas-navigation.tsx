@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { FactChip } from "#/components/lang/chip";
+import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
 import { StateDot } from "#/components/master-table/cells";
 import { Pane } from "#/components/ui/pane";
@@ -54,12 +55,13 @@ export function AtlasNavigation() {
                     setCursor(null);
                   }}
                   tone="quiet"
-                  layout="baseline"
                   state={on ? "selected" : "rest"}
                 >
-                  <span className="w-3">{i + 1}</span>
-                  <span className="flex-1">{stage}</span>
-                  <span>{n}</span>
+                  <PressContent geometry="baseline">
+                    <span className="w-3">{i + 1}</span>
+                    <span className="flex-1">{stage}</span>
+                    <span>{n}</span>
+                  </PressContent>
                 </Press>
               );
             })}
@@ -97,25 +99,26 @@ export function AtlasNavigation() {
                               : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
                           }
                           tone="quiet"
-                          layout="row"
-                          state={on ? "selected" : off ? "subdued" : "rest"}
+                          state={on ? "selected" : "rest"}
                         >
-                          <ZoneThumb zone={z.zone} className="size-5" />
-                          <span>{z.zone.key}</span>
-                          <span className="min-w-0 flex-1">
-                            {off ? "off-plan scribble" : z.name}
-                          </span>
-                          {calls > 0 && (
-                            <span>
-                              <FactChip
-                                tone="alarm"
-                                title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
-                              >
-                                {calls} call{calls === 1 ? "" : "s"}
-                              </FactChip>
+                          <PressContent geometry="row">
+                            <ZoneThumb zone={z.zone} className="size-5" />
+                            <span>{z.zone.key}</span>
+                            <span className="min-w-0 flex-1">
+                              {off ? "off-plan scribble" : z.name}
                             </span>
-                          )}
-                          <ZoneStateBar zone={z} states={states} />
+                            {calls > 0 && (
+                              <span>
+                                <FactChip
+                                  tone="alarm"
+                                  title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
+                                >
+                                  {calls} call{calls === 1 ? "" : "s"}
+                                </FactChip>
+                              </span>
+                            )}
+                            <ZoneStateBar zone={z} states={states} />
+                          </PressContent>
                         </Press>
                       </li>
                     );
