@@ -35,11 +35,11 @@ export function LangVerbSpecimens() {
           <Verb label="refresh" icon={RefreshCw} reason="Re-reads the model" onClick={noop} />
         </VerbGroup>
         <div className="flex items-center gap-3">
-          <Press className="inline-flex h-6 items-center px-2">raw json</Press>
-          <Press icon aria-label="refresh" className="size-6">
+          <Press size="sm">raw json</Press>
+          <Press size="icon-sm" aria-label="refresh">
             <RefreshCw className="size-3" />
           </Press>
-          <Press disabled className="inline-flex h-6 items-center px-2">
+          <Press disabled size="sm">
             disabled
           </Press>
         </div>

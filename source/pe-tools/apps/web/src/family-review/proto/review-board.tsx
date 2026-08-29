@@ -117,15 +117,6 @@ export function useEdits(): EditDesk {
 
 const VERDICT_KEYS: Verdict[] = ["good", "unsure", "wrong"];
 
-/**
- * The human's call. Three buttons, no confirm — nothing leaves the page, so no ceremony is owed.
- *
- * GAP: a raw button element rather than a primitive. `lang/Verb` is a verb (it acts); this is a
- * three-way EXCLUSIVE CHOICE that must also express "not judged yet". `ui/toggle-group` is the
- * right shape and cannot be used: it carries shadcn chrome (`rounded-lg`, `border-line`,
- * `bg-recess/40`) instead of role tokens and the 2px radius, and it has no empty member. Owed as
- * one line in the design-system ledger, naming this route.
- */
 function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Verdict) => void }) {
   return (
     <div className="flex items-center gap-1" role="group" aria-label="verdict">
@@ -135,7 +126,9 @@ function VerdictStrip({ value, onPick }: { value: Verdict; onPick: (verdict: Ver
           type="button"
           onClick={() => onPick(verdict)}
           title={`Record "${VERDICT_LABEL[verdict]}" for this family and type. Prototype: in memory only — the chrome says where a verdict would go, which is nowhere yet.`}
-          className="px-2.5 py-1"
+          size="chip-value"
+          tone={value === verdict ? "neutral" : "muted"}
+          state={value === verdict ? "selected" : "rest"}
           style={{
             borderRadius: "var(--radius)",
             borderColor: value === verdict ? token("line-2") : token("line"),
@@ -337,21 +330,19 @@ export function ReviewBoard({
 
   return (
     <div className="flex min-h-0 flex-1">
-      {/* THE LIST NEVER REFLOWS (ruled 2026-08-19). The expanded preview is an overlay hung off
-          the row's RIGHT edge, not a block inserted under it: opening one family used to push
-          every family below it down the page, which is the one thing a library rail may not do —
-          you lose your place in the list you were scanning. */}
       <nav
         className="w-72 overflow-y-auto overflow-x-visible"
         style={{ borderColor: token("line") }}
       >
         {board.map((entry) => (
           <div key={entry.key} style={{ borderColor: token("line") }}>
-            <div className="flex items-start">
+            <div className="flex items-start [&>button:first-child]:min-w-0 [&>button:first-child]:flex-1">
               <Press
                 type="button"
                 onClick={() => setSelected(entry.key)}
-                className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5"
+                tone="neutral"
+                layout="stack"
+                state={entry.key === selected ? "selected" : "rest"}
                 style={{ borderRadius: "var(--radius)" }}
               >
                 <span>{entry.family.name}</span>
@@ -368,7 +359,8 @@ export function ReviewBoard({
                 aria-expanded={expanded === entry.key}
                 onClick={() => setExpanded(expanded === entry.key ? null : entry.key)}
                 title="Show what this family.json declares, and six small drawings of it. For recognising a family, not judging one — judging is the overlay on the right."
-                className="px-2 py-1.5"
+                tone="muted"
+                size="mono-caption"
               >
                 {expanded === entry.key ? "hide" : "open"}
               </Press>

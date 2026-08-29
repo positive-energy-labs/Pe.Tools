@@ -92,10 +92,13 @@ function ComboboxSpecimen() {
       onValueChange={(option: CategoryOption | null) => setPicked(option)}
       itemToStringLabel={(option: CategoryOption) => option.label}
     >
-      <div ref={anchorRef} className="inline-flex">
+      <div
+        ref={anchorRef}
+        className="inline-flex w-40 [&>button]:w-full [&>button]:justify-between"
+      >
         <ComboboxTrigger
           title="Category"
-          render={<Press className="inline-flex h-7 w-40 items-center justify-between" />}
+          render={<Press tone="quiet" size="md" state="expanded" />}
         >
           <span className="overflow-hidden">{picked?.label ?? "category"}</span>
         </ComboboxTrigger>

@@ -277,7 +277,7 @@ function RailRow({
       type="button"
       title={`${node.id} — ${node.detail}`}
       onClick={onPick}
-      className="flex w-full items-baseline justify-between gap-2 px-1 py-0.5"
+      layout="baseline"
       style={{
         backgroundColor: current ? token("select") : "transparent",
         border: "none",

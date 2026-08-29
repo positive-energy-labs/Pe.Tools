@@ -52,7 +52,7 @@ export function UiSurfaceSpecimens() {
                 <CardDescription>13 params · 3 types</CardDescription>
               </div>
               <CardAction>
-                <Press className="inline-flex h-6 items-center px-2">open</Press>
+                <Press size="sm">open</Press>
               </CardAction>
             </CardHeader>
             <CardContent>content</CardContent>
@@ -62,9 +62,7 @@ export function UiSurfaceSpecimens() {
             <ValueDiff from="100 VA" to="150 VA" />
             <ValueDiff from={null} to="2 hr" />
             <Dialog>
-              <DialogTrigger render={<Press className="inline-flex h-6 items-center px-2" />}>
-                open dialog
-              </DialogTrigger>
+              <DialogTrigger render={<Press size="sm" />}>open dialog</DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Dialog</DialogTitle>
