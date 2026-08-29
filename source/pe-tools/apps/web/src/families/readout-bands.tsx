@@ -92,14 +92,15 @@ export function FamiliesReadoutBands() {
               {plan.entries.length === 0 && outsideProfile.length === 0 && (
                 <tr>
                   <td colSpan={5}>
-                    <EmptyState
-                      story="scope"
-                      exit="widen the categories above, or bind a profile that covers this project"
-                      className="py-1"
-                    >
-                      no family in this scope is claimed by the bound profile — the plan compiled
-                      cleanly and matched nothing
-                    </EmptyState>
+                    <div className="py-1">
+                      <EmptyState
+                        story="scope"
+                        exit="widen the categories above, or bind a profile that covers this project"
+                      >
+                        no family in this scope is claimed by the bound profile — the plan compiled
+                        cleanly and matched nothing
+                      </EmptyState>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -184,13 +185,14 @@ export function FamiliesReadoutBands() {
               {applyData.receipts.length === 0 && (
                 <tr>
                   <td colSpan={5}>
-                    <EmptyState
-                      story="scope"
-                      exit="re-plan and read the decision queue before retrying"
-                      className="py-1"
-                    >
-                      no receipts — apply ran and reported nothing
-                    </EmptyState>
+                    <div className="py-1">
+                      <EmptyState
+                        story="scope"
+                        exit="re-plan and read the decision queue before retrying"
+                      >
+                        no receipts — apply ran and reported nothing
+                      </EmptyState>
+                    </div>
                   </td>
                 </tr>
               )}
@@ -208,33 +210,33 @@ export function FamiliesReadoutBands() {
                 projected profiles
               </span>
             </SectionLabel>
-            <FactChip
-              className="ml-2"
-              title="How many picked families the projection read back out of the model."
-            >
-              {projection.projections.length} famil
-              {projection.projections.length === 1 ? "y" : "ies"}
-            </FactChip>
+            <span className="ml-2">
+              <FactChip title="How many picked families the projection read back out of the model.">
+                {projection.projections.length} famil
+                {projection.projections.length === 1 ? "y" : "ies"}
+              </FactChip>
+            </span>
           </summary>
           {projection.projections.length === 0 && projection.diagnostics.length === 0 && (
-            <EmptyState
-              story="scope"
-              exit="re-pick families in the table's pick column and run it again"
-              className="mt-1"
-            >
-              nothing projected — the picked set read back empty
-            </EmptyState>
+            <div className="mt-1">
+              <EmptyState
+                story="scope"
+                exit="re-pick families in the table's pick column and run it again"
+              >
+                nothing projected — the picked set read back empty
+              </EmptyState>
+            </div>
           )}
           {/* Projection is read-only and blocks nothing, which is exactly what the outcome
               lane's `advisory` means — "a dry run blocks nothing". */}
           {projection.diagnostics.map((diagnostic) => (
-            <OutcomeLine
-              key={`${diagnostic.code}:${diagnostic.path}`}
-              className="mt-1"
-              kind="advisory"
-              label={diagnosticLine(diagnostic)}
-              says={diagnostic.suggestion ?? undefined}
-            />
+            <div key={`${diagnostic.code}:${diagnostic.path}`} className="mt-1">
+              <OutcomeLine
+                kind="advisory"
+                label={diagnosticLine(diagnostic)}
+                says={diagnostic.suggestion ?? undefined}
+              />
+            </div>
           ))}
           {projection.projections.map((entry) => (
             <div key={entry.familyId} className="mt-2">

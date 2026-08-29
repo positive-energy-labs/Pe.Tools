@@ -9,7 +9,6 @@ import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
 import { bindingOf, isFormula, type PageWorld } from "#/family/model";
 import { boundParam, type GeomConstituent } from "#/family/world";
-import { cn } from "#/lib/utils";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
 
@@ -91,7 +90,6 @@ export function FamilyWorkspaceDocPane() {
                         refusal (an emptied literal) is the cell's own note in both places. */}
                     <NavStateCell
                       value={bindingOf(world, draft, part.slug, dim.property)}
-                      className="rounded-sm border border-line-2 t-caption text-caution"
                       note={`UNBOUND — the literal frozen into ${part.slug}. Editable, exactly as it is on its ghost row at the bottom of the table; editing it changes the number, not who can reach it.`}
                       onCommit={(next) => editLiteral(part.slug, dim.property, next)}
                     />
@@ -168,10 +166,6 @@ export function FamilyWorkspaceDocPane() {
                   : "clean"
             }
             stagedBy={family.length > 0 ? "pea" : "you"}
-            className={cn(
-              "rounded-sm border border-line-2 t-label",
-              isFormula(authored) && "italic",
-            )}
             note={
               isFormula(authored)
                 ? `A FORMULA — ${authored}. Its result is derived, so no type may override it and Revit's number for it is an output rather than a competing value. Edit the expression here; change what feeds it to change the result.`
@@ -249,7 +243,9 @@ export function FamilyWorkspaceDocPane() {
       <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-line">
         <div className="flex h-6 shrink-0 items-center gap-2 border-b border-line bg-recess px-2">
           {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
-          <Tag className="shrink-0">{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
+          <span className="shrink-0">
+            <Tag>{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
+          </span>
           <span className="face-mono min-w-0 flex-1 truncate t-caption text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
@@ -288,13 +284,14 @@ export function FamilyWorkspaceDocPane() {
       }
       actions={
         <>
-          <FactChip
-            tone="pea"
-            className="mr-1"
-            title="Open proposals waiting on a verdict. They are ephemeral — page-scoped, never written, gone on reload. Only accept makes one real."
-          >
-            {openProposals.length} open
-          </FactChip>
+          <span className="mr-1">
+            <FactChip
+              tone="pea"
+              title="Open proposals waiting on a verdict. They are ephemeral — page-scoped, never written, gone on reload. Only accept makes one real."
+            >
+              {openProposals.length} open
+            </FactChip>
+          </span>
           <Switcher
             ariaLabel="doc mode"
             value={docMode}

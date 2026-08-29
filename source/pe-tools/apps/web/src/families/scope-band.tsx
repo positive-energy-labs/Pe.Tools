@@ -92,22 +92,26 @@ export function FamiliesScopeBand() {
         {!connected ? (
           /* A disconnected bridge is not the model disagreeing — it is the machine being
              unavailable, which the outcome lane calls `error` (caution, never alarm). */
-          <OutcomeLine
-            className="min-w-0 flex-1"
-            kind="error"
-            label="bridge disconnected"
-            says="nothing can be read — open Revit with the host connected, then bind that world in the sentence above"
-          />
+          <div className="min-w-0 flex-1">
+            <OutcomeLine
+              kind="error"
+              label="bridge disconnected"
+              says="nothing can be read — open Revit with the host connected, then bind that world in the sentence above"
+            />
+          </div>
         ) : categoryFeed.state === "loading" ? (
-          <OutcomeLine className="min-w-0 flex-1" kind="busy" label="reading categories" />
+          <div className="min-w-0 flex-1">
+            <OutcomeLine kind="busy" label="reading categories" />
+          </div>
         ) : categories.length === 0 ? (
-          <EmptyState
-            story="scope"
-            exit="load a family in Revit, or bind a different world in the sentence above"
-            className="min-w-0 flex-1"
-          >
-            no loaded families in this project — the catalog read succeeded and reported nothing
-          </EmptyState>
+          <div className="min-w-0 flex-1">
+            <EmptyState
+              story="scope"
+              exit="load a family in Revit, or bind a different world in the sentence above"
+            >
+              no loaded families in this project — the catalog read succeeded and reported nothing
+            </EmptyState>
+          </div>
         ) : (
           <>
             <NamePicker
@@ -141,7 +145,9 @@ export function FamiliesScopeBand() {
         {draftCategories.length === 0 ? null : (draftFamilyNames.length === 0 &&
             familyFeed.state === "loading") ||
           familyFeed.stale ? (
-          <OutcomeLine className="shrink-0" kind="busy" label="resolving families" />
+          <div className="shrink-0">
+            <OutcomeLine kind="busy" label="resolving families" />
+          </div>
         ) : (
           <FactChip title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated.">
             {pickedFamilies.length === draftFamilyNames.length

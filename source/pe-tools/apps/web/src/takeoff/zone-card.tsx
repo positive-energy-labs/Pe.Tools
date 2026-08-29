@@ -125,36 +125,38 @@ export function ZoneCard({
             `commit`, the language's one filled blue for writes that leave the page. Blast radius
             is not a tone; it groups the lane, which is what the group head below says. */}
         {live && (
-          <VerbGroup className="pt-0.5" title="zone verbs" radius="document · model">
-            <Verb
-              tone="commit"
-              label={zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
-              disabled={busy !== null}
-              reason={hostReason(
-                live,
-                busy,
-                `Prepares cropped seed views on ${zone.zone.lane.label}, exports ink, and detects rooms — writes replay_<level>.bin and touches the document`,
-                "fixture · nothing to capture",
-              )}
-              onClick={() => actions.capture(zone.zone.lane)}
-            />
-            <Verb
-              tone="commit"
-              label="partition zone"
-              disabled={busy !== null || !zone.zone.lane.replayPath}
-              reason={
-                zone.zone.lane.replayPath == null
-                  ? "capture the level first — the partition replays that snapshot, it cannot invent one"
-                  : hostReason(
-                      live,
-                      busy,
-                      "Replays the capture masked to this zone and materializes Room Regions in the model (a rerun never overwrites)",
-                      "fixture · nothing to partition",
-                    )
-              }
-              onClick={() => actions.partition(zone)}
-            />
-          </VerbGroup>
+          <div className="pt-0.5">
+            <VerbGroup title="zone verbs" radius="document · model">
+              <Verb
+                tone="commit"
+                label={zone.zone.lane.replayPath ? "re-capture level" : "capture level"}
+                disabled={busy !== null}
+                reason={hostReason(
+                  live,
+                  busy,
+                  `Prepares cropped seed views on ${zone.zone.lane.label}, exports ink, and detects rooms — writes replay_<level>.bin and touches the document`,
+                  "fixture · nothing to capture",
+                )}
+                onClick={() => actions.capture(zone.zone.lane)}
+              />
+              <Verb
+                tone="commit"
+                label="partition zone"
+                disabled={busy !== null || !zone.zone.lane.replayPath}
+                reason={
+                  zone.zone.lane.replayPath == null
+                    ? "capture the level first — the partition replays that snapshot, it cannot invent one"
+                    : hostReason(
+                        live,
+                        busy,
+                        "Replays the capture masked to this zone and materializes Room Regions in the model (a rerun never overwrites)",
+                        "fixture · nothing to partition",
+                      )
+                }
+                onClick={() => actions.partition(zone)}
+              />
+            </VerbGroup>
+          </div>
         )}
       </div>
     </div>

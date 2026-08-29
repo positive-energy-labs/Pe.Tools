@@ -129,13 +129,14 @@ export function AtlasNavigation() {
                             {off ? "off-plan scribble" : z.name}
                           </span>
                           {calls > 0 && (
-                            <FactChip
-                              tone="alarm"
-                              className="shrink-0"
-                              title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
-                            >
-                              {calls} call{calls === 1 ? "" : "s"}
-                            </FactChip>
+                            <span className="shrink-0">
+                              <FactChip
+                                tone="alarm"
+                                title={`${calls} room${calls === 1 ? "" : "s"} in this zone need a human call — an open detector flag or .r10 drift`}
+                              >
+                                {calls} call{calls === 1 ? "" : "s"}
+                              </FactChip>
+                            </span>
                           )}
                           <ZoneStateBar zone={z} states={states} />
                         </Press>

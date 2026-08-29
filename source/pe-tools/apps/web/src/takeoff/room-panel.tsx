@@ -129,31 +129,30 @@ function RoomPanel({
                 </li>
               ))}
             </ul>
-            {!live ? (
-              <FactChip
-                dashed
-                className="mt-1.5"
-                title="The fixture lane has no document. Verdicts mark this session only and are lost when the tab closes."
-              >
-                fixture · verdicts stay local
-              </FactChip>
-            ) : room.elementId === null ? (
-              <FactChip
-                dashed
-                className="mt-1.5"
-                title="This room was detected but never materialized, so there is no element to write a verdict onto. Partition the zone first."
-              >
-                no Room Region home
-              </FactChip>
-            ) : (
-              <FactChip
-                tone="done"
-                className="mt-1.5"
-                title="Verdicts are persisted onto this room's Room Region provenance blob before the UI shows them as decided."
-              >
-                writes through to the blob
-              </FactChip>
-            )}
+            <div className="mt-1.5">
+              {!live ? (
+                <FactChip
+                  dashed
+                  title="The fixture lane has no document. Verdicts mark this session only and are lost when the tab closes."
+                >
+                  fixture · verdicts stay local
+                </FactChip>
+              ) : room.elementId === null ? (
+                <FactChip
+                  dashed
+                  title="This room was detected but never materialized, so there is no element to write a verdict onto. Partition the zone first."
+                >
+                  no Room Region home
+                </FactChip>
+              ) : (
+                <FactChip
+                  tone="done"
+                  title="Verdicts are persisted onto this room's Room Region provenance blob before the UI shows them as decided."
+                >
+                  writes through to the blob
+                </FactChip>
+              )}
+            </div>
           </div>
         )}
 

@@ -43,14 +43,15 @@ export function ModelViews({
   const drawable = sheet.solids.some((geo) => geo.h != null && (geo.w != null || geo.d != null));
   if (!drawable)
     return (
-      <EmptyState
-        story="scope"
-        exit="give the document's solids values that resolve to numbers at this type, or stage a type where they do"
-        className="p-3"
-      >
-        no shape to draw — no solid&apos;s dimensions resolve to numbers at this type, and nothing
-        here guesses
-      </EmptyState>
+      <div className="p-3">
+        <EmptyState
+          story="scope"
+          exit="give the document's solids values that resolve to numbers at this type, or stage a type where they do"
+        >
+          no shape to draw — no solid&apos;s dimensions resolve to numbers at this type, and nothing
+          here guesses
+        </EmptyState>
+      </div>
     );
 
   // ONE scale for all three views, from the bounds INCLUDING ghosts — so it does not move when a

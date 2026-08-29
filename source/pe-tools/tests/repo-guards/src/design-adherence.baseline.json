@@ -1,12 +1,12 @@
 {
   "rawTable": {
-    "total": 30,
+    "total": 16,
     "byArea": {
       "families": 2,
       "family-review": 5,
       "lib": 1,
       "ops": 1,
-      "param-tables": 17,
+      "param-tables": 3,
       "parameter-links": 1,
       "routes": 1,
       "runs": 2
@@ -30,11 +30,10 @@
     }
   },
   "escHandler": {
-    "total": 9,
+    "total": 7,
     "byArea": {
       "components": 2,
       "family-review": 2,
-      "param-tables": 2,
       "runs": 1,
       "takeoff": 1,
       "targeting": 1
@@ -57,14 +56,13 @@
     }
   },
   "longTitle": {
-    "total": 70,
+    "total": 62,
     "byArea": {
       "components": 4,
       "families": 15,
       "family": 17,
       "family-review": 6,
       "grounded-doc": 1,
-      "param-tables": 8,
       "routes": 10,
       "runs": 6,
       "takeoff": 3
@@ -79,18 +77,19 @@
     }
   },
   "inlineColor": {
-    "total": 306,
+    "total": 208,
     "byArea": {
+      "anatomy": 2,
       "components": 6,
       "family": 3,
       "family-review": 49,
       "grilles": 5,
       "host": 3,
       "ops": 28,
-      "param-tables": 109,
+      "param-tables": 11,
       "routes": 7,
       "runs": 42,
-      "takeoff": 5,
+      "takeoff": 3,
       "targeting": 40,
       "workbench": 9
     }

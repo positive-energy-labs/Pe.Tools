@@ -34,14 +34,15 @@ export function FixtureViews({
 
   if (!body)
     return (
-      <EmptyState
-        story="scope"
-        exit="give Body Width and Body Height literal values at this type, or stage a type that has them"
-        className="p-3"
-      >
-        no shape to draw — the body&apos;s width or height is not a literal at this type, and
-        nothing here guesses
-      </EmptyState>
+      <div className="p-3">
+        <EmptyState
+          story="scope"
+          exit="give Body Width and Body Height literal values at this type, or stage a type that has them"
+        >
+          no shape to draw — the body&apos;s width or height is not a literal at this type, and
+          nothing here guesses
+        </EmptyState>
+      </div>
     );
 
   /** Every OTHER type's solids, as outlines at the same scale. */

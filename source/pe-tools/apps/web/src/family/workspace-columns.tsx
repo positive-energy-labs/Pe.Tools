@@ -140,12 +140,13 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
       );
 
     return (
-      <Verb
-        label="bind…"
-        className={cn("h-4 px-1 t-caption", className)}
-        onClick={() => setBinding({ slug, property })}
-        reason={`Bind ${slug}.${property} to a parameter — its one crossing, and the only verb that changes what CAN be said about this number. Offers every ${dataType} parameter already in the profile, or a new one named "${newName}" seeded with ${literal}. The ghost row then disappears into the parameter row that now represents it. Nothing leaves the page.`}
-      />
+      <span className={className}>
+        <Verb
+          label="bind…"
+          onClick={() => setBinding({ slug, property })}
+          reason={`Bind ${slug}.${property} to a parameter — its one crossing, and the only verb that changes what CAN be said about this number. Offers every ${dataType} parameter already in the profile, or a new one named "${newName}" seeded with ${literal}. The ghost row then disappears into the parameter row that now represents it. Nothing leaves the page.`}
+        />
+      </span>
     );
   };
 
