@@ -39,7 +39,7 @@ export function StageButton(props: {
           type="button"
           onClick={() => props.onSwing(otherPairs[0]!)}
           title={`This zone is staged under ${otherPairs.length} other A/B pair${otherPairs.length === 1 ? "" : "s"} (pinned at stage time; the lens is only a view). Click to swing the lens to the pinned pair.`}
-          className="face-mono shrink-0 t-caption"
+          size="mono-caption"
           style={{ color: token("caution") }}
         >
           ⚑{otherPairs.length}≠
@@ -63,7 +63,8 @@ export function StageButton(props: {
             ? "Staged for export (this exact A/B pair is pinned) — click to unstage. Click rooms/residues on the B panel to flag them."
             : "Stage this zone's current A/B pair for the feedback export. The pair is pinned at stage time; switching the lens afterwards never alters it."
         }
-        className="face-mono shrink-0 border px-1.5 t-caption"
+        size="chip-caption"
+        tone="bordered-quiet"
         style={{
           borderRadius: "var(--radius)",
           borderColor: staged ? token("alarm") : token("line-2"),

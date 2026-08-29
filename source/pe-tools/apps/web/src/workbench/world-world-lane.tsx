@@ -97,7 +97,8 @@ export function WorldLane({
 
           <Press
             type="button"
-            className="h-6 w-[26px] cursor-pointer rounded-sm border-[0.5px] border-line-2 bg-transparent text-ink-2 hover:veil aria-pressed:bg-select aria-pressed:text-ink disabled:cursor-default disabled:italic disabled:opacity-40"
+            tone="firm"
+            state="selectable"
             aria-pressed={diff}
             onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
             title={
@@ -157,37 +158,41 @@ export function WorldLane({
               className={cn("border-b-[0.5px] border-line", changed && "caution-wash-artifact")}
               key={layer.id}
             >
-              <Press
-                className={cn(
-                  WORLD_ROW,
-                  inspect ? "grid-cols-[9px_1fr_auto_auto_auto_auto]" : "grid-cols-[9px_1fr_auto]",
-                )}
-                type="button"
-                onClick={() => toggle(layer.id)}
-              >
+              <Press tone="neutral" layout="block" type="button" onClick={() => toggle(layer.id)}>
                 <span
-                  className="size-[9px] rounded-sm"
-                  style={{ backgroundColor: tone(layer.id) }}
-                />
-                <span className="t-value text-ink">
-                  {layer.label}
-                  {inspect ? (
-                    <span className="ml-1.5 t-caption face-mono text-ink-2">pos {layer.rank}</span>
-                  ) : null}
-                </span>
-                {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
-                {inspect ? (
-                  <span className="t-value face-mono text-ink-2">{fmtTok(layer.tokens)}</span>
-                ) : null}
-                {inspect ? (
-                  <span className="min-w-[30px] text-right t-value face-mono text-ink-2">
-                    {((layer.tokens / used) * 100).toFixed(0)}%
-                  </span>
-                ) : null}
-                <span
-                  className={cn("t-label text-ink-2 transition-transform", isOpen && "rotate-90")}
+                  className={cn(
+                    WORLD_ROW,
+                    inspect
+                      ? "grid-cols-[9px_1fr_auto_auto_auto_auto]"
+                      : "grid-cols-[9px_1fr_auto]",
+                  )}
                 >
-                  ▸
+                  <span
+                    className="size-[9px] rounded-sm"
+                    style={{ backgroundColor: tone(layer.id) }}
+                  />
+                  <span className="t-value text-ink">
+                    {layer.label}
+                    {inspect ? (
+                      <span className="ml-1.5 t-caption face-mono text-ink-2">
+                        pos {layer.rank}
+                      </span>
+                    ) : null}
+                  </span>
+                  {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
+                  {inspect ? (
+                    <span className="t-value face-mono text-ink-2">{fmtTok(layer.tokens)}</span>
+                  ) : null}
+                  {inspect ? (
+                    <span className="min-w-[30px] text-right t-value face-mono text-ink-2">
+                      {((layer.tokens / used) * 100).toFixed(0)}%
+                    </span>
+                  ) : null}
+                  <span
+                    className={cn("t-label text-ink-2 transition-transform", isOpen && "rotate-90")}
+                  >
+                    ▸
+                  </span>
                 </span>
               </Press>
               {isOpen ? (
@@ -249,12 +254,7 @@ export function ItemRow({
         blast ? "border-caution/45" : "border-line",
       )}
     >
-      <Press
-        className="flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-[9px] py-1.5 text-left [font:inherit] enabled:hover:veil disabled:cursor-default"
-        type="button"
-        disabled={!hasBody}
-        onClick={() => hasBody && onToggle()}
-      >
+      <Press layout="row" type="button" disabled={!hasBody} onClick={() => hasBody && onToggle()}>
         <span className="min-w-0 flex-1">
           <span className="block overflow-hidden text-ellipsis whitespace-nowrap t-value text-ink">
             {item.name}

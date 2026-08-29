@@ -111,10 +111,10 @@ export function UploadSurface({
           setDragOver(false);
           handleFiles(event.dataTransfer.files);
         }}
-        className={cn(
-          "flex w-full flex-col items-center gap-3 rounded-sm border border-line-2 px-6 py-12 text-center",
-          dragOver && "bg-select",
-        )}
+        size="drop"
+        tone="firm"
+        layout="stack"
+        state={dragOver ? "selected" : "rest"}
       >
         {parsing ? (
           <OutcomeLine

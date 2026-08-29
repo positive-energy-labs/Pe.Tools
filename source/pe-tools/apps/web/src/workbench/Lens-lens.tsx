@@ -136,16 +136,19 @@ export function Lens({
             <div className="cs-focal" ref={csFocalRef} />
             <div className="caret" ref={caretRef} />
             {!following && moments.length > 0 ? (
-              <Press
-                type="button"
-                className="mapdial-tail"
-                title="Jump to latest"
-                aria-label="Jump to latest"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={scrollToTail}
-              >
-                ↓
-              </Press>
+              <span className="mapdial-tail">
+                <Press
+                  type="button"
+                  tone="quiet"
+                  size="icon-xs"
+                  title="Jump to latest"
+                  aria-label="Jump to latest"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={scrollToTail}
+                >
+                  ↓
+                </Press>
+              </span>
             ) : null}
           </div>
 

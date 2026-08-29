@@ -89,7 +89,7 @@ export function Picker<K extends string>({
         }}
         disabled={inert}
         title={title}
-        className="face-mono t-label"
+        size="mono-label"
         style={{
           padding: 0,
           cursor: inert ? "not-allowed" : "pointer",
@@ -124,7 +124,7 @@ export function Picker<K extends string>({
                   <Press
                     type="button"
                     onClick={() => (setLevel(l.key), setQ(""))}
-                    className="face-mono t-caption"
+                    size="mono-caption"
                     style={{
                       padding: "0 3px",
                       backgroundColor: on ? token("select") : "transparent",
@@ -191,7 +191,7 @@ export function Picker<K extends string>({
                       b.pick(cur, o.id);
                       advance();
                     }}
-                    className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
+                    layout="baseline"
                     style={{ backgroundColor: on ? token("select") : undefined }}
                   >
                     {cur.multi ? (
@@ -228,7 +228,7 @@ export function Picker<K extends string>({
                       else if (!below!.multi) b.setOpen(null);
                       setQ("");
                     }}
-                    className="flex w-full items-baseline gap-2 px-2 py-0.5 text-left"
+                    layout="baseline"
                     style={{
                       backgroundColor: b.isPicked(below!, o.id) ? token("select") : undefined,
                     }}

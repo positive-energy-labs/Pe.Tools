@@ -218,7 +218,6 @@ export function ScheduleGridWorkspace({
               placeholder="Filter schedules…"
               disabled={busy != null}
               emptyNote="No schedules in the document."
-              className="h-full"
             />
           )}
         </SidePane>
