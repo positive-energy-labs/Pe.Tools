@@ -229,6 +229,8 @@ authoring decision flow, and the enforcement commands are
 
 ## Owed
 
+- 2026-08-29 — Goal `design-normalization-2` (running). NUMBER: (a) `apps/web/src` TSX files >400 lines, baseline **37** (not 6; the 6 was the >1000 tier); (b) unregistered-class check + geometry-only allowlist (exceptions → 0) + swatch-coverage check, all green. GATES: web tsc + vitest + repo-guards; adherence baseline never rises. WIDTH: 3 Codex builders/wave on sibling worktrees `Pe.Tools-dn2-{checks,kit,purge}` off `review/design-system` @ 47a0ae6. DRY: two waves adopting nothing. Briefs and reports: `.artifacts/handoffs/dn2/`. Wave 0 seams: checks (replace regex guard), kit (`components/` onto `tailwind-variants`, no `className` on lang), purge (delete variants a–d, extract `anatomy/` from the three workspaces).
+
 - Promote the typed manifest to `@pe/agent-contracts` only when Pea reads it; that consumer is the gate for a wire contract and generated projections.
 - 2026-08-25 — The fixture lane has two spellings: `?source=fixture` (`/takeoffs`, `/settings`) and none on `/family` (lane = whether a document is open). Rule one spelling before a chat pane needs a fixture lane.
 - 2026-08-25 — Live-lane proof for the cutover is partial: PROVEN[browser, worktree host 5180 + installed-25] for `/family` (`open` → `opened`), `/families` (`bind`), `/settings` (`open` via family), `/takeoffs` fixture (`adopt` → receipt), `/chat?plugin=family` (in-realm, one wire). Not exercised: a pea-initiated command through the three route-state tools against a route store's pane; a Revit document open on `/takeoffs` live.
