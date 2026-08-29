@@ -1,0 +1,346 @@
+import { EmptyState } from "#/components/lang/empty";
+import { HelpTip } from "#/components/lang/help";
+import { Switcher } from "#/components/lang/switcher";
+import { Verb } from "#/components/lang/verb";
+import { MasterTable } from "#/components/master-table/master-table";
+import { Pane } from "#/components/ui/pane";
+import { BuildStrip, BUILD_VERB, buildOutputPath } from "#/family/build";
+import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
+import { cn } from "#/lib/utils";
+import { useFamilyWorkspace } from "#/family/workspace-context";
+
+export function FamilyWorkspaceTable() {
+  const {
+    store,
+    lane,
+    world,
+    overlay,
+    setOverlay,
+    tableState,
+    setTableState,
+    drillState,
+    setDrillState,
+    drillType,
+    setDrillType,
+    setFocus,
+    pinnedParam,
+    rows,
+    ghostCount,
+    driftCells,
+    unsavedCount,
+    openProposals,
+    captureAll,
+    applyAll,
+    capturing,
+    armedBuild,
+    building,
+    buildFacts,
+    buildOutcome,
+    focusedParams,
+    focusedParts,
+    columns,
+    firstGhostKey,
+    drillColumns,
+  } = useFamilyWorkspace();
+  const rowTint = (row: PRow) => {
+    const lit =
+      row.kind === "ghost"
+        ? focusedParts.has(row.slug ?? "")
+        : focusedParams.has(row.name) || pinnedParam === row.name;
+    return cn(
+      row.kind === "ghost" && "bg-caution/6",
+      // The hairline is drawn on whichever ghost is first IN VISIBLE ORDER, not on whichever one
+      // the fixture happened to list first — sorting reorders the ghosts among themselves, and a
+      // section rule that stayed on a row in the middle of the section would be drawing a boundary
+      // that is not there.
+      row.key === firstGhostKey && "[&>td]:border-t [&>td]:border-t-line-2",
+      // Focus is a FILL and never a hue.
+      lit && "bg-select",
+    );
+  };
+
+  // A ghost row's focus is its CONSTITUENT — it has no parameter to light, and lighting nothing
+  // would make the bottom of the table feel disconnected from the drawing it came out of.
+  const hoverRow = (row: PRow | null) =>
+    setFocus(
+      row == null
+        ? null
+        : row.kind === "ghost"
+          ? { kind: "part", id: row.slug ?? "" }
+          : { kind: "param", id: row.name },
+    );
+
+  const crossType = (
+    <MasterTable
+      rows={rows}
+      columns={columns}
+      rowKey={(row) => row.key}
+      // THE OWED MARKER (fit reviews, ruled 2026-08-16): a ghost row owes exactly one human
+      // decision — its bind crossing. Count is always 1; the caution ink matches the band the
+      // ghost section already wears.
+      gutter={(row) =>
+        row.kind === "ghost"
+          ? {
+              count: 1,
+              tone: "caution" as const,
+              title: `${row.slug ?? ""}.${row.property ?? ""} is unbound — a bind decision is owed: give it a parameter (its one crossing) or it stays a number nothing can reach`,
+            }
+          : null
+      }
+      scopeLabel="parameters"
+      searchPlaceholder="parameter"
+      onRowHover={hoverRow}
+      rowClassName={rowTint}
+      tableState={tableState}
+      onTableStateChange={setTableState}
+      summary={
+        <span>
+          {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
+          {world.typeNames.length} types ·{" "}
+          <span className={ghostCount > 0 ? "text-caution" : undefined}>{ghostCount} unbound</span>{" "}
+          ·{" "}
+          <span className={unsavedCount > 0 ? "text-caution" : undefined}>
+            {unsavedCount} unsaved
+          </span>{" "}
+          ·{" "}
+          <span className={driftCells.length > 0 ? "text-alarm" : undefined}>
+            {driftCells.length} drift
+          </span>{" "}
+          {/* Region orientation: how to read the counts, what an unbound geom row is, and what
+              each of the two bind choices does. Every ghost row's title defers to this. */}
+          <HelpTip>
+            <p>
+              Read left to right: how much of this profile the spec backs, what pea still wants, how
+              many geometry dimensions nothing can reach, how many cells save would write, and where
+              Revit disagrees. The one alarm is spent on drift and nothing else; unbound and unsaved
+              wear caution, because a gap and a pending write are warnings rather than conflicts.
+            </p>
+            <p className="mt-1.5">
+              An <b>unbound</b> row (marked <i>geom</i>) is a bindable dimension that NO parameter
+              drives. Its literal is the same for every type of this family, forever: no type can
+              differ, no schedule can read it, no formula can reach it. That is why its value sits
+              in the ONE merged cell spanning every type column — because there is exactly one of
+              it. Clicking its name opens the constituent in the inspector.
+            </p>
+            <p className="mt-1.5">
+              Binding one (<i>bind…</i> in the state column) is a choice of two. Binding to an{" "}
+              <b>existing</b> parameter DISCARDS the literal and the dimension starts reading that
+              row instead — check the row says what you want before you pick. Binding to a{" "}
+              <b>new</b> parameter KEEPS the literal as that parameter&rsquo;s family value, so the
+              geometry does not move at all and only its reachability changes.
+            </p>
+          </HelpTip>
+        </span>
+      }
+      empty={
+        // §4's two kinds of empty, told apart: the fixture profile always has rows, so a bare
+        // table is almost always the table's OWN narrowing — but the claim is derived, not
+        // assumed, so each story renders only when it is true.
+        rows.length === 0 ? (
+          <EmptyState story="scope" exit="author a parameter, or promote a geometry literal">
+            no parameters in this profile — nothing to audit
+          </EmptyState>
+        ) : (
+          <EmptyState story="filter" exit="clear a column filter or the search">
+            the narrowing hid all {rows.length} rows
+          </EmptyState>
+        )
+      }
+    />
+  );
+
+  /** The drill-in is the SAME primitive with a narrower column set — that is the whole claim. */
+  const drillIn = drillType ? (
+    <MasterTable
+      // Ghosts and live-only rows stay OUT of the drill-in: it is a view of one type's profile
+      // against Revit, and neither of those rows has a per-type value to reconcile. A ghost here
+      // would be three refusals wide in a table two columns narrow.
+      rows={rows.filter((row) => row.kind === "profile")}
+      columns={drillColumns}
+      rowKey={(row) => row.key}
+      scopeLabel={`${drillType} · parameters`}
+      searchPlaceholder="parameter"
+      onRowHover={hoverRow}
+      rowClassName={rowTint}
+      tableState={drillState}
+      onTableStateChange={setDrillState}
+      summary={
+        <span title="What this one type is asking of you. The same counts as the cross-type table, narrowed to this column of it.">
+          {openProposals.filter((entry) => (entry.typeName ?? null) === drillType).length} open ·{" "}
+          <span
+            className={
+              driftCells.some((cell) => cell.typeName === drillType) ? "text-alarm" : undefined
+            }
+          >
+            {driftCells.filter((cell) => cell.typeName === drillType).length} drift
+          </span>
+        </span>
+      }
+      empty={
+        rows.some((row) => row.kind === "profile") ? (
+          <EmptyState story="filter" exit="clear a column filter or the search">
+            the narrowing hid every parameter at this type
+          </EmptyState>
+        ) : (
+          <EmptyState story="scope" exit="author a parameter in the profile first">
+            no parameters to reconcile at this type — the profile authors none, so there is nothing
+            for Revit to agree or disagree with
+          </EmptyState>
+        )
+      }
+    />
+  ) : null;
+
+  const tablePane = (
+    <Pane
+      kind="content"
+      scroll="clip"
+      bodyClassName="flex min-h-0 flex-col"
+      // The type's own NAME is the title while drilled in — a pane whose title still said
+      // "parameters × types" would be claiming to show something it is not.
+      title={drillType ?? "parameters × types"}
+      meta={
+        drillType
+          ? "one type, the same table — profile, spine, live"
+          : overlay === "live"
+            ? "LIVE OVERLAY — Revit's numbers in place, read-only; the alarm is where it disagrees"
+            : overlay === "saved"
+              ? "SAVED OVERLAY — what is on disk, read-only; caution is what save would overwrite"
+              : "every type, side by side — the spread is the audit"
+      }
+      actions={
+        drillType ? (
+          <>
+            <Verb
+              label="all types"
+              tone="nav"
+              direction="back"
+              onClick={() => setDrillType(null)}
+              reason="Leave the drill-in and return to the cross-type table. Nothing is decided by leaving — every mark you did not settle is still standing. Esc does the same."
+            />
+            <Verb
+              label={`capture ${drillType}`}
+              disabled={driftCells.every((cell) => cell.typeName !== drillType)}
+              onClick={() => captureAll([drillType])}
+              reason={
+                driftCells.some((cell) => cell.typeName === drillType)
+                  ? `Let Revit win on every drifting parameter of the ${drillType} type. Each live value is written into the profile as a ${drillType} override; the model is not touched, so this stays a safe verb.`
+                  : `Nothing is drifting at ${drillType}, so there is nothing to pull back.`
+              }
+            />
+            <Verb
+              label={`apply ${drillType}`}
+              tone="commit"
+              disabled={driftCells.every((cell) => cell.typeName !== drillType)}
+              onClick={() => applyAll([drillType])}
+              reason={
+                driftCells.some((cell) => cell.typeName === drillType)
+                  ? `Let the profile win at ${drillType}: the authored values are written into the family open in Revit. This MODIFIES the model, which is why it is the only verb here wearing the commit colour.`
+                  : `Nothing is drifting at ${drillType}, so an apply would write values Revit already has.`
+              }
+            />
+          </>
+        ) : (
+          <>
+            {/* THE OVERLAY SWITCH — the pseudo-dimension, as three exclusive readings of the same
+                cells. It is deliberately the leftmost control in the pane, because it governs what
+                every value below it means, and deliberately NOT in the URL. */}
+            <Switcher
+              ariaLabel="value overlay"
+              value={overlay}
+              onChange={setOverlay}
+              options={(["draft", "live", "saved"] as const).map((choice) => ({
+                value: choice,
+                label: OVERLAY_LABEL[choice],
+                title: OVERLAY_TITLE[choice],
+              }))}
+            />
+            {/* A BULK VERB IS DISABLED UNLESS YOU CAN SEE ITS FAR SIDE (SURFACE-PHILOSOPHY §2).
+                Both crossings belong to the LIVE overlay and are refused everywhere else. */}
+            <Verb
+              label="capture all"
+              disabled={overlay !== "live" || driftCells.length === 0}
+              onClick={() => captureAll(world.typeNames)}
+              reason={
+                overlay !== "live"
+                  ? "Switch to the ⇄ live overlay first. Capture rewrites the profile with Revit's numbers in bulk, and this is the one view where those numbers are on screen — pressing it from here would be a write you cannot see the far side of."
+                  : driftCells.length === 0
+                    ? "Nothing is drifting anywhere, so there is nothing to pull back. Capture only ever moves values the two sides disagree about."
+                    : `Let Revit win on all ${driftCells.length} drifting cells, across every type — every alarm cell you can see right now. Each live value lands in the profile as that type's override; Revit is not touched.`
+              }
+            />
+            <Verb
+              label="apply all"
+              tone="commit"
+              disabled={overlay !== "live" || driftCells.length === 0}
+              onClick={() => applyAll(world.typeNames)}
+              reason={
+                overlay !== "live"
+                  ? "Switch to the ⇄ live overlay first. Apply MODIFIES the family open in Revit; the overlay is where you can see exactly which numbers it would overwrite."
+                  : driftCells.length === 0
+                    ? "Revit already agrees with the profile everywhere the two can be compared."
+                    : `Let the profile win on all ${driftCells.length} drifting cells — every alarm cell on screen goes back to the draft's number. This is the direction that writes into the model, which is why it is the only verb here in the commit colour.`
+              }
+            />
+            {/* THE TWO HOST CROSSINGS, last in the lane and in escalating blast radius: the switch
+                changes what you are looking at, capture all / apply all move the draft, and these
+                two leave the page. `capture live` reads Revit; `build .rfa` writes an .rfa. */}
+            <Verb
+              label="capture live"
+              busy={capturing}
+              disabled={lane.document == null || capturing}
+              onClick={() => void store.actions.capture().catch(() => undefined)}
+              reason={
+                lane.document == null
+                  ? "The fixture lane has no session behind it — its live readings are checked into `src/family/world.ts`. Open a real family.json to read Revit."
+                  : "Re-read the family open in Revit and re-stamp the evidence — this is what the ⇄ live overlay and the drift marks are readings OF. It moves nothing into the profile: that is capture all, under the overlay. Refuses in Revit's own words if no family document is active there."
+              }
+            />
+            <Verb
+              label={BUILD_VERB}
+              tone="commit"
+              busy={building}
+              disabled={lane.document == null || building}
+              onClick={store.actions.armBuild}
+              reason={
+                lane.document == null
+                  ? "Nothing to build — this page is reading its declared fixture, which has no file behind it. Pick a document in the sentence first."
+                  : `Materialize ${lane.document.relativePath} into a real .rfa inside Revit, at ${buildOutputPath(lane.document.relativePath)}. Pressing this ARMS the ceremony below the header — it does not build. The strip states which family, from which revision, to which path, and refuses out loud if the file on disk is not the file this table is showing.`
+              }
+            />
+          </>
+        )
+      }
+    >
+      {/* THE CEREMONY SLOT. It sits inside the pane that owns the crossing, above the table it is
+          about, and it is EMPTY until the verb arms it — "never hover-height" (settled law)
+          means the reason, the refusals and the receipt all get room at strip scale. The build is a
+          whole-family write, so the slot is the same in the drill-in: no type is on the plan. */}
+      <BuildStrip
+        className="mx-2 mt-2 shrink-0"
+        armed={armedBuild}
+        building={building}
+        said={buildOutcome}
+        facts={buildFacts}
+        familyName={world.familyName}
+        count={world.paramRows.length}
+        onReasonChange={store.actions.setBuildReason}
+        onCommit={() => void store.actions.build().catch(() => undefined)}
+        onCancel={store.actions.cancelBuild}
+        onReplan={store.actions.armBuild}
+      />
+      {drillIn ?? crossType}
+    </Pane>
+  );
+
+  // ── the inspector: the doc pane's LOWER HALF ──────────────────────────────────────────────────
+  //
+  // Two subjects, one slot, because they are the same question: what is true of this THING, rather
+  // than of it at some type. A constituent's non-bindable metadata has no honest column — it does
+  // not vary by type, half of it is not a number, and half of THAT cannot be edited at all. A
+  // parameter's family-level value has no column either, since the one that was pretending to be a
+  // fourth type was removed. Both land here, and the pane keeps the spec above them so a citation
+  // never leaves the screen while you edit the number it justifies.
+
+  return tablePane;
+}
