@@ -136,27 +136,30 @@ export function ReviewBoard({
         {board.map((entry) => (
           <div key={entry.key} style={{ borderColor: token("line") }}>
             <div className="flex items-start">
+              <div className="min-w-0 flex-1">
+                <Press
+                  type="button"
+                  layout="stack"
+                  state={selected === entry.key ? "selected" : "rest"}
+                  onClick={() => setSelected(entry.key)}
+                >
+                  <span>{entry.family.name}</span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span>{entry.typeName}</span>
+                    <AgreementWord agreement={headline(entry.rows)} />
+                    {verdicts.get(entry.key) !== "unjudged" ? (
+                      <span>{VERDICT_LABEL[verdicts.get(entry.key)]}</span>
+                    ) : null}
+                  </span>
+                </Press>
+              </div>
               <Press
                 type="button"
-                onClick={() => setSelected(entry.key)}
-                className="flex min-w-0 flex-1 flex-col items-start gap-0.5 px-2 py-1.5"
-                style={{ borderRadius: "var(--radius)" }}
-              >
-                <span>{entry.family.name}</span>
-                <span className="flex items-baseline gap-1.5">
-                  <span>{entry.typeName}</span>
-                  <AgreementWord agreement={headline(entry.rows)} />
-                  {verdicts.get(entry.key) !== "unjudged" ? (
-                    <span>{VERDICT_LABEL[verdicts.get(entry.key)]}</span>
-                  ) : null}
-                </span>
-              </Press>
-              <Press
-                type="button"
+                size="sm"
+                state="expanded"
                 aria-expanded={expanded === entry.key}
                 onClick={() => setExpanded(expanded === entry.key ? null : entry.key)}
                 title="Show what this family.json declares, and six small drawings of it. For recognising a family, not judging one — judging is the overlay on the right."
-                className="px-2 py-1.5"
               >
                 {expanded === entry.key ? "hide" : "open"}
               </Press>

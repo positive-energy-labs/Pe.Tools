@@ -106,14 +106,11 @@ export function VerdictStrip({
         <Press
           key={verdict}
           type="button"
+          tone="bordered"
+          size="sm"
+          state={value === verdict ? "selected" : "rest"}
           onClick={() => onPick(verdict)}
           title={`Record "${VERDICT_LABEL[verdict]}" for this family and type. Prototype: in memory only — the chrome says where a verdict would go, which is nowhere yet.`}
-          className="px-2.5 py-1"
-          style={{
-            borderRadius: "var(--radius)",
-            borderColor: value === verdict ? token("line-2") : token("line"),
-            backgroundColor: value === verdict ? token("select") : "transparent",
-          }}
         >
           {VERDICT_LABEL[verdict]}
         </Press>
