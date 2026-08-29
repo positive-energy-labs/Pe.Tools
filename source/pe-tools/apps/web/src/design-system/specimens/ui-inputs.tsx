@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 
 import { Press } from "#/components/lang/press";
-import { Section } from "#/components/lang/section";
 import {
   Combobox,
   ComboboxContent,
@@ -28,6 +27,7 @@ import {
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
+  inputGroupRecipe,
 } from "#/components/ui/input-group";
 import { Label } from "#/components/ui/label";
 import {
@@ -36,32 +36,23 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  selectRecipe,
 } from "#/components/ui/select";
 import { Textarea } from "#/components/ui/textarea";
 import { CATEGORY_OPTIONS } from "#/design-system/fixtures";
+
+import { RecipeGrid, SpecimenFrame } from "./recipe-grid";
 
 type CategoryOption = (typeof CATEGORY_OPTIONS)[number];
 
 export function UiInputSpecimens() {
   return (
-    <Section label="ui · inputs">
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div className="flex flex-col gap-3">
-          <Label>parameter scope</Label>
-          <Input placeholder="search params…" />
-          <Textarea placeholder="why this write is happening…" />
-          <InputGroup>
-            <InputGroupInput placeholder="search…" />
-            <InputGroupAddon align="inline-end">
-              <InputGroupButton size="icon-xs" aria-label="search">
-                <Search />
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
-          <SelectSpecimen />
-          <ComboboxSpecimen />
-        </div>
-        <div className="h-64">
+    <>
+      <SpecimenFrame name="Combobox" importPath="#/components/ui/combobox">
+        <ComboboxSpecimen />
+      </SpecimenFrame>
+      <SpecimenFrame name="Command" importPath="#/components/ui/command">
+        <div className="h-52 w-72">
           <Command>
             <CommandInput placeholder="search…" />
             <CommandList>
@@ -77,8 +68,56 @@ export function UiInputSpecimens() {
             </CommandList>
           </Command>
         </div>
-      </div>
-    </Section>
+      </SpecimenFrame>
+      <SpecimenFrame name="Input" importPath="#/components/ui/input">
+        <div className="grid w-80 grid-cols-2 gap-3">
+          <Input placeholder="search params…" />
+          <Input defaultValue="36 in" />
+          <Input defaultValue="36 in" disabled />
+          <Input defaultValue="36 in" aria-invalid />
+        </div>
+      </SpecimenFrame>
+      <RecipeGrid
+        name="InputGroup"
+        importPath="#/components/ui/input-group"
+        recipe={inputGroupRecipe}
+        render={(props) => (
+          <div className="w-56">
+            <InputGroup>
+              <InputGroupAddon
+                align={props.align as "inline-start" | "inline-end" | "block-start" | "block-end"}
+              >
+                <InputGroupButton
+                  size={props.size as "xs" | "sm" | "icon-xs" | "icon-sm"}
+                  aria-label="search"
+                >
+                  <Search />
+                </InputGroupButton>
+              </InputGroupAddon>
+              <InputGroupInput placeholder="search…" />
+            </InputGroup>
+          </div>
+        )}
+      />
+      <SpecimenFrame name="Label" importPath="#/components/ui/label">
+        <div className="flex items-center gap-3">
+          <Label>parameter scope</Label>
+          <Label aria-disabled>disabled label</Label>
+        </div>
+      </SpecimenFrame>
+      <RecipeGrid
+        name="Select"
+        importPath="#/components/ui/select"
+        recipe={selectRecipe}
+        render={() => <SelectSpecimen />}
+      />
+      <SpecimenFrame name="Textarea" importPath="#/components/ui/textarea">
+        <div className="grid w-[32rem] grid-cols-2 gap-3">
+          <Textarea placeholder="why this write is happening…" />
+          <Textarea defaultValue="backfill fire ratings" disabled />
+        </div>
+      </SpecimenFrame>
+    </>
   );
 }
 

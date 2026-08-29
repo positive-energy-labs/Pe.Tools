@@ -810,6 +810,7 @@ const hasExport = (node: ts.Node): boolean =>
   !!ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
 const isPascal = (name: string): boolean => /^[A-Z][A-Za-z0-9]*$/.test(name);
 const LANG_COMPONENTS = new Set<string>();
+const LANG_RECIPES = new Set<string>();
 for (const file of FILES.filter(
   (f) => f.rel.startsWith("components/lang/") && f.rel.endsWith(".tsx"),
 )) {
@@ -833,9 +834,22 @@ for (const file of FILES.filter(
             ts.isFunctionExpression(declaration.initializer))
         )
           LANG_COMPONENTS.add(declaration.name.text);
+    if (ts.isVariableStatement(node) && hasExport(node))
+      for (const declaration of node.declarationList.declarations)
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.name.text.endsWith("Recipe") &&
+          declaration.initializer &&
+          ts.isCallExpression(declaration.initializer) &&
+          ts.isIdentifier(declaration.initializer.expression) &&
+          declaration.initializer.expression.text === "tv"
+        )
+          LANG_RECIPES.add(declaration.name.text);
   });
 }
 const SPECIMEN_JSX = new Set<string>();
+const RECIPE_GRID_USES = new Map<string, number>();
+const SPECIMEN_PATH_USES = new Map<string, number>();
 for (const specimen of FILES.filter(
   (file) => file.rel.startsWith("design-system/specimens/") && file.rel.endsWith(".tsx"),
 )) {
@@ -847,16 +861,90 @@ for (const specimen of FILES.filter(
     ts.ScriptKind.TSX,
   );
   const visit = (node: ts.Node): void => {
-    if (
-      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      ts.isIdentifier(node.tagName)
-    )
-      SPECIMEN_JSX.add(node.tagName.text);
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      if (ts.isIdentifier(node.tagName)) SPECIMEN_JSX.add(node.tagName.text);
+      if (
+        ts.isIdentifier(node.tagName) &&
+        (node.tagName.text === "RecipeGrid" || node.tagName.text === "SpecimenFrame")
+      ) {
+        const importPath = node.attributes.properties.find(
+          (attribute): attribute is ts.JsxAttribute =>
+            ts.isJsxAttribute(attribute) && attribute.name.getText(source) === "importPath",
+        );
+        if (importPath?.initializer && ts.isStringLiteral(importPath.initializer)) {
+          const path = importPath.initializer.text;
+          SPECIMEN_PATH_USES.set(path, (SPECIMEN_PATH_USES.get(path) ?? 0) + 1);
+        }
+      }
+      if (ts.isIdentifier(node.tagName) && node.tagName.text === "RecipeGrid") {
+        const recipe = node.attributes.properties.find(
+          (attribute): attribute is ts.JsxAttribute =>
+            ts.isJsxAttribute(attribute) && attribute.name.getText(source) === "recipe",
+        );
+        const expression = recipe?.initializer;
+        if (
+          expression &&
+          ts.isJsxExpression(expression) &&
+          expression.expression &&
+          ts.isIdentifier(expression.expression)
+        ) {
+          const name = expression.expression.text;
+          RECIPE_GRID_USES.set(name, (RECIPE_GRID_USES.get(name) ?? 0) + 1);
+        }
+      }
+    }
     ts.forEachChild(node, visit);
   };
   visit(source);
 }
 const MISSING_SWATCH = [...LANG_COMPONENTS].filter((name) => !SPECIMEN_JSX.has(name)).sort();
+const REQUIRED_RECIPE_GRIDS = new Set([
+  ...LANG_RECIPES,
+  "badgeVariants",
+  "dialogRecipe",
+  "inputGroupRecipe",
+  "selectRecipe",
+]);
+const BAD_RECIPE_GRIDS = [...REQUIRED_RECIPE_GRIDS]
+  .filter((name) => RECIPE_GRID_USES.get(name) !== 1)
+  .map((name) => `${name}: ${RECIPE_GRID_USES.get(name) ?? 0} grids`)
+  .sort();
+
+const REQUIRED_SPECIMEN_PATHS = [
+  "#/components/lang/addressing-bar",
+  "#/components/lang/arming-strip",
+  "#/components/lang/artifact-frame",
+  "#/components/lang/cell",
+  "#/components/lang/cell-key",
+  "#/components/lang/chip",
+  "#/components/lang/coverage-bar",
+  "#/components/lang/empty",
+  "#/components/lang/help",
+  "#/components/lang/outcome",
+  "#/components/lang/press",
+  "#/components/lang/section",
+  "#/components/lang/switcher",
+  "#/components/lang/verb",
+  "#/components/ui/badge",
+  "#/components/ui/card",
+  "#/components/ui/combobox",
+  "#/components/ui/command",
+  "#/components/ui/dialog",
+  "#/components/ui/input",
+  "#/components/ui/input-group",
+  "#/components/ui/label",
+  "#/components/ui/pane",
+  "#/components/ui/pick-list",
+  "#/components/ui/select",
+  "#/components/ui/side-pane",
+  "#/components/ui/switch",
+  "#/components/ui/textarea",
+  "#/components/ui/toggle-group",
+  "#/components/ui/value-diff",
+] as const;
+const BAD_SPECIMEN_PATHS = REQUIRED_SPECIMEN_PATHS.filter(
+  (importPath) => SPECIMEN_PATH_USES.get(importPath) !== 1,
+).map((importPath) => `${importPath}: ${SPECIMEN_PATH_USES.get(importPath) ?? 0} frames`);
 
 describe("design checks — code holds the boundary", () => {
   it("loads the app CSS graph before checking candidates", () => {
@@ -911,6 +999,14 @@ describe("design checks — code holds the boundary", () => {
 
   it("every lang component export is mounted by a specimen", () => {
     expect(MISSING_SWATCH).toEqual([]);
+  });
+
+  it("every swatch recipe is mounted once through the exhaustive recipe grid", () => {
+    expect(BAD_RECIPE_GRIDS).toEqual([]);
+  });
+
+  it("every catalogued lang and ui import path has one specimen frame", () => {
+    expect(BAD_SPECIMEN_PATHS).toEqual([]);
   });
 });
 

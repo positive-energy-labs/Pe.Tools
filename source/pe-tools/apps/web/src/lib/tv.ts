@@ -25,10 +25,17 @@ type Config<S extends Slots | undefined, V extends Variants<S>> = {
   defaultVariants?: Selection<V>;
 };
 
-type Recipe<V extends Variants<undefined>> = (props?: Selection<V> & ClassProp) => string;
-type SlotRecipe<S extends Slots, V extends Variants<S>> = (
+export type RecipeMetadata = {
+  readonly variants: Record<string, Record<string, unknown>>;
+  readonly slots: readonly string[];
+};
+
+type Recipe<V extends Variants<undefined>> = ((props?: Selection<V> & ClassProp) => string) &
+  RecipeMetadata;
+type SlotRecipe<S extends Slots, V extends Variants<S>> = ((
   props?: Selection<V>,
-) => SlotFunctions<S>;
+) => SlotFunctions<S>) &
+  RecipeMetadata;
 
 export type VariantProps<T extends (...args: never[]) => unknown> = Omit<
   NonNullable<Parameters<T>[0]>,
@@ -52,6 +59,7 @@ export function tv(
   config: Config<Slots | undefined, Variants<Slots | undefined>>,
 ): Recipe<Variants<undefined>> | SlotRecipe<Slots, Variants<Slots>> {
   const variants = config.variants ?? {};
+  const metadata = { variants, slots: Object.keys(config.slots ?? {}) };
   const selected = (props: Record<string, unknown> = {}) =>
     Object.keys(variants).map((name) => {
       const value = props[name] ?? config.defaultVariants?.[name];
@@ -60,11 +68,14 @@ export function tv(
     });
 
   if (config.slots == null) {
-    return (props: Record<string, unknown> & ClassProp = {}) =>
-      cn(config.base, ...selected(props), props.class, props.className);
+    return Object.assign(
+      (props: Record<string, unknown> & ClassProp = {}) =>
+        cn(config.base, ...selected(props), props.class, props.className),
+      metadata,
+    );
   }
 
-  return (props = {}) => {
+  return Object.assign((props = {}) => {
     const choices = selected(props);
     return Object.fromEntries(
       Object.entries(config.slots ?? {}).map(([slot, base]) => [
@@ -80,5 +91,5 @@ export function tv(
           ),
       ]),
     ) as SlotFunctions<Slots>;
-  };
+  }, metadata);
 }
