@@ -42,7 +42,7 @@ export function SettingsChatPlugin({
         <Metric value={summary.staged} label="staged" />
         <Metric value={summary.attention} label="need attention" issue />
         <Link
-          className="ml-auto text-nav hover:underline"
+          className="ml-auto"
           to={isFamilyModel ? "/family" : "/chat"}
           search={isFamilyModel ? undefined : (previous) => ({ ...previous, plugin: "settings" })}
         >
@@ -58,7 +58,7 @@ export function SettingsChatPlugin({
           commitCommand="save"
           commitLabel={(staged) => `Save ${staged}`}
           reviewHint="Pea can propose; only you can save."
-          renderLabel={(path) => <span className="face-mono">{path}</span>}
+          renderLabel={(path) => <span className="">{path}</span>}
           renderValue={displaySettingsValue}
         />
       ) : null}

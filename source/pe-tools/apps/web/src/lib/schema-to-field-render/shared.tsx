@@ -5,7 +5,7 @@ export type {
   FieldOptionDependencyState,
   FieldOptionState,
   ResolvedFieldRendererProps,
-} from "./shared-field-option-item";
+} from "./shared/field-option";
 export {
   SchemaRenderProvider,
   useSettingsField,
@@ -15,5 +15,5 @@ export {
   coercePrimitive,
   objectEntriesSorted,
   buildDefaultArrayItem,
-} from "./shared-field-option-item";
-export { useFieldOptions, useResolvedFieldNode } from "./shared-to-local-items-from-examples";
+} from "./shared/field-option";
+export { useFieldOptions, useResolvedFieldNode } from "./shared/example-options";

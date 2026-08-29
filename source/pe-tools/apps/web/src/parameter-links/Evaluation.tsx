@@ -115,54 +115,38 @@ export function EvaluationView({
         </EmptyState>
       ) : (
         <ArtifactFrame>
-          <table className="w-full border-collapse text-left">
+          <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-line">
-                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Target</th>
-                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Parameter</th>
-                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Current</th>
-                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Linked</th>
-                <th className="t-caption t-upper px-2 py-1.5 text-ink-2">Result</th>
+              <tr className="">
+                <th className="px-2 py-1.5">Target</th>
+                <th className="px-2 py-1.5">Parameter</th>
+                <th className="px-2 py-1.5">Current</th>
+                <th className="px-2 py-1.5">Linked</th>
+                <th className="px-2 py-1.5">Result</th>
               </tr>
             </thead>
             <tbody>
               {writes.map((write) => (
                 <tr
                   key={`${write.assignmentId}:${write.targetElementUniqueId}:${write.targetParameter.name ?? write.targetParameter.kind}`}
-                  className="border-b border-line last:border-b-0"
+                  className="last:border-b-0"
                 >
                   <td
                     className={
                       write.changed
-                        ? "t-value max-w-[14rem] truncate px-2 py-1 text-ink"
-                        : "t-value max-w-[14rem] truncate px-2 py-1 text-ink-mute"
+                        ? "max-w-[14rem] truncate px-2 py-1"
+                        : "max-w-[14rem] truncate px-2 py-1"
                     }
                   >
                     {write.targetElementName ?? write.targetElementId}
                   </td>
-                  <td
-                    className={
-                      write.changed
-                        ? "t-value px-2 py-1 text-ink-2"
-                        : "t-value px-2 py-1 text-ink-mute"
-                    }
-                  >
+                  <td className={write.changed ? "px-2 py-1" : "px-2 py-1"}>
                     {write.targetParameter.name ?? write.targetParameter.kind}
                   </td>
-                  <td className="t-value face-mono px-2 py-1 text-ink-mute">
-                    {displayParameterLinkValue(write.currentValue)}
-                  </td>
-                  <td className="t-value face-mono px-2 py-1 text-ink-mute">
-                    {displayParameterLinkValue(write.linkedValue)}
-                  </td>
+                  <td className="px-2 py-1">{displayParameterLinkValue(write.currentValue)}</td>
+                  <td className="px-2 py-1">{displayParameterLinkValue(write.linkedValue)}</td>
 
-                  <td
-                    className={
-                      write.changed
-                        ? "t-value face-mono px-2 py-1 font-bold text-ink"
-                        : "t-value face-mono px-2 py-1 text-ink-mute"
-                    }
-                  >
+                  <td className={write.changed ? "px-2 py-1" : "px-2 py-1"}>
                     {displayParameterLinkValue(write.proposedValue)}
                     {write.overrideApplied ? " (override)" : ""}
                   </td>

@@ -110,7 +110,7 @@ function TurnTag({ id }: { id: string }) {
   return (
     <Press
       type="button"
-      className="t-label face-mono cursor-pointer border-0 bg-transparent p-0 text-ink-2 hover:text-ink"
+      className="cursor-pointer p-0"
       title={`Center turn ${turn} on the focal axis`}
       onClick={() => window.dispatchEvent(new CustomEvent("pe:focus-turn", { detail: turn }))}
     >
@@ -125,7 +125,7 @@ function MomentTime() {
   );
   if (!at) return null;
   return (
-    <span className="t-caption face-mono ml-auto font-normal normal-case text-ink-2">
+    <span className="ml-auto normal-case">
       {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
     </span>
   );
@@ -150,22 +150,17 @@ function UserMoment() {
   if (!text && images.length === 0) return null;
   return (
     <MomentSection id={id} role="user">
-      <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-ink-2">
+      <div className="mb-1.5 flex items-center gap-[7px]">
         <TurnTag id={id} />
         <span>you</span>
         <MomentTime />
       </div>
       <div className="ml-auto flex w-fit max-w-[80%] flex-col items-end gap-1.5">
         {images.map((src) => (
-          <img
-            key={src}
-            src={src}
-            alt="attachment"
-            className="max-h-64 rounded-sm border-[0.5px] border-line-2 object-contain"
-          />
+          <img key={src} src={src} alt="attachment" className="max-h-64 object-contain" />
         ))}
 
-        {text ? <div className="rounded-sm bg-ink/6 px-3 py-2 t-prose">{text}</div> : null}
+        {text ? <div className="px-3 py-2">{text}</div> : null}
       </div>
     </MomentSection>
   );
@@ -185,7 +180,7 @@ function AssistantMoment() {
   if (!hasContent && !running) return null;
   return (
     <MomentSection id={id} role="assistant">
-      <div className="t-label t-upper mb-1.5 flex items-center gap-[7px] text-pea-ink">
+      <div className="mb-1.5 flex items-center gap-[7px]">
         <TurnTag id={id} />
         <span>pea</span>
         <MomentTime />
@@ -222,7 +217,7 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
     console.error("[workbench] message-part render failed", error, info.componentStack);
   }
   render(): ReactNode {
-    if (this.state.error) return <div className="t-prose text-caution">{this.state.error}</div>;
+    if (this.state.error) return <div className="">{this.state.error}</div>;
     return this.props.children;
   }
 }
@@ -235,9 +230,9 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
   return (
-    <div className="border-l-2 border-line-2">
+    <div className="">
       <Press
-        className="inline-flex items-center gap-[5px] bg-transparent px-1.5 py-px t-label text-ink-2 hover:text-ink"
+        className="inline-flex items-center gap-[5px] px-1.5 py-px"
         type="button"
         title="Pea's chain of thought for this turn — collapsed so the spine stays calm"
         onClick={() => setOpen((value) => !value)}
@@ -245,11 +240,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
         <ChevronRight size={12} className={`transition-transform ${open ? "rotate-90" : ""}`} />
         <span>Thought process</span>
       </Press>
-      {open ? (
-        <div className="mt-1 mb-0.5 ml-2 border-l border-line pl-[9px] t-prose whitespace-pre-wrap text-ink-2">
-          {text}
-        </div>
-      ) : null}
+      {open ? <div className="mt-1 mb-0.5 ml-2 pl-[9px] whitespace-pre-wrap">{text}</div> : null}
     </div>
   );
 };
@@ -274,7 +265,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
 
         <span
           className={`t-label face-mono ml-auto ${
-            isError ? "text-caution" : status?.type === "running" ? "text-ink-2" : "text-done"
+            isError ? "" : status?.type === "running" ? "" : ""
           }`}
         >
           {isError ? "err" : status?.type === "running" ? "run" : "ok"}

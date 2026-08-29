@@ -61,21 +61,21 @@ export function ScheduleGridChatPlugin({
     >
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         {snapshot ? (
-          <span className="min-w-0 truncate t-value text-ink">
+          <span className="min-w-0 truncate">
             {snapshot.scheduleName}
-            <span className="ml-1.5 t-caption face-mono text-ink-2">
+            <span className="ml-1.5">
               {snapshot.rows.length}×{snapshot.columns.length}
               {snapshot.takenAt ? ` · read ${timeAgo(snapshot.takenAt)}` : ""}
             </span>
           </span>
         ) : (
-          <span className="text-ink-mute">no schedule read</span>
+          <span className="">no schedule read</span>
         )}
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
         <Metric value={summary.attention} label="need attention" issue />
         <Link
-          className="ml-auto text-nav hover:underline"
+          className="ml-auto"
           to="/chat"
           search={(previous) => ({ ...previous, plugin: "schedule-grid" })}
         >
@@ -95,7 +95,7 @@ export function ScheduleGridChatPlugin({
             const { rowNumber, columnNumber } = splitScheduleCellKey(key);
             return (
               <>
-                {columnLabel(columnNumber)} <span className="text-ink-2">· row {rowNumber}</span>
+                {columnLabel(columnNumber)} <span className="">· row {rowNumber}</span>
               </>
             );
           }}

@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import type { Verdict } from "#/components/master-table/model";
 import { type WorldFacts } from "#/host/fleet";
 import { type WorldStart } from "#/targeting/world";
@@ -6,14 +5,6 @@ import { RouteDocument } from "#/workbench/route-document";
 import { AddressedInstancesPage } from "#/instances/workspace";
 
 export const YEARS = ["24", "25", "26"];
-
-export const Route = createFileRoute("/instances")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    thread: typeof search.thread === "string" ? search.thread.trim() : undefined,
-    source: typeof search.source === "string" ? search.source : undefined,
-  }),
-  component: InstancesPage,
-});
 
 export function parseUtc(iso: string | null | undefined): number | undefined {
   if (!iso) return undefined;

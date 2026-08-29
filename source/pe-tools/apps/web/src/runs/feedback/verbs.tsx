@@ -56,25 +56,21 @@ export function ExportVerbs(props: {
 export function ExportStatus(props: { className?: string }) {
   const { exporting, lastExport, exportError } = useFb();
   if (exporting) {
-    return (
-      <div className={cn("face-mono t-caption text-ink-2", props.className)}>
-        compositing + writing export…
-      </div>
-    );
+    return <div className={cn("", props.className)}>compositing + writing export…</div>;
   }
   if (exportError) {
     return (
-      <div className={cn("face-mono t-caption", props.className)} style={{ color: token("alarm") }}>
+      <div className={cn("", props.className)} style={{ color: token("alarm") }}>
         export failed: {exportError}
       </div>
     );
   }
   if (!lastExport) return null;
   return (
-    <div className={cn("face-mono flex flex-col gap-0.5 t-caption text-ink-2", props.className)}>
+    <div className={cn("flex flex-col gap-0.5", props.className)}>
       <span className="break-all">
         wrote {lastExport.files.length} file{lastExport.files.length === 1 ? "" : "s"} + clip.txt →{" "}
-        <span className="text-ink">{lastExport.dir}</span>
+        <span className="">{lastExport.dir}</span>
       </span>
       <span>
         {lastExport.verb === "chat" &&
@@ -89,7 +85,7 @@ export function ExportStatus(props: { className?: string }) {
       <a
         href={`/runs?set=${lastExport.stamp}`}
         title="This export's rehydration link — open it (or paste it) to reload this staged set, editable. Re-exporting mints a new stamp."
-        className="break-all underline decoration-dotted hover:text-ink"
+        className="break-all underline decoration-dotted"
       >
         ?set={lastExport.stamp}
       </a>
@@ -97,7 +93,7 @@ export function ExportStatus(props: { className?: string }) {
       <details>
         <summary className="cursor-pointer">view the clip block</summary>
         <pre
-          className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all border p-1.5"
+          className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all p-1.5"
           style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
         >
           {lastExport.text}
@@ -109,11 +105,7 @@ export function ExportStatus(props: { className?: string }) {
 
 export function FlagChips(props: { item: StagedItem }) {
   if (props.item.flags.length === 0) {
-    return (
-      <span className="face-mono t-caption text-ink-2/60">
-        no flags — click rooms/residues on the staged B panel
-      </span>
-    );
+    return <span className="">no flags — click rooms/residues on the staged B panel</span>;
   }
   return (
     <span className="flex flex-wrap gap-1">
@@ -125,7 +117,7 @@ export function FlagChips(props: { item: StagedItem }) {
           onMouseEnter={() => fb.setHoverFlag(`${props.item.key}::${el}`)}
           onMouseLeave={() => fb.setHoverFlag(null)}
           title={`Flagged element ${flagLabel(el)} — goes into the manifest as data. Hover to light it on the B panel; click to unflag.`}
-          className="face-mono border px-1 t-caption"
+          className="px-1"
           style={{
             borderColor: token("caution"),
             color: token("caution"),
@@ -153,10 +145,7 @@ export function NoteInput(props: {
     title:
       "One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block.",
     autoFocus: props.autoFocus,
-    className: cn(
-      "face-mono w-full border bg-page px-1.5 py-0.5 t-label placeholder:text-ink-2/50",
-      props.className,
-    ),
+    className: cn("w-full px-1.5 py-0.5 placeholder:text-ink-2/50", props.className),
     style: { borderColor: token("line-2"), borderRadius: "var(--radius)" },
   };
   return props.multiline ? (

@@ -1,1 +1,1 @@
-export { modelGlanceOps } from "./model-attention-glance-view";
+export { modelGlanceOps } from "./model/attention";

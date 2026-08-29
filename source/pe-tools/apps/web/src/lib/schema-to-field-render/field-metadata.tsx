@@ -70,24 +70,24 @@ function FieldMetadataTooltip({
       <Tooltip.Root>
         <Tooltip.Trigger
           aria-label="Field details"
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-ink-2 transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-line-2"
+          className="inline-flex h-5 w-5 items-center justify-center transition-colors"
         >
           <CircleHelp className="h-4 w-4" />
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup className="z-popup max-w-sm rounded-md border border-line bg-page px-3 py-2 t-value shadow-lg">
+            <Tooltip.Popup className="z-popup max-w-sm px-3 py-2">
               <div className="space-y-2">
                 {description ? (
                   <div className="space-y-1">
-                    <div className="font-medium text-ink">Description</div>
-                    <p className="whitespace-pre-wrap text-ink-2">{description}</p>
+                    <div className="">Description</div>
+                    <p className="whitespace-pre-wrap">{description}</p>
                   </div>
                 ) : null}
                 {formattedDefault !== undefined ? (
                   <div className="space-y-1">
-                    <div className="font-medium text-ink">Default</div>
-                    <pre className="t-label whitespace-pre-wrap break-words rounded-sm bg-recess px-2 py-1 face-mono text-ink">
+                    <div className="">Default</div>
+                    <pre className="whitespace-pre-wrap break-words px-2 py-1">
                       {formattedDefault}
                     </pre>
                   </div>
@@ -129,8 +129,8 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
         <Tooltip.Trigger
           aria-label="View change details"
           className={cn(
-            "t-caption t-upper inline-flex items-center rounded-sm border px-1.5 py-0.5 font-semibold",
-            "border-caution/30 bg-caution/10 text-caution",
+            "inline-flex items-center px-1.5 py-0.5",
+            "",
             // Compact buys tighter padding only — the tier already IS the small size.
             compact && "px-1 py-0",
           )}
@@ -139,25 +139,21 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
-            <Tooltip.Popup className="z-popup max-w-sm rounded-md border border-line bg-page px-3 py-2 t-value shadow-lg">
+            <Tooltip.Popup className="z-popup max-w-sm px-3 py-2">
               <div className="space-y-2">
                 {change.isComposite && nestedChanges > 0 ? (
-                  <p className="text-ink-2">
+                  <p className="">
                     {nestedChanges} nested field
                     {nestedChanges === 1 ? "" : "s"} changed.
                   </p>
                 ) : null}
                 <div className="space-y-1">
-                  <div className="font-medium text-ink">Before</div>
-                  <pre className="t-label whitespace-pre-wrap break-words rounded-sm bg-recess px-2 py-1 face-mono text-ink">
-                    {beforeDisplay}
-                  </pre>
+                  <div className="">Before</div>
+                  <pre className="whitespace-pre-wrap break-words px-2 py-1">{beforeDisplay}</pre>
                 </div>
                 <div className="space-y-1">
-                  <div className="font-medium text-ink">After</div>
-                  <pre className="t-label whitespace-pre-wrap break-words rounded-sm bg-recess px-2 py-1 face-mono text-ink">
-                    {afterDisplay}
-                  </pre>
+                  <div className="">After</div>
+                  <pre className="whitespace-pre-wrap break-words px-2 py-1">{afterDisplay}</pre>
                 </div>
               </div>
             </Tooltip.Popup>
@@ -180,13 +176,7 @@ export function FieldMessages({
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-sm border px-3 py-2 t-value",
-        "border-alarm/30 bg-alarm/10 text-alarm",
-        compact && "t-label px-2 py-1.5",
-      )}
-    >
+    <div className={cn("px-3 py-2", "", compact && "px-2 py-1.5")}>
       <ul className="space-y-1">
         {messages.map((message, index) => (
           <li key={`${message}-${index}`}>{message}</li>
@@ -206,10 +196,10 @@ function OptionMetadataChip({
   return (
     <span
       className={cn(
-        "t-caption inline-flex max-w-full items-center truncate rounded-sm border px-1.5 py-0.5 font-medium",
-        tone === "neutral" && "border-line bg-recess/40 text-ink-mute",
-        tone === "warning" && "border-caution/30 bg-caution/10 text-caution",
-        tone === "danger" && "border-alarm/30 bg-alarm/10 text-alarm",
+        "inline-flex max-w-full items-center truncate px-1.5 py-0.5",
+        tone === "neutral" && "",
+        tone === "warning" && "",
+        tone === "danger" && "",
       )}
     >
       {children}
@@ -257,10 +247,7 @@ export function FieldOptionsMetadata({ options }: { options: FieldOptionState })
 
 function RequiredBadge() {
   return (
-    <span
-      aria-label="Required"
-      className="t-caption t-upper inline-flex items-center rounded-sm bg-alarm/10 px-1.5 py-0.5 font-semibold text-alarm"
-    >
+    <span aria-label="Required" className="inline-flex items-center px-1.5 py-0.5">
       Required
     </span>
   );
@@ -283,7 +270,7 @@ export function FieldLabelRow({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <Label htmlFor={htmlFor} className="font-medium">
+      <Label htmlFor={htmlFor} className="">
         {label}
       </Label>
       {required ? <RequiredBadge /> : null}
@@ -307,7 +294,7 @@ export function FieldLegendRow({
   path?: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-2 px-2 t-prose text-ink-2">
+    <div className="inline-flex items-center gap-2 px-2">
       <span>{label}</span>
       {required ? <RequiredBadge /> : null}
       <FieldChangeBadge path={path} />

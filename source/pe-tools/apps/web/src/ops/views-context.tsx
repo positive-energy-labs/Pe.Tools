@@ -1,1 +1,1 @@
-export { views } from "./views-context-resolve-references-view";
+export { views } from "./views/context/resolve-references";

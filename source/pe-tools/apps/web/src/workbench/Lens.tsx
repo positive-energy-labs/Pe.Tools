@@ -1,1 +1,1 @@
-export { Lens } from "./Lens-lens";
+export { Lens } from "./lens/view";

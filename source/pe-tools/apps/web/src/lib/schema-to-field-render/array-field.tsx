@@ -99,9 +99,9 @@ export function ArrayField({
           {(Array.isArray(field.value) ? (field.value as unknown[]) : []).map((_, index) => {
             const childPathPrefix = `${path}.${index}`;
             return (
-              <div key={childPathPrefix} className="space-y-3 rounded-md border border-line p-3">
+              <div key={childPathPrefix} className="space-y-3 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="t-value font-medium text-ink-2">Item {index + 1}</span>
+                  <span className="">Item {index + 1}</span>
                   <Verb
                     label="remove"
                     reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
@@ -139,10 +139,10 @@ export function ArrayField({
               // Keep user input editable while JSON is invalid.
             }
           }}
-          className="min-h-32 face-mono t-value"
+          className="min-h-32"
         />
       )}
-      <span className="t-value text-ink-2">
+      <span className="">
         {isPrimitiveArray
           ? "Multi-value combobox with searchable suggestions and removable chips."
           : isObjectArray

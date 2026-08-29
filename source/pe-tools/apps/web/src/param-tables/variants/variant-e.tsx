@@ -1,1 +1,1 @@
-export { VariantE } from "./variant-e-variant-e";
+export { VariantE } from "./variant-e/view";

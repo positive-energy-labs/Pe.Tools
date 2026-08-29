@@ -21,7 +21,7 @@ export function VizChip({
   return (
     <span
       title={title}
-      className="face-mono t-caption inline-flex items-center gap-1 rounded-sm border px-1.5 py-px"
+      className="inline-flex items-center gap-1 px-1.5 py-px"
       style={{
         color: c,
         backgroundColor: `color-mix(in srgb, ${c} 12%, transparent)`,
@@ -53,9 +53,9 @@ export function KVGrid({
     >
       {items.map((item, i) => (
         <div key={i} className="min-w-0">
-          <dt className="t-label text-ink-2">{item.label}</dt>
+          <dt className="">{item.label}</dt>
           <dd
-            className="face-mono t-value truncate"
+            className="truncate"
             style={item.tone ? { color: KV_TONE[item.tone] } : undefined}
             title={typeof item.value === "string" ? item.value : undefined}
           >
@@ -77,7 +77,7 @@ export type TreeNode = {
 
 export function TreeView({ nodes, dense = false }: { nodes: TreeNode[]; dense?: boolean }) {
   return (
-    <div className="max-h-[32rem] overflow-auto rounded-sm border border-line">
+    <div className="max-h-[32rem] overflow-auto">
       <ul className="py-1">
         {nodes.map((node) => (
           <TreeRow key={node.id} node={node} depth={0} dense={dense} />
@@ -104,24 +104,22 @@ function TreeRow({ node, depth, dense }: { node: TreeNode; depth: number; dense:
       >
         <span
           className={cn(
-            "t-caption inline-block w-3 shrink-0 text-center text-ink-2 transition-transform duration-control",
+            "inline-block w-3 shrink-0 text-center transition-transform duration-control",
             open && hasChildren && "rotate-90",
           )}
         >
           {hasChildren ? "▸" : ""}
         </span>
         <span
-          className={cn("t-value min-w-0 truncate", hasChildren && "font-medium")}
+          className={cn("min-w-0 truncate", hasChildren && "")}
           title={typeof node.label === "string" ? node.label : undefined}
         >
           {node.label}
         </span>
-        {node.meta && (
-          <span className="face-mono t-caption ml-auto shrink-0 text-ink-2">{node.meta}</span>
-        )}
+        {node.meta && <span className="ml-auto shrink-0">{node.meta}</span>}
       </div>
       {hasChildren && open && (
-        <ul className="border-l border-line" style={{ marginLeft: 8 + depth * 14 + 5 }}>
+        <ul className="" style={{ marginLeft: 8 + depth * 14 + 5 }}>
           {node.children?.map((child) => (
             <TreeRow key={child.id} node={child} depth={depth + 1} dense={dense} />
           ))}
@@ -160,21 +158,16 @@ export function DataTable<Row>({
   footer?: ReactNode;
 }) {
   return (
-    <div className="min-w-0 rounded-sm border border-line-2">
-      {title && (
-        <div className="t-label t-upper border-b border-line-2 px-2 py-1 text-center">{title}</div>
-      )}
+    <div className="min-w-0">
+      {title && <div className="px-2 py-1 text-center">{title}</div>}
       <div className="overflow-auto" style={{ maxHeight }}>
-        <table className="t-value w-full border-collapse text-left">
+        <table className="w-full text-left">
           <thead className="sticky top-0 z-sticky" style={RECESS_GROUND}>
             <tr>
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={cn(
-                    "t-label t-upper whitespace-nowrap border-b border-r border-b-line-2 border-r-line px-2 py-1",
-                    col.numeric && "text-right",
-                  )}
+                  className={cn("whitespace-nowrap px-2 py-1", col.numeric && "text-right")}
                   style={{ width: col.width }}
                 >
                   {col.header}
@@ -189,8 +182,8 @@ export function DataTable<Row>({
                   <td
                     key={col.key}
                     className={cn(
-                      "max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap border-b border-r border-line px-2 py-1 align-top",
-                      col.numeric && "face-mono t-value text-right",
+                      "max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1 align-top",
+                      col.numeric && "text-right",
                     )}
                   >
                     {col.cell(row, index)}
@@ -200,11 +193,9 @@ export function DataTable<Row>({
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && (
-          <div className="t-label px-2 py-6 text-center italic text-ink-mute">no rows</div>
-        )}
+        {rows.length === 0 && <div className="px-2 py-6 text-center">no rows</div>}
       </div>
-      {footer && <div className="border-t border-line px-2 py-1">{footer}</div>}
+      {footer && <div className="px-2 py-1">{footer}</div>}
     </div>
   );
 }

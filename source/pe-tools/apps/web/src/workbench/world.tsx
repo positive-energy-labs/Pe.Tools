@@ -1,3 +1,3 @@
-export { useCacheView } from "./world-plain-cap";
-export { WorldLane } from "./world-world-lane";
-export { ContextRibbon } from "./world-bar";
+export { useCacheView } from "./world/cap";
+export { WorldLane } from "./world/lane";
+export { ContextRibbon } from "./world/bar";

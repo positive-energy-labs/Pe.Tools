@@ -1,1 +1,1 @@
-export { views } from "./views-electrical-breaker-half";
+export { views } from "./views/electrical/breaker";

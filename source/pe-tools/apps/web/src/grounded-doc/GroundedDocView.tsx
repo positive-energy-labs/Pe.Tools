@@ -1,1 +1,1 @@
-export { GroundedDocView } from "./GroundedDocView-block-markdown";
+export { GroundedDocView } from "./view/block-markdown";

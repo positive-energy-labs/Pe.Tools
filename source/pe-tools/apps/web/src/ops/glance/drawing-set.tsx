@@ -82,7 +82,7 @@ function chooseDetailTargets(series: Series[]): string[] {
 }
 
 function EmptyFrame() {
-  return <div aria-hidden className="seam-border aspect-[3/2] rounded-none border border-line-2" />;
+  return <div aria-hidden className="seam-border aspect-[3/2]" />;
 }
 
 function Thumbnail({
@@ -100,7 +100,7 @@ function Thumbnail({
     <Press
       type="button"
       onClick={onSelect}
-      className={`flex min-w-0 flex-col gap-1 rounded-sm border p-1.5 text-left hover:veil ${selected ? "border-line-2" : "border-line"}`}
+      className={`flex min-w-0 flex-col gap-1 rounded-sm border p-1.5 text-left hover:veil ${selected ? "" : ""}`}
       style={
         selected
           ? ({
@@ -116,8 +116,8 @@ function Thumbnail({
       }
     >
       {entry ? <SheetCanvas entry={entry} /> : <EmptyFrame />}
-      <span className="face-mono t-caption truncate">{sheet.sheetNumber}</span>
-      {entry && <span className="t-label truncate text-ink-2">{sheet.sheetName}</span>}
+      <span className="truncate">{sheet.sheetNumber}</span>
+      {entry && <span className="truncate">{sheet.sheetName}</span>}
     </Press>
   );
 }

@@ -40,19 +40,15 @@
     }
   },
   "opacityDim": {
-    "total": 45,
+    "total": 37,
     "byArea": {
       "components": 24,
       "data-tables": 1,
       "families": 1,
       "family": 5,
-      "grounded-doc": 1,
       "host": 1,
-      "ops": 1,
-      "runs": 3,
       "takeoff": 3,
-      "targeting": 2,
-      "workbench": 3
+      "targeting": 2
     }
   },
   "longTitle": {
@@ -97,16 +93,14 @@
     }
   },
   "rawMeaningColor": {
-    "total": 103,
+    "total": 61,
     "byArea": {
       "family": 27,
-      "grounded-doc": 3,
       "host": 6,
-      "lib": 15,
       "routes": 3,
       "schedule-grid": 2,
       "takeoff": 10,
-      "workbench": 37
+      "workbench": 13
     }
   },
   "dlLeak": {

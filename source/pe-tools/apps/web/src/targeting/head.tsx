@@ -31,7 +31,7 @@ function Demand<K extends string>({
   const seam = b.feeds[k]?.seam;
   return (
     <span
-      className={cn("face-mono t-caption border-b", seam ? "seam-border" : undefined)}
+      className={cn("", seam ? "seam-border" : undefined)}
       title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${seam.needs}` : ""}`}
       style={{
         color: bound ? token("ink") : token("caution"),
@@ -98,7 +98,7 @@ export function TargetingHead<K extends string>({
         <span>{verbButton(v, runner)}</span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           {v.demands.length === 0 ? (
-            <span className="face-mono t-caption" style={{ color: token("ink-mute") }}>
+            <span className="" style={{ color: token("ink-mute") }}>
               —
             </span>
           ) : (
@@ -106,7 +106,7 @@ export function TargetingHead<K extends string>({
           )}
         </span>
         <span
-          className="face-mono t-caption text-right"
+          className="text-right"
           style={{
             color: can.ok ? token("ink-mute") : token("ink-2"),
             fontStyle: can.ok ? undefined : "italic",
@@ -128,7 +128,7 @@ export function TargetingHead<K extends string>({
           ? "Collapse the verbs back to one row"
           : "Expand the verbs: what each one needs and why it is or is not ready"
       }
-      className="face-mono t-caption px-2.5"
+      className="px-2.5"
       style={{ borderLeft: `1px solid ${token("line-2")}`, color: token("ink-2") }}
     >
       {expanded ? "▴" : "▾"}
@@ -137,7 +137,7 @@ export function TargetingHead<K extends string>({
 
   const line = (
     <>
-      <span className="t-label t-upper" style={{ color: token("ink") }}>
+      <span className="" style={{ color: token("ink") }}>
         {product.name}
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
@@ -152,7 +152,7 @@ export function TargetingHead<K extends string>({
             >
               <TargetCaption b={b} link={t} />
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="face-mono t-caption" style={{ color: token("ink-2") }}>
+                <span className="" style={{ color: token("ink-2") }}>
                   {t.joiner}
                 </span>
                 <Picker
@@ -180,7 +180,7 @@ export function TargetingHead<K extends string>({
       {expanded ? (
         <>
           <div
-            className="grid px-2.5 pt-1.5 pb-0.5 face-mono t-caption t-upper"
+            className="grid px-2.5 pt-1.5 pb-0.5"
             style={{
               gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
               columnGap: "1rem",
