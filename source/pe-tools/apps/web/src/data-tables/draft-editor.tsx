@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { Tag } from "#/components/lang/chip";
 import { Verb } from "#/components/lang/verb";
 import { Input } from "#/components/ui/input";
 import { cn } from "#/lib/utils";
@@ -58,7 +59,7 @@ export function DraftEditor({
       <Input
         value={draft.name}
         onChange={(e) => patch((d) => ({ ...d, name: e.target.value }))}
-        className="t-value h-8 max-w-72"
+        className="h-8 max-w-72"
         placeholder="Table name"
         title={
           draft.isNew
@@ -71,12 +72,9 @@ export function DraftEditor({
         <table className="border-collapse">
           <thead>
             <tr>
-              <th className="border-b border-line bg-recess" />
+              <th />
               {draft.columns.map((column, columnIndex) => (
-                <th
-                  key={columnIndex}
-                  className="min-w-36 border-b border-l border-line bg-recess px-1.5 py-1 text-left"
-                >
+                <th key={columnIndex} className="min-w-36 px-1.5 py-1 text-left">
                   <div className="flex items-center gap-1">
                     <Input
                       value={column.heading}
@@ -88,13 +86,13 @@ export function DraftEditor({
                           ),
                         }))
                       }
-                      className="t-label h-6 rounded-none border-transparent bg-transparent px-1 font-normal hover:border-line"
+                      className="h-6 px-1"
                       title="Column heading — written to the schedule on apply"
                     />
                     <select
                       value={column.kind}
                       title="Column type: txt = Text, num = Number"
-                      className="t-caption face-mono h-6 rounded-sm border border-transparent bg-transparent text-ink-2 hover:border-line"
+                      className="h-6"
                       onChange={(e) =>
                         patch((d) => ({
                           ...d,
@@ -124,7 +122,7 @@ export function DraftEditor({
                   </div>
                 </th>
               ))}
-              <th className="border-b border-l border-line bg-recess px-1">
+              <th className="px-1">
                 <Verb
                   label="col"
                   icon={Plus}
@@ -138,26 +136,26 @@ export function DraftEditor({
             {draft.rows.map((row, rowIndex) => (
               <tr key={row.key}>
                 <td
-                  className="t-caption face-mono whitespace-nowrap border-b border-line px-2 py-1 text-right text-ink-2"
+                  className="whitespace-nowrap px-2 py-1 text-right"
                   title={`row key: ${row.key} — the stable address apply upserts by`}
                 >
-                  {rowIndex + 1}
+                  <Tag>{rowIndex + 1}</Tag>
                 </td>
                 {draft.columns.map((column, columnIndex) => (
-                  <td key={columnIndex} className="border-b border-l border-line p-0">
-                    <input
+                  <td key={columnIndex} className="p-0">
+                    <Input
                       value={row.values[columnIndex] ?? ""}
                       placeholder={column.kind === "Number" ? "0" : ""}
                       inputMode={column.kind === "Number" ? "decimal" : undefined}
                       onChange={(e) => setCell(rowIndex, columnIndex, e.target.value)}
                       className={cn(
-                        "t-value face-mono h-7 w-full min-w-36 bg-transparent px-2 outline-none focus:bg-select",
+                        "h-7 w-full min-w-36 px-2",
                         column.kind === "Number" && "text-right",
                       )}
                     />
                   </td>
                 ))}
-                <td className="border-b border-l border-line px-1 text-center">
+                <td className="px-1 text-center">
                   <Press
                     type="button"
                     title="Remove this row — it is deleted in Revit on apply"

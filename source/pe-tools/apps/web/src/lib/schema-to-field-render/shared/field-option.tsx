@@ -159,6 +159,12 @@ export function coercePrimitive(input: string, nodeType: string | undefined): un
   return input;
 }
 
+export function primitiveInputValue(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : "";
+}
+
 export function objectEntriesSorted(
   properties: Record<string, RenderSchemaNode>,
 ): Array<[string, RenderSchemaNode]> {

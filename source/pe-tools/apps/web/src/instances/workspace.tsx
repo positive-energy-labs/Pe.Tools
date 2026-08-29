@@ -2,6 +2,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { current, instancesRouteState, type Address } from "@pe/agent-contracts";
 import { EmptyState } from "#/components/lang/empty";
+import { StateCell } from "#/components/lang/cell";
+import { Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -16,6 +18,7 @@ import { product as defineProduct } from "#/targeting/model";
 import { worldTrunk, type WorldStart } from "#/targeting/world";
 import { useRouteState } from "#/workbench/route-state";
 import { Press } from "#/components/lang/press";
+import { Provenance } from "#/components/lang/section";
 import { StartFields, custodyVerdict, parseUtc, phaseVerdict, worldSub } from "#/instances/route";
 
 export function AddressedInstancesPage({ documentAddress }: { documentAddress: Address }) {
@@ -152,40 +155,35 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
         label: "world",
         search: (world) => worldTrunk.label(world).toLowerCase(),
         sort: (world) => worldTrunk.label(world),
-        cell: (world) => (
-          <span className="face-mono t-value block truncate px-1.5 text-ink">
-            {worldTrunk.label(world)}
-          </span>
-        ),
+        cell: (world) => <StateCell scale="row" value={worldTrunk.label(world)} />,
       },
       { key: "custody", label: "custody", width: "w-28", verdict: custodyVerdict },
       { key: "phase", label: "phase", width: "w-32", verdict: phaseVerdict },
       {
         key: "detail",
         label: "lane · year · pid",
-        cell: (world) => (
-          <span className="face-mono t-caption block truncate px-1.5 text-ink-2">
-            {worldSub(world)}
-          </span>
-        ),
+        cell: (world) => <StateCell scale="row" value={worldSub(world)} />,
       },
       {
         key: "legs",
         label: "legs",
         cell: (world) => (
-          <span className="face-mono t-caption block truncate px-1.5 text-ink-2">
-            {world.row?.legs?.map((leg) => `${leg.name} ${leg.state}`).join(" · ") || "no legs"}
-          </span>
+          <StateCell
+            scale="row"
+            value={
+              world.row?.legs?.map((leg) => `${leg.name} ${leg.state}`).join(" · ") || "no legs"
+            }
+          />
         ),
       },
       {
         key: "docs",
         label: "documents",
         cell: (world) => (
-          <span className="face-mono t-caption block truncate px-1.5 text-ink-2">
-            {world.activeDocumentTitle ?? (world.session ? "no open document" : "nothing observed")}
-            {world.openDocumentCount > 1 ? ` +${world.openDocumentCount - 1}` : ""}
-          </span>
+          <StateCell
+            scale="row"
+            value={`${world.activeDocumentTitle ?? (world.session ? "no open document" : "nothing observed")}${world.openDocumentCount > 1 ? ` +${world.openDocumentCount - 1}` : ""}`}
+          />
         ),
       },
       {
@@ -197,11 +195,12 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
           (world.session ? world.session.observedAtUnixMs : parseUtc(world.row?.observedAtUtc)) ??
           0,
         cell: (world) => (
-          <span className="face-mono t-caption block px-1.5 text-right text-ink-2">
-            {timeAgo(
+          <StateCell
+            scale="row"
+            value={timeAgo(
               world.session ? world.session.observedAtUnixMs : parseUtc(world.row?.observedAtUtc),
             )}
-          </span>
+          />
         ),
       },
     ],
@@ -209,7 +208,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
   );
 
   return (
-    <div className="min-h-screen bg-page" data-testid="instances-workspace">
+    <div className="min-h-screen" data-testid="instances-workspace">
       <div className="mx-auto max-w-6xl px-6 pt-6">
         <TargetingHead
           product={product}
@@ -236,7 +235,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
         />
       </div>
       <div className="mx-auto flex min-h-[75vh] max-w-6xl gap-0 px-6 py-5">
-        <div className="flex flex-1 flex-col border-r border-line pr-5">
+        <div className="flex flex-1 flex-col pr-5">
           <MasterTable
             rows={worlds}
             columns={columns}
@@ -263,7 +262,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
           <div className="flex w-72 flex-col pl-5">
             <div className="flex items-baseline justify-between pb-2">
               <span className="flex items-center gap-1.5">
-                <span className="t-caption t-upper text-ink-2">ledger</span>
+                <Tag>ledger</Tag>
                 <HelpTip>Settled SDK envelopes merged with bridge-observed world events.</HelpTip>
               </span>
               <Press type="button" onClick={() => setLedgerOpen(false)} tone="firm" size="caption">
@@ -277,19 +276,19 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
                 </EmptyState>
               ) : null}
               {ledger.map((entry, index) => (
-                <div key={index} className="border-t border-line py-1.5">
-                  <span className="face-mono t-caption text-ink-2">{entry.actor}</span>
-                  <div className="t-label text-ink">{entry.label}</div>
-                  <span className="face-mono t-caption text-ink-2">{timeAgo(entry.atMs)}</span>
+                <div key={index} className="py-1.5">
+                  <Tag>{entry.actor}</Tag>
+                  <StateCell value={entry.label} />
+                  <Provenance>{timeAgo(entry.atMs)}</Provenance>
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <div className="ml-2 flex w-6 flex-col items-center gap-2 self-stretch rounded-sm py-2">
+          <div className="ml-2 flex w-6 flex-col items-center gap-2 self-stretch py-2">
             <Press type="button" onClick={() => setLedgerOpen(true)} tone="firm">
-              <span className="t-caption t-upper text-ink-2 [writing-mode:vertical-rl]">
-                ledger · {ledger.length}
+              <span className="[writing-mode:vertical-rl]">
+                <Tag>ledger · {ledger.length}</Tag>
               </span>
             </Press>
           </div>

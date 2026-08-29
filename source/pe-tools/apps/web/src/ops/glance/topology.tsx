@@ -123,13 +123,8 @@ function DocumentLeaf({ doc }: { doc: Record<string, unknown> }) {
   const isActive = doc.isActive === true;
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 py-0.5">
-      <span
-        className={`inline-block size-[5px] shrink-0 self-center rounded-[1px] ${isActive ? "" : ""}`}
-      />
-      <span
-        className={`t-value min-w-0 truncate ${isActive ? "" : ""}`}
-        title={text(doc.path) || text(doc.title)}
-      >
+      <span className="inline-block size-[5px] shrink-0 self-center" />
+      <span className="min-w-0 truncate" title={text(doc.path) || text(doc.title)}>
         {text(doc.title) || "∅"}
       </span>
       <span className="shrink-0">{doc.isFamilyDocument === true ? "rfa" : "rvt"}</span>
@@ -151,9 +146,7 @@ function SessionNode({
   const custody = asString(session.custody);
   const openCount = asNumber(session.openDocumentCount);
   return (
-    <div
-      className={`flex min-w-0 flex-col gap-1 rounded-sm border px-3 py-2 ${connected ? "" : ""}`}
-    >
+    <div className="flex min-w-0 flex-col gap-1 px-3 py-2">
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <LiveDot tone={connected ? "implicit" : "muted"} lane={lane} />
         <span className="min-w-0 truncate">{text(session.sessionId)}</span>

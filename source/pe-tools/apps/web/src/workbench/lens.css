@@ -19,7 +19,7 @@
  * by inline styles the rAF/scroll controller sets per frame; (2) [data-mode] lane widths;
  * (3) pseudo-elements, descendant/state selectors, and keyframe animations (caret blink, sheen).
  */
-.lens-frame {
+[data-annotation="frame"] {
   font-family: var(--font-body);
   color: var(--pe-ink);
   background: var(--pe-page);
@@ -35,12 +35,12 @@
 /* ===== Lens view: focal planes ======================================== */
 /* --vp (the scroll aperture height) is fed in px by a ResizeObserver. The map-dial gutter and
    trace fisheye use a small rAF scroll handler (they need measured pixel heights). */
-.lens-frame {
+[data-annotation="frame"] {
   min-height: 0;
   height: 100%; /* fill the ChatShell main row (was a grid child in apps/website) */
   position: relative;
 }
-.lens-scroller {
+[data-annotation="scroller"] {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -52,23 +52,23 @@
    collapse-to-rail, and width persistence — so the track is `auto` and sizes to the pane (its full
    width when open, 40px when collapsed, 0 when display:none in plugin mode). --side is mirrored on
    <main> by ChatShell for the composer lane only. column order: sidebar | chat | mapdial */
-.lens-grid {
+[data-annotation="grid"] {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) var(--map, 64px);
   align-items: start;
 }
 /* all share row 1 — explicit grid-column alone bumps items into separate rows */
-.lens-grid > * {
+[data-annotation="grid"] > * {
   grid-row: 1;
 }
-.lens-grid .lens-chat {
+[data-annotation="grid"] [data-annotation="chat"] {
   grid-column: 2;
 }
-.lens-grid .mapdial {
+[data-annotation="grid"] [data-annotation="dial"] {
   grid-column: 3;
 }
 /* the composer floats over the chat lane: clear the sidebar + the right mapdial, then inset by
-   equal 20px gutters so it lines up with the chat text column (.lens-chat padding: 0 20px).
+   equal 20px gutters so it lines up with the chat text column ([data-annotation="chat"] padding: 0 20px).
    The scroller hides its scrollbar (the mapdial replaces it), so the gutters are symmetric. */
 .pe-composer-lane {
   margin-left: var(--side, 300px);
@@ -78,7 +78,7 @@
 }
 
 /* ---- Map-dial: proportional minimap + viewport reticle ---------------- */
-.mapdial {
+[data-annotation="dial"] {
   position: sticky;
   top: 0;
   height: var(--vp, 560px);
@@ -90,13 +90,13 @@
   user-select: none;
   cursor: ns-resize;
 }
-.mapdial-strip {
+[data-annotation="dial-strip"] {
   position: absolute;
   inset: 0 auto 0 0;
   width: 100%;
   will-change: transform;
 }
-.mapdial-band {
+[data-annotation="dial-band"] {
   position: absolute;
   right: 14px;
   width: 8px;
@@ -109,7 +109,7 @@
 }
 /* number rides on the band, to its left. Hidden by default; revealed on hover (below) and
    ALWAYS on the focal band (the reticle readout). Machine-measured: mono, tracked, tabular. */
-.mapdial-band .num {
+[data-annotation="dial-band"] [data-annotation="dial-number"] {
   position: absolute;
   /* band is 8px at right:14px of the 64px lane; 12px inset leaves ~38px of leftward room —
      enough for "#999" in 12px mono without clipping at the lane's overflow:hidden edge. */
@@ -128,36 +128,36 @@
   pointer-events: none;
 }
 /* on screen = inside the candlestick's viewport range */
-.mapdial-band.in-reticle {
+[data-annotation="dial-band"].in-reticle {
   opacity: 0.85;
 }
 /* hover reveals the turn number on any band */
-.mapdial-band:hover {
+[data-annotation="dial-band"]:hover {
   opacity: 1;
 }
-.mapdial-band:hover .num {
+[data-annotation="dial-band"]:hover [data-annotation="dial-number"] {
   opacity: 1;
 }
 /* focal = the single band on the focal axis. Emphasis is WIDTH + full strength of the band's OWN
    provenance colour — never a hue swap. */
-.mapdial-band.focal {
+[data-annotation="dial-band"].focal {
   opacity: 1;
   width: 16px;
 }
 /* provenance: "you" is neutral ink (no identity hue — the standing question, answered NO);
    pea wears the agent identity. Focal = the same colour at full strength; non-focal = a wash. */
-.mapdial-band.user.focal {
+[data-annotation="dial-band"][data-role="user"].focal {
   background: var(--pe-ink-2);
 }
-.mapdial-band.assistant.focal {
+[data-annotation="dial-band"][data-role="assistant"].focal {
   background: var(--pe-pea);
 }
 /* delta = the newest band when context changed this send — changed-this-send is the caution
    family (attention, not disagreement). */
-.mapdial-band.delta {
+[data-annotation="dial-band"][data-delta] {
   opacity: 0.95;
 }
-.mapdial-band.delta::after {
+[data-annotation="dial-band"][data-delta]::after {
   content: "";
   position: absolute;
   right: 100%;
@@ -167,48 +167,48 @@
   border: 3px solid transparent;
   border-right-color: var(--pe-caution);
 }
-.mapdial-band.focal .num {
+[data-annotation="dial-band"].focal [data-annotation="dial-number"] {
   opacity: 1;
   color: var(--pe-ink);
 }
 /* provenance segment washes when NOT focal — same colours, mixed down. */
-.mapdial-band.user:not(.focal) {
+[data-annotation="dial-band"][data-role="user"]:not(.focal) {
   background: color-mix(in srgb, var(--pe-ink-2) 36%, transparent);
 }
-.mapdial-band.assistant:not(.focal) {
+[data-annotation="dial-band"][data-role="assistant"]:not(.focal) {
   background: color-mix(in srgb, var(--pe-pea) 32%, transparent);
 }
 /* tool = pea acting → hollow ring in the agent identity (a solid edge; dashed is reserved
    for seam and a tool call is not a stand-in). */
-.mapdial-band.tool {
+[data-annotation="dial-band"][data-role="tool"] {
   background: transparent;
   box-shadow: inset 0 0 0 1.25px var(--pe-pea);
 }
-.mapdial-band.tool.focal {
+[data-annotation="dial-band"][data-role="tool"].focal {
   box-shadow: inset 0 0 0 2px var(--pe-pea); /* thicker ring, no halo */
 }
 /* memory / event lanes are taxonomy (which lane is this), so they spend the viz ladder;
    approval = a decision owed → caution. */
-.mapdial-band.memory {
+[data-annotation="dial-band"][data-role="memory"] {
   background: var(--viz-5);
 }
-.mapdial-band.approval {
+[data-annotation="dial-band"][data-role="approval"] {
   background: var(--pe-caution);
 }
-.mapdial-band.event {
+[data-annotation="dial-band"][data-role="event"] {
   background: var(--viz-6);
   opacity: 0.55;
 }
 
 /* ---- viewport reticle: a hard-square box around the aperture ----
-   .cs-wick is repositioned by the rAF controller (top = aperture top, height = aperture
+   [data-annotation="reticle-wick"] is repositioned by the rAF controller (top = aperture top, height = aperture
    extent in dial space). The reticle answers "where am I" — a locate mark, so it is neutral
    ink (R13a), not blue. The caps + full-width focal line of the old candlestick are retired
    (display:none) so the controller can keep writing their `top` harmlessly. */
-.cs-focal {
+[data-annotation="reticle-focal"] {
   display: none;
 }
-.cs-wick {
+[data-annotation="reticle-wick"] {
   position: absolute;
   left: 4px;
   right: 4px;
@@ -217,10 +217,10 @@
   pointer-events: none;
   z-index: 3;
 }
-.cs-cap {
+[data-annotation="reticle-cap"] {
   display: none;
 }
-.mapdial .caret {
+[data-annotation="dial"] [data-annotation="caret"] {
   position: absolute;
   left: -1px;
   width: 0;
@@ -234,7 +234,7 @@
 }
 /* jump-to-tail — shown only while detached from the live tail. Within-page navigation, so it
    wears nav's blue TEXT (never a fill). Hover is the one veil. */
-.mapdial-tail {
+[data-annotation="tail"] {
   position: absolute;
   bottom: 8px;
   left: 50%;
@@ -254,33 +254,33 @@
   cursor: pointer;
   z-index: 6;
 }
-.mapdial-tail:hover {
+[data-annotation="tail"]:hover {
   background-image: linear-gradient(var(--pe-veil), var(--pe-veil));
 }
 
 /* chat — near plane, the real scroll. The composer floats over the bottom; pad the tail by its
    live height (+ the pb-4 gap below it) so the last turn always clears the input box. */
-.lens-chat {
+[data-annotation="chat"] {
   padding: 14px 20px;
   padding-bottom: calc(var(--composer-h, 96px) + 24px);
 }
-.lens-moment {
+[data-annotation="moment"] {
   padding: 11px 0;
   scroll-margin-top: 12px;
 }
 /* A hairline at every you↔pea boundary: the transcript reads as a ledger of alternating speaker
    compartments. Same-role runs stay unruled (the rule marks the handoff, not every message). */
-.lens-moment[data-role="user"] + .lens-moment[data-role="assistant"],
-.lens-moment[data-role="assistant"] + .lens-moment[data-role="user"] {
+[data-annotation="moment"][data-role="user"] + [data-annotation="moment"][data-role="assistant"],
+[data-annotation="moment"][data-role="assistant"] + [data-annotation="moment"][data-role="user"] {
   border-top: 0.5px solid var(--pe-line);
 }
 /* The focal turn's left rule answers "where am I" — a locate mark, neutral ink for BOTH roles
    (R13a). The old per-role provenance hue spent identity on a selection question.
    Inset shadow = zero layout shift. */
-.lens-moment.focal {
+[data-annotation="moment"].focal {
   box-shadow: inset 2px 0 0 var(--pe-ink);
 }
-.lens-marker {
+[data-annotation="tool-marker"] {
   /* full-width ledger row: identifiers left, the mono status hugs the right edge (ml-auto) */
   display: flex;
   align-items: center;
@@ -301,31 +301,31 @@
     border-width var(--motion-control) ease;
 }
 /* the tool name never shrinks; only the target arg truncates */
-.lens-marker > span {
+[data-annotation="tool-marker"] > span {
   flex: none;
 }
 /* tool = pea acting → SOLID pea rail (dashed is reserved for seam; a tool call is real).
    memory = the memory lane's taxonomy hue. */
-.lens-marker.memory {
+[data-annotation="tool-marker"].memory {
   border-left-color: var(--viz-5);
 }
-.lens-marker.active {
+[data-annotation="tool-marker"].active {
   border-left-color: var(--pe-pea);
 }
-.lens-marker.failed {
+[data-annotation="tool-marker"].failed {
   border-left-color: var(--pe-caution);
 }
 /* focal stub → heavier rail + tint, but ONLY the single tool at the focal point (`.tool-focal`,
    set per-marker by the scroll controller), not the whole message's tool group. Hover still tints
    the whole hovered message's markers (a separate, coarser affordance). */
-.lens-marker.tool-focal {
+[data-annotation="tool-marker"].tool-focal {
   border-left-width: 3px;
 }
-.lens-marker.tool-focal,
-.lens-moment.hover .lens-marker {
+[data-annotation="tool-marker"].tool-focal,
+[data-annotation="moment"].hover [data-annotation="tool-marker"] {
   background: color-mix(in srgb, var(--pe-pea) 6%, transparent);
 }
-.lens-marker code {
+[data-annotation="tool-marker"] code {
   flex: 0 1 auto;
   min-width: 0; /* allow the ellipsis (the marker is a flex row) */
   font-family: var(--font-mono);
@@ -343,17 +343,17 @@
 
 /* The side lane's --vp height: kept in CSS so the fallback survives before the ResizeObserver sets
    --vp on first paint (position/border/fill ride Tailwind on the className, where twMerge wins). */
-.lens-side-pane {
+[data-annotation="side-pane"] {
   height: var(--vp, 560px);
 }
 
-/* The side lane is the shared SidePane primitive (`.lens-side-pane`): it carries the sticky top,
+/* The side lane is the shared SidePane primitive (`[data-annotation="side-pane"]`): it carries the sticky top,
    --vp height, border, and artifact fill via Tailwind on its className, and owns width/drag/collapse.
    Only the trace fisheye's fixed frame stays here — the pin translates within it, so it needs a
    positioned, clipped, full-height box (SidePane's own body is overflow-y:auto for world/threads).
    The frame sits INSIDE SidePane's body, which starts HEAD_H (40px, the SidePane header) below the
    lane top — matching the HEAD_H subtraction in Lens.tsx's fisheye math. */
-.lens-trace-frame {
+[data-annotation="trace-frame"] {
   position: relative;
   height: 100%;
   overflow: hidden;
@@ -367,7 +367,7 @@
 /* trace lane: a static list of fixed-height header rows. The lane still translates so the focal
    row rides the focal axis; the row's full I/O renders in the pinned inspect window instead of
    expanding in place (no max-height churn). */
-.lens-pin {
+[data-annotation="trace-pin"] {
   position: absolute;
   left: 0;
   right: 0;
@@ -375,7 +375,7 @@
   padding-top: 8px;
   will-change: transform;
 }
-.lens-cell {
+[data-annotation="trace-cell"] {
   margin: 0 12px 4px;
   height: 28px;
   border: 0.5px solid var(--pe-line);
@@ -388,11 +388,11 @@
     border-color var(--motion-control) ease,
     opacity var(--motion-control) ease;
 }
-.lens-cell.hover {
+[data-annotation="trace-cell"].hover {
   opacity: 1;
   border-color: color-mix(in srgb, var(--pe-pea) 40%, transparent);
 }
-.lens-cell.focal {
+[data-annotation="trace-cell"].focal {
   opacity: 1;
   /* emphasis by intensity of the row's own hue — no glow, no elevation */
   border-color: color-mix(in srgb, var(--pe-pea) 70%, transparent);
@@ -401,7 +401,7 @@
 /* Pinned inspect window: the focal/hovered tool's prettified I/O, fixed at the lane top —
    inspection is chronological, so "the current tool" reads at one static spot while the row
    list below previews what's coming. Opaque over the sliding rows. */
-.lens-inspect {
+[data-annotation="inspect"] {
   position: absolute;
   top: 0;
   left: 0;
@@ -417,15 +417,15 @@
   --pe-on: var(--pe-page);
   border-bottom: 0.5px solid var(--pe-line-2);
 }
-.lens-inspect .h {
+[data-annotation="inspect"] [data-annotation="cell-head"] {
   flex: none;
 }
-.lens-inspect .io-label {
+[data-annotation="inspect"] [data-annotation="io-label"] {
   flex: none;
   padding: 3px 8px 0;
   color: var(--pe-ink-2);
 }
-.lens-inspect pre {
+[data-annotation="inspect"] pre {
   margin: 0;
   padding: 3px 8px 6px;
   font-family: var(--font-mono);
@@ -437,13 +437,13 @@
   min-height: 0;
   overflow: auto;
 }
-.lens-inspect .io-error {
+[data-annotation="inspect"] [data-annotation="io-error"] {
   color: var(--pe-caution); /* a failed bridge call is an ERROR, not the model disagreeing */
 }
 /* hybrid row: sans title on the left, machine-measured metadata (status/duration) right-aligned
    in mono. Tight density so the collapsed strip stays ~28px. */
-.lens-cell .h,
-.lens-inspect .h {
+[data-annotation="trace-cell"] [data-annotation="cell-head"],
+[data-annotation="inspect"] [data-annotation="cell-head"] {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -453,23 +453,23 @@
   --pe-on: var(--pe-recess);
   white-space: nowrap;
 }
-.lens-cell .h .h-title,
-.lens-inspect .h .h-title {
+[data-annotation="trace-cell"] [data-annotation="cell-title"],
+[data-annotation="inspect"] [data-annotation="cell-title"] {
   min-width: 0;
   font-size: var(--type-prose-size);
   color: var(--pe-ink);
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.lens-cell .h .h-meta,
-.lens-inspect .h .h-meta {
+[data-annotation="trace-cell"] [data-annotation="cell-meta"],
+[data-annotation="inspect"] [data-annotation="cell-meta"] {
   display: inline-flex;
   flex: none;
   align-items: baseline;
   gap: 8px;
   color: var(--pe-ink-2);
 }
-.lens-inspect .tool-img {
+[data-annotation="inspect"] [data-annotation="tool-image"] {
   display: block;
   width: 100%;
   height: auto;
@@ -479,7 +479,7 @@
 }
 
 /* the focal scrim — top vignette only */
-.lens-scrim {
+[data-annotation="scrim"] {
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -495,7 +495,7 @@
 /* ===== Loading / streaming / pending — baked into the elements ======== */
 /* streaming caret: a blinking bar tailing the live assistant turn — pea's own act, so it
    wears the agent identity (it was blue, which the language reserves for commit/nav). */
-.mg-caret {
+[data-annotation="streaming-caret"] {
   display: inline-block;
   width: 2px;
   height: 1.05em;
@@ -512,7 +512,7 @@
 
 /* active tool: a slow sheen in the agent identity sweeps the marker while it runs */
 .mg-marker.active,
-.lens-marker.active {
+[data-annotation="tool-marker"].active {
   background-image: linear-gradient(
     90deg,
     transparent 0%,
@@ -532,17 +532,17 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lens-scroller {
+  [data-annotation="scroller"] {
     scroll-behavior: auto;
   }
-  .lens-marker.active {
+  [data-annotation="tool-marker"].active {
     animation: none;
   }
-  .mg-caret {
+  [data-annotation="streaming-caret"] {
     animation: none;
     opacity: 0.6;
   }
-  .lens-cell {
+  [data-annotation="trace-cell"] {
     transition: none;
   }
 }

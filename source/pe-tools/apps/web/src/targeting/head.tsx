@@ -1,9 +1,8 @@
 import { token } from "#/lib/token";
 import { useState } from "react";
 
-import { cn } from "#/lib/utils";
-
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
+import { FactChip } from "#/components/lang/chip";
 import { Verb as VerbButton } from "#/components/lang/verb";
 import { TargetCaption, TargetingFlow } from "#/targeting/flow";
 import {
@@ -30,17 +29,14 @@ function Demand<K extends string>({
   const bound = b.isBound(link);
   const seam = b.feeds[k]?.seam;
   return (
-    <span
-      className={cn("", seam ? "seam-border" : undefined)}
+    <FactChip
+      dashed={seam != null}
+      tone={!bound || seam != null ? "caution" : "meta"}
       title={`${k}: ${b.labelOf(link) ?? "unbound"}${seam ? ` — seam, needs ${seam.needs}` : ""}`}
-      style={{
-        color: bound ? token("ink") : token("caution"),
-        borderBottomColor: seam ? token("caution") : "transparent",
-      }}
     >
       {k}
       {bound ? "" : " ∅"}
-    </span>
+    </FactChip>
   );
 }
 

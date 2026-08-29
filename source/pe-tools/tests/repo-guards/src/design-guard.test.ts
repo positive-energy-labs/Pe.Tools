@@ -792,7 +792,7 @@ const TRUE_UNREGISTERED = REMAINDER.filter(
 );
 
 const GEOMETRY =
-  /^(?:flex(?:-.+)?|inline-flex|grid(?:-.+)?|inline-grid|gap(?:-[xy])?-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|overflow(?:-[xy])?(?:-.+)?|items-.+|justify-.+|self-.+|col-.+|row-.+|sticky|z-.+)$/;
+  /^(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+)$/;
 const ALLOWLIST_VIOLATIONS = CLASS_USES.filter(
   (use) => !use.rel.startsWith("components/") && !GEOMETRY.test(baseClass(use.token)),
 );

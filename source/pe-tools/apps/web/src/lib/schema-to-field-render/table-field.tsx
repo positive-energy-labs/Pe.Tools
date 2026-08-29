@@ -7,7 +7,12 @@ import {
   FieldMessages,
   FieldOptionsMetadata,
 } from "./field-metadata";
-import { type ResolvedFieldRendererProps, useFieldOptions, useSettingsField } from "./shared";
+import {
+  primitiveInputValue,
+  type ResolvedFieldRendererProps,
+  useFieldOptions,
+  useSettingsField,
+} from "./shared";
 
 type TableRow = Record<string, unknown>;
 
@@ -120,7 +125,7 @@ function TableCellField({
     <div className="space-y-1">
       <Input
         list={list}
-        value={String(field.value ?? value ?? "")}
+        value={primitiveInputValue(field.value ?? value)}
         onChange={(event) => onChange(event.currentTarget.value)}
         className={field.errors.length > 0 ? "" : undefined}
       />

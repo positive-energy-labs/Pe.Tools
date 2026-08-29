@@ -144,7 +144,7 @@ function createRoutePaneStore(
           [spec.route],
         ),
     },
-    dispose: core.dispose,
+    dispose: () => core.dispose(),
   };
 }
 

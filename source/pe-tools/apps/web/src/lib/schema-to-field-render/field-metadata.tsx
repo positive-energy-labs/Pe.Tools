@@ -70,7 +70,7 @@ function FieldMetadataTooltip({
       <Tooltip.Root>
         <Tooltip.Trigger
           aria-label="Field details"
-          className="inline-flex h-5 w-5 items-center justify-center transition-colors"
+          className="inline-flex h-5 w-5 items-center justify-center"
         >
           <CircleHelp className="h-4 w-4" />
         </Tooltip.Trigger>

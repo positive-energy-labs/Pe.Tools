@@ -1,4 +1,3 @@
-import { token } from "#/lib/token";
 import type { ReactNode } from "react";
 import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
@@ -18,19 +17,9 @@ import { DocFactChips, IssueLines, docKind, handleId, handleLabel } from "./kind
 export function DocumentTab({ doc }: { doc: Record<string, unknown> }) {
   const isActive = doc.isActive === true;
   return (
-    <div
-      className={`flex max-w-[18rem] min-w-0 flex-col gap-0.5 rounded-sm border px-2.5 py-1.5 ${isActive ? "" : ""}`}
-      style={
-        isActive
-          ? ({
-              backgroundColor: token("select"),
-              "--pe-on": token("select"),
-            } as React.CSSProperties)
-          : undefined
-      }
-    >
+    <div className="flex max-w-[18rem] min-w-0 flex-col gap-0.5 px-2.5 py-1.5">
       <div className="flex min-w-0 items-baseline gap-1.5">
-        <span className={`t-value min-w-0 truncate ${isActive ? "" : ""}`} title={text(doc.title)}>
+        <span className="min-w-0 truncate" title={text(doc.title)}>
           {text(doc.title)}
         </span>
         <span className="shrink-0">{docKind(doc)}</span>
@@ -128,11 +117,7 @@ export function VisibleSummaryView({ data, request }: OpViewProps) {
         const ids = samples.map((h) => handleId(h ?? undefined));
         const complete = row.isReturnedElementSetComplete === true;
         return (
-          <span
-            className=""
-            style={{ color: complete ? token("ink-2") : token("caution") }}
-            title={complete ? undefined : "returned element set is incomplete"}
-          >
+          <span title={complete ? undefined : "returned element set is incomplete"}>
             {ids.join(" ")}
             {!complete && " …"}
           </span>

@@ -1,4 +1,5 @@
 import { token } from "#/lib/token";
+import { annotation } from "#/anatomy";
 import { ThreadPrimitive } from "@assistant-ui/react";
 import { modeDepth } from "../depth";
 import { Moments } from "../aui";
@@ -72,10 +73,10 @@ export function Lens({
   } = useLensModel({ state, mode, initialTurn, scrollKey, onTurnChange, sideOpen }); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="lens-frame" ref={frameRef} data-mode={mode}>
-      <div className="lens-scroller" ref={scrollerRef}>
-        <div className="lens-grid">
-          <div className="mapdial" onPointerDown={onPointerDown} aria-label="Timeline">
+    <div {...annotation("frame")} ref={frameRef} data-mode={mode}>
+      <div {...annotation("scroller")} ref={scrollerRef}>
+        <div {...annotation("grid")}>
+          <div {...annotation("dial")} onPointerDown={onPointerDown} aria-label="Timeline">
             <div
               aria-hidden="true"
               title={`target: ${chipDescriptor(chatTarget.resolution).text}`}
@@ -90,20 +91,22 @@ export function Lens({
                 zIndex: 1,
               }}
             />
-            <div className="mapdial-strip" ref={stripRef}>
+            <div {...annotation("dial-strip")} ref={stripRef}>
               {moments.map((moment, index) => (
                 <div
                   key={moment.id}
                   data-key={moment.id}
-                  className={`mapdial-band ${moment.role}${
-                    cache.changed.size > 0 && index === moments.length - 1 ? "delta" : ""
-                  }`}
+                  {...annotation("dial-band")}
+                  data-role={moment.role}
+                  data-delta={
+                    cache.changed.size > 0 && index === moments.length - 1 ? "" : undefined
+                  }
                   ref={(el) => {
                     if (el) bandRefs.current.set(moment.id, el);
                     else bandRefs.current.delete(moment.id);
                   }}
                 >
-                  <span className="num" title={formatTime(moment.createdAt)}>
+                  <span {...annotation("dial-number")} title={formatTime(moment.createdAt)}>
                     #{moment.turn}
                   </span>
 
@@ -130,13 +133,13 @@ export function Lens({
                 </div>
               ))}
             </div>
-            <div className="cs-wick" ref={wickRef} />
-            <div className="cs-cap" ref={capTopRef} />
-            <div className="cs-cap" ref={capBotRef} />
-            <div className="cs-focal" ref={csFocalRef} />
-            <div className="caret" ref={caretRef} />
+            <div {...annotation("reticle-wick")} ref={wickRef} />
+            <div {...annotation("reticle-cap")} ref={capTopRef} />
+            <div {...annotation("reticle-cap")} ref={capBotRef} />
+            <div {...annotation("reticle-focal")} ref={csFocalRef} />
+            <div {...annotation("caret")} ref={caretRef} />
             {!following && moments.length > 0 ? (
-              <span className="mapdial-tail">
+              <span {...annotation("tail")}>
                 <Press
                   type="button"
                   tone="quiet"
@@ -153,7 +156,7 @@ export function Lens({
           </div>
 
           <ThreadPrimitive.Root style={{ display: "contents" }}>
-            <div className="lens-chat" ref={chatRef}>
+            <div {...annotation("chat")} ref={chatRef}>
               {moments.length === 0 ? (
                 <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
                   <h1 className="m-0">Pea</h1>
@@ -177,11 +180,12 @@ export function Lens({
             onOpenChange={onSideOpenChange}
             onWidthChange={onSideResize}
             header={sideHead}
-            className="lens-side-pane col-start-1 sticky top-0"
+            {...annotation("side-pane")}
+            className="col-start-1 sticky top-0"
           >
             {mode === "trace" ? (
-              <div className="lens-trace-frame">
-                <div className="lens-pin" ref={traceInnerRef}>
+              <div {...annotation("trace-frame")}>
+                <div {...annotation("trace-pin")} ref={traceInnerRef}>
                   {traceCells.map((cell) => (
                     <TraceCellView
                       key={cell.key}
@@ -197,7 +201,7 @@ export function Lens({
                 {(() => {
                   const cell = traceCells.find((c) => c.key === inspectKey);
                   return cell ? (
-                    <div className="lens-inspect">
+                    <div {...annotation("inspect")}>
                       <ToolCellBody call={cell.call} />
                     </div>
                   ) : null;
@@ -214,7 +218,7 @@ export function Lens({
           </SidePane>
         </div>
       </div>
-      {moments.length > 0 ? <div className="lens-scrim" aria-hidden="true" /> : null}
+      {moments.length > 0 ? <div {...annotation("scrim")} aria-hidden="true" /> : null}
     </div>
   );
 }

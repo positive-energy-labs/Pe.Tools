@@ -50,7 +50,7 @@ export function Enum<T extends string>({
       value={value}
       disabled={disabled}
       onChange={(event) => onChange(event.target.value as T)}
-      className="h-7 w-full px-2 outline-none"
+      className="h-7 w-full px-2"
     >
       {options.map((option) => (
         <option key={option} value={option}>

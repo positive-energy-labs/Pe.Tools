@@ -26,9 +26,7 @@ export function ImagesPane({
           if (images.length === 0) return null;
           return (
             <div key={page.page} ref={laneAnchorRef(refs, pageKey(page.page))}>
-              <p className="sticky top-0 z-sticky -mx-3 mb-1 px-3 py-1 backdrop-blur">
-                Page {page.page}
-              </p>
+              <p className="sticky top-0 z-sticky -mx-3 mb-1 px-3 py-1">Page {page.page}</p>
               <div className="flex flex-col gap-2">
                 {images.map((image) => {
                   const isFocused = engine.focus?.blockId === image.id;

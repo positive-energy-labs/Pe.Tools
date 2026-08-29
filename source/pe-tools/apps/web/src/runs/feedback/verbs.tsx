@@ -85,7 +85,7 @@ export function ExportStatus(props: { className?: string }) {
       <a
         href={`/runs?set=${lastExport.stamp}`}
         title="This export's rehydration link — open it (or paste it) to reload this staged set, editable. Re-exporting mints a new stamp."
-        className="break-all underline decoration-dotted"
+        className="break-all"
       >
         ?set={lastExport.stamp}
       </a>
@@ -141,8 +141,7 @@ export function NoteInput(props: {
     title:
       "One free-text note for this staged item (TASTE.md verdict shape). Lands in the manifest, the caption strip, and the clip block.",
     autoFocus: props.autoFocus,
-    className: cn("w-full px-1.5 py-0.5 placeholder:text-ink-2/50", props.className),
-    style: { borderColor: token("line-2"), borderRadius: "var(--radius)" },
+    className: cn("w-full px-1.5 py-0.5", props.className),
   };
   return props.multiline ? (
     <textarea {...shared} rows={3} className={cn(shared.className, "resize-y")} />

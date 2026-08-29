@@ -25,7 +25,7 @@ export function BreakerHalf({
 }) {
   const gutter = (
     <span
-      className={`face-mono t-label w-[34px] shrink-0 px-1.5 py-1 text-ink ${side === "left" ? "text-right" : "text-left"}`}
+      className={`w-[34px] shrink-0 px-1.5 py-1 ${side === "left" ? "text-right" : "text-left"}`}
     >
       {slot?.num ?? ""}
     </span>
@@ -37,7 +37,7 @@ export function BreakerHalf({
   );
   const load = (
     <span
-      className={`t-value min-w-0 flex-1 truncate px-1.5 py-1 ${side === "right" ? "text-right" : ""}`}
+      className={`min-w-0 flex-1 truncate px-1.5 py-1 ${side === "right" ? "text-right" : ""}`}
       title={slot?.load}
     >
       {slot ? (slot.load ?? <span className="">—</span>) : ""}

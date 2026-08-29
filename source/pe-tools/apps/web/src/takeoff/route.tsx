@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { address } from "@pe/agent-contracts";
+import { useEffect, useState } from "react";
 import { EmptyState } from "#/components/lang/empty";
 import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
 import { appAtomRegistry } from "#/state/registry";
@@ -20,8 +20,6 @@ export const PANES = [
   { key: "r10", label: ".r10 join", draws: ["r10"] },
 ] as const;
 
-export const str = (v: unknown) => (typeof v === "string" ? v : "");
-
 export const resolvedWorldBinding = (
   resolution: ReturnType<typeof resolveTarget>,
   sessions: readonly SessionFacts[],
@@ -30,16 +28,7 @@ export const resolvedWorldBinding = (
     ? mintSelector(resolution.session, sessions)
     : resolution.selector || null;
 
-export const Route = createFileRoute("/takeoffs")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
-    thread: str(search.thread) || undefined,
-    targeting: search.targeting === "flow" ? ("flow" as const) : undefined,
-  }),
-  component: TakeoffsRoute,
-});
-
-export type Search = ReturnType<(typeof Route)["useSearch"]>;
+export type TakeoffSource = "fixture" | "live";
 
 /** Per-browser recents — the legal-options source for the folder root. ponytail: a disk browse
  *  op would replace this; recents are enough while one firm has one takeoff folder. */
@@ -54,8 +43,7 @@ export const readDirs = (): string[] => {
   }
 };
 
-export function TakeoffsRoute() {
-  const { source } = Route.useSearch();
+export function TakeoffsRoute({ source }: { source: TakeoffSource }) {
   const fixtureAddress = address("C:\\Fixtures\\project-a Residence.rvt");
   return source === "fixture" ? (
     <TakeoffsStoreOwner source="fixture" documentAddress={fixtureAddress} />
@@ -65,23 +53,33 @@ export function TakeoffsRoute() {
 }
 
 export function LiveTakeoffsRoute() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted ? <MountedLiveTakeoffsRoute /> : null;
+}
+
+function MountedLiveTakeoffsRoute() {
   const info = usePeInfo();
   if (info.data?.capabilities.revit === true) return <LiveTakeoffsDocumentRoute />;
+  return <TakeoffsCapabilityState info={info} />;
+}
+
+function TakeoffsCapabilityState({ info }: { info?: ReturnType<typeof usePeInfo> }) {
   return (
     <div className="flex h-screen items-center justify-center">
       <EmptyState
         story="scope"
         exit={
-          info.error
+          info?.error
             ? "restore the host connection, or take the fixture lane with ?source=fixture"
-            : info.data
+            : info?.data
               ? "start Revit with the Pe add-in loaded, or take the fixture lane with ?source=fixture"
               : "checking host capabilities"
         }
       >
-        {info.error
+        {info?.error
           ? "host capabilities unavailable"
-          : info.data
+          : info?.data
             ? "Revit unavailable"
             : "checking host capabilities"}
       </EmptyState>
@@ -101,7 +99,7 @@ export function TakeoffsStoreOwner({
   source,
   documentAddress,
 }: {
-  source: Search["source"];
+  source: TakeoffSource;
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
   const store = useRouteStore(() => {

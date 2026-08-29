@@ -29,6 +29,8 @@ import { APPROVAL_OPTIONS, toolTarget } from "./chat-state";
 import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
+import { annotation } from "#/anatomy";
+import { Provenance } from "#/components/lang/section";
 
 const ThreadMessagesContext = createContext<ThreadMessageLike[]>([]);
 
@@ -88,7 +90,7 @@ function MomentSection({
   const register = useContext(MomentRegistry);
   const setRef = useCallback((el: HTMLElement | null) => register(id, el), [register, id]);
   return (
-    <section data-key={id} data-role={role} className="lens-moment" ref={setRef}>
+    <section data-key={id} data-role={role} {...annotation("moment")} ref={setRef}>
       {children}
     </section>
   );
@@ -126,8 +128,10 @@ function MomentTime() {
   );
   if (!at) return null;
   return (
-    <span className="ml-auto normal-case">
-      {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+    <span className="ml-auto">
+      <Provenance>
+        {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+      </Provenance>
     </span>
   );
 }
@@ -189,7 +193,7 @@ function AssistantMoment() {
       <div className="grid gap-1">
         <AssistantParts />
 
-        {running ? <span className="mg-caret" aria-hidden="true" /> : null}
+        {running ? <span {...annotation("streaming-caret")} aria-hidden="true" /> : null}
       </div>
     </MomentSection>
   );
@@ -261,16 +265,12 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   const pending = approval && approval.approved === undefined && !approval.resolution;
   return (
     <div className="grid gap-1" data-tool-id={toolCallId}>
-      <div className={`lens-marker tool ${tone}`}>
+      <div {...annotation("tool-marker")} data-kind="tool" className={tone}>
         <span>⌗ {toolTitle(toolName)}</span>
         {target ? <code>{target}</code> : null}
 
-        <span
-          className={`t-label face-mono ml-auto ${
-            isError ? "" : status?.type === "running" ? "" : ""
-          }`}
-        >
-          {isError ? "err" : status?.type === "running" ? "run" : "ok"}
+        <span className="ml-auto">
+          <Provenance>{isError ? "err" : status?.type === "running" ? "run" : "ok"}</Provenance>
         </span>
       </div>
       <RouteChatPluginView

@@ -13,6 +13,7 @@ export {
   useSchemaDocument,
   useFieldChangeSummary,
   coercePrimitive,
+  primitiveInputValue,
   objectEntriesSorted,
   buildDefaultArrayItem,
 } from "./shared/field-option";

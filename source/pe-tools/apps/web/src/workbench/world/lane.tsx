@@ -1,9 +1,11 @@
 import { useAtomValue } from "@effect/atom-react";
+import { Key } from "#/anatomy";
 import type { ContextBreakdown, ContextItem } from "../chat-state";
 import { EmptyState } from "#/components/lang/empty";
 import { FactChip } from "#/components/lang/chip";
 import { Switcher } from "#/components/lang/switcher";
 import { cn } from "#/lib/utils";
+import { token } from "#/lib/token";
 import { useWorkbench } from "../provider";
 import {
   blastOf,
@@ -135,8 +137,7 @@ export function WorldLane({
             <span className="ml-auto">{fmtTok(totals.cached)}</span>
           </div>
           <div className="flex items-center gap-[7px]">
-            <span className="size-[9px] flex-none caution-hatch" />
-            reprocessed · 1×
+            <Key tone={token("caution")} label="reprocessed · 1×" seam />
             <span className="ml-auto">{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
@@ -155,8 +156,14 @@ export function WorldLane({
           const changed = diff && cache.changed.has(layer.id);
           const blast = blastOf(layer.rank);
           return (
-            <div className={cn("", changed && "caution-wash-artifact")} key={layer.id}>
-              <Press tone="quiet" layout="block" type="button" onClick={() => toggle(layer.id)}>
+            <div key={layer.id}>
+              <Press
+                tone={changed ? "caution" : "quiet"}
+                state={changed ? "highlighted" : "rest"}
+                layout="block"
+                type="button"
+                onClick={() => toggle(layer.id)}
+              >
                 <span
                   className={cn(
                     WORLD_ROW,

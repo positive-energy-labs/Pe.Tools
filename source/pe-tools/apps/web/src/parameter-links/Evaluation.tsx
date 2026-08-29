@@ -129,7 +129,6 @@ export function EvaluationView({
               {writes.map((write) => (
                 <tr
                   key={`${write.assignmentId}:${write.targetElementUniqueId}:${write.targetParameter.name ?? write.targetParameter.kind}`}
-                  className="last:border-b-0"
                 >
                   <td
                     className={

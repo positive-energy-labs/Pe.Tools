@@ -34,7 +34,7 @@ export function ParameterLinksReview({
     <div className="mt-1.5 w-full pt-1.5">
       <div className="max-h-64 space-y-1 overflow-y-auto">
         {profile?.definitions.map((definition) => (
-          <div key={definition.id} className="py-1 last:border-0">
+          <div key={definition.id} className="py-1">
             <div className="">{definition.id}</div>
             <div className="">
               {definition.relationship} · {definition.reducer} · category{" "}
