@@ -151,12 +151,12 @@ export function StatePanel({
         ) : (
           <ul className="mt-1">
             {staged.map((change) => (
-              <li key={change.path}>
+              <li key={change.path} className="[&>button]:w-full">
                 <Press
                   type="button"
                   onClick={() => editor.setFocus(change.path)}
                   title={`Show ${change.path} in the json pane`}
-                  className="w-full"
+                  size="mono-caption"
                   style={{
                     backgroundColor: editor.focus === change.path ? token("select") : "transparent",
                     border: "none",
@@ -261,13 +261,14 @@ export function RefToken({
       </Press>
       {open ? (
         <>
-          <Press
-            type="button"
-            aria-label="close picker"
-            onClick={() => setOpen(false)}
-            className="z-raised"
-            style={{ backgroundColor: "transparent", border: "none" }}
-          />
+          <span className="z-raised">
+            <Press
+              type="button"
+              aria-label="close picker"
+              onClick={() => setOpen(false)}
+              style={{ backgroundColor: "transparent", border: "none" }}
+            />
+          </span>
           <div
             className="z-popup mt-1 max-h-72 w-72 overflow-y-auto px-1 py-1"
             style={{
@@ -287,7 +288,8 @@ export function RefToken({
                     onPick(option);
                     setOpen(false);
                   }}
-                  className="flex w-full items-baseline justify-between gap-2 px-1 py-0.5"
+                  size="mono-label"
+                  layout="baseline"
                   style={{
                     backgroundColor: option === value ? token("select") : "transparent",
                     border: "none",
@@ -358,7 +360,7 @@ export function TypeStage({ editor }: { editor: Editor }) {
           type="button"
           title={`Resolve every value on this surface for the ${name} type`}
           onClick={() => editor.setTypeName(name)}
-          className="px-1"
+          size="mono-label"
           style={{
             backgroundColor: name === editor.typeName ? token("select") : "transparent",
             border: "none",

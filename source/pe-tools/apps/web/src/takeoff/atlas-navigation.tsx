@@ -58,10 +58,9 @@ export function AtlasNavigation() {
                     setZoneKey(null);
                     setCursor(null);
                   }}
-                  className={cn(
-                    "flex items-baseline gap-1.5 rounded-sm px-1 py-0.5 text-left hover:bg-recess",
-                    on && "bg-select",
-                  )}
+                  tone="quiet"
+                  layout="baseline"
+                  state={on ? "selected" : "rest"}
                 >
                   <span className="face-mono t-value w-3 shrink-0 text-ink-2">{i + 1}</span>
                   <span className={cn("face-mono t-value flex-1 truncate", !on && "text-ink-2")}>
@@ -73,11 +72,7 @@ export function AtlasNavigation() {
             })}
           </div>
           {stageFilter && (
-            <Press
-              type="button"
-              className="t-caption mt-1 text-ink-2 hover:text-ink"
-              onClick={() => setStageFilter(null)}
-            >
+            <Press type="button" tone="quiet" size="caption" onClick={() => setStageFilter(null)}>
               clear filter — show all {world.zones.length}
             </Press>
           )}
@@ -108,11 +103,9 @@ export function AtlasNavigation() {
                               ? `off-plan scribble — ${fmtNum(z.zone.declaredSqft, 0)} sf, drawn far from the level cluster; kept in the list, excluded from the plan`
                               : `${z.name} · ${z.zone.lane.label} · ${fmtNum(z.zone.declaredSqft, 0)} sf declared`
                           }
-                          className={cn(
-                            "flex w-full items-center gap-1.5 border-b border-line px-2 py-1 text-left hover:bg-recess",
-                            on && "bg-select",
-                            off && "opacity-55",
-                          )}
+                          tone="quiet"
+                          layout="row"
+                          state={on ? "selected" : off ? "subdued" : "rest"}
                         >
                           <ZoneThumb zone={z.zone} className="size-5" />
                           <span className="face-mono t-value shrink-0">{z.zone.key}</span>

@@ -114,7 +114,8 @@ export default function RunBrowser() {
               type="button"
               onClick={() => setReview(false)}
               title="Back to the normal sheet."
-              className="face-mono ml-auto border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
+              tone="bordered-quiet"
+              size="chip-caption"
               style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               ✕ exit review
@@ -138,7 +139,8 @@ export default function RunBrowser() {
                         ? "This item's pinned pair IS the current lens."
                         : "Pinned pair ≠ current lens — click to swing the lens to this pair (the stage is untouched)."
                     }
-                    className="face-mono flex items-baseline gap-2 t-label text-ink-2 hover:text-ink"
+                    tone="quiet"
+                    size="mono-label"
                   >
                     <span>
                       pinned A {item.runA ?? "(none)"} → B {item.runB}
@@ -156,7 +158,8 @@ export default function RunBrowser() {
                     type="button"
                     onClick={() => fb.unstage(item.key)}
                     title="Remove this item from the staged set."
-                    className="face-mono ml-auto t-caption text-ink-2 hover:text-ink"
+                    tone="quiet"
+                    size="mono-caption"
                   >
                     ✕ unstage
                   </Press>
@@ -259,7 +262,7 @@ export default function RunBrowser() {
     <div className="flex size-full min-h-0 flex-col">
       <PaneSplit
         axis="horizontal"
-        className="min-h-0 flex-1"
+        grow
         resize={{
           target: "end",
           defaultSize: 340,
@@ -335,7 +338,8 @@ export default function RunBrowser() {
                       ? "Collapse the plan dock (drag the divider to resize it)."
                       : "Expand the plan dock."
                   }
-                  className="face-mono px-1.5 t-label text-ink-2 hover:text-ink"
+                  tone="quiet"
+                  size="chip-label"
                 >
                   {planOpen ? "▴ hide plan" : "▾ show plan"}
                 </Press>

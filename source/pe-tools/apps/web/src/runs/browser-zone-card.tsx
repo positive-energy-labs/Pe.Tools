@@ -1,6 +1,5 @@
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
-import { cn } from "#/lib/utils";
 import { itemKey, type StagedItem } from "./feedback/staging";
 import { type RunIndexEntry, type ZoneRecord } from "./world";
 import { Press } from "#/components/lang/press";
@@ -82,10 +81,9 @@ export function ZoneCard(props: {
                   ? "Highlighted on the plan — click to clear the highlight."
                   : "Highlight this zone on the plan (opens + centers the plan dock). Stays lit until you click again, pick another zone, or hit esc."
               }
-              className={cn(
-                "face-mono shrink-0 border px-1.5 t-caption",
-                props.highlighted ? "bg-recess text-ink" : "text-ink-2 hover:text-ink",
-              )}
+              size="chip-caption"
+              tone="bordered-quiet"
+              state={props.highlighted ? "highlighted" : "rest"}
               style={{
                 borderColor: props.highlighted ? token("ink-2") : token("line-2"),
                 borderRadius: "var(--radius)",
@@ -228,7 +226,7 @@ export function RunStrip(props: {
             <Press
               type="button"
               onClick={() => onPickCur(entry.id)}
-              className="flex flex-col items-start px-2 py-1 text-left"
+              layout="stack"
               title={`${entry.id} — click to make this the CURRENT run (B).`}
             >
               <span className="face-mono t-value">
@@ -249,7 +247,7 @@ export function RunStrip(props: {
               type="button"
               onClick={() => onPickBaseline(entry.id)}
               disabled={isCur}
-              className="border-l px-1.5 t-caption"
+              size="caption"
               style={{
                 borderColor: token("line-2"),
                 backgroundColor: isPrev ? token("recess") : "transparent",

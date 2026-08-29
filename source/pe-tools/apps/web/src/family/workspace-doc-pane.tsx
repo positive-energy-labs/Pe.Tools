@@ -79,7 +79,8 @@ export function FamilyWorkspaceDocPane() {
                     setPinnedParam(bound);
                   }}
                   title={`Driven by "${bound}", currently ${draft.authored[bound] ?? "—"}. Click to select that parameter: the value is edited on its row and in its own inspector, never in two places.`}
-                  className="face-mono min-w-0 flex-1 truncate text-left t-caption text-ink hover:underline"
+                  tone="link"
+                  size="mono-caption"
                 >
                   {bound}
                 </Press>
@@ -199,7 +200,9 @@ export function FamilyWorkspaceDocPane() {
                 type="button"
                 onClick={() => setInspect({ kind: "part", slug: entry.slug })}
                 title={`Open ${entry.slug} — its kind, its other dims, and the non-bindable metadata no parameter can drive.`}
-                className="face-mono block w-full truncate text-left t-caption text-ink hover:underline"
+                tone="link"
+                size="mono-caption"
+                layout="block"
               >
                 → {entry.slug}.{entry.property}
               </Press>

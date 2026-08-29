@@ -1,16 +1,5 @@
-/**
- * PRESS — the neutral machinery control: a tab, a disclosure, a sort header, a close ×.
- * `Verb` is the control that ACTS and owns the tone budget; `Press` mints no tone and draws no
- * layout (the call site keeps its own padding, ground and type). A control that has earned a
- * tone is a `Verb`, not a dressed-up `Press`.
- *
- * Invariants it owns: a real `<button>` (Enter/Space, role, form participation); `type`
- * defaulted to `"button"` so a control inside a form is never an accidental submit; the ONE
- * HOVER LAW's veil, focus ring and `not-allowed` disabled cursor via `pressRecipe`;
- * and pass-through of `ref`, handlers, `disabled` and aria — nothing here intercepts them.
- *
- * The ground/type/border reset stays out of the base recipe. Closed variants own earned marks.
- */
+/** Neutral machinery control. Its closed recipe owns every visual choice; consumers supply
+ * meaning through variants and may wrap it only for one-off geometry. */
 import { tv, type VariantProps } from "#/lib/tv";
 
 import "./lang.css";
@@ -20,12 +9,31 @@ export const pressRecipe = tv({
   variants: {
     tone: {
       bare: "",
-      neutral: "text-ink hover:veil",
-      quiet: "text-ink-2 hover:text-ink",
-      bordered: "border border-line bg-artifact text-ink hover:veil",
+      neutral: "text-ink",
+      quiet: "text-ink-2 enabled:hover:text-ink",
+      muted: "text-ink-mute enabled:hover:text-ink",
+      bordered: "border border-line bg-transparent text-ink",
+      "bordered-quiet": "border border-line bg-transparent text-ink-2 enabled:hover:text-ink",
+      firm: "border border-line-2 bg-transparent text-ink-2 enabled:hover:bg-recess",
+      artifact: "border border-line bg-artifact text-ink",
+      document: "border border-line bg-document text-ink",
+      link: "text-ink enabled:hover:underline",
+      pea: "border border-pea text-pea-ink",
+      caution: "border border-caution text-caution",
+      locate: "border border-transparent enabled:hover:border-ink",
+      "locate-line": "border border-line enabled:hover:border-ink",
+      "locate-viz": "border border-viz-4 enabled:hover:border-ink",
+      input: "text-ink shadow-none disabled:pointer-events-none disabled:opacity-50",
     },
     size: {
       auto: "",
+      caption: "t-caption",
+      label: "t-label",
+      value: "t-value",
+      title: "t-title",
+      "mono-caption": "face-mono t-caption",
+      "mono-label": "face-mono t-label",
+      "mono-value": "face-mono t-value",
       xs: "inline-flex h-5 items-center justify-center rounded-sm px-1 t-caption",
       sm: "inline-flex h-6 items-center justify-center rounded-md px-2 t-value",
       md: "inline-flex h-7 items-center justify-center rounded-md px-2 t-value",
@@ -35,34 +43,45 @@ export const pressRecipe = tv({
         "inline-flex size-6 shrink-0 items-center justify-center rounded-sm [&>svg]:pointer-events-none [&>svg]:shrink-0",
       "icon-md":
         "inline-flex size-7 shrink-0 items-center justify-center rounded-sm [&>svg]:pointer-events-none [&>svg]:shrink-0",
-      row: "flex w-full items-center gap-2 px-2 py-1.5 text-left",
+      "chip-caption": "inline-flex items-center rounded-sm px-1.5 py-0.5 face-mono t-caption",
+      "chip-label": "inline-flex items-center rounded-sm px-1.5 py-0.5 face-mono t-label",
+      "chip-value": "inline-flex items-center rounded-sm px-2 py-0.5 face-mono t-value",
+      drop: "px-6 py-12",
     },
     state: {
       rest: "",
       selectable: "aria-pressed:bg-select aria-pressed:text-ink",
+      selected: "bg-select text-ink",
+      expanded: "aria-expanded:bg-recess aria-expanded:text-ink",
+      highlighted: "bg-recess text-ink",
+      emphasis: "font-semibold text-ink",
+      subdued: "opacity-55",
+      "disabled-faint": "disabled:opacity-40 disabled:italic",
+      "row-action":
+        "opacity-0 transition-opacity group-hover/row:opacity-100 data-selected:opacity-100",
+      "row-action-inline": "hidden group-hover/row:inline",
+      focused: "z-raised border-2 border-ink",
+      "focused-caution": "z-raised border-2 border-caution",
+    },
+    layout: {
+      auto: "",
+      row: "flex w-full items-center gap-2 px-2 py-1.5 text-left",
+      baseline: "flex w-full items-baseline gap-2 px-2 py-0.5 text-left",
+      stack: "flex w-full flex-col items-start gap-0.5 px-2 py-1.5 text-left",
+      block: "block w-full text-left",
     },
   },
-  defaultVariants: { tone: "bare", size: "auto", state: "rest" },
+  defaultVariants: { tone: "bare", size: "auto", state: "rest", layout: "auto" },
 });
 
-export type PressProps = Omit<React.ComponentProps<"button">, "size"> &
-  VariantProps<typeof pressRecipe> & {
-    /** Compatibility for callers outside this migration's component scope. */
-    className?: string;
-    /** Icon-only alias while callers move to `size="icon-*"`. */
-    icon?: boolean;
-  };
+export type PressProps = Omit<React.ComponentProps<"button">, "className" | "size"> &
+  VariantProps<typeof pressRecipe>;
 
-export function Press({ className, type, icon, tone, size, state, ...props }: PressProps) {
+export function Press({ type, tone, size, state, layout, ...props }: PressProps) {
   return (
     <button
       type={type ?? "button"}
-      className={pressRecipe({
-        tone,
-        size: icon === true && size == null ? "icon-sm" : size,
-        state,
-        className,
-      })}
+      className={pressRecipe({ tone, size, state, layout })}
       {...props}
     />
   );

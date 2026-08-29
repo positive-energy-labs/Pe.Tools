@@ -41,7 +41,7 @@ function PaneSpecimens() {
               title={kind}
               meta="4"
               actions={
-                <Press icon aria-label="refresh" className="size-5">
+                <Press size="icon-xs" aria-label="refresh">
                   <RefreshCw className="size-3" />
                 </Press>
               }

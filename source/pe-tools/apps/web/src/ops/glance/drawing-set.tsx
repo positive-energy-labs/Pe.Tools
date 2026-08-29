@@ -100,7 +100,8 @@ function Thumbnail({
     <Press
       type="button"
       onClick={onSelect}
-      className={`flex min-w-0 flex-col gap-1 rounded-sm border p-1.5 text-left hover:veil ${selected ? "border-line-2" : "border-line"}`}
+      tone={selected ? "firm" : "bordered"}
+      layout="stack"
       style={
         selected
           ? ({

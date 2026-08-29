@@ -266,11 +266,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
                 <span className="t-caption t-upper text-ink-2">ledger</span>
                 <HelpTip>Settled SDK envelopes merged with bridge-observed world events.</HelpTip>
               </span>
-              <Press
-                type="button"
-                onClick={() => setLedgerOpen(false)}
-                className="t-caption rounded-sm border border-line-2 px-1"
-              >
+              <Press type="button" onClick={() => setLedgerOpen(false)} tone="firm" size="caption">
                 ›
               </Press>
             </div>
@@ -290,15 +286,13 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
             </div>
           </div>
         ) : (
-          <Press
-            type="button"
-            onClick={() => setLedgerOpen(true)}
-            className="ml-2 flex w-6 flex-col items-center gap-2 self-stretch rounded-sm border border-line-2 bg-transparent py-2"
-          >
-            <span className="t-caption t-upper text-ink-2 [writing-mode:vertical-rl]">
-              ledger · {ledger.length}
-            </span>
-          </Press>
+          <div className="ml-2 flex w-6 flex-col items-center gap-2 self-stretch rounded-sm py-2">
+            <Press type="button" onClick={() => setLedgerOpen(true)} tone="firm">
+              <span className="t-caption t-upper text-ink-2 [writing-mode:vertical-rl]">
+                ledger · {ledger.length}
+              </span>
+            </Press>
+          </div>
         )}
       </div>
     </div>

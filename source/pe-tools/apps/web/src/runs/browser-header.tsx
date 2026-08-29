@@ -1,7 +1,6 @@
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { Press } from "#/components/lang/press";
-import { cn } from "#/lib/utils";
 import { Delta, PartialityChip, fmtSqft } from "./browser-unknown-title";
 import { RunStrip } from "./browser-zone-card";
 import { HeaderScores } from "./browser-no-scores-title";
@@ -91,7 +90,8 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
               type="button"
               onClick={() => setBaseline(null)}
               title="Clear the baseline — cards show the current run only, same footprint."
-              className="face-mono border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
+              tone="bordered-quiet"
+              size="chip-caption"
               style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               clear A
@@ -101,7 +101,8 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
               type="button"
               onClick={() => setBaseline("auto")}
               title="Restore the default baseline: the current run's chronological predecessor."
-              className="face-mono border px-1.5 py-0.5 t-caption text-ink-2 hover:text-ink"
+              tone="bordered-quiet"
+              size="chip-caption"
               style={{ borderColor: token("line-2"), borderRadius: "var(--radius)" }}
             >
               A: auto
@@ -111,10 +112,9 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
             type="button"
             onClick={() => setUnderlay((u) => !u)}
             title="Show/hide the solver evidence layer (received ink + invented closures). The registered Revit plan remains the substrate."
-            className={cn(
-              "face-mono rounded-sm px-1.5 py-0.5 t-caption",
-              underlay ? "bg-recess text-ink" : "border text-ink-2",
-            )}
+            size="chip-caption"
+            tone={underlay ? "neutral" : "bordered-quiet"}
+            state={underlay ? "highlighted" : "rest"}
             style={underlay ? undefined : { borderColor: token("line-2") }}
           >
             ink evidence
@@ -128,12 +128,9 @@ export function RunBrowserHeader({ model }: { model: RunBrowserModel }) {
                 ? "Show only zones that materially changed between A and B (rooms moved, sf moved > 0.5, verdict flipped, or exists on one side only)."
                 : "Needs a baseline — pick A first."
             }
-            className={cn(
-              "face-mono rounded-sm px-1.5 py-0.5 t-caption",
-              changedOnly && comparing
-                ? "bg-recess text-ink"
-                : "border text-ink-2 disabled:opacity-40",
-            )}
+            size="chip-caption"
+            tone="bordered-quiet"
+            state={changedOnly && comparing ? "highlighted" : "disabled-faint"}
             style={changedOnly && comparing ? undefined : { borderColor: token("line-2") }}
           >
             changed only

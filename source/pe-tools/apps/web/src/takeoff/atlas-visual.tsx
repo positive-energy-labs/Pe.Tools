@@ -1,7 +1,6 @@
 import { Suspense } from "react";
 import { Press } from "#/components/lang/press";
 import { Pane } from "#/components/ui/pane";
-import { cn } from "#/lib/utils";
 import { LevelPlan } from "#/takeoff/level-plan";
 import { LevelStats } from "#/takeoff/level-stats";
 import { ZoneCard } from "#/takeoff/zone-card";
@@ -47,13 +46,10 @@ export function AtlasVisual() {
                   key={lane.label}
                   type="button"
                   onClick={() => setLevel(lane.label)}
+                  size="chip-value"
+                  tone={lane.label === level ? "firm" : "quiet"}
+                  state={lane.label === level ? "selected" : "rest"}
                   title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
-                  className={cn(
-                    "face-mono t-value rounded-sm border px-2 py-0.5",
-                    lane.label === level
-                      ? "border-line-2 bg-select"
-                      : "border-transparent text-ink-2 hover:bg-recess",
-                  )}
                 >
                   {lane.label}
                   <span className="ml-1 opacity-60">{zs.length}</span>
@@ -65,11 +61,10 @@ export function AtlasVisual() {
             <Press
               type="button"
               onClick={() => setStatsOpen(!statsOpen)}
+              size="chip-value"
+              tone="firm"
+              state={statsOpen ? "selected" : "rest"}
               title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
-              className={cn(
-                "face-mono t-value ml-2 rounded-sm border border-line-2 px-1.5 py-0.5",
-                statsOpen ? "bg-select" : "text-ink-2 hover:bg-recess",
-              )}
             >
               level stats
             </Press>
@@ -79,7 +74,8 @@ export function AtlasVisual() {
               title={
                 planOpen ? "collapse the plan — give the table the full height" : "show the plan"
               }
-              className="face-mono t-value rounded-sm border border-line-2 px-1.5 py-0.5 text-ink-2 hover:bg-recess"
+              tone="firm"
+              size="chip-value"
             >
               {planOpen ? "▴ hide plan" : "▾ show plan"}
             </Press>

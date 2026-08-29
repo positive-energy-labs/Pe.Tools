@@ -130,12 +130,13 @@ function PickerChipSpecimen() {
       onValueChange={(option: (typeof CATEGORY_OPTIONS)[number] | null) => setPicked(option)}
       itemToStringLabel={(option: (typeof CATEGORY_OPTIONS)[number]) => option.label}
     >
-      <div ref={anchorRef} className="inline-flex">
+      <div
+        ref={anchorRef}
+        className="inline-flex max-w-40 [&>button]:max-w-full [&>button]:justify-between [&>button]:gap-1"
+      >
         <ComboboxTrigger
           title="Category"
-          render={
-            <Press className="inline-flex h-7 max-w-40 items-center justify-between gap-1 px-2" />
-          }
+          render={<Press tone="quiet" size="md" state="expanded" />}
         >
           <span>{picked?.label ?? "category"}</span>
         </ComboboxTrigger>
@@ -325,7 +326,9 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
             type="button"
             onClick={() => onPick(s.id)}
             title={`Mount ${s.name} at all nine positions`}
-            className="px-1.5 py-0.5"
+            size="chip-caption"
+            tone={s.id === specimen.id ? "firm" : "bordered-quiet"}
+            state={s.id === specimen.id ? "selected" : "rest"}
           >
             {s.name}
           </Press>

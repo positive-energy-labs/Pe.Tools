@@ -36,7 +36,7 @@ export function Workspace({
       ) : (
         <PaneWorkspace
           {...pane}
-          className={cn("min-h-0 flex-1", pane?.className)}
+          grow
           navigation={navigation}
           visual={visual}
           content={table}

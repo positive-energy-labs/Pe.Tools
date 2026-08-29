@@ -58,7 +58,7 @@ export function UiSurfaceSpecimens() {
                 <CardDescription>13 params · 3 types</CardDescription>
               </div>
               <CardAction>
-                <Press className="inline-flex h-6 items-center px-2">open</Press>
+                <Press size="sm">open</Press>
               </CardAction>
             </CardHeader>
             <CardContent>content</CardContent>
@@ -72,9 +72,7 @@ export function UiSurfaceSpecimens() {
         recipe={dialogRecipe}
         render={() => (
           <Dialog>
-            <DialogTrigger render={<Press className="inline-flex h-6 items-center px-2" />}>
-              open dialog
-            </DialogTrigger>
+            <DialogTrigger render={<Press size="sm" />}>open dialog</DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Dialog</DialogTitle>

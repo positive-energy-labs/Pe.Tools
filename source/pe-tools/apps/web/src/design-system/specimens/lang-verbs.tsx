@@ -16,11 +16,9 @@ export function LangVerbSpecimens() {
         recipe={pressRecipe}
         render={(props) => (
           <Press
-            tone={props.tone as "bare" | "neutral" | "quiet" | "bordered"}
-            size={
-              props.size as "auto" | "xs" | "sm" | "md" | "icon-xs" | "icon-sm" | "icon-md" | "row"
-            }
-            state={props.state as "rest" | "selectable"}
+            tone={props.tone as React.ComponentProps<typeof Press>["tone"]}
+            size={props.size as React.ComponentProps<typeof Press>["size"]}
+            state={props.state as React.ComponentProps<typeof Press>["state"]}
             aria-pressed={props.state === "selectable"}
           >
             {String(props.size).startsWith("icon") ? <RefreshCw className="size-3" /> : "raw json"}

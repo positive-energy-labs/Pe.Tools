@@ -119,7 +119,8 @@ export function RouteDocumentPicker({
         <Press
           key={choice.at}
           type="button"
-          className="rounded-sm border border-line px-3 py-2 text-left t-value text-ink hover:veil"
+          tone="bordered"
+          size="value"
           onClick={() => onPick(choice.at)}
         >
           {choice.label}

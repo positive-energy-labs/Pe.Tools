@@ -101,10 +101,10 @@ export function LedgerDock(props: {
                   ? "This is the baseline (A) — click to clear it."
                   : "Set this run as the baseline (A).") + caveat
               }
-              className={cn(
-                "face-mono h-7 w-full px-1.5 text-left",
-                isA ? "font-semibold text-ink" : "text-ink-2/60 hover:text-ink-2",
-              )}
+              size="mono-value"
+              tone="quiet"
+              layout="block"
+              state={isA ? "emphasis" : "rest"}
             >
               {isA ? "A" : "set A"}
             </Press>
@@ -320,7 +320,7 @@ export function LedgerDock(props: {
             ? "Collapse the run ledger."
             : "Expand the run ledger — rows are runs, marks drive the sheet's A/B."
         }
-        className="flex w-full items-baseline gap-2 px-3 py-1 text-left hover:bg-recess"
+        layout="baseline"
       >
         <span className="face-mono t-caption t-upper text-ink-2">ledger</span>
         <span className="face-mono t-label text-ink-2">

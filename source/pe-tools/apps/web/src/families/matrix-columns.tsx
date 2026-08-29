@@ -127,7 +127,8 @@ export function useFamiliesColumns({
                 return next;
               })
             }
-            className="face-mono t-value h-7 w-full px-1.5 text-left text-ink-2 hover:text-ink"
+            tone="quiet"
+            size="mono-value"
           >
             {pickedIds.has(row.familyId) ? "▪" : "□"}
           </Press>

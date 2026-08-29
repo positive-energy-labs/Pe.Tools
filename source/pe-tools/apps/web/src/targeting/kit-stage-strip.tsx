@@ -42,7 +42,7 @@ export function StageStrip<K extends string>({
                 return c.ok ? `${v.label}: ready` : `${v.label}: ${c.reason}`;
               })
               .join(" · ")}`}
-            className="face-mono t-caption t-upper flex items-baseline gap-2 px-2.5 py-1"
+            size="mono-caption"
             style={{
               borderLeft: i > 0 ? `1px solid ${token("line-2")}` : undefined,
               backgroundColor: on ? token("select") : "transparent",

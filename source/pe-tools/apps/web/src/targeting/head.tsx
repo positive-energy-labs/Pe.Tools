@@ -128,7 +128,7 @@ export function TargetingHead<K extends string>({
           ? "Collapse the verbs back to one row"
           : "Expand the verbs: what each one needs and why it is or is not ready"
       }
-      className="face-mono t-caption px-2.5"
+      size="mono-caption"
       style={{ borderLeft: `1px solid ${token("line-2")}`, color: token("ink-2") }}
     >
       {expanded ? "▴" : "▾"}

@@ -171,38 +171,40 @@ export function ContextRibbon({
   ];
 
   return (
-    <Press
-      type="button"
-      className="group/ribbon relative block w-full cursor-pointer border-0 bg-transparent p-0"
-      onClick={onOpenWorld}
-      title="What the agent sends the model — request order, token budget. Click to inspect."
-      aria-label="Context budget"
-    >
-      <BudgetBar
-        breakdown={breakdown}
-        cache={cache}
-        className="relative flex h-1.5 items-stretch overflow-hidden bg-recess"
-      />
-      <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] rounded-sm border-[0.5px] border-line-2 on-page px-2.5 py-2 t-label text-ink-2 group-hover/ribbon:flex group-focus-visible/ribbon:flex">
-        {rows.map((row) => (
-          <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
-            <span
-              className="size-2 flex-none rounded-sm"
-              style={{ backgroundColor: tone(row.id) }}
-            />
-            {row.label}
+    <div className="group/ribbon relative block w-full">
+      <Press
+        type="button"
+        layout="block"
+        onClick={onOpenWorld}
+        title="What the agent sends the model — request order, token budget. Click to inspect."
+        aria-label="Context budget"
+      >
+        <BudgetBar
+          breakdown={breakdown}
+          cache={cache}
+          className="relative flex h-1.5 items-stretch overflow-hidden bg-recess"
+        />
+        <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] rounded-sm border-[0.5px] border-line-2 on-page px-2.5 py-2 t-label text-ink-2 group-hover/ribbon:flex group-focus-within/ribbon:flex">
+          {rows.map((row) => (
+            <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
+              <span
+                className="size-2 flex-none rounded-sm"
+                style={{ backgroundColor: tone(row.id) }}
+              />
+              {row.label}
 
-            {row.active ? <span className="ml-1 text-ink-2">⟲</span> : null}
-            <span className="ml-auto t-value face-mono text-ink-2">
-              {fmtTok(row.tok)}
-              {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
+              {row.active ? <span className="ml-1 text-ink-2">⟲</span> : null}
+              <span className="ml-auto t-value face-mono text-ink-2">
+                {fmtTok(row.tok)}
+                {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
+              </span>
             </span>
+          ))}
+          <span className="mt-0.5 t-caption text-ink-2">
+            {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
           </span>
-        ))}
-        <span className="mt-0.5 t-caption text-ink-2">
-          {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
         </span>
-      </span>
-    </Press>
+      </Press>
+    </div>
   );
 }

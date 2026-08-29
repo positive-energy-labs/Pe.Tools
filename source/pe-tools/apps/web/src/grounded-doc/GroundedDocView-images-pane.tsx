@@ -45,11 +45,9 @@ export function ImagesPane({
                       ref={laneAnchorRef(refs, image.id)}
                       onMouseEnter={() => engine.hoverBlock(image.id, "image")}
                       onClick={() => engine.pinBlock(image.id, "image")}
-                      className={cn(
-                        "group flex flex-col overflow-hidden rounded-sm border bg-document text-left",
-                        isFocused ? "border-ink" : "border-line",
-                        !isFocused && VEIL_HOVER,
-                      )}
+                      tone="document"
+                      layout="stack"
+                      state={isFocused ? "focused" : "rest"}
                     >
                       <img
                         src={image.url}
@@ -207,19 +205,8 @@ export function PageCanvas({
               }
               onMouseEnter={() => engine.hoverBlock(block.id, "page")}
               onClick={() => engine.pinBlock(block.id, "page")}
-              className={cn(
-                "absolute rounded-[1px] border",
-                isFocused
-                  ? isApprox
-                    ? "z-raised border-2 border-caution"
-                    : "z-raised border-2 border-ink"
-                  : page.screenshotUrl
-                    ? isApprox
-                      ? "border-caution"
-                      : cn("border-transparent hover:border-ink", VEIL_HOVER)
-                    : // Wireframe mode (no screenshot): keep boxes faintly visible.
-                      cn("border-line hover:border-ink", VEIL_HOVER),
-              )}
+              tone={isApprox ? "caution" : page.screenshotUrl ? "locate" : "locate-line"}
+              state={isFocused ? (isApprox ? "focused-caution" : "focused") : "rest"}
             >
               {!page.screenshotUrl && (
                 <span className="t-caption face-mono absolute left-0.5 top-0.5 text-ink-mute">
@@ -242,12 +229,8 @@ export function PageCanvas({
               title={`${image.category} image — click to ${isPinned ? "unpin" : "pin"}`}
               onMouseEnter={() => engine.hoverBlock(image.id, "page")}
               onClick={() => engine.pinBlock(image.id, "page")}
-              className={cn(
-                "absolute rounded-[1px] border",
-                isFocused
-                  ? "z-raised border-2 border-ink"
-                  : cn("border-viz-4 hover:border-ink", VEIL_HOVER),
-              )}
+              tone="locate-viz"
+              state={isFocused ? "focused" : "rest"}
             />
           );
         })}

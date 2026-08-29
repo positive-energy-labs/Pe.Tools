@@ -175,7 +175,7 @@ function GrillesRoute() {
       </header>
 
       <PaneWorkspace
-        className="min-h-0 flex-1"
+        grow
         visual={drawing}
         content={table}
         inspector={chart}

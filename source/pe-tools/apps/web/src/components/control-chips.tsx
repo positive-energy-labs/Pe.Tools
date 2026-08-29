@@ -92,12 +92,7 @@ function Picker({
       {/* ponytail: explicit anchor on the trigger — the in-popup search input can't be the
           positioner anchor or it feedback-loops (roaming/jittering popup). */}
       <div ref={anchorRef} className="inline-flex">
-        <ComboboxTrigger
-          title={title}
-          render={
-            <Press className="inline-flex h-7 max-w-40 shrink-0 items-center justify-between gap-1 rounded-md px-2 t-value font-medium whitespace-nowrap text-ink-2 transition-all hover:veil aria-expanded:bg-recess aria-expanded:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0" />
-          }
-        >
+        <ComboboxTrigger title={title} render={<Press tone="quiet" size="md" state="expanded" />}>
           <span className="t-value face-mono truncate">{label}</span>
         </ComboboxTrigger>
       </div>
