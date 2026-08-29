@@ -17,7 +17,7 @@
  *   Both currently answer "no" — they are plain content.
  * - `--pe-on` PLUMBING: the frame declares the ground its children actually sit on, and the
  *   recessed bands re-declare it again, so every wash the cell grammar mixes lands on the right
- *   ground without any child naming its own container. See design-lang.css.
+ *   ground without any child naming its own container. See base.css.
  */
 import { tv } from "#/lib/tv";
 
@@ -25,9 +25,9 @@ import "./lang.css";
 
 export const artifactFrameRecipe = tv({
   slots: {
-    base: "bg-artifact shadow-[inset_0_0_0_1px_var(--pe-line)] [--pe-on:var(--pe-artifact)]",
-    head: "flex items-baseline gap-2 border-b border-line bg-recess px-2.5 py-[5px] [--pe-on:var(--pe-recess)]",
-    foot: "flex items-center justify-between gap-2 border-t border-line bg-recess px-2.5 py-1.5 [--pe-on:var(--pe-recess)]",
+    base: "on-artifact inset-ring",
+    head: "flex items-baseline gap-2 border-b border-line on-recess px-2.5 py-[5px]",
+    foot: "flex items-center justify-between gap-2 border-t border-line on-recess px-2.5 py-1.5",
   },
 });
 

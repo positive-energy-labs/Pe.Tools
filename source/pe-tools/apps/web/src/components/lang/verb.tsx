@@ -54,11 +54,11 @@ export const verbRecipe = tv({
   },
   variants: {
     tone: {
-      act: { base: "[background-color:color-mix(in_srgb,var(--pe-ink)_10%,var(--pe-on))]" },
+      act: { base: "ink-wash" },
       commit: { base: "bg-commit text-on-commit" },
       nav: { base: "px-1 text-nav enabled:hover:underline enabled:hover:underline-offset-3" },
       agent: {
-        base: "text-pea-ink [background-color:color-mix(in_srgb,var(--pe-pea-ink)_12%,var(--pe-on))]",
+        base: "text-pea-ink pea-wash",
       },
     },
   },

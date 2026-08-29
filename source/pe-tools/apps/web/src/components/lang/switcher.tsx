@@ -23,7 +23,7 @@ export const switcherRecipe = tv({
   variants: {
     state: {
       rest: {},
-      active: { option: "bg-select text-ink [--pe-on:var(--pe-select)]" },
+      active: { option: "on-select text-ink" },
       disabled: { option: "cursor-not-allowed text-ink-mute italic" },
     },
   },

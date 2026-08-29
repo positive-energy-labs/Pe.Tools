@@ -28,7 +28,7 @@ import "./lang.css";
 
 export const cellStateKeyRecipe = tv({
   slots: {
-    base: "grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-x-[18px] gap-y-[9px] border-t border-line bg-recess px-2.5 pt-2 pb-[9px] [--pe-on:var(--pe-recess)]",
+    base: "grid grid-cols-[repeat(auto-fit,minmax(168px,1fr))] gap-x-[18px] gap-y-[9px] border-t border-line on-recess px-2.5 pt-2 pb-[9px]",
     axis: "flex min-w-0 flex-col gap-[3px]",
     head: "flex items-baseline gap-[5px] border-b border-line pb-0.5",
     name: "face-mono t-caption t-upper text-ink-2",

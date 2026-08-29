@@ -14,7 +14,7 @@
  *   is the cell grammar at its largest scale: same fill-separates-not-borders move.
  * - THE STRIP CARRIES STATE, so it KEEPS its frame under the border budget. It draws its own
  *   `ArtifactFrame`; do not wrap it in a second one.
- * - `--pe-on` IS RE-DECLARED to the strip's own tinted fill (lang.css), which is what gives the
+ * - `--pe-on` IS RE-DECLARED to the strip's own tinted fill (design-lang.css), which gives the
  *   act verbs inside a resting shape against the ground they actually stand on. Round 2's note-4
  *   defect was exactly this: `cancel` and `re-plan` mixed against the artifact token computed to
  *   1.006 and 1.026 against their real ground, and in dark `cancel` was literally not there.
@@ -58,13 +58,13 @@ export const armingStripRecipe = tv({
   },
   variants: {
     state: {
-      unarmed: { base: "border-line-2 bg-artifact [--pe-on:var(--pe-artifact)]" },
+      unarmed: { base: "border-line-2 on-artifact" },
       armed: {
-        base: "border-commit [background-color:color-mix(in_srgb,var(--pe-commit)_9%,var(--pe-artifact))] [--pe-on:color-mix(in_srgb,var(--pe-commit)_9%,var(--pe-artifact))]",
+        base: "border-commit commit-wash-artifact",
         phase: "text-commit",
       },
       refused: {
-        base: "border-alarm [background-color:color-mix(in_srgb,var(--pe-alarm)_10%,var(--pe-artifact))] [--pe-on:color-mix(in_srgb,var(--pe-alarm)_10%,var(--pe-artifact))]",
+        base: "border-alarm alarm-wash-artifact",
         phase: "text-alarm",
       },
     },
