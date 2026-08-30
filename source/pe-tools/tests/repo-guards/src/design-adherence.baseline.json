@@ -70,11 +70,10 @@
     }
   },
   "inlineColor": {
-    "total": 172,
+    "total": 157,
     "byArea": {
-      "anatomy": 2,
       "chat": 2,
-      "components": 4,
+      "components": 6,
       "design-system": 1,
       "family": 3,
       "family-review": 39,
@@ -85,7 +84,7 @@
       "routes": 4,
       "runs": 28,
       "takeoff": 4,
-      "targeting": 31,
+      "targeting": 16,
       "workbench": 9
     }
   },

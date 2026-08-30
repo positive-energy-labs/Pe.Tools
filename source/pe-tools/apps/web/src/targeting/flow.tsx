@@ -1,4 +1,3 @@
-import { token } from "#/lib/token";
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { cn } from "#/lib/utils";
 import {
@@ -25,12 +24,7 @@ export function TargetCaption<K extends string>({ b, link }: { b: Bindings<K>; l
   const feed = b.feeds[link.key];
   const fresh = freshnessWord(b, link);
   return (
-    <span
-      className=""
-      style={{
-        color: feed.stale || feed.state === "error" ? token("caution") : token("ink-mute"),
-      }}
-    >
+    <span className="face-mono t-caption text-ink-mute">
       {targetMode(link)}
       {link.liveness ? ` · ${link.liveness}` : ""}
       {fresh ? ` · ${fresh}` : ""}
@@ -46,8 +40,11 @@ function Connector<K extends string>({ link, active }: { link: Link<K>; active: 
   return (
     <span
       aria-hidden
-      className="shrink-0 text-center"
-      style={{ color: active ? token("ink") : token("line-2"), minWidth: 64 }}
+      className={cn(
+        "face-mono t-caption shrink-0 text-center",
+        active ? "text-ink" : "text-ink-mute",
+      )}
+      style={{ minWidth: 64 }}
     >
       {glyph}
     </span>
@@ -80,7 +77,7 @@ function Terminal<K extends string>({
       >
         <TargetCaption b={b} link={link} />
         <span className="inline-flex items-baseline gap-1.5">
-          <span>{link.joiner}</span>
+          <span className="face-mono t-caption text-ink-2">{link.joiner}</span>
           <Picker product={product} link={link} b={b} runner={runner} extra={extra} inert={dim} />
         </span>
       </div>
@@ -116,7 +113,7 @@ function Rail<K extends string>({
     <div
       className={`flex min-w-0 flex-col justify-center gap-1.5 ${side === "left" ? "items-end" : "items-start"}`}
     >
-      <span className="px-1" style={{ color: token("ink-mute") }}>
+      <span className="face-mono t-caption t-upper px-1 text-ink-mute">
         {side === "left" ? "reads" : "writes · syncs"}
       </span>
       {links.length ? (
@@ -132,9 +129,7 @@ function Rail<K extends string>({
           />
         ))
       ) : (
-        <span className="px-1" style={{ color: token("ink-mute") }}>
-          none
-        </span>
+        <span className="face-mono t-caption px-1 text-ink-mute">none</span>
       )}
     </div>
   );
@@ -169,12 +164,10 @@ export function TargetingFlow<K extends string>({
         <ArtifactFrame
           head={
             <>
-              <span style={{ color: token("ink") }}>{product.name}</span>
-              <span className="" style={{ color: token("ink-mute") }}>
-                trunks
-              </span>
+              <span className="t-label t-upper text-ink">{product.name}</span>
+              <span className="face-mono t-caption t-upper text-ink-mute">trunks</span>
               {ends.map((end) => (
-                <span key={end.key} className="" style={{ color: token("ink-2") }}>
+                <span key={end.key} className="face-mono t-caption text-ink-2">
                   {pathOf(product, end.key)
                     .filter((link) => link.dir === null)
                     .map((link) => b.labelOf(link) ?? link.placeholder)

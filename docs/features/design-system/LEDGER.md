@@ -164,8 +164,13 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ### Style regression, main → review/design-system (opened 2026-08-30)
 
-- `/design-system` ported 2026-08-30 (spec beside specimen, gap, counter-example; 0
-  browser-default text nodes, 9,319px). Still owed: `/takeoffs`, then `/family`, `/settings`.
+- `/design-system`, its swatch, `/` and `/takeoffs` (fixture lane) ported 2026-08-30: 0
+  browser-default text nodes on each; takeoffs mono within 9 and ink-2 within 10 of main. Still
+  owed: `/family`, `/settings`, `/chat` (+6 default nodes), `/runs` (+3).
+- Targeting gaps (from `.artifacts/handoffs/takeoffs-port.md`): no primitive for an inline
+  stale/error caption (main spent caution at the call site); no language-owned stage-strip
+  rail/separator hairlines (main drew them with inline `token()` strokes, now dropped); no
+  pane-availability mark beyond the ink ladder (main's ready underline and disabled italic).
   Main is the reference, not the code; zero guard violations is the bar.
 - `/family`, `/families`, `/settings`, `/ops`, `/instances` have NO fixture lane on either
   branch (`?source=fixture` falls back to the document gate); they cannot be censused or ported

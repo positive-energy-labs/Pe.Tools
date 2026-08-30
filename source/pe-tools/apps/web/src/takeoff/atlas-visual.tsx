@@ -51,9 +51,11 @@ export function AtlasVisual() {
                   state={lane.label === level ? "selected" : "rest"}
                   title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
                 >
-                  {lane.label}
-                  <span className="ml-1">{zs.length}</span>
-                  {calls > 0 && <span className="ml-1">·{calls}</span>}
+                  <span className="face-mono">
+                    {lane.label}
+                    <span className="ml-1">{zs.length}</span>
+                    {calls > 0 && <span className="ml-1">·{calls}</span>}
+                  </span>
                 </Press>
               );
             })}
@@ -66,7 +68,7 @@ export function AtlasVisual() {
               state={statsOpen ? "selected" : "rest"}
               title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
             >
-              level stats
+              <span className="face-mono">level stats</span>
             </Press>
             <Press
               type="button"
@@ -77,10 +79,10 @@ export function AtlasVisual() {
               tone="neutral"
               size="value"
             >
-              {planOpen ? "▴ hide plan" : "▾ show plan"}
+              <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
             </Press>
 
-            <span className="ml-auto">
+            <span className="face-mono t-caption ml-auto text-ink-2">
               {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc clears
             </span>
           </>

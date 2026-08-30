@@ -1,4 +1,3 @@
-import { token } from "#/lib/token";
 import { useState } from "react";
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
@@ -79,7 +78,7 @@ export function TargetingHead<K extends string>({
     (x, y) => Number(x.kind === "commit") - Number(y.kind === "commit"),
   );
 
-  const gridRow = (v: Verb<K>, i: number) => {
+  const gridRow = (v: Verb<K>) => {
     const can = runner.canRun(v);
     return (
       <div
@@ -88,25 +87,18 @@ export function TargetingHead<K extends string>({
         style={{
           gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
           minHeight: 34,
-          borderTop: i === 0 ? undefined : `1px solid ${token("line-2")}`,
         }}
       >
         <span>{verbButton(v, runner)}</span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           {v.demands.length === 0 ? (
-            <span className="" style={{ color: token("ink-mute") }}>
-              —
-            </span>
+            <span className="face-mono t-caption text-ink-mute">—</span>
           ) : (
             v.demands.map((k) => <Demand key={k} product={product} k={k} b={b} />)
           )}
         </span>
         <span
-          className="text-right"
-          style={{
-            color: can.ok ? token("ink-mute") : token("ink-2"),
-            fontStyle: can.ok ? undefined : "italic",
-          }}
+          className={`face-mono t-caption text-right ${can.ok ? "text-ink-mute" : "text-ink-2"}`}
         >
           {v.kind === "commit" && !can.ok ? "" : can.ok ? "ready" : can.reason}
         </span>
@@ -127,15 +119,13 @@ export function TargetingHead<K extends string>({
           : "Expand the verbs: what each one needs and why it is or is not ready"
       }
     >
-      {expanded ? "▴" : "▾"}
+      <span className="face-mono">{expanded ? "▴" : "▾"}</span>
     </Press>
   );
 
   const line = (
     <>
-      <span className="" style={{ color: token("ink") }}>
-        {product.name}
-      </span>
+      <span className="t-label t-upper text-ink">{product.name}</span>
       <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
         {targets(product).map((t) => {
           const dim = t.dir !== null && !b.demanded.has(t.key);
@@ -148,9 +138,7 @@ export function TargetingHead<K extends string>({
             >
               <TargetCaption b={b} link={t} />
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="" style={{ color: token("ink-2") }}>
-                  {t.joiner}
-                </span>
+                <span className="face-mono t-caption text-ink-2">{t.joiner}</span>
                 <Picker
                   product={product}
                   link={t}
@@ -176,18 +164,17 @@ export function TargetingHead<K extends string>({
       {expanded ? (
         <>
           <div
-            className="grid px-2.5 pt-1.5 pb-0.5"
+            className="face-mono t-caption t-upper grid px-2.5 pt-1.5 pb-0.5 text-ink-mute"
             style={{
               gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
               columnGap: "1rem",
-              color: token("ink-mute"),
             }}
           >
             <span>verb</span>
             <span>needs</span>
             <span className="text-right">state</span>
           </div>
-          <div style={{ borderBottom: `1px solid ${token("ink")}` }}>{verbs.map(gridRow)}</div>
+          <div>{verbs.map(gridRow)}</div>
         </>
       ) : (
         <div className="flex flex-wrap items-center gap-1.5 px-2.5 py-2">

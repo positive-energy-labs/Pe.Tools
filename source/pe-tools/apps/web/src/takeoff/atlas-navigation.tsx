@@ -28,10 +28,14 @@ export function AtlasNavigation() {
     <Suspense fallback={<div className="p-2">reading zones…</div>}>
       <Pane kind="navigation" title="zones" meta={`${world.zones.length} declared`}>
         <div className="px-2 py-1.5">
-          <div className="mb-1">room states — one per room</div>
+          <div className="t-caption t-upper mb-1 text-ink-2">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {ROOM_STATES.map((s) => (
-              <span key={s} title={STATE_META[s].note} className="inline-flex items-center gap-1">
+              <span
+                key={s}
+                title={STATE_META[s].note}
+                className="face-mono t-caption inline-flex items-center gap-1 text-ink-2"
+              >
                 <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
                 {STATE_META[s].label}
               </span>
@@ -40,7 +44,7 @@ export function AtlasNavigation() {
         </div>
 
         <div className="px-2 py-2">
-          <div className="mb-1">zone pipeline — global filter</div>
+          <div className="t-caption t-upper mb-1 text-ink-2">zone pipeline — global filter</div>
           <div className="flex flex-col">
             {stageCounts.map(({ stage, n }, i) => {
               const on = stageFilter === stage;
@@ -58,9 +62,9 @@ export function AtlasNavigation() {
                   state={on ? "selected" : "rest"}
                 >
                   <PressContent geometry="baseline">
-                    <span className="w-3">{i + 1}</span>
-                    <span className="flex-1">{stage}</span>
-                    <span>{n}</span>
+                    <span className="face-mono w-3">{i + 1}</span>
+                    <span className="face-mono flex-1">{stage}</span>
+                    <span className="face-mono">{n}</span>
                   </PressContent>
                 </Press>
               );
