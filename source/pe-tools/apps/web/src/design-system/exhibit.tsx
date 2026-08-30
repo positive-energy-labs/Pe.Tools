@@ -20,9 +20,9 @@ export function Demo({
   return (
     <div className="grid grid-cols-1 items-start gap-x-8 gap-y-3 py-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span>{label}</span>
-        <p>{spec}</p>
-        <span>consumers: {consumers}</span>
+        <span className="t-label t-upper text-ink">{label}</span>
+        <p className="t-prose text-ink-2">{spec}</p>
+        <span className="t-caption face-mono text-ink-mute">consumers: {consumers}</span>
       </div>
       <div className="flex min-w-0 flex-col gap-3">{children}</div>
     </div>
@@ -32,8 +32,8 @@ export function Demo({
 /** A recorded gap, said out loud where a reader would otherwise think the demo was finished. */
 export function Gap({ children }: { children: React.ReactNode }) {
   return (
-    <p className="max-w-[86ch] pl-2">
-      <span>gap · </span>
+    <p className="max-w-[86ch] pl-2 t-caption face-mono text-ink-2">
+      <span className="t-upper">gap · </span>
       {children}
     </p>
   );
@@ -45,8 +45,8 @@ export function CounterExample({ why, children }: { why: string; children: React
   return (
     <div className="flex flex-col gap-1">
       <div className="w-fit">{children}</div>
-      <span>
-        <span>the wrong way</span> — {why}
+      <span className="t-caption text-ink-2">
+        <span className="t-upper">the wrong way</span> — {why}
       </span>
     </div>
   );

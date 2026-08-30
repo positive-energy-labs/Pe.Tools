@@ -28,7 +28,7 @@ export function DesignSystemLaws() {
         {LAW_POINTERS.map(([name, home]) => (
           <div key={name} className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] gap-3">
             <Tag>{name}</Tag>
-            <code>{home}</code>
+            <code className="t-caption face-mono text-ink-2">{home}</code>
           </div>
         ))}
       </div>

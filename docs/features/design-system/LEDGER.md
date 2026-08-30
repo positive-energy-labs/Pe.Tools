@@ -18,9 +18,13 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 - 2026-08-29 — Taste that code cannot hold lives in `lens.house`: figure, referents,
   anti-referents, ten one-line laws, the authoring ladder. Invoked on any UI edit.
-- 2026-08-29 — Components own visuals. Product code carries geometry utilities only; a visible
-  stroke or fill needs a primitive. Enforced by `design-guard.test.ts` (`visual utilities stay in
-  components`, baseline `{}`).
+- 2026-08-30 — Product code authors GEOMETRY, TYPE (`t-*`, `face-*`, `t-upper`) and INK
+  (`text-ink|ink-2|ink-mute`); meaning hues, fills, strokes and elevation need a primitive.
+  Supersedes the 2026-08-29 "geometry only" ruling: the `{}` allowlist stripped ~1,100
+  `t-*`/`face-*` sites (main: 684 + 422 outside `components/`; wt: 30) and left product text at
+  browser defaults (`/design-system`: 122 text nodes at 16px, 0 on main). A `<Text>` primitive was
+  rejected — no DX difference from a utility, and one more wrapper. Enforced by
+  `design-guard.test.ts` (`meaning, fill and stroke utilities stay in components`, baseline `{}`).
 - 2026-08-29 — Every `lang/` primitive carries a closed variant set declared with
   `tailwind-variants` (`tv`, vendored at `lib/tv.ts`) and takes no `className`. Hand CSS survives
   only where the cascade is the law (`StateCell` precedence, documented in `lang.css`).
@@ -157,6 +161,17 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   ships (`h-*`, `face-*`, `z-*`) read as unregistered. A checker's loader is part of its claim.
 
 ## Owed
+
+### Style regression, main → review/design-system (opened 2026-08-30)
+
+- Port main's `/design-system` (spec beside specimen, gap, counter-example) back onto wt
+  primitives; the pointer list defeated the route's purpose. Then `/takeoffs`, `/family`,
+  `/settings`. Main is the reference, not the code; zero guard violations is the bar.
+- Style-delta census per route (main :3001 vs wt :3000, computed styles + PNG) is the edge for
+  every port; lives at `.artifacts/handoffs/style-delta.md` when run.
+- `t-display`/`face-display`/`t-head` exist and nothing wears them; route heads have no head.
+- `lens.house` holds prose the route used to show. The skill is philosophy; the route is the
+  spec. Move what renders back to the route.
 
 ### From goal `design-normalization-2` (closed 2026-08-29 at `e60113b`)
 

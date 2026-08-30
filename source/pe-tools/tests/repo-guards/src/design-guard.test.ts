@@ -791,10 +791,13 @@ const TRUE_UNREGISTERED = REMAINDER.filter(
   (use) => !DEAD_VOCABULARY.includes(use) && !PLUGIN_ONLY.includes(use),
 );
 
-const GEOMETRY =
-  /^(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+)$/;
+/** Product code may author GEOMETRY plus TYPE (tier, face, case) and INK (the three text inks).
+ *  Ruled 2026-08-30: the `{}` allowlist stripped ~1,100 `t-*`/`face-*` sites and left product
+ *  text at browser defaults. Meaning hues, fills, strokes and elevation stay component-only. */
+const AUTHORING =
+  /^(?:t-(?:caption|label|value|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
 const ALLOWLIST_VIOLATIONS = CLASS_USES.filter(
-  (use) => !use.rel.startsWith("components/") && !GEOMETRY.test(baseClass(use.token)),
+  (use) => !use.rel.startsWith("components/") && !AUTHORING.test(baseClass(use.token)),
 );
 const ALLOWLIST_BY_FILE = Object.fromEntries(
   [...new Set(ALLOWLIST_VIOLATIONS.map((use) => use.rel))]
@@ -963,7 +966,7 @@ describe("design checks — code holds the boundary", () => {
     ).toEqual([]);
   });
 
-  it(`visual utilities stay in components (${ALLOWLIST_VIOLATIONS.length} baseline exceptions)`, () => {
+  it(`meaning, fill and stroke utilities stay in components (${ALLOWLIST_VIOLATIONS.length} baseline exceptions)`, () => {
     const fixture = classUses([
       {
         rel: "fixture.tsx",
