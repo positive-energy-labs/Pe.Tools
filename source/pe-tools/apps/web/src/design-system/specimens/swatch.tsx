@@ -17,9 +17,13 @@ export function SwatchSpecimens() {
       <header className="sticky z-sticky">
         <div className="flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
-            <Link to="/design-system">← design system</Link>
-            <span>swatch</span>
-            <span>every component · every variant · every state · the import path</span>
+            <Link className="t-caption face-mono text-ink-2" to="/design-system">
+              ← design system
+            </Link>
+            <span className="t-title text-ink">swatch</span>
+            <span className="t-caption face-mono text-ink-mute">
+              every component · every variant · every state · the import path
+            </span>
             <FactChip dashed title="Every specimen uses fixture data.">
               fixture
             </FactChip>
@@ -29,18 +33,20 @@ export function SwatchSpecimens() {
       </header>
       <main className="flex flex-col gap-8 pt-6 pb-24">
         <div className="flex flex-col gap-2">
-          <p>The swatch.</p>
-          <p>
+          <p className="t-head text-ink">The swatch.</p>
+          <p className="t-prose text-ink-2">
             A lookup table, not a spec. Each recipe grid reads the shipping variant vocabulary, and
             each frame names the import path and its current static-import census.
           </p>
-          <p>lang · the design language primitives</p>
+          <p className="t-label face-mono text-ink-2">lang · the design language primitives</p>
         </div>
         <LangWorkflowSpecimens />
         <LangCellSpecimens />
         <LangStatusSpecimens />
         <LangVerbSpecimens />
-        <p>ui · the surviving application component layer</p>
+        <p className="t-label face-mono text-ink-2">
+          ui · the surviving application component layer
+        </p>
         <UiInputSpecimens />
         <UiSurfaceSpecimens />
         <UiLayoutSpecimens />
