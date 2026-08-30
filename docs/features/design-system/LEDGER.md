@@ -1,372 +1,249 @@
 # design-system ledger
 
-The one-system design cluster: the design LANGUAGE (raw values in `src/base.css`, projected by
-`src/design-lang.css`, grammar in `components/lang/`), the `/design-system` route and its
-satellites, the shared PRIMITIVES in `apps/web/src`, the front door (`/`), and the document lab
-(`/doc-lab`).
+The one-system design cluster: the design LANGUAGE (raw values in `apps/web/src/base.css`,
+projected by `design-lang.css`, grammar in `components/lang/`, page anatomy in
+`components/anatomy/`), the `/design-system` route and its satellites, the front door (`/`), and
+the document lab (`/doc-lab`).
 
-**This ledger is the single owner of every cross-route design-language and primitive gap.** Route
-ledgers name their own applications and evidence; they never restate a ruling or a gap that lives
-here. Standing authority: `docs/design/SURFACE-PHILOSOPHY.md`. The current ownership map, the
-authoring decision flow, and the enforcement commands are
-[NORMALIZATION.md](NORMALIZATION.md) — read it before writing UI.
+**This ledger owns every cross-route design-language and primitive gap.** Route ledgers name their
+own applications and evidence; they never restate a ruling or a gap that lives here.
+
+A rule lives in exactly one home — a type, a check, a swatch specimen, or
+`.agents/skills/lens.house/SKILL.md`. `docs/design/SURFACE-PHILOSOPHY.md` indexes those homes.
+Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the timeline.
 
 ## Decided
 
-- 2026-08-29 — Components own visuals; product code may use geometry utilities only (flex, gap, padding, size). No colour, type, border, radius, or shadow utility outside `components/`; a visible stroke or fill needs a primitive.
-- 2026-08-29 — `lang/` primitives carry a closed variant set and no `className`. `ui/` keeps `className` only until it is folded.
-- 2026-08-29 — Variant sets are declared with `tailwind-variants` (`tv`, with `slots` for the anatomy tier); `cva` is deleted. Hand CSS stays only where the cascade is the law (`StateCell` precedence).
-- 2026-08-29 — A page-anatomy tier (`Workspace` slots: head rail, table, side panel, readout band; `StatLine`; `Key`; `MasterTable` mints its own narrow chips from `tableState`) is extracted from the three shipping workspaces, not designed.
-- 2026-08-29 — Every TSX file under `apps/web/src` ratchets toward 400 lines, from today's 2,251.
-- 2026-08-29 — A rule lives in exactly one home: a type, a check, a swatch specimen, or `lens.house`. Dated rationale is git history; this ledger keeps Owed and one-line Decided; component headers are at most five lines.
-- 2026-08-29 — The regex design guard is replaced by `eslint-plugin-better-tailwindcss` `no-unregistered-classes`, one allowlist test (colour/type utilities only under `components/`), and one coverage test (every `lang/` export renders in `/design-system/swatch`). Matching regex gates are deleted.
-- 2026-08-29 — A losing prototype variant is deleted on verdict; only the winner's rewrite survives.
-- 2026-08-29 — Taste lives in `lens.house` (≤80 lines: figure, referents, anti-referents, ten one-line laws code cannot hold, the authoring ladder, "open the swatch before drawing"), invoked on any UI edit.
-- 2026-08-29 — The above run as a `goal` after two grill sittings; the two Q8 checks are the number.
+### Where a rule lives
 
-- 2026-08-26 — Route-doc identity is `(route, Address)`, and `?thread` is only a view; route docs are facts about an rvt/rfa.
-- 2026-08-26 — Thread-keyed route docs are orphaned with no migration.
-- 2026-08-26 — Route-doc concurrency uses no locks or sync engine: apply and commands require `expectedRevision` end to end, external commands use client `requestId` idempotency, and the UI shows an open-in-another-tab cue plus a changed-elsewhere banner; `requestId` covers retransmission, receipts are non-evicting per envelope, and `outcomeUnknown` remains the crash barrier. Add an optimistic overlay only after measured latency demands it.
-- 2026-08-26 — Flow stays as the targeting manifest's second projection, and its strobe stays removed.
-- 2026-08-26 — The route-document machine owns no product meaning: `agent-contracts/route-doc.ts` exports the pure `applyPatches`, `guardCommand`, and `commitDoc` functions; `RouteWorkspace` is only their persistence, serialization, crash-barrier, and publication shell.
-- 2026-08-26 — J7 resolves the 2026-08-25 second-temporal-holder Owed line: route bindings live only in the route document; `/takeoffs` has no `searchAtom`, `SearchPort`, `setSearch`, `patchSearch`, or CSV URL codec.
-- 2026-08-26 — The `/chat` sidebar nested by Revit document remains Owed until each thread persists and returns its document Address; the sidebar must not project the current fleet document onto every thread.
-- 2026-08-26 — A GET never mints a thread. With no existing thread, the route renders the designed `pick or start a thread` empty; thread creation is an explicit user action.
-- 2026-08-26 — Address law: `Address` is only the Revit document identity (`cloudModelGuid ?? absolute path`), and `Reading` is `{ at: Address, version, observedAt }`. A world is the call target on a binding, never part of read identity; `here(value, documentAddress(session))` performs the one render-time `===` currency check. Observed and pid-named worlds persist readings normally because the document is the falsifier. Plain operation receipts and file-backed settings reads are not Readings.
-- 2026-08-27 — The one canonical design guard adopts the union/cleanroom parent's shipped dead-shim token, bare-hairline, tele-class, hex-literal, and sub-10px-type offence counts as a non-increasing merge-floor ratchet; no new offence is authorized.
-- 2026-08-27 — `RouteStateWriteResult` is a discriminated union on `ok` (`{ok:true, revision, doc?, result?} | {ok:false, kind, error, hint, code?, revision?}`). The 2026-08-26/27 typed-outcome pass patched seven consumers around an `ok: boolean` with every field optional; the union deletes every `result.kind ?? "error"` chain and fixes `/ops` and `/settings` painting `stale_revision` as `error`. One verb bracket (`runVerb`); `lib/use-verb.ts` is deleted. Store producers that refuse produce `kind: "refused"`, never a bare `Error`. Ruled by kaitpw on `post/REVIEW-2.md` G3.
-- 2026-08-27 — The picked rvt on a multi-document route lives only in `?doc`; the `boundDocument` module global was a second temporal holder (J7) and is deleted. The picker navigates.
-- 2026-08-27 — `/family` supplies the canonical apply/command outcome vocabulary; per-route stores remain, consumed results render through `OutcomeLine`, and the app-level changed-elsewhere cue covers stale writes generally and remains necessary as fallback for current fire-and-forget writes until later all-route convergence.
-
-- 2026-08-25 — A route that owns a trunk declares `Product.manages`; `TargetingHead` reuses the trunk's existing picker, and panes drawing that managed trunk remain available before a binding because they draw its whole feed. `/instances` is the first consumer with `manages: ["world"]`; ordinary routes still print terminals only.
-- 2026-08-25 — World is a trunk, never a terminal: the sentence names documents and files, while the shared `world` trunk names a fused SDK-registry/bridge world by `sdkSessionId ?? "Revit <pid>"` and discloses custody.
-- 2026-08-25 — `RouteStateSpec.key` and `readRouteState` are deleted. Route documents use `spec.route`; renderers use `parseRouteDoc`.
-- 2026-08-25 — `__PE_INSPECT__.inspect()` is the one dev observation surface: it reads only valid cached Registry nodes, exposes labels, values, graph, hover, and consumed verb causes from app boot; the 187-line `AtomDevtools` panel is deleted.
-- 2026-08-24 — The targeting manifest is canon (`apps/web/src/targeting/`): a route declares a static `Product` (links forest · stages of demanding verbs · panes), supplies one `Feed` per link from its queries, and keeps bindings in URL search; `TargetingHead` renders it as a sentence of TERMINALS only (links with `dir`); trunks (world › rvt, folder) never print — they are the picker's crumbs, and terminals under one trunk share its binding. The verb rail expands in place (`▾`) into verb · needs · state. Seams derive (`feed.options === null`, `run === null`), refusals derive (unwired → unbound → stale → gate). `/takeoffs` is the reference adoption; the round-5 proto stays on main until every route converges.
+- 2026-08-29 — Taste that code cannot hold lives in `lens.house`: figure, referents,
+  anti-referents, ten one-line laws, the authoring ladder. Invoked on any UI edit.
+- 2026-08-29 — Components own visuals. Product code carries geometry utilities only; a visible
+  stroke or fill needs a primitive. Enforced by `design-guard.test.ts` (`visual utilities stay in
+  components`, baseline `{}`).
+- 2026-08-29 — Every `lang/` primitive carries a closed variant set declared with
+  `tailwind-variants` (`tv`, vendored at `lib/tv.ts`) and takes no `className`. Hand CSS survives
+  only where the cascade is the law (`StateCell` precedence, documented in `lang.css`).
+- 2026-08-29 — `components/ui/` is folded into `components/lang/`: one grammar, no second tier.
+  Chat views are product, and live in `chat/`.
+- 2026-08-29 — A losing prototype variant is deleted on verdict; only the winner's rewrite lives.
 
 ### The language
 
-- 2026-08-28 — Semantic chrome joins the same ownership law: `base.css` owns fixed document ground, modal scrim, float/modal elevation, control motion, and the six global layers (`raised`, `sticky`, `popup`, `modal`, `notice`, `dev`); `design-lang.css` projects portable and Tailwind utilities. Product code retains only data-driven colours and local drawing/table geometry. The guard hard-zeros static CSS colours, raw non-inset elevation, fixed durations, and global numeric layers.
+- 2026-08-16 — Round-1 winner **e (cell states)** on whole-page legibility. Two load-bearing
+  mechanisms: one cell grammar at three scales (chat card / table cell / arming strip), and
+  tasteful fills over outline borders — border scarcity is what makes the arming strip ceremony.
+- 2026-08-16 — Round-2 winner **p3 (wholistic bands)**: every role on shared OKLCH
+  lightness/chroma bands so the palette reads as one system, alarm alone off-band. Cross-mode
+  strategy is sibling renderings — per-role light|dark pair, identical meaning map, lightness
+  free, hue within a named tolerance.
+- 2026-08-16 — Standing mode preference (kaitpw): light is the preferred palette but dark reads
+  with better contrast, and the fix is ground/background tokens — never re-tuning accents per mode.
+- 2026-08-16 — Carried-in motif meaning beats internal consistency: locked is greyed italic;
+  squiggle is not-settled while a plain underline is a citation; a proposal is a whole-cell event;
+  nav splits three ways. Icons work in verbs and outcomes and break table ergonomics inside cells.
+- 2026-08-16 — PE character is warm paper, an earthy secondary family, a mono voice, and pea
+  green. All four are identity.
+- 2026-08-16 — Weak anchors, deviate with cause and record it: cell-body treatment is reserved for
+  pea proposals and uneditable/disabled; artifact frames wrap large interactive chunks.
+- 2026-08-16 — The type model (tier × face × case, the weight law, the mono face law) is
+  [ADR 0004](../../adr/0004-type-tier-model.md); the verdict column and the meaning-role tone union
+  are [ADR 0005](../../adr/0005-verdict-column-and-tone-union.md).
+- 2026-08-28 — Broken lines have three roles and one authority in `base.css`: `seam` is declared
+  with nothing real behind it and is the one UI broken edge; `reference` and `void` are drawing
+  vocabulary. No call site names a pattern.
+- 2026-08-29 — Opacity is not a de-emphasis mechanism. Locked is italic + `ink-mute`.
+- 2026-08-29 — A cell carries a `shown` reading and a bound `authority`; drift is
+  `shown.value !== authority.value`, `stale` is superseded. The type is the spec (`StateCellProps`).
 
-- 2026-08-16 — The design language is settled (base 2, rounds 1–2); grammar in `components/lang/`. Standing law: nothing exists on `/design-system` unless it is a real component with a real consumer (no shims — a workaround is noise that hides a gap).
-- 2026-08-28 — Ownership stack ruled: `base.css` is the raw portable authority under `[data-pe]`, `design-lang.css` is only its Tailwind projection and declares no number, `components/lang` is the base semantic grammar, product code owns geometry and refinement only, and `lib/token.ts` is the one runtime token lookup. `components/ui` composites may depend on `components/lang`; four already do, for `Press`. The `--r-*` token family is retired and guarded at zero. Map: [NORMALIZATION.md](NORMALIZATION.md).
-- 2026-08-16 — Stretching the system and migrating components/routes are one paired exercise; every migration is a probe and every gap is recorded, never worked around.
-- 2026-08-16 — Round-1 winner: **e (cell states)**, on whole-page legibility. Two load-bearing mechanisms: one cell grammar everywhere (chat card / table cell / arming strip = same treatment at three scales), and tasteful fills over outline borders (border scarcity is what made the arming strip read as ceremony).
-- 2026-08-16 — Round-2 winner: **p3 (wholistic bands)** — every role on shared OKLCH lightness/chroma bands so the palette reads as one system, with the alarm alone off-band (the one-alarm law made physical). Cross-mode strategy is sibling renderings: per-role light|dark pair, identical meaning map, lightness free, hue within a named tolerance.
-- 2026-08-16 — Standing color laws (unchallenged through eight scopes): one alarm; pea has one identity colour (green); proposals are never blue; selection and focus are a fill, never a hue; blue is scarce (commit fill + nav text only — pe-tools designs tools, not portals); blast radius is a descriptor of a verb, not a reason for more hues.
-- 2026-08-16 — Weak anchors (deviate with cause, record it): cell-body treatment is reserved for pea proposals and uneditable/disabled — everything else lives at edges/text/decoration; artifact frames wrap large interactive chunks; light-mode fix uses both levers (spread the light ground ladder AND add mixable `-ink` companions).
-- 2026-08-16 — Standing mode preference (kaitpw, raw round-1 reaction): light is the preferred palette but dark reads with better contrast, and the fix is ground/background tokens — never re-tuning accents per mode. (Was `docs/design/DESIGN-LANG-HANDOFF.md` §5, git history.)
-- 2026-08-16 — Border budget: plain content is never enclosed. Artifact frames are for machine-operated objects carrying state (table, chat card, arming strip, sentence); plain control groups and receipt lanes sit unframed.
-- 2026-08-16 — Cell-scale ruling (kaitpw, live `/design-system` §04): a table cell shows the value and nothing else — body colorations fill the whole td, never a pill, and fat rows are banned (cells clip; `StateCell scale="row"` enforces height).
-  Prose-shaped content moves to the **readout band**, a constant-height strip on the table (formula-bar motif) reading out the focused cell's word, reason, note, citation and ghost value; card scale keeps the footline.
-- 2026-08-16 — A refusal's reason lives in the `title`; `reason` stays a required constructor argument (that is the enforcement), but the visible `.dl-refusal` under-line rendering is deleted. A chip states a SHORT fact and clips at 34ch; the required `title` carries the sentence.
-- 2026-08-16 — Carried-in motif laws (cross-software motif meaning beats internal consistency): locked/uneditable is greyed italic; squiggle = not settled/wrong while plain underline = citation; a proposal is a whole-cell event, not a corner mark; nav splits three ways (back/forward/out).
-  Icons work in verbs and outcomes but break table ergonomics inside data cells; outcome receipts read as coloured mono text.
-- 2026-08-16 — PE character = warm paper, earthy secondary family, mono voice, pea green (all four are identity). `docs/context/PE_DESIGN_VIBE.md` is a pre-tools first step and STALE for tools — its durable identity content is absorbed here. Deregistered from the docs authority registry 2026-08-17 — do not cite it as authority; refresh or fold it.
-- 2026-08-16 — Type census (163 files, ~32.3k LOC) is the evidence behind [ADR 0004](../../adr/0004-type-tier-model.md): 666 type spends across 17 rendered sizes, 90.2% inside 9–12.5px, `tele` overridden at 118/240 call sites, section heads forked seven ways, and 10 mono : 2 sans font-families making mono the unmarked default.
-- 2026-08-16 — The tier × face × case type model adopted (joint review, Q21), with the weight law (Q22) and the mono face law: promoted to [ADR 0004](../../adr/0004-type-tier-model.md) because it constrains every route's markup.
-- 2026-08-28 — `t-head` 24/1.2 is the seventh tier and the one 24px rung: the heading that names a whole route or workspace, one per surface, while `t-title` names a region inside it. It closes the 16 → 40 void where three route headings had landed at 20, 24 and 30px. Earned by role evidence, not by call-site volume — the 24 `text-sm` sites split cleanly onto `t-title` and `t-prose` and wanted no tier of their own. ADR 0004 amended.
-- 2026-08-16 — Copy boundary adopted (Q23). Mechanical test: does the sentence still make sense if you delete the thing it is attached to? Yes ⇒ region orientation ⇒ `HelpTip`; no ⇒ control fact ⇒ native `title`, ≤60 chars, one clause (never a second sentence; empty states and honesty lanes are never titles).
-  `/design-system` holds an explicit documentation-surface exemption for inline prose that never travels to product routes.
+### Route and state architecture (cross-route, owned here)
 
-### Cross-route rulings this ledger owns
-
-- 2026-08-16 — Consolidation batch R1–R14 ruled by the autonomous sweep session against recorded verdicts/anchors, re-openable at the next joint sitting. R1 origin qualifies staging (not a fifth axis); R2 `fresh:"never"` completes the ladder; R3 queued-decision and unreachability are ROW facts for the §4 gutter marker; R4/R5 (verdict column, tone union) in ADR 0005; R6 sever leaves no cell trace; R8 `StateCell.onCommit`; R9 `EmptyState` with required `story`+`exit`; R10 `ui/verb`/`ui/chip` and seven shim lines deleted, `Switcher` promoted; R11 `AddressingBar`; R12 `useVerb.fail(kind, text)`; R13 selection is `--r-select` fill and SVG `stroke-dasharray` owns the dashed slot; R14 standing defaults confirmed. **Consumer routes cite R-numbers; they do not restate the rulings.**
-- 2026-08-16 — R4/R5, the verdict column and the meaning-role tone union (pipeline verdicts are a typed column, not a cell state; derived is not a state): promoted to [ADR 0005](../../adr/0005-verdict-column-and-tone-union.md) because every pipeline route hits it. `stateColumn` was replaced by the typed `verdict:` column clause, not by the proposed `state:` + `word` path — overruled by the `/families` evidence (only 1 of 7 plan-verdict words maps to a cell axis). Consumers: `/families` (origin), `/instances` (first fleet consumer), `/takeoffs`.
-- 2026-08-16 — R13(b), the ONE dashed slot: every broken-edge mechanism (`border-dashed`, `stroke-dasharray`, `border-style: dashed`) occupies the same slot. Unbound/ghost state is NEVER dashed — a frozen literal is the opposite of a stand-in — and neither is "provisional", "estimated", "button", or "not yet fetched". Consumers who paid for this ruling: `/families` (bridge-op seam chips are legal), `/workbench` (six wrong spends, zero remain), `/doc-lab` (three re-expressed), `/ops` (`EmptyFrame`'s declared-sheet seam), `/instances` (declare-button dashes deleted).
-- 2026-08-28 — Broken lines have THREE roles and ONE authority, superseding R13(b)'s seam-only reading. `seam` `3 2` is declared with nothing real behind it and stays the one UI broken edge; `reference` `12 3 2 3` says where a drawing is measured from; `void` `4 3` is space where material is absent and must never read as material. `base.css` owns the patterns and the `.dash-*` / `.seam-border` classes; `runs/visual-law.json` owns the semantic `dashRole` and carries no number; `eval/rhvac/render-zone-promotion.py` resolves `--dash-<role>` out of `base.css` and fails fast. `centerline` was rejected as a name: true of the family origin axes and the board centre, false of the chart datum, the RCP leader and the received zone boundary. The census the old kebab-only gate could not see was ~30 sites, 20 of them camelCase `strokeDasharray`; seam and void had been colliding on `3 2` while meaning different things. The earlier blessing of `/design-system` exhibit chrome as a deliberate dashed spend is REVERSED — a commentary rail is not a seam.
-- 2026-08-16 — `EmptyState` requires `story: "scope" | "filter"` and `exit` as constructor arguments — the same enforcement that makes `Verb.reason` work; the dashed border is gone. An empty state must never stand in for an unreadable result.
-- 2026-08-16 — Gutter-scale destructive controls (per-row/column removers) stay raw `<button title=…>`: `Verb.label` is required and a dense grid cannot pay a 24px labelled verb per row. Neutral hover, not `--destructive` — alarm is not an affordance. (Evidence: `/data-tables`.)
-- 2026-08-16 — Column-kind txt/num stays a native `<select>`, not `Switcher`: same semantics, but 24px vs ~70px × N columns at table-header scale. Evidence for a compact switcher variant, not a request for one. (Evidence: `/data-tables`.)
-- 2026-08-16 — The user gets NO identity hue; `--user`/`--user-tint`/`--user-line` deleted. Authorship is already carried by four redundant channels (right-aligned filled block vs left prose, "you"/"pea" head labels, speaker-handoff hairline, alternating mapdial bands) — in grayscale nothing is lost, which is the viz ladder's own test. The asymmetry is the design: **the agent is the marked case, the human is the ground.**
-- 2026-08-16 — Do NOT grow the cell-grammar axes toward conversations. Only 2 of 28 `/workbench` states map onto fresh/agree/stage/cap; the outcome lane plus the meaning roles carried 26 of them with no new token, no new axis, no sixth colour. The outcome lane IS the conversational grammar.
-- 2026-08-16 — Inferred values (cache state, cache horizon, token estimates) are marked by a literal "≈" prefix + title provenance on SOLID marks — the squiggle uncertainty family lives on `StateCell`, which off-cell surfaces cannot use, and inventing an off-cell inferred mark would be a language extension.
-- 2026-08-16 — Two blue readings settled on `/workbench`: the mapdial's `↓` jump-to-tail is NAV (blue text `--r-nav`, no fill) because it is within-page movement (a reading, not a written law — neutral ink costs nothing if review disagrees); and Send in the composer IS a legal filled blue, because it writes beyond the page.
-- 2026-08-16 — Killed/unmanaged rows render italic + `--r-ink-mute` at whole-row scale, borrowing the dropped/locked cell-and-outcome law; this replaced `opacity-[0.55]`, which the language rules nothing about. (Evidence: `/instances`.)
-- 2026-08-16 — An age (seen/started, "read 4m ago") is a NUMBER, not a verdict: freshness has no subject or threshold in the model, so it can never rank fresh-vs-stale or become queue work, and no staleness threshold may be invented per route. Rendered mono secondary ink, no colour, no squiggle. Consumers: `/instances`, `/schedule-grid`.
-- 2026-08-16 — `Chip` split by *meaning*, not by site: `VizChip` for taxonomy/identity spends (categories, doc kinds, disciplines), `FactChip` for meaning tones. A shared component was hiding two different jobs.
-- 2026-08-16 — Refusal-to-title NARROWED (fit-review sitting, kaitpw delegated: "choose the occam approach — what matters is everything fits the system and tokens propagate, not perfect discipline"): a DISABLED `commit` verb renders its reason visibly (a small line by the verb, no new slot); every other verb stays title-only. The lane-spam case that justified the global gag never applied to the lone page-blast verb.
-- 2026-08-16 — Grayscale law EXTENDED to the meaning band: a meaning-band spend on a fill smaller than a word needs a non-hue channel — alarm and caution separate by hue alone (1.04|1.03) and takeoffs rides that pair as 2–13px fills. Takeoffs' `call` gets one; implementer picks the minimal channel.
-- 2026-08-16 — `AddressingBar` RELEASED on form routes: the five-slot rule binds table/workspace routes only, form routes may use a Section-style head, and `name` is lowercased at call sites (the CSS already uppercases). `/settings` collapses its two header rows.
-- 2026-08-16 — `ReadCell.reason` becomes OPTIONAL (required, it farmed tooltip ceremony on identity columns). `EmptyState` keeps its required story+exit, but hover-readouts-at-rest and combobox no-match slots are ruled NOT empty states — plain muted text; the three absurd call sites revert.
-- 2026-08-16 — The readout band renders only while a cell is FOCUSED; the idle tutorial placeholder dies. A verb path for the focused proposed cell is deferred as design work, not fit work.
-- 2026-08-19 — TARGETING GRAMMAR ruled (the cross-product sitting the parked Owed lines waited for; kaitpw, idealize session): the FULL binding set lives in ONE sentence via a fixed joiner grammar — subject `editing`/`on` (read-write, the thing operated on), reads `from`/`against`, writes `into`/`to`, syncs `syncing` — no dialects per route. Direction gets a second channel beyond the word: a mono glyph prefix on the noun (`←` reads, `→` writes, `⇄` syncs) — grayscale-safe, no hue spend (blue stays verbs/nav). OPERANDS (per-invocation verb targets, e.g. "move … *to sheet B*") never enter the sentence — they live where the verb arms; the far-side law already covers them.
-- 2026-08-19 — THREE-HOME ADDRESSING ruled (closes the sidebar-vs-sentence methodology question): **sentence = external bindings** (test: survives the page closing, other software can touch it); **left rail = route-owned item navigator** (chat sessions, collection members); **right rail = within-page section navigator** (blesses the family-editor/takeoffs convergence). Per noun: outside the page → sentence; one of the route's many → left; a place in this page → right. Chat gets both a session rail and a sentence — different questions, no tension.
-- 2026-08-19 — The typed route BINDING MANIFEST is the base: `Binding[]` (slot, direction, noun|null, options(), drive?, ownerRoute?) declared per route; the sentence rendering, chat-plugin registration, connection census, and drive verbs are all PROJECTIONS of it — the repo's contract posture applied to addressing. `options()` is how the legal-options law is enforced structurally. New routes declare bindings and inherit all five answers (where am I, reads, writes, connected, safe); discharges takeoffs' sentence-config and plugin-readiness gaps on the way.
-- 2026-08-16 — Same sitting, smaller rulings: "beyond the page" (the blue boundary) means leaving the current page's state — disk, host, external; boilerplate honesty stamps dedupe to one home per surface; instances' crash payload is un-muted; `NarrowChip` is adopted by MasterTable (`FilterChip` dies) or deleted if adoption fights back. Vocabulary stacking on `/takeoffs` got NO code change — a disclaimed container label used as a filter is permitted — but the census TEMPLATE is rewritten to grade against all five carriers (axes · verdict · outcome · row-fact · viz).
-- 2026-08-24 — G7 ruled (kaitpw, state-arch bake-off): the route store derives visible row order; page state lives in the store by default. Family workspace's local order (Owed, Component repairs) is the remaining consumer.
-- 2026-08-24 — G8 ruled: one `AtomRegistry` per app and a route store is a handle over the atoms it owns, [ADR 0009](../../adr/0009-one-atom-registry-per-app.md). Same sitting: the takeoff-cutover merge takes the most recent writer per path; the live (Revit) lane is deferred and owed in the takeoffs ledger.
-- 2026-08-24 — A1 ruled (kaitpw): ALL page state lives in the route store; no "single-writer field stays component-local" exception. Purest rule; reverse it only if it measurably hurts. `searchAtom` stays; `visibleKeys` moves in (Owed).
-- 2026-08-24 — B4 ruled (kaitpw): the second targeting consumer is found by two delegated spikes on the most complex mocked product (`family`: 14 links, 2 dirs, a commit verb). The five proto products are unfinished mocks; the product is not found yet.
-- 2026-08-25 — A1 executed on main (`23d4710`, 5 commits): plan/stats visibility, targeting popover, picker level and query now live in the takeoff store; `useBindings` takes the picker state from its caller instead of owning it. 20-row census found no state that resisted the rule. PROVEN[deterministic, main, 23d4710]: 156/156, tsc exit 0.
-- 2026-08-25 — B4 spikes judged (fresh-eyes judge, `.artifacts/spikes/targeting-family-judge.md`; re-openable): spike 1 (primitives frozen, `spike/targeting-family-1`) KILL — zero verbs run, two heads stacked; spike 2 (`spike/targeting-family-2`) ADOPT as pattern only (handler map + head replacement), never as diff — neither arm compiles against post-A1 main. Claims: `Dir` duplex FALSIFIED as a primitive need (`Dir` drives no behavior; write is the verb's property), static-product handler map FALSIFIED as necessity (takeoffs' in-render closures ship) but PROVEN as a working alternative; pick-must-stage UNPROVEN; ≥2-route bar UNPROVEN (two routes render, one consumes; no browser lane). Judge-found gaps: `/family` has no route store (A1 precondition); both arms shipped lying feed states.
-- 2026-08-25 — `FeedState` is `ready|loading|error`; `Feed.lane` (`live|read|fixture`), `Feed.stale` (from `AsyncResult.waiting`) and `Feed.seam` are declared facts; `seams()` and `refusal()` read them, never `options===null` or a state word. Consumers: `/takeoffs`, `/family`.
-- 2026-08-25 — `state/route-store.ts` is the route-store kit (`createRouteStoreCore`, `hostRead`, `feed`, `docAtom`, `docWriter`); its second caller is `family/store.ts`. Labels: public nodes and verbs only.
-- 2026-08-25 — A1 applied to `/family` (second route); `Sentence` picker state and `MasterTable` state are store-owned on both consumers; `SidePane` width is app-shell memory, declared outside every route store.
-- 2026-08-25 — `/family` Q1–Q7 applied as recommendation A (judge file `.artifacts/spikes/targeting-family-judge.md`); `Dir` gains `duplex`. Q8 (≥2-route bar) stays Owed pending one browser observation: in one session, bind a terminal and switch a stage on both `/takeoffs` and `/family`, then reload and go back; both `TargetingHead` instances must retain their URL bindings, print their store feed lane/state, and run a wired verb without the old head appearing.
-- 2026-08-25 — Refusing a second verb is LAW: `Atom.fn` supersedes (installed `Atom.ts:1336–1392`); the host transaction cannot be interrupted, so `runVerb` refuses and records `busy`. `useVerb` records the same refusal.
-- 2026-08-25 — ≥2-route bar: `TargetingHead` renders and is consumed on `/family` and `/families` (deterministic lane); the browser observation from W2-C is still owed for the ruling.
-- 2026-08-25 — Route-store cutover now covers `/takeoffs`, `/family`, `/families`, `/settings`, and `/chat`. A chat plugin is an in-realm pane by construction: the five-route pane registry builds in the parent `AtomRegistry`, and card, dock, sentence, and pane share the keyed `docAtom`; the iframe door and its second registry/wire copy are deleted (`234901e`).
-- 2026-08-25 — A mount-derived write (bind the URL target, open the URL profile) is a system write (`core.write("system", …)` straight through the writer), never a verb: on `/families` and `/family` the mount call raced the picker/catalog verb and the immediate-refusal LAW printed `refused; another verb is running` on first paint (PROVEN[browser, worktree host 5180 + installed-25]; fixes `a3be4fa`, W9-B). Only user-initiated actions take the verb bracket.
-- 2026-08-25 — Page atoms hold primitives or identity-stable values, one writer each: `/chat` looped (`Maximum update depth`, `<Lens>`) because an object-valued `page/lens-intent` atom was rewritten with fresh identities from an effect whose deps were fresh objects (`13469e0`); `Object.is` on primitives ends it. Regression test in `workbench/store.test.ts`.
-- 2026-08-25 — Verbs ≡ commands is PROVEN at the store, not the render kit: `commandVerb(name, input)` in a route store joins a rail verb to a `RouteStateSpec` command through `runVerb` + `docWriter.command`; `/family` joins 4/4 (`540b665`, net −37) with arming/refusal/receipt in the store. `targeting/**` never imports `docWriter`. The first FALSIFIED ("build needs a closure") was LORE; fresh-eyes critic caught it.
-- 2026-08-25 — `Feed.stale` derives from a real re-read in flight, never from the doc slice's `AsyncResult.waiting`: a `docAtom` rides an open SSE stream and is `waiting` for its whole life, so feeds projected from it printed `stale` forever and disabled every verb on `/takeoffs` (`1a9ba87`; PROVEN[browser, worktree host 5180] before/after). A slice is `ready` when `hydrated` and the doc is present.
-- 2026-08-25 — A route's agent-shared slice is producible without page memory: `/takeoffs` doc = `binding · snapshot · staged` with one producer `produceTakeoffSnapshot` (host read → `apply`; pea `adopt`/`audit` → `setDoc`), one zod schema in `agent-contracts/takeoffs.ts`, one exec seam `mcps/shared/takeoff-ops.ts`, `scope` required (`ad36f1f`; S-A's first pass shipped a snapshot with no producer and was FALSIFIED by critic w5).
-
-- 2026-08-25 — Route-store shape ADOPTED for every notable route (orchestrator ruling in kaitpw's absence, re-openable; evidence `.artifacts/goal/route-cutover/reports/w1-demiurge.md`): the host route-state doc is the source and a route store subscribes to zero or more docs through one `docAtom(spec, { threadId })` node per coordinate; the store is a React-free owner of page memory, feeds and verbs built on a six-export kit `state/route-store.ts` (`createRouteStoreCore`, `hostRead`, `feed`, `docAtom`, `docWriter`, `Scope`); panes receive `{ store }` only. Corollaries: `runVerb` immediate refusal is LAW (`Atom.fn` supersedes, never refuses); `FeedState` becomes `ready | loading | error` with `lane`, `stale`, `seam` produced, never asserted; labels only on public nodes and verbs; workspace scope dies (no agent reads it, C3); the chat iframe dies when the fifth store lands; `SidePane` width and DOM refs are the declared non-store exceptions. Identity is superseded by the 2026-08-26 `(route, Address)` ruling; the kit shape stands.
-
-- 2026-08-25 — B4 closed; the ≥2-route bar for the targeting manifest is met (orchestrator ruling, re-openable). PROVEN[browser, worktree host 5180 + Revit installed-25, 2026-08-25 03:28–03:38]: `/takeoffs` (fixture) and `/family` (?thread, live host) both retain URL bindings and stage across reload and Back, print lane/state from store feeds (a real `settings.tree` error showed as `read failed` and healed to `read at …` when Revit attached), and ran one wired verb (`adopt zones`, `open`); the old `/family` head is gone. Evidence `.artifacts/runs/cutover-dev-20260825/q8-observation.md`. Residue: `/family` prints no receipt line for `open` (nit).
-
-### The control taxonomy
-
-- 2026-08-28 — Three control kinds, no fourth. `Verb` is a world action and carries a tone plus a required `reason`; `Press` is surface machinery and mints no tone, so furniture never spends the scarce blue; a link is navigation and owns nav blue. `components/ui/button` is deleted: all twelve importers were machinery, none was a world action, none was a navigation. `Press` owns a real `<button>`, `type="button"`, native `disabled`, and joins the one hover law; its `icon` prop is geometry, not tone.
-- 2026-08-28 — The deleted `ui/button` press-down nudge (`active:translate-y-px`) stays deleted. It belonged to the chrome, not to the language. Add an active transform to `Press` only if a later product observation demands it.
-- 2026-08-28 — Export, PDF and SVG verbs are `act`: they produce an artifact outside the app, touch no model data, and cannot be wrong, so they are not `commit`, which stays the one filled blue for the page-blast write. This discharges the export half of the drive-verb hue question.
-- 2026-08-28 — A user-placed review flag is `caution`, not `alarm`. `alarm` stays reserved for the model disagreeing; a person marking a room for an export manifest is not a disagreement.
-- 2026-08-28 — Furniture may not claim an affordance it does not have. `PaneStrip`'s entries were buttons with a title, a `disabled` and no handler; they are honest read-only text now, an available pane upright and a gated one muted italic with its reason still in the `title`. No action was invented to justify the shape.
-- 2026-08-28 — `HelpTip` is fixed at the primitive, not at call sites: it portals to `document.body` over the repo's existing popover foundation, so no ancestor's overflow clips it, and it pairs a `useId` trigger with the popup id so `aria-describedby` resolves whether or not the note is open. Three of six new placements sat inside scroll containers and provably clipped before this. The copy boundary is unchanged: region orientation is a `HelpTip`, a control fact is a native `title`.
+- 2026-08-19 — THREE-HOME ADDRESSING: the sentence carries external bindings (test: it survives the
+  page closing and other software can touch it); page memory carries the rest; the route document
+  carries what an agent shares. The full binding set lives in ONE sentence.
+- 2026-08-24 — The targeting manifest is canon (`apps/web/src/targeting/`): a route declares a
+  static `Product` (links · stages · panes), supplies one `Feed` per link, and keeps bindings in
+  URL search. `TargetingHead` renders terminals only; trunks are the picker's crumbs. Seams and
+  refusals derive, never declared twice.
+- 2026-08-24 — All page state lives in the route store; no component-local exception. One
+  `AtomRegistry` per app, [ADR 0009](../../adr/0009-one-atom-registry-per-app.md).
+- 2026-08-25 — A page atom holds a primitive or an identity-stable value, one writer each; an
+  object-valued atom loops the renderer.
+- 2026-08-25 — Refusing a second verb is LAW: the host transaction cannot be interrupted, so
+  `runVerb` refuses and records `busy`.
+- 2026-08-26 — Route-doc identity is `(route, Address)`; `?thread` is only a view. `Address` is the
+  Revit document identity (`cloudModelGuid ?? absolute path`) and `Reading` is
+  `{ at: Address, version, observedAt }` — a world is a call target, never part of read identity.
+- 2026-08-26 — Route-doc concurrency uses no locks and no sync engine: `expectedRevision` end to
+  end, client `requestId` idempotency for external commands, an open-in-another-tab cue and a
+  changed-elsewhere banner, `outcomeUnknown` as the crash barrier. Add an optimistic overlay only
+  when measured latency demands it.
+- 2026-08-26 — The route-document machine owns no product meaning: `agent-contracts/route-doc.ts`
+  exports pure `applyPatches`, `guardCommand`, `commitDoc`; `RouteWorkspace` is only their shell.
+- 2026-08-27 — `RouteStateWriteResult` is a discriminated union on `ok`. Store producers that
+  refuse produce `kind: "refused"`, never a bare `Error`.
+- 2026-08-28 — Three control kinds, no fourth: `Verb` is a world action with a tone and a required
+  `reason`; `Press` is surface machinery and mints no tone; furniture may not claim an affordance
+  it does not have. Export/PDF/SVG verbs are `act` — `commit` stays the one filled blue.
+- 2026-08-28 — A user-placed review flag is `caution`. `alarm` is reserved for the model disagreeing.
 
 ### Enforcement
 
-- 2026-08-16 — the design-guard test IS the lint: the web app has no CI, so token discipline holds by assertion in `vp test` (the `ready` lane), not by review. Full rationale — including the ground-flip ruling and every gate's why — lives in the test header (`tests/repo-guards/src/design-guard.test.ts`); a grammar or vocabulary change lands as ruling + code + guard update in one commit. **Do not restate the gates in prose; they are executable.**
-- 2026-08-28 — Every guard category is a direct HARD ZERO and `design-guard.baseline.json` is deleted. There is no ratchet left to slacken and no prototype exemption: the walk covers every `apps/web/src` TS/TSX/CSS surface plus JSON for the dash rule, and only the generated route tree is excluded. Failures print path, line and match. Commands are in [NORMALIZATION.md](NORMALIZATION.md).
-- 2026-08-28 — A gate that matches one spelling measures nothing. The dashed gate read kebab case only and saw 8 of ~30 real sites; the type gate read `px` only, so `ui/badge`'s `text-[0.7rem]` survived every sweep including the ADR that named it. Widen the pattern before trusting a count, and prove the widened pattern against negative controls.
-- 2026-08-28 — One authority stops at the language boundary. `runs/visual-law.json` had two readers and every web-side gate stayed green while `/runs` and the Python renderer drew the same zone boundary two different ways. A shared data file needs a check on each side: the JSON hard zero from the web side, `eval/rhvac/test_dash_role.py` from the eval side.
-- 2026-08-28 — Typography is one authority: `base.css` owns seven tier size/leading pairs, four weight variables, and the body/display/mono faces; `design-lang.css` projects them. Maintained CSS, template CSS, and style objects consume variables, while SVG drawing geometry keeps only its scale-dependent `fontSize`. The old class-only type gate missed these declarations, so the guard now holds absolute size, leading, face, and numeric weight at hard zero.
-- 2026-08-16 — The one-system sweep CLOSED against its own census: forked `Verb` components 5→0, `--st-*`/`--act-*` consumers 6 files→0, hex literals outside `design-lang.css`→0, `tele`/`tele-label`/`section-label` 152 uses / 15 files→0 (bundles deleted), sub-10px `text-[Npx]`→0, raw palette refs outside ui ~640 / 50 files→0, ALIAS SHIM meter ~40 lines→0, `ui/verb`/`ui/chip`/`ui/switcher` deleted — each now a hard zero in `design-guard.test.ts`. (Full table was `docs/design/DESIGN-SWEEP.md`, git history.)
-- 2026-08-28 — The tails that had ratcheted rather than zeroed are closed: raw text-size utilities 229 → 0 (the gate now reads `rem` as well as `px`; `em` stays legal because `text-[1em]` is an inheritance instruction), raw `<button>` outside ui+lang 109 → 0, `ui/button` importers 12 → 0 with the file deleted, retired `tele` machinery 82 → 0, inline `background:` shorthand in TS/TSX 79 → 0, dashed 8-under-a-blind-gate → 0 under the widened one. The 14 surviving arbitrary-pixel utilities were inspected and kept as local geometry — hairlines, marker squares, compact radii, control and gutter spacing, fixed panel widths, chart dimensions — none a hidden colour, type or spacing authority.
-- 2026-08-28 — Maintained scope ruled: every `apps/web/src` TS/TSX/CSS/JSON surface is enforced, mounted routes and incubating variants alike. `/param-tables` is an incubating PRODUCT, not a throwaway and not an exemption — mounted, five variants on `?variant`, front-door discoverable as `Incubating product`, paying every gate; it needs no backend cutover yet. `docs/remote-factory.html` is a private disposable standalone page and is deliberately outside maintained-app adoption.
-- 2026-08-28 — Disposable standalone artifacts are outside maintained-app adoption: `docs/remote-factory.html` and existing `apps/web/docs/*.html` demos need no migration. Future artifacts should link/use `base.css` when practical; this exception does not extend to `apps/web/src`.
-- 2026-08-28 — Case is a type-axis authority: maintained consumers use `t-upper` for uppercase presentation, with the portable rule in `base.css` and the Tailwind projection in `design-lang.css`; only `components/lang` grammar CSS may author its own transform.
-- 2026-08-16 — Sweep working rules, kept for later crusades: local commits with explicit paths only (concurrent agents clobbered each other's staged index twice), and important decisions are answered by prototypes or real code, never prose.
+- 2026-08-16 — The design-guard test IS the lint: the web app has no CI, so token discipline holds
+  by assertion in the deterministic lane, not by review.
+- 2026-08-28 — Every guard category is a hard zero; there is no prototype exemption. Maintained
+  scope is every `apps/web/src` TS/TSX/CSS/JSON surface, mounted routes and incubating variants
+  alike. Disposable standalone artifacts (`docs/remote-factory.html`, `apps/web/docs/*.html`) are
+  outside maintained-app adoption.
+- 2026-08-28 — A gate that matches one spelling measures nothing (the dashed gate read kebab case
+  and saw 8 of ~30 sites; the type gate read `px` only). One authority stops at the language
+  boundary: `runs/visual-law.json` had two readers and every web gate stayed green while two
+  surfaces drew the same law differently.
+- 2026-08-29 — Class discipline is proved by compiling authored candidates against the app's own
+  CSS graph (`styles.css` and its imports), not by regex. Three checks hold the boundary:
+  unregistered classes (hard zero), the visual-utility allowlist (`{}`), and swatch coverage.
+- 2026-08-29 — The swatch is generated from recipe metadata: every variant value of every exported
+  `tv` recipe renders, asserted exhaustively. A new variant appears with no edit.
+- 2026-08-29 — A ratchet must fall as well as refuse to rise. Both baselines assert staleness and
+  print paste-ready JSON; a count that dropped is a failure until it is recorded.
+- 2026-08-29 — Every TSX file under `apps/web/src` stays under 400 lines, split by region. A split
+  file is named for what it draws, never for its parent plus a symbol.
 
-### The `/design-system` route and its catalogue
-
-- 2026-08-16 — the `/design-lang` proto route and `src/design-lang/*` were deleted once they had served as the validation record; the losing rivals survive only on snapshot branch `proto/design-lang-base2-round2`, and palette values are single-homed in `src/design-lang.css`.
-- 2026-08-16 — satellite demos are deliberately mocked (fixture data, null identities, no host calls) and say so. This is not a gap to discharge: satellites exist to show complicated cases a real route cannot reach.
-- 2026-08-16 — shadcn exhibits with zero product consumers are evicted from the index rather than catalogued: the index documents components with a proven consumer, so an un-consumed component is either given one (and re-admitted with the consumer named) or deleted.
-- 2026-08-16 — the per-route crusade runs BEFORE satellite work, deliberately: catalogue entries must be backed by real consumers, so satellites are explicitly not blockers.
-- 2026-08-16 — `ui/verb` and `ui/chip` survive with zero product consumers because `/design-system/swatch` imports them as superseded-specimen exhibits; retiring the files is the exhibit's call, not a route pass's.
-- 2026-08-16 — `ArmingStrip`'s lifecycle is validated against a real gate: `/parameter-links`' preview→stale→apply maps onto it (no fresh preview → `refused` with re-plan; preview verified → `arming`, reason input arms the one commit).
-- 2026-08-16 — ADR 0003 collapsed the glance client fan-outs into first-class host packets: `revit.glance.model` (was 4 calls, 3 truncation dialects) and `revit.glance.attention` (was 3 calls; limits are host-owned and never clamp to the minimum).
-
-### Primitives
-
-- 2026-08-15 — `components/master-table/` is the canonical table (multi-sort, facets over ALL rows, cluster headers, tested pure core); every other table implementation is a migration target, not a peer. Atlas migrated onto it and its fork + `takeoff/cells.tsx` were deleted.
-- 2026-08-15 — TanStack Table v9 adopted as `MasterTable`'s headless model/state engine: the announced requirements (arbitrarily nested headers, real pinning/sizing/visibility, cell focus/selection) are exactly the state and geometry it owns, so custom table algebra stops accumulating. It removes no rendering, editing, keyboard, accessibility, or export code.
-- 2026-08-15 — The official TanStack **Spreadsheet example is REJECTED as the component**: ~3,941 TS/TSX + 895 CSS lines of virtualization, merged cells, clipboard, fill, undo/redo and menus. It is evidence and recipes, not a primitive.
-- 2026-08-15 — `@tanstack/react-table` is PINNED to `9.1.2`, never `latest`: v9.0.0 went stable 2026-08-04 and 9.1.2 published 2026-08-09, so the explicit-feature API is new enough that a float is a liability. MIT, React 18+ adapter, in range for this repo's React 19.
-- 2026-08-15 — The boundary: TanStack is the authority for column IDs, nested structure, row order, filters, sort, pinning, sizing, visibility and selection, used directly inside `MasterTable` with no second generic engine in front of it; route-owned scope chips and mutation callbacks stay outside. A thin Pe column-helper/meta layer carries domain vocabulary and dense cell renderers. (Was `docs/context/tanstack-table-master-table-fit-2026-08-15.md`, git history; the landed migration is +269 product LOC — an ownership/capability win, not a size win.)
-- 2026-08-15 — Proposals get a shared *vocabulary* (state names, tone budget, dot/badge/queue, receipt shape), NOT one store. The three commitment models (`/family` FieldState, `/takeoffs` write-through decide, `/families` plan-as-lens) stay per-route; only the language unifies.
-- 2026-08-15 — `components/ui/pane.tsx` landed as the pane primitive (`Pane`, `PaneSplit`, `PaneWorkspace`, keyboard-accessible handles, persist + controlled collapse); atlas is first consumer.
-- 2026-08-15 — `lib/affine-frame.ts` is the one camera seam: finite bounds, union, uniform fit, Y-up/Y-down, renderer-neutral matrix, exact forward/inverse mapping. Domain projection and rendering stay outside it.
-- 2026-08-15 — A stateful pan/zoom camera was deliberately NOT added to `affine-frame`; compose one over the frame when a real user-controlled camera earns it.
-- 2026-08-15 — Purge wave: −4,932 LOC across 14 files, `vp check` + `vp test` (21 files / 123 tests) green. Two `/docs/*` exhibit routes and `target-chip.tsx` deleted; `@t3-oss/env-core` and `@tanstack/router-plugin` dropped (zero imports; routing belongs to `tanstackStart`, generation to `@tanstack/router-cli`).
-- 2026-08-15 — Kept-despite-looking-dead, with reasons: `Peek` (posterity, unmounted by decision); `route:family-types` contracts + pea handlers (retained deliberately: `packages/mcps` registers its `parse_spec`/`refresh_snapshot`/`push` handlers and `agent-contracts/family-types.ts` exports schemas imported by `family.ts` and `parameter-links.ts` — retire when pea's family editing runs through the live lane's own commands (was family SHIMS 7, git history); `WORKSPACELESS_ROUTES` prevents a 404 workspace); `ops/synthetic.tsx` (alive — see Tried); `takeoff/proto/**` and the `rhvac` takeoff half (`?source=fixture` is a user-selectable adapter with a "never a fallback" rule); `rhvac` extract normalizer (kept alive by `takeoff.test.ts`, which is a data-integrity proof over committed fixture data — a proof seam dies only when its replacement preserves the proof); `lab/estimate.ts`, `grounded-doc/**` (real consumers).
-- 2026-08-15 — `src/host/target-scope.ts` kept though its tenancy half is exercised only by its own test: 84 LOC of pure tested functions whose header names concrete futures with migration paths — the cheapest form the bet can take. A test is not a consumer; revisit if no second consumer appears next wave.
-
-### The front door (`/`)
-
-- 2026-08-16 — Nav cards stay on `ui/card` deliberately: enclosing plain content is forbidden and `ArtifactFrame` rightly refuses to serve, but twelve unbounded prose blocks have no scannable shape. Alien chrome beats a misused frame until the front door earns a ruled navigation-surface form.
-- 2026-08-16 — Hover on a nav card buys no hue (veil replaces `border-primary/40 bg-accent/30`); the one blue is `--r-nav` text on the arrow — nav's legal spend.
-- 2026-08-16 — The bundle-identity mono caption in the hero eyebrow is kept: it is a proof-lane marker (which deploy you are looking at), not decoration.
-- 2026-08-16 — Reachability (§0) verified against `src/routes/`: every living route has a card, and the four design-system satellites (`/proposal-flow`, `/arming`, `/popovers`, `/swatch`) got direct nav links instead of being two hops deep inside `/design-system`'s footer, where they rot.
-
-### The document lab (`/doc-lab`)
-
-- 2026-08-16 — Approximate (shared-bbox) blocks render solid `--r-caution` + "≈ approx" tag: the block exists, its *address* is doubted — that is squiggle-family semantics, but the squiggle rides text decoration and cannot ride an SVG/absolute region border. Separates by hue only; weaker than the measured/estimated law wants, accepted as the honest stopgap.
-- 2026-08-16 — Ungroundable blocks (no bbox) get muted italic "no bbox" + 60% whole-block opacity: `cap:"readonly"`-shaped but there is no cell to carry it. Italic = locked is settled type law; the opacity is a route invention.
-- 2026-08-16 — Hover is focus in this engine, so the veil (hover law) and select fill (selection law) collapse per lane. Twin-lighting renders as selection, the veil stays on the lane under the pointer; pinning is true selection and differs only by the pin glyph.
-- 2026-08-16 — The sample-document lane now declares itself with a dashed `FactChip` "fixture · sample"; before this it ran silently as if it were real input.
-
-### Method (purge waves and route passes)
-
-- 2026-08-15 — Grep the import graph by **symbol**, not path; distinguish *used elsewhere* (live) / *used only in its own file* (drop the `export`, keep the code) / *declaration-only* (dead, safe to cut); always include `tests/` in the sweep. Path-shaped grep misses relative imports (`./mock-geo`) and prose census misreads intent — the import graph beat the prose census twice in one wave.
-- 2026-08-15 — The second consumer is the only evidence a seam is real. A docblock naming three futures, a passing test, and an ADR line are all consumers that were *described*, not consumers that *arrived*.
-- 2026-08-15 — Authoring test for any new seam: not "can I name a future user?" (always answerable) but "what makes this obviously wrong if the future never comes?" Code with no tripwire doesn't fail — it accumulates, compiles, and passes.
-- 2026-08-15 — Undiscoverable is the leading indicator of dead: every route deleted in the wave was unreachable from the index `TOOLS` list. Reachability from the front door tracks liveness better than any timestamp.
-- 2026-08-16 — Sweep governance for a route pass: `components/lang/*`, `components/master-table/*`, `design-lang.css` tokens and the state-model axes are NOT changed by a route pass. Where the language cannot say something, leave the code honest and write the gap down here. Gaps become numbered findings, never unilateral language changes.
-- 2026-08-26 — `/targeting-proto` and `targeting-proto/**` left canon after S2–J6′ rewrote the selected targeting kit into `targeting/**`. `view-sentence.tsx` and `view-board.tsx` were losers; `view-flow.tsx` was NOT — it was queued for promotion as a second projection of the kit and was swept with them. All three are at `76ae024^`.
-- 2026-08-26 — `ChatSentence` is the chat targeting head only; it does not render Pea testimony or inspect a plugin route document. The live plugin registry still owns pane titles and inline route-state cards, while the dead `chatPluginRegistration` testimony bridge is deleted.
 ## Tried & rejected
 
-- 2026-08-25 — A shared targeting-controller hook across `/takeoffs`, `/family`, `/settings` (W3-B fix): the three controllers differ in picker state and navigation, not only in product/store args; `state/use-route-store.ts` (owner ceremony) is the shared part, the controller stays per route.
-- 2026-08-16 — **Base 1 (byte-identical specimen isolating token scope)** retired: it isolated the variable so well the round stopped judging a product. Verdicts on 12 abstract rows and caption prose did not transfer; every verdict that stuck came from a concrete product moment, never from the five-axis taxonomy. Raw findings survive in git history (`docs/design/DESIGN-LANG-HANDOFF.md`, deleted 2026-08-17).
-- 2026-08-16 — **a · control-plus** (round 1): beaten as its own control. Donated verb grouping + outcome colour coordination and the green proposal card as originally intended.
-- 2026-08-16 — **b · ink** (colour nearly abolished): looks good but noisier than c's axis discipline. Donated the outcome text-decoration direction (squiggly-under / italic; bold stays reserved) and the dark-mode green card.
-- 2026-08-16 — **c · borrowed motifs**: palette rejected as too saturated and not PE — but it donated the round's biggest idea, the **axis-splitting law** (one decoration family carries "state of the value" ranked by colour; only two primary text colours; citation = plain underline), and its coordination property became round 2's target.
-- 2026-08-16 — **d · new palette**: bad in light, no PE character. Donated evidence that dark's character is underdefined, plus its verb treatment and token discipline (ground-does-contrast, every-hue-is-a-meaning).
-- 2026-08-16 — **p1 · incumbent tuned**: user-deleted during judging; light wash capped at 1.38:1 and dark alarm/caution rested on chroma alone (fails deuteranopia).
-- 2026-08-16 — **p2 · warm adjacency** and **p4 · dark-first** rejected; p2 moved `done` out of pea's family (a meaning change) and turned brand #005695 cerulean, p4 dropped brand blue entirely and was globally rigid to hand-tweaks. Both independently diagnosed kiln's near-zero chroma (not token aliasing) as caution's root failure and both killed light ink-2's 55° blue-slate drift — those diagnoses are what survived. p4's written derivation rule stays available if dark ever needs re-deriving.
-- 2026-08-16 — Mode-invariant accents (declared once, identical in dark) read as muddy. Typographic glyphs standing in for icons "look really bad". Vertical left bars for outcome receipts were not understood.
-- 2026-08-16 — The design-lang scaffold's **fixture table**: right on emphasis-and-demonstration framing, wrong on the fixture — a hand-rolled table proves the grammar only against markup written to flatter it. Replaced by mounting the real `MasterTable` with `StateCell` renderers; what it cannot express is recorded as a finding at the call site.
-- 2026-08-16 — The base's weak-anchor arbitration **dropped pea's unsaved square** on the proposal cell: wrong, the fold and the square travel together on an open proposal (user's own staged square stays distinct). Fixed same day.
-- 2026-08-16 — Visible `.dl-refusal` under-line rendering: a lane of four refused verbs repeated one sentence four times, wrapped the header, and made buttons read wide. Supersedes the round-1 "reason on the surface" ruling.
-- 2026-08-16 — R7 grounding ambiguity 0/1/N: deferred, fails the ≥2-route bar (only takeoffs' targeting states want it).
-- 2026-08-16 — "Delete all copy and re-evaluate from scratch": tempting, ruled too broad. The per-route purge with typed destinations is the adopted path.
-- 2026-08-16 — Sizing `title=` as a general prose vehicle: 63 of 176 static titles are multi-sentence and the four longest run 366/356/337/309 chars — each fired on hover, none selectable, searchable, or keyboard-reachable. The distribution is bimodal (58 bare nouns under 20ch, 51 over 120ch): two different primitives were wearing one attribute.
-- 2026-08-16 — `state:` + `word` column clause for MasterTable cell state: overruled by the families verdict-column evidence (see Decided); the parallel `stateColumn` renderer was deleted rather than migrated.
-- 2026-08-16 — oxlint as the token-discipline enforcement lever: waived in favour of one dependency-free directory walk with plain regexes inside the existing test lane; oxlint stays an optional later hardening.
-- 2026-08-16 — Dashed as a general "provisional/partial" mark on `/workbench`: all six spends were wrong slots. Tool rail → solid pea (a tool call is real); "on demand" pill → neutral mono, the label carries it; empty picker → `EmptyState` with exit (scope-empty, not a seam); reflect floor → solid caution hairline; cache horizon → solid `--r-ink` locate tick (was dashed BLUE). Zero dashed spends remain there.
-- 2026-08-16 — `border-dashed` as the "estimated/guessed coordinate" mark in `/doc-lab`: illegal — R13b reserves every dashed mechanism for SEAM, and an approximate bbox is not a seam. Three dashed sites re-expressed (drop zone → hairline, approx → solid caution, image regions → solid `--viz-4`).
-- 2026-08-16 — Viz hues carrying state, caught on three surfaces the same week: `/doc-lab` (`--cat-blue` focus/pin, `--cat-kiln` approx, `--cat-lichen` image focus — `--viz-4` survives spent purely as image-kind taxonomy); `/instances` `PHASE_COLOR` in `host/fleet.ts` (deleted — phase→tone mapping belongs to the rendering route as `phaseVerdict`, and fleet keeps no colour opinion); `/schedule-grid`'s kiln "T" type-parameter badge (dropped to a note).
-- 2026-08-16 — Blue as a provenance/busy hue on `/workbench`: the empty-thread "Pea" hero was `--pe-blue` (the agent's own name in blue — pea is never blue), the focal-turn rule and mapdial reticle were blue/provenance-hued (now neutral ink, R13a — non-hue channel where a fill cannot separate), plan status spent blue-for-busy and viz-for-pending.
-- 2026-08-16 — Four hover idioms (`bg-paper-2`, `bg-muted`, `primary/10`, opacity) and four selection idioms (blue border-left, paper+inset-shadow, `--primary` tints, `data-selected:bg-paper-2`): collapsed to the one veil and the one `--r-select` fill.
-- 2026-08-16 — `--fail` for evaluation issues and `Metric issue`: blocking machine refusals wear the alarm (refused → alarm is legal), attention COUNTS wear caution.
-- 2026-08-16 — `hover:text-destructive` on `/data-tables`' row/column removers: spent the alarm hue on mere affordance; replaced by neutral ink plus a title reason.
-- 2026-08-16 — Route-local `Btn` atom and dashed declare-button borders on `/instances`: the dashes meant "button", not seam.
-- 2026-08-16 — `bg-primary` brand lamp beside "Positive Energy" on the front door: the commit blue used as a logo. Moved to neutral ink — but a colour-shaped dot beside a name still reads as a status lamp (instances uses exactly that shape for liveness).
-- 2026-08-15 — Documentation-as-UI exhibits (`docs/runtime` 3,183 LOC, `docs/target` 1,327 LOC): 4,510 LOC of the single largest cut. `docs/target` *did* import the live model, which is why it never broke and why it survived a month past usefulness — importing the live model protects an exhibit from drifting, not from becoming pointless. `docs/runtime` documented another repo's internals pinned to "as of beta.97" and reenacted a bug already fixed in beta.97. An exhibit needs an owner and an expiry.
-- 2026-08-15 — `useRouteDraft`/`RouteDraftHandle`: a generic save/discard draft hook with zero call sites. ADR 0001 listed "lift to an Atom family when two components share one draft" as tracked-open work, which *read* like a named future consumer but was a note written while the hook had zero callers. Deleted; ADR line rewritten to describe the need rather than the artifact. Rebuild against a real second consumer.
-- 2026-08-15 — Web-side mirror types lose to generated contracts silently: `rhvac/types.ts`'s `RhvacExtract` was superseded by `RhvacExtractData` from `@pe/host-contracts` the day the contract landed, but nothing failed because both compiled. Also deleted: the `RhvacAssemblyOption`/`Catalog` block mirroring an `rhvac.assemblies` op the web never calls, and `DIRECTIONS` (a label table for a field stored as a raw number).
-- 2026-08-15 — Symmetric alias/wrapper layers: 6 of 12 `Ff*` aliases in `host/familyfoundry.ts` and 5 of 15 exported readers in `takeoff/host.ts` had zero references. When a file's job is "one alias per contract member", it gets filled out for symmetry, and completeness masquerades as design. Generate on demand, not in sets.
-- 2026-08-15 — Prose-census-based deletion: `ops/synthetic.tsx` was misread as dead ("glance moved to real ops" meant the *deps* became real ops — the fan-out runner is what makes that work; `routes/ops.tsx` mounts `SyntheticRunner` and all three `ops/glance/*` type against it). Path-shaped grep also missed `proto/mock-geo`, imported relatively as `./mock-geo`. The import graph beat the prose census both times.
-- 2026-08-15 — Other declaration-only cuts: `TONE_STYLE`/`ageLabel` (`host/target-ui.tsx`, orphaned by the docs-route deletion), `loadFixtureExtract`/`FIXTURE_SOURCE_LABEL` (`rhvac/fixture.ts`), `BridgeBusyNotice` (`host/issues.tsx`), `joinUniqueIds` (`parameter-links/model.ts`).
-- 2026-08-15 — Speculative seams that *paid* (counter-examples, don't re-litigate): `ops/synthetic.tsx` — the seam was behavioral (fan out N deps, per-dep status, one "as of"), not structural, so real ops needed no change and three glance modules came free; `grounded-doc/**` — three unrelated consumers plus server routes, arrived at honestly.
-- 2026-08-26 — U2: the typed route manifest is a web UI kit until an agent consumes it. `Product<K>` owns a total keyed slot/feed record and the ordered render refusal ladder; `seams()`, `peaNote`, the repo census, and `ownerRoute` are deleted as agent-facing projections with no agent reader. This supersedes the agent-projection claims in the 2026-08-24 manifest ruling and its Owed projections.
-
-- 2026-08-25 — Route-store shapes rejected in the W1 demiurge (`w1-demiurge.md` §1): store-as-source (S1: Pea, dock and iframe write the same doc from other realms; the host's 1,393 LOC of ordering/gate proof would need remaking in a tab); two truths reconciled on save (S3: every "hardest three" in the route census is this bug already); bare atoms with no owner (S4: no `dispose`, no fixture root); `abstract class RouteStore` (S5: five subclasses of one base is a framework); one app store with routes as slices (S6: couples five routes' dispose); TanStack Query as feed substrate (S8: tracked waterfalls lost; survives only as page cache for reads that feed no link); page memory in the doc (S9: hover as a thread event); per-realm stores with iframe replication (S10: a fourth truth; delete the iframe instead).
+- 2026-08-15 — The TanStack **Spreadsheet example** as the component: ~3,941 TS/TSX + 895 CSS lines
+  of virtualization, merged cells, clipboard, fill, undo/redo and menus for a table that needed a
+  headless model. `@tanstack/react-table` is pinned, never `latest`.
+- 2026-08-15 — Documentation-as-UI exhibits (4,510 LOC, the single largest cut). A route nobody can
+  reach from the front door is the leading indicator of dead code.
+- 2026-08-15 — Speculative seams that PAID, do not re-litigate: `ops/synthetic.tsx` (the seam was
+  behavioral — fan out N deps, per-dep status). The authoring test is not "can I name a future
+  user?" but "what makes this obviously wrong if the future never comes?".
+- 2026-08-16 — **Base 1** (byte-identical specimen isolating token scope): it isolated the variable
+  so well the round stopped judging a product.
+- 2026-08-16 — Round-1 losers and what they donated: **a** (control) verb grouping; **b** (colour
+  nearly abolished) the outcome decoration direction; **c** (borrowed motifs) the axis-splitting
+  law, though its palette was too saturated for PE; **d** (new palette) evidence that dark's
+  character was underdefined.
+- 2026-08-16 — Round-2 palette losers: **p1** capped light wash at 1.38:1 and rested dark
+  alarm/caution on chroma alone (fails deuteranopia); **p2** moved `done` out of pea's family, a
+  meaning change; **p4** dropped brand blue entirely. Mode-invariant accents read as muddy.
+- 2026-08-16 — Viz hues carrying state, caught on three surfaces in one week; blue as a
+  provenance/busy hue; `hover:text-destructive` on row removers; a `bg-primary` brand lamp beside
+  the wordmark. Each spent a meaning hue on mere affordance or identity.
+- 2026-08-16 — Dashed as a general "provisional/partial" mark: every spend was a different slot.
+  Dashed is the seam slot only.
+- 2026-08-16 — The user gets NO identity hue: authorship already rides four redundant channels.
+- 2026-08-16 — `title=` as a general prose vehicle: 63 of 176 static titles were multi-sentence,
+  the longest 366 chars, each fired on hover.
+- 2026-08-16 — oxlint as the token-discipline lever: waived for one dependency-free walk inside the
+  existing test lane. (Superseded 2026-08-29 by the compiler-backed checks, same verdict on eslint.)
+- 2026-08-16 — "Delete all copy and re-evaluate from scratch": ruled too broad; the per-route purge
+  with typed destinations is the adopted path.
+- 2026-08-25 — A shared targeting-controller hook across three routes: the controllers differ in
+  picker state and navigation, not only in product data.
+- 2026-08-26 — Store-as-source and the typed manifest as a wire contract: a manifest is a web UI
+  kit until an agent consumes it, and that consumer is the gate.
+- 2026-08-29 — A guard that a dead object can satisfy: `LANG_EXPORTS` + `void LANG_EXPORTS` passed
+  swatch coverage while rendering nothing. Coverage now requires a JSX mount.
+- 2026-08-29 — A hand-written consumer count on each swatch frame, kept honest by a guard that
+  forced it to equal the import census: prose in a check's uniform, and every unrelated file split
+  broke it. A count earns its place only if it is derived at render.
+- 2026-08-29 — Moving a monolith is not splitting it: the first specimen pass moved 2,365 lines
+  into two files and the swatch silently lost 100 specimens (594 → 350 JSX tags). Region split or
+  nothing.
+- 2026-08-29 — The first unregistered-class census (855) was measured against
+  `tailwindcss/theme.css + design-lang.css` instead of the app's real CSS graph, so classes the app
+  ships (`h-*`, `face-*`, `z-*`) read as unregistered. A checker's loader is part of its claim.
 
 ## Owed
 
-- 2026-08-29 — Goal `design-normalization-2` (**closed at `e60113b`**, number reached; DRY by definition — nothing left the number measures). NUMBER: (a) `apps/web/src` TSX files >400 lines, baseline **37** (not 6; the 6 was the >1000 tier); (b) unregistered-class check + geometry-only allowlist (exceptions → 0) + swatch-coverage check, all green. GATES: web tsc + vitest + repo-guards; adherence baseline never rises. WIDTH: 3 Codex builders/wave on sibling worktrees `Pe.Tools-dn2-{checks,kit,purge}` off `review/design-system` @ 47a0ae6. DRY: two waves adopting nothing. Briefs and reports: `.artifacts/handoffs/dn2/`. Wave 0 seams: checks (replace regex guard), kit (`components/` onto `tailwind-variants`, no `className` on lang), purge (delete variants a–d, extract `anatomy/` from the three workspaces).
-  - Wave 0 verdicts. **checks ADOPTED** (`d536508`): compiler-backed census over the app's real CSS graph (loader contract is a test), geometry-only allowlist ratchet (4,320 exceptions / 88 files baselined), swatch coverage hard zero (18/18), five regex gates retired; first census FALSIFIED (loader omitted `base.css`; 855 → 82 true unregistered, all `ptc-*`/`no-print`/`no-scrollbar`). **kit ADOPTED** (`edb9a78`): 14 `lang/` recipes on vendored `tv` (`lib/tv.ts`, pnpm add refused in a wired worktree), `lang.css` 951 → 266 (StateCell cascade only), cva gone, four new `@utility` projections (`ink-wash`, `commit-wash-artifact`, `alarm-wash-artifact`, `inset-ring`); `Press` NOT closed — 129 sites, 107 with `className`, the brief's "8" was wrong. Base fix `6614f0a`: web test lane projects `base.css` `:root` onto jsdom (module-scope `token()` reads threw). Eye: text-lane only (preview tool wedged once); swatch and `/takeoffs?source=fixture` render clean; screenshot proof owed.
-    **purge ADOPTED** (`4d7b972`): variants a–d deleted (3,483 LOC), `/param-tables` renders e only; `anatomy/` tier extracted from the census (`Workspace` slots, `StatLine`, `Key`, `useTableChips`) — 107 lines, 3 workspaces consume `Workspace`; three monoliths split by region into 42 files, all <400. Ratchets fell: rawTable 30→16, escHandler 9→7, longTitle 70→62, inlineColor 306→208, allowlist 4,320→3,921. Wave 0 close: gates green on the graft; **number 37 → 29** files >400.
-  - Wave 1 verdicts (review `2d0377a`, all gates green: web 52/343, guards 71, tsc 0). **kit ADOPTED**: `Press` closed — 122 sites, 0 `className`, 0 `icon` — but its variant set is the 108-string census re-spelled (16 tones/18 sizes/12 states/5 layouts); wave 2 collapses it. **checks**: prose demotion ADOPTED (`LAWS` 17 → 0, each paragraph's sole home is `lens.house` or a type/specimen; `routes/design-system.tsx` 1,374 → 38), unregistered 82 → 0 with the hard zero active, allowlist in scope 867 → 0; KILLED twice on the way — a `void LANG_EXPORTS` object that satisfied coverage without rendering, and a move-not-split that thinned the swatch (594 → 350 JSX tags); replaced by `specimens/recipe-grid.tsx` generating every variant × state from each `tv` recipe's metadata, with an exhaustive test (18 recipes) — a hand-written consumer count that a guard forced to match the import census was KILLED as prose in a check's uniform. **purge ADOPTED**: every file in scope under 400 by region (159 files, net −677), routes thin over `anatomy/`, `useTableChips` everywhere; two owed — split names of the shape `world-world-lane.tsx` (rename wave 2) and a hydration mismatch now logged on `/ops`, `/instances`, `/schedule-grid` in the no-document state (cause owed); it also deleted 1,681 comment lines of dated rationale on the "git history" ruling — the one verdict here worth the user's re-opening. **Number 37 → 3** (`family-review/proto-editor/composed-parts.tsx`, `b.tsx`, `proto/review-board.tsx`; checks' wave 2). Allowlist 4,320 → 2,697. Eye lane: headless text/DOM only; the `probe.mjs` text field caps at 900 chars — use `measure.mjs` (innerText length, import-path count, element count).
-  - Wave 2, in progress (review `47c0fd9`). **checks ADOPTED**: family-review verdict applied (composed won; a/b/c deleted), `SURFACE-PHILOSOPHY.md` 328 → 47 lines as an index of homes, `MAP.md` deleted, `NORMALIZATION.md` a pointer; four candidate `lens.house` laws owed to the user: front-door reachability of every product route; a human invokes every crossing into the live model; a rejected cell commit restores the prior value with its reason beside the cell; a route owns its world and host calls. **purge ADOPTED** (graft pending its crossing fix): hydration mismatch cause = `createFileRoute` declarations moved below `routes/` (TanStack Start transforms only route modules) — declarations returned, 0 hydration errors on `/ops` `/instances` `/schedule-grid`; 63 `git mv` renames into region directories; allowlist 3,914 → 1,621. **Number (a): 37 → 0.** Number (b): unregistered hard zero active at 0, swatch coverage 18/18 + 18 exhaustive recipe tests; allowlist not yet 0.
-  - Wave 2/3 (review `58bd328`). **kit ADOPTED**: `Press` 16/18/12/5 → 4 tones (`neutral quiet nav agent`) / 5 sizes (one per type tier + `icon`) / 4 states / `layout` deleted (`PressContent` carries geometry); `OutcomeLine` 7 → 5 states; `ui/badge`, `ui/toggle-group` deleted (`FactChip`, `Switcher` are the richer twins). **checks ADOPTED**: allowlist 0 in family/families/takeoff/host/grilles; falsified `/grilles` (`master-table-body` effect returned `scrollIntoView`'s result as cleanup → `destroy is not a function`), fixed, proven. Allowlist 4,320 → 586, all in purge's wave-3 scope. Every crossing between lines was resolved by taking the newer rewrite and letting tsc map the kit contract back — five times; the crossings cost roughly a builder-turn each, the price of three writing lines on one tree.
-  - **Number reached** (review `de759ca`): (a) 0 TSX files over 400 (from 37); (b) unregistered classes 0 (hard zero active over the app's real CSS graph), geometry-only allowlist `{}` (from 4,320; the baseline is now a true ratchet with paste-ready JSON on staleness), swatch coverage green with every recipe's variant × state generated from `tv` metadata. Waves 3–4: purge found `/takeoffs`'s hydration cause (server `Suspense` vs a client clock + route declaration outside `routes/`) and fixed it; every route hydrates clean; `anatomy/` moved under `components/` (a component tier by ruling); kit folded `components/ui/` into `lang/` entirely (one grammar, 0 `cn()` outside recipes) and moved the chat views out of `components/` into `chat/` — note it minted a private `lang/chat-appearance` recipe to carry their paint, which is the ruling honoured to the letter and worth a look.
-  - Close. Final: tsc 0, web 52 files / 353 tests, guards 71 (42 design-guard), `check.py` 0 failures; six routes render with 0 console errors on the review server (`/` `/takeoffs?source=fixture` `/grilles` `/design-system` `/design-system/swatch` `/chat`); `/family` `/families` `/ops` `/instances` `/schedule-grid` show the document gate cleanly (no host). 66+ commits on `review/design-system` over main; builder branches `dn2/{checks,kit,purge}` are fully merged and their worktrees `Pe.Tools-dn2-*` may be removed. Owed to the user, each re-openable: (1) the 1,681 comment lines purge deleted under the "git history" ruling; (2) `Press` collapsed to 4 tones — `locate`/`caution` image-overlay marks in `grounded-doc` became `neutral`, and the world-lane `caution` became `quiet`: a meaning that may want an `anatomy/annotation` variant rather than a Press tone; (3) `lang/chat-appearance` carries the chat views' paint inside the kit; (4) `components/anatomy/annotation.tsx` has 28 variants for the Lens — a second grammar, uncensused; (5) four candidate `lens.house` laws (front-door reachability; human-invoked live crossings; rejected-cell restoration with reason; route owns world and host calls); (6) screenshot-lane proof still owed — the preview tool wedged on first call, every eye above is DOM testimony via `.artifacts/handoffs/dn2/measure.mjs`.
+### From goal `design-normalization-2` (closed 2026-08-29 at `e60113b`)
 
-- Promote the typed manifest to `@pe/agent-contracts` only when Pea reads it; that consumer is the gate for a wire contract and generated projections.
-- 2026-08-25 — The fixture lane has two spellings: `?source=fixture` (`/takeoffs`, `/settings`) and none on `/family` (lane = whether a document is open). Rule one spelling before a chat pane needs a fixture lane.
-- 2026-08-25 — Live-lane proof for the cutover is partial: PROVEN[browser, worktree host 5180 + installed-25] for `/family` (`open` → `opened`), `/families` (`bind`), `/settings` (`open` via family), `/takeoffs` fixture (`adopt` → receipt), `/chat?plugin=family` (in-realm, one wire). Not exercised: a pea-initiated command through the three route-state tools against a route store's pane; a Revit document open on `/takeoffs` live.
-- 2026-08-25 — `/takeoffs` `searchAtom` copies router search (`takeoff/store.ts:378-390`) and is synchronized only by `routes/takeoffs.tsx:132`; `/chat` `page/composer` mirrors into `?prompt` after 300 ms (`workbench/store.ts:129-139`). Both are second temporal holders: rule whether every route's `SearchPort` reads the router directly, with no atom copy.
-- 2026-08-25 — Retained one-caller named seams: `families/workspace.tsx` `cellReason`, `provenanceSummary`, and `Seam`; `workbench/store.ts` `workbenchStream` and its adapter tail. Fold only when their names stop carrying a domain or transport boundary.
+- Read the diff of the 1,681 comment lines deleted under the "dated rationale is git history"
+  ruling; confirm none of it was a `FOOTGUN:` or a trap that no code site now carries.
+- `Press` collapsed to four tones, so `grounded-doc`'s image-overlay `locate`/`caution` marks
+  became `neutral` and the world lane's `caution` became `quiet`. Rule whether an overlay mark is
+  an `anatomy/annotation` variant rather than a Press tone.
+- `components/lang/chat-appearance` carries the chat views' paint inside the kit after the views
+  moved to `chat/`. Rule it a primitive or fold it.
+- `components/anatomy/annotation.tsx` grew 28 variants for the Lens — a second grammar, uncensused.
+  Census it against the kit before it earns a 29th.
+- Four candidate `lens.house` laws, written but unruled: every product route is reachable from the
+  front door; a human invokes every crossing into the live model; a rejected cell commit restores
+  the prior value and states the reason beside the cell; a route owns its world and host calls.
+- Screenshot-lane proof is owed for the whole cluster. Every eye claim on record is DOM testimony
+  (innerText, element counts, console errors); the harness preview tool wedged on first call.
 
 ### Cross-route language gaps (the single owners)
 
-- Is `reference` legible at drawing scale? Its `12 3 2 3` pattern replaced four literals across four scales, and the shortest consumer — the RCP leader in `family/anatomy`, about 36 user units — fits under two repeats and may read as one long dash. Needs a browser or raster observation, then either the shared pattern changes or the shortest consumer does. Consumers: `family/anatomy`, `grilles/spec-drawing`, `runs`.
-- Is the grille overrun rectangle correctly `void`? It outlines geometry the design asks for that cannot be built: the dash channel says "not material" and the alarm hue says "this is a problem". The alternative reading is that an overrun is its own role. Do not mint a fourth dash role without this verdict. Consumer: `grilles/spec-drawing`.
-
-- The `review: "attention"` axis: a staged value can be flagged/contested with nothing in the grammar saying so. Not `agree: "drift"` (the model holds no other value; the schema objects to this one), not freshness, not capability. Rule it as a row-fact gutter marker or an `invalid` qualifier on `stage: "staged"`. Consumers: `/settings` (first), `/schedule-grid` (second — clears the ≥2-route bar).
-- The SURFACE-PHILOSOPHY §4 **gutter marker** (R3): "a human decision is queued here" and "this row is unreachable" are ROW facts, and the marker (count + locate) is not built. Consumers waiting on it: `/families` (`excluded` in the decision queue), `/takeoffs` (its flags column stays hand-rolled until it exists), `/schedule-grid` and `/settings` (via the attention axis above).
-- **Outcomes are orphans**: `OutcomeLine` carries no verb, actor, time, target, or item list. Blocks `/instances`' timestamped attributed ledger rail, `/workbench`'s owed-approval count, and `/schedule-grid`'s partial-push failure attribution — all three stay hand-rolled until the state model grows outcome links.
-- State-model gaps blocking grammar work: `staged` has no author (pea's square vs the user's is inferred from `origin`, the wrong fact — `trichotomy.ts` stores `by`, the reviewer and every fixture discard it), and machine-staged has no rung at all (`revit.detail.parameter-links` writes are staged by a rules engine, neither "you" nor pea); a proposed table cell has no prior value (`ProposalCardCell` and `CellFixture` model one fact twice, once incompletely); arming has no lifecycle or identity (unarmed → armed → refused → re-plan, only two frozen frames exist); freshness has no subject/threshold, so its claim is unfalsifiable; denied proposals carry no reason/author; nohome vs readonly conflate two refusals. Components take only ruled props; discharged by the corresponding `@pe/agent-contracts` / route-state changes, then widening the props.
-- The route-command result needs a `refused` marker in its payload before any route can spend the alarm honestly — the R12 `fail(kind, …)` machinery exists, the payload doesn't carry the kind. Consumers: `/settings`, `/families` (whose refused-arming state wants structured refusals too).
-- 11 of 30 `/families` censused states had no axis: `outside profile`, `only-live` and "a parameter the family does not carry" remain unmappable or half-mapped — `cap` is about editing, not about claiming.
-- **`MasterTable` row density**: a sheet-like consumer (one row per candidate, all numeric, dozens of rows) needs a denser row than the table offers; the user ruled 2026-08-25 "my master-table is not compact enough". Consumers: `/grille-proto` (first), `/families`, `/instances`. Rule a `dense` density or a row-scale token, not a rival table.
-- "Host disconnected" has no axis and no kind; three routes now hand-pick a chip tone for it. Rule a standing treatment ("connection state is a caution fact chip named `host ·`").
-- Preview freshness (`previewed`/`reviewed`/`applyReady`, incl. "pea previewed, human must re-run") is real state with no visible mark — only a greyed verb + hover title. Candidate home: `ArmingStrip`, still with no shipping consumer; `/parameter-links` is the candidate first consumer.
-- No home for page-level "unsaved" beyond a caution `FactChip`: on `/parameter-links` the unsaved thing is a nested *document* edited through selects (`FieldOptionSelect`), and the editable `StateCell` (R8) covers text cells only. Needs a select-shaped editable cell — a component repair, and the second route to want it after takeoffs.
-- LEGAL-OPTIONS LAW (ruled 2026-08-19, family editor round 2): every input offers only the options valid in that slot, read from the live document — never a free field where the legal set is knowable, and never regress a surface that has it. First full expression: `family-review/proto-editor/`'s `RefToken` scoped pickers; many shipping UIs still fail this. Backend shape unsolved — the schema-to-form generator (other family worktree) carries the intent. Consumers owed an audit once the primitive is canon: every picker-bearing route.
-- BINDING MANIFEST build (ruled 2026-08-19, see Decided): the `Binding[]` type + `Sentence` consuming it (joiner grammar + direction glyphs replace ad-hoc `SlotSpec` joiners). First consumer `/takeoffs` — the worst case (world, read-view, write-view, .r10 sync) and the last `Sentence` holdout; then `/family`, `/chat`. The glyph prefix needs a rendering that survives the mono/type laws and the design guard.
-- SESSION-DRIVE VERBS unruled: "open in Revit / open view / reveal json in IDE / open .r10 in rhvac" live in the binding noun's popover (the noun is the handle to the service). They drive a session but write no model data — candidate: neutral ink, not blue. Rule when the first one ships. The export half is ruled `act` (2026-08-28).
-- `ownerRoute` nav: every binding noun's popover links to the route that owns that noun ("manage worlds → /instances") — nav-blue text, the legal spend. Gives inter-page navigation as a projection of the manifest; unbuilt. Two of the four manifest projections (chat-plugin registration, repo-wide census) are also unbuilt. (doubt-0824 targeting #11)
-- `lib/schema-to-field-render` promotion decision: the renderer is on the tier ladder, role tokens and lang `Verb`; its `rounded-md`/`rounded-lg` utilities now project the shared 2px radius. The remaining question is whether its three hover panels (description / default / before-after) should use a blessed recessed value block or the shared `ui/tooltip` foundation. Consumers: `/settings`; family editor next.
-- The table language needs a ruled COMPACT MODE: hairline rows, mono values, one line per cell, no scope strip/toolbar, editable through `NavStateCell` with its own `CellNavigationProvider` (caret moves, not grid focus). Exists as prototype `family-review/proto/compact-table.tsx` (`CompactTable`, round 2) with a stated contract against `MasterTable`; promotion decides whether it becomes a `MasterTable` mode or a sibling component. Consumer: `/family-review-proto`; `/takeoffs`' stat lists are the likely second.
-- No primitive for a THREE-WAY EXCLUSIVE CHOICE that can also be empty — a human verdict (`looks good` / `not sure` / `looks wrong` / not judged yet). `lang/Verb` is a verb (it acts); `ui/toggle-group` is the right shape and is on role tokens with the shared 2px radius, but has no empty member. Consumer: `/family-review-proto`'s `VerdictStrip` (round 1), which still needs a product ruling and component shape.
-- No axis for "this apply will *remove* N rows" — a queued destructive write has no grammar, where R3 made queued *human* work a row fact.
-- Three severities onto one caution: host ops report Info/Warning/Error and logs carry warn/error/fatal, but the meaning band has one alarm (reserved: the model disagrees) and one caution — only the word separates Warning from Error, everywhere ops renders diagnostics (`IssuesNote`/`issueLine`, `logLineColor`). A second warning rank must be a token ruling, not a route invention. Same hole: `concept-evidence` High/Medium/Low → done/meta/caution.
-- View-trust facts (temp hide/isolate, hidden filter/category/workset, unloaded link) have no axis at all — they ride hand-picked caution tones. Needs a vocabulary for "how much should you trust what the host said".
-- The language needs a blessed "distrusted region" treatment for spatial views; takeoffs' residue ruling covers held/absent area, not doubted addresses. `/doc-lab`'s solid-caution approx tag is the honest stopgap.
-- Rule whether opacity is a legal de-emphasis mechanism or shadows the ink ladder (blocks `/doc-lab`'s ungroundable treatment).
-- Decide whether dense chat/workbench `0.5px` hairlines become a shared fine-stroke token or remain local geometry; the current concentration is a signal, not a token mandate.
-- Bless (or refuse) "document imagery is an exempt ground; all marks over it follow R13a, the non-hue-channel law" — the rendered PDF page is literal white, tinting it would misrepresent the document, and `--r-select` cannot separate on it.
-- No law distinguishes "transient twin highlight" from "selection" — if review wants pinned sharper, it needs its own weight.
-- The law has no written clause for *rank* marks; R13a covers "where a fill cannot separate", which is the spirit not the letter. Write the clause or scope R13a.
-- Bless the row-scale idiom: either italic + `ink-mute` is the row-scale reading of the dropped/locked law, or `verdict:` gets a `dim` treatment that owns it (`Verdict.dim` exists, spent on the dot).
-- Border-budget edge cases unruled: is the write-verb group an artifact frame? A bare receipt line? Are readonly testimony cards (document hero, `ObservedViewCard`, `ElementCard`, panel/session nodes, recent-doc tiles) "artifacts"? They are hairline-framed but are not `ArtifactFrame`s and carry no writable state, while the border budget says only `artifact-frame.tsx` draws frames.
-- Untested compositions: only proposed+drift is proven. Staged+stale, grounded+drift (citation underline vs squiggle on one value), refused+proposed — all asserted by precedence, proven by nothing.
-- **Interaction states are undesigned as a system** — no hover/focus/selected/editing state exists in any fixture; the note-4 button mistakes (`sync to .r10`, `cancel`, `re-plan` blending into their grounds in both modes) were the symptom, not the disease.
-- Grammar knobs never varied by any round: wash strength (20% mix) + ring weight — palette variable or grammar constant? (pea's ring-over-wash is 2.08:1, p3's own weakest pair); pea display vs pea-ink as one token or two (they collapse to a 1.19:1 nuance in light); the footline clamp at card scale (capReason ▸ note ▸ citation truncates real sentences including the RFI citation) — acceptable loss or does a clamped row need disclosure?
-- Consolidation pass over the state vocabulary to squash responsibilities where axes can merge — standing caveat that every new state word is more for the user to learn.
-- For joint review only if blue-density is re-litigated: a bordered-commit rank for row-scale writes (`/instances`). Skepticism of growth says no.
-- Fit-review agenda remainder — everything the 2026-08-16 sitting did not rule (the owed/gutter marker as highest-leverage build, the fractured editable cell, `ArmingStrip`'s first consumer, the flagship type pass, the canon's own law violations): see git history of `docs/design/FIT-REVIEWS-2026-08-16.md`.
+- **Outcomes are orphans**: `OutcomeLine` carries no verb, actor, time, target, or item list.
+  Blocks `/instances`' attributed ledger rail and `/workbench`'s owed-approval lane.
+- The **gutter marker** (SURFACE-PHILOSOPHY §4): "a human decision is queued here" and "this row is
+  unreachable" are ROW facts and the marker (count + locate) is not built.
+- The `review: "attention"` axis: a staged value can be contested with nothing in the grammar
+  saying so. Not `agree: "drift"` — the model holds no other value.
+- Three severities onto one caution: host ops report Info/Warning/Error while the meaning band has
+  one alarm (reserved: the model disagrees) and one caution.
+- "Host disconnected" has no axis and no kind; routes hand-pick a chip tone for it.
+- Preview freshness (`previewed`/`reviewed`/`applyReady`, including "pea previewed, a human must
+  re-run") is real state with no visible mark.
+- No home for page-level "unsaved" beyond a caution `FactChip`, where the unsaved thing is a nested
+  document edited through selects.
+- View-trust facts (temp hide/isolate, hidden filter/category/workset, unloaded link) have no axis
+  and ride hand-picked caution tones.
+- No blessed "distrusted region" treatment for spatial views; takeoffs' residue ruling covers
+  held/absent area, not doubted addresses.
+- No primitive for a three-way exclusive choice that can also be empty (a human verdict: looks
+  good / not sure / looks wrong / not judged yet).
+- No axis for "this apply will *remove* N rows" — a queued destructive write has no grammar.
+- LEGAL-OPTIONS LAW (ruled 2026-08-19) is unbuilt: every input offers only the options valid in
+  that slot, read from the live document, never a free field.
+- SESSION-DRIVE VERBS unruled ("open in Revit", "open view", "reveal json in IDE"), and
+  `ownerRoute` nav from a binding noun's popover to the route that owns it.
+- The table language needs a ruled COMPACT MODE: hairline rows, mono values, one line per cell, no
+  scope strip. The user ruled sheet-like consumers need a denser row than `MasterTable` offers.
+- Rule whether a transient twin highlight differs from selection, and write the *rank* clause the
+  non-hue-channel law implies rather than merely spirits.
+- Border-budget edge cases: is the write-verb group an artifact frame? Are readonly testimony cards?
+- Untested compositions: only proposed+drift is proven. Staged+stale, grounded+drift,
+  refused+proposed are asserted by precedent alone.
+- **Interaction states are undesigned as a system**: no hover/focus/selected/editing state exists
+  in any fixture.
+- Consolidation pass over the state vocabulary, squashing axes that can merge — every new state
+  word is more for the user to learn.
 
 ### Component repairs
 
-- Family workspace still derives visible row order locally to place the first-ghost hairline.
-  Promote that order into route/store state in the owed G7 cutover when family state leaves the
-  component; do not restore `MasterTable.onVisibleChange` write-back.
-- `Verb` has no icon-only or render-prop form. `Press` covers icon-only machinery, so nothing is stranded, but a world action that must render as an icon alone has no home. Rule an icon-verb variant with the required `reason` riding the title, or bless gutter-scale destructive affordances staying route-rolled.
-- Verb busy+disabled composition: a busy-and-refused verb is currently unrenderable.
-- One popover foundation in `components/lang/` that every popover-bearing component sits on. `ui/tooltip` over Base UI is the de facto foundation with two consumers now (`HelpTip` since 2026-08-28, `lib/schema-to-field-render` before it); bless it or replace it. A second question rides along: whether prose as long as `HelpTip` now carries wants a click-to-open popover rather than a hover tooltip. Measured evidence (5 specimens): combobox's hard `w-(--anchor-width)` wins every merge so caller widths are silently ignored, `ui/select` states the opposite law, `align="end"` is hard-coded, and the private duplicates `ColFilter`/`Picker` cannot be imported by anyone else. (Mechanism note lives at `components/ui/combobox.tsx`.) Every popover-bearing component must then be tested across viewport positions (corners/edges/center harness for flip, clamp, overflow).
-- Section/page-chrome primitive: every new route hand-rolled the same Section/SectionHead chrome (three near-identical copies exist) — the most visible thing `lang/` is missing.
-- The addressing-sentence component: `NarrowChip` owns removal but nothing owns re-adding, and the "is the sentence an artifact?" border-budget edge case is unshowable until it exists.
-- MasterTable remainder from the cell-state clause: `CellStateKey` deriving axes from on-screen rows, row-level proposal marking beyond `rowClassName`, the double head beside `ArtifactFrame`, `FilterChip` vs `NarrowChip`, no receipt/footline row. `CellStateKey` also wants to become a first-class component (the table-axes key was instrumental to the table reading well), including how cell states sort/group inside it — by axis, in precedence order.
-- Rule whether `ProposedCell` is the permanent sanctioned wrapper for inherited-resolution, or `StateCellProps.placeholder?: string` ships — its docblock should say so either way. (`/families` evidence.)
-- `onLocate?: () => void` on `StateCellProps` so the proposal fold stays a real hit target; without it, migrating a proposed editable cell silently deletes the cell-level locator and leaves only the rail dot.
-- The trichotomy reviewer rebuilt on `StateCell` — named as soon-consumer everywhere; the proposal-flow satellite stands in for it today. Card-scale `StateCell` should render the struck-current → proposed treatment the chat card owns, once the model grows the proposal's prior value.
-- A catalogued chart/series consumer for `--viz-1..6` (tokens shipped 2026-08-16, band-quantized, grayscale law); ops `CoverageBar` is the designated first, arriving with the ops migration. The `--viz-*` parallel palette for charts/taxonomy stays deferred until that consumer exists; p3's band system gives the recipe (one band, N hues).
-- Composer keeps a hand-built artifact treatment (ground shift + hairline) because `ArtifactFrame`'s layout didn't fit a form. (verify)
-- `ui/pick-list`'s `emptyNote` is a plain string — should take the lang `EmptyState` (story: scope, exit: where schedules come from) when pick-list gets its pass.
-- Resolve whether `SidePane` (6 consumers, overlay collapse) and `PaneSplit` remain two primitives once chat, the family reshape, and the FOM/BOD tool land on `pane.tsx`.
-- One `useVerb`/`useRun` hook is landed but not universal: serialized verbs (one host transaction at a time is already the law), busy label + elapsed seconds, error channel, receipt firing — it replaces three idioms plus eight hand-rolled brackets and the copy-pasted receipt `useState`. `/instances` and `/parameter-links` still hand-roll `busy`.
-- Finish the honesty-chrome extraction: one Seam/Live chip (two idioms today — children-based vs op-based), one `STATE_META` (takeoffs still uses the original, families consumes the `master-table/cells.tsx` extraction), and write the one-alarm hue budget into the design-system route — it is currently enforced only by taste.
-- Per-domain host-call façades on the `host/familyfoundry.ts` pattern (83 LOC, typed façade over `callHostRpc`), plus universal `HostIssuePanel` adoption — its good 7-variant error UI is used by only 4 of 11 surfaces. Today: five inline `callHostRpc` sites and five non-`/call` fetch paths with ad-hoc error handling.
+- `Verb` has no icon-only or render-prop form; a world action that must render as an icon alone has
+  no home. A busy-and-refused verb is currently unrenderable.
+- The addressing sentence: `NarrowChip` owns removal, nothing owns re-adding.
+- `MasterTable` remainder: `CellStateKey` deriving axes from on-screen rows; row-level proposal
+  marking beyond `rowClassName`; multi-select (families hand-rolls `pickedIds`); per-cell width
+  control; URL-addressable filter/sort/query state (`MasterTableState` is component-local today,
+  invisible to the route, the URL, and any chat plugin).
+- Rule whether `ProposedCell` is the permanent wrapper for inherited resolution or
+  `StateCellProps.placeholder` ships; add `onLocate` so a migrated proposal fold stays a hit target.
+- The trichotomy reviewer rebuilt on `StateCell`; the proposal-flow satellite stands in for it.
+- A catalogued chart/series consumer for `--viz-1..6`; ops `CoverageBar` is the designated first.
+- Resolve whether `SidePane` and `PaneSplit` remain two primitives now that both live in `lang/`.
+- Per-domain host-call façades on the `host/familyfoundry.ts` pattern, plus universal
+  `HostIssuePanel` adoption.
 
-### Duplication to collapse
+### Duplication to collapse (counted 2026-08-29)
 
-- `timeAgo` ×6 copies (`family/live.tsx`, `schedule-grid.tsx`, `settings.tsx`, `instances.tsx`, `host/target-ui.tsx`, schedule-grid plugin), plus takeoffs' `.slice(0,10)`. (verify)
-- Esc-handler with input-guard ×3, each with a different guard list. (verify)
-- `ops/primitives.tsx:213` `DataTable<Row>` is a second, incompatible `Column<Row>` interface with 12 consumers; hand-rolled tables also in `data-tables.tsx`, `schedule-grid.tsx`, `instances.tsx`, `ops.tsx`, `parameter-links/Evaluation.tsx`, and families' decision-queue + receipts tables. (verify)
+- `timeAgo` has six copies beside the canonical `lib/utils.ts` export.
+- Esc-handler with an input guard ×7, each with a different guard list.
+- `ops/primitives.tsx` `DataTable<Row>` is a second, incompatible `Column<Row>` with 12 consumers;
+  16 files still hand-roll a `<table>`.
 
-### Capabilities the master table must absorb before it can abolish the rest
+### Open questions carried forward
 
-- Multi-select selection model — families hand-rolls `pickedIds: Set<number>` in a cell; single cursor is already covered by `activeKey` + `onVisibleChange`. (verify)
-- Cell width control — only a `width` utility-class string today. (verify)
-- URL-addressable filter/sort/query state — component-local `useState` today, invisible to the route, the URL, and any chat plugin. (verify)
-- Proposal-aware cells (blocked on the shared proposal vocabulary above).
-- (Already covered, don't rebuild: editable cells via `master-table/cells.tsx`, first-col lock via `Column.lock`.)
-
-### Type, copy and token sweeps
-
-- Canon `Press`/`Chip`/`Verb` token indirection: proven **palette-invariant** (they reach app tokens no `[data-palette]` scope can retint) — the first work item of the component-repair step.
-- Unruled italic deviations the census surfaced: `routes/families.tsx` deliberately marks **empty** and ProjectBindingOnly by italic rather than hue (documented at `:785`), and `variant-e` uses italic for **warning** and for the ghost row — italic is supposed to mean locked/uneditable/dropped and nothing else. Rule the deviation or delete it.
-- Two type stretches to review: role heads ("you"/"pea") use `t-label t-upper`, which carries section-head semibold — a weightless `t-upper` does not exist; and `doc-picker`'s 8px mono went to `t-caption` (10px floor), making picker rows two px taller. Same family: `DataTable` column heads now `t-label t-upper` small-caps sans, which uppercases user-authored column names, and the ops sidebar's 9px tele rose to the 10px `t-caption` floor. All forced by the tier/weight law, none explicitly ruled — confirm or carve an exception.
-
-### Discoverability and rot risk
-
-- Every product and incubating-product route has a front-door card, including `/param-tables`, `/parameter-links`, `/data-tables`, `/design-system` and `/schedule-grid`. Explicitly round-scoped throwaway experiments may remain typed-URL-only while still paying the maintained styling guard. The next signal is which linked routes nobody opens.
-- Decide the front door's brand dot: either it earns a real lamp (host connected?) or the dot goes. Neutral ink is a holding position. The front door also needs a ruled navigation-surface form before `ui/card` can die there.
-- "Update check unavailable" conflates endpoint 500, dead network, and a dev proxy with no host into one advisory because the query surfaces one `error` string. Honest fix is upstream in the `/host/update` contract, not in chrome.
-- Declaration-only symbols flagged but not cut inside the protected `src/takeoff/**` zone, for the next takeoff pass to decide: `readStatus`, `readViews`, `readZones`, `applyRegistry`, `readZoneRegions` (`takeoff/host.ts`); `DEFAULT_ARTIFACT_DIR` (`takeoff/model.ts`); `openDecisions` (`takeoff/proto/mock.ts`); `ZonePlan`, `PlanLegend` (`takeoff/zone-plan.tsx`).
-
-### Chat-plugin readiness
-
-- `/takeoffs` now declares its sentence as a manifest (`targeting/model.ts` `Product`, rendered by `TargetingHead`); `/family`, `/families`, `/chat`, `/settings` still configure `AddressingBar`/`Sentence` per call site. Converge them onto the manifest (each was fixtured in the round-5 proto) and register the manifest with the chat plugin, which is what the "bindings are projections" ruling promised.
-- Targeting primitives still owed after the takeoffs cutover: a gated pane label (disabled-but-readable, reason required — `PaneStrip` draws its own); the in-flight mark (`PathInput` inlines an opacity pulse, the board inlines a run bar); `Switcher` never got the dense tier, so the sentence/board and input-shape modes ride on URL search (`?head=board`, `?input=columns|search`) with no visible switch. `PaneStrip` is honest read-only text since 2026-08-28, so the open question is now product, not honesty: give it a real pane-opening action or delete it once the product shape settles. (doubt-0824 targeting #4, Q4)
-- A1 residue: `targeting/head.tsx` `expanded` (verb-rail disclosure) is the last component-local page state on `/takeoffs`; move it when the head is next touched. Census: `.artifacts/spikes/a1-store/CENSUS.md`.
-- Rule which slice of `/takeoffs` is agent-shared under THREE-HOME ADDRESSING (Decided 2026-08-19): snapshot, staged edits, binding; not hover, sort, cursor. Decides whether a takeoffs `RouteStateSpec` exists. (doubt-0824 plugins #1–2; the handoff cited LEDGER:253, anchor gone post-merge)
-- 2026-08-25 — Amend `TEACH.html` §5: `conflict` is mis-told, the runtime probe caught it inverted, not false. (doubt-0824 cutover V7)
-- Rule which route pays for extracting `state/route-store.ts` (~200 LOC: `hostRead`, the verb bracket `runVerb` `takeoff/store.ts:851`, the feed projector): now, or when `/runs` copies `routes/takeoffs.tsx` (631 lines). (doubt-0824 cutover Occam)
-- Unruled: four one-line targeting fixes. `seams()` (`targeting/model.ts:191`) reports loading/error as unsourced; undemanded pickers are disabled where round 2 ruled dim; `stale` means "re-read in flight" and blocks verbs with "refresh first"; `live` is hardcoded while `fixture` is a route lane. Fix: `FeedState` (`model.ts:61`) as `ready|loading|error` plus a declared `Feed.seam`. (doubt-0824 targeting #1–4, #6)
-- Rule `defineCommitCommand` (`agent-contracts/src/commit.ts:54`; 2 callers, 1 verb, 1 dead option): inline or keep. `spec.key` is always `"route:"+route`: delete it? (doubt-0824 plugins #13–15)
-- Rule whether immediate refusal of a second verb is LAW (keep the `runVerb` gate, `takeoff/store.ts:851`) or `Atom.fn` may own pending and failure. Decides the `runVerb` split. (doubt-0824 effect grade)
-- Unruled: one observation surface `inspect()` (~50 LOC, never `registry.get` on a feed) replaces the atom devtools panel and collector (`integrations/atoms/devtools.tsx`, 187 lines; −395 claimed). Today `inspect()` can fire a Revit read, `__PE_ATOMS__` exists only while the panel is open (`devtools.tsx:59`), and the cause slot is never cleared. Make `currentHover` (`takeoff/store.ts:425`) an atom so the census is bounded and the closure mirror dies. (doubt-0824 devtools #4–8)
-- 2026-08-25 — Q8 (≥2-route bar): in one browser session, bind a terminal and switch a stage on both `/takeoffs` and `/family`, then reload and go back; both `TargetingHead` instances must retain their URL bindings, print their store feed lane/state, and run a wired verb without the old head appearing. Spike worktrees `Pe.Tools-spike-family-{1,2}` may be deleted after this observation.
-- Rule the diagram's fate: promote `docs/research/state-arch/13-diagram-gen.md` as a drift-review tool (44-node manifest renderer, drop the 26 registry nodes) or park it as user docs (blocked on Marks and a canonical `stateNode` key). Duplicate labels collapse silently there (202→201; `diagram.ts:149` anchor gone post-merge), `route-state.tsx` atoms are unlabelled so dropped, and no lint catches either. (doubt-0824 devtools #1–3, #9–10)
-- 2026-08-25 — ADR hygiene: ADR 0001 (`docs/adr/0001-route-workspace-framework.md`) amend or supersede, 4/6 decisions name deleted files or n=2 laws; ADR 0009 strip the Suspense-workaround rationale (fixed upstream, effect-atom PR #6672). (doubt-0824 plugins #4–5, effect)
-- Rule where Apply-arming lives: the dock unmounts every turn, so `previewedProfile` (`workbench/route-chat-plugins.tsx:180`, a safety gate) dies in `useState`; the doc is the candidate home. (doubt-0824 plugins #9, Q5)
-- Measure whether `routeWireAtom` (`workbench/route-state.tsx:134`, not `keepAlive`, 400 ms TTL) closes the SSE when the dock unmounts and reconnects once per turn. (doubt-0824 plugins #10)
-- `BINDINGS` (`takeoff/store.ts:248`) is a second `Product` whose only caller was a test, and `actions.pick` is test-only: delete them or give them a consumer. (doubt-0824 targeting #7; `targeting/store.test.ts:161` anchor gone post-merge)
-- `Stage` (targeting verb group) collides with `zone.stage` (domain) on one screen: rename one (Shared Language). (doubt-0824 targeting #9)
-- Rule `Dir`: it lost `read+write` and `loud()` from the proto, and round 4 found 8/12 endpoints duplex. The same ruling picks one lineage of `targeting-proto/kit.tsx` (713 lines) vs `targeting/kit.tsx` (617). (doubt-0824 targeting #12; merge handoff §3)
-
-### Noted, not scheduled
-
-- Write the route pattern into `apps/web/AGENTS.md` (currently 3 lines), not a framework: route = adapter (world + verbs); feature dir = model + view; seam interface for the store; ONE spelling for the fixture lane (`?mock` vs `?source=fixture` — pick one); state-lane choices (react-query for host reads, route-state for agent-shared docs, `useState` for session ephemera).
-- Takeoffs' inline-C#-via-`scripting.execute` stays until `takeoffs.*` host ops exist (the promotion shims in the takeoffs ledger's Owed); the façade work does not block on it.
-- Mastra/route-state transport vs host-RPC split (two origins, two error models) is real, but a product/architecture call — not a web-primitives cleanup.
-- `workbench/provider.tsx` (670 LOC) + `adapter.ts` (963 LOC) chat internals: untouched.
-- Per-route stale-time literals in `host/queries.ts` are hand-tuned, not a policy — fine for now.
-
-### Adherence census (review/design-system, 2026-08-28; five verdicts 2026-08-29)
-
-- `tests/repo-guards/src/design-adherence.test.ts` holds eleven component-adoption counts as a non-increasing ratchet (`design-adherence.baseline.json`). Each drop is a repair to name; each metric is a candidate for a ruling, never a ruling. Totals after the 2026-08-29 pass: rawTable 30, localChrome 1, hostBelowRoute 8, escHandler 9, opacityDim 47 (24 shadcn `disabled:opacity-50` in `components/ui`), longTitle 70, busyState 3, inlineColor 306, rawMeaningColor 127, dlLeak 0, fatRoute 16.
-- 2026-08-29 — EXHIBIT CHROME ruled (kaitpw): the `/design-system` routes wear the product's chrome. Sections are `lang/Section` (the exhibit number rides the label, the note is the first child), captions are `lang/Provenance`, the small mono tag is `lang/Tag` (new export in `chip.tsx`, the one home for `.dl-tag`). `Demo`, `Gap`, and `CounterExample` are exhibit scaffolding with one home, `design-system/exhibit.tsx`; `Demo` left the localChrome metric for that reason. dlLeak is at zero and the ratchet holds it there; the one localChrome site left is `families/workspace.tsx:181` `SectionLabel` (Owed, Component repairs). The swatch's hand-dated `COUNTED` string is deleted; consumer counts are unstamped until they are generated.
-- 2026-08-29 — NAMESPACE RESET ruled (kaitpw): `design-lang.css` resets Tailwind's `--color-*`, `--text-*`, `--leading-*`, `--shadow-*`, `--font-*`, `--radius-*` at the top of its `@theme inline` block, so an off-system class emits nothing; only the roles redeclared below it exist. Probed against the real stylesheets: the stock palette, named text sizes, leading, `shadow-lg`-by-default and `font-mono` drop; `bg-page`, `border-line`, `rounded-sm`, `shadow-sm`, `font-medium` (`--font-weight-*` is its own namespace) and `p-4` emit. Order is the whole trick: appended after the redeclarations, the reset wipes them too. The regex gates in `design-guard.test.ts` stay as the source lint. Owed: a candidate-drop lint (scan every class candidate in `apps/web/src`, `build()`, fail on any that emitted nothing and is not a `dl-*`/`t-*`/owned class); it replaces about a third of the guard and catches typos. Half a day with the `tailwindcss` scanner.
-- 2026-08-29 — OPACITY ruled (kaitpw): opacity is not a de-emphasis mechanism. Locked is italic + `ink-mute`; the exhibits' struck counter-examples are marked by their caption, not dimmed. Owed, the migration list: 24 `opacityDim` sites in `components/ui` (shadcn `disabled:opacity-50`, 11 files) and 23 elsewhere; `opacityDim` is the next hard zero after dlLeak.
-- 2026-08-29 — STATECELL SOURCES ruled (kaitpw): a cell carries a `shown` reading and a bound `authority`; drift is `shown.value !== authority.value`; `stale` is `superseded(shown, authority)` on `Reading.observedAt`; every other reading is an `others[]` overlay listed in the readout band. `modelValue` and `agree` become derived and leave the props. Owed: apply on `/family` first (three readings already rendered as overlays), then `/takeoffs` (.r10 vs zones), which meets the ≥2-route bar. The agent's own uncertainty (`confidence: "low"`) must not share the drift squiggle; that slot is decided when `/family` is cut over.
-- 2026-08-29 — FIRST HARD ZERO ruled: dlLeak, reached in the exhibit-chrome pass; the baseline at 0 is the zero. Next in order: localChrome (1), opacityDim (47).
+- The fixture lane has two spellings: `?source=fixture` and none at all (lane = whether a document
+  is open). Rule one.
+- Live-lane proof for the route-store cutover is partial: `/family`, `/families`, `/settings` are
+  browser-proven; `/takeoffs` and `/chat` are not.
+- Decide the front door's brand dot: it earns a real lamp (host connected?) or it goes.
+- "Update check unavailable" conflates endpoint 500, dead network, and a dev proxy with no host.
+- Write the route pattern into `apps/web/AGENTS.md` (currently 3 lines) — a pattern, not a framework.
+- `workbench/provider.tsx` + its adapter (chat internals) are untouched by every pass so far.
