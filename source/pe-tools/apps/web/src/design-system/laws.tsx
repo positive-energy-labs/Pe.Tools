@@ -1,5 +1,4 @@
-import { Tag } from "#/components/lang/chip";
-import { Section } from "#/components/lang/section";
+import { LawSpecimens } from "#/design-system/specimens/laws";
 
 export const LAW_POINTERS = [
   ["one alarm", "lens.house law 5"],
@@ -22,16 +21,5 @@ export const LAW_POINTERS = [
 ] as const;
 
 export function DesignSystemLaws() {
-  return (
-    <Section label={`laws · ${LAW_POINTERS.length}`}>
-      <div className="grid grid-cols-1 gap-2 py-2">
-        {LAW_POINTERS.map(([name, home]) => (
-          <div key={name} className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] gap-3">
-            <Tag>{name}</Tag>
-            <code className="t-caption face-mono text-ink-2">{home}</code>
-          </div>
-        ))}
-      </div>
-    </Section>
-  );
+  return <LawSpecimens pointers={LAW_POINTERS} />;
 }

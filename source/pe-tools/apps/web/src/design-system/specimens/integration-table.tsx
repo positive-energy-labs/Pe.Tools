@@ -5,7 +5,7 @@ import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { CellStateKey } from "#/components/lang/cell-key";
 import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
-import { Section } from "#/components/lang/section";
+import { Provenance, Section } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
@@ -25,10 +25,10 @@ export function RealTable() {
         lock: true,
         sort: (r) => r.param,
         search: (r) => r.param,
-        // GAP (MasterTable): `td` is `p-0` and `Column` has no cell-class hook â€” only
+        // GAP (MasterTable): `td` is `p-0` and `Column` has no cell-class hook — only
         // `headerClassName`, `width` and `right`. Every renderer must draw its own box model, so
         // cell padding is decided thirteen times per table instead of once by the primitive.
-        cell: (r) => <span className="px-1.5 py-1">{r.param}</span>,
+        cell: (r) => <span className="px-1.5 py-1 t-value text-ink">{r.param}</span>,
       },
       {
         key: "scope",
@@ -36,7 +36,7 @@ export function RealTable() {
         title: "Type-level or instance-level.",
         width: "w-24",
         facet: (r) => r.scope,
-        cell: (r) => <span className="px-1.5 py-1">{r.scope}</span>,
+        cell: (r) => <span className="px-1.5 py-1 t-caption face-mono text-ink-2">{r.scope}</span>,
       },
       {
         key: "value",
@@ -45,7 +45,7 @@ export function RealTable() {
           "The value, carrying every mark the grammar has to make. Its filter speaks the grammar's own state vocabulary.",
         // THE CELL-STATE CLAUSE (ruled 2026-08-16, discharging the renderer-identity gap): the
         // column declares WHAT IT DRAWS. The table renders StateCell itself, and facet defaults
-        // to the grammar's one-word reading â€” the hand-modelled `state` column this section
+        // to the grammar's one-word reading — the hand-modelled `state` column this section
         // used to carry is gone because the primitive now reads the cell instead of the caller
         // restating it. Sort stays the VALUE; the filter carries the state.
         state: cellProps,
@@ -59,7 +59,9 @@ export function RealTable() {
         width: "w-24",
         right: true,
         sort: (r) => r.ageMin ?? Number.MAX_SAFE_INTEGER,
-        cell: (r) => <span className="px-1.5 py-1">{ageText(r)}</span>,
+        cell: (r) => (
+          <span className="px-1.5 py-1 t-caption face-mono text-ink-2">{ageText(r)}</span>
+        ),
       },
     ],
     [],
@@ -67,7 +69,7 @@ export function RealTable() {
 
   return (
     <Section
-      label="04 Â· the real table"
+      label="04 · real table"
       help={
         <HelpTip>
           The product table primitive, unmodified, with the cell grammar as its renderer. Rows never
@@ -76,38 +78,43 @@ export function RealTable() {
         </HelpTip>
       }
     >
-      <p>
-        the actual MasterTable â€” the primitive atlas, takeoffs and families run on â€” with
-        StateCell as its cell renderer
+      <h3 className="pt-2 t-head text-ink">The real table</h3>
+      <Provenance>
+        shipping MasterTable with StateCell as its value renderer · fixture rows are marked in the
+        artifact head
+      </Provenance>
+      <p className="max-w-[80ch] pt-3 t-prose text-ink-2">
+        the actual MasterTable — the primitive atlas, takeoffs and families run on — with StateCell
+        as its cell renderer
       </p>
-      <p className="max-w-[80ch]">
+      <p className="max-w-[80ch] t-prose text-ink-2">
         The design-lang round hand-rolled its table, so the grammar was only ever proven against
         markup written to flatter it. This is the product primitive, unmodified, wrapped in an{" "}
         <code>ArtifactFrame</code> per the border budget, with the cell-state key inside the frame
-        it describes. Sort a column, filter one, type in the search box â€” the grammar has to
-        survive all of it. THE ROW LAW (ruled 2026-08-16): a cell is one clipped line â€” the value
-        and its zero-footprint marks, with the body wash filling the whole cell. Fat rows are never
-        allowed. The prose a cell used to carry (refusal reasons, notes, citations, the model&apos;s
-        ghost value) reads out in the band under the table when the cell is focused, the way a
-        spreadsheet&apos;s formula bar reads out the active cell â€” click a cell below to see it.
+        it describes. Sort a column, filter one, type in the search box — the grammar has to survive
+        all of it. THE ROW LAW (ruled 2026-08-16): a cell is one clipped line — the value and its
+        zero-footprint marks, with the body wash filling the whole cell. Fat rows are never allowed.
+        The prose a cell used to carry (refusal reasons, notes, citations, the model&apos;s ghost
+        value) reads out in the band under the table when the cell is focused, the way a
+        spreadsheet&apos;s formula bar reads out the active cell — click a cell below to see it.
       </p>
       <p className="max-w-[80ch]">
-        This table is also the exhibit for two of Â§01&apos;s laws, because neither can be shown on
-        a static specimen. <strong>A filter&apos;s vocabulary is stable under filtering:</strong>{" "}
-        the facet options come from <code>facetOptions</code> reading ALL rows, never the visible
+        This table is also the exhibit for two of §01&apos;s laws, because neither can be shown on a
+        static specimen. <strong>A filter&apos;s vocabulary is stable under filtering:</strong> the
+        facet options come from <code>facetOptions</code> reading ALL rows, never the visible
         subset, so narrowing by scope leaves the value column&apos;s state vocabulary untouched and
-        picking an option can always widen back out â€” at the price of a chosen option resolving to
+        picking an option can always widen back out — at the price of a chosen option resolving to
         zero visible rows, which the empty state says. <strong>Sort by domain order:</strong> a{" "}
         <code>state</code> column that declares no <code>sort</code> falls back to{" "}
-        <code>CELL_STATE_ORDER</code> â€” drift first, locked last â€” rather than to the alphabet.
-        The value column below opts out deliberately: it sorts by the VALUE and lets its facet carry
-        the state.
+        <code>CELL_STATE_ORDER</code> — drift first, locked last — rather than to the alphabet. The
+        value column below opts out deliberately: it sorts by the VALUE and lets its facet carry the
+        state.
       </p>
 
       <ArtifactFrame
         head={
           <>
-            <Tag>overhead coiling door 421 Â· parameters</Tag>
+            <Tag>overhead coiling door 421 · parameters</Tag>
             <FactChip title="Rows in scope before any narrowing.">
               {PARAM_ROWS.length} params
             </FactChip>
@@ -117,21 +124,21 @@ export function RealTable() {
             <FactChip tone="caution" title="Unsaved work that will be lost if you leave.">
               2 unsaved
             </FactChip>
-            <FactChip dashed title="Fixture data â€” no host, no document, no element behind it.">
+            <FactChip dashed title="Fixture data — no host, no document, no element behind it.">
               fixture
             </FactChip>
           </>
         }
         foot={
           <>
-            <Tag>2 unsaved Â· 1 refused by Revit</Tag>
+            <Tag>2 unsaved · 1 refused by Revit</Tag>
             <Verb
               tone="commit"
               label="apply to Revit"
               icon={Upload}
               onClick={noop}
               disabled
-              reason="fixture data â€” there is no model behind this table to write to"
+              reason="fixture data — there is no model behind this table to write to"
             />
           </>
         }
@@ -143,21 +150,21 @@ export function RealTable() {
             columns={columns}
             rowKey={(r) => r.key}
             scopeLabel="params in scope"
-            searchPlaceholder="search paramsâ€¦"
-            summary={<>13 params Â· 3 types</>}
+            searchPlaceholder="search params…"
+            summary={<>13 params · 3 types</>}
             // THE OWED MARKER (ruled 2026-08-16, fit reviews): the gutter locates the rows a
-            // person must act on â€” count in the tone's ink, sentence in the title, no verb.
+            // person must act on — count in the tone's ink, sentence in the title, no verb.
             // The locked param column offsets past it, which is the lock interaction the prop
             // documents, exercised here on purpose.
             gutter={(r) =>
               r.agree === "drift"
                 ? {
                     count: 1,
-                    title: "the model disagrees â€” a person must pick the real value",
+                    title: "the model disagrees — a person must pick the real value",
                     tone: "alarm",
                   }
                 : r.stage === "staged"
-                  ? { count: 1, title: "staged and unsaved â€” commit or discard before leaving" }
+                  ? { count: 1, title: "staged and unsaved — commit or discard before leaving" }
                   : null
             }
           />
@@ -169,18 +176,18 @@ export function RealTable() {
       </ArtifactFrame>
 
       <div className="flex flex-col gap-1.5 pt-1">
-        <span>what MasterTable cannot express</span>
+        <span className="t-label t-upper text-ink">what MasterTable cannot express</span>
         <Gap>
           <strong>the clause&apos;s residue.</strong> The cell-state clause (ruled 2026-08-16)
-          discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome
-          â€” but <code>CellStateKey</code> still cannot derive its axes from the rows on screen,
-          and a row holding a proposal is still marked through <code>rowClassName</code>, which
-          knows nothing about the grammar. Row-level state is the clause&apos;s unfinished half.
+          discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome —
+          but <code>CellStateKey</code> still cannot derive its axes from the rows on screen, and a
+          row holding a proposal is still marked through <code>rowClassName</code>, which knows
+          nothing about the grammar. Row-level state is the clause&apos;s unfinished half.
         </Gap>
         <Gap>
           <strong>non-state cells own their own box.</strong> <code>td</code> is <code>p-0</code>;
           the table draws the box model for <code>state</code> columns, but every plain{" "}
-          <code>cell</code> renderer still decides padding for itself â€” decided per column instead
+          <code>cell</code> renderer still decides padding for itself — decided per column instead
           of once by the primitive.
         </Gap>
         <Gap>
@@ -190,9 +197,9 @@ export function RealTable() {
         </Gap>
         <Gap>
           <strong>one chip family now.</strong> The strip&apos;s chips ARE <code>NarrowChip</code>{" "}
-          (fit reviews, ruled 2026-08-16 â€” <code>FilterChip</code> deleted). The honest residue:
-          the strip has no per-narrowing denominator, so every chip&apos;s count is rows still in
-          scope under ALL active narrowings, not what this one alone admits.
+          (fit reviews, ruled 2026-08-16 — <code>FilterChip</code> deleted). The honest residue: the
+          strip has no per-narrowing denominator, so every chip&apos;s count is rows still in scope
+          under ALL active narrowings, not what this one alone admits.
         </Gap>
         <Gap>
           <strong>no footline row.</strong> A receipt has nowhere in the grid: outcomes can only sit
@@ -204,4 +211,4 @@ export function RealTable() {
   );
 }
 
-/* â•â•â• 06 Â· satellites â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* ═══ 06 · satellites ═══════════════════════════════════════════════════════════════════════ */

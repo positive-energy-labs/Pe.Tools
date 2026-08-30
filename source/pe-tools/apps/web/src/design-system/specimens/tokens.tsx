@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { Section } from "#/components/lang/section";
+import { Provenance, Section } from "#/components/lang/section";
 import { Gap } from "#/design-system/exhibit";
 
 interface TokenSpec {
   token: string;
   means: string;
-  /** How the two sibling renderings differ â€” this is the pairing table's payload, in one line. */
+  /** How the two sibling renderings differ — this is the pairing table's payload, in one line. */
   modes: string;
 }
 
@@ -18,7 +18,7 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
       {
         token: "--pe-page",
         means: "the page itself; prose and page chrome",
-        modes: "L .985 â†” .185 â€” one hue (88Â°) in both modes",
+        modes: "L .985 ↔ .185 — one hue (88°) in both modes",
       },
       {
         token: "--pe-artifact",
@@ -28,7 +28,7 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
       {
         token: "--pe-recess",
         means: "set INTO an artifact: head/foot bands, the key",
-        modes: "same step size again â€” the ladder is even",
+        modes: "same step size again — the ladder is even",
       },
       {
         token: "--pe-select",
@@ -53,8 +53,8 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
       },
       {
         token: "--pe-ink-mute",
-        means: "locked Â· dropped Â· the 'never checked' squiggle",
-        modes: "near-achromatic; ~0 drift and ~0 Î”L across modes",
+        means: "locked · dropped · the 'never checked' squiggle",
+        modes: "near-achromatic; ~0 drift and ~0 ΔL across modes",
       },
     ],
   },
@@ -65,12 +65,12 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
       {
         token: "--pe-line",
         means: "quiet: row rules, the artifact frame's inset edge",
-        modes: "ink @12% â†” @14% â€” derived, so it rides the hue free",
+        modes: "ink @12% ↔ @14% — derived, so it rides the hue free",
       },
       {
         token: "--pe-line-2",
         means: "firm: seams, citation underline, chip edge, focus",
-        modes: "ink @22% â†” @26%",
+        modes: "ink @22% ↔ @26%",
       },
     ],
   },
@@ -81,7 +81,7 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
       {
         token: "--pe-pea",
         means: "pea's MARK: proposal ring, corner fold, card edge",
-        modes: "the display rung â€” band lightness stepped 0.08 toward its ground",
+        modes: "the display rung — band lightness stepped 0.08 toward its ground",
       },
       {
         token: "--pe-pea-ink",
@@ -95,13 +95,13 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
       },
       {
         token: "--pe-caution",
-        means: "stale Â· unverified Â· unsaved Â· partial Â· error",
-        modes: "on-band; 2.8Ã— the incumbent kiln's chroma",
+        means: "stale · unverified · unsaved · partial · error",
+        modes: "on-band; 2.8× the incumbent kiln's chroma",
       },
       {
         token: "--pe-done",
         means: "it landed: receipts, the post-commit sentence",
-        modes: "on-band; 25Â° from pea â€” adjacent, not equal",
+        modes: "on-band; 25° from pea — adjacent, not equal",
       },
       {
         token: "--pe-commit",
@@ -115,7 +115,7 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
       },
       {
         token: "--pe-nav",
-        means: "nav as blue TEXT â€” back Â· forward Â· out",
+        means: "nav as blue TEXT — back · forward · out",
         modes: "byte-identical to commit; the job carries the difference",
       },
     ],
@@ -126,37 +126,37 @@ const TOKEN_GROUPS: readonly { group: string; asks: string; tokens: readonly Tok
     tokens: [
       {
         token: "--viz-1",
-        means: "series 1 â€” carries the old cat-blue identity",
-        modes: "band-quantized: L .470 â†” .795, hue unmoved",
+        means: "series 1 — carries the old cat-blue identity",
+        modes: "band-quantized: L .470 ↔ .795, hue unmoved",
       },
       {
         token: "--viz-2",
-        means: "series 2 â€” old cat-green",
+        means: "series 2 — old cat-green",
         modes: "same band; no series out-shouts another",
       },
       {
         token: "--viz-3",
-        means: "series 3 â€” old cat-slate (low chroma)",
+        means: "series 3 — old cat-slate (low chroma)",
         modes: "C .045 keeps its near-neutral character",
       },
-      { token: "--viz-4", means: "series 4 â€” old cat-lichen", modes: "on-band" },
+      { token: "--viz-4", means: "series 4 — old cat-lichen", modes: "on-band" },
       {
         token: "--viz-5",
-        means: "series 5 â€” old cat-clay",
+        means: "series 5 — old cat-clay",
         modes: "on-band; a chart clay is not the alarm",
       },
       {
         token: "--viz-6",
-        means: "series 6 â€” old cat-kiln (low chroma)",
+        means: "series 6 — old cat-kiln (low chroma)",
         modes:
-          "C .055. THE GRAYSCALE LAW: a viz spend must survive grayscale â€” label, legend, or position carries the distinction",
+          "C .055. THE GRAYSCALE LAW: a viz spend must survive grayscale — label, legend, or position carries the distinction",
       },
     ],
   },
 ];
 
 /** Read the live values off :root, and re-read when the theme class flips. The page reports the
- *  contract rather than restating it â€” re-pitching a token shows up here untouched. */
+ *  contract rather than restating it — re-pitching a token shows up here untouched. */
 function useTokenValues(tokens: readonly string[]): Record<string, string> {
   const [values, setValues] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -179,24 +179,28 @@ export function TokenSpecimens() {
   const values = useTokenValues(all);
 
   return (
-    <Section label="02 Â· tokens">
-      <p>
-        eighteen, and every one of them is oklch(L C h) off a declared band â€” src/base.css is the
+    <Section label="02 · tokens">
+      <h3 className="pt-2 t-head text-ink">Tokens</h3>
+      <Provenance>
+        live role values grouped by the question they answer · base.css owns every colour decision
+      </Provenance>
+      <p className="max-w-[80ch] pt-3 t-prose text-ink-2">
+        eighteen, and every one of them is oklch(L C h) off a declared band — src/base.css is the
         one place a colour is decided
       </p>
-      <p className="max-w-[80ch]">
+      <p className="max-w-[80ch] t-prose text-ink-2">
         <code>--pe-*</code> is canon. The old <code>--act-*</code> / <code>--st-*</code> /{" "}
         <code>--cat-*</code> role vocabulary in <code>styles.css</code> is retired and removed. The
         repo guard rejects its reintroduction; <code>--pe-*</code> is the sole authority. Swatches
-        below are read off <code>:root</code> at render and re-read when you flip the theme â€” this
+        below are read off <code>:root</code> at render and re-read when you flip the theme — this
         table cannot drift from the stylesheet.
       </p>
 
       {TOKEN_GROUPS.map((g) => (
         <div key={g.group} className="flex flex-col gap-1.5">
           <div className="flex items-baseline gap-3 pb-1">
-            <span>{g.group}</span>
-            <span>{g.asks}</span>
+            <span className="t-caption t-upper text-ink">{g.group}</span>
+            <span className="t-caption text-ink-mute">{g.asks}</span>
           </div>
           {g.tokens.map((t) => (
             <div
@@ -208,9 +212,9 @@ export function TokenSpecimens() {
                 style={{ backgroundColor: `var(${t.token})` }}
                 title={values[t.token] ?? t.token}
               />
-              <span>{t.token}</span>
-              <span className="min-w-0">{t.means}</span>
-              <span className="col-span-3 sm:col-span-1">{t.modes}</span>
+              <span className="t-caption face-mono text-ink">{t.token}</span>
+              <span className="min-w-0 t-label text-ink-2">{t.means}</span>
+              <span className="col-span-3 t-caption text-ink-mute sm:col-span-1">{t.modes}</span>
             </div>
           ))}
         </div>
@@ -226,4 +230,4 @@ export function TokenSpecimens() {
   );
 }
 
-/* â•â•â• 04 Â· the catalogue â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* ═══ 04 · the catalogue ════════════════════════════════════════════════════════════════════ */

@@ -164,9 +164,16 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ### Style regression, main → review/design-system (opened 2026-08-30)
 
-- Port main's `/design-system` (spec beside specimen, gap, counter-example) back onto wt
-  primitives; the pointer list defeated the route's purpose. Then `/takeoffs`, `/family`,
-  `/settings`. Main is the reference, not the code; zero guard violations is the bar.
+- `/design-system` ported 2026-08-30 (spec beside specimen, gap, counter-example; 0
+  browser-default text nodes, 9,319px). Still owed: `/takeoffs`, then `/family`, `/settings`.
+  Main is the reference, not the code; zero guard violations is the bar.
+- `/family`, `/families`, `/settings`, `/ops`, `/instances` have NO fixture lane on either
+  branch (`?source=fixture` falls back to the document gate); they cannot be censused or ported
+  without a controlled Revit session. `/takeoffs` is the only gated route with a real fixture.
+- Port gaps (from `.artifacts/handoffs/ds-port.md`): `Section` has no tier slot, so a page head
+  needs a second `t-head` line under it; `CounterExample` has no struck variant beyond the
+  caption; `OutcomeLine` lost `dropped`/`partial`; `ArmingStrip` cannot show armed-at/by or plan
+  age because the state model lacks them.
 - Style-delta census per route (main :3001 vs wt :3000, computed styles + PNG) is the edge for
   every port; lives at `.artifacts/handoffs/style-delta.md` when run.
 - `t-display`/`face-display`/`t-head` exist and nothing wears them; route heads have no head.

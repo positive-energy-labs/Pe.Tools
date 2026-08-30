@@ -29,6 +29,33 @@ export function Demo({
   );
 }
 
+/** One law: its ruling, code owner, shipping specimen, and any honest failure beside it. */
+export function Law({
+  name,
+  owner,
+  ruling,
+  children,
+}: {
+  name: string;
+  owner: string;
+  ruling: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Demo
+      label={name}
+      spec={
+        <>
+          {ruling} <span className="t-caption face-mono text-ink-mute">owner: {owner}</span>
+        </>
+      }
+      consumers="every product surface"
+    >
+      {children}
+    </Demo>
+  );
+}
+
 /** A recorded gap, said out loud where a reader would otherwise think the demo was finished. */
 export function Gap({ children }: { children: React.ReactNode }) {
   return (
@@ -46,7 +73,7 @@ export function CounterExample({ why, children }: { why: string; children: React
     <div className="flex flex-col gap-1">
       <div className="w-fit">{children}</div>
       <span className="t-caption text-ink-2">
-        <span className="t-upper">the wrong way</span> — {why}
+        <s className="t-upper">the wrong way</s> — {why}
       </span>
     </div>
   );
