@@ -281,7 +281,7 @@ function App() {
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
             <span className="size-2" />
-            <span>Positive Energy</span>
+            <span className="t-value text-ink">Positive Energy</span>
           </div>
           <div className="flex items-center gap-3">
             <UpdateButton />
@@ -292,11 +292,12 @@ function App() {
 
       <main className="py-16">
         <section className="max-w-2xl">
-          <p className="mb-3">
-            Internal tools · <span>update proof 0.6.22</span>
+          <p className="t-label mb-3 text-ink-2">
+            <span className="t-upper">Internal tools</span> ·{" "}
+            <span className="face-mono">update proof 0.6.22</span>
           </p>
-          <h1>Healthy people, healthy planet.</h1>
-          <p className="mt-4">
+          <h1 className="t-display face-display text-ink">Healthy people, healthy planet.</h1>
+          <p className="t-prose mt-4 text-ink-2">
             A small workbench of internal tools — the Pea agent, Revit data, and the host pipeline.
             Pick one to get started.
           </p>
@@ -310,16 +311,16 @@ function App() {
                   <span className="inline-flex size-9 items-center justify-center">
                     <tool.icon className="size-4.5" />
                   </span>
-                  <ArrowUpRight className="size-4" />
+                  <ArrowUpRight className="size-4 text-ink-2" />
                 </div>
                 <div>
-                  <p>{tool.label}</p>
-                  <h2 className="mt-0.5">{tool.title}</h2>
-                  <p className="mt-1.5">{tool.description}</p>
+                  <p className="t-caption t-upper text-ink-2">{tool.label}</p>
+                  <h2 className="t-title mt-0.5 text-ink">{tool.title}</h2>
+                  <p className="t-prose mt-1.5 text-ink-2">{tool.description}</p>
                 </div>
               </Card>
               {"satellites" in tool && (
-                <p className="flex flex-wrap gap-x-2 px-1">
+                <p className="t-caption face-mono flex flex-wrap gap-x-2 px-1 text-ink-2">
                   {tool.satellites.map((satellite) => (
                     <Link key={satellite.to} to={satellite.to}>
                       /{satellite.label}
