@@ -54,7 +54,7 @@ export function ArrayField({
   const comboboxItems = items.map((item) => item.value);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       <FieldLabelRow
         label={label}
         required={isRequired}
@@ -95,13 +95,16 @@ export function ArrayField({
           </ComboboxContent>
         </Combobox>
       ) : isObjectArray && itemNode?.properties ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {(Array.isArray(field.value) ? (field.value as unknown[]) : []).map((_, index) => {
             const childPathPrefix = `${path}.${index}`;
             return (
-              <div key={childPathPrefix} className="space-y-3 p-3">
+              <div
+                key={childPathPrefix}
+                className="space-y-3 border-l-2 border-line-2 bg-recess px-3 py-2"
+              >
                 <div className="flex items-center justify-between">
-                  <span className="">Item {index + 1}</span>
+                  <span className="t-label t-upper text-ink-2">Item {index + 1}</span>
                   <Verb
                     label="remove"
                     reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
@@ -142,7 +145,7 @@ export function ArrayField({
           }}
         />
       )}
-      <span className="">
+      <span className="t-caption text-ink-2">
         {isPrimitiveArray
           ? "Multi-value combobox with searchable suggestions and removable chips."
           : isObjectArray

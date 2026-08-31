@@ -1,8 +1,8 @@
 import { CircleHelp } from "lucide-react";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip, Tag } from "#/components/lang/chip";
 import { Label } from "#/components/lang/label";
+import { OutcomeLine } from "#/components/lang/outcome";
 import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
-import { cn } from "#/lib/utils";
 import { type FieldOptionState, useFieldChangeSummary } from "./shared";
 
 function formatValue(value: unknown): string | undefined {
@@ -78,14 +78,14 @@ function FieldMetadataTooltip({
               <div className="space-y-2">
                 {description ? (
                   <div className="space-y-1">
-                    <div className="">Description</div>
-                    <p className="whitespace-pre-wrap">{description}</p>
+                    <div className="t-label t-upper text-ink">Description</div>
+                    <p className="whitespace-pre-wrap t-value text-ink-2">{description}</p>
                   </div>
                 ) : null}
                 {formattedDefault !== undefined ? (
                   <div className="space-y-1">
-                    <div className="">Default</div>
-                    <pre className="whitespace-pre-wrap break-words px-2 py-1">
+                    <div className="t-label t-upper text-ink">Default</div>
+                    <pre className="face-mono t-value whitespace-pre-wrap break-words bg-recess px-2 py-1 text-ink">
                       {formattedDefault}
                     </pre>
                   </div>
@@ -125,25 +125,31 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
     <UiTooltipProvider>
       <Tooltip.Root>
         <Tooltip.Trigger aria-label="View change details" size={compact ? "compact" : "default"}>
-          {label}
+          <FactChip tone="caution" title="Open the saved and staged values.">
+            {label}
+          </FactChip>
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Positioner sideOffset={8}>
             <Tooltip.Popup>
               <div className="space-y-2">
                 {change.isComposite && nestedChanges > 0 ? (
-                  <p className="">
+                  <p className="t-value text-ink-2">
                     {nestedChanges} nested field
                     {nestedChanges === 1 ? "" : "s"} changed.
                   </p>
                 ) : null}
                 <div className="space-y-1">
-                  <div className="">Before</div>
-                  <pre className="whitespace-pre-wrap break-words px-2 py-1">{beforeDisplay}</pre>
+                  <div className="t-label t-upper text-ink">Before</div>
+                  <pre className="face-mono t-value whitespace-pre-wrap break-words bg-recess px-2 py-1 text-ink">
+                    {beforeDisplay}
+                  </pre>
                 </div>
                 <div className="space-y-1">
-                  <div className="">After</div>
-                  <pre className="whitespace-pre-wrap break-words px-2 py-1">{afterDisplay}</pre>
+                  <div className="t-label t-upper text-ink">After</div>
+                  <pre className="face-mono t-value whitespace-pre-wrap break-words bg-recess px-2 py-1 text-ink">
+                    {afterDisplay}
+                  </pre>
                 </div>
               </div>
             </Tooltip.Popup>
@@ -166,13 +172,13 @@ export function FieldMessages({
   }
 
   return (
-    <div className={cn("px-3 py-2", "", compact && "px-2 py-1.5")}>
-      <ul className="space-y-1">
-        {messages.map((message, index) => (
-          <li key={`${message}-${index}`}>{message}</li>
-        ))}
-      </ul>
-    </div>
+    <ul className={compact ? "space-y-0.5 py-1" : "space-y-1 py-1.5"}>
+      {messages.map((message, index) => (
+        <li key={`${message}-${index}`}>
+          <OutcomeLine kind="error" label={message} />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -187,7 +193,7 @@ export function FieldOptionsMetadata({ options }: { options: FieldOptionState })
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-1">
       <FactChip title="The schema source that supplies this field's choices.">
         {options.sourceKey ? `source ${options.sourceKey}` : options.source}
       </FactChip>
@@ -223,8 +229,8 @@ export function FieldOptionsMetadata({ options }: { options: FieldOptionState })
 
 function RequiredBadge() {
   return (
-    <span aria-label="Required" className="inline-flex items-center px-1.5 py-0.5">
-      Required
+    <span aria-label="Required">
+      <Tag>required</Tag>
     </span>
   );
 }
@@ -245,7 +251,7 @@ export function FieldLabelRow({
   path?: string;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-baseline gap-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
       {required ? <RequiredBadge /> : null}
       <FieldChangeBadge path={path} />
@@ -268,7 +274,7 @@ export function FieldLegendRow({
   path?: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-2 px-2">
+    <div className="t-label t-upper inline-flex items-center gap-1.5 px-2 text-ink-2">
       <span>{label}</span>
       {required ? <RequiredBadge /> : null}
       <FieldChangeBadge path={path} />

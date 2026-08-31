@@ -23,7 +23,7 @@ export function SchemaToFieldRender({
     [schemaDocument, validationResult],
   );
   if (rootEntries.length === 0) {
-    return <p className="">Schema has no editable properties.</p>;
+    return <p className="t-label text-ink-mute italic">Schema has no editable properties.</p>;
   }
 
   return (
@@ -74,7 +74,7 @@ function SchemaToFieldRenderContent({
       rootKey={rootKey}
       fieldChanges={fieldChanges}
     >
-      <div className="space-y-5">
+      <div className="space-y-4">
         {rootEntries.map(([key, nodeRef]) => (
           <FieldRenderer key={key} path={key} node={nodeRef.raw()} />
         ))}

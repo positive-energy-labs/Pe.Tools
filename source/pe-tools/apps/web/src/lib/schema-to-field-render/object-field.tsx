@@ -15,7 +15,7 @@ export function ObjectField({
   }
 
   return (
-    <fieldset className="space-y-4 p-4">
+    <fieldset className="space-y-4 border-t border-line pt-3">
       <legend>
         <FieldLegendRow
           label={label}

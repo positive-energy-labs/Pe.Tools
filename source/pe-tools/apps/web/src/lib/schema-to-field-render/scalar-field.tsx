@@ -42,7 +42,7 @@ export function ScalarField({
     : undefined;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-1.5">
       <FieldLabelRow
         label={label}
         htmlFor={path}
@@ -72,7 +72,9 @@ export function ScalarField({
             size="sm"
             onCheckedChange={field.change}
           />
-          <span className="">{field.value ? "Enabled" : "Disabled"}</span>
+          <span className="face-mono t-value text-ink-2">
+            {field.value ? "Enabled" : "Disabled"}
+          </span>
         </div>
       ) : options.length > 0 && allowsCustomValue ? (
         <>

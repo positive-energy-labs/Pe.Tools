@@ -12,7 +12,7 @@ import type { SettingsValidationResult } from "@pe/host-contracts/operation-type
 
 import { ArtifactFrame } from "#/components/lang/artifact-frame";
 import { StateCell } from "#/components/lang/cell";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip, Tag } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { VerbLane } from "#/components/lang/verb-lane";
@@ -183,7 +183,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const runner = useRunner(product, bindings, busy?.id ?? null);
 
   return (
-    <main className="flex h-screen min-h-0 flex-col overflow-hidden">
+    <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-page">
       <TargetingHead
         product={product}
         b={bindings}
@@ -192,24 +192,38 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
         aside={aside}
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-3xl space-y-3">
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           <VerbLane atoms={store.atoms} />
           {sliceError ? (
             <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
           ) : null}
-          {snapshot?.versionToken ? (
-            <FactChip title="The open document version token.">v{snapshot.versionToken}</FactChip>
-          ) : null}
-          {snapshot?.modifiedUtc ? (
-            <FactChip title="The open file's modification time.">
-              read {timeAgo(snapshot.modifiedUtc)}
-            </FactChip>
+          {snapshot?.versionToken || snapshot?.modifiedUtc ? (
+            <div className="flex min-h-6 flex-wrap items-center gap-1">
+              <span className="face-mono t-caption t-upper mr-1 text-ink-mute">document facts</span>
+              {snapshot?.versionToken ? (
+                <FactChip title="The open document version token.">v{snapshot.versionToken}</FactChip>
+              ) : null}
+              {snapshot?.modifiedUtc ? (
+                <FactChip title="The open file's modification time.">
+                  read {timeAgo(snapshot.modifiedUtc)}
+                </FactChip>
+              ) : null}
+            </div>
           ) : null}
 
           {snapshot && formModel ? (
             <>
-              <ArtifactFrame>
+              <ArtifactFrame
+                head={
+                  <>
+                    <Tag>fields</Tag>
+                    <span className="face-mono t-caption min-w-0 truncate text-ink-2">
+                      {snapshot.documentId.relativePath}
+                    </span>
+                  </>
+                }
+              >
                 <div className="px-4 py-3">
                   <SchemaToFieldRender
                     schema={formModel.schema}
@@ -227,8 +241,17 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                 </div>
               </ArtifactFrame>
               {proposalRows.length ? (
-                <ArtifactFrame>
-                  <div>
+                <ArtifactFrame
+                  head={
+                    <>
+                      <Tag>pea proposals</Tag>
+                      <FactChip tone="pea" title="Open field proposals in this document.">
+                        {proposalRows.length} open
+                      </FactChip>
+                    </>
+                  }
+                >
+                  <div className="divide-y divide-line">
                     {proposalRows.map((row) => (
                       <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
                     ))}
@@ -238,7 +261,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
             </>
           ) : snapshot && rows.length ? (
             <ArtifactFrame>
-              <div>
+              <div className="divide-y divide-line">
                 {rows.map((row) => (
                   <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
                 ))}
@@ -301,9 +324,9 @@ function FieldRow({
   const proposal = staged ? null : row.field?.proposal;
   const shown = staged ? row.field?.staged?.value : proposal ? proposal.value : row.current;
   return (
-    <div className="flex min-h-12 items-center gap-3 px-3 py-2">
+    <div className="flex min-h-11 items-center gap-3 px-3 py-1.5">
       <div className="min-w-0 flex-1">
-        <div>{row.path}</div>
+        <div className="face-mono t-label truncate text-ink-2">{row.path}</div>
         <StateCell
           scale="row"
           value={display(shown)}
@@ -327,7 +350,7 @@ function FieldRow({
           onClick={() => patchField(store, [{ path: ["fields", row.path, "staged"] }])}
         />
       ) : proposal ? (
-        <span className="flex gap-1.5">
+        <span className="flex shrink-0 gap-1.5">
           <Verb
             label="deny"
             disabled={busy}
