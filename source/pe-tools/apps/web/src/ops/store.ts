@@ -36,6 +36,11 @@ export function createOpsStore(deps: {
   apply?: (patches: RouteStatePatch[]) => Promise<RouteStateWriteResult>;
   call?: typeof callHostDynamic;
   now?: () => Date;
+  initial?: {
+    op: string;
+    identity: Identity;
+    request?: { args: string; mode: Mode; formValues: Record<string, unknown> };
+  };
 }) {
   const core = createRouteStoreCore("ops", deps.registry);
   const { registry, owned, write, runVerb } = core;
@@ -55,9 +60,13 @@ export function createOpsStore(deps: {
     const result = get(slice);
     return AsyncResult.isSuccess(result) && result.value.hydrated;
   }).pipe(owned("view/hydrated"));
-  const identity = Atom.make<Identity | null>(null).pipe(owned("page/identity"));
-  const selectedKey = Atom.make("").pipe(owned("page/op"));
-  const draftKey = Atom.make("").pipe(owned("page/draft-op"));
+  const identity = Atom.make<Identity | null>(deps.initial?.identity ?? null).pipe(
+    owned("page/identity"),
+  );
+  const selectedKey = Atom.make(deps.initial?.op ?? "").pipe(owned("page/op"));
+  const draftKey = Atom.make(deps.initial?.request ? (deps.initial?.op ?? "") : "").pipe(
+    owned("page/draft-op"),
+  );
   const localResult = Atom.make<OpsReceipt | null>(null).pipe(owned("page/result"));
   const result = Atom.make((get) => {
     const value = get(localResult) ?? get(document)?.receipt ?? null;
@@ -66,9 +75,11 @@ export function createOpsStore(deps: {
       ? value
       : null;
   }).pipe(owned("view/result"));
-  const args = Atom.make("{}").pipe(owned("page/request"));
-  const mode = Atom.make<Mode>("raw").pipe(owned("page/mode"));
-  const formValues = Atom.make<Record<string, unknown>>({}).pipe(owned("page/form-values"));
+  const args = Atom.make(deps.initial?.request?.args ?? "{}").pipe(owned("page/request"));
+  const mode = Atom.make<Mode>(deps.initial?.request?.mode ?? "raw").pipe(owned("page/mode"));
+  const formValues = Atom.make<Record<string, unknown>>(
+    deps.initial?.request?.formValues ?? {},
+  ).pipe(owned("page/form-values"));
   const picker = Atom.make<PickerState>({ open: null, level: null, query: "" }).pipe(
     owned("page/picker"),
   );

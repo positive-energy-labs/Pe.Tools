@@ -23,11 +23,51 @@ import type { Feeds } from "#/targeting/model";
 import { worldTrunk } from "#/targeting/world";
 import { OperationPane, parseSchema } from "#/ops/operation-pane";
 import { buildFormRequest, readFormSeed } from "#/ops/schema-form";
+import {
+  createOpsFixtureSlice,
+  OPS_FIXTURE_ADDRESS,
+  OPS_FIXTURE_CATALOG,
+  OPS_FIXTURE_REQUEST,
+  OPS_FIXTURE_SELECTED,
+  OPS_FIXTURE_SESSION,
+  OPS_FIXTURE_TARGET,
+  OPS_FIXTURE_WORLD_FACTS,
+} from "#/ops/fixture";
 
 export type HostOperationJsonSchema = Record<string, unknown>;
 
-export function OpsRoute() {
-  return <RouteDocument>{(at) => <OpsStoreOwner key={at} documentAddress={at} />}</RouteDocument>;
+export function OpsRoute({ source }: { source?: "fixture" }) {
+  return source === "fixture" ? (
+    <FixtureOpsStoreOwner />
+  ) : (
+    <RouteDocument>{(at) => <OpsStoreOwner key={at} documentAddress={at} />}</RouteDocument>
+  );
+}
+
+function FixtureOpsStoreOwner() {
+  const store = useRouteStore(() => {
+    const fixture = createOpsStore({
+      registry: appAtomRegistry,
+      scope: { documentAddress: OPS_FIXTURE_ADDRESS },
+      slice: createOpsFixtureSlice(),
+      apply: async () => ({ ok: true, revision: 1 }),
+      call: async () => {
+        throw new Error("fixture review refuses operation runs");
+      },
+      now: () => new Date("2026-08-30T18:42:00.000Z"),
+      initial: {
+        op: OPS_FIXTURE_SELECTED,
+        identity: { target: OPS_FIXTURE_TARGET },
+        request: {
+          args: JSON.stringify(OPS_FIXTURE_REQUEST),
+          mode: "form",
+          formValues: OPS_FIXTURE_REQUEST,
+        },
+      },
+    });
+    return fixture;
+  });
+  return <OpsPage store={store} fixture />;
 }
 
 export function OpsStoreOwner({
@@ -44,18 +84,32 @@ export function OpsStoreOwner({
   return <OpsPage store={store} />;
 }
 
-export function OpsPage({ store }: { store: OpsStore }) {
+export function OpsPage({ store, fixture = false }: { store: OpsStore; fixture?: boolean }) {
   const world = useAtomValue(store.atoms.world);
   const op = useAtomValue(store.atoms.op);
-  const fleet = useFleet();
+  const liveFleet = useFleet({ enabled: !fixture });
+  const fleet = fixture
+    ? {
+        worlds: [OPS_FIXTURE_WORLD_FACTS],
+        sessions: [OPS_FIXTURE_SESSION],
+        isLoading: false,
+        stale: false,
+        error: null,
+        at: Date.UTC(2026, 7, 30, 18, 42, 0),
+        basis: ["fixture.ops.catalog", "fixture.route-document"],
+      }
+    : liveFleet;
   const resolution = resolveTarget(fleet.sessions, world);
   const session = resolution.kind === "resolved" ? resolution.session : null;
   const catalog = useHostOp("host.ops.catalog", undefined, {
     bridgeSessionId: session?.sessionId,
-    enabled: session !== null,
+    enabled: !fixture && session !== null,
     staleTime: 60_000,
   });
-  const operations = useMemo(() => catalog.data?.operations ?? [], [catalog.data?.operations]);
+  const operations = useMemo(
+    () => (fixture ? OPS_FIXTURE_CATALOG : (catalog.data?.operations ?? [])),
+    [catalog.data?.operations, fixture],
+  );
   const selected = operations.find((operation) => operation.key === op);
   const requestSchema = selected ? parseSchema(selected.requestSchemaJson) : undefined;
   const args = useAtomValue(store.atoms.args);
@@ -90,12 +144,22 @@ export function OpsPage({ store }: { store: OpsStore }) {
           label: operation.displayName ?? operation.key,
           sub: `${operation.intent} · ${operation.costTier}`,
         })),
-        state: catalog.isPending ? "loading" : catalog.isError ? "error" : "ready",
-        lane: "live",
-        stale: catalog.isFetching && !catalog.isPending,
-        at: catalog.dataUpdatedAt || undefined,
-        basis: ["host.ops.catalog"],
-        note: catalog.error instanceof Error ? catalog.error.message : undefined,
+        state: fixture
+          ? "ready"
+          : catalog.isPending
+            ? "loading"
+            : catalog.isError
+              ? "error"
+              : "ready",
+        lane: fixture ? "fixture" : "live",
+        stale: fixture ? false : catalog.isFetching && !catalog.isPending,
+        at: fixture ? Date.UTC(2026, 7, 30, 18, 42, 0) : catalog.dataUpdatedAt || undefined,
+        basis: fixture ? ["fixture.ops.catalog"] : ["host.ops.catalog"],
+        note: fixture
+          ? "checked-in review catalog"
+          : catalog.error instanceof Error
+            ? catalog.error.message
+            : undefined,
       },
     }),
     [
@@ -105,6 +169,7 @@ export function OpsPage({ store }: { store: OpsStore }) {
       catalog.isFetching,
       catalog.isPending,
       fleet,
+      fixture,
       operations,
     ],
   );
@@ -120,6 +185,7 @@ export function OpsPage({ store }: { store: OpsStore }) {
     () =>
       OPS_PRODUCT(feeds, {
         run: () => {
+          if (fixture) throw Error("fixture review refuses operation runs");
           if (!selected || !session) throw Error("bind an operation and world first");
           return store.actions.run({
             opKey: selected.key,
@@ -133,9 +199,12 @@ export function OpsPage({ store }: { store: OpsStore }) {
             bridgeSessionId: session.sessionId,
           });
         },
-        refuse: () => opsRefusal(selected, session?.custody),
+        refuse: () =>
+          fixture
+            ? "fixture review refuses operation runs"
+            : opsRefusal(selected, session?.custody),
       }),
-    [args, feeds, formValues, mode, requestSchema, selected, session, store],
+    [args, feeds, fixture, formValues, mode, requestSchema, selected, session, store],
   );
   const b = useBindings(
     product,
@@ -193,6 +262,8 @@ export function OpsPage({ store }: { store: OpsStore }) {
                 tone="neutral"
                 state="selected"
                 aria-pressed={selectedGlanceKey === glance.key}
+                disabled={fixture}
+                title={fixture ? "fixture review refuses synthetic Host runs" : undefined}
                 onClick={() => store.actions.setSelectedGlance(glance.key)}
               >
                 {glance.displayName}
@@ -217,7 +288,7 @@ export function OpsPage({ store }: { store: OpsStore }) {
             <OperationPane
               operation={selected}
               schema={requestSchema}
-              bridgeSessionId={session?.sessionId}
+              bridgeSessionId={fixture ? undefined : session?.sessionId}
               args={args}
               mode={mode}
               formValues={formValues}
@@ -237,7 +308,9 @@ export function OpsPage({ store }: { store: OpsStore }) {
         <div className="mx-auto w-full max-w-5xl pt-2">
           <VerbLane atoms={store.atoms} />
           <Provenance>
-            catalog = host.ops.catalog · selected live key is the route's one dynamic /call
+            {fixture
+              ? "catalog = checked-in fixture · route document and receipt are local"
+              : "catalog = host.ops.catalog · selected live key is the route's one dynamic /call"}
           </Provenance>
         </div>
       }
