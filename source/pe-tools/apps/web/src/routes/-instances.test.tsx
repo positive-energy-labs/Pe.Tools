@@ -2,9 +2,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import type { useFleet, WorldFacts } from "#/host/fleet";
 
-const fleet = vi.hoisted(() => ({
-  useFleet: vi.fn(() => ({
+const fleet = vi.hoisted(() => {
+  const value: ReturnType<typeof useFleet> = {
     worlds: [
       {
         id: "pe.app-25",
@@ -70,13 +71,17 @@ const fleet = vi.hoisted(() => ({
       },
     ],
     sessions: [],
+    unreadableReceipts: [],
+    processReadErrors: [],
+    registryRoot: "C:\\registry",
     isLoading: false,
     stale: false,
     error: null,
     at: 123,
     basis: ["sessions.list", "bridge.sessions.list"],
-  })),
-}));
+  };
+  return { value, useFleet: vi.fn(() => value) };
+});
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -103,7 +108,6 @@ import { InstancesPage } from "#/routes/instances";
 import { paneState } from "#/targeting/kit";
 import { product as defineProduct } from "#/targeting/model";
 import { worldTrunk } from "#/targeting/world";
-import type { WorldFacts } from "#/host/fleet";
 
 afterEach(() => {
   cleanup();
@@ -119,6 +123,43 @@ describe("instances route", () => {
     );
 
     expect(screen.getByText("pick a document")).toBeTruthy();
+  });
+
+  it("discloses census exceptions when no session identity can be formed", () => {
+    fleet.useFleet.mockReturnValueOnce({
+      ...fleet.value,
+      worlds: [],
+      sessions: [],
+      unreadableReceipts: [
+        {
+          detail: "receipt JSON could not be decoded",
+          id: "broken-receipt",
+          observedAtUtc: "2026-08-30T12:00:00.000Z",
+          receiptPath: "C:\\registry\\broken.json",
+        },
+      ],
+      processReadErrors: [
+        {
+          candidatePid: 404,
+          detail: "process start time was unavailable",
+          observedAtUtc: "2026-08-30T12:00:00.000Z",
+        },
+      ],
+    });
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <InstancesPage />
+      </QueryClientProvider>,
+    );
+
+    const disclosure = screen.getByRole("complementary", { name: "census exceptions" });
+    expect(disclosure.textContent).toContain("broken-receipt");
+    expect(disclosure.textContent).toContain("C:\\registry\\broken.json");
+    expect(disclosure.textContent).toContain("receipt JSON could not be decoded");
+    expect(disclosure.textContent).toContain("404");
+    expect(disclosure.textContent).toContain("process start time was unavailable");
+    expect(disclosure.textContent).toContain("C:\\registry");
   });
 
   it("prints the leaf world and gates its pane while unbound", () => {

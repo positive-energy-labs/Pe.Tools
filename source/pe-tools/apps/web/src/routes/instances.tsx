@@ -148,15 +148,56 @@ function StartFields({
 }
 
 export function InstancesPage() {
-  return <RouteDocument>{(at) => <AddressedInstancesPage documentAddress={at} />}</RouteDocument>;
+  const fleet = useFleet({ all: true });
+  const hasCensusExceptions =
+    fleet.unreadableReceipts.length > 0 || fleet.processReadErrors.length > 0;
+  return (
+    <>
+      {hasCensusExceptions ? (
+        <aside
+          aria-label="census exceptions"
+          className="mx-auto mt-4 max-w-6xl border border-[var(--r-line-2)] px-3 py-2"
+        >
+          <div className="t-caption t-upper text-[var(--r-ink-2)]">census exceptions</div>
+          {fleet.registryRoot ? (
+            <div className="face-mono t-caption text-[var(--r-ink-2)]">
+              registry {fleet.registryRoot}
+            </div>
+          ) : null}
+          <ul className="mt-1 grid gap-1">
+            {fleet.unreadableReceipts.map((receipt) => (
+              <li key={receipt.receiptPath} className="t-caption text-[var(--r-ink)]">
+                <span className="face-mono">receipt {receipt.id}</span> · {receipt.receiptPath} ·{" "}
+                {receipt.detail}
+              </li>
+            ))}
+            {fleet.processReadErrors.map((failure) => (
+              <li key={failure.candidatePid} className="t-caption text-[var(--r-ink)]">
+                <span className="face-mono">process {failure.candidatePid}</span> · {failure.detail}
+              </li>
+            ))}
+          </ul>
+        </aside>
+      ) : null}
+      <RouteDocument>
+        {(at) => <AddressedInstancesPage documentAddress={at} fleet={fleet} />}
+      </RouteDocument>
+    </>
+  );
 }
 
-function AddressedInstancesPage({ documentAddress }: { documentAddress: Address }) {
+function AddressedInstancesPage({
+  documentAddress,
+  fleet,
+}: {
+  documentAddress: Address;
+  fleet: ReturnType<typeof useFleet>;
+}) {
   const route = useRouteState(instancesRouteState, { documentAddress });
   const target = current(route.slice?.bindings.world, documentAddress)?.id ?? "";
   const [stage, setStage] = useState("declare");
   const queryClient = useQueryClient();
-  const { worlds, sessions, isLoading, error, stale, at, basis } = useFleet({ all: true });
+  const { worlds, sessions, isLoading, error, stale, at, basis } = fleet;
   const worldLog = useWorldLog(sessions);
   const [localLog, setLocalLog] = useState<{ atMs: number; actor: "you"; label: string }[]>([]);
   const [busy, setBusy] = useState<string | null>(null);

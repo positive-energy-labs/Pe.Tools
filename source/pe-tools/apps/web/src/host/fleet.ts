@@ -226,17 +226,21 @@ function useSessionStatusQuery({ all = false, enabled = true }: FleetOptions) {
   return useQuery({
     queryKey: [...HOST_QUERY_KEY, "", "sessions.status", all ? "all" : ""],
     enabled,
-    queryFn: async (): Promise<SessionObservation[]> => {
+    queryFn: async (): Promise<SessionListResult> => {
       const response = await fetch(all ? "/sessions?all=true" : "/sessions");
       if (!response.ok) throw new Error(`session list ${response.status}`);
       // The route relays the CLI envelope untouched, so this is the SDK's own result shape. No
       // `?? []` fallback: an envelope without `sessions` means the contract moved underneath us,
       // and a silent empty fleet is exactly the failure this cutover exists to end.
       const body = (await response.json()) as Envelope<SessionListResult>;
-      const sessions = body.result?.sessions;
-      if (!Array.isArray(sessions))
+      const result = body.result;
+      if (!result || !Array.isArray(result.sessions))
         throw new Error("session list envelope carried no result.sessions[]");
-      return [...sessions];
+      if (!Array.isArray(result.unreadableReceipts))
+        throw new Error("session list envelope carried no result.unreadableReceipts[]");
+      if (!Array.isArray(result.processReadErrors))
+        throw new Error("session list envelope carried no result.processReadErrors[]");
+      return result;
     },
     refetchInterval: 5_000,
     refetchOnWindowFocus: false,
@@ -250,8 +254,11 @@ export function useFleet(options: FleetOptions = {}) {
   return useMemo(() => {
     const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
     return {
-      worlds: fuseFleet(status.data ?? [], sessions),
+      worlds: fuseFleet(status.data?.sessions ?? [], sessions),
       sessions,
+      unreadableReceipts: status.data?.unreadableReceipts ?? [],
+      processReadErrors: status.data?.processReadErrors ?? [],
+      registryRoot: status.data?.registryRoot,
       isLoading: sessionsQuery.isLoading || status.isLoading,
       stale: sessionsQuery.isFetching || status.isFetching,
       error: sessionsQuery.error ?? status.error,

@@ -191,7 +191,19 @@ test("capability admission gates every fleet request", async () => {
   globalThis.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     requests.push(`${init?.method ?? "GET"} ${url}`);
-    return Response.json(url === "/sessions" ? { result: { sessions: [] } } : { sessions: [] });
+    return Response.json(
+      url === "/sessions"
+        ? {
+            result: {
+              processReadErrors: [],
+              registryRoot: "C:\\registry",
+              sessions: [],
+              state: "no-sessions",
+              unreadableReceipts: [],
+            },
+          }
+        : { sessions: [] },
+    );
   };
   const mount = (enabled: boolean) => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
