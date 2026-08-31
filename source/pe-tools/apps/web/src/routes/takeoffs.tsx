@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { ClientOnly, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { address } from "@pe/agent-contracts";
 
 import { FactChip } from "#/components/lang/chip";
@@ -51,7 +51,7 @@ export const resolvedWorldBinding = (
     : resolution.selector || null;
 
 export const Route = createFileRoute("/takeoffs")({
-  ssr: "data-only",
+  wrapInSuspense: true,
   validateSearch: (search: Record<string, unknown>) => ({
     source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
     thread: str(search.thread) || undefined,
@@ -78,7 +78,9 @@ export function TakeoffsRoute() {
   const { source } = Route.useSearch();
   const fixtureAddress = address("C:\\Fixtures\\project-a Residence.rvt");
   return source === "fixture" ? (
-    <TakeoffsStoreOwner source="fixture" documentAddress={fixtureAddress} />
+    <ClientOnly>
+      <TakeoffsStoreOwner source="fixture" documentAddress={fixtureAddress} />
+    </ClientOnly>
   ) : (
     <LiveTakeoffsRoute />
   );
