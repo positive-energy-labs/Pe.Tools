@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
 import { CLOSE_M, INK_M, SEAL_DOOR, SEAL_RUN } from "../palette";
 import {
-  loadPlan,
-  loadReplaySeedInk,
-  loadRaster,
-  loadRunReport,
-  loadSealClasses,
-  loadZoneGeometry,
   paintClassRaster,
   paintRaster,
   type Raster,
@@ -17,6 +11,7 @@ import {
   type ZoneRecord,
   type ZoneViewport,
 } from "../world";
+import { useRunsSource, type RunsSource } from "../source";
 import { PX_PER_FT } from "./unknown";
 
 export type Frame = { minX: number; minY: number; maxX: number; maxY: number };
@@ -61,16 +56,17 @@ export const levelCanvasCache = new Map<
 export function loadLevelCanvas(
   runId: string,
   zone: ZoneRecord,
+  source: RunsSource,
 ): Promise<{ canvas: HTMLCanvasElement; ink: Raster }> {
   const key = `combo:${runId}/${zone.Ink}`;
   let cached = levelCanvasCache.get(key);
   if (!cached) {
     cached = (async () => {
       const [ink, seals, close, sealClasses] = await Promise.all([
-        loadReplaySeedInk(runId, zone.Ink),
-        zone.Seals ? loadRaster(runId, zone.Seals) : Promise.resolve(null),
-        zone.Close ? loadRaster(runId, zone.Close) : Promise.resolve(null),
-        zone.Seals ? loadSealClasses(runId, zone.Seals) : Promise.resolve(null),
+        source.loadReplaySeedInk(runId, zone.Ink),
+        zone.Seals ? source.loadRaster(runId, zone.Seals) : Promise.resolve(null),
+        zone.Close ? source.loadRaster(runId, zone.Close) : Promise.resolve(null),
+        zone.Seals ? source.loadSealClasses(runId, zone.Seals) : Promise.resolve(null),
       ]);
       const vp: ZoneViewport = {
         ...rasterFrame(ink),
@@ -107,6 +103,7 @@ export type LevelData = {
 };
 
 export function useLevelData(runId: string | null, level: string | null): LevelData | null {
+  const source = useRunsSource();
   const [data, setData] = useState<LevelData | null>(null);
   useEffect(() => {
     setData(null);
@@ -114,19 +111,19 @@ export function useLevelData(runId: string | null, level: string | null): LevelD
     let stale = false;
     void (async () => {
       try {
-        const report = await loadRunReport(runId);
+        const report = await source.loadRunReport(runId);
         const zones = report.Zones.filter((z) => z.Level === level);
         const anchor = zones.find((z) => z.Ink);
         const [plan, painted] = anchor
           ? await Promise.all([
-              loadPlan(runId, anchor.Ink),
-              loadLevelCanvas(runId, anchor).catch(() => null),
+              source.loadPlan(runId, anchor.Ink),
+              loadLevelCanvas(runId, anchor, source).catch(() => null),
             ])
           : [null, null];
         const geomEntries = await Promise.all(
           zones
             .filter((z) => z.Tsv)
-            .map(async (z) => [z.Zone, await loadZoneGeometry(runId, z.Tsv)] as const),
+            .map(async (z) => [z.Zone, await source.loadZoneGeometry(runId, z.Tsv)] as const),
         );
         if (stale) return;
         setData({
@@ -144,7 +141,7 @@ export function useLevelData(runId: string | null, level: string | null): LevelD
     return () => {
       stale = true;
     };
-  }, [runId, level]);
+  }, [runId, level, source]);
   return data;
 }
 

@@ -2,14 +2,13 @@ import { type ReactNode } from "react";
 import { FactChip as Chip } from "#/components/lang/chip";
 import {
   boardSummary,
-  loadRunReport,
-  loadRunScores,
   modalZoneCount,
   partiality,
   type RunIndexEntry,
   type RunScores,
   scoreBoards,
 } from "../world";
+import type { RunsSource } from "../source";
 import type { RunRow } from "./plan-dock";
 import { Delta } from "./unknown";
 import { rowScores } from "./plan-dock";
@@ -25,10 +24,13 @@ export function savedWorkDelta(cur: RunScores | null, prev: RunScores | null): n
   return null;
 }
 
-export async function buildLedgerRows(index: RunIndexEntry[]): Promise<RunRow[]> {
+export async function buildLedgerRows(
+  index: RunIndexEntry[],
+  source: Pick<RunsSource, "loadRunReport" | "loadRunScores">,
+): Promise<RunRow[]> {
   const [reports, scoresAll] = await Promise.all([
-    Promise.all(index.map((entry) => loadRunReport(entry.id))),
-    Promise.all(index.map((entry) => loadRunScores(entry.id))),
+    Promise.all(index.map((entry) => source.loadRunReport(entry.id))),
+    Promise.all(index.map((entry) => source.loadRunScores(entry.id))),
   ]);
   const modal = modalZoneCount(reports);
   return index.map((entry, i) => {

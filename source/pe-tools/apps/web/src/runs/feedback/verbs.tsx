@@ -3,8 +3,8 @@ import type { ChangeEvent } from "react";
 
 import { cn } from "#/lib/utils";
 
-import { runExport } from "./export";
 import { fb, flagLabel, type StagedItem, useFb } from "./staging";
+import { useRunsSource } from "../source";
 import { Press } from "#/components/lang/press";
 import { Verb } from "#/components/lang/verb";
 
@@ -13,10 +13,12 @@ export function ExportVerbs(props: {
   pool: string | null;
   compact?: boolean;
 }) {
+  const source = useRunsSource();
   const { exporting } = useFb();
-  const disabled = props.items.length === 0 || exporting !== null;
-  const refusal =
-    props.items.length === 0
+  const disabled = props.items.length === 0 || exporting !== null || !source.exportEnabled;
+  const refusal = !source.exportEnabled
+    ? "Fixture export is disabled. "
+    : props.items.length === 0
       ? "Nothing is staged yet — stage at least one item first. "
       : exporting !== null
         ? "An export is already running. "
@@ -28,7 +30,7 @@ export function ExportVerbs(props: {
       tone={primary ? "commit" : "act"}
       disabled={disabled}
       busy={exporting === verb}
-      onClick={() => void runExport(verb, props.items, props.pool)}
+      onClick={() => void source.runExport(verb, props.items, props.pool)}
     />
   );
   return (

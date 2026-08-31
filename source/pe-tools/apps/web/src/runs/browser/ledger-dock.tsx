@@ -10,6 +10,7 @@ import type { RunRow } from "./plan-dock";
 import { Delta, PartialityChip, fmtTime, partialTitle, possiblyPartialTitle } from "./unknown";
 import { buildLedgerRows, runName, scoreCell } from "./no-scores";
 import { PressContent } from "#/components/anatomy/press-content";
+import { useRunsSource } from "../source";
 
 export function LedgerDock(props: {
   runs: RunIndexEntry[];
@@ -21,6 +22,7 @@ export function LedgerDock(props: {
   onPickCur: (id: string) => void;
   onPickBaseline: (id: string) => void;
 }) {
+  const source = useRunsSource();
   const { runs, pool, curId, prevId, open, onToggle, onPickCur, onPickBaseline } = props;
   const [rows, setRows] = useState<RunRow[] | null>(null);
   const [tableState, setTableState] = useState<MasterTableState>({
@@ -31,8 +33,10 @@ export function LedgerDock(props: {
 
   useEffect(() => {
     if (!open || rows !== null || runs.length === 0) return;
-    buildLedgerRows(runs).then(setRows, (err: unknown) => console.error("combo ledger:", err));
-  }, [open, rows, runs]);
+    buildLedgerRows(runs, source).then(setRows, (err: unknown) =>
+      console.error("combo ledger:", err),
+    );
+  }, [open, rows, runs, source]);
 
   const columns = useMemo<Column<RunRow>[]>(
     () => [

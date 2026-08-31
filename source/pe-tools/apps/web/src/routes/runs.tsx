@@ -5,8 +5,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import RunBrowser from "../runs/browser";
+import { FixtureRunsProvider } from "../runs/fixture";
 
-export const Route = createFileRoute("/runs")({ component: RunsPage });
+export const runsSearch = (search: Record<string, unknown>): { source?: "fixture" } => ({
+  source: search.source === "fixture" ? "fixture" : undefined,
+});
+
+export const Route = createFileRoute("/runs")({
+  validateSearch: runsSearch,
+  component: RunsPage,
+});
 
 function RunsPage() {
   // Dev-only surface pinned to light chrome (kaitpw ruling, round 2): the plan/card palettes
@@ -22,5 +30,15 @@ function RunsPage() {
   if (!import.meta.env.DEV) {
     return <div className="p-8">/runs is a dev-only surface.</div>;
   }
-  return <RunBrowser />;
+  return <RunsRouteContent source={Route.useSearch().source} />;
+}
+
+export function RunsRouteContent({ source }: { source?: "fixture" }) {
+  return source === "fixture" ? (
+    <FixtureRunsProvider>
+      <RunBrowser />
+    </FixtureRunsProvider>
+  ) : (
+    <RunBrowser />
+  );
 }

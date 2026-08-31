@@ -1,26 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { hydrateFromSet } from "../feedback/hydrate";
 import { type StagedItem, useFb } from "../feedback/staging";
 import { type Lens } from "../feedback/tray";
 import {
   boardSummary,
-  fetchRunIndex,
-  loadRunReport,
-  loadRunScores,
   pairZones,
   partiality,
-  poolModalZones,
   type RunIndexEntry,
   type RunReport,
   type RunScores,
   type ZonePair,
   type ZoneRecord,
 } from "../world";
+import { useRunsSource } from "../source";
 import type { FocusRequest } from "./zone-peek";
 import type { Baseline } from "./baseline";
 import { pairingCaveat, useElementWidth } from "./unknown";
 
 export function useRunBrowserModel() {
+  const source = useRunsSource();
   const [runs, setRuns] = useState<RunIndexEntry[] | null>(null);
 
   const [pool, setPool] = useState<string | null>(null);
@@ -37,7 +34,7 @@ export function useRunBrowserModel() {
 
   const [planOpen, setPlanOpen] = useState(true);
 
-  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(source.initialLedgerOpen);
 
   const [trayOpen, setTrayOpen] = useState(true);
 
@@ -66,24 +63,25 @@ export function useRunBrowserModel() {
   useEffect(() => {
     if (!runs || runs.length === 0) return;
     let live = true;
-    poolModalZones(runs.map((entry) => entry.id)).then(
+    source.poolModalZones(runs.map((entry) => entry.id)).then(
       (modal) => live && setModalZones(modal),
       () => {},
     );
     return () => {
       live = false;
     };
-  }, [runs]);
+  }, [runs, source]);
 
   useEffect(() => {
-    fetchRunIndex()
+    source
+      .fetchRunIndex()
       .then((index) => {
         setRuns(index.runs);
         setPool(index.pool);
         setCurId((prev) => prev ?? index.runs[0]?.id ?? null);
       })
       .catch((err: unknown) => setError(String(err)));
-  }, []);
+  }, [source]);
 
   const linkApplied = useRef(false);
 
@@ -95,7 +93,8 @@ export function useRunBrowserModel() {
     const params = new URLSearchParams(window.location.search);
     const set = params.get("set");
     if (set) {
-      hydrateFromSet(set)
+      source
+        .hydrateFromSet(set)
         .then(() => setTrayOpen(true))
         .catch((err: unknown) => setLinkNote(`set ${set} did not load: ${String(err)}`));
     }
@@ -111,7 +110,7 @@ export function useRunBrowserModel() {
         `deep link run${b && !has(b) ? ` B=${b}` : ""}${a && !has(a) ? ` A=${a}` : ""} is not in the pool`,
       );
     }
-  }, [runs]);
+  }, [runs, source]);
 
   const prevId = useMemo(() => {
     if (!runs || !curId || baseline === null) return null;
@@ -125,10 +124,12 @@ export function useRunBrowserModel() {
     let live = true;
     setReportCur(null);
     setScoresCur(undefined);
-    loadRunReport(curId)
+    source
+      .loadRunReport(curId)
       .then((r) => live && setReportCur(r))
       .catch((err: unknown) => live && setError(String(err)));
-    loadRunScores(curId)
+    source
+      .loadRunScores(curId)
       .then((s) => live && setScoresCur(s))
       .catch((err: unknown) => {
         console.error("runs: scores.json load failed", err);
@@ -137,7 +138,7 @@ export function useRunBrowserModel() {
     return () => {
       live = false;
     };
-  }, [curId]);
+  }, [curId, source]);
 
   useEffect(() => {
     if (!prevId) {
@@ -148,16 +149,18 @@ export function useRunBrowserModel() {
     let live = true;
     setReportPrev(null);
     setScoresPrev(undefined);
-    loadRunReport(prevId)
+    source
+      .loadRunReport(prevId)
       .then((r) => live && setReportPrev(r))
       .catch(() => live && setReportPrev(null));
-    loadRunScores(prevId)
+    source
+      .loadRunScores(prevId)
       .then((s) => live && setScoresPrev(s))
       .catch(() => live && setScoresPrev(null));
     return () => {
       live = false;
     };
-  }, [prevId]);
+  }, [prevId, source]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

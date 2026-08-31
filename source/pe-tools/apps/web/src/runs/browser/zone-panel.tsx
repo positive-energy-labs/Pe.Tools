@@ -15,11 +15,6 @@ import {
   ZONE_WIDTH,
 } from "../palette";
 import {
-  loadPlan,
-  loadReplaySeedInk,
-  loadRaster,
-  loadSealClasses,
-  loadZoneGeometry,
   paintPlan,
   paintClassRaster,
   paintRaster,
@@ -31,6 +26,7 @@ import {
   type ZoneViewport,
   zoneViewport,
 } from "../world";
+import { useRunsSource } from "../source";
 import type { PanelHover } from "./unknown";
 import {
   HatchPattern,
@@ -48,6 +44,7 @@ export function ZonePanel(props: {
   underlay: boolean;
   fbKey?: string;
 }) {
+  const source = useRunsSource();
   const { runId, zone, maxW, maxH, underlay } = props;
   const { items, hoverFlag } = useFb();
   const stagedItem = props.fbKey ? (items.find((i) => i.key === props.fbKey) ?? null) : null;
@@ -83,24 +80,26 @@ export function ZonePanel(props: {
 
   useEffect(() => {
     let live = true;
-    loadZoneGeometry(runId, zone.Tsv)
+    source
+      .loadZoneGeometry(runId, zone.Tsv)
       .then((g) => live && setGeom(g))
       .catch(() => live && setGeom({ rooms: [], polys: new Map(), residues: [] }));
     return () => {
       live = false;
     };
-  }, [runId, zone.Tsv]);
+  }, [runId, zone.Tsv, source]);
 
   useEffect(() => {
     let live = true;
     setPlan(undefined);
-    loadPlan(runId, zone.Ink)
+    source
+      .loadPlan(runId, zone.Ink)
       .then((value) => live && setPlan(value))
       .catch(() => live && setPlan(null));
     return () => {
       live = false;
     };
-  }, [runId, zone.Ink]);
+  }, [runId, zone.Ink, source]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -109,10 +108,10 @@ export function ZonePanel(props: {
     void (async () => {
       const [ink, seals, close, sealClasses] = underlay
         ? await Promise.all([
-            loadReplaySeedInk(runId, zone.Ink).catch(() => null),
-            zone.Seals ? loadRaster(runId, zone.Seals).catch(() => null) : null,
-            zone.Close ? loadRaster(runId, zone.Close).catch(() => null) : null,
-            zone.Seals ? loadSealClasses(runId, zone.Seals).catch(() => null) : null,
+            source.loadReplaySeedInk(runId, zone.Ink).catch(() => null),
+            zone.Seals ? source.loadRaster(runId, zone.Seals).catch(() => null) : null,
+            zone.Close ? source.loadRaster(runId, zone.Close).catch(() => null) : null,
+            zone.Seals ? source.loadSealClasses(runId, zone.Seals).catch(() => null) : null,
           ])
         : [null, null, null, null];
       if (!live) return;
@@ -145,7 +144,7 @@ export function ZonePanel(props: {
     return () => {
       live = false;
     };
-  }, [runId, zone, vp, geom, plan, underlay]);
+  }, [runId, zone, vp, geom, plan, underlay, source]);
 
   return (
     <div
