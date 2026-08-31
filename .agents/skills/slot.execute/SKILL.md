@@ -34,18 +34,23 @@ lane choice, the proven loop shapes, and the lies to defend against. Defensive l
 
 - Canonical invocation is `dotnet tool run pe-revit -- <verb>` from the repo/worktree root. Bare
   `pe-revit` resolves the *installed* build. Every envelope names its answerer in
-  `binary{executable,root,rule}`; human mode prints `binary root:` whenever it is not your cwd's
-  repo — read it before believing an odd answer, especially from a worktree.
+  `binary{origin,assembly,sha256,informationalVersion}` (`origin: checkout | dev-installed |
+  installed-global | unknown`) and the repo it ruled from in `command{cwd,commandRoot,commandRule,
+  commandManifest}` — read both before believing an odd answer, especially from a worktree.
 - **`pea` is checkout-pinned, not worktree-safe**: its dev shim routes to the main checkout and
   discloses the target; from a worktree treat `pea` results as evidence about the tree it names.
 - **Custody**: the resolver refuses every mutation on an `observed` Revit; you never need to guard
   it yourself. The user's own Revit is observed unless they started it through `pe-revit`. Once a
   controlled session is yours, restarts and document opens are yours too — do them, don't hand back.
   If SDK output, machine state, and your expectations misalign: STOP and let the user reconcile.
-- Preflight before any mutation: `session status --json` (custody, origin, lane, buildStamp,
-  legs[], documents[] per row; `resolved` is null on `status` — read `sessions[]` yourself).
+- Preflight before any mutation: `session list --json` (`--id N` for one row, `--all` to include
+  stopped/failed/missing). A row carries `id, phase, detail, origin, year, project, worktree,
+  payload ("checkout"|"installed"), generationId, generationRoot, buildStamp, pid,
+  processStartUtc, revitExecutable, receiptPath, overridePath, failure, observedAtUtc` — no
+  custody field, because every registry row IS controlled; an observed (user-launched) Revit does
+  not appear in `session list` at all — the host bridge is the only census of those.
   **`ready` means the SDK bridge answered, not that the product loaded**: `session logs --id N`
-  is the only witness for `LoaderStartupFailed Pe.App` (dies when: start/status surface loader
+  is the only witness for `LoaderStartupFailed Pe.App` (dies when: start/list surface loader
   failures as diagnostics, SDK).
 - Preflight the boundary too: explicit workdir on every compound command; prove a guessed path with
   `rg --files -g <pattern>` before building on it.
@@ -55,16 +60,22 @@ lane choice, the proven loop shapes, and the lies to defend against. Defensive l
 1. **deterministic**, no Revit. Tests are temporary feedback, not a suite: one red loop while building, one deterministic run over the whole chain when it closes, the rest deleted. `pe-revit test --project <P>` picks this rung by itself for a
    year-neutral project. Put judgment here; spend Revit time only on proof.
 2. **fresh**, the default Revit-backed proof: `pe-revit test --project <RevitTests csproj>` picks
-   it for a Revit-backed project, launches its own ephemeral **controlled** Revit (row
-   `{stem}-fresh-{yy}`, `origin: test`, visible in `session status`, swept by `session gc`), and
-   holds the per-year quarantine lease. Grind: `test --plan` after any lane change → edit →
-   `test --filter "Name~<OneTest>" --no-build` → repeat. `--year` XOR `--configuration`.
-   Parameterize probes via env vars (`$env:PE_RHVAC_MODEL=...`) instead of new flags.
+   it for a Revit-backed project and launches its own ephemeral **controlled** Revit
+   (`origin: test`, visible in `session list --all`). Grind: `test --plan` after any lane change →
+   edit → `test --filter "Name~<OneTest>" --no-build` → repeat. `--configuration` and `--unstick`
+   left the surface at beta.131; year selection is `--year` only (or the project's
+   `PeDefaultRevitYear`). Parameterize probes via env vars (`$env:PE_RHVAC_MODEL=...`) instead of
+   new flags.
 3. **attached**, against a controlled session you name: `test --attach --id <session>`; it
    converges that session first (`--no-build` skips the converge). Static refusals are immediate
    and typed (`test.attach-preflight`).
 4. **installed**: `install repair` runs the ladder and reports which rung fixed it; then a bare
    `session start --year Y` (no `--project`) runs the installed payload under a controlled id.
+   `install apply` also deploys the SDK session bridge beside the bootstrap: a content-hash dir
+   (`Addins\{year}\Pe.Revit.Bridge\{hash}\`) plus a `Pe.Revit.Bridge.addin` flip to it. After
+   ANOTHER repo's `install apply` touched the shared installed product (e.g. the SDK's own live
+   drive), this checkout's `install verify` goes red on hash mismatches; its `fix:` (`install
+   apply --force`) is the supported reconcile.
 
 `--plan` on `test` and `session start` prints the chosen rung/legs and the exact commands without
 running them — use it before every Revit-contacting run in a new worktree.
@@ -76,41 +87,45 @@ Revit-backed projects** — it drives its own Revit outside the SDK's lifecycle 
 
 ## Sessions and hot reload
 
-One noun, one family. `session start --project <P> --year Y [--id N] [--doc <path|recent:T>]`
-builds once, byte-copies into an immutable generation, launches Revit with hot reload armed, and
-blocks to SDK-ready (~55-90 s cold; `--no-wait` returns at launch, then `session watch`). Without
-`--project` the session runs the installed payload. Ids are minted `{project-stem|installed}-{yy}`;
-pass `--id` only when you want several sessions of one project+year. Restart is the only
-freshness mechanism (`session restart --id N`, keeps the active document; the `keep-doc` leg lists
-what it reopened and what it dropped). `session stop`, then `session gc --id N --forget` retires a
-row you are done with.
+One noun, five verbs since beta.131: `start`, `list`, `hr`, `stop`, `logs`. The retired words —
+`session status` (→ `list --id`), `session restart` (→ `hr --restart`), `session converge`,
+`session watch`, `session gc`, `protocol-server` — no longer parse; do not type them.
 
-`session converge --id N` is an **attachment act**: it starts the emitter against an already
-hot-reloadable session (no session → starts one), never restarts, and is idempotent. The emitter
-watches this checkout's source tree — one emitter per checkout. The edit loop:
+`session start --project <P> --year Y [--id N] [--doc <path|recent:T>] [--plan]
+[--timeout-seconds S]` builds once, byte-copies into an immutable generation under
+`%LOCALAPPDATA%\Pe.Revit.Sdk\sessions\{id}\generations\`, launches Revit, and blocks to SDK-ready
+(minutes cold; there is no `--no-wait` — size the timeout instead). Without `--project` the
+session runs the installed payload. Ids are minted `{project-stem|installed}-{yy}` from the main
+checkout and `{stem}-{yy}-{worktree-dir}` from a worktree, so worktree sessions never collide
+with main's; pass `--id` only for several sessions of one project+year. States are typed:
+start answers `booting | doc-failed | existing | failed | gone | planned | ready | unresponsive`;
+a start on an existing id answers `existing` rather than colliding.
 
-| Situation | Do |
-|---|---|
-| emitter watching, ordinary edit | nothing — it applies on save (~1-2 s); `session converge --id N` re-reports `watching` + `encGeneration`, and names the emitter events file |
-| rude edit (rename / signature / deleted member) | converge reports `session.restart-required` → `session restart --id N` |
-| compile error | converge reports `blocked` → fix the error and save; never restart for it |
-| no emitter | `session converge --id N` |
+`session hr --id N` is the whole edit loop: it applies your latest saved edit to the running
+Revit, hot (EnC delta, keeps the pid, answer `hot-apply`) when the payload and year allow it,
+else cold (restart + reopen the active document, answer `cold-swap`; its result lists `reopened`
+and `dropped`). `--restart` skips the hot attempt. A rude edit surfaces
+`session.restart-required`; a compile error blocks hr — fix and re-run, never restart for it.
 
-Evidence gradient, weakest to strongest: compile < `apply` event < changed behavior. `apply`
+Evidence gradient, weakest to strongest: compile < `hr` verdict < changed behavior. `hot-apply`
 proves delta acceptance, not product behavior; re-run the behavior before claiming a reload
 landed. Which edits hot-reload vs require restart is SDK truth (`docs/HOT_RELOAD.md` in
 Pe.Revit.Sdk). Unsigned-addin approval is an always-on start leg, not a verb you type.
+`session stop --id N` (`--force` only after a verified stuck pid) is the only retirement verb
+left; stopped rows stay visible under `session list --all`.
 
 ## Documents and op receipts
 
-Documents are session state: `doc open <path> [--detach] --id N`, `doc current [--doc T|P]`,
-`doc close --intent keep|discard [--doc T|P]` (default: the active document; closing the active one hands
-activation to another open document first; `--sync` is a cloud write and is refused — synchronize and
-relinquish stay user actions), `doc recents` (Revit.ini, no bridge).
-`session start --doc` opens on boot; a failed open leaves a RUNNING session + a doc diagnostic.
-Every mutating bridge op journals a receipt before it answers: if your shell died mid-op,
-`op list --id N` then `op result <requestId>` recovers the answer. Never infer an open document —
-read `doc current`.
+Documents are session state: `doc open <path|recent:T> [--detach] [--conflict-policy
+keep|discard-latest] --id N` (conflict-policy is REQUIRED for a cloud open; there is no `--year`
+on open), `doc current [--doc T|P]`, `doc close --intent keep|discard [--doc T|P]` (default: the
+active document; closing the active one hands activation to another open document first;
+`--sync` is a cloud write and is refused — synchronize and relinquish stay user actions),
+`doc recents [--year Y]` (Revit's own list, no bridge). `session start --doc` opens on boot; a
+failed open answers state `doc-failed` and leaves a RUNNING session. Every mutating bridge op
+journals a receipt before it answers: if your shell died mid-op, `op list --id N [--tail]` then
+`op result <requestId>` recovers the answer; `op status <key> --id N` reads by op key. Never
+infer an open document — read `doc current`.
 
 ## Host/web lane (TypeScript)
 
@@ -123,14 +138,17 @@ read `doc current`.
   once the product's bridge registers, so until then a `legBecause: lane:dev` leg is a lane
   match, not proof). A stale SDK sample in `Addins\{year}` (another product's older
   `Pe.Revit.Loader.dll`) wins the loader identity for the whole process — `session logs` shows
-  `LoaderStartupFailed` and the first op kills the bridge; `install list` names the culprit. `session status` shows the host as a `leg` of its session (`up|down`,
-  `how: health|tcp|pid`, `legBecause`). Never assume 5180. Dev and installed hosts are SIBLINGS —
+  `LoaderStartupFailed` and the first op kills the bridge; `install list` names the culprit.
+  Companion-leg narration left the CLI with `session status` (beta.131): `session start`/`hr`
+  results still carry `legs[]`, but no list verb narrates the host leg — the service file and
+  `GET /sessions` on the host are the leg witnesses now. Never assume 5180. Dev and installed
+  hosts are SIBLINGS —
   a dev host never evicts the installed `host`, so this pane survives a session start through the
   route, and every client picks its host BY LANE: `--host dev | installed | <worktree path> | <url>`.
 - The host relays session lifecycle for the browser at `GET /sessions` and `POST /sessions
-  {action: start|stop|restart|converge, id?, year?, doc?}` — the SDK envelope passed through
-  untouched. `start` takes `lane: installed` (default, the bare CLI meaning) or `dev` (this
-  checkout's Pe.App; 400 on a host with no checkout).
+  {action: start|stop|restart, id?, year?, doc?}` — the SDK envelope passed through untouched
+  (`restart` shells `session hr --restart`). `start` takes `lane: installed` (default, the bare
+  CLI meaning) or `dev` (this checkout's Pe.App; 400 on a host with no checkout).
 - **`vp check` is a gate, not a poll**: `vp check --fix <targets>` once, then `vp check <targets>`
   once. Never loop it. Separate formatter noise from type/lint output when diagnosing. Targets are
   PATHS (`apps/host/src`), never package names: `vp check @pe/host` prints `pass` having checked
@@ -238,10 +256,11 @@ herdr.ps1 stop   S                             stop then delete; absent is succe
 ## Timeouts, backgrounding, cleanup
 
 - Revit operations are minutes-scale. The shell's default timeout silently overrides
-  `--timeout-seconds`; set the client timeout ≥ the CLI timeout, or `--no-wait` + `session watch`.
-  `doc open` takes no `--timeout-seconds` — background it and read `op result`.
-  Never sleep-then-poll; read `session status` before any retry. Leases and quarantine: `test
-  --unstick` owns reclaim; never hand process surgery.
+  `--timeout-seconds`; set the client timeout ≥ the CLI timeout, or background the command and
+  read the envelope from a tee file. `doc open` takes no `--timeout-seconds` — background it and
+  read `op result`. Never sleep-then-poll; read `session list` before any retry. Never hand
+  process surgery: `session stop --force` after a verified stuck pid is the whole toolkit
+  (`test --unstick` left the surface at beta.131).
 - Never probe CLI surface through app-booting wrappers (`pnpm run pea -- --help` boots the app);
   never foreground a smoke suite to read three tail lines — background once, tee, poll.
 - The permission sandbox can block localhost HTTP, indistinguishable from a dead host. Probe
@@ -263,14 +282,15 @@ herdr.ps1 stop   S                             stop then delete; absent is succe
 | robocopy exit 0–7 | success tiers, only ≥8 is failure |
 | herdr group help exit 2 / server errors exit 1 | help prints to stderr by design; errors are JSON on stderr |
 
-Every `--json` envelope carries `diagnostics[{code,detail,fix}]` and `nextSteps[]`; branch on the
-diagnostic `code` (never on exit 3 alone), follow `fix:` before inventing a remedy, and when a
-prescribed fix fails once, diagnose — don't re-run the prescription. When `diagnostics` is empty
-but the verdict is bad, read `result`: `doctor` exits 0 with `ok:false` checks, `test --attach`
-nests the real code under `result.liveSync[0].json.diagnostics`, `install verify` puts the remedy
-in `result.next`, and `install repair --release latest` can silently downgrade below
-`product.payloads.json` (dies when: each lifts its failure to the top level, SDK). Windows shell-tax rules live
-in `AGENTS.md`.
+Every `--json` envelope carries `diagnostics[{code,detail,fix}]`, `nextSteps[]`, `related[]`, and
+`guide`; branch on the diagnostic `code` (never on exit 3 alone), follow `fix:` before inventing
+a remedy, and when a prescribed fix fails once, diagnose — don't re-run the prescription. When
+`diagnostics` is empty but the verdict is bad, read `result`: `install apply` answers `ok:false`
+exit 1 with EMPTY diagnostics when its integrity write fails, burying the only clue in
+`result.actions[].Status` — run `install verify` to get the coded diagnostics (proven
+2026-08-30, beta.131). `install repair --release latest` can silently downgrade below
+`product.payloads.json` (dies when: each lifts its failure to the top level, SDK). Windows
+shell-tax rules live in `AGENTS.md`.
 
 ## Skill-set check
 
@@ -278,12 +298,12 @@ in `AGENTS.md`.
 
 ## Guardrails
 
-- Never `Stop-Process`/`taskkill` Revit.exe by hand: `session stop|restart` (`--force` only after a
-  verified stuck pid), `session gc`, and `test --unstick` own process lifecycle; the resolver
-  refuses anything it cannot prove it controls. Preserve other worktrees' and installed sessions.
+- Never `Stop-Process`/`taskkill` Revit.exe by hand: `session stop` (`--force` only after a
+  verified stuck pid) and `session hr` own process lifecycle; the resolver refuses anything it
+  cannot prove it controls. Preserve other worktrees' and installed sessions.
 - Never treat an open document as implicit — `doc current`.
 - Never infer freshness from an isolated build, an old log line, or a matching filename; the row's
-  `buildStamp` and the emitter's `apply` event are the witnesses.
+  `buildStamp` and `session hr`'s own verdict are the witnesses.
 - Never use harness worktree tools; `git worktree add` as repo siblings, never nested.
 - A fresh worktree has no `node_modules` and `pnpm install` there is banned. `wire-worktree.ps1 <worktree> [<source>]` beside `herdr.ps1` builds it: per-entry junctions to a healthy checkout (main when its install is whole, else `Pe.Tools-tooling-boot`) for `source/pe-tools` and every `apps/*`, `packages/*`, with workspace links (`@pe/*`) re-pointed at THIS worktree's tree. A single junction of the whole `node_modules` proves the wrong tree (2026-08-25). Proof of the link: `(Get-Item apps/web/node_modules/@pe/agent-contracts).Target` is inside the worktree and tsc exits 0 from `apps/web`. In a wired worktree `pnpm exec` runs a deps check that tries to install and aborts; use `pnpm --config.verify-deps-before-run=false exec <cmd>` or `node_modules/.bin/<cmd>`.
 - After a merge that moves `pnpm-lock.yaml`, a checkout's install can drift while `pnpm install --frozen-lockfile` and `--force` both print "Already up to date": `node_modules/.modules.yaml` still names the old graph and the deterministic lane goes red on phantom failures (main @ `bf3473f`, 2026-08-27: 28 web tests, green in a sibling worktree at the same commit). Diagnose with `grep <expected-version> node_modules/.modules.yaml`; repair with `rm -rf node_modules apps/*/node_modules packages/*/node_modules && pnpm install --frozen-lockfile`. A red lane in one checkout and green in another at one commit is install drift until proven otherwise.

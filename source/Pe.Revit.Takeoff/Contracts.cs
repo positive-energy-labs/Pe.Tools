@@ -16,8 +16,7 @@ public enum TakeoffSeedSource { RegionCores, Hybrid, DistanceMaxima }
 public enum TakeoffSource { Detector, Native }
 public enum ResidueReason { Border, Crumb, Rejected, Excluded }
 
-public sealed class TakeoffOptions
-{
+public sealed class TakeoffOptions {
     public bool InferLevelProfile = true;   // false = caller owns every policy knob explicitly
     public string LevelNameContains = "";   // matched against host Level.Name
     public double CellFt = 0.25;            // grid resolution; 0.25 resolves stud walls
@@ -38,9 +37,9 @@ public sealed class TakeoffOptions
     public double CeilingCloseFt = 0;       // close gaps <= this in the ceiling mask (rafter-only roofs read patchy)
     public double BoundarySimplifyFt = 2.0; // physical wall-fit tolerance for raster boundary chains
                                             // (coarsening falsified twice — LEDGER 2026-08-14)
-    // ---- Shared-boundary regularizer frame snapping (SpaceBoundaryNetwork.cs) ----
-    // 35/12 are the fan-out-tuned values (+4 rooms, BoundaryDrift 25->21, ink flat); the rest are
-    // the consts that stage always carried. SnapTol 45/20 is a per-zone area-dominant lever.
+                                            // ---- Shared-boundary regularizer frame snapping (SpaceBoundaryNetwork.cs) ----
+                                            // 35/12 are the fan-out-tuned values (+4 rooms, BoundaryDrift 25->21, ink flat); the rest are
+                                            // the consts that stage always carried. SnapTol 45/20 is a per-zone area-dominant lever.
     public double BoundarySnapToleranceDeg = 35;  // long edge joins a frame axis within this
     public double BoundarySnapShortDeg = 12;      // short edges must be nearly on-axis already
     public double BoundarySnapShortFt = 6;        // the long/short boundary
@@ -70,9 +69,9 @@ public sealed class TakeoffOptions
     public string? EvidenceReferenceViewName; // production view whose graphics + orientation evidence should match
     public bool DumpReplaySnapshot = true;  // persist post-Revit inputs as replay_<level>.bin for offline
                                             // DetectSnapshot.Replay (see DetectSnapshot header for live-only steps)
-    // ---- Partition formulation knobs (PartitionFormulation.cs) ----
-    // Defaults, not per-project constants: evidence weights are calibratable; widths follow building
-    // conventions (door ~2.5 ft).
+                                            // ---- Partition formulation knobs (PartitionFormulation.cs) ----
+                                            // Defaults, not per-project constants: evidence weights are calibratable; widths follow building
+                                            // conventions (door ~2.5 ft).
     public TakeoffSeedSource SeedSource = TakeoffSeedSource.RegionCores;
     public double SeedClearFt = 1.5;        // DistanceMaxima: seed plateau must sit this clear of strong evidence
     public double CeilStepEvidenceFt = 0.75;   // ceiling-height jump where boundary evidence starts
@@ -96,7 +95,7 @@ public sealed class TakeoffOptions
     // falsified as a per-zone discriminator on framing-clean bins (DECISIONS 2026-08-16).
     public double SmallZoneSqft = 750;      // at or under: solve, then hold whole if no room survives (0 = off);
                                             // current projectA: 5 of 16 solve; the other 11 fall back whole
-    // ---- Pre-solve ink hygiene (InkHygiene.cs) ----
+                                            // ---- Pre-solve ink hygiene (InkHygiene.cs) ----
     public int InkClusterWhiteoutCells = 100; // drop floating in-zone ink clusters smaller than this (0 = off)
     // ---- Zone-edge ink pull (PartitionFormulation.Run) ----
     // Designers draw zone edges THROUGH walls (2026-08-16 survey: 83% of all project-a zone-boundary
@@ -119,8 +118,8 @@ public sealed class TakeoffOptions
     // ---- Post-solve disposition recombination (TakeoffPromotion.cs stages) ----
     public double AbsorbNeighborMaxSqft = 60;  // room under this area may absorb into a neighbor (0 = off)
     public double AbsorbNeighborSharedPerimeterFraction = 0.45; // ...holding this share of its perimeter; measured
-                                            // project-a ceiling is 0.54 (0.6 never fires); 0.30 is a per-zone lever
-                                            // that cracks lattice zones (LL08) but bulldozes good rooms elsewhere
+                                                                // project-a ceiling is 0.54 (0.6 never fires); 0.30 is a per-zone lever
+                                                                // that cracks lattice zones (LL08) but bulldozes good rooms elsewhere
     public double AbsorbNakedMaxSqft = 0;   // naked-separator absorb candidacy extends to rooms under this
                                             // area (0 = candidacy stays AbsorbNeighborMaxSqft). FALSIFIED AS
                                             // A GLOBAL DEFAULT at 400 (exp/ll08-forensics 2026-08-17): in the
@@ -135,13 +134,13 @@ public sealed class TakeoffOptions
                                             // rule keyed on ink trust (AdaptivePolicy seam, recalibration
                                             // ritual) — never as a default.
     public double AbsorbNakedSeparatorFraction = 0.6; // multi-neighbor absorb: when no single neighbor
-                                            // clears the share bar but the TOTAL neighbor-shared perimeter does,
-                                            // merge only if at least this fraction of the shared boundary stands
-                                            // on NO WALL INK (seed ink; door-heads are openings, plugs are
-                                            // heuristics — neither is a wall). An unbacked separator is a
-                                            // watershed line, not a wall. Board raw census 2026-08-16: genuine
-                                            // small rooms (closets) top out at 0.46 naked; watershed slivers sit
-                                            // at 0.64-1.00 (LL09 R04 = 0.95). 0.6 splits with margin. 0 = off.
+                                                      // clears the share bar but the TOTAL neighbor-shared perimeter does,
+                                                      // merge only if at least this fraction of the shared boundary stands
+                                                      // on NO WALL INK (seed ink; door-heads are openings, plugs are
+                                                      // heuristics — neither is a wall). An unbacked separator is a
+                                                      // watershed line, not a wall. Board raw census 2026-08-16: genuine
+                                                      // small rooms (closets) top out at 0.46 naked; watershed slivers sit
+                                                      // at 0.64-1.00 (LL09 R04 = 0.95). 0.6 splits with margin. 0 = off.
     public double EdgeBandFt = 2.0;            // band inside the zone boundary that recombines outward (0 = off)
     public double EdgeBandAreaFraction = 0.5;  // room with this much area inside the band merges inward
     // ---- Frame-local projection (FrameLocalProjector.cs) ----
@@ -225,8 +224,7 @@ public sealed class TakeoffOptions
     public TakeoffOptions Clone() => (TakeoffOptions)this.MemberwiseClone();
 }
 
-public sealed class RoomResult
-{
+public sealed class RoomResult {
     public string Id = "";                  // R01, R02, ... (area-descending)
     public double RawSqft;                  // cell-count area (finish-face-ish)
     public double PerimeterFt;
@@ -239,8 +237,7 @@ public sealed class RoomResult
     internal string? MergedFrom;             // sidecar provenance for resolved survivor Spaces
 }
 
-public sealed class ResidueResult
-{
+public sealed class ResidueResult {
     public string Id = "";
     public ResidueReason Reason;
     public double RawSqft;
@@ -262,8 +259,7 @@ internal sealed record DetectorOwnerMetadata(
 
 // Exact detector authority retained in-process. Geometry remains derived output; this is deliberately
 // absent from TSV until the whole partition can be serialized and round-tripped together.
-internal sealed class DetectorOwnership
-{
+internal sealed class DetectorOwnership {
     private readonly int[] ownerByCell;
     private readonly bool[] claimedByCell;
     private readonly DetectorUnownedCause[] unownedCauseByCell;
@@ -272,8 +268,7 @@ internal sealed class DetectorOwnership
     internal DetectorOwnership(
         int width, int height, double minX, double minY, double cellFt,
         int[] ownerByCell, bool[] claimedByCell, DetectorUnownedCause[] unownedCauseByCell,
-        IReadOnlyDictionary<int, DetectorOwnerMetadata> metadata)
-    {
+        IReadOnlyDictionary<int, DetectorOwnerMetadata> metadata) {
         if (ownerByCell.Length != width * height
             || claimedByCell.Length != ownerByCell.Length
             || unownedCauseByCell.Length != ownerByCell.Length)
@@ -286,7 +281,7 @@ internal sealed class DetectorOwnership
         this.ownerByCell = (int[])ownerByCell.Clone();
         this.claimedByCell = (bool[])claimedByCell.Clone();
         this.unownedCauseByCell = (DetectorUnownedCause[])unownedCauseByCell.Clone();
-        this.metadata = new Dictionary<int, DetectorOwnerMetadata>(metadata);
+        this.metadata = metadata.ToDictionary(kv => kv.Key, kv => kv.Value);
     }
 
     internal int Width { get; }
@@ -300,8 +295,7 @@ internal sealed class DetectorOwnership
     internal DetectorUnownedCause UnownedCauseAt(int cell) => this.unownedCauseByCell[cell];
 }
 
-public sealed class TakeoffResult
-{
+public sealed class TakeoffResult {
     public string LevelName = "";
     public double LevelElevation;           // ProjectElevation (internal origin)
     public TakeoffSource? Source;           // null = detector (legacy); Native = Revit Space readback
@@ -326,8 +320,7 @@ public sealed class TakeoffResult
 
     // Tab-separated payload. Polygon coordinates use round-trip precision: six-decimal rounding
     // made valid overlay residue self-intersect on reload. Never serialize geometry at display precision.
-    public string ToTsv()
-    {
+    public string ToTsv() {
         var ic = CultureInfo.InvariantCulture;
         var sb = new StringBuilder();
         sb.AppendLine($"META\tlevel\t{this.LevelName}\nMETA\telev\t{this.LevelElevation.ToString("F6", ic)}");
@@ -342,8 +335,7 @@ public sealed class TakeoffResult
         // renderer convention. A 7-column ROOM line means the package predates the column or is
         // raw detector output: disposition unknown, and readers must not assume accepted.
         string disposition = this.DispositionsResolved ? "\taccepted" : "";
-        foreach (var r in this.Rooms)
-        {
+        foreach (var r in this.Rooms) {
             sb.AppendLine($"ROOM\t{r.Id}\t{r.RawSqft.ToString("F1", ic)}\t{r.PerimeterFt.ToString("F1", ic)}\t{r.LabelX.ToString("F6", ic)}\t{r.LabelY.ToString("F6", ic)}\t{r.MeanCeilingFt.ToString("F2", ic)}{disposition}");
             sb.AppendLine($"POLY\t{r.Id}\touter\t{PolyStr(r.Polygon)}");
             foreach (var h in r.Holes) sb.AppendLine($"POLY\t{r.Id}\thole\t{PolyStr(h)}");

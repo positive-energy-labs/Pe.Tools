@@ -2,10 +2,9 @@
  * Target model — the web-side view of the host's `resolveSessionTarget` (apps/host/src/bridge.ts).
  *
  * This file used to carry its own `SessionLane` union and its own selector grammar, hand-synced to
- * the host's. Both are gone: `Custody` and `Lane` are imported from the SDK's GENERATED contract
- * (`apps/host/src/generated/pe-revit-contract.ts`, drift-guarded by `pe-revit doctor`), so there is
- * one vocabulary and adding a lane value in the SDK is a compile error here rather than a silent
- * disagreement.
+ * the host's. Both are gone: `Custody` and `Lane` come from `@pe/host-contracts/contracts`
+ * (bridge-protocol.ts), the one home for that vocabulary since SDK beta.131 dropped the unions
+ * from its generated contract.
  *
  * A Target is a SELECTOR STRING, never a resolved session id. Selectors are stable across process
  * restarts (`observed` still means the session pe-revit holds no receipt for after a restart; a raw
@@ -17,7 +16,7 @@
  * host.
  */
 
-import type { Custody, Lane } from "@pe/host-contracts/pe-revit-contract";
+import type { Custody, Lane } from "@pe/host-contracts/contracts";
 import { addressSchema, type Address } from "@pe/agent-contracts";
 
 export type { Custody, Lane };
@@ -29,7 +28,7 @@ export interface SessionFacts {
   processId: number;
   /** Payload SOURCE, the SDK's only two values. Null when the payload reported none. */
   lane: Lane | null;
-  /** The id `pe-revit session status` prints, when this payload was launched by pe-revit. */
+  /** The id `pe-revit session list` prints, when this payload was launched by pe-revit. */
   sdkSessionId?: string;
   /**
    * `controlled` = pe-revit holds a receipt (full lifecycle); `observed` = it does not (reads

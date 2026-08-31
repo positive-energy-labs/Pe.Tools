@@ -135,7 +135,7 @@ function DataTablesRoute() {
             icon={CheckCheck}
             busy={busy === "apply"}
             disabled={!draft || draft.name.trim().length === 0}
-            onClick={() => void applyDraft()}
+            onClick={() => applyDraft()}
             reason={applyReason}
           />
         }

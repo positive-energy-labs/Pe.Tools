@@ -10,6 +10,15 @@ export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;
 
 const nullableString = Schema.optional(Schema.NullOr(Schema.String));
 
+// SDK vocabulary this wire speaks but the SDK's generated contract stopped exporting at
+// beta.131 (session list rows became untyped there). Owed: the SDK regenerates these unions;
+// until then this file is their one home.
+// `controlled` = pe-revit holds a receipt (full lifecycle); `observed` = reads only.
+export type Custody = "controlled" | "observed";
+// Payload SOURCE only. The CLI's session rows say `payload: "checkout" | "installed"`;
+// this wire and the UI say `dev` for checkout payloads. TODO: unwind this!!!
+export type Lane = "dev" | "installed";
+
 export const hostModuleDescriptorSchema = Schema.Struct({
   activeDocumentKind: Schema.Literals(["Any", "ProjectOnly", "FamilyOnly"]),
   defaultRootKey: Schema.String,

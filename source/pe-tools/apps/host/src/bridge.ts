@@ -10,8 +10,9 @@ import {
   type BridgeRegistrationRequest,
   type BridgeResponse,
   type BridgeStateSnapshot,
+  type Custody,
+  type Lane,
 } from "@pe/host-contracts/contracts";
-import type { Custody, Lane } from "./generated/pe-revit-contract.ts";
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to
 // it. With stable ids (hash(pid + processStartUtc)) a reconnect re-registers the SAME session id,
@@ -21,8 +22,8 @@ type Session = {
   readonly pending: Ref.Ref<BridgePendingRequest | null>; // single in-flight mailbox
   readonly sessionId: string;
   readonly processId: number;
-  // Observed selector metadata, never identity. `lane` is the SDK's generated vocabulary verbatim
-  // (dev | installed — payload SOURCE only); `sdkSessionId` is the id `pe-revit session status`
+  // Observed selector metadata, never identity. `lane` is the SDK's vocabulary verbatim
+  // (dev | installed — payload SOURCE only); `sdkSessionId` is the id `pe-revit session list`
   // prints for this session; buildStamp is the LOADED payload's stamp as reported at registration —
   // the host never computes staleness.
   readonly lane: Lane | null;

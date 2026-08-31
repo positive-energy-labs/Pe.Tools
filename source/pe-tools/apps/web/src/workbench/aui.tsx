@@ -384,4 +384,3 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
     </div>
   );
 };
-

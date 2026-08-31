@@ -42,9 +42,7 @@ export function segSignature(segment: ContextSegment): string {
   return `${Math.round(segment.tokens)}|${items}`;
 }
 
-export function signatureMap(
-  breakdown: ContextBreakdown | undefined,
-): Map<string, string> {
+export function signatureMap(breakdown: ContextBreakdown | undefined): Map<string, string> {
   const map = new Map<string, string>();
   for (const segment of breakdown?.segments ?? []) map.set(segment.id, segSignature(segment));
   return map;

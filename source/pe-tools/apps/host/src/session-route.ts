@@ -5,10 +5,9 @@ import { join } from "node:path";
 import {
   docOpenArgv,
   docRecentsArgv,
+  sessionHrArgv,
   sessionListArgv,
-  sessionRestartArgv,
   sessionStartArgv,
-  sessionStatusArgv,
   sessionStopArgv,
 } from "./generated/pe-revit-contract.ts";
 import { hostOwnership, type HostLane } from "./host-ownership.ts";
@@ -23,13 +22,14 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
  *
  * Untouched is the whole contract. This file forges NO envelope of its own: every state, code,
  * diagnostic and nextStep a caller sees is the SDK's, so the browser and an agent running
- * `pe-revit session list` or exact `session status` read the same words. A hung CLI is the one
+ * `pe-revit session list` read the same words. A hung CLI is the one
  * thing we cannot relay (no
  * envelope was ever produced) and is reported as a plain 504, not as a hand-made `unresponsive`
  * result that would look like an SDK verdict without being one.
  *
- * GET /sessions → `session list --json`, or exact `session status --id` when an id is supplied.
- * POST /sessions {action: start|stop|restart, …} → the matching verb.
+ * GET /sessions → `session list --json`, narrowed with `--id` when an id is supplied.
+ * POST /sessions {action: start|stop|restart, …} → the matching verb (restart shells
+ * `session hr --restart`, the SDK's cold-swap since beta.131 deleted `session restart`).
  */
 
 type SessionAction = "start" | "stop" | "restart";
@@ -127,20 +127,23 @@ export function sessionCliArgs(
         year: request.year!,
         id: request.id,
         doc: request.doc,
-        origin: "web",
         timeoutSeconds: request.timeoutSeconds,
       });
     case "restart":
-      return sessionRestartArgv({ id: request.id, timeoutSeconds: request.timeoutSeconds });
+      return sessionHrArgv({
+        id: request.id,
+        restart: true,
+        timeoutSeconds: request.timeoutSeconds,
+      });
     case "stop":
       return sessionStopArgv({ id: request.id, force: request.force });
   }
 }
 
-/** GET (status/list) CLI args; `id` narrows to one session, `all` includes the graveyard. */
+/** GET (list) CLI args; `id` narrows to one session, `all` includes the graveyard. */
 export function sessionStatusArgs(id?: string | null, all = false): string[] {
   const pinned = id?.trim();
-  return pinned ? sessionStatusArgv({ id: pinned }) : sessionListArgv({ all });
+  return pinned ? sessionListArgv({ id: pinned }) : sessionListArgv({ all });
 }
 
 type SessionCliRunner<R = never> = (args: readonly string[]) => Effect.Effect<string, unknown, R>;
@@ -150,7 +153,6 @@ type SessionCliOutcome = { readonly status: number; readonly bodyJson: string };
 type DocOpenRequest = {
   readonly path: string;
   readonly id: string;
-  readonly year?: string;
   readonly conflictPolicy?: string;
   readonly detach?: boolean;
 };
@@ -176,7 +178,6 @@ export function parseDocOpenRequest(
     request: {
       path,
       id,
-      year: typeof record.year === "number" ? String(record.year) : readOptionalString(record.year),
       conflictPolicy: readOptionalString(record.conflictPolicy),
       detach: record.detach === true,
     },
@@ -228,7 +229,7 @@ export function executeSessionCli<R>(
           error: `pe-revit session ${timeoutContext.action}${target} did not answer within ${Math.round(timeoutMs / 1000)}s. The process may still be alive but blocked inside a Revit API call, which no timeout can cancel.`,
           nextSteps: [
             timeoutContext.id
-              ? `pe-revit session status --id ${timeoutContext.id} --json — read what the SDK actually observes`
+              ? `pe-revit session list --id ${timeoutContext.id} --json — read what the SDK actually observes`
               : `pe-revit session list --all --json — read what the SDK actually observes`,
             `pe-revit session stop${target} --force — force-stop that exact incarnation`,
           ],

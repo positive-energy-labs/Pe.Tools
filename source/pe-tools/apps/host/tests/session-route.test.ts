@@ -39,8 +39,6 @@ test("start on a source-linked (dev) host uses the checkout's Pe.App project", (
     "25",
     "--id",
     "scratch",
-    "--origin",
-    "web",
     "--json",
   ]);
 });
@@ -54,7 +52,7 @@ test("start on an installed-lane host passes NO --project: project-less start IS
   const request = parsed({ action: "start", year: "25" });
   expect(request.lane).toBe("installed");
   const args = sessionCliArgs(request, undefined);
-  expect(args).toEqual(["session", "start", "--year", "25", "--origin", "web", "--json"]);
+  expect(args).toEqual(["session", "start", "--year", "25", "--json"]);
   expect(parseSessionActionRequest({ action: "start", year: "25", lane: "sandbox" })).toMatchObject(
     {
       ok: false,
@@ -69,25 +67,17 @@ test("start on an installed-lane host passes NO --project: project-less start IS
 test("start carries an optional --doc for the end-user case", () => {
   expect(
     sessionCliArgs(parsed({ action: "start", year: "26", doc: "Tower.rvt" }), undefined),
-  ).toEqual([
-    "session",
-    "start",
-    "--year",
-    "26",
-    "--doc",
-    "Tower.rvt",
-    "--origin",
-    "web",
-    "--json",
-  ]);
+  ).toEqual(["session", "start", "--year", "26", "--doc", "Tower.rvt", "--json"]);
 });
 
 test("stop/restart map to --id verbs; stop honors force", () => {
+  // restart shells `session hr --restart` — beta.131 deleted `session restart`.
   expect(sessionCliArgs(parsed({ action: "restart", id: "scratch" }), undefined)).toEqual([
     "session",
-    "restart",
+    "hr",
     "--id",
     "scratch",
+    "--restart",
     "--json",
   ]);
   expect(sessionCliArgs(parsed({ action: "stop", id: "scratch", force: true }), undefined)).toEqual(
@@ -95,10 +85,10 @@ test("stop/restart map to --id verbs; stop honors force", () => {
   );
 });
 
-test("fleet reads use list and exact reads use status", () => {
+test("fleet and exact reads both use list; an id narrows it", () => {
   expect(sessionStatusArgs()).toEqual(["session", "list", "--json"]);
   expect(sessionStatusArgs(undefined, true)).toEqual(["session", "list", "--all", "--json"]);
-  expect(sessionStatusArgs("scratch")).toEqual(["session", "status", "--id", "scratch", "--json"]);
+  expect(sessionStatusArgs("scratch")).toEqual(["session", "list", "--id", "scratch", "--json"]);
 });
 
 test("document recents args carry an optional year", () => {
@@ -112,7 +102,6 @@ test("document open requires path and id and maps optional arguments", () => {
   const parsed = parseDocOpenRequest({
     path: "recent:Cloud.rvt",
     id: "dev-26",
-    year: 2026,
     conflictPolicy: "keep",
     detach: true,
   });
@@ -123,8 +112,6 @@ test("document open requires path and id and maps optional arguments", () => {
     "recent:Cloud.rvt",
     "--id",
     "dev-26",
-    "--year",
-    "2026",
     "--detach",
     "--conflict-policy",
     "keep",

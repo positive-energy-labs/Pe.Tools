@@ -47,7 +47,8 @@ function worldSub(world: WorldFacts): string {
 }
 
 function phaseVerdict(world: WorldFacts): Verdict {
-  const state = world.row?.state;
+  // beta.131 rows speak one word, `phase`; the old `state` field is gone.
+  const state = world.row?.phase;
   if (world.phase === "ready")
     return {
       word: state ?? "ready",
@@ -300,11 +301,12 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
         ),
       },
       {
-        key: "legs",
-        label: "legs",
+        // beta.131 list rows carry no legs; the row's live-state detail is the closest testimony.
+        key: "row-detail",
+        label: "detail",
         cell: (world) => (
           <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
-            {world.row?.legs?.map((leg) => `${leg.name} ${leg.state}`).join(" · ") || "no legs"}
+            {world.row?.detail || "—"}
           </span>
         ),
       },

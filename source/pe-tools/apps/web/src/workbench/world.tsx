@@ -539,13 +539,7 @@ function BudgetBar({
  * Composition fidelity lives in the per-layer rows below (exact tokens + share); this panel is the
  * budget/headroom view. Only renders when the runtime reports OM windows.
  */
-function ContextBudgetBar({
-  breakdown,
-  cache,
-}: {
-  breakdown: ContextBreakdown;
-  cache: CacheView;
-}) {
+function ContextBudgetBar({ breakdown, cache }: { breakdown: ContextBreakdown; cache: CacheView }) {
   const mw = breakdown.memoryWindows;
   if (!mw || mw.observationThreshold <= 0 || mw.reflectionThreshold <= 0) return null;
   const segTok = (id: string) =>

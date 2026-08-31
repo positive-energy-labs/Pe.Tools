@@ -1079,7 +1079,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
             </span>
             <Verb
               label="project → profile"
-              onClick={() => void runProject()}
+              onClick={() => runProject()}
               busy={busy === "project"}
               disabled={pickedIds.size === 0}
               reason={

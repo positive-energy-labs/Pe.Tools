@@ -81,8 +81,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
   const PluginPane = plugin ? selectRoutePane(plugin) : null;
 
   const status = selectRunStatus(chat);
-  const threadLabel =
-    threads.find((item) => item.id === currentThreadId)?.title ?? "new session";
+  const threadLabel = threads.find((item) => item.id === currentThreadId)?.title ?? "new session";
   // Context gauges (cap + OM meters) ride beside the composer now, so the cache view is derived
   // here instead of inside the Lens. userTurns gates the diff baseline (advances on each send).
   const breakdown = useMemo(() => selectBreakdown(chat), [chat]);
