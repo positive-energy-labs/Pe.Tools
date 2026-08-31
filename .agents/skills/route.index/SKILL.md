@@ -84,7 +84,7 @@ Shared words. Each is a rule compressed to a noun; use them, don't paraphrase th
 | **rvt/rfa** | An authored model file; reserve document for a generic authored or state document |
 | **agent** | A subagent; `delegate` sends it. Figures call it apostle, bird, sheep, builder, pilgrim, runner; the law says agent |
 | **line** | One agent and every prompt sent down it; a follow-up goes down the line that read the terrain, never to a fresh agent. `delegate` calls it jesses |
-| **edge** | The bound on a delegated mission: stop condition, time box, report file; no agent is sent without all three. `delegate` calls it the creance |
+| **edge** | The bound on a mission: stop condition, time box, report file; no agent, including yourself, is sent without all three. `delegate` calls it the creance |
 | **stop** | What ends a loop; every pass and loop names one in frontmatter, and a stop is reported with `prove`'s stamp or not as a stop |
 | **census** | The list of what exists and who uses it, made before any deletion, shim strike, or fan-out. `purge` calls it the firebreak |
 | **stake** | Evidence a reader can open: `path:line`, a command with its output, a commit. `ground` calls it benchmark and bearing |
@@ -149,23 +149,12 @@ A fix on Prose breaks the fourth wall. Tread carefully and verify the intended r
 - Speak of the tangible: what a user feels, what the wire sees, why or why not it works. Behavior is the default compartmentalization boundary, not implementation details.
 - Artifacts stand out; speak in tables, codeblocks, and references. Tablulate particularly to compare or emphasize authority and permanence. Annotated codeblocks best illustrate a wire contract or API change. Links, view/page/line, PIDs and ports connect the abstract to material. Clear anchors are what make a journey feel safe. Surface the anchors inline so the progress is tangible at a glance and use them when recounting the timeline. 
 - Code is the spec, tests included, so what stays must be what you want. Units are dev-loop scaffolding: a shape to fill, then gone. Two things earn a place: a deterministic chain through the surface the user touches, and visibility (raw JSON views, a raw feed, a review route, a `package.json` script), because a wrong number you can see never needs a unit to guard it.
+- Everything hangs off of a good data model. A handrolled state-machine is beat by a few enums and a switch. When every commit title is "refuse X unless Y", the data model is wrong, not the guards
+- The old maxims priced human hours. Now with AI, a migration, port, or prototype can be backgrounded overnight. Keep the instinct for correctness; drop the instinct for caution. "Never rewrite" is now "always rewrite when shape is wrong", a bad data model blocks quick iteration.
 - Sanctioned autonomous sessions: when the user hands over a session, decide against recorded verdicts in their absence, mark such verdicts re-openable.
 - The unit of progress is one rule, with one owner, and one test that fails when the rule is broken. Lines added or deleted are a side effect of that and are never the count reported.
 - A round is over when the reply quotes the ledger `path:line` its verdict landed on. Unquoted is unpersisted.
 - The set checks itself. A check script sits beside this file; the table above is its projection of each skill's directory and frontmatter (`figure`, `stop`, `scope`, `disable-model-invocation`), never hand-edited. It also asserts the kinds, the one-owner-per-trigger rule, that no stance carries anything repo-shaped, and that the set has one home. The `execute` slot names how to run it. A stance edit that does not pass is not landed.
-
-
-## Priors to Drop
-
-The old maxims priced human hours. They are wrong here not because they lacked merit, but because the prices changed. A migration, port, or prototype can be backgrounded overnight. Keep the instinct for correctness; drop the instinct for caution.
-
-- "Never rewrite." Rewrites are overnight work; rewrite when the shape is wrong.
-- "Reading is harder than writing." Reading is the cheap side now; write for a fresh context to read and delete.
-- "Don't change the contract." Contracts move every loop; keep one authority, regenerate the projections.
-- "Prototypes are debt." Prototypes are variants: spin, compare, kill.
-- "Don't touch what works." Stability is a property of the check, not the code.
-
-A stance is written per `write`'s Stance register; the form lives there, not here.
 
 ## Parlance
 

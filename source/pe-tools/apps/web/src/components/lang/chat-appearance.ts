@@ -32,6 +32,7 @@ export const chatStyles = tv({
     chatShell12: "pointer-events-auto",
     chatShell13: "flex items-center justify-between",
     chatShell14: "truncate t-title",
+    emptyMark: "m-0 t-display face-display text-pea",
     chatTarget0: "border-b-[0.5px] border-line px-3 py-3",
     chatTarget1: "mb-1.5 flex items-baseline justify-between",
     chatTarget2: "t-label t-upper text-ink-2",

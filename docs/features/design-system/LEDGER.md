@@ -165,8 +165,10 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 ### Style regression, main → review/design-system (opened 2026-08-30)
 
 - `/design-system`, its swatch, `/` and `/takeoffs` (fixture lane) ported 2026-08-30: 0
-  browser-default text nodes on each; takeoffs mono within 9 and ink-2 within 10 of main. Still
-  owed: `/family`, `/settings`, `/chat` (+6 default nodes), `/runs` (+3).
+  browser-default text nodes on each; takeoffs mono within 9 and ink-2 within 10 of main. `/runs`
+  ported 2026-08-30: 0 browser-default text nodes in its empty-pool state. `/chat` ported
+  2026-08-30: 0 visible app-owned browser-default text nodes in its empty-thread state. Still
+  owed: `/family`, `/settings`.
 - Targeting gaps (from `.artifacts/handoffs/takeoffs-port.md`): no primitive for an inline
   stale/error caption (main spent caution at the call site); no language-owned stage-strip
   rail/separator hairlines (main drew them with inline `token()` strokes, now dropped); no

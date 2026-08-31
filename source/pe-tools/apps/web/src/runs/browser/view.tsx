@@ -1,6 +1,7 @@
 import { token } from "#/lib/token";
 import { FactChip as Chip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
+import { OutcomeLine } from "#/components/lang/outcome";
 import { Pane, PaneSplit } from "#/components/lang/pane";
 import { fb } from "../feedback/staging";
 import { NoteInput } from "../feedback/verbs";
@@ -58,14 +59,14 @@ export default function RunBrowser() {
 
   if (error) {
     return (
-      <div className="p-8" style={{ color: token("caution") }}>
-        run pool unavailable: {error}
+      <div className="p-8">
+        <OutcomeLine kind="error" label="run pool unavailable" says={error} />
       </div>
     );
   }
 
   if (!runs) {
-    return <div className="p-8">loading run pool…</div>;
+    return <div className="p-8 t-value text-ink-2">loading run pool…</div>;
   }
 
   if (runs.length === 0 || !curId) {
@@ -74,9 +75,9 @@ export default function RunBrowser() {
         <EmptyState story="scope" exit="run the takeoff harness to fill the pool">
           No runs captured yet
         </EmptyState>
-        <p className="">
+        <p className="t-label text-ink-2">
           Every run of{" "}
-          <span className="">
+          <span className="face-mono text-ink">
             ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope
           </span>{" "}
           auto-persists its package (report.json, zone TSVs, INKP bins) into the pool; this page
@@ -84,7 +85,7 @@ export default function RunBrowser() {
         </p>
         {pool && (
           <p
-            className="break-all"
+            className="face-mono t-caption break-all text-ink-2"
             title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
           >
             pool {pool}
