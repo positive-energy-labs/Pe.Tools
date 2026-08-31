@@ -165,6 +165,13 @@ export interface DocumentSelectionResult {
   readonly state: string;
 }
 
+export interface DroppedDocument {
+  readonly isFamily: boolean;
+  readonly isModified: boolean;
+  readonly path: string | null;
+  readonly title: string | null;
+}
+
 export interface EmptyResult {
 }
 
@@ -353,7 +360,7 @@ export interface SessionFailureInfo {
 }
 
 export interface SessionHrColdResult {
-  readonly dropped: readonly unknown[];
+  readonly dropped: readonly DroppedDocument[];
   readonly id: string;
   readonly legs: readonly SessionOperationLeg[];
   readonly reopened: string | null;
@@ -362,7 +369,7 @@ export interface SessionHrColdResult {
 }
 
 export interface SessionHrFailureResult {
-  readonly dropped: readonly unknown[];
+  readonly dropped: readonly DroppedDocument[];
   readonly id: string;
   readonly legs: readonly SessionOperationLeg[];
   readonly reopened: string | null;
@@ -375,6 +382,12 @@ export interface SessionHrHotResult {
   readonly id: string;
   readonly session: ControlledObservation;
   readonly state: SessionHrResultState;
+}
+
+export interface SessionKey {
+  readonly project: string | null;
+  readonly worktree: string;
+  readonly year: string;
 }
 
 export interface SessionListResult {
@@ -401,7 +414,7 @@ export interface SessionStartFailureResult {
 export interface SessionStartPlanResult {
   readonly bootstrap: string;
   readonly id: string;
-  readonly key: unknown;
+  readonly key: SessionKey;
   readonly mutations: readonly string[];
   readonly payload: string;
   readonly state: SessionStartResultState;
