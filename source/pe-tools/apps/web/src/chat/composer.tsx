@@ -188,6 +188,8 @@ export function Composer({
         <div className={chatStyles.composer8()}>
           <Textarea
             name="input"
+            size="compact"
+            surface="embedded"
             placeholder="Ask Pea…  ( / for commands )"
             rows={1}
             autoFocus
