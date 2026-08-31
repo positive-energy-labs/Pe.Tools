@@ -157,7 +157,7 @@ function UserMoment() {
     <MomentSection id={id} role="user">
       <div className="mb-1.5 flex items-center gap-[7px]">
         <TurnTag id={id} />
-        <span>you</span>
+        <span className="t-label t-upper text-ink-2">you</span>
         <MomentTime />
       </div>
       <div className="ml-auto flex w-fit max-w-[80%] flex-col items-end gap-1.5">
@@ -165,7 +165,7 @@ function UserMoment() {
           <img key={src} src={src} alt="attachment" className="max-h-64 object-contain" />
         ))}
 
-        {text ? <div className="px-3 py-2">{text}</div> : null}
+        {text ? <div className="px-3 py-2 t-prose text-ink">{text}</div> : null}
       </div>
     </MomentSection>
   );
@@ -187,7 +187,7 @@ function AssistantMoment() {
     <MomentSection id={id} role="assistant">
       <div className="mb-1.5 flex items-center gap-[7px]">
         <TurnTag id={id} />
-        <span>pea</span>
+        <span className="t-label t-upper text-pea-ink">pea</span>
         <MomentTime />
       </div>
       <div className="grid gap-1">
