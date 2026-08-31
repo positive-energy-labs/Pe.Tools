@@ -264,11 +264,6 @@
   padding: 14px 20px;
   padding-bottom: calc(var(--composer-h, 96px) + 24px);
 }
-[data-chat="surface"] [data-slot="textarea"]:focus-visible {
-  border-color: transparent;
-  outline: none;
-  box-shadow: none;
-}
 [data-annotation="moment"] {
   padding: 10px 0;
   scroll-margin-top: 12px;
