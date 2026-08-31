@@ -1,18 +1,90 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { LiveTakeoffsRoute } from "#/routes/takeoffs";
+import { RootComponent } from "#/routes/__root";
 import { usePeInfo } from "./info";
 import { useHostLiveInvalidation } from "./live";
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+test("fixture root mounts route content without Host wires while ordinary routing keeps them", async () => {
+  const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+    Response.json({
+      controllerId: "pea",
+      resourceId: "local",
+      capabilities: { revit: true },
+      world: {
+        id: "local",
+        root: "C:/repo",
+        storage: { kind: "local-unversioned" },
+        isolation: "none",
+      },
+    }),
+  );
+  const eventSources: { close: ReturnType<typeof vi.fn> }[] = [];
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal(
+    "EventSource",
+    class {
+      close = vi.fn();
+      constructor() {
+        eventSources.push(this);
+      }
+    },
+  );
+
+  const mountRoot = (entry: string) => {
+    const root = createRootRoute({ component: RootComponent });
+    const index = createRoute({
+      getParentRoute: () => root,
+      path: "/",
+      component: () => <p>route content</p>,
+    });
+    const router = createRouter({
+      routeTree: root.addChildren([index]),
+      history: createMemoryHistory({ initialEntries: [entry] }),
+    });
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+  };
+
+  const fixture = mountRoot("/?source=fixture");
+  expect(await screen.findByText("route content")).toBeTruthy();
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(eventSources).toHaveLength(0);
+  fixture.unmount();
+
+  mountRoot("/");
+  await screen.findByText("route content");
+  await waitFor(() => expect(eventSources).toHaveLength(1));
+  expect(fetchMock).toHaveBeenCalledOnce();
+  const requested = fetchMock.mock.calls[0]?.[0];
+  expect(
+    typeof requested === "string"
+      ? requested
+      : requested instanceof URL
+        ? requested.href
+        : requested?.url,
+  ).toContain("/host/status");
 });
 
 test("opens host events only after PeInfo confirms Revit", async () => {
