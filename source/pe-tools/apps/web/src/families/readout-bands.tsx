@@ -53,23 +53,23 @@ export function FamiliesReadoutBands() {
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </Press>
                     </td>
-                    <td className="py-0.5">{entry.familyName}</td>
+                    <td className="face-mono t-value py-0.5">{entry.familyName}</td>
                     <td
-                      className="w-24 py-0.5"
+                      className="face-mono t-value w-24 py-0.5"
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className="py-0.5"
+                      className="face-mono t-caption text-ink-2 py-0.5"
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
                     </td>
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
-                    <td className="w-64 py-0.5" title={flag ?? ""}>
+                    <td className="t-value text-ink-2 w-64 py-0.5" title={flag ?? ""}>
                       {flag ?? ""}
                     </td>
                   </tr>
@@ -80,9 +80,9 @@ export function FamiliesReadoutBands() {
                   <td className="w-8 py-0.5">
                     <span>✕</span>
                   </td>
-                  <td className="py-0.5">{family.familyName}</td>
-                  <td className="w-24 py-0.5">—</td>
-                  <td className="py-0.5" colSpan={2}>
+                  <td className="face-mono t-value py-0.5">{family.familyName}</td>
+                  <td className="face-mono t-value w-24 py-0.5">—</td>
+                  <td className="t-value text-ink-2 py-0.5" colSpan={2}>
                     in scope, but the bound profile does not claim this family
                   </td>
                 </tr>

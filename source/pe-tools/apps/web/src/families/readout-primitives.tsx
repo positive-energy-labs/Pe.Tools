@@ -24,7 +24,7 @@ export function Seam({ op }: { op: string }) {
 }
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span>{children}</span>;
+  return <span className="t-label t-upper text-ink-2">{children}</span>;
 }
 
 /**
