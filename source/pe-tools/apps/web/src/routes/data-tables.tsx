@@ -25,8 +25,13 @@ import { DraftEditor } from "#/data-tables/draft-editor";
  * upserts in one apply. Missing rows are pruned on apply, so deleting a row here
  * deletes it in Revit.
  */
+export const dataTablesSearch = (search: Record<string, unknown>) => ({
+  source: search.source === "fixture" ? ("fixture" as const) : undefined,
+});
+
 export const Route = createFileRoute("/data-tables")({
-  component: DataTablesRoute,
+  validateSearch: dataTablesSearch,
+  component: DataTablesFileRoute,
 });
 
 export type ColumnKind = "Text" | "Number";
@@ -48,23 +53,112 @@ export interface TableHandle {
 
 export const rowKey = () => `row-${crypto.randomUUID().slice(0, 8)}`;
 
-export function DataTablesRoute() {
-  const detail = useHostOp("revit.detail.data-tables", {});
-  const tables = detail.data?.tables ?? [];
+const draftFrom = (table: TableHandle): Draft => ({
+  name: table.name,
+  isNew: false,
+  columns: table.columns.map((column) => ({ ...column })),
+  rows: table.rows.map((row) => ({ key: row.key, values: [...row.values] })),
+});
 
-  const [draft, setDraft] = useState<Draft | null>(null);
+const FIXTURE_TABLES: TableHandle[] = [
+  {
+    name: "Air Terminal Schedule",
+    scheduleId: 41001,
+    columns: [
+      { heading: "Mark", kind: "Text" },
+      { heading: "Type", kind: "Text" },
+      { heading: "Level", kind: "Text" },
+      { heading: "Airflow", kind: "Number" },
+      { heading: "Neck Size", kind: "Text" },
+      { heading: "System", kind: "Text" },
+    ],
+    rows: [
+      { key: "at-101", values: ["SA-101", "4-way ceiling", "Level 1", "325", "10x10", "SA-1"] },
+      { key: "at-102", values: ["SA-102", "Linear slot", "Level 1", "180", "8x8", "SA-1"] },
+      { key: "at-103", values: ["RA-101", "Eggcrate return", "Level 1", "450", "14x14", "RA-1"] },
+      { key: "at-201", values: ["SA-201", "4-way ceiling", "Level 2", "400", "12x12", "SA-2"] },
+      { key: "at-202", values: ["SA-202", "Linear slot", "Level 2", "225", "8x10", "SA-2"] },
+      { key: "at-203", values: ["EA-201", "Exhaust grille", "Level 2", "110", "8x8", "EA-2"] },
+    ],
+    placements: [{ sheetNumber: "M601" }],
+  },
+  {
+    name: "Hydronic Design Points",
+    scheduleId: 41002,
+    columns: [
+      { heading: "Loop", kind: "Text" },
+      { heading: "Service", kind: "Text" },
+      { heading: "Flow GPM", kind: "Number" },
+      { heading: "Head ft", kind: "Number" },
+    ],
+    rows: [
+      { key: "chw-primary", values: ["CHW-P", "Primary chilled water", "380", "54"] },
+      { key: "chw-secondary", values: ["CHW-S", "Secondary chilled water", "425", "72"] },
+      { key: "hhw-primary", values: ["HHW-P", "Heating hot water", "190", "48"] },
+    ],
+    placements: [{ sheetNumber: "M602" }],
+  },
+];
+
+function DataTablesFileRoute() {
+  const { source } = Route.useSearch();
+  return <DataTablesRoute source={source} />;
+}
+
+export function DataTablesRoute({ source }: { source?: "fixture" }) {
+  return source === "fixture" ? (
+    <DataTablesWorkspace tables={FIXTURE_TABLES} initialDraft={draftFrom(FIXTURE_TABLES[0])} />
+  ) : (
+    <LiveDataTablesRoute />
+  );
+}
+
+function LiveDataTablesRoute() {
+  const detail = useHostOp("revit.detail.data-tables", {});
+  return (
+    <DataTablesWorkspace
+      tables={detail.data?.tables ?? []}
+      isLoading={detail.isLoading}
+      isFetching={detail.isFetching}
+      onRefetch={async () => void (await detail.refetch())}
+      onApply={async (draft) => {
+        const result = await callHostRpc("revit.apply.schedule", {
+          table: {
+            name: draft.name,
+            columns: draft.columns,
+            rows: draft.rows,
+            pruneMissingRows: true,
+          },
+        });
+        return result.warnings ?? [];
+      }}
+    />
+  );
+}
+
+function DataTablesWorkspace({
+  tables,
+  initialDraft = null,
+  isLoading = false,
+  isFetching = false,
+  onRefetch,
+  onApply,
+}: {
+  tables: TableHandle[];
+  initialDraft?: Draft | null;
+  isLoading?: boolean;
+  isFetching?: boolean;
+  onRefetch?: () => Promise<void>;
+  onApply?: (draft: Draft) => Promise<string[]>;
+}) {
+  const [draft, setDraft] = useState<Draft | null>(initialDraft);
   const store = useRouteStore(() => createRouteStoreCore("data-tables", appAtomRegistry));
   const busy = useAtomValue(store.busy)?.id ?? null;
   const clearFailure = () => store.registry.set(store.failure, null);
 
   const openTable = (handle: TableHandle) => {
     clearFailure();
-    setDraft({
-      name: handle.name,
-      isNew: false,
-      columns: handle.columns.map((c) => ({ heading: c.heading, kind: c.kind })),
-      rows: handle.rows.map((r) => ({ key: r.key, values: [...r.values] })),
-    });
+    setDraft(draftFrom(handle));
   };
 
   const newTable = () => {
@@ -80,27 +174,22 @@ export function DataTablesRoute() {
   const applyDraft = () =>
     void store
       .runVerb("apply", async () => {
-        if (!draft) return;
-        const result = await callHostRpc("revit.apply.schedule", {
-          table: {
-            name: draft.name,
-            columns: draft.columns,
-            rows: draft.rows,
-            pruneMissingRows: true,
-          },
-        });
+        if (!draft || !onApply) return;
+        const warnings = await onApply(draft);
         setDraft((d) => (d ? { ...d, isNew: false } : d));
-        await detail.refetch();
-        if (result.warnings?.length) return fail(result.warnings.join(" · "), "advisory");
+        await onRefetch?.();
+        if (warnings.length) return fail(warnings.join(" · "), "advisory");
         return `applied — ${draft.name} upserted (${draft.columns.length}×${draft.rows.length})`;
       })
       .catch(() => undefined);
 
-  const applyReason = !draft
-    ? "open or create a table first"
-    : draft.name.trim().length === 0
-      ? "name the table first — apply upserts by name"
-      : "Upsert this draft into Revit by name + row key; rows missing from the draft are pruned";
+  const applyReason = !onApply
+    ? "fixture review — apply to Revit is unavailable"
+    : !draft
+      ? "open or create a table first"
+      : draft.name.trim().length === 0
+        ? "name the table first — apply upserts by name"
+        : "Upsert this draft into Revit by name + row key; rows missing from the draft are pruned";
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
@@ -129,7 +218,7 @@ export function DataTablesRoute() {
             label="apply to revit"
             icon={CheckCheck}
             busy={busy === "apply"}
-            disabled={!draft || draft.name.trim().length === 0}
+            disabled={!onApply || !draft || draft.name.trim().length === 0}
             onClick={() => applyDraft()}
             reason={applyReason}
           />
@@ -152,9 +241,14 @@ export function DataTablesRoute() {
                 <Verb
                   label="re-read"
                   icon={List}
-                  busy={detail.isFetching}
-                  onClick={() => void detail.refetch()}
-                  reason="Re-read every data table from the document"
+                  busy={isFetching}
+                  disabled={!onRefetch}
+                  onClick={() => void onRefetch?.()}
+                  reason={
+                    onRefetch
+                      ? "Re-read every data table from the document"
+                      : "fixture data is already loaded locally"
+                  }
                 />
                 <Verb
                   label="new"
@@ -183,7 +277,7 @@ export function DataTablesRoute() {
             }}
             placeholder="Filter tables…"
             emptyNote={
-              detail.isLoading ? (
+              isLoading ? (
                 <OutcomeLine kind="busy" label="reading data tables" />
               ) : (
                 <EmptyState story="scope" exit="create one with the new verb above">
