@@ -110,8 +110,8 @@ function FacetFilterSpecimen() {
   );
 }
 
-/** As `control-chips.tsx`'s private `Picker` composes it: a ghost Button as the trigger,
- *  `align="end"`, an explicit anchor, and a searchable popup. */
+/** As `control-chips.tsx`'s private `Picker` composes it: a quiet Press as the trigger,
+ *  an explicit anchor, and a searchable popup. */
 function PickerChipSpecimen() {
   const [picked, setPicked] = useState<(typeof CATEGORY_OPTIONS)[number] | null>(null);
   const anchorRef = useComboboxAnchor();
@@ -133,7 +133,7 @@ function PickerChipSpecimen() {
           <span>{picked?.label ?? "category"}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent align="end" anchor={anchorRef}>
+      <ComboboxContent anchor={anchorRef}>
         <ComboboxInput placeholder="Search category…" />
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>
@@ -211,12 +211,12 @@ const SPECIMENS: readonly Specimen[] = [
     id: "picker",
     name: "combobox · picker chip",
     consumers: "components/control-chips.tsx → the chat composer, families",
-    shape: "ghost Button trigger · align=end · explicit anchor · searchable",
+    shape: "quiet Press trigger · explicit anchor · searchable · collision fit",
     defects: [
       "FIXED — narrow single-value triggers now open a readable 10rem popup instead of collapsing to the trigger width.",
-      'OBSERVED — `align="end"` is hard-coded, so the popup is right-aligned to the anchor everywhere, including at the left edge where there is nothing to avoid.',
+      "FIXED — the consumer no longer forces end alignment; Base UI starts at the trigger and shifts only to avoid a collision.",
       "same private-function problem: `Picker` is internal to control-chips.tsx.",
-      "the trigger is a shadcn ghost Button on `--muted-foreground` while the facet filter is a bare `ComboboxTrigger` on `--pe-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
+      "the trigger uses the shared quiet Press while the facet filter is a bare `ComboboxTrigger`: the same control still has two trigger identities.",
     ],
     render: () => <PickerChipSpecimen />,
   },

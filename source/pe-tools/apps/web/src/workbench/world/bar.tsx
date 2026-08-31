@@ -11,6 +11,7 @@ import {
 import { Press } from "#/components/lang/press";
 import { fmtTok, tint, tone } from "./cap";
 import { PressContent } from "#/components/anatomy/press-content";
+import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
 
 export function whySentence(layers: Layer[], cache: CacheView, reprocessed: number): string {
   const front = layers.find((layer) => layer.rank === cache.horizonRank);
@@ -158,42 +159,48 @@ export function ContextRibbon({
   ];
 
   return (
-    <div className="group/ribbon relative w-full">
-      <Press
-        type="button"
-        onClick={onOpenWorld}
-        title="What the agent sends the model — request order, token budget. Click to inspect."
-        aria-label="Context budget"
-      >
-        <PressContent geometry="block">
-          <BudgetBar
-            breakdown={breakdown}
-            cache={cache}
-            className="relative flex h-1.5 items-stretch overflow-hidden"
-          />
-          <span className="absolute right-0 bottom-[calc(100%+6px)] z-[8] hidden w-[280px] max-w-[calc(100vw-2rem)] flex-col gap-1 border-[0.5px] border-line-2 on-artifact px-2.5 py-2 shadow-sm group-hover/ribbon:flex group-focus-within/ribbon:flex">
-            {rows.map((row) => (
-              <span
-                className="grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-x-2"
-                key={row.id}
-              >
-                <span className="size-2 flex-none" style={{ backgroundColor: tone(row.id) }} />
-                <span className="min-w-0 truncate">
-                  {row.label}
-                  {row.active ? " · active" : ""}
-                </span>
-                <span className="text-right face-mono whitespace-nowrap">
-                  {fmtTok(row.tok)}
-                  {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
+    <UiTooltipProvider>
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          render={<Press type="button" onClick={onOpenWorld} style={{ width: "100%" }} />}
+          aria-label="Context budget. Click to inspect."
+        >
+          <PressContent geometry="block">
+            <BudgetBar
+              breakdown={breakdown}
+              cache={cache}
+              className="relative flex h-1.5 items-stretch overflow-hidden"
+            />
+          </PressContent>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Positioner side="top" align="end" sideOffset={6}>
+            <Tooltip.Popup>
+              <span className="flex w-[280px] max-w-full flex-col gap-1">
+                {rows.map((row) => (
+                  <span
+                    className="grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-x-2"
+                    key={row.id}
+                  >
+                    <span className="size-2 flex-none" style={{ backgroundColor: tone(row.id) }} />
+                    <span className="min-w-0 truncate">
+                      {row.label}
+                      {row.active ? " · active" : ""}
+                    </span>
+                    <span className="text-right face-mono whitespace-nowrap">
+                      {fmtTok(row.tok)}
+                      {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
+                    </span>
+                  </span>
+                ))}
+                <span className="mt-0.5 border-t-[0.5px] border-line pt-1.5 t-caption text-ink-2">
+                  {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
                 </span>
               </span>
-            ))}
-            <span className="mt-0.5 border-t-[0.5px] border-line pt-1.5 t-caption text-ink-2">
-              {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
-            </span>
-          </span>
-        </PressContent>
-      </Press>
-    </div>
+            </Tooltip.Popup>
+          </Tooltip.Positioner>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </UiTooltipProvider>
   );
 }

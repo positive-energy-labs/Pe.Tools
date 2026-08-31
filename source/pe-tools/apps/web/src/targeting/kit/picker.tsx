@@ -12,7 +12,7 @@ import {
 } from "#/targeting/model";
 import { Press } from "#/components/lang/press";
 import type { Bindings, Runner } from "./direction-glyph";
-import { DIR_GLYPH, POP, PULSE_CSS, freshnessWord } from "./direction-glyph";
+import { DIR_GLYPH, PULSE_CSS, freshnessWord } from "./direction-glyph";
 import { PressContent } from "#/components/anatomy/press-content";
 
 export function Picker<K extends string>({
@@ -109,8 +109,7 @@ export function Picker<K extends string>({
         >
           <Popover.Popup
             aria-label={`Choose ${cur.key}`}
-            className="block max-h-(--available-height) overflow-hidden rounded-lg outline-none"
-            style={POP}
+            className="block max-h-(--available-height) w-80 max-w-(--available-width) overflow-hidden rounded-lg bg-artifact text-ink ring-1 ring-line outline-none"
           >
             <div
               className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"

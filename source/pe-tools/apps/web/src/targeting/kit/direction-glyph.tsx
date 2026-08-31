@@ -1,4 +1,3 @@
-import { token } from "#/lib/token";
 import { useCallback, useMemo } from "react";
 import { FactChip } from "#/components/lang/chip";
 import {
@@ -218,10 +217,3 @@ export function freshnessWord<K extends string>(b: Bindings<K>, link: Link<K>): 
 }
 
 export const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}}";
-
-export const POP: React.CSSProperties = {
-  border: `1px solid ${token("line-2")}`,
-  backgroundColor: token("page"),
-  width: 320,
-  maxWidth: "var(--available-width)",
-};

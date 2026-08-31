@@ -97,16 +97,18 @@ function Picker({
           <span className={chatStyles.controlChips1()}>{label}</span>
         </ComboboxTrigger>
       </div>
-      <ComboboxContent align="end" anchor={anchorRef}>
+      <ComboboxContent anchor={anchorRef}>
         {searchable ? <ComboboxInput placeholder={`Search ${title.toLowerCase()}…`} /> : null}
         <ComboboxEmpty>No matches</ComboboxEmpty>
         <ComboboxList>
           {(option: PickerOption) => (
             <ComboboxItem key={option.id} value={option}>
-              <span className={chatStyles.controlChips2()}>{option.name}</span>
-              {option.hint ? (
-                <span className={chatStyles.controlChips3()}>{option.hint}</span>
-              ) : null}
+              <span className="flex min-w-0 flex-col">
+                <span className={chatStyles.controlChips2()}>{option.name}</span>
+                {option.hint ? (
+                  <span className={chatStyles.controlChips3()}>{option.hint}</span>
+                ) : null}
+              </span>
             </ComboboxItem>
           )}
         </ComboboxList>

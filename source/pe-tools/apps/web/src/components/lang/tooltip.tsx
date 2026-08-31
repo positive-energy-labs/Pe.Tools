@@ -6,9 +6,9 @@ import { tv, type VariantProps } from "#/lib/tv";
 export const tooltipRecipe = tv({
   slots: {
     trigger: "inline-flex items-center justify-center transition-colors",
-    positioner: "z-popup",
+    positioner: "isolate z-popup outline-none",
     popup:
-      "max-h-(--available-height) max-w-[min(24rem,var(--available-width))] overflow-y-auto overscroll-contain border border-line-2 on-artifact px-3 py-2 t-label text-ink-2",
+      "max-h-(--available-height) max-w-[min(24rem,var(--available-width))] overflow-y-auto overscroll-contain rounded-lg bg-artifact px-3 py-2 t-label text-ink-2 ring-1 ring-line",
   },
   variants: {
     kind: {
