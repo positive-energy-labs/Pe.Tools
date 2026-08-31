@@ -51,7 +51,7 @@ export function ZoneCard({
       data-selected={entity.selected || undefined}
       data-dirty={entity.dirty || undefined}
       data-conflict={entity.conflict || undefined}
-      className="absolute top-2 left-2 z-raised max-h-[calc(100%-1rem)] w-64 overflow-y-auto"
+      className="absolute top-1 left-1 z-raised max-h-[calc(100%-0.5rem)] w-64 overflow-y-auto"
     >
       <ArtifactFrame
         head={
@@ -73,7 +73,7 @@ export function ZoneCard({
       >
         <ZonePeek zone={zone} cursorRoom={cursorRoom} geoReady={geoReady} stateOf={stateOf} />
 
-        <div className="flex flex-col gap-1 px-2 py-1.5">
+        <div className="flex flex-col gap-0.5 px-2 py-1">
           <div className="flex flex-wrap gap-1">
             {entity.bound && (
               <FactChip title="This zone is bound in the URL scope.">URL bound</FactChip>

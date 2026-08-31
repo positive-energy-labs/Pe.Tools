@@ -7,7 +7,7 @@ import { useAtlasWorkspace } from "#/takeoff/atlas-context";
 
 const PLAN_MIN_PX = 140;
 const PLAN_MAX_PX = 720;
-const PLAN_DEFAULT_PX = 340;
+const PLAN_DEFAULT_PX = 320;
 const PLAN_CHROME_PX = 34;
 
 export function AtlasWorkspace() {

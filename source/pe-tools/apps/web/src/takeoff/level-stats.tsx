@@ -48,7 +48,7 @@ export function LevelStats({
   const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));
 
   return (
-    <div className="absolute top-2 right-2 z-raised w-56">
+    <div className="absolute top-1 right-1 z-raised w-52">
       <ArtifactFrame
         head={
           <>
@@ -61,7 +61,7 @@ export function LevelStats({
           </>
         }
       >
-        <div className="px-2 py-1.5">
+        <div className="px-2 py-1">
           <div className="flex h-1.5 w-full items-stretch gap-px overflow-hidden">
             {ROOM_STATES.map((s) =>
               area[s] > 0 ? (
@@ -89,7 +89,7 @@ export function LevelStats({
             {fmtNum(totalArea, 0)} sf declared on this level, by room state
           </p>
 
-          <div className="mt-1.5">
+          <div className="mt-1">
             <StatLine
               label="partitioned"
               value={`${pct(partitioned)}% · ${partitioned}/${zones.length} zones`}

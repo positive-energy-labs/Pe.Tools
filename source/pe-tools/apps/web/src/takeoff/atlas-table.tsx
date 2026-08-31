@@ -62,7 +62,7 @@ export function AtlasTable() {
               rowKey={rowKey}
               gutter={gutter}
               scopeLabel="rooms in scope"
-              searchPlaceholder="name / type / zone…"
+              searchPlaceholder="room / type / zone…"
               chips={chips}
               summary={
                 <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
@@ -74,10 +74,9 @@ export function AtlasTable() {
                       tone="alarm"
                       title={`${scopeCalls} room${scopeCalls === 1 ? "" : "s"} in the visible table need a human verdict`}
                     >
-                      {scopeCalls} needing a call
+                      {scopeCalls} open call{scopeCalls === 1 ? "" : "s"}
                     </FactChip>
                   )}
-                  <span className="text-ink-mute">j/k cursor · a/d accept/dismiss</span>
                   <span className="shrink-0 border-l border-line pl-2">
                     <Press
                       type="button"
@@ -97,6 +96,7 @@ export function AtlasTable() {
                       fields · {fieldsMode}
                     </Press>
                   </span>
+                  <span className="text-ink-mute">j/k move · a/d decide</span>
                 </span>
               }
               empty={

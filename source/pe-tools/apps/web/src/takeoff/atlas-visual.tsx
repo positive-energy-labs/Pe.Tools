@@ -60,30 +60,34 @@ export function AtlasVisual() {
               );
             })}
 
-            <Press
-              type="button"
-              onClick={() => setStatsOpen(!statsOpen)}
-              size="caption"
-              tone="neutral"
-              state={statsOpen ? "selected" : "rest"}
-              title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
-            >
-              <span className="face-mono">level stats</span>
-            </Press>
-            <Press
-              type="button"
-              onClick={() => setPlanOpen(!planOpen)}
-              title={
-                planOpen ? "collapse the plan — give the table the full height" : "show the plan"
-              }
-              tone="neutral"
-              size="caption"
-            >
-              <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
-            </Press>
+            <span className="ml-1 flex items-center gap-1 border-l border-line pl-1">
+              <Press
+                type="button"
+                onClick={() => setStatsOpen(!statsOpen)}
+                size="caption"
+                tone="neutral"
+                state={statsOpen ? "selected" : "rest"}
+                title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
+              >
+                <span className="face-mono">level stats</span>
+              </Press>
+              <Press
+                type="button"
+                onClick={() => setPlanOpen(!planOpen)}
+                title={
+                  planOpen
+                    ? "collapse the plan — give the table the full height"
+                    : "show the plan"
+                }
+                tone="neutral"
+                size="caption"
+              >
+                <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
+              </Press>
+            </span>
 
             <span className="face-mono t-caption ml-auto min-w-0 truncate text-ink-mute">
-              {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc clears
+              {selected ? `${selected.zone.key} in scope` : "whole house in scope"} · Esc clears
             </span>
           </>
         }

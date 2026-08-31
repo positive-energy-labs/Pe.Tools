@@ -35,7 +35,7 @@ export function ZonePeek({
 
   return (
     <div>
-      <div className="h-52">
+      <div className="h-48">
         <svg
           viewBox={`0 0 ${viewport.width} ${viewport.height}`}
           preserveAspectRatio="xMidYMid meet"
@@ -119,7 +119,7 @@ export function ZonePeek({
         </svg>
       </div>
 
-      <div className="face-mono t-value flex flex-wrap items-center gap-x-2.5 gap-y-1 border-y border-line px-2.5 py-1 text-ink-2 on-recess">
+      <div className="face-mono t-caption flex flex-wrap items-center gap-x-2 gap-y-0.5 border-y border-line px-2 py-0.5 text-ink-2 on-recess">
         <Key tone={CURSOR_INK} label="cursor room" />
         <Key tone={stateInk("call")} label="needs a call" />
         {zone.residues.length > 0 && (
@@ -131,7 +131,7 @@ export function ZonePeek({
       </div>
 
       {(!geoReady || withGeometry.length < zone.rooms.length) && (
-        <p className="px-2.5 pb-1.5">
+        <p className="px-2 pb-1">
           <FactChip
             dashed
             title="Some rooms here are drawn as position dots rather than boundaries. A dot says the position is known and the shape is not — it is a stand-in, never a measurement."
