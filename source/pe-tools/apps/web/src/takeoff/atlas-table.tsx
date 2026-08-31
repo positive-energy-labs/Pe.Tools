@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { FactChip } from "#/components/lang/chip";
 import { EmptyState } from "#/components/lang/empty";
 import { Press } from "#/components/lang/press";
 import { MasterTable } from "#/components/master-table/master-table";
@@ -47,7 +48,7 @@ export function AtlasTable() {
           axis="horizontal"
           resize={{
             target: "end",
-            defaultSize: 320,
+            defaultSize: 288,
             minSize: 240,
             maxSize: 520,
             minOtherSize: 360,
@@ -64,30 +65,39 @@ export function AtlasTable() {
               searchPlaceholder="name / type / zone…"
               chips={chips}
               summary={
-                <>
-                  {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
+                <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="shrink-0 text-ink">
+                    {visibleRows.length} rooms · {fmtNum(scopeSqft, 0)} sf
+                  </span>
                   {scopeCalls > 0 && (
-                    <span className="text-alarm"> · {scopeCalls} needing a call</span>
+                    <FactChip
+                      tone="alarm"
+                      title={`${scopeCalls} room${scopeCalls === 1 ? "" : "s"} in the visible table need a human verdict`}
+                    >
+                      {scopeCalls} needing a call
+                    </FactChip>
                   )}
-                  <span className="ml-2 text-ink-2">j/k cursor · a/d accept/dismiss</span>
-                  <Press
-                    type="button"
-                    onClick={() =>
-                      store.actions.setAtlasPage({
-                        fieldsMode: fieldsMode === "panel" ? "columns" : "panel",
-                      })
-                    }
-                    title={
-                      fieldsMode === "panel"
-                        ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
-                        : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
-                    }
-                    tone="neutral"
-                    size="caption"
-                  >
-                    fields: {fieldsMode}
-                  </Press>
-                </>
+                  <span className="text-ink-mute">j/k cursor · a/d accept/dismiss</span>
+                  <span className="shrink-0 border-l border-line pl-2">
+                    <Press
+                      type="button"
+                      onClick={() =>
+                        store.actions.setAtlasPage({
+                          fieldsMode: fieldsMode === "panel" ? "columns" : "panel",
+                        })
+                      }
+                      title={
+                        fieldsMode === "panel"
+                          ? "Manual J fields are edited in the room panel for the cursor row; the table stays narrow. Click to move them back into the table as columns."
+                          : "Manual J fields are table columns. Click to edit them in the room panel instead and narrow the table."
+                      }
+                      tone="neutral"
+                      size="caption"
+                    >
+                      fields · {fieldsMode}
+                    </Press>
+                  </span>
+                </span>
               }
               empty={
                 rows.length > 0 ? (

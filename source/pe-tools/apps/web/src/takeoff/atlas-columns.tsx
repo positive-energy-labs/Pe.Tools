@@ -101,7 +101,7 @@ export function useAtlasColumns({
         key: "stage",
         label: "stage",
         title: "the ZONE's pipeline label — not a claim about this room",
-        width: "w-28",
+        width: "w-24",
         sort: ATLAS_COLUMN_SEMANTICS.stage.sort,
         facet: ATLAS_COLUMN_SEMANTICS.stage.facet,
         options: STAGE_ORDER.map((s) => ({ value: s, label: s })),
@@ -128,7 +128,7 @@ export function useAtlasColumns({
       {
         key: "zone",
         label: "zone",
-        width: "w-24",
+        width: "w-20",
         sort: ATLAS_COLUMN_SEMANTICS.zone.sort,
         search: (row) => row.zone.zone.key,
         cell: (row) => (
@@ -264,7 +264,7 @@ export function useAtlasColumns({
         // order the work happens in (SURFACE-PHILOSOPHY §1).
         key: "r10",
         label: ".r10",
-        width: "w-28",
+        width: "w-24",
         title:
           "this room's line in the .r10, and whether it still agrees with the model. Read-only: the identifier is assigned by sync, never typed.",
         state: r10State,

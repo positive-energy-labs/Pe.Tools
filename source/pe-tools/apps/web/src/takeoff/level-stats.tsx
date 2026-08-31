@@ -48,11 +48,11 @@ export function LevelStats({
   const pct = (n: number) => (zones.length === 0 ? 0 : Math.round((n / zones.length) * 100));
 
   return (
-    <div className="absolute top-2 right-2 z-raised w-64">
+    <div className="absolute top-2 right-2 z-raised w-56">
       <ArtifactFrame
         head={
           <>
-            <span className="t-label t-upper min-w-0 flex-1 truncate text-ink-2">
+            <span className="t-caption t-upper min-w-0 flex-1 truncate text-ink-2">
               {level} — level totals
             </span>
             <Press type="button" onClick={onClose} tone="quiet" size="value">
@@ -62,7 +62,7 @@ export function LevelStats({
         }
       >
         <div className="px-2 py-1.5">
-          <div className="flex h-2 w-full items-stretch gap-px overflow-hidden">
+          <div className="flex h-1.5 w-full items-stretch gap-px overflow-hidden">
             {ROOM_STATES.map((s) =>
               area[s] > 0 ? (
                 <span
@@ -85,7 +85,7 @@ export function LevelStats({
               />
             )}
           </div>
-          <p className="face-mono t-value mt-0.5 text-ink-2">
+          <p className="face-mono t-caption mt-0.5 text-ink-mute">
             {fmtNum(totalArea, 0)} sf declared on this level, by room state
           </p>
 

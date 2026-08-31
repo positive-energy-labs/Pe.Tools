@@ -53,7 +53,7 @@ export function AtlasVisual() {
                 >
                   <span className="face-mono">
                     {lane.label}
-                    <span className="ml-1 text-ink-2">{zs.length}</span>
+                    <span className="ml-1 text-ink-mute">{zs.length}</span>
                     {calls > 0 && <span className="ml-1 text-alarm">·{calls}</span>}
                   </span>
                 </Press>
@@ -82,7 +82,7 @@ export function AtlasVisual() {
               <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
             </Press>
 
-            <span className="face-mono t-caption ml-auto text-ink-2">
+            <span className="face-mono t-caption ml-auto min-w-0 truncate text-ink-mute">
               {selected ? `scoped to ${selected.zone.key}` : "whole house in scope"} — Esc clears
             </span>
           </>

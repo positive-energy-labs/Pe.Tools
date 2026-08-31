@@ -123,7 +123,7 @@ export function AtlasNavigation() {
                                 </FactChip>
                               </span>
                             )}
-                            <ZoneStateBar zone={z} states={states} className="shrink-0" />
+                            <ZoneStateBar zone={z} states={states} className="w-8 shrink-0" />
                           </PressContent>
                         </Press>
                       </li>

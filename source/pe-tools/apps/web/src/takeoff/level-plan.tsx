@@ -209,14 +209,14 @@ export function LevelPlan({
         })}
       </svg>
 
-      <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-x-2 gap-y-0.5">
         {ROOM_STATES.map((s) => (
           <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
         ))}
         <Key tone={ABSENT_INK} label="held residue" seam />
         <Key tone={CURSOR_INK} label="cursor" />
         {skipped > 0 && (
-          <span>
+          <span className="face-mono t-caption text-ink-mute">
             {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
             rail
           </span>
