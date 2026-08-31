@@ -19,6 +19,7 @@ import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { selectRoutePane } from "#/workbench/route-panes";
 import { ChatSentence } from "#/chat/chat-sentence";
 import { WorldBadge } from "#/chat/world-badge";
+import { cn } from "#/lib/utils";
 import "#/workbench/lens.css";
 
 /** Routes hostable as in-realm chat workspace panes.
@@ -117,17 +118,25 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
   const statusLine = loading ? "Loading thread state" : (error ?? operationError);
 
   return (
-    <main ref={mainRef} data-mode={mode} data-plugin={plugin} className={chatStyles.chatShell0()}>
+    <main
+      ref={mainRef}
+      data-chat="surface"
+      data-mode={mode}
+      data-plugin={plugin}
+      className={chatStyles.chatShell0()}
+    >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
       <div className={chatStyles.chatShell1()}>
-        <header className={chatStyles.chatShell2()}>
+        <header className={cn(chatStyles.chatShell2(), "h-12 py-0")}>
           <div className={chatStyles.chatShell3()}>
             {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
                 your call is owed (caution), error = a bridge/run error (caution — NOT the
                 alarm), idle = muted. */}
             <span title={status} className={chatStyles.chatShell4()} data-s={status} />
-            <span className={chatStyles.chatShell5()}>{threadLabel}</span>
+            <span className={cn(chatStyles.chatShell5(), "font-semibold tracking-tight")}>
+              {threadLabel}
+            </span>
           </div>
           <div className={chatStyles.chatShell6()}>
             <WorldBadge world={world} />
@@ -169,7 +178,7 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
                 />
               }
             />
-            <div className={chatStyles.chatShell10()}>
+            <div className={cn(chatStyles.chatShell10(), "pb-3")}>
               <div className={chatStyles.chatShell11()}>
                 <div ref={composerRef} className={chatStyles.chatShell12()}>
                   <Composer

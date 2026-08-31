@@ -76,8 +76,10 @@ export function WorldLane({
 
   return (
     <div className="flex min-h-0 flex-col t-label text-ink-2">
-      <div className="sticky top-0 z-[2] flex items-center gap-2.5 px-3.5 pt-3 pb-2.5">
-        <h2 className="m-0 t-label t-upper text-ink-2">What the agent sends the model</h2>
+      <div className="sticky top-0 z-[2] flex items-center gap-2 border-b border-line bg-page px-3 py-2">
+        <h2 className="m-0 max-w-[14ch] t-label t-upper leading-tight text-ink">
+          What the agent sends the model
+        </h2>
         <div className="ml-auto flex items-center gap-1.5">
           <Switcher
             ariaLabel="density"
@@ -119,7 +121,7 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="flex flex-wrap items-center gap-[7px] px-3.5 pt-[7px]">
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2 t-caption face-mono">
           {sendNumber ? (
             <FactChip title="This breakdown was captured at the last user send; streaming pushes within the turn do not advance it">
               snapshot @ send #{sendNumber}
@@ -130,7 +132,7 @@ export function WorldLane({
       ) : null}
 
       {inspect && cache.hasBaseline ? (
-        <div className="mx-3.5 mt-2.5 grid gap-1.5 px-3 py-2.5">
+        <div className="inset-ring on-recess mx-3 mt-2 grid gap-1 px-2.5 py-2 t-caption face-mono">
           <div className="flex items-center gap-[7px]">
             <span className="size-[9px] flex-none" />
             cache-read · 0.1×
@@ -158,7 +160,7 @@ export function WorldLane({
           return (
             <div key={layer.id}>
               <Press
-                tone={changed ? "quiet" : "quiet"}
+                tone="quiet"
                 state={changed ? "selected" : "rest"}
                 type="button"
                 onClick={() => toggle(layer.id)}
@@ -167,19 +169,25 @@ export function WorldLane({
                   className={cn(
                     WORLD_ROW,
                     inspect
-                      ? "grid-cols-[9px_1fr_auto_auto_auto_auto]"
-                      : "grid-cols-[9px_1fr_auto]",
+                      ? "grid-cols-[9px_minmax(0,1fr)_auto_auto_auto_auto]"
+                      : "grid-cols-[9px_minmax(0,1fr)_auto]",
                   )}
                 >
                   <span className="size-[9px]" style={{ backgroundColor: tone(layer.id) }} />
-                  <span className="">
+                  <span className="min-w-0 truncate text-ink">
                     {layer.label}
-                    {inspect ? <span className="ml-1.5">pos {layer.rank}</span> : null}
+                    {inspect ? (
+                      <span className="ml-1.5 t-caption face-mono text-ink-2">
+                        pos {layer.rank}
+                      </span>
+                    ) : null}
                   </span>
                   {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
-                  {inspect ? <span className="">{fmtTok(layer.tokens)}</span> : null}
                   {inspect ? (
-                    <span className="min-w-[30px] text-right">
+                    <span className="t-caption face-mono">{fmtTok(layer.tokens)}</span>
+                  ) : null}
+                  {inspect ? (
+                    <span className="min-w-[26px] text-right t-caption face-mono">
                       {((layer.tokens / used) * 100).toFixed(0)}%
                     </span>
                   ) : null}
@@ -187,8 +195,10 @@ export function WorldLane({
                 </span>
               </Press>
               {isOpen ? (
-                <div className="pt-0 pr-3.5 pb-[11px] pl-[31px]">
-                  <p className="mt-0 mb-1.5">{PLAIN_CAP[layer.id] ?? layer.label}</p>
+                <div className="pt-0 pr-3 pb-2.5 pl-[29px] t-caption leading-relaxed">
+                  <p className="mt-0 mb-1.5 text-ink-2">
+                    {PLAIN_CAP[layer.id] ?? layer.label}
+                  </p>
                   {inspect && changed ? (
                     <p className="mt-0 mb-1.5">
                       ⚡ changed this send → {BLAST_LABEL[blast]}. {driftHint(blast)}
@@ -215,7 +225,7 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="px-3.5 pt-[11px] pb-4">
+        <div className="px-3 pt-2.5 pb-4 t-caption leading-relaxed">
           cache state <span className={cn(CACHE_BASE, CACHE_TONE.cached)}>≈ inferred</span> from a
           frontend snapshot diff — the provider only reports aggregate cache totals.
         </div>
@@ -237,9 +247,9 @@ export function ItemRow({
 }) {
   const hasBody = Boolean(item.body);
   return (
-    <li className={cn("overflow-hidden", blast ? "" : "")}>
+    <li className="overflow-hidden">
       <Press type="button" tone="quiet" disabled={!hasBody} onClick={() => hasBody && onToggle()}>
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1 t-caption">
           <span className="block overflow-hidden text-ellipsis whitespace-nowrap">{item.name}</span>
           {item.src ? (
             <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap">
@@ -247,7 +257,7 @@ export function ItemRow({
             </span>
           ) : null}
         </span>
-        <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
+        <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap t-caption face-mono">
           {blast ? (
             <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
           ) : null}

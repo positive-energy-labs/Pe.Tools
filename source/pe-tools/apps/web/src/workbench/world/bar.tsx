@@ -105,16 +105,16 @@ export function ContextBudgetBar({
     ((segTok("tools") + segTok("system-prompt") + mw.reflectionThreshold) / budget) * 100;
 
   return (
-    <div className="mx-3.5 mt-3">
-      <div className="mb-1.5 flex justify-between">
-        <span className="">Context budget</span>
-        <span className="">
+    <div className="mx-3 mt-3">
+      <div className="mb-1.5 grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
+        <span className="t-label text-ink">Context budget</span>
+        <span className="text-right t-caption face-mono">
           {fmtTok(inContext)} / {fmtTok(budget)} · OM windows
         </span>
       </div>
       <BudgetBar breakdown={breakdown} cache={cache} />
 
-      <div className="relative mt-px h-[14px]">
+      <div className="relative mt-px h-[14px] t-caption face-mono">
         <span
           className="absolute -translate-x-1/2 whitespace-nowrap"
           style={{ left: `${reflectAt}%` }}

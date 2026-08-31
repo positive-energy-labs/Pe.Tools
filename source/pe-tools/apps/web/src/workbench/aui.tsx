@@ -30,7 +30,6 @@ import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
-import { Provenance } from "#/components/lang/section";
 
 const ThreadMessagesContext = createContext<ThreadMessageLike[]>([]);
 
@@ -128,10 +127,8 @@ function MomentTime() {
   );
   if (!at) return null;
   return (
-    <span className="ml-auto">
-      <Provenance>
-        {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-      </Provenance>
+    <span className="ml-auto t-caption face-mono tracking-[0.02em] text-ink-2">
+      {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
     </span>
   );
 }
@@ -162,10 +159,17 @@ function UserMoment() {
       </div>
       <div className="ml-auto flex w-fit max-w-[80%] flex-col items-end gap-1.5">
         {images.map((src) => (
-          <img key={src} src={src} alt="attachment" className="max-h-64 object-contain" />
+          <img
+            key={src}
+            src={src}
+            alt="attachment"
+            className="max-h-64 rounded-sm border-[0.5px] border-line-2 object-contain"
+          />
         ))}
 
-        {text ? <div className="px-3 py-2 t-prose text-ink">{text}</div> : null}
+        {text ? (
+          <div className="rounded-sm bg-recess px-3 py-2 t-prose text-ink">{text}</div>
+        ) : null}
       </div>
     </MomentSection>
   );
@@ -222,7 +226,7 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
     console.error("[workbench] message-part render failed", error, info.componentStack);
   }
   render(): ReactNode {
-    if (this.state.error) return <div className="">{this.state.error}</div>;
+    if (this.state.error) return <div className="t-prose text-caution">{this.state.error}</div>;
     return this.props.children;
   }
 }
@@ -235,7 +239,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
   return (
-    <div className="">
+    <div className="border-l-2 border-line-2">
       <Press
         type="button"
         tone="quiet"
@@ -246,7 +250,11 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
         <ChevronRight size={12} className={`transition-transform ${open ? "rotate-90" : ""}`} />
         <span>Thought process</span>
       </Press>
-      {open ? <div className="mt-1 mb-0.5 ml-2 pl-[9px] whitespace-pre-wrap">{text}</div> : null}
+      {open ? (
+        <div className="mt-1 mb-0.5 ml-2 border-l border-line pl-[9px] t-prose text-ink-2 whitespace-pre-wrap">
+          {text}
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -269,8 +277,16 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         <span>⌗ {toolTitle(toolName)}</span>
         {target ? <code>{target}</code> : null}
 
-        <span className="ml-auto">
-          <Provenance>{isError ? "err" : status?.type === "running" ? "run" : "ok"}</Provenance>
+        <span
+          className={`ml-auto t-caption face-mono tracking-[0.02em] ${
+            isError
+              ? "text-caution"
+              : status?.type === "running"
+                ? "text-ink-2"
+                : "text-done"
+          }`}
+        >
+          {isError ? "err" : status?.type === "running" ? "run" : "ok"}
         </span>
       </div>
       <RouteChatPluginView

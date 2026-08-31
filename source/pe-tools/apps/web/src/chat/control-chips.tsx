@@ -95,7 +95,7 @@ function Picker({
       <div ref={anchorRef} className={chatStyles.controlChips0()}>
         <ComboboxTrigger
           title={title}
-          render={<Press tone="quiet" size="value" state="selected" />}
+          render={<Press tone="quiet" size="value" />}
         >
           <span className={chatStyles.controlChips1()}>{label}</span>
         </ComboboxTrigger>

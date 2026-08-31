@@ -13,6 +13,7 @@ import {
   type ToolCall,
 } from "../chat-state";
 import { Press } from "#/components/lang/press";
+import { PressContent } from "#/components/anatomy/press-content";
 import type { Moment, TraceCell } from "./scale";
 
 export function ContextStrip({ state, depth }: { state: ChatState; depth: "read" | "trace" }) {
@@ -28,15 +29,14 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
       {plan.length > 0 ? (
         <ArtifactFrame head={<span>Plan</span>}>
           {plan.map((entry) => (
-            <div
-              className={`${PLAN_ITEM} ${
-                entry.status === "completed" ? "" : entry.status === "pending" ? "" : ""
-              }`}
-              key={entry.id}
-            >
+            <div className={PLAN_ITEM} data-status={entry.status} key={entry.id}>
               <span
                 className={
-                  entry.status === "completed" ? "" : entry.status === "in_progress" ? "" : ""
+                  entry.status === "completed"
+                    ? "text-done"
+                    : entry.status === "in_progress"
+                      ? "text-ink"
+                      : "text-ink-2"
                 }
               >
                 {entry.status === "completed" ? "✓" : entry.status === "in_progress" ? "▸" : "○"}
@@ -50,14 +50,24 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
       {showContext && systemPrompt?.content ? (
         <ArtifactFrame
           head={
-            <Press
-              type="button"
-              title="Show or hide the resolved system prompt pea started with"
-              onClick={() => setOpen((value) => !value)}
-            >
-              <span>System prompt{systemPrompt.source ? ` · ${systemPrompt.source}` : ""}</span>
-              <span>{open ? "hide" : "show"}</span>
-            </Press>
+            <span className="w-full [&>button]:w-full">
+              <Press
+                type="button"
+                tone="quiet"
+                size="caption"
+                title="Show or hide the resolved system prompt pea started with"
+                onClick={() => setOpen((value) => !value)}
+              >
+                <PressContent geometry="block">
+                  <span className="flex items-baseline justify-between gap-3 t-upper">
+                    <span>
+                      System prompt{systemPrompt.source ? ` · ${systemPrompt.source}` : ""}
+                    </span>
+                    <span>{open ? "hide" : "show"}</span>
+                  </span>
+                </PressContent>
+              </Press>
+            </span>
           }
         >
           {open ? (
@@ -72,7 +82,7 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
 }
 
 export const PLAN_ITEM =
-  "flex gap-[9px] border-b-[0.5px] border-line px-3 py-1.5 t-prose last:border-b-0";
+  "grid grid-cols-[14px_minmax(0,1fr)] gap-1.5 border-b-[0.5px] border-line px-3 py-1.5 t-prose last:border-b-0";
 
 export function TraceCellView({
   cell,

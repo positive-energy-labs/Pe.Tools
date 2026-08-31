@@ -265,8 +265,17 @@
   padding-bottom: calc(var(--composer-h, 96px) + 24px);
 }
 [data-annotation="moment"] {
-  padding: 11px 0;
+  padding: 10px 0;
   scroll-margin-top: 12px;
+}
+
+/* The no-message route keeps the same compact identity hierarchy as a populated transcript. */
+[data-chat="surface"] [data-annotation="chat"] > div > h1 {
+  font-family: var(--font-body);
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-line-height);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 /* A hairline at every you↔pea boundary: the transcript reads as a ledger of alternating speaker
    compartments. Same-role runs stay unruled (the rule marks the handoff, not every message). */
