@@ -50,6 +50,20 @@ const controlled = {
 } as const;
 
 test("beta.132 observations project every fleet case without fallback", () => {
+  const journalProcess = process(105);
+  const journalFailure: SessionObservation = {
+    ...controlled,
+    case: "failed-receipt",
+    id: "journal-failed",
+    detail: "journal failed detail",
+    failure: {
+      source: "journal",
+      event: "crash",
+      journalFile: "C:\\journal.txt",
+      message: "failed",
+      process: journalProcess,
+    },
+  };
   const rows: SessionObservation[] = [
     {
       ...controlled,
@@ -108,6 +122,7 @@ test("beta.132 observations project every fleet case without fallback", () => {
         failure: { atUtc: observedAtUtc, code: "session.failed", detail: "failed detail" },
       },
     },
+    journalFailure,
   ];
 
   expect(
@@ -124,9 +139,20 @@ test("beta.132 observations project every fleet case without fallback", () => {
     { id: "201", custody: "observed", phase: "ready", lane: undefined, pid: 201 },
     { id: "202", custody: "observed", phase: "unresponsive", lane: undefined, pid: 202 },
     { id: "203", custody: "observed", phase: "unresponsive", lane: undefined, pid: 203 },
-    { id: "gone", custody: "controlled", phase: "gone", lane: "dev", pid: undefined },
+    { id: "gone", custody: "controlled", phase: "gone", lane: "dev", pid: 104 },
     { id: "failed", custody: "controlled", phase: "failed", lane: "dev", pid: undefined },
+    { id: "journal-failed", custody: "controlled", phase: "failed", lane: "dev", pid: 105 },
   ]);
+
+  const journalSession: SessionFacts = {
+    sessionId: "journal-bridge",
+    processId: journalProcess.pid,
+    processStartUtcUnixMs: Date.parse(journalProcess.processStartUtc),
+    lane: "dev",
+    custody: "controlled",
+    openDocumentCount: 0,
+  };
+  expect(fuseFleet([journalFailure], [journalSession])[0]?.session).toBe(journalSession);
 });
 
 test("fleet fusion requires equal pid and process start", () => {
@@ -157,8 +183,6 @@ test("fleet fusion requires equal pid and process start", () => {
       detail: "Host bridge is connected, but no exact SDK census row matched.",
       lane: "dev",
       pid: identity.pid,
-      activeDocumentTitle: "connected document",
-      openDocumentCount: 1,
       session: storedSession,
     },
   ]);

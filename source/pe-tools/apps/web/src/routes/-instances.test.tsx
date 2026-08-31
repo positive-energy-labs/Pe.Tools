@@ -13,7 +13,6 @@ const fleet = vi.hoisted(() => {
         phase: "ready",
         detail: "ready detail",
         pid: 25,
-        openDocumentCount: 0,
         row: {
           case: "controlled-active",
           bridge: { bridge: "ready", sessionDescriptor: "C:\\session.json" },
@@ -44,7 +43,6 @@ const fleet = vi.hoisted(() => {
         custody: "controlled",
         phase: "failed",
         detail: "failed detail",
-        openDocumentCount: 0,
         row: {
           case: "failed-receipt",
           detail: "failed detail",
@@ -202,7 +200,6 @@ describe("instances route", () => {
       custody: "controlled",
       phase: "ready",
       detail: "ready detail",
-      openDocumentCount: 0,
       row: {
         case: "controlled-active",
         bridge: { bridge: "ready", sessionDescriptor: "C:\\session.json" },

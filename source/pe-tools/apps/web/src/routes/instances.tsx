@@ -35,47 +35,27 @@ function parseUtc(iso: string | null | undefined): number | undefined {
   return Number.isNaN(ms) ? undefined : ms;
 }
 
-function yearLabel(year: string | undefined): string | undefined {
-  if (!year) return undefined;
-  return year.length === 2 ? `20${year}` : year;
-}
-
 function worldSub(world: WorldFacts): string {
-  return [world.lane, yearLabel(world.year), world.pid ? `pid ${world.pid}` : undefined]
+  return [world.lane, world.row?.year, world.pid ? `pid ${world.pid}` : undefined]
     .filter(Boolean)
     .join(" · ");
 }
 
+const PHASE_VERDICT = {
+  booting: { word: "booting", tone: "ink" },
+  failed: { word: "failed", tone: "alarm" },
+  gone: { word: "gone", tone: "mute", dim: true },
+  ready: { word: "ready", tone: "done" },
+  unresponsive: { word: "unresponsive", tone: "caution" },
+} satisfies Record<WorldFacts["phase"], Omit<Verdict, "note">>;
+
 function phaseVerdict(world: WorldFacts): Verdict {
-  if (world.phase === "ready")
-    return {
-      word: "ready",
-      tone: "done",
-      note: world.session ? "The bridge holds an open connection to this world." : world.detail,
-    };
-  if (world.phase === "booting")
-    return {
-      word: "booting",
-      tone: "ink",
-      note: world.detail,
-    };
-  if (world.phase === "unresponsive")
-    return {
-      word: "unresponsive",
-      tone: "caution",
-      note: world.detail,
-    };
-  if (world.phase === "failed")
-    return {
-      word: "failed",
-      tone: "alarm",
-      note: world.detail,
-    };
   return {
-    word: "gone",
-    tone: "mute",
-    dim: true,
-    note: world.detail,
+    ...PHASE_VERDICT[world.phase],
+    note:
+      world.phase === "ready" && world.session
+        ? "The bridge holds an open connection to this world."
+        : world.detail,
   };
 }
 
@@ -149,31 +129,25 @@ function StartFields({
 
 export function InstancesPage() {
   const fleet = useFleet({ all: true });
-  const hasCensusExceptions =
-    fleet.unreadableReceipts.length > 0 || fleet.processReadErrors.length > 0;
+  const censusExceptions = fleet.unreadableReceipts
+    .map((receipt) => `receipt ${receipt.id} · ${receipt.receiptPath} · ${receipt.detail}`)
+    .concat(
+      fleet.processReadErrors.map((error) => `process ${error.candidatePid} · ${error.detail}`),
+    );
   return (
     <>
-      {hasCensusExceptions ? (
+      {censusExceptions.length ? (
         <aside
           aria-label="census exceptions"
           className="mx-auto mt-4 max-w-6xl border border-[var(--r-line-2)] px-3 py-2"
         >
-          <div className="t-caption t-upper text-[var(--r-ink-2)]">census exceptions</div>
-          {fleet.registryRoot ? (
-            <div className="face-mono t-caption text-[var(--r-ink-2)]">
-              registry {fleet.registryRoot}
-            </div>
-          ) : null}
+          <div className="t-caption t-upper text-[var(--r-ink-2)]">
+            census exceptions{fleet.registryRoot ? ` · registry ${fleet.registryRoot}` : ""}
+          </div>
           <ul className="mt-1 grid gap-1">
-            {fleet.unreadableReceipts.map((receipt) => (
-              <li key={receipt.receiptPath} className="t-caption text-[var(--r-ink)]">
-                <span className="face-mono">receipt {receipt.id}</span> · {receipt.receiptPath} ·{" "}
-                {receipt.detail}
-              </li>
-            ))}
-            {fleet.processReadErrors.map((failure) => (
-              <li key={failure.candidatePid} className="t-caption text-[var(--r-ink)]">
-                <span className="face-mono">process {failure.candidatePid}</span> · {failure.detail}
+            {censusExceptions.map((exception) => (
+              <li key={exception} className="face-mono t-caption text-[var(--r-ink)]">
+                {exception}
               </li>
             ))}
           </ul>
@@ -344,7 +318,6 @@ function AddressedInstancesPage({
         ),
       },
       {
-        // beta.131 list rows carry no legs; the row's live-state detail is the closest testimony.
         key: "row-detail",
         label: "detail",
         cell: (world) => (
@@ -358,8 +331,11 @@ function AddressedInstancesPage({
         label: "documents",
         cell: (world) => (
           <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
-            {world.activeDocumentTitle ?? (world.session ? "no open document" : "nothing observed")}
-            {world.openDocumentCount > 1 ? ` +${world.openDocumentCount - 1}` : ""}
+            {world.session?.activeDocumentTitle ??
+              (world.session ? "no open document" : "nothing observed")}
+            {(world.session?.openDocumentCount ?? 0) > 1
+              ? ` +${(world.session?.openDocumentCount ?? 1) - 1}`
+              : ""}
           </span>
         ),
       },

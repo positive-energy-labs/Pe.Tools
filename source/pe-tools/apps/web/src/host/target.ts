@@ -1,17 +1,5 @@
 /**
  * Target model — the web-side view of the host's `resolveSessionTarget` (apps/host/src/bridge.ts).
- *
- * This file carries no session-lane or custody union. `Lane` is the Host/UI lane, and `Custody` is
- * derived from the SDK's generated `SessionObservation` union in the browser-safe contracts package.
- *
- * A Target is a SELECTOR STRING, never a resolved session id. Selectors are stable across process
- * restarts (`observed` still means the session pe-revit holds no receipt for after a restart; a raw
- * bridge session id dies with the process), so UI state (URL params, chat session pins) stores
- * selectors and resolves them against the live session list on every render.
- *
- * Resolution is a pure function so every surface (composer chip, route toolbar, plugin, inspector)
- * reflects ONE state, and so the full state space is exercisable in POCs and tests without a live
- * host.
  */
 
 import type { Custody, Lane } from "@pe/host-contracts/contracts";

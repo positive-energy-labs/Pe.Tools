@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useLocation, useRouter, useSearch } from "@tanstack/react-router";
 import { addressSchema, type Address } from "@pe/agent-contracts";
 
@@ -52,11 +52,7 @@ function useRouteDocumentState(suppliedSessions?: readonly SessionFacts[]) {
     strict: false,
     select: (search) => (search as { doc?: Address | null }).doc,
   });
-  const at = useMemo(
-    () => routeDocumentAddress(routeDocumentChoices(sessions), requested),
-    [sessions, requested],
-  );
-  return { at, sessions };
+  return { at: routeDocumentAddress(routeDocumentChoices(sessions), requested), sessions };
 }
 
 export function useRouteDocumentAddress() {

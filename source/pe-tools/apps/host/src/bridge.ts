@@ -23,10 +23,7 @@ type Session = {
   readonly sessionId: string;
   readonly processId: number;
   readonly processStartUtcUnixMs: number | null;
-  // Observed selector metadata, never identity. `lane` is the SDK's vocabulary verbatim
-  // (dev | installed — payload SOURCE only); `sdkSessionId` is the id `pe-revit session list`
-  // prints for this session; buildStamp is the LOADED payload's stamp as reported at registration —
-  // the host never computes staleness.
+  // Observed selector metadata, never process identity or custody authority.
   readonly lane: Lane | null;
   readonly sdkSessionId: string | null;
   readonly buildStamp: string | null;
@@ -106,13 +103,7 @@ export function computeBridgeSessionId(registration: {
   return `session-${digest.slice(0, 16)}`;
 }
 
-/**
- * The Host/UI lane is `dev | installed`; the SDK calls the source payload `checkout`. This does not
- * so much normalize a lane
- * as REFUSE anything outside that union — a payload reporting a retired or invented lane reports
- * no lane at all, rather than teaching this broker a third vocabulary. A lane-less session is still
- * a perfectly good target by pid or bridge session id; it is only unreachable through lane words.
- */
+/** Accepts only Host/UI lanes; lane-less sessions remain targetable by process identity. */
 const LANES: readonly Lane[] = ["dev", "installed"];
 
 export function normalizeSessionLane(lane: string | null | undefined): Lane | null {

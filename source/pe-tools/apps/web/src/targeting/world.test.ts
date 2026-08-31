@@ -93,7 +93,6 @@ describe("targeting world", () => {
         phase: "ready",
         detail: "ready",
         pid: 25,
-        openDocumentCount: 1,
         session: controlled,
       },
       {
@@ -102,7 +101,6 @@ describe("targeting world", () => {
         phase: "ready",
         detail: "ready",
         pid: 77,
-        openDocumentCount: 1,
         session: observed,
       },
       {
@@ -111,7 +109,6 @@ describe("targeting world", () => {
         phase: "ready",
         detail: "ready",
         pid: 88,
-        openDocumentCount: 0,
         session: installed,
         row: observation("installed-25", 88),
       },
@@ -121,7 +118,6 @@ describe("targeting world", () => {
         phase: "ready",
         detail: "ready",
         pid: 99,
-        openDocumentCount: 0,
       },
     ];
 
@@ -158,7 +154,6 @@ describe("targeting world", () => {
       phase: "ready",
       detail: "ready",
       pid: 77,
-      openDocumentCount: 1,
       session: session({
         sessionId: "bridge-user",
         sdkSessionId: undefined,
@@ -192,7 +187,6 @@ describe("targeting world", () => {
       phase: "ready",
       detail: "ready",
       pid: 25,
-      openDocumentCount: 1,
       session: session(),
     };
 

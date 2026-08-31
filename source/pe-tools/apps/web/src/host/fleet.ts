@@ -1,9 +1,12 @@
 /** Fuses SDK registry custody/lifecycle with bridge-observed documents. */
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
+  BridgeObservation,
+  ControlledActiveBridgeObservation,
   Envelope,
   FleetPhase,
+  PendingBridgeObservation,
+  ProcessIdentity,
   SessionListResult,
   SessionObservation,
   SessionReceipt,
@@ -24,138 +27,71 @@ export interface WorldFacts {
   detail: string;
   /** Host/UI lane. The SDK payload source calls `dev` checkouts `checkout`. */
   lane?: HostLane;
-  year?: string;
   pid?: number;
-  activeDocumentTitle?: string;
-  openDocumentCount: number;
   /** Live bridge observation, when this world holds an open WebSocket to the host. */
   session?: SessionFacts;
   /** The SDK's own registry row, when `session list` knows this world. */
   row?: SessionObservation;
 }
 
-type ObservationProjection = {
-  readonly custody: Custody;
-  readonly detail: string;
-  readonly id: string;
-  readonly lane?: HostLane;
-  readonly phase: WorldPhase;
-  readonly process?: { readonly pid: number; readonly processStartUtc: string };
-};
+type ObservationView = readonly [WorldPhase, string, ProcessIdentity?];
 
 function assertNever(value: never): never {
   throw new Error(`unhandled session observation: ${JSON.stringify(value)}`);
 }
 
-function receiptLane(receipt: SessionReceipt): HostLane {
-  switch (receipt.payload) {
-    case "checkout":
-      return "dev";
-    case "installed":
-      return "installed";
-    default:
-      return assertNever(receipt);
-  }
-}
+const ACTIVE_PHASE = {
+  ready: "ready",
+  "unresponsive-endpoint": "unresponsive",
+} satisfies Record<ControlledActiveBridgeObservation["bridge"], WorldPhase>;
+const PENDING_PHASE = {
+  answering: "booting",
+  "missing-endpoint": "booting",
+} satisfies Record<PendingBridgeObservation["bridge"], WorldPhase>;
+const OBSERVED_VIEW = {
+  answering: ["ready", "SDK bridge answers for this observed Revit process."],
+  "missing-endpoint": [
+    "unresponsive",
+    "SDK bridge endpoint is missing for this observed Revit process.",
+  ],
+  "unresponsive-endpoint": [
+    "unresponsive",
+    "SDK bridge does not answer for this observed Revit process.",
+  ],
+} satisfies Record<BridgeObservation["bridge"], readonly [WorldPhase, string]>;
+const RECEIPT_LANE = {
+  checkout: "dev",
+  installed: "installed",
+} satisfies Record<SessionReceipt["payload"], HostLane>;
 
-function projectObservation(row: SessionObservation): ObservationProjection {
+function projectObservation(row: SessionObservation): ObservationView {
   switch (row.case) {
     case "controlled-active":
-      switch (row.bridge.bridge) {
-        case "ready":
-          return {
-            custody: "controlled",
-            detail: row.detail,
-            id: row.id,
-            lane: receiptLane(row.receipt),
-            phase: "ready",
-            process: row.process,
-          };
-        case "unresponsive-endpoint":
-          return {
-            custody: "controlled",
-            detail: row.detail,
-            id: row.id,
-            lane: receiptLane(row.receipt),
-            phase: "unresponsive",
-            process: row.process,
-          };
-        default:
-          return assertNever(row.bridge);
-      }
-    case "controlled-pending": {
-      let process: ObservationProjection["process"];
+      return [ACTIVE_PHASE[row.bridge.bridge], row.detail, row.process];
+    case "controlled-pending":
       switch (row.attempt.attempt) {
         case "awaiting-launch":
-          process = undefined;
-          break;
+          return ["booting", row.detail];
         case "launched":
-          switch (row.attempt.bridge.bridge) {
-            case "answering":
-            case "missing-endpoint":
-              process = row.attempt.process;
-              break;
-            default:
-              return assertNever(row.attempt.bridge);
-          }
-          break;
+          return [PENDING_PHASE[row.attempt.bridge.bridge], row.detail, row.attempt.process];
         default:
           return assertNever(row.attempt);
       }
-      return {
-        custody: "controlled",
-        detail: row.detail,
-        id: row.id,
-        lane: receiptLane(row.receipt),
-        phase: "booting",
-        process,
-      };
+    case "observed-active": {
+      const [phase, detail] = OBSERVED_VIEW[row.bridge.bridge];
+      return [phase, detail, row.process];
     }
-    case "observed-active":
-      switch (row.bridge.bridge) {
-        case "answering":
-          return {
-            custody: "observed",
-            detail: "SDK bridge answers for this observed Revit process.",
-            id: String(row.process.pid),
-            phase: "ready",
-            process: row.process,
-          };
-        case "missing-endpoint":
-          return {
-            custody: "observed",
-            detail: "SDK bridge endpoint is missing for this observed Revit process.",
-            id: String(row.process.pid),
-            phase: "unresponsive",
-            process: row.process,
-          };
-        case "unresponsive-endpoint":
-          return {
-            custody: "observed",
-            detail: "SDK bridge does not answer for this observed Revit process.",
-            id: String(row.process.pid),
-            phase: "unresponsive",
-            process: row.process,
-          };
-        default:
-          return assertNever(row.bridge);
-      }
     case "gone-receipt":
-      return {
-        custody: "controlled",
-        detail: row.detail,
-        id: row.id,
-        lane: receiptLane(row.receipt),
-        phase: "gone",
-      };
+      return ["gone", row.detail, row.process];
     case "failed-receipt":
-      return {
-        custody: "controlled",
-        detail: row.detail,
-        id: row.id,
-        lane: receiptLane(row.receipt),
-        phase: "failed",
-      };
+      switch (row.failure.source) {
+        case "journal":
+          return ["failed", row.detail, row.failure.process];
+        case "receipt":
+          return ["failed", row.detail];
+        default:
+          return assertNever(row.failure);
+      }
     default:
       return assertNever(row);
   }
@@ -168,49 +104,39 @@ export function fuseFleet(
 ): WorldFacts[] {
   const claimedSessionIds = new Set<string>();
   const worlds: WorldFacts[] = rows.map((row) => {
-    const projected = projectObservation(row);
-    const processStartUtcUnixMs = projected.process
-      ? Date.parse(projected.process.processStartUtc)
-      : Number.NaN;
-    const session =
-      projected.process && Number.isFinite(processStartUtcUnixMs)
-        ? sessions.find(
-            (candidate) =>
-              !claimedSessionIds.has(candidate.sessionId) &&
-              candidate.processId === projected.process!.pid &&
-              candidate.processStartUtcUnixMs === processStartUtcUnixMs,
-          )
-        : undefined;
+    const [phase, detail, process] = projectObservation(row);
+    const session = process
+      ? sessions.find(
+          (candidate) =>
+            !claimedSessionIds.has(candidate.sessionId) &&
+            candidate.processId === process.pid &&
+            candidate.processStartUtcUnixMs === Date.parse(process.processStartUtc),
+        )
+      : undefined;
     if (session) claimedSessionIds.add(session.sessionId);
+    const observed = row.case === "observed-active";
     return {
-      id: projected.id,
-      custody: projected.custody,
-      phase: projected.phase,
-      detail: projected.detail,
-      lane: projected.lane ?? session?.lane ?? undefined,
-      year: String(row.year),
-      pid: projected.process?.pid,
-      activeDocumentTitle: session?.activeDocumentTitle,
-      openDocumentCount: session?.openDocumentCount ?? 0,
+      phase,
+      detail,
+      id: observed ? String(row.process.pid) : row.id,
+      custody: observed ? "observed" : "controlled",
+      lane: observed ? (session?.lane ?? undefined) : RECEIPT_LANE[row.receipt.payload],
+      pid: process?.pid,
       session,
       row,
     };
   });
-  worlds.push(
-    ...sessions
-      .filter((session) => !claimedSessionIds.has(session.sessionId))
-      .map((session) => ({
+  for (const session of sessions)
+    if (!claimedSessionIds.has(session.sessionId))
+      worlds.push({
         id: session.sessionId,
-        custody: "observed" as const,
-        phase: "ready" as const,
+        custody: "observed",
+        phase: "ready",
         detail: "Host bridge is connected, but no exact SDK census row matched.",
         lane: session.lane ?? undefined,
         pid: session.processId,
-        activeDocumentTitle: session.activeDocumentTitle,
-        openDocumentCount: session.openDocumentCount,
         session,
-      })),
-  );
+      });
   return worlds;
 }
 
@@ -229,9 +155,6 @@ function useSessionStatusQuery({ all = false, enabled = true }: FleetOptions) {
     queryFn: async (): Promise<SessionListResult> => {
       const response = await fetch(all ? "/sessions?all=true" : "/sessions");
       if (!response.ok) throw new Error(`session list ${response.status}`);
-      // The route relays the CLI envelope untouched, so this is the SDK's own result shape. No
-      // `?? []` fallback: an envelope without `sessions` means the contract moved underneath us,
-      // and a silent empty fleet is exactly the failure this cutover exists to end.
       const body = (await response.json()) as Envelope<SessionListResult>;
       const result = body.result;
       if (!result || !Array.isArray(result.sessions))
@@ -251,30 +174,17 @@ export function useFleet(options: FleetOptions = {}) {
   const { all = false, enabled = true } = options;
   const sessionsQuery = useBridgeSessionsListQuery({ enabled });
   const status = useSessionStatusQuery({ all, enabled });
-  return useMemo(() => {
-    const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
-    return {
-      worlds: fuseFleet(status.data?.sessions ?? [], sessions),
-      sessions,
-      unreadableReceipts: status.data?.unreadableReceipts ?? [],
-      processReadErrors: status.data?.processReadErrors ?? [],
-      registryRoot: status.data?.registryRoot,
-      isLoading: sessionsQuery.isLoading || status.isLoading,
-      stale: sessionsQuery.isFetching || status.isFetching,
-      error: sessionsQuery.error ?? status.error,
-      at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
-      basis: ["sessions.list", "bridge.sessions.list"],
-    };
-  }, [
-    sessionsQuery.data?.sessions,
-    sessionsQuery.dataUpdatedAt,
-    sessionsQuery.error,
-    sessionsQuery.isFetching,
-    sessionsQuery.isLoading,
-    status.data,
-    status.dataUpdatedAt,
-    status.error,
-    status.isFetching,
-    status.isLoading,
-  ]);
+  const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
+  return {
+    worlds: fuseFleet(status.data?.sessions ?? [], sessions),
+    sessions,
+    unreadableReceipts: status.data?.unreadableReceipts ?? [],
+    processReadErrors: status.data?.processReadErrors ?? [],
+    registryRoot: status.data?.registryRoot,
+    isLoading: sessionsQuery.isLoading || status.isLoading,
+    stale: sessionsQuery.isFetching || status.isFetching,
+    error: sessionsQuery.error ?? status.error,
+    at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
+    basis: ["sessions.list", "bridge.sessions.list"],
+  };
 }
