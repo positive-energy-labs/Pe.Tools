@@ -1,5 +1,7 @@
+import { Popover } from "@base-ui/react/popover";
+import { useEffect } from "react";
+
 import { token } from "#/lib/token";
-import { useCallback, useEffect } from "react";
 import {
   pathOf,
   progress,
@@ -10,7 +12,7 @@ import {
 } from "#/targeting/model";
 import { Press } from "#/components/lang/press";
 import type { Bindings, Runner } from "./direction-glyph";
-import { DIR_GLYPH, POP, PULSE_CSS, freshnessWord, useClickAway } from "./direction-glyph";
+import { DIR_GLYPH, POP, PULSE_CSS, freshnessWord } from "./direction-glyph";
 import { PressContent } from "#/components/anatomy/press-content";
 
 export function Picker<K extends string>({
@@ -31,8 +33,6 @@ export function Picker<K extends string>({
   const chain = pathOf(product, link.key);
   const slot = `pick:${link.key}`;
   const open = b.open === slot;
-  const close = useCallback(() => b.setOpen(null), [b.setOpen]);
-  const ref = useClickAway(open, close);
   const level = b.pickerLevel ?? link.key;
   const setLevel = b.setPickerLevel;
   const q = b.pickerQuery;
@@ -80,30 +80,38 @@ export function Picker<K extends string>({
   };
 
   return (
-    <span ref={ref} className="relative inline-flex items-baseline">
-      <style>{PULSE_CSS}</style>
-      <Press
-        type="button"
-        onClick={() => {
-          if (!open) setLevel(link.key);
-          b.setOpen(open ? null : slot);
-        }}
-        disabled={inert}
-        title={title}
-        style={{
-          padding: 0,
-          cursor: inert ? "not-allowed" : "pointer",
-          backgroundColor: open ? token("select") : "transparent",
-          borderBottom: `1px solid ${caution ? token("caution") : token("ink")}`,
-          color: caution ? token("caution") : token("ink"),
-          whiteSpace: "nowrap",
-          animation: lit ? "tp-pulse var(--motion-control) ease-in-out infinite" : undefined,
-        }}
-      >
-        {link.dir ? `${DIR_GLYPH[link.dir]} ${closedText}` : closedText}
-      </Press>
-      {open ? (
-        <span className="absolute left-0 top-full z-popup mt-1 block overflow-hidden" style={POP}>
+    <Popover.Root open={open} onOpenChange={(next) => b.setOpen(next ? slot : null)}>
+      <span className="inline-flex items-baseline">
+        <style>{PULSE_CSS}</style>
+        <Popover.Trigger
+          render={<Press type="button" />}
+          disabled={inert}
+          title={title}
+          style={{
+            padding: 0,
+            cursor: inert ? "not-allowed" : "pointer",
+            backgroundColor: open ? token("select") : "transparent",
+            borderBottom: `1px solid ${caution ? token("caution") : token("ink")}`,
+            color: caution ? token("caution") : token("ink"),
+            whiteSpace: "nowrap",
+            animation: lit ? "tp-pulse var(--motion-control) ease-in-out infinite" : undefined,
+          }}
+        >
+          {link.dir ? `${DIR_GLYPH[link.dir]} ${closedText}` : closedText}
+        </Popover.Trigger>
+      </span>
+      <Popover.Portal>
+        <Popover.Positioner
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          className="isolate z-popup outline-none"
+        >
+          <Popover.Popup
+            aria-label={`Choose ${cur.key}`}
+            className="block max-h-(--available-height) overflow-hidden rounded-lg outline-none"
+            style={POP}
+          >
           <div
             className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"
             style={{ borderBottom: `1px solid ${token("line-2")}` }}
@@ -137,6 +145,7 @@ export function Picker<K extends string>({
 
           <input
             autoFocus
+            aria-label={`Search ${cur.key}`}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
@@ -144,7 +153,6 @@ export function Picker<K extends string>({
                 b.pick(cur, hits[0].id);
                 advance();
               }
-              if (e.key === "Escape") b.setOpen(null);
             }}
             placeholder={`search ${cur.key}${opts ? ` · ${opts.length}` : ""}`}
             className="w-full px-2 py-1"
@@ -246,8 +254,9 @@ export function Picker<K extends string>({
             ) : null}
             {extra?.(cur)}
           </div>
-        </span>
-      ) : null}
-    </span>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

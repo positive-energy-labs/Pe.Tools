@@ -41,14 +41,20 @@ function SelectTrigger({ children, ...props }: Omit<SelectPrimitive.Trigger.Prop
 
 function SelectContent({
   children,
-  sideOffset = 4,
+  sideOffset = 6,
   ...props
 }: Omit<SelectPrimitive.Popup.Props, "className"> &
   Pick<SelectPrimitive.Positioner.Props, "sideOffset">) {
   const { positioner, content } = selectRecipe();
   return (
     <SelectPrimitive.Portal>
-      <SelectPrimitive.Positioner className={positioner()} sideOffset={sideOffset}>
+      <SelectPrimitive.Positioner
+        side="bottom"
+        align="start"
+        sideOffset={sideOffset}
+        alignItemWithTrigger={false}
+        className={positioner()}
+      >
         <SelectPrimitive.Popup data-slot="select-content" className={content()} {...props}>
           {children}
         </SelectPrimitive.Popup>

@@ -3,17 +3,12 @@
  * at every corner of a real viewport.**
  *
  * Standing directive (CLEANROOM, ruled 2026-08-16): every popover-bearing component is tested
- * across viewport positions, because combobox, targeting dropdown and search boxes are
- * inconsistent in both style and popover behaviour everywhere in the app, and nobody has ever
- * seen that inconsistency as ONE fact. A harness that puts nine instances of the same specimen at
- * the corners, edges and centre of the viewport turns "it sometimes opens wrong" into a picture.
+ * across viewport positions. A harness that puts nine instances of the same specimen at the
+ * corners, edges and centre of the viewport turns "it sometimes opens wrong" into a picture.
  *
- * THIS PAGE FIXES NOTHING. It does not pass better `side`/`align` props, does not add collision
- * padding, does not restyle a popup. Each specimen is mounted EXACTLY as its real consumer mounts
- * it — the same composition, the same props, the same omissions — so what you see here is what
- * that consumer ships. Every observed defect is written down beside the picker. Discharging them
- * is SHIMS entry 7: one popover foundation in `components/lang/` that every popover-bearing
- * component sits on, adopted during the crusade.
+ * THIS PAGE OWNS NO POPUP FIXES. Each specimen is mounted EXACTLY as its real consumer mounts it,
+ * so what you see here is what that consumer ships. The notes distinguish current defects from
+ * repairs now owned by the shared language primitives.
  *
  * WHY TWO SPECIMENS ARE COMPOSED HERE RATHER THAN IMPORTED: the facet filter (`master-table`) and
  * the picker chip (`control-chips`) are PRIVATE functions inside their consumers. There is no
@@ -68,13 +63,13 @@ interface Specimen {
   consumers: string;
   /** What this composition does that the others do not. */
   shape: string;
-  /** Observed vs expected. Written down, not fixed. */
+  /** Current observation or a defect discharged by the shared primitive. */
   defects: readonly string[];
   render: () => React.ReactNode;
 }
 
 /** As `master-table.tsx`'s private `ColFilter` composes it: explicit anchor on the trigger, an
- *  in-popup search input once the option list is long, `side`/`align` left at the wrapper default. */
+ *  in-popup search input once the option list is long, and the wrapper's bottom/start defaults. */
 function FacetFilterSpecimen() {
   const [value, setValue] = useState<{ value: string | null; label: string } | null>(null);
   const choices = useMemo(
@@ -203,9 +198,9 @@ const SPECIMENS: readonly Specimen[] = [
     name: "combobox · facet filter",
     consumers:
       "components/master-table/master-table.tsx → every MasterTable column header (atlas/takeoffs, families, data-tables)",
-    shape: "explicit anchor on the trigger · in-popup search · wrapper default side/align",
+    shape: "explicit trigger anchor · in-popup search · bottom/start with collision fit",
     defects: [
-      "OBSERVED — the consumer asks for `min-w-44` and gets the anchor's width instead: `ComboboxContent`'s base `w-(--anchor-width)` wins the merge, so every option longer than the trigger truncates (`Curtain Pa…`, `Mechanic…`). The filter is the one place you cannot read the values you are filtering by.",
+      "FIXED — single-value Combobox popups keep the anchor as their preferred width with a readable 10rem floor.",
       "OBSERVED — flip works (bottom edge opens upward) but the in-popup search input stays at the popup's top, so after a flip the search box is the FURTHEST thing from the trigger you just clicked.",
       "no component to import: `ColFilter` is a private function inside master-table.tsx, so this composition is duplicated wherever a facet filter is wanted.",
       "the anchor is an extra `div` that exists only to stop the in-popup search input from becoming the positioner anchor (a jitter loop). Every consumer has to know that.",
@@ -218,7 +213,7 @@ const SPECIMENS: readonly Specimen[] = [
     consumers: "components/control-chips.tsx → the chat composer, families",
     shape: "ghost Button trigger · align=end · explicit anchor · searchable",
     defects: [
-      "OBSERVED, and it is the worst of the set — `min-w-56` is likewise beaten by `w-(--anchor-width)`, and this trigger's anchor is a ~6rem ghost Button, so the two-line items wrap character-by-character: `Windo / ws`, `OST_D / oors`. Unreadable at every one of the nine positions.",
+      "FIXED — narrow single-value triggers now open a readable 10rem popup instead of collapsing to the trigger width.",
       'OBSERVED — `align="end"` is hard-coded, so the popup is right-aligned to the anchor everywhere, including at the left edge where there is nothing to avoid.',
       "same private-function problem: `Picker` is internal to control-chips.tsx.",
       "the trigger is a shadcn ghost Button on `--muted-foreground` while the facet filter is a bare `ComboboxTrigger` on `--pe-line` — the same control, two visual identities. (The `--line-soft` shim this note used to cite is deleted.)",
@@ -230,11 +225,11 @@ const SPECIMENS: readonly Specimen[] = [
     name: "ui/select",
     consumers:
       "routes/settings.tsx, routes/ops.tsx (bridge session + scalar fields), routes/families.tsx",
-    shape: "Base UI Select — positions against the SELECTED ITEM, not the trigger",
+    shape: "Base UI Select · trigger-width popup · bottom/start with collision fit",
     defects: [
-      "OBSERVED — Select's popup GROWS to fit its content (350px from a 9rem trigger) while Combobox's SHRINKS to its anchor. The two dropdown families in this app have opposite width laws, which is the single loudest inconsistency the harness exposes.",
-      "OBSERVED — the popup aligns the SELECTED item over the trigger, so at the bottom-left corner it lands up and to the right, on top of whatever it overlaps. Correct Base UI behaviour; wrong next to four neighbours that anchor below.",
-      "styled on `--popover`/`--border`, the old vocabulary, so it cannot be retinted by the `--pe-*` layer at all — and in dark the popup ground is visibly lighter than every other popup on this page.",
+      "FIXED — Select keeps the trigger's width while Combobox adds a readable floor only for narrow single-value triggers.",
+      "FIXED — `alignItemWithTrigger={false}` gives Select the same anchored bottom/start positioning law as Combobox.",
+      "FIXED — the popup uses the shared artifact, ink, and line tokens in both themes.",
     ],
     render: () => <SelectSpecimen />,
   },
@@ -244,7 +239,7 @@ const SPECIMENS: readonly Specimen[] = [
     consumers: "routes/ops.tsx, ops/views-catalog.tsx, parameter-links/ProfileEditor.tsx",
     shape: "the INPUT is the trigger · NO explicit anchor · defaults everywhere",
     defects: [
-      "OBSERVED — anchor-width again: `Mechanical Equipment` wraps onto two lines here while `ui/select` renders the same option on one. Same data, same page, two answers.",
+      "FIXED — the single-value width floor keeps long option labels readable without changing the input's anchor ownership.",
       "no explicit anchor is passed, unlike BOTH other combobox consumers, which each wrote an anchor `div` with a comment explaining that the in-popup input must not be the positioner anchor. Nothing in the API says which shape needs it — the knowledge lives in two ponytail comments.",
       "OBSERVED — flips at the bottom edge (correct), but the description sub-line is `t-caption text-ink-2` here and `t-value text-ink-2` in the picker chip: the same option list, rendered at two sizes by two consumers.",
     ],
@@ -257,7 +252,7 @@ const SPECIMENS: readonly Specimen[] = [
     shape: "chips container is the anchor · the anchor GROWS as chips are added",
     defects: [
       "the anchor is the chips container, which GROWS every time a chip is added, so an open popup re-positions mid-selection — worst at the bottom edge, where each new chip can force a flip.",
-      "`data-chips` switches the popup to `min-w-(--anchor-width)` — the ONLY consumer that escapes the anchor-width clamp, and it escapes it by accident of which sub-component was anchored.",
+      "FIXED — the existing `multiple` contract now keeps chip popups anchor-owned without guessing from which element was anchored.",
       "FIXED — the trailing count line spent `--lichen`, a raw palette hue from the old vocabulary; it now sits on `--pe-ink-2` (and the old cat-lichen identity lives on only as `--viz-4`).",
     ],
     render: () => <FieldMultiSpecimen />,
@@ -337,23 +332,19 @@ function Panel({ specimen, onPick }: { specimen: Specimen; onPick: (id: string) 
         <span>shape: {specimen.shape}</span>
         {specimen.defects.map((d) => (
           <p key={d} className="pl-2">
-            <span>observed · </span>
+            <span>finding · </span>
             {d}
           </p>
         ))}
         <p className="pl-2">
           <span>the headline · </span>
-          three of the four combobox consumers ask for a wider popup than their anchor (
-          <code>min-w-44</code>, <code>min-w-56</code>) and every one of them is overruled by{" "}
-          <code>ComboboxContent</code>&apos;s own <code>w-(--anchor-width)</code>. Meanwhile{" "}
-          <code>ui/select</code> grows to fit its content. Two dropdown families, opposite width
-          laws, and the request the consumer wrote down is silently ignored.
+          Select matches its trigger. A single-value Combobox uses the greater of its anchor and a
+          10rem reading floor. A multiple Combobox matches its chips anchor. Both families open
+          bottom/start with Base UI collision handling unless a consumer explicitly changes align.
         </p>
         <p className="pt-1">
-          Open the same specimen at all nine positions and compare. Nothing here is corrected — each
-          is mounted exactly as its consumer mounts it, so the inconsistency you see is the
-          inconsistency that ships. One popover foundation in <code>components/lang/</code>{" "}
-          discharges it (SHIMS entry 7).
+          Open the same specimen at all nine positions and compare. Each instance is mounted exactly
+          as its consumer mounts it, so the remaining defects here are the defects that ship.
         </p>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { token } from "#/lib/token";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { FactChip } from "#/components/lang/chip";
 import {
   demandedKeys,
@@ -116,19 +116,6 @@ export function useBindings<K extends string>(
   };
 }
 
-export function useClickAway(open: boolean, onAway: () => void) {
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onAway();
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open, onAway]);
-  return ref;
-}
-
 export interface Runner<K extends string> {
   busy: string | null;
   active: Set<string>;
@@ -236,5 +223,5 @@ export const POP: React.CSSProperties = {
   border: `1px solid ${token("line-2")}`,
   backgroundColor: token("page"),
   width: 320,
-  maxWidth: "calc(100vw - 16px)",
+  maxWidth: "var(--available-width)",
 };
