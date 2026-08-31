@@ -143,6 +143,12 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-08-31 — Priority law: routes outside chat, takeoffs, family, families, settings are touched
   only in normalizing crusades; their specific holes wait for protoui/close rounds. Most lesser
   routes are ideas kept because code is the spec.
+- 2026-08-31 — Route-state demiurge converged on S2a-core: the shell owns address schema (shared
+  `doc` and `thread`), lane, and binding via ordered resolvers with the notYet/chrome/identity
+  contract; the lane is the first resolver and carries a `reachesHost` capability, not a string.
+  `store` and `useWorkspace` stay route-owned; that ruling is deferred to the first complex-route
+  cutover. Evidence: `spike/route-shell`, three routes, two spike rounds. Canon build lands with
+  the cutover, not as throwaway round 3.
 
 ## Tried & rejected
 
