@@ -122,13 +122,9 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
           {
             key: "adopt",
             label: "adopt zones",
-            demands: live ? ["views"] : [],
+            demands: ["views"],
             kind: "act",
-            run: () => {
-              if (!live && views.length === 0)
-                setState({ multi: { views: new Set(world.lanes.map((lane) => lane.view)) } });
-              return store.actions.openAdopt();
-            },
+            run: () => store.actions.openAdopt(),
             refuse: () => null,
             needs: "a zoning view with filled regions",
           },
