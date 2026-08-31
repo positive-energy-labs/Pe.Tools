@@ -46,14 +46,14 @@ export function FamilyWorkspaceDocPane() {
   const partInspector = (part: GeomConstituent): React.ReactNode => (
     <>
       <p
-        className="mb-1.5"
+        className="face-mono t-caption mb-2 text-ink-2"
         title={`${part.slug} is a ${part.kind}. The kind is READ-ONLY here: a prism does not become a cylinder because a word changed, and the profile's job is to say what the geometry is, not to pretend it can be retyped.`}
       >
         {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
       </p>
 
-      <div className="mb-2 p-1.5">
-        <p className="mb-1 flex items-center gap-1">
+      <div className="mb-3 border-t border-line pt-2">
+        <p className="t-label t-upper mb-1 flex items-center gap-1 text-ink-2">
           bindable dims — represented in the table
           <HelpTip>
             The constituent&rsquo;s bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE
@@ -101,9 +101,9 @@ export function FamilyWorkspaceDocPane() {
         })}
       </div>
 
-      <div className="p-1.5">
+      <div className="border-t border-line pt-2">
         <p
-          className="mb-1"
+          className="t-label t-upper mb-1 text-ink-2"
           title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
         >
           non-bindable metadata — lives only here
@@ -130,14 +130,14 @@ export function FamilyWorkspaceDocPane() {
     const family = proposalsAt(name, null);
     return (
       <>
-        <p className="mb-1.5">
+        <p className="face-mono t-caption mb-2 text-ink-2">
           {row?.dataType ?? "unknown"} · bound per {row?.isInstance ? "instance" : "type"}
           {row?.group ? ` · ${row.group}` : ""}
           {world.missingInRevit.has(name) && <span className="ml-1">⊘ not in Revit</span>}
         </p>
 
-        <div className="mb-2 p-1.5">
-          <p className="mb-1 flex items-center gap-1">
+        <div className="mb-3 border-t border-line pt-2">
+          <p className="t-label t-upper mb-1 flex items-center gap-1 text-ink-2">
             family value {isFormula(authored) ? "· formula" : ""}
             <HelpTip>
               THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows
@@ -175,9 +175,9 @@ export function FamilyWorkspaceDocPane() {
           )}
         </div>
 
-        <div className="mb-2 p-1.5">
+        <div className="mb-3 border-t border-line pt-2">
           <p
-            className="mb-1"
+            className="t-label t-upper mb-1 text-ink-2"
             title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
           >
             drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
@@ -204,9 +204,9 @@ export function FamilyWorkspaceDocPane() {
           )}
         </div>
 
-        <div className="p-1.5">
+        <div className="border-t border-line pt-2">
           <p
-            className="mb-1"
+            className="t-label t-upper mb-1 text-ink-2"
             title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."
           >
             grounding
@@ -236,13 +236,13 @@ export function FamilyWorkspaceDocPane() {
 
   const inspectorPanel =
     inspect == null ? null : (
-      <div className="flex max-h-[58%] min-h-0 flex-col">
-        <div className="flex h-6 items-center gap-2 px-2">
+      <div className="flex max-h-[58%] min-h-0 shrink-0 flex-col border-t-2 border-line-2">
+        <div className="flex h-7 shrink-0 items-center gap-2 border-b border-line bg-recess px-2">
           {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
           <span>
             <Tag>{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
           </span>
-          <span className="min-w-0 flex-1">
+          <span className="face-mono t-label min-w-0 flex-1 truncate text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
           <Verb
@@ -253,7 +253,7 @@ export function FamilyWorkspaceDocPane() {
             reason="Close the inspector and give the pane back to the spec. Esc does the same. Nothing is decided by closing — every edit here landed the moment you made it."
           />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {inspect.kind === "part"
             ? (world.geomBySlug.get(inspect.slug) ?? null) == null
               ? partProseOnly(world, inspect.slug)
@@ -322,7 +322,7 @@ export function FamilyWorkspaceDocPane() {
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* proposals — margin annotations, docked as a stack above the spec */}
-        <div className="p-2">
+        <div className="border-b border-line bg-artifact p-2">
           <p
             className="mb-1 t-label t-upper text-ink-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."

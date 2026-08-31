@@ -74,7 +74,7 @@ export function ModelViews({
   );
 
   return (
-    <div className="flex min-w-0 flex-col">
+    <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1">
         {VIEWS.map((view) => {
           const [uMin, uMax] = bounds[view.u];
@@ -122,7 +122,7 @@ export function ModelViews({
             <svg
               key={view.key}
               viewBox={`0 0 ${BOX} ${BOX}`}
-              className="h-full"
+              className="h-full min-w-0 flex-1 border-r border-line last:border-r-0"
               role="img"
               aria-label={`family ${view.key} view`}
             >

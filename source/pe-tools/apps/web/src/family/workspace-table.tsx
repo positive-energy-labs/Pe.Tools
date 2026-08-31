@@ -8,6 +8,7 @@ import { Pane } from "#/components/lang/pane";
 import { BuildStrip, BUILD_VERB, buildOutputPath } from "#/family/build";
 import { OVERLAY_LABEL, OVERLAY_TITLE, type PRow } from "#/family/model";
 import { useFamilyWorkspace } from "#/family/workspace-context";
+import { cn } from "#/lib/utils";
 
 export function FamilyWorkspaceTable() {
   const {
@@ -23,6 +24,9 @@ export function FamilyWorkspaceTable() {
     drillType,
     setDrillType,
     setFocus,
+    focusedParts,
+    focusedParams,
+    pinnedParam,
     rows,
     ghostCount,
     driftCells,
@@ -36,8 +40,21 @@ export function FamilyWorkspaceTable() {
     buildFacts,
     buildOutcome,
     columns,
+    firstGhostKey,
     drillColumns,
   } = useFamilyWorkspace();
+
+  const rowTint = (row: PRow) => {
+    const focused =
+      row.kind === "ghost"
+        ? focusedParts.has(row.slug ?? "")
+        : focusedParams.has(row.name) || pinnedParam === row.name;
+    return cn(
+      row.kind === "ghost" && "caution-wash-artifact",
+      row.key === firstGhostKey && "[&>td]:border-t [&>td]:border-t-line-2",
+      focused && "on-select",
+    );
+  };
 
   // A ghost row's focus is its CONSTITUENT — it has no parameter to light, and lighting nothing
   // would make the bottom of the table feel disconnected from the drawing it came out of.
@@ -70,6 +87,7 @@ export function FamilyWorkspaceTable() {
       scopeLabel="parameters"
       searchPlaceholder="parameter"
       onRowHover={hoverRow}
+      rowClassName={rowTint}
       tableState={tableState}
       onTableStateChange={setTableState}
       summary={
@@ -151,6 +169,7 @@ export function FamilyWorkspaceTable() {
       scopeLabel={`${drillType} · parameters`}
       searchPlaceholder="parameter"
       onRowHover={hoverRow}
+      rowClassName={rowTint}
       tableState={drillState}
       onTableStateChange={setDrillState}
       summary={

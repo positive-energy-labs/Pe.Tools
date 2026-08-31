@@ -74,7 +74,7 @@ export function FixtureViews({
           <svg
             key={view.key}
             viewBox={`0 0 ${BOX} ${BOX}`}
-            className="h-full"
+            className="h-full min-w-0 flex-1 border-r border-line last:border-r-0"
             role="img"
             aria-label={`family ${view.key} view`}
           >

@@ -35,7 +35,7 @@ export function SpecText({
       </EmptyState>
     );
   return (
-    <div className="p-2">
+    <div className="space-y-2 p-2">
       {spec.blocks.map((block) => {
         const lit = litBlocks.has(block.id);
         return (
@@ -127,15 +127,15 @@ export function SpecSheet({
         />
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="space-y-3 overflow-x-auto">
         {pages.map((page) => {
           const blocks = spec.blocks.filter((block) => block.page === page);
           return (
             <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
-              <div className="mb-0.5">page {page}</div>
+              <div className="face-mono t-caption mb-0.5 text-ink-2">page {page}</div>
               <svg
                 viewBox="0 0 100 130"
-                className="w-full"
+                className="block w-full border border-line-2 bg-document"
                 role="img"
                 aria-label={`stand-in page ${page}`}
               >
