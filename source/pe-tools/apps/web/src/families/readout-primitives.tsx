@@ -70,12 +70,12 @@ export function NamePicker({
       <div
         ref={anchor}
         title={title}
-        className="max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto"
+        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto"
       >
         <ComboboxChips>
           {collapsed ? (
             <span
-              className="px-1"
+              className="t-caption px-1 text-ink-2"
               title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
             >
               all {values.length}
@@ -97,7 +97,7 @@ export function NamePicker({
         <ComboboxList>
           {(name: string) => (
             <ComboboxItem key={name} value={name}>
-              <span>{name}</span>
+              <span className="face-mono min-w-0 truncate">{name}</span>
             </ComboboxItem>
           )}
         </ComboboxList>

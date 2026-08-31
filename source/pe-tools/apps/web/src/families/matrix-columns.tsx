@@ -128,6 +128,7 @@ export function useFamiliesColumns({
             }
             tone="quiet"
             size="value"
+            state={pickedIds.has(row.familyId) ? "selected" : "rest"}
           >
             {pickedIds.has(row.familyId) ? "▪" : "□"}
           </Press>

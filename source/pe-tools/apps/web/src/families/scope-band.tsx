@@ -59,13 +59,13 @@ export function FamiliesScopeBand() {
       )}
 
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
-      <div className="flex flex-wrap items-center gap-2 px-4 py-1.5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
         <SectionLabel>
           <span title="Which families the table loads at all. Scope is a DRAFT until you apply it — the matrix op is the expensive one, so it never fires on a click.">
             scope
           </span>
         </SectionLabel>
-        <div className="w-32">
+        <div className="face-mono w-32">
           <Select
             items={PLACEMENT_LABELS}
             value={placement}
@@ -156,7 +156,7 @@ export function FamiliesScopeBand() {
         )}
       </div>
 
-      <div className="px-4 py-1.5">
+      <div className="border-b border-line px-4 py-1.5">
         <VerbLane atoms={store.atoms} />
       </div>
       {matrixIssue && (
