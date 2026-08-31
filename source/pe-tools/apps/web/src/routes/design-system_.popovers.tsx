@@ -281,7 +281,7 @@ function PopoverHarness() {
     /* The grid IS the viewport — no page header, because a header would push the top row down and
        the top row is the whole point. The control panel lives in the centre cell, which is the one
        position with nothing to clamp against. */
-    <div className="grid grid-cols-3 grid-rows-3 gap-2 p-2">
+    <div className="grid h-dvh min-h-0 grid-cols-3 grid-rows-3 gap-2 overflow-hidden p-2">
       {POSITIONS.map((p) => (
         <div key={p.id} className={cn("flex min-h-0 min-w-0", p.cls)}>
           <span>{p.id}</span>
