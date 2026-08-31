@@ -42,7 +42,7 @@ export function ScalarField({
     : undefined;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="grid grid-cols-[minmax(9rem,0.7fr)_minmax(12rem,1.3fr)] items-start gap-x-3 gap-y-1">
       <FieldLabelRow
         label={label}
         htmlFor={path}
@@ -51,37 +51,60 @@ export function ScalarField({
         defaultValue={defaultValue}
         path={path}
       />
-      {shouldRenderSelect ? (
-        <Select value={primitiveInputValue(field.value)} onValueChange={field.change}>
-          <SelectTrigger id={path}>
-            <SelectValue placeholder="Select an option" />
-          </SelectTrigger>
-          <SelectContent>
-            {sanitizedItems.map((item) => (
-              <SelectItem key={item.value} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : isBoolean ? (
-        <div className="flex items-center gap-3">
-          <Switch
-            checked={Boolean(field.value)}
-            id={path}
-            size="sm"
-            onCheckedChange={field.change}
-          />
-          <span className="face-mono t-value text-ink-2">
-            {field.value ? "Enabled" : "Disabled"}
-          </span>
-        </div>
-      ) : options.length > 0 && allowsCustomValue ? (
-        <>
+      <div className="min-w-0">
+        {shouldRenderSelect ? (
+          <Select value={primitiveInputValue(field.value)} onValueChange={field.change}>
+            <SelectTrigger id={path}>
+              <SelectValue placeholder="Select an option" />
+            </SelectTrigger>
+            <SelectContent>
+              {sanitizedItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : isBoolean ? (
+          <div className="flex h-7 items-center gap-2">
+            <Switch
+              checked={Boolean(field.value)}
+              id={path}
+              size="sm"
+              onCheckedChange={field.change}
+            />
+            <span className="face-mono t-value text-ink-2">
+              {field.value ? "Enabled" : "Disabled"}
+            </span>
+          </div>
+        ) : options.length > 0 && allowsCustomValue ? (
+          <>
+            <Input
+              id={path}
+              type={isNumber ? "number" : "text"}
+              list={datalistId}
+              value={primitiveInputValue(field.value)}
+              onChange={(event) => {
+                field.change(
+                  isNumber
+                    ? coercePrimitive(event.currentTarget.value, nodeType)
+                    : event.currentTarget.value,
+                );
+              }}
+              placeholder={placeholder}
+            />
+            <datalist id={datalistId}>
+              {sanitizedItems.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </datalist>
+          </>
+        ) : (
           <Input
             id={path}
             type={isNumber ? "number" : "text"}
-            list={datalistId}
             value={primitiveInputValue(field.value)}
             onChange={(event) => {
               field.change(
@@ -92,31 +115,14 @@ export function ScalarField({
             }}
             placeholder={placeholder}
           />
-          <datalist id={datalistId}>
-            {sanitizedItems.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </datalist>
-        </>
-      ) : (
-        <Input
-          id={path}
-          type={isNumber ? "number" : "text"}
-          value={primitiveInputValue(field.value)}
-          onChange={(event) => {
-            field.change(
-              isNumber
-                ? coercePrimitive(event.currentTarget.value, nodeType)
-                : event.currentTarget.value,
-            );
-          }}
-          placeholder={placeholder}
-        />
-      )}
-      <FieldOptionsMetadata options={optionsState} />
-      <FieldMessages messages={field.errors} />
+        )}
+      </div>
+      <div className="col-start-2 empty:hidden">
+        <FieldOptionsMetadata options={optionsState} />
+      </div>
+      <div className="col-start-2 empty:hidden">
+        <FieldMessages messages={field.errors} compact />
+      </div>
     </div>
   );
 }

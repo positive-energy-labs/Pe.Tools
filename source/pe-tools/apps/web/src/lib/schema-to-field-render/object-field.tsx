@@ -15,8 +15,8 @@ export function ObjectField({
   }
 
   return (
-    <fieldset className="space-y-4 border-t border-line pt-3">
-      <legend>
+    <fieldset className="space-y-2 border-l-2 border-line-2 pl-3">
+      <legend className="w-full">
         <FieldLegendRow
           label={label}
           required={isRequired}
@@ -27,11 +27,17 @@ export function ObjectField({
           path={path}
         />
       </legend>
-      <FieldMessages messages={field.errors} />
-      {propertyEntries.map(([childKey, childNodeRef]) => {
-        const childPath = `${path}.${childKey}`;
-        return <FieldRenderer key={childPath} path={childPath} node={childNodeRef.raw()} />;
-      })}
+      <FieldMessages messages={field.errors} compact />
+      <div className="divide-y divide-line">
+        {propertyEntries.map(([childKey, childNodeRef]) => {
+          const childPath = `${path}.${childKey}`;
+          return (
+            <div key={childPath} className="py-2 first:pt-0 last:pb-0">
+              <FieldRenderer path={childPath} node={childNodeRef.raw()} />
+            </div>
+          );
+        })}
+      </div>
     </fieldset>
   );
 }

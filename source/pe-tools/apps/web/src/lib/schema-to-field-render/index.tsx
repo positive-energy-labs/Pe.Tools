@@ -74,9 +74,11 @@ function SchemaToFieldRenderContent({
       rootKey={rootKey}
       fieldChanges={fieldChanges}
     >
-      <div className="space-y-4">
+      <div className="divide-y divide-line">
         {rootEntries.map(([key, nodeRef]) => (
-          <FieldRenderer key={key} path={key} node={nodeRef.raw()} />
+          <div key={key} className="py-2 first:pt-0 last:pb-0">
+            <FieldRenderer path={key} node={nodeRef.raw()} />
+          </div>
         ))}
       </div>
     </SchemaRenderProvider>

@@ -54,7 +54,7 @@ export function ArrayField({
   const comboboxItems = items.map((item) => item.value);
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1">
       <FieldLabelRow
         label={label}
         required={isRequired}
@@ -95,41 +95,50 @@ export function ArrayField({
           </ComboboxContent>
         </Combobox>
       ) : isObjectArray && itemNode?.properties ? (
-        <div className="space-y-3">
-          {(Array.isArray(field.value) ? (field.value as unknown[]) : []).map((_, index) => {
-            const childPathPrefix = `${path}.${index}`;
-            return (
-              <div
-                key={childPathPrefix}
-                className="space-y-3 border-l-2 border-line-2 bg-recess px-3 py-2"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="t-label t-upper text-ink-2">Item {index + 1}</span>
-                  <Verb
-                    label="remove"
-                    reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
-                    onClick={() => {
-                      field.remove(index);
-                    }}
-                  />
+        <div className="border-t border-line">
+          <div className="flex items-center justify-between bg-artifact px-2 py-1">
+            <span className="face-mono t-caption t-upper text-ink-2">
+              {(Array.isArray(field.value) ? field.value : []).length} items
+            </span>
+            <Verb
+              label="add item"
+              reason="Append an item built from the schema's own defaults for this list. The change lives in the form until save writes it."
+              onClick={() => {
+                field.push(buildDefaultArrayItem(itemNodeRef));
+              }}
+            />
+          </div>
+          <div className="divide-y divide-line">
+            {(Array.isArray(field.value) ? (field.value as unknown[]) : []).map((_, index) => {
+              const childPathPrefix = `${path}.${index}`;
+              return (
+                <div
+                  key={childPathPrefix}
+                  className="space-y-2 border-l-2 border-line-2 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="face-mono t-caption t-upper text-ink-2">
+                      item {index + 1}
+                    </span>
+                    <Verb
+                      label="remove"
+                      reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
+                      onClick={() => {
+                        field.remove(index);
+                      }}
+                    />
+                  </div>
+                  {(itemNodeRef?.sortedProperties() ?? []).map(([childKey, childNodeRef]) => (
+                    <FieldRenderer
+                      key={`${childPathPrefix}.${childKey}`}
+                      path={`${childPathPrefix}.${childKey}`}
+                      node={childNodeRef.raw()}
+                    />
+                  ))}
                 </div>
-                {(itemNodeRef?.sortedProperties() ?? []).map(([childKey, childNodeRef]) => (
-                  <FieldRenderer
-                    key={`${childPathPrefix}.${childKey}`}
-                    path={`${childPathPrefix}.${childKey}`}
-                    node={childNodeRef.raw()}
-                  />
-                ))}
-              </div>
-            );
-          })}
-          <Verb
-            label="add item"
-            reason="Append an item built from the schema's own defaults for this list. The change lives in the form until save writes it."
-            onClick={() => {
-              field.push(buildDefaultArrayItem(itemNodeRef));
-            }}
-          />
+              );
+            })}
+          </div>
         </div>
       ) : (
         <Textarea
@@ -145,15 +154,15 @@ export function ArrayField({
           }}
         />
       )}
-      <span className="t-caption text-ink-2">
-        {isPrimitiveArray
-          ? "Multi-value combobox with searchable suggestions and removable chips."
-          : isObjectArray
-            ? "Array item object fields are fully editable."
+      {isObjectArray ? null : (
+        <span className="t-caption text-ink-2">
+          {isPrimitiveArray
+            ? "Multi-value combobox with searchable suggestions and removable chips."
             : "Array is currently edited as JSON for the MVP."}
-      </span>
+        </span>
+      )}
       <FieldOptionsMetadata options={optionsState} />
-      <FieldMessages messages={field.errors} />
+      <FieldMessages messages={field.errors} compact />
     </div>
   );
 }

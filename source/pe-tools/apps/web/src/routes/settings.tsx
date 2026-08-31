@@ -191,25 +191,18 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
         receipt={receipt ? <OutcomeLine kind="receipt" label={receipt.text} /> : undefined}
         aside={aside}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-        <div className="mx-auto max-w-3xl space-y-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+        <div className="mx-auto max-w-3xl space-y-2">
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           <VerbLane atoms={store.atoms} />
           {sliceError ? (
             <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
           ) : null}
-          {snapshot?.versionToken || snapshot?.modifiedUtc ? (
-            <div className="flex min-h-6 flex-wrap items-center gap-1">
-              <span className="face-mono t-caption t-upper mr-1 text-ink-mute">document facts</span>
-              {snapshot?.versionToken ? (
-                <FactChip title="The open document version token.">v{snapshot.versionToken}</FactChip>
-              ) : null}
-              {snapshot?.modifiedUtc ? (
-                <FactChip title="The open file's modification time.">
-                  read {timeAgo(snapshot.modifiedUtc)}
-                </FactChip>
-              ) : null}
-            </div>
+          {attentionCount > 0 ? (
+            <OutcomeLine
+              kind="error"
+              label={`${attentionCount} staged field${attentionCount === 1 ? "" : "s"} need attention before save`}
+            />
           ) : null}
 
           {snapshot && formModel ? (
@@ -218,13 +211,23 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                 head={
                   <>
                     <Tag>fields</Tag>
-                    <span className="face-mono t-caption min-w-0 truncate text-ink-2">
+                    <span className="face-mono t-caption min-w-0 flex-1 truncate text-ink-2">
                       {snapshot.documentId.relativePath}
                     </span>
+                    {snapshot.versionToken ? (
+                      <FactChip title="The open document version token.">
+                        v{snapshot.versionToken}
+                      </FactChip>
+                    ) : null}
+                    {snapshot.modifiedUtc ? (
+                      <FactChip title="The open file's modification time.">
+                        read {timeAgo(snapshot.modifiedUtc)}
+                      </FactChip>
+                    ) : null}
                   </>
                 }
               >
-                <div className="px-4 py-3">
+                <div className="px-3 py-2">
                   <SchemaToFieldRender
                     schema={formModel.schema}
                     moduleKey={snapshot.documentId.moduleKey}
@@ -273,12 +276,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
             </EmptyState>
           )}
 
-          {attentionCount > 0 ? (
-            <OutcomeLine
-              kind="error"
-              label={`${attentionCount} staged field${attentionCount === 1 ? "" : "s"} need attention before save`}
-            />
-          ) : null}
         </div>
       </div>
     </main>

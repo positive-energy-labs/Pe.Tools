@@ -251,11 +251,13 @@ export function FieldLabelRow({
   path?: string;
 }) {
   return (
-    <div className="flex items-baseline gap-1.5">
+    <div className="flex min-w-0 items-center gap-1 [&_[data-slot=label]]:face-mono [&_[data-slot=label]]:t-label [&_[data-slot=label]]:text-ink-2">
       <Label htmlFor={htmlFor}>{label}</Label>
       {required ? <RequiredBadge /> : null}
-      <FieldChangeBadge path={path} />
       <FieldMetadataTooltip description={description} defaultValue={defaultValue} />
+      <span className="ml-auto">
+        <FieldChangeBadge path={path} />
+      </span>
     </div>
   );
 }
@@ -274,11 +276,13 @@ export function FieldLegendRow({
   path?: string;
 }) {
   return (
-    <div className="t-label t-upper inline-flex items-center gap-1.5 px-2 text-ink-2">
+    <div className="face-mono t-label t-upper flex w-full items-center gap-1 border-b border-line pb-1 text-ink-2">
       <span>{label}</span>
       {required ? <RequiredBadge /> : null}
-      <FieldChangeBadge path={path} />
       <FieldMetadataTooltip description={description} defaultValue={defaultValue} />
+      <span className="ml-auto">
+        <FieldChangeBadge path={path} />
+      </span>
     </div>
   );
 }
