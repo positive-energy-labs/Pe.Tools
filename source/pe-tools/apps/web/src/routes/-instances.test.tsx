@@ -53,7 +53,7 @@ vi.mock("#/host/fleet", () => fleet);
 vi.mock("#/host/use-target", () => ({ useWorldLog: () => [] }));
 vi.mock("#/host/queries", () => ({ HOST_QUERY_KEY: ["host"] }));
 
-import { InstancesPage } from "#/routes/instances";
+import { InstancesPage, InstancesRouteContent, instancesSearch } from "#/routes/instances";
 import { paneState } from "#/targeting/kit";
 import { product as defineProduct } from "#/targeting/model";
 import { worldTrunk } from "#/targeting/world";
@@ -62,9 +62,43 @@ import type { WorldFacts } from "#/host/fleet";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("instances route", () => {
+  it("renders several exact fixture worlds without Host calls", () => {
+    const fetchMock = vi.fn();
+    const eventSource = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("EventSource", eventSource);
+
+    expect(instancesSearch({ source: "fixture" }).source).toBe("fixture");
+    expect(instancesSearch({ source: "Fixture" }).source).toBeUndefined();
+    expect(instancesSearch({ source: "fixture " }).source).toBeUndefined();
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <InstancesRouteContent source="fixture" />
+      </QueryClientProvider>,
+    );
+
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("fixture-dev-25");
+    expect(text).toContain("project-a Tower.rvt +1");
+    expect(text).toContain("observed-desktop");
+    expect(text).toContain("Clinic Renovation.rvt");
+    expect(text).toContain("fixture-installed-26");
+    expect(text).toContain("STARTING");
+    expect(text).toContain("fixture-dev-24-stalled");
+    expect(text).toContain("UNRESPONSIVE");
+    expect(text).toContain("revit up · host down");
+    expect((screen.getByRole("button", { name: "start" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(eventSource).not.toHaveBeenCalled();
+  });
+
   it("asks for a document before mounting the route document", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>

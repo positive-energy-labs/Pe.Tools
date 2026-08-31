@@ -24,9 +24,41 @@ import { StartFields, custodyVerdict, parseUtc, phaseVerdict, worldSub } from "#
 export function AddressedInstancesPage({ documentAddress }: { documentAddress: Address }) {
   const route = useRouteState(instancesRouteState, { documentAddress });
   const target = current(route.slice?.bindings.world, documentAddress)?.id ?? "";
+  const fleet = useFleet({ all: true });
+  return (
+    <InstancesWorkspace
+      target={target}
+      setTarget={(nextTarget) =>
+        void route.apply([
+          {
+            path: ["bindings", "world"],
+            value: nextTarget
+              ? { id: nextTarget, label: nextTarget, at: documentAddress }
+              : undefined,
+          },
+        ])
+      }
+      fleet={fleet}
+    />
+  );
+}
+
+export type InstancesFleet = ReturnType<typeof useFleet>;
+
+export function InstancesWorkspace({
+  target,
+  setTarget,
+  fleet,
+  source,
+}: {
+  target: string;
+  setTarget: (target: string) => void;
+  fleet: InstancesFleet;
+  source?: "fixture";
+}) {
   const [stage, setStage] = useState("declare");
   const queryClient = useQueryClient();
-  const { worlds, sessions, isLoading, error, stale, at, basis } = useFleet({ all: true });
+  const { worlds, sessions, isLoading, error, stale, at, basis } = fleet;
   const worldLog = useWorldLog(sessions);
   const [localLog, setLocalLog] = useState<{ atMs: number; actor: "you"; label: string }[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,7 +78,10 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
   const liveWorlds = worlds.filter((world) => world.phase !== "gone");
   const selectedWorld = worldTrunk.resolve(liveWorlds, sessions, target);
   const feeds = {
-    world: worldTrunk.feed({ worlds: liveWorlds, sessions, isLoading, stale, error, at, basis }),
+    world: {
+      ...worldTrunk.feed({ worlds: liveWorlds, sessions, isLoading, stale, error, at, basis }),
+      ...(source === "fixture" ? { lane: "fixture" as const } : {}),
+    },
   };
   const lifecycleVerbs = worldTrunk.verbs<"world">({
     start: () => ({
@@ -79,6 +114,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
       void queryClient.invalidateQueries({ queryKey: HOST_QUERY_KEY });
     },
   });
+  const fixtureRefusal = () => "fixture worlds are read-only";
   const product = defineProduct("instances", "instances", { world: worldTrunk.link })({
     feeds,
     stages: [
@@ -88,6 +124,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
         verbs: [
           {
             ...lifecycleVerbs.start,
+            ...(source === "fixture" ? { refuse: fixtureRefusal } : {}),
           },
         ],
       },
@@ -97,6 +134,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
         verbs: (["converge", "restart", "stop"] as const).map((key) => ({
           ...lifecycleVerbs[key],
           label: key === "stop" && selectedWorld?.phase === "unresponsive" ? "force stop" : key,
+          ...(source === "fixture" ? { refuse: fixtureRefusal } : {}),
         })),
       },
     ],
@@ -113,15 +151,7 @@ export function AddressedInstancesPage({ documentAddress }: { documentAddress: A
   const setState = (patch: BindingPatch<"world">) => {
     const nextTarget = patch.bound?.world;
     if (patch.stage) setStage(patch.stage);
-    if (nextTarget !== undefined)
-      void route.apply([
-        {
-          path: ["bindings", "world"],
-          value: nextTarget
-            ? { id: nextTarget, label: nextTarget, at: documentAddress }
-            : undefined,
-        },
-      ]);
+    if (nextTarget !== undefined) setTarget(nextTarget ?? "");
   };
   const bindings = useBindings(
     product,
