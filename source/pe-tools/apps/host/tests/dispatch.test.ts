@@ -22,7 +22,12 @@ import {
   normalizeApsTokenRequest,
   resolveApsScopes,
 } from "../src/aps-auth.ts";
-import { getBridgeSessionSummary, getSettingsWorkspaces, openShellPath } from "../src/local-ops.ts";
+import {
+  getBridgeSessionSummary,
+  getSettingsWorkspaces,
+  listBridgeSessions,
+  openShellPath,
+} from "../src/local-ops.ts";
 import { LocalOpError } from "../src/local-error.ts";
 import {
   discoverSettingsTree,
@@ -510,6 +515,29 @@ test("bridge session summary maps Revit state snapshot fields", async () => {
     path: "C:/shared.txt",
     provenance: "revit-state-sync",
   });
+});
+
+test("bridge sessions list carries process-start identity", async () => {
+  const result = await Effect.runPromise(
+    listBridgeSessions(
+      Effect.succeed([
+        {
+          connected: true,
+          sessionId: "bridge-a",
+          processId: 123,
+          processStartUtcUnixMs: 1_752_000_000_000,
+        },
+      ]),
+    ),
+  );
+
+  expect(result.sessions).toEqual([
+    expect.objectContaining({
+      sessionId: "bridge-a",
+      processId: 123,
+      processStartUtcUnixMs: 1_752_000_000_000,
+    }),
+  ]);
 });
 
 test("bridge registration rejects mismatched contract versions", () => {

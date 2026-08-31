@@ -2,6 +2,8 @@
 // once produced this file is deleted; changes here are ordinary code review, not regeneration.
 
 import { Schema } from "effect";
+import type { SessionObservation } from "../vendor/generated/pe-revit-contract.ts";
+import type { HostLane } from "../service-identity.ts";
 
 export const HOST_CONTRACT_VERSION = 37 as const;
 export const BRIDGE_CONTRACT_VERSION = 20 as const;
@@ -10,14 +12,14 @@ export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;
 
 const nullableString = Schema.optional(Schema.NullOr(Schema.String));
 
-// SDK vocabulary this wire speaks but the SDK's generated contract stopped exporting at
-// beta.131 (session list rows became untyped there). Owed: the SDK regenerates these unions;
-// until then this file is their one home.
 // `controlled` = pe-revit holds a receipt (full lifecycle); `observed` = reads only.
-export type Custody = "controlled" | "observed";
-// Payload SOURCE only. The CLI's session rows say `payload: "checkout" | "installed"`;
-// this wire and the UI say `dev` for checkout payloads. TODO: unwind this!!!
-export type Lane = "dev" | "installed";
+export type Custody = SessionObservation extends infer Observation
+  ? Observation extends { readonly case: "observed-active" }
+    ? "observed"
+    : "controlled"
+  : never;
+// Host/UI lane. The SDK calls the source payload `checkout`; only presentation calls it `dev`.
+export type Lane = HostLane;
 
 export const hostModuleDescriptorSchema = Schema.Struct({
   activeDocumentKind: Schema.Literals(["Any", "ProjectOnly", "FamilyOnly"]),

@@ -9,7 +9,7 @@ import {
   sessionListArgv,
   sessionStartArgv,
   sessionStopArgv,
-} from "./generated/pe-revit-contract.ts";
+} from "@pe/host-contracts/pe-revit-contract";
 import { hostOwnership, type HostLane } from "./host-ownership.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 
@@ -17,7 +17,7 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
  * Control plane for Revit sessions — NOT a catalog op. Session lifecycle belongs to the SDK
  * (`pe-revit session …` is the only implementation); this plain HTTP route is a THIN RELAY so a
  * browser can reach it. It shells the CLI through the GENERATED argv builders
- * (`generated/pe-revit-contract.ts`, vendored from the SDK and drift-guarded by
+ * (`@pe/host-contracts/pe-revit-contract`, vendored from the SDK and drift-guarded by
  * `pe-revit doctor`'s `ts-client-drift`) and hands the CLI's envelope back untouched.
  *
  * Untouched is the whole contract. This file forges NO envelope of its own: every state, code,

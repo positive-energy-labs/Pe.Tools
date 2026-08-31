@@ -47,33 +47,35 @@ function worldSub(world: WorldFacts): string {
 }
 
 function phaseVerdict(world: WorldFacts): Verdict {
-  // beta.131 rows speak one word, `phase`; the old `state` field is gone.
-  const state = world.row?.phase;
   if (world.phase === "ready")
     return {
-      word: state ?? "ready",
+      word: "ready",
       tone: "done",
-      note: world.session
-        ? "The bridge holds an open connection to this world."
-        : (world.row?.detail ?? "pe-revit verified this process identity."),
+      note: world.session ? "The bridge holds an open connection to this world." : world.detail,
     };
   if (world.phase === "booting")
     return {
-      word: state ?? "booting",
+      word: "booting",
       tone: "ink",
-      note: world.row?.detail ?? "The registry says this process is in its boot window.",
+      note: world.detail,
     };
   if (world.phase === "unresponsive")
     return {
-      word: state ?? "unresponsive",
+      word: "unresponsive",
       tone: "caution",
-      note: world.row?.detail ?? "The process exists but stopped answering.",
+      note: world.detail,
+    };
+  if (world.phase === "failed")
+    return {
+      word: "failed",
+      tone: "alarm",
+      note: world.detail,
     };
   return {
-    word: state ?? "gone",
+    word: "gone",
     tone: "mute",
     dim: true,
-    note: world.row?.detail ?? "pe-revit says this world is gone.",
+    note: world.detail,
   };
 }
 
@@ -306,7 +308,7 @@ function AddressedInstancesPage({ documentAddress }: { documentAddress: Address 
         label: "detail",
         cell: (world) => (
           <span className="face-mono t-caption block truncate px-1.5 text-[var(--r-ink-2)]">
-            {world.row?.detail || "—"}
+            {world.detail || "—"}
           </span>
         ),
       },

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
+import type { RecentDocument, SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 
 import type { WorldFacts } from "#/host/fleet";
 import { resolveTarget, type SessionFacts } from "#/host/target";
@@ -9,6 +9,7 @@ const session = (overrides: Partial<SessionFacts> = {}): SessionFacts => ({
   sessionId: "bridge-25",
   sdkSessionId: "pe.app-25",
   processId: 25,
+  processStartUtcUnixMs: 1_000,
   lane: "dev",
   custody: "controlled",
   openDocumentCount: 1,
@@ -24,6 +25,28 @@ const recent = (modelGuid: string, path: string): RecentDocument => ({
   region: "US",
   title: "Equal title.rvt",
   year: 2026,
+});
+
+const observation = (id: string, pid: number): SessionObservation => ({
+  case: "controlled-active",
+  bridge: { bridge: "ready", sessionDescriptor: "C:\\session.json" },
+  detail: "ready",
+  id,
+  observedAtUtc: "2026-08-30T12:00:00.000Z",
+  origin: "test",
+  process: {
+    executable: "C:\\Revit.exe",
+    pid,
+    processStartUtc: new Date(pid * 1_000).toISOString(),
+  },
+  project: null,
+  receipt: {
+    payload: "installed",
+    generationRoot: "C:\\generation",
+    receiptPath: "C:\\session.json",
+  },
+  worktree: "consumer",
+  year: 2025,
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -68,6 +91,7 @@ describe("targeting world", () => {
         id: "pe.app-25",
         custody: "controlled",
         phase: "ready",
+        detail: "ready",
         pid: 25,
         openDocumentCount: 1,
         session: controlled,
@@ -76,6 +100,7 @@ describe("targeting world", () => {
         id: "bridge-user",
         custody: "observed",
         phase: "ready",
+        detail: "ready",
         pid: 77,
         openDocumentCount: 1,
         session: observed,
@@ -84,15 +109,17 @@ describe("targeting world", () => {
         id: "installed-25",
         custody: "controlled",
         phase: "ready",
+        detail: "ready",
         pid: 88,
         openDocumentCount: 0,
         session: installed,
-        row: { id: "installed-25" } as WorldFacts["row"],
+        row: observation("installed-25", 88),
       },
       {
         id: "orphan",
         custody: "observed",
         phase: "ready",
+        detail: "ready",
         pid: 99,
         openDocumentCount: 0,
       },
@@ -129,6 +156,7 @@ describe("targeting world", () => {
       id: "bridge-user",
       custody: "observed",
       phase: "ready",
+      detail: "ready",
       pid: 77,
       openDocumentCount: 1,
       session: session({
@@ -162,6 +190,7 @@ describe("targeting world", () => {
       id: "pe.app-25",
       custody: "controlled",
       phase: "ready",
+      detail: "ready",
       pid: 25,
       openDocumentCount: 1,
       session: session(),

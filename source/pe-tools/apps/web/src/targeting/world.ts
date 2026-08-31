@@ -48,9 +48,9 @@ export interface WorldLifecycleReceipt {
 
 type WorldOption = Option & { readonly world: WorldFacts };
 
-const worldLabel = (
-  world: Pick<WorldFacts, "pid"> & Partial<Pick<WorldFacts, "session" | "row">>,
-) => world.session?.sdkSessionId ?? world.row?.id ?? `Revit ${world.pid ?? 0}`;
+const worldLabel = (world: Pick<WorldFacts, "custody" | "id" | "pid" | "session">) =>
+  world.session?.sdkSessionId ??
+  (world.custody === "observed" ? `Revit ${world.pid ?? world.id}` : world.id);
 
 const worldOption = (world: WorldFacts, sessions: readonly SessionFacts[]): WorldOption => ({
   id: world.session ? mintSelector(world.session, sessions) : `session:${worldLabel(world)}`,

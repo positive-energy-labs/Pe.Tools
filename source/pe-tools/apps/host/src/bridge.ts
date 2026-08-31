@@ -22,6 +22,7 @@ type Session = {
   readonly pending: Ref.Ref<BridgePendingRequest | null>; // single in-flight mailbox
   readonly sessionId: string;
   readonly processId: number;
+  readonly processStartUtcUnixMs: number | null;
   // Observed selector metadata, never identity. `lane` is the SDK's vocabulary verbatim
   // (dev | installed — payload SOURCE only); `sdkSessionId` is the id `pe-revit session list`
   // prints for this session; buildStamp is the LOADED payload's stamp as reported at registration —
@@ -65,6 +66,7 @@ export type BridgeSessionView = {
   /** The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id. */
   readonly sessionId?: string;
   readonly processId?: number;
+  readonly processStartUtcUnixMs?: number | null;
   readonly lane?: Lane | null;
   /** The id `pe-revit session status` prints for this session, when the payload reported one. */
   readonly sdkSessionId?: string | null;
@@ -105,8 +107,8 @@ export function computeBridgeSessionId(registration: {
 }
 
 /**
- * Lane vocabulary is the SDK's, and only the SDK's: the `Lane` union in the generated contract is
- * `dev | installed` and means payload SOURCE, nothing else. This does not so much normalize a lane
+ * The Host/UI lane is `dev | installed`; the SDK calls the source payload `checkout`. This does not
+ * so much normalize a lane
  * as REFUSE anything outside that union — a payload reporting a retired or invented lane reports
  * no lane at all, rather than teaching this broker a third vocabulary. A lane-less session is still
  * a perfectly good target by pid or bridge session id; it is only unreachable through lane words.
@@ -366,6 +368,7 @@ export const RevitBridgeLive = Layer.effect(
         connected: true,
         sessionId: session.sessionId,
         processId: session.processId,
+        processStartUtcUnixMs: session.processStartUtcUnixMs,
         lane: session.lane,
         sdkSessionId: session.sdkSessionId,
         custody: inferCustody(session),
@@ -454,6 +457,7 @@ export const RevitBridgeLive = Layer.effect(
               pending: yield* Ref.make<BridgePendingRequest | null>(null),
               sessionId,
               processId: frame.registration.processId,
+              processStartUtcUnixMs: frame.registration.processStartUtcUnixMs ?? null,
               lane: normalizeSessionLane(frame.registration.lane),
               sdkSessionId: frame.registration.sdkSessionId ?? null,
               buildStamp: frame.registration.buildStamp ?? null,

@@ -1,42 +1,19 @@
 /** Fuses SDK registry custody/lifecycle with bridge-observed documents. */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { Envelope, FleetPhase } from "@pe/host-contracts/pe-revit-contract";
+import type {
+  Envelope,
+  FleetPhase,
+  SessionListResult,
+  SessionObservation,
+  SessionReceipt,
+} from "@pe/host-contracts/pe-revit-contract";
+import type { HostLane } from "@pe/host-contracts/service-identity";
 
 import { HOST_QUERY_KEY, useBridgeSessionsListQuery } from "#/host/queries";
 import { fromBridgeSessions, type Custody, type SessionFacts } from "#/host/target";
 
-/**
- * One `session list` row as SessionCommand.Summary() emits it. beta.131's generated contract
- * carries no row type (the CLI builds rows as anonymous objects, which the generator cannot see),
- * so this mirrors the wire by hand. Owed: delete when the SDK regenerates SessionRow.
- */
-export interface SessionRow {
-  readonly id: string;
-  readonly phase: FleetPhase;
-  readonly detail: string | null;
-  readonly origin: string | null;
-  readonly year: string | null;
-  readonly project: string | null;
-  readonly worktree: string | null;
-  /** Payload SOURCE in the CLI's words: "checkout" (the UI's "dev") | "installed". */
-  readonly payload: string | null;
-  readonly buildStamp: string | null;
-  readonly pid: number | null;
-  readonly processStartUtc: string | null;
-  readonly observedAtUtc: string;
-}
-
-interface SessionListResult {
-  readonly state: string;
-  readonly registryRoot: string;
-  readonly sessions: readonly SessionRow[];
-}
-
-/** Branch on phase; SHOW row.phase. */
-type WorldPhase = "ready" | "booting" | "unresponsive" | "gone";
-
-const PHASES: readonly WorldPhase[] = ["ready", "booting", "unresponsive", "gone"];
+type WorldPhase = FleetPhase | "failed";
 
 /** One world as the sentence speaks about it and /instances tables it. */
 export interface WorldFacts {
@@ -44,8 +21,9 @@ export interface WorldFacts {
   id: string;
   custody: Custody;
   phase: WorldPhase;
-  /** Payload SOURCE: dev | installed. Null when unknown. */
-  lane?: string;
+  detail: string;
+  /** Host/UI lane. The SDK payload source calls `dev` checkouts `checkout`. */
+  lane?: HostLane;
   year?: string;
   pid?: number;
   activeDocumentTitle?: string;
@@ -53,55 +31,168 @@ export interface WorldFacts {
   /** Live bridge observation, when this world holds an open WebSocket to the host. */
   session?: SessionFacts;
   /** The SDK's own registry row, when `session list` knows this world. */
-  row?: SessionRow;
+  row?: SessionObservation;
 }
 
-function phaseOf(row: SessionRow): WorldPhase {
-  return PHASES.find((p) => p === row.phase) ?? "gone";
+type ObservationProjection = {
+  readonly custody: Custody;
+  readonly detail: string;
+  readonly id: string;
+  readonly lane?: HostLane;
+  readonly phase: WorldPhase;
+  readonly process?: { readonly pid: number; readonly processStartUtc: string };
+};
+
+function assertNever(value: never): never {
+  throw new Error(`unhandled session observation: ${JSON.stringify(value)}`);
 }
 
-/** Joins by SDK session id, then pid; unmatched bridges are observed worlds. */
+function receiptLane(receipt: SessionReceipt): HostLane {
+  switch (receipt.payload) {
+    case "checkout":
+      return "dev";
+    case "installed":
+      return "installed";
+    default:
+      return assertNever(receipt);
+  }
+}
+
+function projectObservation(row: SessionObservation): ObservationProjection {
+  switch (row.case) {
+    case "controlled-active":
+      switch (row.bridge.bridge) {
+        case "ready":
+          return {
+            custody: "controlled",
+            detail: row.detail,
+            id: row.id,
+            lane: receiptLane(row.receipt),
+            phase: "ready",
+            process: row.process,
+          };
+        case "unresponsive-endpoint":
+          return {
+            custody: "controlled",
+            detail: row.detail,
+            id: row.id,
+            lane: receiptLane(row.receipt),
+            phase: "unresponsive",
+            process: row.process,
+          };
+        default:
+          return assertNever(row.bridge);
+      }
+    case "controlled-pending": {
+      let process: ObservationProjection["process"];
+      switch (row.attempt.attempt) {
+        case "awaiting-launch":
+          process = undefined;
+          break;
+        case "launched":
+          switch (row.attempt.bridge.bridge) {
+            case "answering":
+            case "missing-endpoint":
+              process = row.attempt.process;
+              break;
+            default:
+              return assertNever(row.attempt.bridge);
+          }
+          break;
+        default:
+          return assertNever(row.attempt);
+      }
+      return {
+        custody: "controlled",
+        detail: row.detail,
+        id: row.id,
+        lane: receiptLane(row.receipt),
+        phase: "booting",
+        process,
+      };
+    }
+    case "observed-active":
+      switch (row.bridge.bridge) {
+        case "answering":
+          return {
+            custody: "observed",
+            detail: "SDK bridge answers for this observed Revit process.",
+            id: String(row.process.pid),
+            phase: "ready",
+            process: row.process,
+          };
+        case "missing-endpoint":
+          return {
+            custody: "observed",
+            detail: "SDK bridge endpoint is missing for this observed Revit process.",
+            id: String(row.process.pid),
+            phase: "unresponsive",
+            process: row.process,
+          };
+        case "unresponsive-endpoint":
+          return {
+            custody: "observed",
+            detail: "SDK bridge does not answer for this observed Revit process.",
+            id: String(row.process.pid),
+            phase: "unresponsive",
+            process: row.process,
+          };
+        default:
+          return assertNever(row.bridge);
+      }
+    case "gone-receipt":
+      return {
+        custody: "controlled",
+        detail: row.detail,
+        id: row.id,
+        lane: receiptLane(row.receipt),
+        phase: "gone",
+      };
+    case "failed-receipt":
+      return {
+        custody: "controlled",
+        detail: row.detail,
+        id: row.id,
+        lane: receiptLane(row.receipt),
+        phase: "failed",
+      };
+    default:
+      return assertNever(row);
+  }
+}
+
+/** Joins only one exact process incarnation; the SDK census owns every world's classification. */
 export function fuseFleet(
-  rows: readonly SessionRow[],
+  rows: readonly SessionObservation[],
   sessions: readonly SessionFacts[],
 ): WorldFacts[] {
-  const claimed = new Set<string>();
-  const worlds: WorldFacts[] = rows.map((row) => {
-    const session = sessions.find(
-      (s) =>
-        (s.sdkSessionId && s.sdkSessionId === row.id) ||
-        (row.pid != null && s.processId === row.pid),
-    );
-    if (session) claimed.add(session.sessionId);
+  return rows.map((row) => {
+    const projected = projectObservation(row);
+    const processStartUtcUnixMs = projected.process
+      ? Date.parse(projected.process.processStartUtc)
+      : Number.NaN;
+    const session =
+      projected.process && Number.isFinite(processStartUtcUnixMs)
+        ? sessions.find(
+            (candidate) =>
+              candidate.processId === projected.process!.pid &&
+              candidate.processStartUtcUnixMs === processStartUtcUnixMs,
+          )
+        : undefined;
     return {
-      id: row.id,
-      // Every registry row IS a pe-revit receipt; the user's own Revit never appears here.
-      custody: "controlled",
-      phase: phaseOf(row),
-      lane: row.payload === "checkout" ? "dev" : (row.payload ?? undefined),
-      year: row.year ?? undefined,
-      pid: row.pid ?? undefined,
-      // beta.131 rows carry no document snapshot; only a live bridge connection sees documents.
+      id: projected.id,
+      custody: projected.custody,
+      phase: projected.phase,
+      detail: projected.detail,
+      lane: projected.lane ?? session?.lane ?? undefined,
+      year: String(row.year),
+      pid: projected.process?.pid,
       activeDocumentTitle: session?.activeDocumentTitle,
       openDocumentCount: session?.openDocumentCount ?? 0,
       session,
       row,
     };
   });
-  for (const session of sessions) {
-    if (claimed.has(session.sessionId)) continue;
-    worlds.push({
-      id: session.sdkSessionId ?? session.sessionId,
-      custody: session.custody,
-      phase: "ready", // an open bridge connection is the strongest readiness claim there is
-      lane: session.lane ?? undefined,
-      pid: session.processId,
-      activeDocumentTitle: session.activeDocumentTitle,
-      openDocumentCount: session.openDocumentCount,
-      session,
-    });
-  }
-  return worlds;
 }
 
 interface FleetOptions {
@@ -116,7 +207,7 @@ function useSessionStatusQuery({ all = false, enabled = true }: FleetOptions) {
   return useQuery({
     queryKey: [...HOST_QUERY_KEY, "", "sessions.status", all ? "all" : ""],
     enabled,
-    queryFn: async (): Promise<SessionRow[]> => {
+    queryFn: async (): Promise<SessionObservation[]> => {
       const response = await fetch(all ? "/sessions?all=true" : "/sessions");
       if (!response.ok) throw new Error(`session list ${response.status}`);
       // The route relays the CLI envelope untouched, so this is the SDK's own result shape. No

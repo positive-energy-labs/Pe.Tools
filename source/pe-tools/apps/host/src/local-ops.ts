@@ -147,6 +147,7 @@ export const listBridgeSessions = Effect.fnUntraced(function* (
         openDocumentCount:
           typeof bridge.state?.openDocumentCount === "number" ? bridge.state.openDocumentCount : 0,
         processId: bridge.processId ?? null,
+        processStartUtcUnixMs: bridge.processStartUtcUnixMs ?? null,
         revitVersion: bridge.state?.revitVersion ?? null,
         runtimeFramework: bridge.state?.runtimeFramework ?? null,
         custody: bridge.custody ?? null,

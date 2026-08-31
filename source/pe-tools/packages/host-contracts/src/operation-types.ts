@@ -385,6 +385,7 @@ export const bridgeSessionsListSchema = Schema.Struct({
       lane: Schema.optional(Schema.NullOr(Schema.String)),
       openDocumentCount: Schema.Number,
       processId: Schema.optional(Schema.NullOr(Schema.Number)),
+      processStartUtcUnixMs: Schema.optional(Schema.NullOr(Schema.Number)),
       revitVersion: Schema.optional(Schema.NullOr(Schema.String)),
       runtimeFramework: Schema.optional(Schema.NullOr(Schema.String)),
       sdkSessionId: Schema.optional(Schema.NullOr(Schema.String)),

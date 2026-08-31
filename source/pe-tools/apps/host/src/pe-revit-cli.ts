@@ -4,7 +4,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import type { Diagnostic, Envelope, Resolved as GeneratedResolved } from "./generated/pe-revit-contract.ts";
+import type {
+  Diagnostic,
+  Envelope,
+  Resolved as GeneratedResolved,
+} from "@pe/host-contracts/pe-revit-contract";
 
 /** A resolved launch: the executable plus the fixed args that precede the verb tokens. */
 export interface PeRevitLaunch {
