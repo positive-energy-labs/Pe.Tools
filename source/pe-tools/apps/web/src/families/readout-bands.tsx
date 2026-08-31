@@ -10,8 +10,16 @@ import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
 
 export function FamiliesReadoutBands() {
-  const { store, plan, includedPlanned, outsideProfile, excludedIds, applyData, projection } =
-    useFamiliesWorkspace();
+  const {
+    fixture,
+    store,
+    plan,
+    includedPlanned,
+    outsideProfile,
+    excludedIds,
+    applyData,
+    projection,
+  } = useFamiliesWorkspace();
   return (
     <>
       {plan && (
@@ -227,7 +235,7 @@ export function FamiliesReadoutBands() {
 
       {/* ── projection: a lazily-rendered document, copyable ─────────────────────────────── */}
       {projection && (
-        <details className="border-b border-line px-4 py-2">
+        <details className="border-b border-line px-4 py-2" open={fixture ? true : undefined}>
           <summary className="cursor-pointer">
             <SectionLabel>
               <span title="Each picked family read back out of the model as profile JSON. Nothing is written anywhere — copy it into a profile document if you want to keep it.">

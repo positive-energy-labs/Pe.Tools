@@ -191,8 +191,8 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
         receipt={receipt ? <OutcomeLine kind="receipt" label={receipt.text} /> : undefined}
         aside={aside}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-        <div className="mx-auto max-w-4xl space-y-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-1.5">
+        <div className="mx-auto max-w-5xl space-y-1.5">
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           <VerbLane atoms={store.atoms} />
           {sliceError ? (
@@ -329,7 +329,7 @@ function FieldRow({
   const proposal = staged ? null : row.field?.proposal;
   const shown = staged ? row.field?.staged?.value : proposal ? proposal.value : row.current;
   return (
-    <div className="grid min-h-10 grid-cols-[minmax(14rem,0.8fr)_minmax(0,1.2fr)_auto] items-center gap-3 px-3 py-1">
+    <div className="grid min-h-9 grid-cols-[minmax(15rem,0.75fr)_minmax(0,1.25fr)_auto] items-center gap-2 px-3 py-0.5">
       <div className="face-mono t-label min-w-0 truncate text-ink-2">{row.path}</div>
       <StateCell
         scale="row"

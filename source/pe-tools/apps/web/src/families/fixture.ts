@@ -331,7 +331,29 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
     categories: async () => fixtureFamiliesDraft.categories,
     families: async () => fixtureFamiliesDraft.families,
     profiles: async () => ["desk.json"],
-    project: async () => ({ projections: [], diagnostics: [] }),
+    project: async (_target, familyIds) => ({
+      projections: familyIds.map((familyId) => {
+        const family = fixtureFamilyRows.find((candidate) => candidate.familyId === familyId);
+        return family
+          ? {
+              familyId,
+              familyName: family.familyName,
+              success: true,
+              profileJson: JSON.stringify(
+                {
+                  FilterFamilies: { IncludeNames: { Equaling: [family.familyName] } },
+                  FamilyParameters: family.parameters.map((parameter) => ({
+                    Name: parameter.definition.identity.name,
+                  })),
+                },
+                null,
+                2,
+              ),
+            }
+          : { familyId, success: false, error: "fixture family not found" };
+      }),
+      diagnostics: [],
+    }),
     openPath: async () => {
       throw new Error("fixture path opening is disabled");
     },
@@ -369,5 +391,6 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
     categoryNames: fixtureFamiliesDraft.categories,
     familyNames: fixtureFamiliesDraft.families,
   });
+  registry.set(store.atoms.pickedIds, new Set([101]));
   return store;
 }
