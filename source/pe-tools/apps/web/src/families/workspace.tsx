@@ -309,7 +309,10 @@ export function FamiliesWorkspace({
 
   // ── scope: the cheap catalog feeds both pickers; the matrix waits for Apply ───────────────────
   const categories = categoryFeed.options?.map((option) => option.id) ?? [];
-  const draftFamilyNames = familyFeed.options?.map((option) => option.id) ?? [];
+  const draftFamilyNames =
+    fixtureFamilies?.map((family) => family.familyName) ??
+    familyFeed.options?.map((option) => option.id) ??
+    [];
 
   // Budget sized to the picked family list so nothing truncates silently, and samples lifted so
   // no type/cell is dropped from the master table.
@@ -785,7 +788,7 @@ export function FamiliesWorkspace({
               placeholder={
                 draftCategories.length === 0
                   ? "pick categories first"
-                  : familyFeed.state === "loading" || familyFeed.stale
+                  : !fixture && (familyFeed.state === "loading" || familyFeed.stale)
                     ? "resolving families…"
                     : "no families resolved"
               }
@@ -797,9 +800,9 @@ export function FamiliesWorkspace({
         {/* RULED 2026-08-16 (fit reviews): the third EmptyState that sat here — "no categories
             picked yet" — is deleted; the two visibly-empty pickers beside it announce
             themselves. */}
-        {draftCategories.length === 0 ? null : (draftFamilyNames.length === 0 &&
-            familyFeed.state === "loading") ||
-          familyFeed.stale ? (
+        {draftCategories.length === 0 ? null : !fixture &&
+          ((draftFamilyNames.length === 0 && familyFeed.state === "loading") ||
+            familyFeed.stale) ? (
           <OutcomeLine className="shrink-0" kind="busy" label="resolving families" />
         ) : (
           <FactChip title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated.">
