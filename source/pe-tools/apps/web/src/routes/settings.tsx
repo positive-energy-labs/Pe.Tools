@@ -191,8 +191,8 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
         receipt={receipt ? <OutcomeLine kind="receipt" label={receipt.text} /> : undefined}
         aside={aside}
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
-        <div className="mx-auto max-w-3xl space-y-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+        <div className="mx-auto max-w-4xl space-y-2">
           {peaActive ? <OutcomeLine kind="busy" label="pea is working" /> : null}
           <VerbLane atoms={store.atoms} />
           {sliceError ? (
@@ -210,8 +210,8 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
               <ArtifactFrame
                 head={
                   <>
-                    <Tag>fields</Tag>
-                    <span className="face-mono t-caption min-w-0 flex-1 truncate text-ink-2">
+                    <Tag>schema ledger</Tag>
+                    <span className="face-mono t-label min-w-0 flex-1 truncate text-ink">
                       {snapshot.documentId.relativePath}
                     </span>
                     {snapshot.versionToken ? (
@@ -227,7 +227,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                   </>
                 }
               >
-                <div className="px-3 py-2">
+                <div className="px-3 py-1.5 [&_[data-slot=combobox-chip-input]]:face-mono [&_[data-slot=combobox-chip]]:face-mono [&_[data-slot=input]]:face-mono [&_[data-slot=select-trigger]]:face-mono [&_[data-slot=textarea]]:face-mono">
                   <SchemaToFieldRender
                     schema={formModel.schema}
                     moduleKey={snapshot.documentId.moduleKey}
@@ -263,7 +263,16 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
               ) : null}
             </>
           ) : snapshot && rows.length ? (
-            <ArtifactFrame>
+            <ArtifactFrame
+              head={
+                <>
+                  <Tag>field readout</Tag>
+                  <span className="face-mono t-label min-w-0 flex-1 truncate text-ink">
+                    {snapshot.documentId.relativePath}
+                  </span>
+                </>
+              }
+            >
               <div className="divide-y divide-line">
                 {rows.map((row) => (
                   <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
@@ -321,24 +330,22 @@ function FieldRow({
   const proposal = staged ? null : row.field?.proposal;
   const shown = staged ? row.field?.staged?.value : proposal ? proposal.value : row.current;
   return (
-    <div className="flex min-h-11 items-center gap-3 px-3 py-1.5">
-      <div className="min-w-0 flex-1">
-        <div className="face-mono t-label truncate text-ink-2">{row.path}</div>
-        <StateCell
-          scale="row"
-          value={display(shown)}
-          stage={staged ? "staged" : proposal ? "proposed" : "clean"}
-          stagedBy="you"
-          cap={busy ? "readonly" : "editable"}
-          capReason={busy ? "A settings verb is running." : undefined}
-          onCommit={(value) =>
-            void store.actions.stage(row.path, parseLike(shown, value)).catch(() => undefined)
-          }
-          note={
-            row.field?.review === "attention" ? "needs attention" : (proposal?.note ?? undefined)
-          }
-        />
-      </div>
+    <div className="grid min-h-10 grid-cols-[minmax(14rem,0.8fr)_minmax(0,1.2fr)_auto] items-center gap-3 px-3 py-1">
+      <div className="face-mono t-label min-w-0 truncate text-ink-2">{row.path}</div>
+      <StateCell
+        scale="row"
+        value={display(shown)}
+        stage={staged ? "staged" : proposal ? "proposed" : "clean"}
+        stagedBy="you"
+        cap={busy ? "readonly" : "editable"}
+        capReason={busy ? "A settings verb is running." : undefined}
+        onCommit={(value) =>
+          void store.actions.stage(row.path, parseLike(shown, value)).catch(() => undefined)
+        }
+        note={
+          row.field?.review === "attention" ? "needs attention" : (proposal?.note ?? undefined)
+        }
+      />
       {staged ? (
         <Verb
           label="unstage"
