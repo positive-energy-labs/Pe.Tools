@@ -1,5 +1,10 @@
 import { Effect } from "effect";
-import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { expect, test } from "vite-plus/test";
 import {
   docOpenArgs,
@@ -14,6 +19,8 @@ import {
   type SessionActionRequest,
 } from "../src/session-route.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-launch.ts";
+
+const execFileAsync = promisify(execFile);
 
 function parsed(body: unknown): SessionActionRequest {
   const result = parseSessionActionRequest(body);
@@ -173,6 +180,34 @@ test("session CLI rejects empty, invalid, and non-envelope output", () => {
     '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":{},"command":{}}';
   expect(validatePeRevitEnvelope(envelope, args, launch)).toBe(envelope);
 });
+
+test("checkout pin answers with an envelope against isolated SDK roots", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-tools-session-list-"));
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../../..");
+  const launch = peRevitLauncher({
+    lane: "dev",
+    sourceRoot: join(repoRoot, "source", "pe-tools"),
+  });
+  const args = ["session", "list", "--all", "--json"];
+  const registryRoot = join(root, "registry");
+  try {
+    const { stdout } = await execFileAsync(launch.cmd, [...launch.args, ...args], {
+      cwd: launch.cwd,
+      env: {
+        ...process.env,
+        PE_REVIT_ADDINS_ROOT: join(root, "addins"),
+        PE_SERVICE_STATE_ROOT: join(root, "services"),
+        PE_SESSION_FILES_ROOT: join(root, "files"),
+        PE_SESSION_REGISTRY_ROOT: registryRoot,
+      },
+      windowsHide: true,
+    });
+    expect(validatePeRevitEnvelope(stdout, args, launch)).toBe(stdout);
+    expect(stdout).toContain(registryRoot.replaceAll("\\", "\\\\"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30_000);
 
 // --- shelled execution (fake shell layer, no real CLI) ----------------------------------------
 
