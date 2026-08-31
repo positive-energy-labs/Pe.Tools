@@ -40,6 +40,18 @@ Shapes on the table (verdict owed, re-openable):
   into it, leave layout/URL/keyboard free. Argued against: canonizes the heaviest boilerplate and
   settles one axis of five.
 
+Round-1 spike (`spike/route-shell` worktree, report
+`.artifacts/runs/route-shell-spike-20260831/report.md`): S2's binding/lane/URL/store half held on
+`/schedule-grid` and `/grilles` with no friction; the layout-slot half FALSIFIED — neither route's
+real layout is a `PaneWorkspace` (it requires `visual`, lacks `header`), so mandating slots is a
+redesign in refactor clothes. S2 splits: S2a = shell without layout (live candidate), S2b = slots
+(deferred until the pane primitive grows `header` and optional `visual`; phase-3/4 work). New
+candidate S5 from `/instances`: `binding` as an ordered resolver pipeline (world resolves before
+document, resolved values land in ctx). Round 2 running: port `/instances` on resolvers before any
+freeze. Known holes staked by the spike: `workbench/route-state.tsx` welds store creation to the
+hook (module-private factory, had to be copied); `Lane` member `"read"` is silently treated as
+live in gate ordering.
+
 ## Laws for this effort
 
 - The SDK contract is fixed; only web-side state shape changes (LEDGER Decided 2026-08-31).
