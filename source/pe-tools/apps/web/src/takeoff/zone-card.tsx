@@ -51,15 +51,14 @@ export function ZoneCard({
       data-selected={entity.selected || undefined}
       data-dirty={entity.dirty || undefined}
       data-conflict={entity.conflict || undefined}
-      className="z-raised max-h-[calc(100%-1rem)] w-64 overflow-y-auto"
-      style={{ position: "absolute", top: 8, left: 8 }}
+      className="absolute top-2 left-2 z-raised max-h-[calc(100%-1rem)] w-64 overflow-y-auto"
     >
       <ArtifactFrame
         head={
           <>
-            <ZoneThumb zone={zone.zone} className="size-5" />
-            <span>{zone.zone.key}</span>
-            <span className="min-w-0">{zone.name}</span>
+            <ZoneThumb zone={zone.zone} className="size-4" />
+            <span className="face-mono t-value shrink-0">{zone.zone.key}</span>
+            <span className="t-label min-w-0 flex-1 truncate text-ink-2">{zone.name}</span>
             <Press
               type="button"
               onClick={onClose}
@@ -74,7 +73,7 @@ export function ZoneCard({
       >
         <ZonePeek zone={zone} cursorRoom={cursorRoom} geoReady={geoReady} stateOf={stateOf} />
 
-        <div className="px-2 py-1.5">
+        <div className="flex flex-col gap-1 px-2 py-1.5">
           <div className="flex flex-wrap gap-1">
             {entity.bound && (
               <FactChip title="This zone is bound in the URL scope.">URL bound</FactChip>
@@ -93,7 +92,7 @@ export function ZoneCard({
               </FactChip>
             )}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="face-mono t-value flex items-center gap-1.5 text-ink-2">
             <ZoneStateBar zone={zone} states={states} className="w-16" />
             <span title={STAGE_BLURB[zone.stage]}>
               {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
@@ -110,7 +109,7 @@ export function ZoneCard({
             </FactChip>
           )}
           {zoneSystems.map((s) => (
-            <p key={s.tag}>
+            <p key={s.tag} className="face-mono t-value text-ink-2">
               {s.tag} · {fmtNum(s.sensibleBtuh, 0)} Btu/h
               {s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""}
             </p>

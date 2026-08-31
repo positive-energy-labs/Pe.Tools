@@ -33,7 +33,7 @@ export function AtlasVisual() {
     selectZone,
   } = useAtlasWorkspace();
   return (
-    <Suspense fallback={<div className="p-2">reading plan…</div>}>
+    <Suspense fallback={<div className="t-label p-2 text-ink-2">reading plan…</div>}>
       <Pane
         kind="visual"
         toolbar={
@@ -46,15 +46,15 @@ export function AtlasVisual() {
                   key={lane.label}
                   type="button"
                   onClick={() => setLevel(lane.label)}
-                  size="value"
+                  size="caption"
                   tone={lane.label === level ? "neutral" : "quiet"}
                   state={lane.label === level ? "selected" : "rest"}
                   title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
                 >
                   <span className="face-mono">
                     {lane.label}
-                    <span className="ml-1">{zs.length}</span>
-                    {calls > 0 && <span className="ml-1">·{calls}</span>}
+                    <span className="ml-1 text-ink-2">{zs.length}</span>
+                    {calls > 0 && <span className="ml-1 text-alarm">·{calls}</span>}
                   </span>
                 </Press>
               );
@@ -63,7 +63,7 @@ export function AtlasVisual() {
             <Press
               type="button"
               onClick={() => setStatsOpen(!statsOpen)}
-              size="value"
+              size="caption"
               tone="neutral"
               state={statsOpen ? "selected" : "rest"}
               title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
@@ -77,7 +77,7 @@ export function AtlasVisual() {
                 planOpen ? "collapse the plan — give the table the full height" : "show the plan"
               }
               tone="neutral"
-              size="value"
+              size="caption"
             >
               <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
             </Press>
