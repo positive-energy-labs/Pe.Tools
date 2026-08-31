@@ -75,9 +75,9 @@ export function WorldLane({
     });
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex min-h-0 flex-col t-label text-ink-2">
       <div className="sticky top-0 z-[2] flex items-center gap-2.5 px-3.5 pt-3 pb-2.5">
-        <h2 className="m-0">What the agent sends the model</h2>
+        <h2 className="m-0 t-label t-upper text-ink-2">What the agent sends the model</h2>
         <div className="ml-auto flex items-center gap-1.5">
           <Switcher
             ariaLabel="density"
