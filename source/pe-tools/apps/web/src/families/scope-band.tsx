@@ -30,6 +30,7 @@ const PLACEMENT_NOTES: Record<LoadedFamilyPlacementScope, string> = {
 
 export function FamiliesScopeBand() {
   const {
+    fixture,
     store,
     selectedProfileQuery,
     placement,
@@ -128,7 +129,7 @@ export function FamiliesScopeBand() {
               placeholder={
                 draftCategories.length === 0
                   ? "pick categories first"
-                  : familyFeed.state === "loading" || familyFeed.stale
+                  : !fixture && (familyFeed.state === "loading" || familyFeed.stale)
                     ? "resolving families…"
                     : "no families resolved"
               }
@@ -140,9 +141,9 @@ export function FamiliesScopeBand() {
         {/* RULED 2026-08-16 (fit reviews): the third EmptyState that sat here — "no categories
             picked yet" — is deleted; the two visibly-empty pickers beside it announce
             themselves. */}
-        {draftCategories.length === 0 ? null : (draftFamilyNames.length === 0 &&
-            familyFeed.state === "loading") ||
-          familyFeed.stale ? (
+        {draftCategories.length === 0 ? null : !fixture &&
+          ((draftFamilyNames.length === 0 && familyFeed.state === "loading") ||
+            familyFeed.stale) ? (
           <div>
             <OutcomeLine kind="busy" label="resolving families" />
           </div>

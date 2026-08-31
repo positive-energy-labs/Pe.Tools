@@ -61,12 +61,15 @@ function useFamiliesWorkspaceModel(
   const familyFeed = useAtomValue(store.feeds.family);
   const profileFeed = useAtomValue(store.feeds.profile);
 
-  const status = useHostStatusQuery({ ...scope, enabled: fixtureFamilies === undefined });
-  const connected = fixtureFamilies !== undefined || (status.data?.bridgeIsConnected ?? false);
+  const fixture = fixtureFamilies !== undefined;
+  const status = useHostStatusQuery({ ...scope, enabled: !fixture });
+  const connected = fixture || (status.data?.bridgeIsConnected ?? false);
 
   // ── scope: the cheap catalog feeds both pickers; the matrix waits for Apply ───────────────────
   const categories = categoryFeed.options?.map((option) => option.id) ?? [];
-  const draftFamilyNames = familyFeed.options?.map((option) => option.id) ?? [];
+  const draftFamilyNames = fixture
+    ? fixtureFamilies.map((family) => family.familyName)
+    : (familyFeed.options?.map((option) => option.id) ?? []);
 
   // Budget sized to the picked family list so nothing truncates silently, and samples lifted so
   // no type/cell is dropped from the master table.
@@ -86,7 +89,7 @@ function useFamiliesWorkspaceModel(
   );
   const matrix = useLoadedFamiliesMatrixQuery(matrixRequest, {
     ...scope,
-    enabled: fixtureFamilies === undefined && connected && matrixRequest !== undefined,
+    enabled: !fixture && connected && matrixRequest !== undefined,
   });
   const families = useMemo(
     () => fixtureFamilies ?? matrix.data?.families ?? [],
@@ -113,7 +116,7 @@ function useFamiliesWorkspaceModel(
         ),
       staleTime: 60_000,
       retry: false,
-      enabled: fixtureFamilies === undefined,
+      enabled: !fixture,
     })),
   });
 
@@ -318,7 +321,7 @@ function useFamiliesWorkspaceModel(
 
   return {
     store,
-    fixture: fixtureFamilies !== undefined,
+    fixture,
     navigate,
     target,
     scope,
