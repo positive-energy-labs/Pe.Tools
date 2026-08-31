@@ -5,6 +5,7 @@ import { FactChip } from "#/components/lang/chip";
 import { VerbLane } from "#/components/lang/verb-lane";
 import { FAMILIES_PRODUCT, type FamiliesSlot } from "#/families/product";
 import type { FamiliesStore } from "#/families/store";
+import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { useFleet } from "#/host/fleet";
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
@@ -21,7 +22,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
   const plan = useAtomValue(store.atoms.plan);
   const picker = useAtomValue(store.atoms.picker);
   const busy = useAtomValue(store.atoms.busy);
-  const fleet = useFleet();
+  const fleet = useFleet({ enabled: !useFamiliesWorkspace().fixture });
   const feeds = {
     world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),

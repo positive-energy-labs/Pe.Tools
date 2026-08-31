@@ -13,6 +13,7 @@ import {
   cellText,
   visibleParameters,
   LoadedFamilyPlacementScope,
+  type FamilySnapshotRecord,
   type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
 import { HOST_QUERY_KEY, useHostStatusQuery, useLoadedFamiliesMatrixQuery } from "#/host/queries";
@@ -28,7 +29,10 @@ const PROFILE_READ_LIMIT = 40;
 /** A parameter is "common" when it appears on this share of the families in scope. */
 
 /** The placement filter's vocabulary, and what each choice MEANS for the audit. */
-function useFamiliesWorkspaceModel(store: FamiliesStore) {
+function useFamiliesWorkspaceModel(
+  store: FamiliesStore,
+  fixtureFamilies?: readonly FamilySnapshotRecord[],
+) {
   const navigate = useNavigate();
   const target = useAtomValue(store.atoms.target);
   const scope = useMemo(() => (target ? { bridgeSessionId: target } : undefined), [target]);
@@ -57,8 +61,8 @@ function useFamiliesWorkspaceModel(store: FamiliesStore) {
   const familyFeed = useAtomValue(store.feeds.family);
   const profileFeed = useAtomValue(store.feeds.profile);
 
-  const status = useHostStatusQuery(scope);
-  const connected = status.data?.bridgeIsConnected ?? false;
+  const status = useHostStatusQuery({ ...scope, enabled: fixtureFamilies === undefined });
+  const connected = fixtureFamilies !== undefined || (status.data?.bridgeIsConnected ?? false);
 
   // ── scope: the cheap catalog feeds both pickers; the matrix waits for Apply ───────────────────
   const categories = categoryFeed.options?.map((option) => option.id) ?? [];
@@ -82,9 +86,12 @@ function useFamiliesWorkspaceModel(store: FamiliesStore) {
   );
   const matrix = useLoadedFamiliesMatrixQuery(matrixRequest, {
     ...scope,
-    enabled: connected && matrixRequest !== undefined,
+    enabled: fixtureFamilies === undefined && connected && matrixRequest !== undefined,
   });
-  const families = useMemo(() => matrix.data?.families ?? [], [matrix.data?.families]);
+  const families = useMemo(
+    () => fixtureFamilies ?? matrix.data?.families ?? [],
+    [fixtureFamilies, matrix.data?.families],
+  );
 
   // ── profile library: the store feeds paths; document.open validates each entry ───────────────
   const allProfilePaths = useMemo(
@@ -106,6 +113,7 @@ function useFamiliesWorkspaceModel(store: FamiliesStore) {
         ),
       staleTime: 60_000,
       retry: false,
+      enabled: fixtureFamilies === undefined,
     })),
   });
 
@@ -310,6 +318,7 @@ function useFamiliesWorkspaceModel(store: FamiliesStore) {
 
   return {
     store,
+    fixture: fixtureFamilies !== undefined,
     navigate,
     target,
     scope,
@@ -366,8 +375,14 @@ function useFamiliesWorkspaceModel(store: FamiliesStore) {
 
 export type FamiliesWorkspaceModel = ReturnType<typeof useFamiliesWorkspaceModel>;
 
-export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
-  const model = useFamiliesWorkspaceModel(store);
+export function FamiliesWorkspace({
+  store,
+  fixtureFamilies,
+}: {
+  store: FamiliesStore;
+  fixtureFamilies?: readonly FamilySnapshotRecord[];
+}) {
+  const model = useFamiliesWorkspaceModel(store, fixtureFamilies);
   return (
     <FamiliesWorkspaceProvider value={model}>
       <FamiliesWorkspaceView />

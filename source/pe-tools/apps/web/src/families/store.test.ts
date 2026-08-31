@@ -10,18 +10,9 @@ import {
 } from "@pe/agent-contracts";
 
 import type { FamiliesHost } from "#/families/host";
+import { fixtureFamilyPlanEntry } from "#/families/fixture";
 import { createFamiliesStore } from "#/families/store";
 
-const emptyEntry = {
-  familyId: 1,
-  familyName: "Desk",
-  plan: {
-    parameters: [],
-    requiredApsParameterNames: [],
-    familyParameterNames: [],
-    loweredActions: [{ operation: "set", target: "Width", sources: [], reason: "profile" }],
-  },
-};
 const document = (documentId = "C:\\Models\\Test.rvt"): FamiliesRouteDocument => ({
   bindings: { world: { id: "session:test", label: "test", at: address("C:\\Models\\Test.rvt") } },
   profilePath: "desk.json",
@@ -32,7 +23,7 @@ const document = (documentId = "C:\\Models\\Test.rvt"): FamiliesRouteDocument =>
       observedAt: "2026-08-25T00:00:00Z",
     },
     planHash: "hash-1",
-    entries: [emptyEntry],
+    entries: [fixtureFamilyPlanEntry],
   },
   excludedIds: [],
   apply: null,
