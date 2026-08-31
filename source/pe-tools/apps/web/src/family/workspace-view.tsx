@@ -26,7 +26,7 @@ export function FamilyWorkspaceView() {
   } = useFamilyWorkspace();
   return (
     <Workspace
-      className="[&_[data-kind=visual]_[data-slot=pane-header]]:bg-recess [&_[data-kind=content]_[data-slot=pane-header]]:border-t-2 [&_[data-kind=content]_[data-slot=pane-header]]:border-t-line-2 [&_[data-kind=content]_[data-slot=pane-header]]:bg-recess [&_[data-kind=inspector]_[data-slot=pane-header]]:bg-artifact [&_[data-kind=inspector]_[data-slot=pane-body]]:p-0"
+      className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=visual]_[data-slot=pane-header]]:bg-recess [&_[data-kind=content]_[data-slot=pane-header]]:border-t-2 [&_[data-kind=content]_[data-slot=pane-header]]:border-t-line-2 [&_[data-kind=content]_[data-slot=pane-header]]:bg-recess [&_[data-kind=inspector]_[data-slot=pane-header]]:bg-artifact [&_[data-kind=inspector]_[data-slot=pane-body]]:p-0"
       headRail={
         <TargetingHead
           product={product}
@@ -93,7 +93,7 @@ export function FamilyWorkspaceView() {
         inspectorSpan: "full",
         resize: {
           visual: {
-            defaultSize: 240,
+            defaultSize: 220,
             minSize: 34,
             collapse: {
               collapsed: anatomyCollapsed,

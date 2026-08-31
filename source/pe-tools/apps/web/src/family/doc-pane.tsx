@@ -36,14 +36,14 @@ export function SpecText({
     );
   return (
     <div>
-      <div className="flex items-center gap-2 border-b border-line bg-recess px-2 py-1.5">
+      <div className="flex items-center gap-2 border-b border-line bg-recess px-2 py-1">
         <Tag>source</Tag>
         <span className="face-mono t-caption min-w-0 flex-1 truncate text-ink-2">
           {spec.fileName}
         </span>
         <Tag>{spec.blocks.length} blocks</Tag>
       </div>
-      <div className="space-y-2 p-2">
+      <div className="space-y-1.5 p-1.5">
         {spec.blocks.map((block) => {
           const lit = litBlocks.has(block.id);
           return (
@@ -70,7 +70,7 @@ export function SpecText({
                   </>
                 }
               >
-                <pre className="mt-1 p-2">{block.md}</pre>
+                <pre className="mt-1 px-2 py-1.5">{block.md}</pre>
               </ArtifactFrame>
             </div>
           );
@@ -105,8 +105,8 @@ export function SpecSheet({
   const pages = [...new Set(spec.blocks.map((block) => block.page))].sort((a, b) => a - b);
 
   return (
-    <div className="p-2">
-      <div className="mb-2 flex items-center gap-1">
+    <div className="p-1.5">
+      <div className="mb-1.5 flex items-center gap-1">
         {/* A stand-in announces itself AND says what would replace it (SURFACE-PHILOSOPHY §3).
             An advisory, not a warning: it blocks nothing and claims nothing about the model. */}
         <OutcomeLine
@@ -136,7 +136,7 @@ export function SpecSheet({
         />
       </div>
 
-      <div className="space-y-3 overflow-x-auto">
+      <div className="space-y-2.5 overflow-x-auto">
         {pages.map((page) => {
           const blocks = spec.blocks.filter((block) => block.page === page);
           return (
@@ -264,7 +264,7 @@ export function ProposalCard({
       ref={register}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
-      className="mb-1.5 border-b border-line py-1 pb-2 pl-2 last:mb-0 last:border-b-0"
+      className="mb-1 border-b border-line py-1 pl-2 last:mb-0 last:border-b-0"
       /* Pea's identity, never the commit colour: the card edge is a MARK (`--pe-pea`, the display
          rung) and the focus wash is mixed from pea's ink. */
       style={{
@@ -280,7 +280,7 @@ export function ProposalCard({
       <div className="face-mono t-label text-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 t-value text-ink">{proposal.note}</p>
+      <p className="mt-0.5 t-value leading-snug text-ink">{proposal.note}</p>
       {blockMd && (
         <p
           className="face-mono mt-1 max-h-[3lh] overflow-hidden border-l border-line pl-1.5 whitespace-pre-line t-caption text-ink-2"

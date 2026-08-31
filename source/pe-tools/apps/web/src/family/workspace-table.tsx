@@ -1,5 +1,5 @@
 import { EmptyState } from "#/components/lang/empty";
-import { FactChip, Tag } from "#/components/lang/chip";
+import { FactChip } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
 import { Verb } from "#/components/lang/verb";
@@ -92,9 +92,10 @@ export function FamilyWorkspaceTable() {
       onTableStateChange={setTableState}
       summary={
         <span className="inline-flex flex-wrap items-center gap-1">
-          <Tag>{Object.keys(world.grounding).length} grounded</Tag>
-          <Tag>{openProposals.length} open</Tag>
-          <Tag>{world.typeNames.length} types</Tag>
+          <span className="face-mono t-caption text-ink-2">
+            {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
+            {world.typeNames.length} types
+          </span>
           <FactChip
             tone={ghostCount > 0 ? "caution" : undefined}
             title="Geometry rows without a parameter binding."
