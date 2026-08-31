@@ -1,4 +1,5 @@
 import { CircleHelp } from "lucide-react";
+import { FactChip } from "#/components/lang/chip";
 import { Label } from "#/components/lang/label";
 import { Tooltip, UiTooltipProvider } from "#/components/lang/tooltip";
 import { cn } from "#/lib/utils";
@@ -175,27 +176,6 @@ export function FieldMessages({
   );
 }
 
-function OptionMetadataChip({
-  children,
-  tone = "neutral",
-}: {
-  children: React.ReactNode;
-  tone?: "neutral" | "warning" | "danger";
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex max-w-full items-center truncate px-1.5 py-0.5",
-        tone === "neutral" && "",
-        tone === "warning" && "",
-        tone === "danger" && "",
-      )}
-    >
-      {children}
-    </span>
-  );
-}
-
 export function FieldOptionsMetadata({ options }: { options: FieldOptionState }) {
   if (
     options.source === "none" &&
@@ -208,27 +188,34 @@ export function FieldOptionsMetadata({ options }: { options: FieldOptionState })
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      <OptionMetadataChip tone={options.isLoading ? "warning" : "neutral"}>
+      <FactChip title="The schema source that supplies this field's choices.">
         {options.sourceKey ? `source ${options.sourceKey}` : options.source}
-      </OptionMetadataChip>
-      {options.isLoading ? <OptionMetadataChip tone="warning">loading</OptionMetadataChip> : null}
+      </FactChip>
+      {options.isLoading ? (
+        <FactChip title="This field's choices are still resolving.">loading</FactChip>
+      ) : null}
       {options.resolver ? (
-        <OptionMetadataChip>{`resolver ${options.resolver}`}</OptionMetadataChip>
+        <FactChip title="The resolver that supplies this field's choices.">{`resolver ${options.resolver}`}</FactChip>
       ) : null}
       {options.dataset ? (
-        <OptionMetadataChip>{`dataset ${options.dataset}`}</OptionMetadataChip>
+        <FactChip title="The dataset that supplies this field's choices.">{`dataset ${options.dataset}`}</FactChip>
       ) : null}
-      <OptionMetadataChip>
+      <FactChip title="Whether this field accepts values outside the supplied choices.">
         {options.allowsCustomValue ? "custom allowed" : "fixed choices"}
-      </OptionMetadataChip>
-      <OptionMetadataChip>{`mode ${options.mode}`}</OptionMetadataChip>
+      </FactChip>
+      <FactChip title="Whether supplied choices constrain the value or provide suggestions.">{`mode ${options.mode}`}</FactChip>
       {options.dependencies.map((dependency) => (
-        <OptionMetadataChip key={`${dependency.scope ?? "context"}:${dependency.key}`}>
+        <FactChip
+          key={`${dependency.scope ?? "context"}:${dependency.key}`}
+          title="The dependency value used to resolve this field's choices."
+        >
           {`${dependency.key}=${dependency.value ?? "unset"}`}
-        </OptionMetadataChip>
+        </FactChip>
       ))}
       {options.errorMessage ? (
-        <OptionMetadataChip tone="danger">{options.errorMessage}</OptionMetadataChip>
+        <FactChip title={`Option resolution failed: ${options.errorMessage}`} tone="caution">
+          {options.errorMessage}
+        </FactChip>
       ) : null}
     </div>
   );
