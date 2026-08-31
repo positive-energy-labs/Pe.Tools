@@ -323,12 +323,13 @@ export function FamilyWorkspaceDocPane() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* proposals — margin annotations, docked as a stack above the spec */}
         <div className="border-b border-line bg-artifact p-2">
-          <p
-            className="mb-1 t-label t-upper text-ink-2"
+          <div
+            className="mb-1.5 flex items-baseline gap-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
           >
-            pea proposes — ephemeral, page-scoped
-          </p>
+            <span className="face-mono t-label t-upper text-pea-ink">pea</span>
+            <span className="t-label t-upper text-ink-2">proposals · ephemeral · page-scoped</span>
+          </div>
           {world.proposals.length === 0 ? (
             <EmptyState story="scope" exit="ask pea to read the attached spec against the family">
               no proposals — pea has not read this spec against the profile

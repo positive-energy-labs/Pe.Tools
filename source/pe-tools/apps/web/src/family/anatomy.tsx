@@ -99,15 +99,17 @@ export function AnatomyDrawing({
     <div className="flex size-full min-h-0">
       <div className="flex min-w-0 flex-1">{views}</div>
       <div className="w-72 shrink-0 overflow-y-auto border-l border-line bg-page p-2">
-        <p className="face-mono t-label t-upper mb-1 flex items-center gap-1 text-ink-2">
-          constituents · {typeName}
-          <HelpTip>
-            The profile&rsquo;s own constituent list. Hovering one lights both the shape and the
-            table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it
-            in the doc pane&rsquo;s lower half, where the half of it no parameter can drive —
-            direction, system type, where its frame sits — is edited.
-          </HelpTip>
-        </p>
+        <div className="-mx-2 -mt-2 mb-1.5 border-b border-line bg-recess px-2 py-1.5">
+          <p className="face-mono t-label t-upper flex items-center gap-1 text-ink-2">
+            constituents · {typeName}
+            <HelpTip>
+              The profile&rsquo;s own constituent list. Hovering one lights both the shape and the
+              table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS
+              it in the doc pane&rsquo;s lower half, where the half of it no parameter can drive —
+              direction, system type, where its frame sits — is edited.
+            </HelpTip>
+          </p>
+        </div>
         {world.constituents.map((part) => {
           const geom = world.geomBySlug.get(part.slug);
           const unbound =

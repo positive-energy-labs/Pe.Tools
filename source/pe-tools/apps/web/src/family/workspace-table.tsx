@@ -1,5 +1,5 @@
 import { EmptyState } from "#/components/lang/empty";
-import { FactChip } from "#/components/lang/chip";
+import { FactChip, Tag } from "#/components/lang/chip";
 import { HelpTip } from "#/components/lang/help";
 import { Switcher } from "#/components/lang/switcher";
 import { Verb } from "#/components/lang/verb";
@@ -91,29 +91,28 @@ export function FamilyWorkspaceTable() {
       tableState={tableState}
       onTableStateChange={setTableState}
       summary={
-        <span>
-          {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
-          {world.typeNames.length} types ·{" "}
+        <span className="inline-flex flex-wrap items-center gap-1">
+          <Tag>{Object.keys(world.grounding).length} grounded</Tag>
+          <Tag>{openProposals.length} open</Tag>
+          <Tag>{world.typeNames.length} types</Tag>
           <FactChip
             tone={ghostCount > 0 ? "caution" : undefined}
             title="Geometry rows without a parameter binding."
           >
             {ghostCount} unbound
-          </FactChip>{" "}
-          ·{" "}
+          </FactChip>
           <FactChip
             tone={unsavedCount > 0 ? "caution" : undefined}
             title="Cells the next profile save would write."
           >
             {unsavedCount} unsaved
-          </FactChip>{" "}
-          ·{" "}
+          </FactChip>
           <FactChip
             tone={driftCells.length > 0 ? "alarm" : undefined}
             title="Cells where Revit disagrees with the draft."
           >
             {driftCells.length} drift
-          </FactChip>{" "}
+          </FactChip>
           {/* Region orientation: how to read the counts, what an unbound geom row is, and what
               each of the two bind choices does. Every ghost row's title defers to this. */}
           <HelpTip>

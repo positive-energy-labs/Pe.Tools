@@ -122,7 +122,7 @@ export function ModelViews({
             <svg
               key={view.key}
               viewBox={`0 0 ${BOX} ${BOX}`}
-              className="h-full min-w-0 flex-1 border-r border-line last:border-r-0"
+              className="face-mono h-full min-w-0 flex-1 border-r border-line bg-artifact last:border-r-0"
               role="img"
               aria-label={`family ${view.key} view`}
             >
@@ -303,8 +303,14 @@ export function ModelViews({
                 </g>
               )}
 
-              <text x={M} y={BOX - 5} fontSize={7} fill={token("ink-2")}>
-                {view.label}
+              <text
+                x={M}
+                y={BOX - 5}
+                fontSize={7}
+                fill={token("ink-2")}
+                style={{ letterSpacing: "0.08em" }}
+              >
+                {view.label.toUpperCase()}
               </text>
             </svg>
           );

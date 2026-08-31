@@ -35,38 +35,47 @@ export function SpecText({
       </EmptyState>
     );
   return (
-    <div className="space-y-2 p-2">
-      {spec.blocks.map((block) => {
-        const lit = litBlocks.has(block.id);
-        return (
-          <div
-            key={block.id}
-            title={
-              lit
-                ? "This is the block the focused parameter is grounded in. That correspondence is the whole claim — if the text does not say what the cell says, the cell is wrong."
-                : `Page ${block.page} of ${spec.fileName}, as OCR read it. Hover a grounded row in the table to light the block it cites.`
-            }
-          >
-            <ArtifactFrame
-              head={
-                <>
-                  <Tag>
-                    {block.id} · p{block.page}
-                  </Tag>
-                  <Tag>{block.kind}</Tag>
-                  {lit ? (
-                    <FactChip title="The focused parameter cites this block.">
-                      focused citation
-                    </FactChip>
-                  ) : null}
-                </>
+    <div>
+      <div className="flex items-center gap-2 border-b border-line bg-recess px-2 py-1.5">
+        <Tag>source</Tag>
+        <span className="face-mono t-caption min-w-0 flex-1 truncate text-ink-2">
+          {spec.fileName}
+        </span>
+        <Tag>{spec.blocks.length} blocks</Tag>
+      </div>
+      <div className="space-y-2 p-2">
+        {spec.blocks.map((block) => {
+          const lit = litBlocks.has(block.id);
+          return (
+            <div
+              key={block.id}
+              title={
+                lit
+                  ? "This is the block the focused parameter is grounded in. That correspondence is the whole claim — if the text does not say what the cell says, the cell is wrong."
+                  : `Page ${block.page} of ${spec.fileName}, as OCR read it. Hover a grounded row in the table to light the block it cites.`
               }
             >
-              <pre className="mt-1 p-2">{block.md}</pre>
-            </ArtifactFrame>
-          </div>
-        );
-      })}
+              <ArtifactFrame
+                head={
+                  <>
+                    <Tag>
+                      {block.id} · p{block.page}
+                    </Tag>
+                    <Tag>{block.kind}</Tag>
+                    {lit ? (
+                      <FactChip title="The focused parameter cites this block.">
+                        focused citation
+                      </FactChip>
+                    ) : null}
+                  </>
+                }
+              >
+                <pre className="mt-1 p-2">{block.md}</pre>
+              </ArtifactFrame>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -239,7 +248,7 @@ export function ProposalCard({
         ref={register}
         onMouseEnter={() => onHover(true)}
         onMouseLeave={() => onHover(false)}
-        className="face-mono flex items-baseline gap-1 py-0.5 t-caption"
+        className="face-mono flex items-baseline gap-1 border-b border-line py-0.5 t-caption last:border-b-0"
         title={settled.note}
         style={{ color: settled.colour }}
       >
@@ -255,7 +264,7 @@ export function ProposalCard({
       ref={register}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
-      className="mb-1.5 py-1 pl-2"
+      className="mb-1.5 border-b border-line py-1 pb-2 pl-2 last:mb-0 last:border-b-0"
       /* Pea's identity, never the commit colour: the card edge is a MARK (`--pe-pea`, the display
          rung) and the focus wash is mixed from pea's ink. */
       style={{
@@ -271,10 +280,10 @@ export function ProposalCard({
       <div className="face-mono t-label text-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 t-caption text-ink">{proposal.note}</p>
+      <p className="mt-0.5 t-value text-ink">{proposal.note}</p>
       {blockMd && (
         <p
-          className="face-mono mt-1 max-h-[3lh] overflow-hidden whitespace-pre-line t-caption text-ink-2"
+          className="face-mono mt-1 max-h-[3lh] overflow-hidden border-l border-line pl-1.5 whitespace-pre-line t-caption text-ink-2"
           title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}
