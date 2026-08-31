@@ -112,6 +112,21 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   print paste-ready JSON; a count that dropped is a failure until it is recorded.
 - 2026-08-29 — Every TSX file under `apps/web/src` stays under 400 lines, split by region. A split
   file is named for what it draws, never for its parent plus a symbol.
+- 2026-08-31 — Merge main into `review/design-system` wholesale; a clean-room happens only
+  per-route during re-cutover. The branch tip is the latest restoration pass and a full replay
+  re-pays the brute-force cutover cost. See `MAP.md` for the live phase plan.
+- 2026-08-31 — Seam order after the merge: route-state demiurge first, design-system distillation
+  second, route re-cutover third (chat, takeoffs, family, then families, settings). Unrestored
+  routes bend to the system.
+- 2026-08-31 — The SDK contract (generated operation catalog, session-census consumption) is
+  fixed during the route-state demiurge. Only web-side state shape may change.
+- 2026-08-31 — moderncss rules (`@layer`, `@scope`, `oklch`, container queries) bind the distilled
+  system and re-cutover code only. No app-wide migration wave; lesser routes adopt when touched.
+- 2026-08-31 — `spike/takeoffs-pane-hotkeys` is input only. Its pane-state, route-command, and
+  hover-css implications are distilled into the route-state demiurge, then the branch is deleted.
+- 2026-08-31 — `design-adherence.baseline.json` must shrink substantially for chat, takeoffs,
+  family, families, and settings; literal zero is not required. The check itself is re-opened
+  whenever its signals feel wrong and may be amended as the system changes.
 
 ## Tried & rejected
 
