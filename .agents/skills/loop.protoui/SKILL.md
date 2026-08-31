@@ -1,11 +1,11 @@
 ---
-name: triangulate
-description: Find the shape of a product surface by building comparable variants. Trigger on "triangulate", "parallax", "find the product", "variants", "find UI", "refine UI", "UI feels wrong", "which layout", "prototype", clean-rooming a precedent, or when the user is circling what a product *is*. Not for backend or API shape; that is `demiurge` or `close`.
+name: protoui
+description: Find the shape of a product surface by building comparable variants. Trigger on "protoui", "parallax", "find the product", "variants", "find UI", "refine UI", "UI feels wrong", "which layout", "prototype", clean-rooming a precedent, or when the user is circling what a product *is*. Not for backend or API shape; that is `demiurge` or `close`.
 argument-hint: "What surface, what's unsettled, what precedent?"
 stop: two dry rounds
 figure: Lineup and Toile — a product surface is unsettled
 ---
-# Triangulate
+# protoui
 
 **Stage a Lineup.** The officer does not pick. Suspects stand in the same light, same height marks, same distance; the witness picks one, or none, or "the jaw from three with the eyes from five". A lineup of one is a confession you wrote yourself; a suspect you dressed differently from the others is a rigged lineup. One variant is a portrait; three, a keypress apart, are a fix on the product. A suspect the witness cannot see drew no verdict. Think Pareto front, not winner: the round retires what is dominated and keeps what trades.
 
@@ -31,9 +31,3 @@ Round: build variants, user decides, record the verdict, reshape. `grill` on wha
 User verdicts are the top signal. Losing the layout argument while winning the product argument is normal. Persist per `docs`: frontier and per-round verdicts live; settled law promotes; the winner is rewritten to canon, never promoted as-is, or captured as a chimera; the round's losers are thrown away.
 
 Mounting, the switcher bar, isolated-file variants, and cleanup are mechanics: `execute` owns them, under the lane that serves the surface.
-
-## Parlance
-
-| Word | Pins |
-|---|---|
-| variant | suspect, toile, muslin |

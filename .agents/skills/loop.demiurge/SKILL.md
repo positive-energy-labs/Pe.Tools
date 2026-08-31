@@ -1,6 +1,6 @@
 ---
 name: demiurge
-description: Find and fashion the ideal shape by exploring every option before converging. Trigger on "demiurge X", "best long-term solution", "rethink the API", "cleanroom", "no back-compat, refactor", "dream on", "rethink from first principles", "deepen the module", "where should the seam go", "what are ALL the approaches", or when the user is fighting an existing design. Not for product surfaces a user touches; that is `triangulate`.
+description: Find and fashion the ideal shape by exploring every option before converging. Trigger on "demiurge X", "best long-term solution", "rethink the API", "cleanroom", "no back-compat, refactor", "dream on", "rethink from first principles", "deepen the module", "where should the seam go", "what are ALL the approaches", or when the user is fighting an existing design. Not for product surfaces a user touches; that is `protoui`.
 argument-hint: "What shape is in question, and what constrains it?"
 stop: two rounds adding no shape and killing none
 figure: Demiurge in the realm of forms — architecture, API, data shape, seam is open
@@ -29,10 +29,4 @@ Score shapes on what they make impossible, never on what past reviews caught. A 
 
 The prompt is signal, never the whole picture; `grill` throughout. Once a shape is found, `index` routes. Not every ideal demands implementation; this is an exercise for the user as much as anything. Verdicts persist per `docs`.
 
-Report per `write`, artifact register: shapes side by side, never a wall of prose.
-
-## Parlance
-
-| Word | Pins |
-|---|---|
-| shape | form |
+Report in `index`'s artifact register: shapes side by side, never a wall of prose.

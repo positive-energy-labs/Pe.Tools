@@ -26,10 +26,4 @@ Mode: a claim leaves your hands as PROVEN, FALSIFIED, or UNPROVEN, never as "sho
 - Rank by consequence, not by count. One wrong invariant outranks twenty nits; report nits only when asked. The user decides the ranking.
 - Name what survives.
 - A hang or timeout is a diagnostic boundary, not a failure; name it, do not retry blind.
-- Report as proven / blocked / not done, each with its stake.
-
-## Parlance
-
-| Word | Pins |
-|---|---|
-| stamp | hallmark, the four marks |
+- Report state as PROVEN / BLOCKED / OPEN, each with its stake.

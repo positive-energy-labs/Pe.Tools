@@ -21,10 +21,3 @@ When the backend shape is still open, settle it first, comparable, in `demiurge`
 4. `grill` when a replacement forces a decision the plan did not settle.
 
 Persist per `docs`: the shim census and frontier stay live, settlements promote, spike verdicts persist with their branch. Done when shims are zero or explicitly deferred and the workflow has been driven by hand.
-
-## Parlance
-
-| Word | Pins |
-|---|---|
-| chain | the arch |
-| real part | stone |

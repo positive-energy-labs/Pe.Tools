@@ -146,7 +146,7 @@ read `doc current`.
 - The SDK's generated TS contract (`clients/ts/generated/pe-revit-contract.ts`, vendored) is the
   only way Pe.Tools code calls `pe-revit`: argv builders + typed envelopes. Never hand-write argv.
 
-### Variant rounds (`triangulate` mechanics)
+### Variant rounds (`protoui` mechanics)
 
 **Mounting.**
 
@@ -274,7 +274,7 @@ in `AGENTS.md`.
 
 ## Skill-set check
 
-`python .agents/skills/check.py [--fix]`, deterministic lane, no deps. It asserts: every directory is `<kind>.<name>` with kind in route/lens/pass/slot/loop; frontmatter `name` equals the directory suffix, every skill has `figure`, every pass and loop has `stop`, every slot has `scope: repo|house`; no trigger phrase is claimed by two skills; `route.index`'s table equals the projection of those fields; no non-`slot.` stance names this repo, its tools, its paths, or carries a code fence; `.claude/skills` is a junction to `.agents/skills`, never a copy; and `~/.claude/skills` is empty (one home). `--fix` creates the junction and rewrites the table. Run it after any skill edit.
+`python .agents/skills/check.py [--fix]`, deterministic lane, no deps. It asserts: every directory is `<kind>.<name>` with kind in root/lens/pass/slot/loop; frontmatter `name` equals the directory suffix, every skill has `figure`, every pass and loop has `stop`, every slot has `scope: skills|repo`; no trigger phrase is claimed by two skills; `root.index`'s table equals the projection of those fields; no skill carries a `## Parlance` section (aliases live in the Lexicon); no non-`slot.` stance names this repo, its tools, its paths, or carries a code fence; `.claude/skills` is a junction to `.agents/skills`, never a copy; and `~/.claude/skills` is empty (one home). `--fix` creates the junction and rewrites the table. Run it after any skill edit.
 
 ## Guardrails
 
