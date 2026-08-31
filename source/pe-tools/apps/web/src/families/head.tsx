@@ -103,7 +103,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
       aside={
         plan ? (
           <FactChip title="The plan hash that the apply command must return unchanged.">
-            hash · {plan.planHash.slice(0, 12)}
+            plan hash · {plan.planHash.slice(0, 12)}
           </FactChip>
         ) : undefined
       }

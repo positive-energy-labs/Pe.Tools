@@ -15,8 +15,8 @@ export function FamiliesReadoutBands() {
   return (
     <>
       {plan && (
-        <div className="max-h-48 overflow-auto border-b border-line px-2 py-1.5">
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="max-h-44 overflow-auto border-b border-line px-2 py-1.5">
+          <div className="sticky top-0 z-[1] flex flex-wrap items-center gap-1.5 bg-page py-0.5">
             <SectionLabel>
               <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
                 decision queue
@@ -31,7 +31,7 @@ export function FamiliesReadoutBands() {
               </FactChip>
             )}
           </div>
-          <table className="mt-1 w-full table-fixed border-collapse">
+          <table className="mt-0.5 w-full table-fixed border-collapse leading-tight">
             <thead className="face-mono t-caption t-upper text-ink-mute">
               <tr className="border-b border-line">
                 <th className="w-8 font-normal">
@@ -230,7 +230,7 @@ export function FamiliesReadoutBands() {
 
       {/* ── projection: a lazily-rendered document, copyable ─────────────────────────────── */}
       {projection && (
-        <details className="border-b border-line px-4 py-2" open>
+        <details className="border-b border-line px-4 py-2">
           <summary className="cursor-pointer">
             <SectionLabel>
               <span title="Each picked family read back out of the model as profile JSON. Nothing is written anywhere — copy it into a profile document if you want to keep it.">

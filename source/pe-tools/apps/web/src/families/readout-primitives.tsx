@@ -55,7 +55,7 @@ export function NamePicker({
   /* The whole-set default is a SUMMARY, not a chip flood: 300 auto-picked families as 300
      chips is bounded but unreadable. One quiet count stands in until the set is narrowed —
      deselection happens in the popup either way, so nothing is lost but the noise. */
-  const collapsed = values.length > 8 && values.length === options.length;
+  const collapsed = values.length > 3 && values.length === options.length;
   return (
     <Combobox
       items={options}
@@ -70,7 +70,7 @@ export function NamePicker({
       <div
         ref={anchor}
         title={title}
-        className="face-mono max-h-[3.25rem] min-h-7 min-w-0 flex-1 overflow-y-auto"
+        className="face-mono max-h-[3.25rem] min-h-7 min-w-[14rem] flex-1 basis-[14rem] overflow-y-auto"
       >
         <ComboboxChips>
           {collapsed ? (
@@ -78,7 +78,7 @@ export function NamePicker({
               className="t-caption px-1 text-ink-2"
               title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
             >
-              all {values.length}
+              all {values.length} {ariaLabel.replace(/^draft /, "")}
             </span>
           ) : (
             values.map((name) => <ComboboxChip key={name}>{name}</ComboboxChip>)

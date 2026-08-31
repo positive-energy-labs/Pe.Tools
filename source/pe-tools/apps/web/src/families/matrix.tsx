@@ -32,7 +32,7 @@ export function FamiliesMatrix() {
         onTableStateChange={store.actions.setTable}
         chips={chips}
         summary={
-          <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 face-mono">
             <span
               className="text-ink"
               title="Every family and type the applied scope resolved to."
@@ -40,10 +40,10 @@ export function FamiliesMatrix() {
               {totalFamilies} families · {totalTypes} types
             </span>
             <span
-              className="text-ink-mute"
+              className="text-ink-2"
               title="Every parameter the applied scope resolved to. Uncommon columns may be hidden by the chip beside this."
             >
-              {params.length} fields
+              {params.length} parameters
             </span>
             <span className="border-l border-line pl-2">
               <Verb
