@@ -4,10 +4,7 @@ import { EmptyState } from "#/components/lang/empty";
 import { mintSelector, resolveTarget, type SessionFacts } from "#/host/target";
 import { appAtomRegistry } from "#/state/registry";
 import { createHostSessionSource, createLiveTakeoffHost } from "#/takeoff/host";
-import {
-  createFixtureSessionSource,
-  createFixtureTakeoffHost,
-} from "#/takeoff/proto/fixture-world";
+import { createFixtureTakeoffStore } from "#/takeoff/proto/fixture-world";
 import { createTakeoffStore } from "#/takeoff/store";
 import { useRouteStore } from "#/state/use-route-store";
 import { RouteDocument } from "#/workbench/route-document";
@@ -103,13 +100,16 @@ export function TakeoffsStoreOwner({
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
   const store = useRouteStore(() => {
-    const created = createTakeoffStore({
-      host: source === "fixture" ? createFixtureTakeoffHost() : createLiveTakeoffHost(),
-      sessions: source === "fixture" ? createFixtureSessionSource() : createHostSessionSource(),
-      source,
-      registry: appAtomRegistry,
-      scope: { documentAddress },
-    });
+    const created =
+      source === "fixture"
+        ? createFixtureTakeoffStore(appAtomRegistry, { documentAddress })
+        : createTakeoffStore({
+            host: createLiveTakeoffHost(),
+            sessions: createHostSessionSource(),
+            source,
+            registry: appAtomRegistry,
+            scope: { documentAddress },
+          });
     for (const dir of readDirs().reverse()) created.actions.rememberDir(dir);
     return created;
   });

@@ -546,7 +546,11 @@ export function createTakeoffStore(deps: {
       const active = get(activeDocumentResult);
       const document = AsyncResult.isSuccess(active) ? active.value.value : null;
       const persisted = slice.value.doc?.snapshot;
-      const at = document ? documentAddress(document.session) : null;
+      const at = document
+        ? documentAddress(document.session)
+        : deps.host.fixture
+          ? deps.scope.documentAddress
+          : null;
       const snapshot = here(persisted, at);
       if (persisted) {
         return AsyncResult.success(
