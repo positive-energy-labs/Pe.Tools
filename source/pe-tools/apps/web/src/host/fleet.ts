@@ -1,21 +1,22 @@
 /** Fuses SDK registry custody/lifecycle with bridge-observed documents. */
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
+  BridgeObservation,
+  ControlledActiveBridgeObservation,
   Envelope,
-  SessionRow,
-  SessionStatusResult,
+  FleetPhase,
+  PendingBridgeObservation,
+  ProcessIdentity,
+  SessionListResult,
+  SessionObservation,
+  SessionReceipt,
 } from "@pe/host-contracts/pe-revit-contract";
+import type { HostLane } from "@pe/host-contracts/service-identity";
 
 import { HOST_QUERY_KEY, useBridgeSessionsListQuery } from "#/host/queries";
 import { fromBridgeSessions, type Custody, type SessionFacts } from "#/host/target";
 
-export type { SessionRow };
-
-/** Branch on phase; SHOW row.state. */
-type WorldPhase = "ready" | "booting" | "unresponsive" | "gone";
-
-const PHASES: readonly WorldPhase[] = ["ready", "booting", "unresponsive", "gone"];
+type WorldPhase = FleetPhase | "failed";
 
 /** One world as the sentence speaks about it and /instances tables it. */
 export interface WorldFacts {
@@ -23,63 +24,119 @@ export interface WorldFacts {
   id: string;
   custody: Custody;
   phase: WorldPhase;
-  /** Payload SOURCE: dev | installed. Null when unknown. */
-  lane?: string;
-  year?: string;
+  detail: string;
+  /** Host/UI lane. The SDK payload source calls `dev` checkouts `checkout`. */
+  lane?: HostLane;
   pid?: number;
-  activeDocumentTitle?: string;
-  openDocumentCount: number;
   /** Live bridge observation, when this world holds an open WebSocket to the host. */
   session?: SessionFacts;
-  /** The SDK's own status row, when `session status` knows this world. */
-  row?: SessionRow;
+  /** The SDK's own registry row, when `session list` knows this world. */
+  row?: SessionObservation;
 }
 
-function phaseOf(row: SessionRow): WorldPhase {
-  return PHASES.find((p) => p === row.phase) ?? "gone";
+type ObservationView = readonly [WorldPhase, string, ProcessIdentity?];
+
+function assertNever(value: never): never {
+  throw new Error(`unhandled session observation: ${JSON.stringify(value)}`);
 }
 
-/** Joins by SDK session id, then pid; unmatched bridges are observed worlds. */
+const ACTIVE_PHASE = {
+  ready: "ready",
+  "unresponsive-endpoint": "unresponsive",
+} satisfies Record<ControlledActiveBridgeObservation["bridge"], WorldPhase>;
+const PENDING_PHASE = {
+  answering: "booting",
+  "missing-endpoint": "booting",
+} satisfies Record<PendingBridgeObservation["bridge"], WorldPhase>;
+const OBSERVED_VIEW = {
+  answering: ["ready", "SDK bridge answers for this observed Revit process."],
+  "missing-endpoint": [
+    "unresponsive",
+    "SDK bridge endpoint is missing for this observed Revit process.",
+  ],
+  "unresponsive-endpoint": [
+    "unresponsive",
+    "SDK bridge does not answer for this observed Revit process.",
+  ],
+} satisfies Record<BridgeObservation["bridge"], readonly [WorldPhase, string]>;
+const RECEIPT_LANE = {
+  checkout: "dev",
+  installed: "installed",
+} satisfies Record<SessionReceipt["payload"], HostLane>;
+
+function projectObservation(row: SessionObservation): ObservationView {
+  switch (row.case) {
+    case "controlled-active":
+      return [ACTIVE_PHASE[row.bridge.bridge], row.detail, row.process];
+    case "controlled-pending":
+      switch (row.attempt.attempt) {
+        case "awaiting-launch":
+          return ["booting", row.detail];
+        case "launched":
+          return [PENDING_PHASE[row.attempt.bridge.bridge], row.detail, row.attempt.process];
+        default:
+          return assertNever(row.attempt);
+      }
+    case "observed-active": {
+      const [phase, detail] = OBSERVED_VIEW[row.bridge.bridge];
+      return [phase, detail, row.process];
+    }
+    case "gone-receipt":
+      return ["gone", row.detail, row.process];
+    case "failed-receipt":
+      switch (row.failure.source) {
+        case "journal":
+          return ["failed", row.detail, row.failure.process];
+        case "receipt":
+          return ["failed", row.detail];
+        default:
+          return assertNever(row.failure);
+      }
+    default:
+      return assertNever(row);
+  }
+}
+
+/** Joins only one exact process incarnation; the SDK census owns every world's classification. */
 export function fuseFleet(
-  rows: readonly SessionRow[],
+  rows: readonly SessionObservation[],
   sessions: readonly SessionFacts[],
 ): WorldFacts[] {
-  const claimed = new Set<string>();
+  const claimedSessionIds = new Set<string>();
   const worlds: WorldFacts[] = rows.map((row) => {
-    const session = sessions.find(
-      (s) =>
-        (s.sdkSessionId && s.sdkSessionId === row.id) ||
-        (row.pid != null && s.processId === row.pid),
-    );
-    if (session) claimed.add(session.sessionId);
+    const [phase, detail, process] = projectObservation(row);
+    const session = process
+      ? sessions.find(
+          (candidate) =>
+            !claimedSessionIds.has(candidate.sessionId) &&
+            candidate.processId === process.pid &&
+            candidate.processStartUtcUnixMs === Date.parse(process.processStartUtc),
+        )
+      : undefined;
+    if (session) claimedSessionIds.add(session.sessionId);
+    const observed = row.case === "observed-active";
     return {
-      id: row.id,
-      custody: row.custody,
-      phase: phaseOf(row),
-      lane: row.lane ?? undefined,
-      year: row.year ?? undefined,
-      pid: row.pid ?? undefined,
-      // The bridge sees the CURRENT active document; the row's is as of its own observation. Prefer
-      // the live one when a connection exists.
-      activeDocumentTitle: session?.activeDocumentTitle ?? row.activeDocument?.title ?? undefined,
-      openDocumentCount: session?.openDocumentCount ?? row.documents?.length ?? 0,
+      phase,
+      detail,
+      id: observed ? String(row.process.pid) : row.id,
+      custody: observed ? "observed" : "controlled",
+      lane: observed ? (session?.lane ?? undefined) : RECEIPT_LANE[row.receipt.payload],
+      pid: process?.pid,
       session,
       row,
     };
   });
-  for (const session of sessions) {
-    if (claimed.has(session.sessionId)) continue;
-    worlds.push({
-      id: session.sdkSessionId ?? session.sessionId,
-      custody: session.custody,
-      phase: "ready", // an open bridge connection is the strongest readiness claim there is
-      lane: session.lane ?? undefined,
-      pid: session.processId,
-      activeDocumentTitle: session.activeDocumentTitle,
-      openDocumentCount: session.openDocumentCount,
-      session,
-    });
-  }
+  for (const session of sessions)
+    if (!claimedSessionIds.has(session.sessionId))
+      worlds.push({
+        id: session.sessionId,
+        custody: "observed",
+        phase: "ready",
+        detail: "Host bridge is connected, but no exact SDK census row matched.",
+        lane: session.lane ?? undefined,
+        pid: session.processId,
+        session,
+      });
   return worlds;
 }
 
@@ -95,17 +152,18 @@ function useSessionStatusQuery({ all = false, enabled = true }: FleetOptions) {
   return useQuery({
     queryKey: [...HOST_QUERY_KEY, "", "sessions.status", all ? "all" : ""],
     enabled,
-    queryFn: async (): Promise<SessionRow[]> => {
+    queryFn: async (): Promise<SessionListResult> => {
       const response = await fetch(all ? "/sessions?all=true" : "/sessions");
-      if (!response.ok) throw new Error(`session status ${response.status}`);
-      // The route relays the CLI envelope untouched, so this is the SDK's own result shape. No
-      // `?? []` fallback: an envelope without `sessions` means the contract moved underneath us,
-      // and a silent empty fleet is exactly the failure this cutover exists to end.
-      const body = (await response.json()) as Envelope<SessionStatusResult>;
-      const sessions = body.result?.sessions;
-      if (!Array.isArray(sessions))
-        throw new Error("session status envelope carried no result.sessions[]");
-      return [...sessions];
+      if (!response.ok) throw new Error(`session list ${response.status}`);
+      const body = (await response.json()) as Envelope<SessionListResult>;
+      const result = body.result;
+      if (!result || !Array.isArray(result.sessions))
+        throw new Error("session list envelope carried no result.sessions[]");
+      if (!Array.isArray(result.unreadableReceipts))
+        throw new Error("session list envelope carried no result.unreadableReceipts[]");
+      if (!Array.isArray(result.processReadErrors))
+        throw new Error("session list envelope carried no result.processReadErrors[]");
+      return result;
     },
     refetchInterval: 5_000,
     refetchOnWindowFocus: false,
@@ -116,27 +174,17 @@ export function useFleet(options: FleetOptions = {}) {
   const { all = false, enabled = true } = options;
   const sessionsQuery = useBridgeSessionsListQuery({ enabled });
   const status = useSessionStatusQuery({ all, enabled });
-  return useMemo(() => {
-    const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
-    return {
-      worlds: fuseFleet(status.data ?? [], sessions),
-      sessions,
-      isLoading: sessionsQuery.isLoading || status.isLoading,
-      stale: sessionsQuery.isFetching || status.isFetching,
-      error: sessionsQuery.error ?? status.error,
-      at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
-      basis: ["sessions.status", "bridge.sessions.list"],
-    };
-  }, [
-    sessionsQuery.data?.sessions,
-    sessionsQuery.dataUpdatedAt,
-    sessionsQuery.error,
-    sessionsQuery.isFetching,
-    sessionsQuery.isLoading,
-    status.data,
-    status.dataUpdatedAt,
-    status.error,
-    status.isFetching,
-    status.isLoading,
-  ]);
+  const sessions = fromBridgeSessions(sessionsQuery.data?.sessions ?? []);
+  return {
+    worlds: fuseFleet(status.data?.sessions ?? [], sessions),
+    sessions,
+    unreadableReceipts: status.data?.unreadableReceipts ?? [],
+    processReadErrors: status.data?.processReadErrors ?? [],
+    registryRoot: status.data?.registryRoot,
+    isLoading: sessionsQuery.isLoading || status.isLoading,
+    stale: sessionsQuery.isFetching || status.isFetching,
+    error: sessionsQuery.error ?? status.error,
+    at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
+    basis: ["sessions.list", "bridge.sessions.list"],
+  };
 }

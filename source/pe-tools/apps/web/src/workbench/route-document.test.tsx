@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-router";
 
 const router = vi.hoisted(() => ({ href: "/settings?thread=thread-1&source=fixture#fields" }));
+const fleet = vi.hoisted(() => ({ useFleet: vi.fn(() => ({ sessions: [] })) }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -17,10 +18,15 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
     ...actual,
     useLocation: (options?: { select?: (location: { href: string }) => unknown }) =>
       options?.select?.({ href: router.href }) ?? { href: router.href },
+    useRouter: () => ({ navigate: () => Promise.resolve() }),
+    useSearch: () => undefined,
   };
 });
 
+vi.mock("#/host/fleet", () => fleet);
+
 import {
+  RouteDocument,
   RouteDocumentPicker,
   RouteDocumentSurface,
   routeDocumentAddress,
@@ -44,6 +50,14 @@ const session = (id: string, title: string, at: string): SessionFacts => ({
 afterEach(cleanup);
 
 describe("route document choice", () => {
+  it("makes exactly one default fleet query when sessions are not supplied", () => {
+    fleet.useFleet.mockClear();
+
+    render(<RouteDocument>{() => "route body"}</RouteDocument>);
+
+    expect(fleet.useFleet.mock.calls).toEqual([[undefined]]);
+  });
+
   it("handles zero, one, and two open documents", () => {
     const one = routeDocumentChoices([session("pe.app-25", "project-a", "C:\\Models\\projectA.rvt")]);
     const two = routeDocumentChoices([

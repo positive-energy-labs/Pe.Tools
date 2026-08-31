@@ -31,7 +31,7 @@ export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
           atMs,
           kind: "session-appeared",
           sessionId: id,
-          label: `${worldTrunk.label({ pid: s.processId, session: s })} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
+          label: `${worldTrunk.label({ id: s.sdkSessionId ?? String(s.processId), custody: s.custody, session: s })} · ${s.activeDocumentTitle ?? `Revit ${s.processId}`} connected`,
         });
       } else if (old.activeDocumentId !== s.activeDocumentId) {
         events.push({

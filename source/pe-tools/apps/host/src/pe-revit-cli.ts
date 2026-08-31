@@ -1,29 +1,14 @@
-// pe-revit-cli.ts — the SDK-owned TypeScript resolver for launching the pe-revit CLI and validating
-// its --json envelope.
-//
-// OWNED BY Pe.Revit.Sdk — DO NOT FORK. Copy this file verbatim into a consumer; the SDK ships it
-// inside the Pe.Revit.Sdk nupkg under clients/ts/ so there is exactly ONE launch-chain + envelope
-// implementation per language. Dependency-free — Node stdlib only (fs, path). No product imports:
-// vendor/product identity and lane/source inputs are passed in by the caller, so this file stays
-// generic across every product that installs a pe-revit kernel shim.
-//
-// Two responsibilities, both mirroring the real C# CLI:
-//   1. peRevitLaunch — the four-step launch chain that decides HOW to invoke pe-revit:
-//        PE_REVIT_CMD env override
-//        → dev lane: repo-local tool (`dotnet tool run pe-revit --` at the tool-manifest root)
-//        → installed kernel shim (%LOCALAPPDATA%\<vendor>\<product>\shims\pe-revit.cmd)
-//        → bare `dotnet pe-revit` (PATH/global-tool discovery).
-//   2. validatePeRevitEnvelope / PeRevitEnvelope — the exact top-level shape the CLI emits under
-//      --json (source of truth: Pe.Revit.Cli/CommandEnvelope.cs Build()):
-//        { result, resolved, diagnostics[{code,detail,fix}], nextSteps[], guide, related[] }.
-//      A successful process exit is NOT a verdict: empty stdout, non-JSON, or a non-envelope object
-//      all mean the resolved CLI did not actually answer this verb (e.g. a pre-session installed
-//      shim), so validation throws rather than relaying a blank/foreign 200.
+// SDK-owned copy-in client. The generated contract defines the eight-field envelope.
+// Process success is not a verdict; validation rejects empty, non-JSON, and non-envelope output.
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import type { Diagnostic, Envelope, Resolved as GeneratedResolved } from "./generated/pe-revit-contract.ts";
+import type {
+  Diagnostic,
+  Envelope,
+  Resolved as GeneratedResolved,
+} from "@pe/host-contracts/pe-revit-contract";
 
 /** A resolved launch: the executable plus the fixed args that precede the verb tokens. */
 export interface PeRevitLaunch {
@@ -129,7 +114,7 @@ export function validatePeRevitEnvelope(
   return stdout;
 }
 
-/** Structural type guard for the envelope's six required top-level fields. */
+/** Structural type guard for the envelope's eight required top-level fields. */
 export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
@@ -137,7 +122,8 @@ export function isPeRevitEnvelope(value: unknown): value is PeRevitEnvelope {
     "result" in v &&
     "resolved" in v &&
     Array.isArray(v.diagnostics) &&
-    (v.binary === null || typeof v.binary === "object") &&
+    typeof v.binary === "object" && v.binary !== null &&
+    typeof v.command === "object" && v.command !== null &&
     Array.isArray(v.nextSteps) &&
     typeof v.guide === "string" &&
     Array.isArray(v.related)

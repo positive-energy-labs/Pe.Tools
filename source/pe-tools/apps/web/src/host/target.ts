@@ -1,23 +1,9 @@
 /**
  * Target model — the web-side view of the host's `resolveSessionTarget` (apps/host/src/bridge.ts).
- *
- * This file used to carry its own `SessionLane` union and its own selector grammar, hand-synced to
- * the host's. Both are gone: `Custody` and `Lane` are imported from the SDK's GENERATED contract
- * (`apps/host/src/generated/pe-revit-contract.ts`, drift-guarded by `pe-revit doctor`), so there is
- * one vocabulary and adding a lane value in the SDK is a compile error here rather than a silent
- * disagreement.
- *
- * A Target is a SELECTOR STRING, never a resolved session id. Selectors are stable across process
- * restarts (`observed` still means the session pe-revit holds no receipt for after a restart; a raw
- * bridge session id dies with the process), so UI state (URL params, chat session pins) stores
- * selectors and resolves them against the live session list on every render.
- *
- * Resolution is a pure function so every surface (composer chip, route toolbar, plugin, inspector)
- * reflects ONE state, and so the full state space is exercisable in POCs and tests without a live
- * host.
  */
 
-import type { Custody, Lane } from "@pe/host-contracts/pe-revit-contract";
+import type { Custody, Lane } from "@pe/host-contracts/contracts";
+import type { BridgeSessionListEntry } from "@pe/host-contracts/operation-types";
 import { addressSchema, type Address } from "@pe/agent-contracts";
 
 export type { Custody, Lane };
@@ -27,9 +13,10 @@ export interface SessionFacts {
   /** The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id. */
   sessionId: string;
   processId: number;
-  /** Payload SOURCE, the SDK's only two values. Null when the payload reported none. */
+  processStartUtcUnixMs?: number | null;
+  /** Host/UI lane. The SDK payload source calls `dev` checkouts `checkout`. */
   lane: Lane | null;
-  /** The id `pe-revit session status` prints, when this payload was launched by pe-revit. */
+  /** The id `pe-revit session list` prints, when this payload was launched by pe-revit. */
   sdkSessionId?: string;
   /**
    * `controlled` = pe-revit holds a receipt (full lifecycle); `observed` = it does not (reads
@@ -122,26 +109,13 @@ export function documentAddress(session: SessionFacts): Address | null {
 }
 
 /** Wire entry (bridge.sessions.list) → SessionFacts. Disconnected entries are not targets. */
-export function fromBridgeSessions(
-  entries: readonly {
-    activeDocumentCloudModelGuid?: string | null;
-    activeDocumentPath?: string | null;
-    sessionId: string;
-    connected: boolean;
-    lane?: string | null;
-    sdkSessionId?: string | null;
-    custody?: string | null;
-    processId?: number | null;
-    activeDocumentTitle?: string | null;
-    activeDocumentObservedAtUnixMs?: number | null;
-    openDocumentCount: number;
-  }[],
-): SessionFacts[] {
+export function fromBridgeSessions(entries: readonly BridgeSessionListEntry[]): SessionFacts[] {
   return entries
     .filter((e) => e.connected)
     .map((e) => ({
       sessionId: e.sessionId,
       processId: e.processId ?? 0,
+      processStartUtcUnixMs: e.processStartUtcUnixMs ?? null,
       // Anything outside the SDK's union is no lane at all, not an invented "unknown" member.
       lane: LANES.find((l) => l === e.lane) ?? null,
       sdkSessionId: e.sdkSessionId ?? undefined,

@@ -6,8 +6,8 @@ Run from anywhere: python .agents/skills/check.py [--fix]
 import io, os, re, sys, glob, subprocess, collections
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-KINDS = ('route', 'lens', 'pass', 'slot', 'loop')
-DIR_RE = re.compile(r'^(route|lens|pass|slot|loop)\.([a-z][a-z0-9-]*)$')
+KINDS = ('root', 'lens', 'pass', 'slot', 'loop')
+DIR_RE = re.compile(r'^(root|lens|pass|slot|loop)\.([a-z][a-z0-9-]*)$')
 # A stance is portable. Anything naming this repo, its tools, or its paths belongs in a slot.
 REPO_TOKENS = re.compile(
     r'\bPe\.[A-Za-z]|\bpe-revit\b|\bRevit\b|\bHerd\w*|\bpnpm\b|\bdotnet\b|\btmux\b'
@@ -82,12 +82,12 @@ def main():
             fail('triggers', '%r is claimed by %s' % (phrase, ', '.join(uniq)))
 
     # 4. the index table is a projection of dirnames + frontmatter; --fix rewrites it, otherwise it must match
-    idx = skills.get('route.index')
+    idx = skills.get('root.index')
     if not idx:
-        fail('route.index', 'missing')
+        fail('root.index', 'missing')
     else:
-        order = {k: i for i, k in enumerate(('route', 'lens', 'pass', 'loop', 'slot'))}
-        want = ['| Kind | Stance | It is | Rounds | User-only | Stop |', '|---|---|---|---|---|---|']
+        order = {k: i for i, k in enumerate(('root', 'lens', 'pass', 'loop', 'slot'))}
+        want = ['| Kind | Stance | Figure/It is | Rounds | User-only | Stop |', '|---|---|---|---|---|---|']
         for d, (kind, name, text) in sorted(skills.items(), key=lambda kv: (order[kv[1][0]], kv[0])):
             fm = frontmatter(text) or ''
             figure, stop = field(fm, 'figure'), field(fm, 'stop')
@@ -95,25 +95,27 @@ def main():
                 fail(d, 'no frontmatter figure:; the index table projects it')
             if kind in ('pass', 'loop') and not stop:
                 fail(d, 'a %s with no frontmatter stop:' % kind)
-            if kind == 'slot' and field(fm, 'scope') not in ('repo', 'house'):
-                fail(d, 'a slot needs scope: repo | house')
+            if kind == 'slot' and field(fm, 'scope') not in ('skills', 'repo'):
+                fail(d, 'a slot needs scope: skills | repo')
             user_only = '**yes**' if field(fm, 'disable-model-invocation') == 'true' else 'no'
             if kind == 'slot':
                 want.append('| slot | `%s` | %s | - | - | - |' % (name, figure))
+            elif kind == 'root':
+                want.append('| root | `%s` | %s | - | %s | - |' % (name, figure, user_only))
             else:
                 want.append('| %s | `%s` | %s | %s | %s | %s |' % (
                     kind, name, figure, 'yes' if kind == 'loop' else 'no', user_only, stop or ''))
         want = '\n'.join(want)
         tbl = re.search(r'^\| Kind \| Stance.*?(?=\n\n)', idx[2], re.S | re.M)
         if not tbl:
-            fail('route.index', 'no `| Kind | Stance |` table to project into')
+            fail('root.index', 'no `| Kind | Stance |` table to project into')
         elif tbl.group(0) != want:
             if do_fix:
-                path = os.path.join(HERE, 'route.index', 'SKILL.md')
+                path = os.path.join(HERE, 'root.index', 'SKILL.md')
                 io.open(path, 'w', encoding='utf-8', newline='\n').write(idx[2].replace(tbl.group(0), want))
                 fixes.append('rewrote the index table from frontmatter')
             else:
-                fail('route.index', 'table differs from frontmatter projection; run --fix')
+                fail('root.index', 'table differs from frontmatter projection; run --fix')
 
     # 5. only slot.* may name this repo, its tools, or its paths
     for d, (kind, name, text) in sorted(skills.items()):
@@ -126,7 +128,7 @@ def main():
                 continue
             if sat.endswith('.md'):
                 s = read(sat)
-                if field(frontmatter(s) or '', 'scope') != 'house':  # house policy may name tools and models
+                if field(frontmatter(s) or '', 'scope') != 'skills':  # set-scoped policy may name tools and models
                     body += '\n' + s
             else:
                 body += '\n```code\n'
@@ -138,29 +140,10 @@ def main():
         if code:
             fail(d, 'code fence(s) in a portable stance (%s); mechanics belong in a slot' % ', '.join(sorted(set(code))))
 
-    # 5b. Parlance: a row pins a figure's alias to one canonical word. A row with no alias is a
-    #     definition, not a pin; a word owned by two stances or by the Lexicon belongs in the Lexicon only.
-    lexicon = set()
-    if idx:
-        lex = re.search(r'^## Lexicon\n(.*?)(?=\n## )', idx[2], re.S | re.M)
-        if lex:
-            lexicon = {m.group(1).lower() for m in re.finditer(r'^\| \*\*([^*|]+)\*\*', lex.group(1), re.M)}
-    parlance_owner = {}
+    # 5b. Parlance is dead: aliases live in the Lexicon rows of root.index, nowhere else.
     for d, (kind, name, text) in sorted(skills.items()):
-        sec = re.search(r'^## Parlance\n(.*?)(?=\n#|\Z)', text, re.S | re.M)
-        if not sec:
-            continue
-        for word, pins in re.findall(r'^\| ([^|]+?) \| ([^|]*?) \|$', sec.group(1), re.M):
-            if word in ('Word', '---'):
-                continue
-            w = word.strip().lower()
-            if not pins.strip():
-                fail(d, 'Parlance %r has no alias; a row pins a figure word or it is cut' % w)
-            if w in lexicon:
-                fail(d, 'Parlance %r is a Lexicon word; pin its alias in the Lexicon row instead' % w)
-            if w in parlance_owner:
-                fail(d, 'Parlance %r is also in %s; a shared word lives in the Lexicon' % (w, parlance_owner[w]))
-            parlance_owner[w] = name
+        if re.search(r'^## Parlance', text, re.M):
+            fail(d, 'a `## Parlance` section; Parlance is dead, pin aliases in the Lexicon row in root.index')
 
     # 6. the client mirror is a junction, never a copy that can drift
     mirror = os.path.join(os.path.dirname(os.path.dirname(HERE)), '.claude', 'skills')

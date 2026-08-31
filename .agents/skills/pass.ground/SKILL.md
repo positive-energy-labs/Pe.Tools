@@ -21,9 +21,3 @@ Mode: writes are off. Reads, runs, and greps are the work. The artifact is a map
 - Treat a handoff, a review, or a doc as terrain to survey, not as a stake. Confirm or contradict it.
 - The user sets the depth; the default is one pass wide, then the three places worth a second look.
 - End by naming the next stance and the one question that decides it. A pasted failure ends in `diagnose`.
-
-## Parlance
-
-| Word | Pins |
-|---|---|
-| map | plat |

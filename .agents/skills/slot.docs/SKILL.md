@@ -7,7 +7,7 @@ scope: repo
 
 # Docs
 
-**Code is the spec**. Markdown exists only for what code cannot say: why, what was tried and failed, and what is still owed. Before writing a doc, ask whether the knowledge belongs in code, a test, or a commit message instead, those are preferred. Exception: product/design **verdicts always go to the feature ledger**, never commit messages (the `triangulate` rule wins).
+**Code is the spec**. Markdown exists only for what code cannot say: why, what was tried and failed, and what is still owed. Before writing a doc, ask whether the knowledge belongs in code, a test, or a commit message instead, those are preferred. Exception: product/design **verdicts always go to the feature ledger**, never commit messages (the `protoui` rule wins).
 
 Be the **zealous hermit building the apocrypha** and the **diligent redactor masorete guarding the canon**. The hermit writes what code can't say, the redactor makes sure only that survives.
 
@@ -22,7 +22,7 @@ There is no external issue tracker. No GitHub issues, no `.scratch/`, no ticket 
 | Home| Knowledge |
 |---|---|
 | `docs/features/<name>/LEDGER.md` |  Feature-scoped decisions, rejected paths, open work |
-| `docs/features/<name>/MAP.md`, deleted when the effort ends |  Live-effort frontier (triangulate rounds, demiurge shapes) |
+| `docs/features/<name>/MAP.md`, deleted when the effort ends |  Live-effort frontier (protoui rounds, demiurge shapes) |
 | `docs/adr/NNNN-slug.md` |  Decisions that constrain other features |
 | Nearest package `AGENTS.md` Shared Language table; feature terms in `docs/features/<name>/GLOSSARY.md` (lazy, `grill` grows them; formats: `GLOSSARY-FORMAT.md`, `ADR-FORMAT.md` beside this skill) |  Domain vocabulary |
 | Hard-won wide-breadth rationale | Authority docs (registry below) |
@@ -127,10 +127,3 @@ Docs earn their keep by being findable from code and vice versa. Pragmatic rules
 ## Frozen
 
 `docs/context/` and `docs/rework/` were swept and deleted on 2026-08-17 (every surviving fact folded into ledgers, grounding docs, ADRs, or code comments, git history holds the long forms). Neither dir may be recreated; `docs-guard.test.ts` enforces this. New writing goes to ledgers, handoffs, or (research only) `docs/research/`.
-
-## Parlance
-
-| Word | Pins |
-|---|---|
-| rebuild | Ise; rewrite a ledger as current truth instead of appending |
-| sweep | sand mandala; delete a map when its effort ends |

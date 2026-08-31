@@ -1,5 +1,10 @@
 import { Effect } from "effect";
-import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { expect, test } from "vite-plus/test";
 import {
   docOpenArgs,
@@ -14,6 +19,8 @@ import {
   type SessionActionRequest,
 } from "../src/session-route.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "../src/pe-revit-launch.ts";
+
+const execFileAsync = promisify(execFile);
 
 function parsed(body: unknown): SessionActionRequest {
   const result = parseSessionActionRequest(body);
@@ -39,8 +46,6 @@ test("start on a source-linked (dev) host uses the checkout's Pe.App project", (
     "25",
     "--id",
     "scratch",
-    "--origin",
-    "web",
     "--json",
   ]);
 });
@@ -54,14 +59,14 @@ test("start on an installed-lane host passes NO --project: project-less start IS
   const request = parsed({ action: "start", year: "25" });
   expect(request.lane).toBe("installed");
   const args = sessionCliArgs(request, undefined);
-  expect(args).toEqual(["session", "start", "--year", "25", "--origin", "web", "--json"]);
+  expect(args).toEqual(["session", "start", "--year", "25", "--json"]);
   expect(parseSessionActionRequest({ action: "start", year: "25", lane: "sandbox" })).toMatchObject(
     {
       ok: false,
     },
   );
   // The retired flags must never reappear: lane is derived from the payload source, and start
-  // blocks to ready by default (the opt-out is --no-wait, which this route never wants).
+  // blocks to ready by default.
   expect(args).not.toContain("--installed");
   expect(args).not.toContain("--wait");
 });
@@ -69,39 +74,28 @@ test("start on an installed-lane host passes NO --project: project-less start IS
 test("start carries an optional --doc for the end-user case", () => {
   expect(
     sessionCliArgs(parsed({ action: "start", year: "26", doc: "Tower.rvt" }), undefined),
-  ).toEqual([
-    "session",
-    "start",
-    "--year",
-    "26",
-    "--doc",
-    "Tower.rvt",
-    "--origin",
-    "web",
-    "--json",
-  ]);
+  ).toEqual(["session", "start", "--year", "26", "--doc", "Tower.rvt", "--json"]);
 });
 
-test("stop/restart/converge map to --id verbs; stop honors force", () => {
+test("stop/restart map to --id verbs; stop honors force", () => {
+  // restart shells `session hr --restart` — beta.131 deleted `session restart`.
   expect(sessionCliArgs(parsed({ action: "restart", id: "scratch" }), undefined)).toEqual([
     "session",
-    "restart",
+    "hr",
     "--id",
     "scratch",
+    "--restart",
     "--json",
   ]);
   expect(sessionCliArgs(parsed({ action: "stop", id: "scratch", force: true }), undefined)).toEqual(
     ["session", "stop", "--id", "scratch", "--force", "--json"],
   );
-  expect(
-    sessionCliArgs(parsed({ action: "converge", id: "scratch", timeoutSeconds: 300 }), undefined),
-  ).toEqual(["session", "converge", "--id", "scratch", "--timeout-seconds", "300", "--json"]);
 });
 
-test("status args pass an optional id filter", () => {
-  expect(sessionStatusArgs()).toEqual(["session", "status", "--json"]);
-  expect(sessionStatusArgs(undefined, true)).toEqual(["session", "status", "--all", "--json"]);
-  expect(sessionStatusArgs("scratch")).toEqual(["session", "status", "--id", "scratch", "--json"]);
+test("fleet and exact reads both use list; an id narrows it", () => {
+  expect(sessionStatusArgs()).toEqual(["session", "list", "--json"]);
+  expect(sessionStatusArgs(undefined, true)).toEqual(["session", "list", "--all", "--json"]);
+  expect(sessionStatusArgs("scratch")).toEqual(["session", "list", "--id", "scratch", "--json"]);
 });
 
 test("document recents args carry an optional year", () => {
@@ -115,7 +109,6 @@ test("document open requires path and id and maps optional arguments", () => {
   const parsed = parseDocOpenRequest({
     path: "recent:Cloud.rvt",
     id: "dev-26",
-    year: 2026,
     conflictPolicy: "keep",
     detach: true,
   });
@@ -126,8 +119,6 @@ test("document open requires path and id and maps optional arguments", () => {
     "recent:Cloud.rvt",
     "--id",
     "dev-26",
-    "--year",
-    "2026",
     "--detach",
     "--conflict-policy",
     "keep",
@@ -142,16 +133,14 @@ test("action body validation mirrors the CLI invocation contract", () => {
   expect(parseSessionActionRequest({ action: "start" })).toMatchObject({ ok: false }); // no year
   expect(parseSessionActionRequest({ action: "stop" })).toMatchObject({ ok: false }); // no id
   expect(parseSessionActionRequest({ action: "start", year: 25 })).toMatchObject({ ok: true });
-  // converge with no id is legal: the SDK resolver owns implicit-single resolution and this
-  // route must not re-implement a stricter one.
-  expect(parseSessionActionRequest({ action: "converge" })).toMatchObject({ ok: true });
+  expect(parseSessionActionRequest({ action: "converge" })).toMatchObject({ ok: false });
 });
 
 test("caller-provided timeouts get a margin over the CLI's own budget", () => {
-  expect(sessionActionTimeoutMs(parsed({ action: "converge", id: "s", timeoutSeconds: 300 }))).toBe(
+  expect(sessionActionTimeoutMs(parsed({ action: "restart", id: "s", timeoutSeconds: 300 }))).toBe(
     360_000,
   );
-  expect(sessionActionTimeoutMs(parsed({ action: "converge", id: "s" }))).toBe(600_000);
+  expect(sessionActionTimeoutMs(parsed({ action: "restart", id: "s" }))).toBe(600_000);
 });
 
 // --- launcher / envelope validation ------------------------------------------------------------
@@ -175,7 +164,7 @@ test("dev host selects its checkout CLI even when an installed shim exists", () 
 
 test("session CLI rejects empty, invalid, and non-envelope output", () => {
   const launch = { cmd: "dotnet", args: ["pe-revit"] } as const;
-  const args = ["session", "status", "--json"];
+  const args = ["session", "list", "--json"];
   expect(() => validatePeRevitEnvelope("", args, launch)).toThrow("no output");
   expect(() => validatePeRevitEnvelope("not json", args, launch)).toThrow("invalid JSON");
   expect(() => validatePeRevitEnvelope("{}", args, launch)).toThrow("non-envelope");
@@ -183,16 +172,42 @@ test("session CLI rejects empty, invalid, and non-envelope output", () => {
   // pre-session-CLI output it exists to reject.
   const guideless = '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[]}';
   expect(() => validatePeRevitEnvelope(guideless, args, launch)).toThrow("non-envelope");
-  // The seventh field, `binary`, arrived with the beta.121 envelope and the vendored validator
-  // now checks it. A six-field envelope no longer passes — which is the whole point of vendoring
-  // the validator instead of restating the shape here.
-  const sixField =
-    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[]}';
-  expect(() => validatePeRevitEnvelope(sixField, args, launch)).toThrow("non-envelope");
+  // The generated validator checks all eight required envelope fields instead of restating them.
+  const sevenField =
+    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":{}}';
+  expect(() => validatePeRevitEnvelope(sevenField, args, launch)).toThrow("non-envelope");
   const envelope =
-    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":null}';
+    '{"result":{},"resolved":{},"diagnostics":[],"nextSteps":[],"guide":"g","related":[],"binary":{},"command":{}}';
   expect(validatePeRevitEnvelope(envelope, args, launch)).toBe(envelope);
 });
+
+test("checkout pin answers with an envelope against isolated SDK roots", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pe-tools-session-list-"));
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../../..");
+  const launch = peRevitLauncher({
+    lane: "dev",
+    sourceRoot: join(repoRoot, "source", "pe-tools"),
+  });
+  const args = ["session", "list", "--all", "--json"];
+  const registryRoot = join(root, "registry");
+  try {
+    const { stdout } = await execFileAsync(launch.cmd, [...launch.args, ...args], {
+      cwd: launch.cwd,
+      env: {
+        ...process.env,
+        PE_REVIT_ADDINS_ROOT: join(root, "addins"),
+        PE_SERVICE_STATE_ROOT: join(root, "services"),
+        PE_SESSION_FILES_ROOT: join(root, "files"),
+        PE_SESSION_REGISTRY_ROOT: registryRoot,
+      },
+      windowsHide: true,
+    });
+    expect(validatePeRevitEnvelope(stdout, args, launch)).toBe(stdout);
+    expect(stdout).toContain(registryRoot.replaceAll("\\", "\\\\"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 30_000);
 
 // --- shelled execution (fake shell layer, no real CLI) ----------------------------------------
 
@@ -211,7 +226,7 @@ test("CLI stdout (the JSON envelope) relays verbatim, even for failed verdicts",
     ),
   );
 
-  expect(seen).toEqual([["session", "status", "--json"]]);
+  expect(seen).toEqual([["session", "list", "--json"]]);
   expect(outcome).toEqual({ status: 200, bodyJson: envelope });
 });
 
@@ -280,7 +295,7 @@ for (const verdict of existingIdVerdicts) {
 test("a spawn failure is a plain 500", async () => {
   const outcome = await Effect.runPromise(
     executeSessionCli(
-      ["session", "status", "--json"],
+      ["session", "list", "--json"],
       () => Effect.fail("pe-revit not found"),
       1_000,
       {
@@ -295,15 +310,10 @@ test("a spawn failure is a plain 500", async () => {
 
 test("a hung CLI is a 504 that forges no envelope", async () => {
   const outcome = await Effect.runPromise(
-    executeSessionCli(
-      ["session", "converge", "--id", "scratch", "--json"],
-      () => Effect.never,
-      50,
-      {
-        action: "converge",
-        id: "scratch",
-      },
-    ),
+    executeSessionCli(["session", "restart", "--id", "scratch", "--json"], () => Effect.never, 50, {
+      action: "restart",
+      id: "scratch",
+    }),
   );
 
   expect(outcome.status).toBe(504);

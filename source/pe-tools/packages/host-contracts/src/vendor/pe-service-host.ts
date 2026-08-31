@@ -1,26 +1,7 @@
-// pe-service-host.ts — the SDK-owned serve-side helper for a managed Pe service (SDK-LEDGER A10 / D3).
-//
-// OWNED BY Pe.Revit.Sdk — DO NOT FORK. Copy this file verbatim into a consumer alongside its sibling
-// pe-service.ts; the SDK ships it inside the Pe.Revit.Sdk nupkg under clients/ts/ so there is exactly ONE
-// implementation per language. Dependency-free — Node stdlib only, plus its one canonical sibling
-// ./pe-service. It imports NOTHING else.
-//
-// PRIMITIVES-ONLY. This helper does NOT own an HTTP server, routes, or a framework. A managed host binds
-// its own loopback port and mounts its own shutdown route; this helper owns the identity/eviction seam
-// around that:
-//   - claim-on-startup: build the caller's identity (createServiceFile), verify the prior owner
-//     (pid + start-time, via the SDK's isRecordedOwnerAlive), evict it end-to-end when policy allows,
-//     write the service file on bind, and delete it on graceful exit;
-//   - eviction end-to-end: reading the prior owner's file, POSTing its shutdown route with ITS token
-//     (header `x-pe-service-token`, SDK-owned), waiting for the port to release / the process to exit,
-//     then claiming — all delegated to pe-service.ts `takeOver`, which mirrors C#
-//     `InstalledProduct.TakeOver` / `EnsureRunning`→`ShutDown` byte-for-byte in behaviour;
-//   - token validation for the product's shutdown route (a thin binding over `isAuthorizedShutdown`).
-//
-// REPLACEMENT POLICY IS DATA, not probe logic. The claimant declares which foreign-owner lanes it may
-// evict; the claim call applies that data. The preserved rule (see {@link hostReplacementPolicy}): a dev
-// host replaces an installed host automatically; a dev host replaces another dev host only with an
-// explicit takeover flag.
+// SDK-owned copy-in primitive. Keep this file byte-identical across consumers.
+// It owns service identity, verified eviction, service-file claim, and shutdown-token validation.
+// It does not own the HTTP server or product routes.
+// Replacement policy is data: dev replaces installed; dev replaces dev only after explicit takeover.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -75,7 +56,7 @@ export interface ServiceHostDescriptor {
   /** Dev-lane checkout this host runs from (recorded as `sourceRoot`). */
   readonly sourceRoot?: string;
   /** Schema 3, optional: the relative HTTP path that answers 2xx/3xx while this host is up. Recorded
-   * in the service file so a READER (e.g. `pe-revit session status`, which narrates companion legs
+   * in the service file so a READER (e.g. `pe-revit session list --id NAME`, which narrates companion legs
    * and never starts them) can probe health rather than infer liveness from a TCP accept. Defaults to
    * `descriptor.health` and is unrelated to `shutdown`. */
   readonly health?: string;
@@ -161,7 +142,7 @@ export async function claimServiceHost(
   if (result.outcome === "owner-stopped-and-claimed" && existing) {
     try {
       descriptor.onEvict?.(existing);
-    } catch {}
+    } catch { }
   }
   if (result.outcome === "no-current-owner" || result.outcome === "owner-stopped-and-claimed")
     return { claimed: true, handle: makeHandle(appBase, descriptor.name, result.file) };
@@ -175,7 +156,7 @@ function mayEvict(policy: ReplacementPolicy, incumbentLane: string): boolean {
 function makeHandle(appBase: string, name: string, serviceFile: ServiceFile): ServiceHostHandle {
   return {
     serviceFile,
-    release: () => deleteServiceFile(appBase, name, serviceFile.instanceId).then(() => {}),
+    release: () => deleteServiceFile(appBase, name, serviceFile.instanceId).then(() => { }),
   };
 }
 
@@ -212,7 +193,7 @@ export async function chooseServicePort(
     );
     if (Number.isInteger(remembered) && remembered > 0 && remembered <= 65_535)
       preferred = remembered;
-  } catch {}
+  } catch { }
   if (!Number.isInteger(preferred) || preferred <= 0 || preferred > 65_535) return 0;
   return (await portIsFree(preferred)) ? preferred : 0;
 }

@@ -10,8 +10,9 @@ import {
   type BridgeRegistrationRequest,
   type BridgeResponse,
   type BridgeStateSnapshot,
+  type Custody,
+  type Lane,
 } from "@pe/host-contracts/contracts";
-import type { Custody, Lane } from "./generated/pe-revit-contract.ts";
 
 // Vocabulary: a SESSION is one Revit process incarnation; a CONNECTION is one WS attachment to
 // it. With stable ids (hash(pid + processStartUtc)) a reconnect re-registers the SAME session id,
@@ -21,10 +22,8 @@ type Session = {
   readonly pending: Ref.Ref<BridgePendingRequest | null>; // single in-flight mailbox
   readonly sessionId: string;
   readonly processId: number;
-  // Observed selector metadata, never identity. `lane` is the SDK's generated vocabulary verbatim
-  // (dev | installed — payload SOURCE only); `sdkSessionId` is the id `pe-revit session status`
-  // prints for this session; buildStamp is the LOADED payload's stamp as reported at registration —
-  // the host never computes staleness.
+  readonly processStartUtcUnixMs: number | null;
+  // Observed selector metadata, never process identity or custody authority.
   readonly lane: Lane | null;
   readonly sdkSessionId: string | null;
   readonly buildStamp: string | null;
@@ -64,6 +63,7 @@ export type BridgeSessionView = {
   /** The BROKER's id: hash(pid + processStartUtc). Not the pe-revit session id. */
   readonly sessionId?: string;
   readonly processId?: number;
+  readonly processStartUtcUnixMs?: number | null;
   readonly lane?: Lane | null;
   /** The id `pe-revit session status` prints for this session, when the payload reported one. */
   readonly sdkSessionId?: string | null;
@@ -103,13 +103,7 @@ export function computeBridgeSessionId(registration: {
   return `session-${digest.slice(0, 16)}`;
 }
 
-/**
- * Lane vocabulary is the SDK's, and only the SDK's: the `Lane` union in the generated contract is
- * `dev | installed` and means payload SOURCE, nothing else. This does not so much normalize a lane
- * as REFUSE anything outside that union — a payload reporting a retired or invented lane reports
- * no lane at all, rather than teaching this broker a third vocabulary. A lane-less session is still
- * a perfectly good target by pid or bridge session id; it is only unreachable through lane words.
- */
+/** Accepts only Host/UI lanes; lane-less sessions remain targetable by process identity. */
 const LANES: readonly Lane[] = ["dev", "installed"];
 
 export function normalizeSessionLane(lane: string | null | undefined): Lane | null {
@@ -365,6 +359,7 @@ export const RevitBridgeLive = Layer.effect(
         connected: true,
         sessionId: session.sessionId,
         processId: session.processId,
+        processStartUtcUnixMs: session.processStartUtcUnixMs,
         lane: session.lane,
         sdkSessionId: session.sdkSessionId,
         custody: inferCustody(session),
@@ -453,6 +448,7 @@ export const RevitBridgeLive = Layer.effect(
               pending: yield* Ref.make<BridgePendingRequest | null>(null),
               sessionId,
               processId: frame.registration.processId,
+              processStartUtcUnixMs: frame.registration.processStartUtcUnixMs ?? null,
               lane: normalizeSessionLane(frame.registration.lane),
               sdkSessionId: frame.registration.sdkSessionId ?? null,
               buildStamp: frame.registration.buildStamp ?? null,

@@ -2,16 +2,34 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   documentAddress,
+  fromBridgeSessions,
   mintSelector,
   resolveTarget,
   selectorLabel,
   type SessionFacts,
 } from "./target";
 
+it("projects process-start identity from the bridge sessions transport", () => {
+  expect(
+    fromBridgeSessions([
+      {
+        sessionId: "bridge-a",
+        connected: true,
+        processId: 4128,
+        processStartUtcUnixMs: 1_752_000_000_000,
+        lane: "dev",
+        custody: "observed",
+        openDocumentCount: 0,
+      },
+    ])[0],
+  ).toMatchObject({ processId: 4128, processStartUtcUnixMs: 1_752_000_000_000 });
+});
+
 /** The user's own Revit: pe-revit holds no receipt for it, so custody is `observed`. */
 const observed: SessionFacts = {
   sessionId: "aaa111",
   processId: 4128,
+  processStartUtcUnixMs: 1_000,
   lane: "installed",
   custody: "observed",
   activeDocumentId: "C:\\Models\\Tower-A.rvt",
@@ -22,6 +40,7 @@ const observed: SessionFacts = {
 const controlled: SessionFacts = {
   sessionId: "bbb222",
   processId: 9204,
+  processStartUtcUnixMs: 2_000,
   lane: "installed",
   custody: "controlled",
   sdkSessionId: "fam-lab",

@@ -21,10 +21,15 @@ import { Press } from "#/components/lang/press";
 import { Provenance } from "#/components/lang/section";
 import { StartFields, custodyVerdict, parseUtc, phaseVerdict, worldSub } from "#/instances/route";
 
-export function AddressedInstancesPage({ documentAddress }: { documentAddress: Address }) {
+export function AddressedInstancesPage({
+  documentAddress,
+  fleet,
+}: {
+  documentAddress: Address;
+  fleet: InstancesFleet;
+}) {
   const route = useRouteState(instancesRouteState, { documentAddress });
   const target = current(route.slice?.bindings.world, documentAddress)?.id ?? "";
-  const fleet = useFleet({ all: true });
   return (
     <InstancesWorkspace
       target={target}
@@ -131,7 +136,7 @@ export function InstancesWorkspace({
       {
         key: "lifecycle",
         label: "lifecycle",
-        verbs: (["converge", "restart", "stop"] as const).map((key) => ({
+        verbs: (["restart", "stop"] as const).map((key) => ({
           ...lifecycleVerbs[key],
           label: key === "stop" && selectedWorld?.phase === "unresponsive" ? "force stop" : key,
           ...(source === "fixture" ? { refuse: fixtureRefusal } : {}),
@@ -195,16 +200,9 @@ export function InstancesWorkspace({
         cell: (world) => <StateCell scale="row" value={worldSub(world)} />,
       },
       {
-        key: "legs",
-        label: "legs",
-        cell: (world) => (
-          <StateCell
-            scale="row"
-            value={
-              world.row?.legs?.map((leg) => `${leg.name} ${leg.state}`).join(" · ") || "no legs"
-            }
-          />
-        ),
+        key: "row-detail",
+        label: "detail",
+        cell: (world) => <StateCell scale="row" value={world.detail || "—"} />,
       },
       {
         key: "docs",
@@ -212,7 +210,7 @@ export function InstancesWorkspace({
         cell: (world) => (
           <StateCell
             scale="row"
-            value={`${world.activeDocumentTitle ?? (world.session ? "no open document" : "nothing observed")}${world.openDocumentCount > 1 ? ` +${world.openDocumentCount - 1}` : ""}`}
+            value={`${world.session?.activeDocumentTitle ?? (world.session ? "no open document" : "nothing observed")}${(world.session?.openDocumentCount ?? 0) > 1 ? ` +${(world.session?.openDocumentCount ?? 1) - 1}` : ""}`}
           />
         ),
       },

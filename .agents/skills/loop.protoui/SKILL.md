@@ -1,11 +1,11 @@
 ---
-name: triangulate
-description: Find the shape of a product surface by building comparable variants. Trigger on "triangulate", "parallax", "find the product", "variants", "find UI", "refine UI", "UI feels wrong", "which layout", "prototype", clean-rooming a precedent, or when the user is circling what a product *is*. Not for backend or API shape; that is `demiurge` or `close`.
+name: protoui
+description: Find the shape of a product surface by building comparable variants. Trigger on "protoui", "parallax", "find the product", "variants", "find UI", "refine UI", "UI feels wrong", "which layout", "prototype", clean-rooming a precedent, or when the user is circling what a product *is*. Not for backend or API shape; that is `demiurge` or `close`.
 argument-hint: "What surface, what's unsettled, what precedent?"
 stop: two dry rounds
 figure: Lineup and Toile — a product surface is unsettled
 ---
-# Triangulate
+# protoui
 
 **Stage a Lineup.** The officer does not pick. Suspects stand in the same light, same height marks, same distance; the witness picks one, or none, or "the jaw from three with the eyes from five". A lineup of one is a confession you wrote yourself; a suspect you dressed differently from the others is a rigged lineup. One variant is a portrait; three, a keypress apart, are a fix on the product. A suspect the witness cannot see drew no verdict. Think Pareto front, not winner: the round retires what is dominated and keeps what trades.
 
@@ -32,8 +32,32 @@ User verdicts are the top signal. Losing the layout argument while winning the p
 
 Mounting, the switcher bar, isolated-file variants, and cleanup are mechanics: `execute` owns them, under the lane that serves the surface.
 
-## Parlance
+## Mounting [scope: repo]
 
-| Word | Pins |
-|---|---|
-| variant | suspect, toile, muslin |
+Prefer an existing host page. Variants render on the same route, gated by `?variant=`; data fetching, params, and auth stay, only the rendered subtree swaps. A throwaway route (project routing conventions, named `prototype-*`) is a last resort; an empty route hides problems a populated one exposes.
+
+```tsx
+const variant = searchParams.get('variant') ?? 'A';
+return (
+  <>
+    {variant === 'A' && <VariantA {...data} />}
+    {variant === 'B' && <VariantB {...data} />}
+    {variant === 'C' && <VariantC {...data} />}
+    <PrototypeSwitcher variants={['A','B','C']} current={variant} />
+  </>
+);
+```
+
+Shared `<Header>` fine; shared `<Layout>` defeats the point.
+
+## Switcher bar [scope: repo]
+
+Fixed *bottom-centre*, *constant-width* pill: ← arrow, `B — Sidebar layout` label, → arrow, wrapping. Arrows update the URL param via the router (shareable, reload-stable). Arrow keys cycle too, except when an input, textarea, or contenteditable is focused. Visually alien to the page so it reads as not-the-design. Gated out of production builds. One shared component, with the project's shared UI.
+
+## Isolated HTML variants [scope: repo]
+
+For component-ey questions (a widget, an idiom, an interaction in isolation): one file, no framework, no server, opens by double-click, survives being emailed. Domain language on every label. Title and one-line question at top, variants side by side or tabbed. Real logic in a pure `<script>` module the page calls into; the shell is throwaway.
+
+## Cleanup [scope: repo]
+
+Winner folds into canon, rewritten to prod standard. Losers, switcher, and throwaway routes leave main; the full round only kept on a throwaway branch if the user's verdicts lacked confidence.

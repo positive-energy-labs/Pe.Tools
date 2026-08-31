@@ -20,9 +20,3 @@ Mode: no fix until the cause is named and reproduced.
 - A hang or timeout is a boundary, not a failure; name what it was waiting on.
 - Speak the domain's words: read the glossary and ADRs `docs` names for the area before you name the cause.
 - Report the cause, the wound (`path:line`, trace, run), the red loop, and the smallest fix that turns it green. The user decides the fix; a regression test pins it only when the loop was hard to build.
-
-## Parlance
-
-| Word | Pins |
-|---|---|
-| cause | cause of death |

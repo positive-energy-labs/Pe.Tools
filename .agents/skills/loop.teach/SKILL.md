@@ -13,7 +13,7 @@ Mode: ask one question first if the mission is not obvious: what will you do wit
 
 ## Laws
 
-- Hand over one short artifact they keep, per `write`'s artifact register: the load-bearing 20%, a dense example beside its explanation, the rest linked. Short beats complete.
+- Hand over one short artifact they keep, in `index`'s artifact register: the load-bearing 20%, a dense example beside its explanation, the rest linked. Short beats complete.
 - Cite primary sources: official docs, source code, specs. Never teach from vibes.
 - Explain by way physical shape. Extra attention paid wire/module/process crossings, identity through a vertical, and what is persisted where.
 - Do not give the way until asked. Check their understanding, correct the hand, let them reach it.

@@ -32,16 +32,7 @@ Mode: no fan-out without a posture table first. Task, who (model and thinking), 
 - One writing line, one tree. Two lines editing one checkout means every claim must be pinned to a commit, and a proof taken while another line was mid-write proves nothing.
 - Leave it better than you found it. Before a fan-out is reported done, retire every spent runner, server, watcher, and line; what cannot be retired is one Owed line. Let go of any resource no foreseeable future needs. An anti-pattern seen on the way is one Owed line, not a fix.
 
-## Parlance
-
-| Word | Pins |
-|---|---|
-| mission | gospel, cast, flight |
-| cross | graft, breed, matricize |
-
-# Models (Scope: `house`)
-
-House policy; it travels with the user, not the codebase.
+# Models (Scope: `repo`)
 
 Cost: price per task. Taste: opinions, pretty code, UI/UX, architecture, decisions. Intelligence: full marks on a big but bounded and/or specified task without derailing. Bounded: a supplied edge. Specified: the important choices supplied.
 

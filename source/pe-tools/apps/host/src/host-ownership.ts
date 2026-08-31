@@ -1,12 +1,16 @@
 import { normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
-import { devHostSourceDir, hostServiceName } from "@pe/host-contracts/service-identity";
+import {
+  devHostSourceDir,
+  hostServiceName,
+  type HostLane,
+} from "@pe/host-contracts/service-identity";
 import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
 
 export { productRoot } from "@pe/host-contracts/service-identity";
 
-export type HostLane = "dev" | "installed";
+export type { HostLane } from "@pe/host-contracts/service-identity";
 
 export type HostOwnership = {
   readonly executablePath: string;

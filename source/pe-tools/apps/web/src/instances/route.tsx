@@ -1,9 +1,10 @@
 import type { Verdict } from "#/components/master-table/model";
-import { type WorldFacts } from "#/host/fleet";
+import { type WorldFacts, useFleet } from "#/host/fleet";
 import { type WorldStart } from "#/targeting/world";
 import { RouteDocument } from "#/workbench/route-document";
 import { AddressedInstancesPage } from "#/instances/workspace";
 import { Input } from "#/components/lang/input";
+import { OutcomeLine } from "#/components/lang/outcome";
 
 export const YEARS = ["24", "25", "26"];
 
@@ -13,44 +14,27 @@ export function parseUtc(iso: string | null | undefined): number | undefined {
   return Number.isNaN(ms) ? undefined : ms;
 }
 
-export function yearLabel(year: string | undefined): string | undefined {
-  if (!year) return undefined;
-  return year.length === 2 ? `20${year}` : year;
-}
-
 export function worldSub(world: WorldFacts): string {
-  return [world.lane, yearLabel(world.year), world.pid ? `pid ${world.pid}` : undefined]
+  return [world.lane, world.row?.year, world.pid ? `pid ${world.pid}` : undefined]
     .filter(Boolean)
     .join(" · ");
 }
 
+const PHASE_VERDICT = {
+  booting: { word: "booting", tone: "ink" },
+  failed: { word: "failed", tone: "alarm" },
+  gone: { word: "gone", tone: "mute", dim: true },
+  ready: { word: "ready", tone: "done" },
+  unresponsive: { word: "unresponsive", tone: "caution" },
+} satisfies Record<WorldFacts["phase"], Omit<Verdict, "note">>;
+
 export function phaseVerdict(world: WorldFacts): Verdict {
-  const state = world.row?.state;
-  if (world.phase === "ready")
-    return {
-      word: state ?? "ready",
-      tone: "done",
-      note: world.session
-        ? "The bridge holds an open connection to this world."
-        : (world.row?.detail ?? "pe-revit verified this process identity."),
-    };
-  if (world.phase === "booting")
-    return {
-      word: state ?? "booting",
-      tone: "ink",
-      note: world.row?.detail ?? "The registry says this process is in its boot window.",
-    };
-  if (world.phase === "unresponsive")
-    return {
-      word: state ?? "unresponsive",
-      tone: "caution",
-      note: world.row?.detail ?? "The process exists but stopped answering.",
-    };
   return {
-    word: state ?? "gone",
-    tone: "mute",
-    dim: true,
-    note: world.row?.detail ?? "pe-revit says this world is gone.",
+    ...PHASE_VERDICT[world.phase],
+    note:
+      world.phase === "ready" && world.session
+        ? "The bridge holds an open connection to this world."
+        : world.detail,
   };
 }
 
@@ -122,5 +106,26 @@ export function StartFields({
 }
 
 export function InstancesPage() {
-  return <RouteDocument>{(at) => <AddressedInstancesPage documentAddress={at} />}</RouteDocument>;
+  const fleet = useFleet({ all: true });
+  const censusExceptions = fleet.unreadableReceipts
+    .map((receipt) => `receipt ${receipt.id} · ${receipt.receiptPath} · ${receipt.detail}`)
+    .concat(
+      fleet.processReadErrors.map((error) => `process ${error.candidatePid} · ${error.detail}`),
+    );
+  return (
+    <>
+      {censusExceptions.length ? (
+        <aside aria-label="census exceptions" className="mx-auto mt-4 max-w-6xl px-3 py-2">
+          <OutcomeLine
+            kind="advisory"
+            label={`census exceptions${fleet.registryRoot ? ` · registry ${fleet.registryRoot}` : ""}`}
+            says={censusExceptions.join(" · ")}
+          />
+        </aside>
+      ) : null}
+      <RouteDocument sessions={fleet.sessions}>
+        {(at) => <AddressedInstancesPage documentAddress={at} fleet={fleet} />}
+      </RouteDocument>
+    </>
+  );
 }

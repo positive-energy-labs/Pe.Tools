@@ -30,7 +30,7 @@ interface FleetFeed {
   readonly basis: readonly string[];
 }
 
-type WorldLifecycleAction = "start" | "converge" | "restart" | "stop";
+type WorldLifecycleAction = "start" | "restart" | "stop";
 
 export interface WorldStart {
   readonly lane: "installed" | "dev";
@@ -48,9 +48,9 @@ export interface WorldLifecycleReceipt {
 
 type WorldOption = Option & { readonly world: WorldFacts };
 
-const worldLabel = (
-  world: Pick<WorldFacts, "pid"> & Partial<Pick<WorldFacts, "session" | "row">>,
-) => world.session?.sdkSessionId ?? world.row?.id ?? `Revit ${world.pid ?? 0}`;
+const worldLabel = (world: Pick<WorldFacts, "custody" | "id" | "pid" | "session">) =>
+  world.session?.sdkSessionId ??
+  (world.custody === "observed" ? `Revit ${world.pid ?? world.id}` : world.id);
 
 const worldOption = (world: WorldFacts, sessions: readonly SessionFacts[]): WorldOption => ({
   id: world.session ? mintSelector(world.session, sessions) : `session:${worldLabel(world)}`,
@@ -178,7 +178,6 @@ export const worldTrunk = {
     };
     return {
       start: verb("start"),
-      converge: verb("converge"),
       restart: verb("restart"),
       stop: verb("stop"),
     };

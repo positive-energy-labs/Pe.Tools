@@ -5,12 +5,11 @@ import { join } from "node:path";
 import {
   docOpenArgv,
   docRecentsArgv,
-  sessionConvergeArgv,
-  sessionRestartArgv,
+  sessionHrArgv,
+  sessionListArgv,
   sessionStartArgv,
-  sessionStatusArgv,
   sessionStopArgv,
-} from "./generated/pe-revit-contract.ts";
+} from "@pe/host-contracts/pe-revit-contract";
 import { hostOwnership, type HostLane } from "./host-ownership.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 
@@ -18,20 +17,22 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
  * Control plane for Revit sessions — NOT a catalog op. Session lifecycle belongs to the SDK
  * (`pe-revit session …` is the only implementation); this plain HTTP route is a THIN RELAY so a
  * browser can reach it. It shells the CLI through the GENERATED argv builders
- * (`generated/pe-revit-contract.ts`, vendored from the SDK and drift-guarded by
+ * (`@pe/host-contracts/pe-revit-contract`, vendored from the SDK and drift-guarded by
  * `pe-revit doctor`'s `ts-client-drift`) and hands the CLI's envelope back untouched.
  *
  * Untouched is the whole contract. This file forges NO envelope of its own: every state, code,
  * diagnostic and nextStep a caller sees is the SDK's, so the browser and an agent running
- * `pe-revit session status` read the same words. A hung CLI is the one thing we cannot relay (no
+ * `pe-revit session list` read the same words. A hung CLI is the one
+ * thing we cannot relay (no
  * envelope was ever produced) and is reported as a plain 504, not as a hand-made `unresponsive`
  * result that would look like an SDK verdict without being one.
  *
- * GET /sessions → `session status --json`
- * POST /sessions {action: start|stop|restart|converge, …} → the matching verb.
+ * GET /sessions → `session list --json`, narrowed with `--id` when an id is supplied.
+ * POST /sessions {action: start|stop|restart, …} → the matching verb (restart shells
+ * `session hr --restart`, the SDK's cold-swap since beta.131 deleted `session restart`).
  */
 
-type SessionAction = "start" | "stop" | "restart" | "converge";
+type SessionAction = "start" | "stop" | "restart";
 
 export type SessionActionRequest = {
   readonly action: SessionAction;
@@ -49,13 +50,12 @@ export type SessionActionRequest = {
   readonly timeoutSeconds?: number;
 };
 
-const SESSION_ACTIONS: readonly SessionAction[] = ["start", "stop", "restart", "converge"];
+const SESSION_ACTIONS: readonly SessionAction[] = ["start", "stop", "restart"];
 
 /**
  * Parse and validate a POST body. Field requirements mirror the CLI's own invocation contract
  * (start needs a year; stop/restart need an id) so bad requests fail here with a clear message
- * instead of a shelled bad-invocation. `converge` takes an id OR nothing (the SDK resolves
- * implicit-single itself) — refusing it here would be a second, stricter resolver.
+ * instead of a shelled bad-invocation.
  */
 export function parseSessionActionRequest(
   body: unknown,
@@ -114,9 +114,7 @@ export function resolveStartProject(lane: HostLane, sourceRoot: string | null): 
 
 /**
  * Map a validated action request onto pe-revit argv through the GENERATED builders. Every builder
- * appends `--json` itself. No `--wait`: start/restart block to ready by default, and the opt-out
- * is `--no-wait` (which this route never wants — an HTTP caller waiting on a response wants the
- * verdict, not a booting handle).
+ * appends `--json` itself. Start and restart return their own terminal observation.
  */
 export function sessionCliArgs(
   request: SessionActionRequest,
@@ -129,21 +127,23 @@ export function sessionCliArgs(
         year: request.year!,
         id: request.id,
         doc: request.doc,
-        origin: "web",
         timeoutSeconds: request.timeoutSeconds,
       });
     case "restart":
-      return sessionRestartArgv({ id: request.id, timeoutSeconds: request.timeoutSeconds });
+      return sessionHrArgv({
+        id: request.id,
+        restart: true,
+        timeoutSeconds: request.timeoutSeconds,
+      });
     case "stop":
       return sessionStopArgv({ id: request.id, force: request.force });
-    case "converge":
-      return sessionConvergeArgv({ id: request.id, timeoutSeconds: request.timeoutSeconds });
   }
 }
 
-/** GET (status/list) CLI args; `id` narrows to one session, `all` includes the graveyard. */
+/** GET (list) CLI args; `id` narrows to one session, `all` includes the graveyard. */
 export function sessionStatusArgs(id?: string | null, all = false): string[] {
-  return sessionStatusArgv(id?.trim() ? { id: id.trim() } : all ? { all: true } : {});
+  const pinned = id?.trim();
+  return pinned ? sessionListArgv({ id: pinned }) : sessionListArgv({ all });
 }
 
 type SessionCliRunner<R = never> = (args: readonly string[]) => Effect.Effect<string, unknown, R>;
@@ -153,7 +153,6 @@ type SessionCliOutcome = { readonly status: number; readonly bodyJson: string };
 type DocOpenRequest = {
   readonly path: string;
   readonly id: string;
-  readonly year?: string;
   readonly conflictPolicy?: string;
   readonly detach?: boolean;
 };
@@ -179,7 +178,6 @@ export function parseDocOpenRequest(
     request: {
       path,
       id,
-      year: typeof record.year === "number" ? String(record.year) : readOptionalString(record.year),
       conflictPolicy: readOptionalString(record.conflictPolicy),
       detach: record.detach === true,
     },
@@ -190,7 +188,7 @@ export function docOpenArgs(request: DocOpenRequest): string[] {
   return docOpenArgv(request);
 }
 
-// start/restart/converge block on Revit readiness (cold boot is 180-300s; the CLI's own wait
+// Start and restart block on Revit readiness (cold boot is 180-300s; the CLI's own wait
 // default is 420s; a dev-lane start also builds first) — the route budget must outlast the CLI's.
 const DEFAULT_ACTION_TIMEOUT_MS = 600_000;
 const STATUS_TIMEOUT_MS = 60_000;
@@ -230,7 +228,9 @@ export function executeSessionCli<R>(
           ok: false,
           error: `pe-revit session ${timeoutContext.action}${target} did not answer within ${Math.round(timeoutMs / 1000)}s. The process may still be alive but blocked inside a Revit API call, which no timeout can cancel.`,
           nextSteps: [
-            `pe-revit session status${target} --json — read what the SDK actually observes`,
+            timeoutContext.id
+              ? `pe-revit session list --id ${timeoutContext.id} --json — read what the SDK actually observes`
+              : `pe-revit session list --all --json — read what the SDK actually observes`,
             `pe-revit session stop${target} --force — force-stop that exact incarnation`,
           ],
         }),

@@ -82,12 +82,12 @@ MSBuild solution configuration (Debug.R24 / Debug.R25 / Debug.R26)
 The active solution configuration is the year authority. What an IDE build still contributes is exactly one thing: it writes the **package-local fixed-path output** (`bin/obj`, not `.artifacts/`) that a dev-lane session copies from and that the hot-reload emitter baselines against. Any build that writes that path — Rider, VS Code, or `dotnet build /p:PeIsolatedBuild=false` — serves equally, and none of them launches Revit.
 
 ```powershell
-dotnet tool run pe-revit -- session converge --project .\source\Pe.App\Pe.App.csproj   # start-or-attach, the edit loop
-dotnet tool run pe-revit -- session restart --id pe.app-25                             # the freshness mechanism
-dotnet tool run pe-revit -- session status --json                                      # what is running, machine-wide
+dotnet tool run pe-revit -- session start --project .\source\Pe.App\Pe.App.csproj --year 25  # open Revit on this checkout
+dotnet tool run pe-revit -- session hr --id pe.app-25                                  # apply your latest edit (hot, else cold swap)
+dotnet tool run pe-revit -- session list --json                                        # the session registry
 ```
 
-`pe-revit guide session` owns the mechanics — the five resolution states, custody, legs, the refusal table, what converge will and will not do. Read it there rather than here. Two things are worth knowing before you type anything: converge attaches and never restarts, and `dotnet build` succeeds while a session runs because Revit loaded the generation copy, not your build tree.
+`pe-revit guide session` owns the mechanics — resolution, typed states, what `hr` will and will not do. Read it there rather than here. Two things are worth knowing before you type anything: `session hr` tries a hot apply before it ever restarts, and `dotnet build` succeeds while a session runs because Revit loaded the generation copy, not your build tree.
 
 The debugger remains an ordinary attach-to-process against the session's Revit, and it is mutually exclusive with the emitter after the first hot-reload generation.
 
@@ -147,7 +147,7 @@ dotnet tool run pe-revit -- session start --project .\source\Pe.App\Pe.App.cspro
 
 Bare `start` (no `--project`) is the **installed** lane — every product on its `current.txt` pointer, no checkout, no build, no copy. That is what an end user runs, and it is the only lane that proves installed behavior. Adding `--project` makes it the **dev** lane. Name which one any claim used; they run different bytes and prove different things.
 
-Every session pe-revit starts is `controlled`, so `session status`, `doc *`, `op list`, and stop/restart all work against it. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
+Every session pe-revit starts is `controlled`, so `session list`, `doc *`, `op list`, and stop/hr all work against it. A Revit the user launched is `observed`: readable, never mutable. Do not add a Pe.Tools-side guard for that — the SDK resolver refuses it before the verb runs.
 
 ## Packaging and release decisions
 
@@ -367,7 +367,8 @@ worktree's dev host — no env vars. `PE_LANE` / `PE_TOOLS_HOST_SOURCE_DIR` are 
 supervisor telling its child who it is), never user configuration. To target explicitly, `--host`
 (and `PE_TOOLS_HOST_BASE_URL`) accept a URL or a lane token: `installed`, `dev` (this location's
 worktree), or a path inside any checkout. `pe-revit service list` is the phone book;
-`pe-revit session status` lists every Revit the machine is running, controlled and observed alike.
+`pe-revit session list` shows the session registry (pe-revit-launched Revits only; a user-launched
+Revit is visible only through the host bridge).
 
 If you used the old flow on this machine, clean up once: delete `%LOCALAPPDATA%\Positive Energy\Pe.Tools\bin\pea\*.cmd`
 and remove the `bin\pea` / Pe.Dev.Cli output-dir entries from your user PATH (the SDK never writes those).
@@ -453,8 +454,8 @@ adapter; a future Pea/host workflow can replace it when product use proves the r
 | Revit-backed test proof           | `dotnet tool run pe-revit -- test --project <P> --filter "Name~..." --timeout-seconds 900 --json`                                |
 | Which rung, and why               | `dotnet tool run pe-revit -- test --plan --project <P> --json`                                                                   |
 | Attached proof                    | `dotnet tool run pe-revit -- test --project <P> --attach [--id <name>]`; add pea product tools (`pe_status`, `pe_logs`, `pea --prompt`) when Pea status/logs or product probes should accompany the proof. |
-| Start-or-attach the edit loop     | `dotnet tool run pe-revit -- session converge --project .\source\Pe.App\Pe.App.csproj`                                          |
-| What Revit is running             | `dotnet tool run pe-revit -- session status --json`                                                                              |
+| Apply your latest edit            | `dotnet tool run pe-revit -- session hr --id <name>`                                                                             |
+| What Revit is running             | `dotnet tool run pe-revit -- session list --json`                                                                                |
 | Durable installed-lane session    | `dotnet tool run pe-revit -- session start --year 25 --json`                                                                     |
 | Product host/log/script check     | `pea host ...`, `pea script ...`                                                                                                 |
 | Package artifacts/MSI             | `dotnet run --project .\build\Build.csproj -c Release -- pack`                                                                   |

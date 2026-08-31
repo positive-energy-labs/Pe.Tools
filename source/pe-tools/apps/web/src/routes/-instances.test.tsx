@@ -2,35 +2,84 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import type { useFleet, WorldFacts } from "#/host/fleet";
 
-const fleet = vi.hoisted(() => ({
-  useFleet: vi.fn(() => ({
+const fleet = vi.hoisted(() => {
+  const value: ReturnType<typeof useFleet> = {
     worlds: [
       {
         id: "pe.app-25",
         custody: "controlled",
         phase: "ready",
+        detail: "ready detail",
         pid: 25,
-        openDocumentCount: 0,
-        row: { id: "pe.app-25" },
+        row: {
+          case: "controlled-active",
+          bridge: { bridge: "ready", sessionDescriptor: "C:\\session.json" },
+          detail: "ready detail",
+          id: "pe.app-25",
+          observedAtUtc: "2026-08-30T12:00:00.000Z",
+          origin: "test",
+          process: {
+            executable: "C:\\Revit.exe",
+            pid: 25,
+            processStartUtc: "2026-08-30T11:59:00.000Z",
+          },
+          project: null,
+          receipt: {
+            payload: "checkout",
+            buildStamp: "build",
+            generationId: "generation",
+            generationRoot: "C:\\generation",
+            overridePath: null,
+            receiptPath: "C:\\session.json",
+          },
+          worktree: "consumer",
+          year: 2025,
+        },
       },
       {
         id: "installed-25",
         custody: "controlled",
-        phase: "gone",
-        pid: 88,
-        openDocumentCount: 0,
-        row: { id: "installed-25" },
+        phase: "failed",
+        detail: "failed detail",
+        row: {
+          case: "failed-receipt",
+          detail: "failed detail",
+          failure: {
+            source: "receipt",
+            failure: {
+              atUtc: "2026-08-30T12:00:00.000Z",
+              code: "session.failed",
+              detail: "failed detail",
+            },
+          },
+          id: "installed-25",
+          observedAtUtc: "2026-08-30T12:00:00.000Z",
+          origin: "test",
+          project: null,
+          receipt: {
+            payload: "installed",
+            generationRoot: "C:\\generation",
+            receiptPath: "C:\\session.json",
+          },
+          worktree: "consumer",
+          year: 2025,
+        },
       },
     ],
     sessions: [],
+    unreadableReceipts: [],
+    processReadErrors: [],
+    registryRoot: "C:\\registry",
     isLoading: false,
     stale: false,
     error: null,
     at: 123,
-    basis: ["sessions.status", "bridge.sessions.list"],
-  })),
-}));
+    basis: ["sessions.list", "bridge.sessions.list"],
+  };
+  return { value, useFleet: vi.fn(() => value) };
+});
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-router")>();
@@ -53,50 +102,27 @@ vi.mock("#/host/fleet", () => fleet);
 vi.mock("#/host/use-target", () => ({ useWorldLog: () => [] }));
 vi.mock("#/host/queries", () => ({ HOST_QUERY_KEY: ["host"] }));
 
-import { InstancesPage, InstancesRouteContent, instancesSearch } from "#/routes/instances";
+import { InstancesPage } from "#/routes/instances";
 import { paneState } from "#/targeting/kit";
 import { product as defineProduct } from "#/targeting/model";
 import { worldTrunk } from "#/targeting/world";
-import type { WorldFacts } from "#/host/fleet";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
 describe("instances route", () => {
-  it("renders several exact fixture worlds without Host calls", () => {
-    const fetchMock = vi.fn();
-    const eventSource = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("EventSource", eventSource);
-
-    expect(instancesSearch({ source: "fixture" }).source).toBe("fixture");
-    expect(instancesSearch({ source: "Fixture" }).source).toBeUndefined();
-    expect(instancesSearch({ source: "fixture " }).source).toBeUndefined();
+  it("does not enable a default fleet query beside the all-session query", () => {
+    fleet.useFleet.mockClear();
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <InstancesRouteContent source="fixture" />
+        <InstancesPage />
       </QueryClientProvider>,
     );
 
-    const text = document.body.textContent ?? "";
-    expect(text).toContain("fixture-dev-25");
-    expect(text).toContain("project-a Tower.rvt +1");
-    expect(text).toContain("observed-desktop");
-    expect(text).toContain("Clinic Renovation.rvt");
-    expect(text).toContain("fixture-installed-26");
-    expect(text).toContain("STARTING");
-    expect(text).toContain("fixture-dev-24-stalled");
-    expect(text).toContain("UNRESPONSIVE");
-    expect(text).toContain("revit up · host down");
-    expect((screen.getByRole("button", { name: "start" }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(eventSource).not.toHaveBeenCalled();
+    expect(fleet.useFleet.mock.calls).toEqual([[{ all: true }], [{ enabled: false }]]);
   });
 
   it("asks for a document before mounting the route document", () => {
@@ -107,6 +133,43 @@ describe("instances route", () => {
     );
 
     expect(screen.getByText("pick a document")).toBeTruthy();
+  });
+
+  it("discloses census exceptions when no session identity can be formed", () => {
+    fleet.useFleet.mockReturnValueOnce({
+      ...fleet.value,
+      worlds: [],
+      sessions: [],
+      unreadableReceipts: [
+        {
+          detail: "receipt JSON could not be decoded",
+          id: "broken-receipt",
+          observedAtUtc: "2026-08-30T12:00:00.000Z",
+          receiptPath: "C:\\registry\\broken.json",
+        },
+      ],
+      processReadErrors: [
+        {
+          candidatePid: 404,
+          detail: "process start time was unavailable",
+          observedAtUtc: "2026-08-30T12:00:00.000Z",
+        },
+      ],
+    });
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <InstancesPage />
+      </QueryClientProvider>,
+    );
+
+    const disclosure = screen.getByRole("complementary", { name: "census exceptions" });
+    expect(disclosure.textContent).toContain("broken-receipt");
+    expect(disclosure.textContent).toContain("C:\\registry\\broken.json");
+    expect(disclosure.textContent).toContain("receipt JSON could not be decoded");
+    expect(disclosure.textContent).toContain("404");
+    expect(disclosure.textContent).toContain("process start time was unavailable");
+    expect(disclosure.textContent).toContain("C:\\registry");
   });
 
   it("prints the leaf world and gates its pane while unbound", () => {
@@ -136,8 +199,31 @@ describe("instances route", () => {
       id: "pe.app-25",
       custody: "controlled",
       phase: "ready",
-      openDocumentCount: 0,
-      row: { id: "pe.app-25" } as WorldFacts["row"],
+      detail: "ready detail",
+      row: {
+        case: "controlled-active",
+        bridge: { bridge: "ready", sessionDescriptor: "C:\\session.json" },
+        detail: "ready detail",
+        id: "pe.app-25",
+        observedAtUtc: "2026-08-30T12:00:00.000Z",
+        origin: "test",
+        process: {
+          executable: "C:\\Revit.exe",
+          pid: 25,
+          processStartUtc: "2026-08-30T11:59:00.000Z",
+        },
+        project: null,
+        receipt: {
+          payload: "checkout",
+          buildStamp: "build",
+          generationId: "generation",
+          generationRoot: "C:\\generation",
+          overridePath: null,
+          receiptPath: "C:\\session.json",
+        },
+        worktree: "consumer",
+        year: 2025,
+      },
     };
     const verbs = worldTrunk.verbs<"world">({
       start: () => ({ lane: "dev", year: "25" }),
@@ -154,14 +240,14 @@ describe("instances route", () => {
       error: null,
       basis: [],
     });
-    const pending = verbs.converge.run({ world: "session:pe.app-25" }, { world: feed });
+    const pending = verbs.restart.run({ world: "session:pe.app-25" }, { world: feed });
 
     expect(record).not.toHaveBeenCalled();
     answer(
       new Response(
         JSON.stringify({
           result: { state: "refused" },
-          diagnostics: [{ code: "session.failed", detail: "converge was refused" }],
+          diagnostics: [{ code: "session.failed", detail: "restart was refused" }],
         }),
         { status: 409, headers: { "content-type": "application/json" } },
       ),
@@ -170,12 +256,12 @@ describe("instances route", () => {
 
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: "converge",
+        action: "restart",
         ok: false,
         state: "refused",
-        diagnostics: ["converge was refused"],
+        diagnostics: ["restart was refused"],
       }),
     );
-    expect(worldTrunk.describe(record.mock.calls[0]![0])).toContain("converge was refused");
+    expect(worldTrunk.describe(record.mock.calls[0]![0])).toContain("restart was refused");
   });
 });

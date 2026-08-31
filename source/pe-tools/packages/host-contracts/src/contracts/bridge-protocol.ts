@@ -2,6 +2,8 @@
 // once produced this file is deleted; changes here are ordinary code review, not regeneration.
 
 import { Schema } from "effect";
+import type { SessionObservation } from "../vendor/generated/pe-revit-contract.ts";
+import type { HostLane } from "../service-identity.ts";
 
 export const HOST_CONTRACT_VERSION = 37 as const;
 export const BRIDGE_CONTRACT_VERSION = 20 as const;
@@ -9,6 +11,15 @@ export const BRIDGE_PATH = "/api/bridge" as const;
 export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;
 
 const nullableString = Schema.optional(Schema.NullOr(Schema.String));
+
+// `controlled` = pe-revit holds a receipt (full lifecycle); `observed` = reads only.
+export type Custody = SessionObservation extends infer Observation
+  ? Observation extends { readonly case: "observed-active" }
+    ? "observed"
+    : "controlled"
+  : never;
+// Host/UI lane. The SDK calls the source payload `checkout`; only presentation calls it `dev`.
+export type Lane = HostLane;
 
 export const hostModuleDescriptorSchema = Schema.Struct({
   activeDocumentKind: Schema.Literals(["Any", "ProjectOnly", "FamilyOnly"]),
