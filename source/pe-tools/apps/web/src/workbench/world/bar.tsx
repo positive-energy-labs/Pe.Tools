@@ -114,17 +114,14 @@ export function ContextBudgetBar({
       </div>
       <BudgetBar breakdown={breakdown} cache={cache} />
 
-      <div className="relative mt-px h-[14px] t-caption face-mono">
+      <div className="relative mt-1 h-7 t-caption face-mono text-ink-2">
         <span
-          className="absolute -translate-x-1/2 whitespace-nowrap"
+          className="absolute top-0 -translate-x-full pr-2 whitespace-nowrap"
           style={{ left: `${reflectAt}%` }}
         >
           reflect {fmtTok(mw.reflectionThreshold)}
         </span>
-        <span
-          className="absolute whitespace-nowrap"
-          style={{ left: "100%", transform: "translateX(-100%)" }}
-        >
+        <span className="absolute right-0 bottom-0 whitespace-nowrap">
           observe {fmtTok(mw.observationThreshold)}
         </span>
       </div>

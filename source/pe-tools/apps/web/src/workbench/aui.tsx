@@ -30,6 +30,7 @@ import { PROSE_CLASS } from "./prose";
 import { RouteChatPluginView } from "./route-chat-plugins";
 import { Press } from "#/components/lang/press";
 import { annotation } from "#/components/anatomy";
+import { PressContent } from "#/components/anatomy/press-content";
 
 const ThreadMessagesContext = createContext<ThreadMessageLike[]>([]);
 
@@ -239,7 +240,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
   return (
-    <div className="border-l-2 border-line-2">
+    <div className="border-l border-line pl-1">
       <Press
         type="button"
         tone="quiet"
@@ -247,11 +248,13 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
         title="Pea's chain of thought for this turn — collapsed so the spine stays calm"
         onClick={() => setOpen((value) => !value)}
       >
-        <ChevronRight size={12} className={`transition-transform ${open ? "rotate-90" : ""}`} />
-        <span>Thought process</span>
+        <PressContent geometry="baseline">
+          <ChevronRight size={12} className={`transition-transform ${open ? "rotate-90" : ""}`} />
+          <span>Thought process</span>
+        </PressContent>
       </Press>
       {open ? (
-        <div className="mt-1 mb-0.5 ml-2 border-l border-line pl-[9px] t-prose text-ink-2 whitespace-pre-wrap">
+        <div className="mt-1 mb-0.5 ml-1 px-2 t-prose text-ink-2 whitespace-pre-wrap">
           {text}
         </div>
       ) : null}

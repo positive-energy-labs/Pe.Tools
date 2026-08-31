@@ -31,6 +31,7 @@ import {
   tone,
 } from "./cap";
 import { ContextBudgetBar, whySentence } from "./bar";
+import { PressContent } from "#/components/anatomy/press-content";
 
 export function WorldLane({
   breakdown,
@@ -76,7 +77,7 @@ export function WorldLane({
 
   return (
     <div className="flex min-h-0 flex-col t-label text-ink-2">
-      <div className="sticky top-0 z-[2] flex items-center gap-2 border-b border-line bg-page px-3 py-2">
+      <div className="sticky top-0 z-[2] flex items-center gap-2 border-y border-line bg-page px-3 py-2">
         <h2 className="m-0 max-w-[14ch] t-label t-upper leading-tight text-ink">
           What the agent sends the model
         </h2>
@@ -132,15 +133,18 @@ export function WorldLane({
       ) : null}
 
       {inspect && cache.hasBaseline ? (
-        <div className="inset-ring on-recess mx-3 mt-2 grid gap-1 px-2.5 py-2 t-caption face-mono">
-          <div className="flex items-center gap-[7px]">
-            <span className="size-[9px] flex-none" />
-            cache-read · 0.1×
-            <span className="ml-auto">{fmtTok(totals.cached)}</span>
+        <div className="mx-3 mt-2 grid gap-1 border-t border-line pt-2 t-caption face-mono">
+          <div className="mb-0.5 t-upper text-ink">Cache estimate</div>
+          <div className="grid grid-cols-[9px_minmax(0,1fr)_auto] items-center gap-1.5">
+            <span className="size-[9px] bg-done" />
+            <span>cache-read · 0.1×</span>
+            <span>{fmtTok(totals.cached)}</span>
           </div>
-          <div className="flex items-center gap-[7px]">
-            <Key tone={token("caution")} label="reprocessed · 1×" seam />
-            <span className="ml-auto">{fmtTok(totals.reprocessed)}</span>
+          <div className="grid grid-cols-[9px_minmax(0,1fr)_auto] items-center gap-1.5">
+            <span className="col-span-2">
+              <Key tone={token("caution")} label="reprocessed · 1×" seam />
+            </span>
+            <span>{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
             <div className="px-2 py-1.5">
@@ -158,7 +162,7 @@ export function WorldLane({
           const changed = diff && cache.changed.has(layer.id);
           const blast = blastOf(layer.rank);
           return (
-            <div key={layer.id}>
+            <div key={layer.id} className="[&>button]:w-full">
               <Press
                 tone="quiet"
                 state={changed ? "selected" : "rest"}
@@ -169,8 +173,8 @@ export function WorldLane({
                   className={cn(
                     WORLD_ROW,
                     inspect
-                      ? "grid-cols-[9px_minmax(0,1fr)_auto_auto_auto_auto]"
-                      : "grid-cols-[9px_minmax(0,1fr)_auto]",
+                      ? "grid-cols-[9px_minmax(0,1fr)_46px_32px_28px_10px]"
+                      : "grid-cols-[9px_minmax(0,1fr)_10px]",
                   )}
                 >
                   <span className="size-[9px]" style={{ backgroundColor: tone(layer.id) }} />
@@ -182,16 +186,26 @@ export function WorldLane({
                       </span>
                     ) : null}
                   </span>
-                  {inspect ? <CacheBadge state={cache.stateOf(layer.id)} /> : null}
                   {inspect ? (
-                    <span className="t-caption face-mono">{fmtTok(layer.tokens)}</span>
+                    <span className="flex w-[46px] justify-end">
+                      <CacheBadge state={cache.stateOf(layer.id)} />
+                    </span>
                   ) : null}
                   {inspect ? (
-                    <span className="min-w-[26px] text-right t-caption face-mono">
+                    <span className="w-8 text-right t-caption face-mono">
+                      {fmtTok(layer.tokens)}
+                    </span>
+                  ) : null}
+                  {inspect ? (
+                    <span className="w-7 text-right t-caption face-mono">
                       {((layer.tokens / used) * 100).toFixed(0)}%
                     </span>
                   ) : null}
-                  <span className={cn("transition-transform", isOpen && "rotate-90")}>▸</span>
+                  <span
+                    className={cn("w-2.5 text-right transition-transform", isOpen && "rotate-90")}
+                  >
+                    ▸
+                  </span>
                 </span>
               </Press>
               {isOpen ? (
@@ -225,7 +239,7 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="px-3 pt-2.5 pb-4 t-caption leading-relaxed">
+        <div className="mt-2 border-t border-line px-3 pt-2 pb-3 t-caption leading-relaxed text-ink-mute">
           cache state <span className={cn(CACHE_BASE, CACHE_TONE.cached)}>≈ inferred</span> from a
           frontend snapshot diff — the provider only reports aggregate cache totals.
         </div>
@@ -247,30 +261,34 @@ export function ItemRow({
 }) {
   const hasBody = Boolean(item.body);
   return (
-    <li className="overflow-hidden">
+    <li className="overflow-hidden [&>button]:w-full">
       <Press type="button" tone="quiet" disabled={!hasBody} onClick={() => hasBody && onToggle()}>
-        <span className="min-w-0 flex-1 t-caption">
-          <span className="block overflow-hidden text-ellipsis whitespace-nowrap">{item.name}</span>
-          {item.src ? (
-            <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap">
-              {item.src}
+        <PressContent geometry="baseline">
+          <span className="min-w-0 flex-1 t-caption">
+            <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
+              {item.name}
             </span>
-          ) : null}
-        </span>
-        <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap t-caption face-mono">
-          {blast ? (
-            <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
-          ) : null}
-          {item.state ? (
-            <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>
-              {PILL_LABEL[item.state]}
-            </span>
-          ) : null}
-          {item.tokens != null ? <span className="">{fmtTok(item.tokens)}</span> : null}
-          {hasBody ? (
-            <span className={cn("transition-transform", open && "rotate-90")}>▸</span>
-          ) : null}
-        </span>
+            {item.src ? (
+              <span className="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap">
+                {item.src}
+              </span>
+            ) : null}
+          </span>
+          <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap t-caption face-mono">
+            {blast ? (
+              <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
+            ) : null}
+            {item.state ? (
+              <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>
+                {PILL_LABEL[item.state]}
+              </span>
+            ) : null}
+            {item.tokens != null ? <span>{fmtTok(item.tokens)}</span> : null}
+            {hasBody ? (
+              <span className={cn("transition-transform", open && "rotate-90")}>▸</span>
+            ) : null}
+          </span>
+        </PressContent>
       </Press>
       {open && hasBody ? (
         <pre className="m-0 max-h-[220px] overflow-auto px-[9px] py-2 break-words whitespace-pre-wrap">

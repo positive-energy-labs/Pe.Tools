@@ -110,4 +110,4 @@ export const BLAST_TONE: Record<Blast, string> = {
 };
 
 export const WORLD_ROW =
-  "grid w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 py-1 text-left [font:inherit] hover:veil";
+  "grid w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 py-1 text-left tabular-nums [font:inherit] hover:veil";

@@ -15,6 +15,7 @@ import { selectSkillCommands } from "#/workbench/chat-state";
 import type { Mode } from "#/workbench/depth";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
+import { cn } from "#/lib/utils";
 
 interface SlashCommand {
   name: string;
@@ -157,11 +158,9 @@ export function Composer({
         </div>
       ) : null}
 
-      {/* Hard-edged instrument panel: the composer is a machine-operated object carrying state
-          (draft, attachments, the in-flight run), so it wears the artifact treatment — one
-          ground shift plus one quiet hairline. The card clips its children, so the budget bar
-          stays a flush rectangle under the boundary. */}
-      <div className={chatStyles.composer4()}>
+      {/* The composer carries state, but it belongs to the transcript rather than floating as a
+          second card. One top rule and the artifact ground separate input from history. */}
+      <div className={cn(chatStyles.composer4(), "rounded-none border-x-0 border-b-0")}>
         {topBar}
 
         {attachments.length > 0 ? (
@@ -185,7 +184,7 @@ export function Composer({
           </div>
         ) : null}
 
-        <div className={chatStyles.composer8()}>
+        <div className={cn(chatStyles.composer8(), "px-2 py-1.5")}>
           <Textarea
             name="input"
             size="compact"
@@ -198,9 +197,9 @@ export function Composer({
             onKeyDown={onKeyDown}
           />
           {/* Control row: attachments + session controls (model/access) left, send right. */}
-          <div className={chatStyles.composer9()}>
+          <div className={cn(chatStyles.composer9(), "gap-1.5")}>
             <Press
-              tone="neutral"
+              tone="quiet"
               size="icon"
               title="Attach files"
               onClick={() => fileRef.current?.click()}

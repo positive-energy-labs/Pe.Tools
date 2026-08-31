@@ -264,6 +264,11 @@
   padding: 14px 20px;
   padding-bottom: calc(var(--composer-h, 96px) + 24px);
 }
+[data-chat="surface"] [data-slot="textarea"]:focus-visible {
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+}
 [data-annotation="moment"] {
   padding: 10px 0;
   scroll-margin-top: 12px;
@@ -290,9 +295,10 @@
   box-shadow: inset 2px 0 0 var(--pe-ink);
 }
 [data-annotation="tool-marker"] {
-  /* full-width ledger row: identifiers left, the mono status hugs the right edge (ml-auto) */
-  display: flex;
-  align-items: center;
+  /* full-width ledger row: identifiers left, the mono status owns the right track */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 7px;
   /* The marker is a grid item; min-width:0 lets its track shrink to the lane (default `auto`
      grows the track to the long target's min-content) so the target can ellipsis-truncate. */
@@ -309,9 +315,12 @@
     border-color var(--motion-control) ease,
     border-width var(--motion-control) ease;
 }
-/* the tool name never shrinks; only the target arg truncates */
-[data-annotation="tool-marker"] > span {
-  flex: none;
+/* the tool name and outcome stay fixed; only the target arg truncates */
+[data-annotation="tool-marker"] > span:first-child {
+  white-space: nowrap;
+}
+[data-annotation="tool-marker"] > span:last-child {
+  grid-column: 3;
 }
 /* tool = pea acting → SOLID pea rail (dashed is reserved for seam; a tool call is real).
    memory = the memory lane's taxonomy hue. */
@@ -335,8 +344,8 @@
   background: color-mix(in srgb, var(--pe-pea) 6%, transparent);
 }
 [data-annotation="tool-marker"] code {
-  flex: 0 1 auto;
-  min-width: 0; /* allow the ellipsis (the marker is a flex row) */
+  grid-column: 2;
+  min-width: 0; /* allow the ellipsis inside the marker's middle grid track */
   font-family: var(--font-mono);
   font-size: var(--type-value-size);
   color: var(--pe-ink-2);

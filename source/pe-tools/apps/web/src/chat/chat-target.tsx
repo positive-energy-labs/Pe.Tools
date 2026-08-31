@@ -11,6 +11,7 @@ import { worldTrunk } from "#/targeting/world";
 import { useWorkbench } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
+import { cn } from "#/lib/utils";
 
 /**
  * Chat-wired target surfaces. The pin is the `target` search param (a selector, retained like
@@ -51,14 +52,16 @@ export function TargetWorld() {
   const chip = chipDescriptor(resolution);
   const options = worldTrunk.feed(fleet).options ?? [];
   return (
-    <div className={chatStyles.chatTarget0()}>
-      <div className={chatStyles.chatTarget1()}>
-        <span className={chatStyles.chatTarget2()}>Target</span>
+    <div className={cn(chatStyles.chatTarget0(), "border-b-0 py-2")}>
+      <div className={cn(chatStyles.chatTarget1(), "mb-1")}>
+        <span className={cn(chatStyles.chatTarget2(), "text-ink")}>Target</span>
         <span className={chatStyles.chatTarget3()}>{chip.tone}</span>
       </div>
 
       {/* raw resolution — provenance, not decoration */}
-      <div className={chatStyles.chatTarget4()}>{resolutionReadout(resolution)}</div>
+      <div className={cn(chatStyles.chatTarget4(), "mb-1.5 leading-relaxed")}>
+        {resolutionReadout(resolution)}
+      </div>
 
       {options.map((option) => {
         const optionResolution = resolveTarget(sessions, option.id);
