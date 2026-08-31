@@ -126,7 +126,8 @@ export function UiInputSpecimens() {
         recipe={textareaRecipe}
         render={(props) => (
           <Textarea
-            size={props.size as "normal" | "tall"}
+            size={props.size as "compact" | "normal" | "tall"}
+            surface={props.surface as "field" | "embedded"}
             placeholder="why this write is happening"
           />
         )}
