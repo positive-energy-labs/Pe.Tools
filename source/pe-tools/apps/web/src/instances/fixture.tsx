@@ -1,4 +1,8 @@
 import { useState } from "react";
+// TODO(sdk-beta132): `Leg` and `SessionRow` stopped being exported by the generated
+// pe-revit-contract at the beta.132 cutover; this file has 6 type errors that only per-file
+// `vp check` sees (the test path never type-checks it). Re-derive these fixture types from the
+// contract's current exports. Found 2026-08-31 by the route-shell spike.
 import type { Leg, SessionRow } from "@pe/host-contracts/pe-revit-contract";
 
 import type { SessionFacts } from "#/host/target";

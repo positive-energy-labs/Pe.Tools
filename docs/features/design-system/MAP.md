@@ -47,10 +47,21 @@ real layout is a `PaneWorkspace` (it requires `visual`, lacks `header`), so mand
 redesign in refactor clothes. S2 splits: S2a = shell without layout (live candidate), S2b = slots
 (deferred until the pane primitive grows `header` and optional `visual`; phase-3/4 work). New
 candidate S5 from `/instances`: `binding` as an ordered resolver pipeline (world resolves before
-document, resolved values land in ctx). Round 2 running: port `/instances` on resolvers before any
-freeze. Known holes staked by the spike: `workbench/route-state.tsx` welds store creation to the
+document, resolved values land in ctx). Known holes staked by the spike: `workbench/route-state.tsx` welds store creation to the
 hook (module-private factory, had to be copied); `Lane` member `"read"` is silently treated as
 live in gate ordering.
+
+Round-2 spike (`/instances` on resolvers): all five unmodified `-instances` tests pass, gate-as-
+last-resolver held, `AddressedInstancesPage` deleted outright. But the builder refuses a freeze
+with one root defect named: **the shell fixes the hook list at define time while lanes and stores
+are decided at mount time** — three frictions (lane branches in every resolver, per-lane hooks
+smuggled as `store.read()`, per-render ctx vs per-mount store) are that defect in different
+clothes. Take forward, in order: 1. `documentResolver` + notYet/chrome/identity contract
+(converged), 2. lane becomes a resolver carrying `reachesHost` capability, not a string (forced by
+evidence), 3. only then rule whether the store belongs in the shell at all. `ctx.resolved` typing
+(`Partial<R>`, needs a builder chain) is the largest correctness gap. `/instances` has no
+fixture-lane test. Side finding, proven on main: `instances/fixture.tsx` has 6 type errors since
+the beta.132 contract cutover (`TODO(sdk-beta132)` at the site).
 
 ## Laws for this effort
 
