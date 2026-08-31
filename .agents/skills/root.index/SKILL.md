@@ -49,10 +49,10 @@ Authority runs user, then skill, then this file. A stance is a posture, not a pr
 | loop | `protoui` | Lineup and Toile — a product surface is unsettled | yes | no | two dry rounds |
 | loop | `teach` | Master — a concept the user wants to own | yes | no | transfer demonstrated |
 | slot | `docs` | where durable knowledge lives, this repo; rebuilt like Ise, swept like a sand mandala | - | - | - |
-| slot | `execute` | how anything runs and is proven, this repo | - | - | - |
+| slot | `execute` | the proving ground and chain of custody — touch the right reality, then name exactly what answered | - | - | - |
 | slot | `mine` | how retained Claude and Codex sessions become evidence, this repo | - | - | - |
 
-Default entry for real work is `ground`. An ungrounded entry is a fresh-perspective move the user may ask for in exploratory phases; it is never the default, and it is named as ungrounded in the reply. Most sessions then enter `protoui` rounds, a `goal` form, or a `relay`. A pasted failure is `ground` then `diagnose`. Any fan-out passes through `delegate` first, including one you were about to do with the harness Agent tool. `goal` and `relay` are user-only; name their slash command and stop.
+Default entry for real work is `ground`, proceed ungrounded only if fresh-perspective is requested. `protoui`,`demiurge`,`purge`, `diagnose`, and `goal` often form a session's main loop. A pasted failure is `ground` then `diagnose`. Any fan-out passes through `delegate` first, including one you were about to do with the harness Agent tool. `goal` and `relay` are user-only; name them then stop. Suggest "/realy" when you and the user seem to be consistently misaligned.
 
 ## Approach
 
@@ -66,7 +66,7 @@ A skill changes method, never authorization. Capture, instrumentation, and gloss
 Fix unexpected systemic signals, scope growth avoidance is an old maxim to forget. Eg. a user steer, time-box spent, excessive LOC, a repeated helper script, a misunderstanding. They are only noise if you choose to work around them. Fix the root cause by default and at the highest rung that fits. Fix above your layer? File it Owed and name the interim. Rungs:
 
 0. **Code**: a bug fix or feature add is expected work; normal, not systemic friction.
-1. **Substrate**: architecture, data structure, wire contract, tooling, dev setup. A library the repo grows is this rung.
+1. **Substrate**: architecture, data structure, wire contract, tooling, dev setup, agent toml/json. A library the repo grows is this rung.
 2. **Check**: a lint, codegen, or test that catches it every loop, CI or not.
 3. **Prose**: a skill or `AGENTS.md` line. Prescriptive prose decay fast. 
 
@@ -99,7 +99,7 @@ The stance register (skill files: figured above the fold, plain laws below) belo
 
 ## Style
 
-> Note: skills, this one included, are written to optimize for semantic density. Do not copy their style in any other register; `reflect` owns how stances are written.
+> Note: skills, this one included, are written to optimize for semantic density and latent space activation. They violate every sin in the mechanism table below. Do not copy their style. `reflect` owns the register for writing stances. 
 
 Voice: use "I", have opinions, vary rhythm, be specific (not "concerning", but the 3am page). Say what it does, not how it feels. No false ranges, no forced threes, no "not just X, but Y". No em dashes, no parentheses as dashes. Colons only before a list or example.
 

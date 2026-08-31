@@ -74,6 +74,7 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 
 ## Tried & rejected
 
+- 2026-08-31, encyclopedic `slot.execute`: 265 lines mixed stable proof choices with a beta-specific CLI manual, incident fixes, prototype mechanics, browser fallbacks, and the full Herdr protocol. A cold reader could not find the next command. The rewrite keeps lane choice, custody, safety boundaries, and authoritative entrypoints inline; git holds the killed laws, and caveats return only when they change a repeated decision.
 - One disposition doc instead of skills: a cold model cannot be primed for every phase at once.
 - Lexicon-only modes the user types: the user invokes by name and expects the loop to drive itself.
 - Standards/spec review shape: user rejected in session.
@@ -82,6 +83,7 @@ The one ledger outside `docs/features/`; the skill set is not a feature. Same th
 - "Name once", the rename ban: the set is still finding its shape.
 - A routing corpus the check runs: user ruled no; a misroute that bites is the trigger to revisit.
 - An `implement`/`bite` stance, a diagram stance, a fifth kind for house policy: the prompt, a register law, and a `scope` field cover them.
+- 2026-08-31, worktree dependency wiring (`wire-worktree.ps1`): it redirected `@pe/*` into the candidate but shared third-party dependencies with the donor. Falsifier: 22 of 37 wired worktrees had lockfiles that differed from the donor, and one candidate resolved `class-variance-authority` it neither declared nor locked. Killed for `vp i --frozen-lockfile --prefer-offline` from `source/pe-tools`, the only taught install surface.
 
 ## Owed
 

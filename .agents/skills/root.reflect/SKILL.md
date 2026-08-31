@@ -86,5 +86,6 @@ A skill edit is a Prose fix, rung 3 in `index`'s rungs, and it breaks the fourth
 ## Porting to a new repo
 
 - The set has one home, a single directory in the repo, mirrored into the client's skill directory as a junction, never a copy; the check's `--fix` lays the junction. The user-global skill directory stays empty.
-- Slots hold the old repo's facts. Rewrite `docs`, `execute`, and `mine` for the new repo, or delete what the repo cannot fill; every other stance travels unchanged.
+- Slots hold the old repo's facts. Rewrite every `scope: repo` slot's facts under its existing headings; a deleted section is a verdict, not a scrub. Delete a whole slot only when the repo cannot fill it at all. Every other stance travels unchanged.
+- The ledger does not travel. A port starts a fresh ledger that names the origin; the set's design history stays single-sourced in the origin repo.
 - Adapt the set to the user's needs; it is a foundation, not a creed frozen at its first repo. Run the check before first use.
