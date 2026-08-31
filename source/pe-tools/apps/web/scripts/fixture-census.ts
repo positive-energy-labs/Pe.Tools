@@ -7,7 +7,9 @@ const canonicalFixtures: Record<
   { canonicalReviewUrl: string; fixtureKind: "inherent-static" | "query-fixture" } | undefined
 > = {
   "/": { canonicalReviewUrl: "/", fixtureKind: "inherent-static" },
+  "/doc-lab": { canonicalReviewUrl: "/doc-lab?source=fixture", fixtureKind: "query-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
+  "/settings": { canonicalReviewUrl: "/settings?source=fixture", fixtureKind: "query-fixture" },
   "/takeoffs": {
     canonicalReviewUrl: "/takeoffs?source=fixture",
     fixtureKind: "query-fixture",
