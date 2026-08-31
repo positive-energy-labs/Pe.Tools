@@ -127,6 +127,22 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-08-31 — `design-adherence.baseline.json` must shrink substantially for chat, takeoffs,
   family, families, and settings; literal zero is not required. The check itself is re-opened
   whenever its signals feel wrong and may be amended as the system changes.
+- 2026-08-31 — Route shape S2a adopted pending the `/instances` spike round: a route shell owns
+  address schema, lane, binding, and store lifetime. Layout slots (S2b) are deferred until the
+  pane primitive grows `header` and optional `visual`. S1 (prose only) and S4 (store-first canon)
+  are killed; S3 (generated routes) is deferred inside S2a's interface. Evidence:
+  `spike/route-shell` report.
+- 2026-08-31 — Keyboard law: raw `addEventListener("keydown")` is banned in routes;
+  `@tanstack/react-hotkeys` is the one registration door, pane-scoped with mandatory labels.
+  Enforced by a route guard when the shell lands.
+- 2026-08-31 — URL law: a route's address schema declares only params something consumes. `thread`
+  is not route-local: the wire layer consumes it for Pea drivability (`state/route-store.ts:331`
+  raw `location` read). Under S2a `thread` moves to shared ownership beside root `doc`, and the
+  shell hands it to the store through `ctx`; the raw read is retired then. Every route is intended
+  to be Pea-drivable; do not delete `thread` validations before the shared owner exists.
+- 2026-08-31 — Priority law: routes outside chat, takeoffs, family, families, settings are touched
+  only in normalizing crusades; their specific holes wait for protoui/close rounds. Most lesser
+  routes are ideas kept because code is the spec.
 
 ## Tried & rejected
 
@@ -177,6 +193,9 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Owed
 
+- `/data-tables` performs live Revit reads/writes with no document gate
+  (`routes/data-tables.tsx:116-135`). Deferred by the 2026-08-31 priority law; falls to the S2a
+  cutover crusade.
 - 8 repo-guard reds ride on main since the 2026-08-31 merge (`31f5d93`), all pre-existing branch
   debt: `opacityDim` 22>21, `rawMeaningColor` 30>17, `no raw leading utilities` 5 sites,
   `weight variables outside the foundation` 1 site (`workbench/lens.css:277`), `unregistered
