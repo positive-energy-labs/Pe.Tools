@@ -45,16 +45,22 @@ export function routeDocumentTabHref(href: string, at: Address) {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-export function useRouteDocumentAddress() {
-  const { sessions } = useFleet();
+function useRouteDocumentState(suppliedSessions?: readonly SessionFacts[]) {
+  const fallback = useFleet(suppliedSessions === undefined ? undefined : { enabled: false });
+  const sessions = suppliedSessions ?? fallback.sessions;
   const requested = useSearch({
     strict: false,
     select: (search) => (search as { doc?: Address | null }).doc,
   });
-  return useMemo(
+  const at = useMemo(
     () => routeDocumentAddress(routeDocumentChoices(sessions), requested),
     [sessions, requested],
   );
+  return { at, sessions };
+}
+
+export function useRouteDocumentAddress() {
+  return useRouteDocumentState().at;
 }
 
 export function RouteDocumentSurface({ at, children }: { at: Address; children: ReactNode }) {
@@ -74,17 +80,22 @@ export function RouteDocumentSurface({ at, children }: { at: Address; children: 
   );
 }
 
-export function RouteDocument({ children }: { children: (at: Address) => ReactNode }) {
-  const at = useRouteDocumentAddress();
+export function RouteDocument({
+  children,
+  sessions: suppliedSessions,
+}: {
+  children: (at: Address) => ReactNode;
+  sessions?: readonly SessionFacts[];
+}) {
+  const { at, sessions } = useRouteDocumentState(suppliedSessions);
   return at ? (
     <RouteDocumentSurface at={at}>{children(at)}</RouteDocumentSurface>
   ) : (
-    <RouteDocumentEmpty />
+    <RouteDocumentEmpty sessions={sessions} />
   );
 }
 
-export function RouteDocumentEmpty() {
-  const { sessions } = useFleet();
+export function RouteDocumentEmpty({ sessions }: { sessions: readonly SessionFacts[] }) {
   const router = useRouter();
   const href = useLocation({ select: (location) => location.href });
   const choices = routeDocumentChoices(sessions);

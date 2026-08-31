@@ -115,6 +115,18 @@ afterEach(() => {
 });
 
 describe("instances route", () => {
+  it("does not enable a default fleet query beside the all-session query", () => {
+    fleet.useFleet.mockClear();
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <InstancesPage />
+      </QueryClientProvider>,
+    );
+
+    expect(fleet.useFleet.mock.calls).toEqual([[{ all: true }], [{ enabled: false }]]);
+  });
+
   it("asks for a document before mounting the route document", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>

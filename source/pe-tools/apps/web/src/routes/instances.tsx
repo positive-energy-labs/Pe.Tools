@@ -179,7 +179,7 @@ export function InstancesPage() {
           </ul>
         </aside>
       ) : null}
-      <RouteDocument>
+      <RouteDocument sessions={fleet.sessions}>
         {(at) => <AddressedInstancesPage documentAddress={at} fleet={fleet} />}
       </RouteDocument>
     </>
