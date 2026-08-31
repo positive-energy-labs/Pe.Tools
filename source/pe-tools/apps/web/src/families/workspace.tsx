@@ -41,6 +41,7 @@ import {
   visibleParameters,
   LoadedFamilyPlacementScope,
   type FamilyParameterSnapshot,
+  type FamilySnapshotRecord,
   type LoadedFamiliesMatrixRequest,
 } from "#/host/loaded-families-view";
 import { HOST_QUERY_KEY, useHostStatusQuery, useLoadedFamiliesMatrixQuery } from "#/host/queries";
@@ -267,7 +268,13 @@ function NamePicker({
 
 // ── route ───────────────────────────────────────────────────────────────────────────────────────
 
-export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
+export function FamiliesWorkspace({
+  store,
+  fixtureFamilies,
+}: {
+  store: FamiliesStore;
+  fixtureFamilies?: readonly FamilySnapshotRecord[];
+}) {
   const navigate = useNavigate();
   const target = useAtomValue(store.atoms.target);
   const scope = useMemo(() => (target ? { bridgeSessionId: target } : undefined), [target]);
@@ -296,8 +303,9 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   const familyFeed = useAtomValue(store.feeds.family);
   const profileFeed = useAtomValue(store.feeds.profile);
 
-  const status = useHostStatusQuery(scope);
-  const connected = status.data?.bridgeIsConnected ?? false;
+  const fixture = fixtureFamilies !== undefined;
+  const status = useHostStatusQuery({ ...scope, enabled: !fixture });
+  const connected = fixture || (status.data?.bridgeIsConnected ?? false);
 
   // ── scope: the cheap catalog feeds both pickers; the matrix waits for Apply ───────────────────
   const categories = categoryFeed.options?.map((option) => option.id) ?? [];
@@ -321,9 +329,12 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
   );
   const matrix = useLoadedFamiliesMatrixQuery(matrixRequest, {
     ...scope,
-    enabled: connected && matrixRequest !== undefined,
+    enabled: !fixture && connected && matrixRequest !== undefined,
   });
-  const families = useMemo(() => matrix.data?.families ?? [], [matrix.data?.families]);
+  const families = useMemo(
+    () => fixtureFamilies ?? matrix.data?.families ?? [],
+    [fixtureFamilies, matrix.data?.families],
+  );
 
   // ── profile library: the store feeds paths; document.open validates each entry ───────────────
   const allProfilePaths = useMemo(
@@ -345,6 +356,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
         ),
       staleTime: 60_000,
       retry: false,
+      enabled: !fixture,
     })),
   });
 
@@ -693,7 +705,7 @@ export function FamiliesWorkspace({ store }: { store: FamiliesStore }) {
 
   return (
     <main className="flex h-screen flex-col bg-[var(--r-page)] text-[var(--r-ink)]">
-      <FamiliesHead store={store} />
+      <FamiliesHead store={store} fixture={fixture} />
       {selectedProfileQuery?.error && (
         <div className="border-b border-[var(--r-line)] px-4 py-1.5">
           <OutcomeLine

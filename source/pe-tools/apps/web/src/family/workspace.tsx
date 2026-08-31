@@ -183,9 +183,11 @@ import { worldTrunk } from "#/targeting/world";
 export function FamilyWorkspace({
   store,
   requestedFamily,
+  fixture = false,
 }: {
   store: FamilyStore;
   requestedFamily?: string;
+  fixture?: boolean;
 }) {
   const profile = useAtomValue(store.atoms.profile);
   const stage = useAtomValue(store.atoms.routeStage);
@@ -2101,7 +2103,7 @@ export function FamilyWorkspace({
   );
 
   const picker = useAtomValue(store.atoms.picker);
-  const fleet = useFleet();
+  const fleet = useFleet({ enabled: !fixture });
   const feeds = {
     world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),
