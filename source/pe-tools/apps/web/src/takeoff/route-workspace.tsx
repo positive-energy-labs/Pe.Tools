@@ -122,9 +122,13 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
           {
             key: "adopt",
             label: "adopt zones",
-            demands: ["views"],
+            demands: live ? ["views"] : [],
             kind: "act",
-            run: () => store.actions.openAdopt(),
+            run: () => {
+              if (!live && views.length === 0)
+                setState({ multi: { views: new Set(world.lanes.map((lane) => lane.view)) } });
+              return store.actions.openAdopt();
+            },
             refuse: () => null,
             needs: "a zoning view with filled regions",
           },
@@ -266,7 +270,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
     ) : null;
 
   const headRail = (
-    <div className="px-2 pt-2">
+    <div>
       <TargetingHead
         product={product}
         b={b}

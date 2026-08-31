@@ -14,6 +14,7 @@ export function AtlasWorkspace() {
   const { geoReady, headRail, sidePanel, readoutBand, planOpen, setPlanOpen } = useAtlasWorkspace();
   return (
     <Workspace
+      className="[&_[data-slot=pane-header]_h2]:text-ink [&_[data-kind=visual]_[data-slot=pane-header]]:bg-recess [&_[data-kind=content]_[data-slot=pane-header]]:border-t-2 [&_[data-kind=content]_[data-slot=pane-header]]:border-t-line-2 [&_[data-kind=content]_[data-slot=pane-header]]:bg-recess"
       headRail={headRail}
       readoutBand={
         readoutBand ??
