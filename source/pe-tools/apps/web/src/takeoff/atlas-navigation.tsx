@@ -105,7 +105,7 @@ export function AtlasNavigation() {
                           tone="quiet"
                           state={on ? "selected" : "rest"}
                         >
-                          <PressContent geometry="row">
+                          <PressContent geometry="baseline">
                             <ZoneThumb zone={z.zone} className="size-5" />
                             <span>{z.zone.key}</span>
                             <span className="min-w-0 flex-1">
