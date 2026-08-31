@@ -1,8 +1,9 @@
+import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Eye, RefreshCw, Save } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { ParameterLinkProfile } from "@pe/agent-contracts";
+import type { ParameterLinkProfile, ParameterLinksDocument } from "@pe/agent-contracts";
 import { parameterLinksRouteState } from "@pe/agent-contracts";
 
 import { AddressingBar } from "#/components/lang/addressing-bar";
@@ -18,13 +19,19 @@ import { useHostStatusQuery } from "#/host/queries";
 import { EvaluationView, RuntimeStatusBar } from "#/parameter-links/Evaluation";
 import { ProfileEditor } from "#/parameter-links/ProfileEditor";
 import {
+  createFixtureParameterLinksStore,
+  fixtureParameterLinksAddress,
+} from "#/parameter-links/fixture";
+import {
   canApply,
   errorIssueCount,
   isDraftDirty,
   retainDraftBasis,
   sameProfile,
 } from "#/parameter-links/model";
-import { useRouteState } from "#/workbench/route-state";
+import { appAtomRegistry } from "#/state/registry";
+import { useRouteStore } from "#/state/use-route-store";
+import { useRouteState, type RouteStateHandle } from "#/workbench/route-state";
 
 /**
  * /parameter-links — the route-native workspace for cross-element parameter links.
@@ -34,11 +41,16 @@ import { useRouteState } from "#/workbench/route-state";
  * Preview evaluates it without writing; Apply (human-only, freshness-gated) stores it and
  * reconciles the changed target parameters. Mirrors the /family-types route architecture.
  */
+export const parameterLinksSearch = (
+  search: Record<string, unknown>,
+): { thread?: string; source?: "fixture" } => ({
+  thread:
+    typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
+  source: search.source === "fixture" ? "fixture" : undefined,
+});
+
 export const Route = createFileRoute("/parameter-links")({
-  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
-    thread:
-      typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  }),
+  validateSearch: parameterLinksSearch,
   component: ParameterLinksRoute,
 });
 
@@ -57,23 +69,77 @@ function profileHash(profile: ParameterLinkProfile | null): string {
 }
 
 function ParameterLinksRoute() {
-  return <RouteDocument>{(at) => <ParameterLinksWorkspace documentAddress={at} />}</RouteDocument>;
+  return <ParameterLinksRouteContent source={Route.useSearch().source} />;
 }
 
-function ParameterLinksWorkspace({
+export function ParameterLinksRouteContent({ source }: { source?: "fixture" }) {
+  if (source === "fixture") return <ParameterLinksFixtureRoute />;
+  return (
+    <RouteDocument>
+      {(at) => <ParameterLinksStoreOwner key={at} documentAddress={at} />}
+    </RouteDocument>
+  );
+}
+
+function ParameterLinksFixtureRoute() {
+  const store = useRouteStore(() => createFixtureParameterLinksStore(appAtomRegistry));
+  const envelope = useAtomValue(store.slice);
+  const busy = useAtomValue(store.atoms.busy);
+  const route: RouteStateHandle<ParameterLinksDocument> = {
+    slice: envelope.doc,
+    revision: envelope.revision,
+    hydrated: true,
+    apply: store.apply,
+    command: store.command,
+    peaActive: false,
+    connected: false,
+    failure: null,
+    busy: busy?.id ?? null,
+    atoms: store.atoms,
+    lastCommand: null,
+  };
+  return (
+    <ParameterLinksWorkspace
+      documentAddress={fixtureParameterLinksAddress}
+      route={route}
+      connected={false}
+      fieldOptionsEnabled={false}
+    />
+  );
+}
+
+function ParameterLinksStoreOwner({
   documentAddress,
 }: {
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
   const route = useRouteState(parameterLinksRouteState, { documentAddress });
+  const bridgeConnected = useHostStatusQuery().data?.bridgeIsConnected ?? false;
+  return (
+    <ParameterLinksWorkspace
+      documentAddress={documentAddress}
+      route={route}
+      connected={route.connected && bridgeConnected}
+    />
+  );
+}
+
+export function ParameterLinksWorkspace({
+  documentAddress,
+  route,
+  connected,
+  fieldOptionsEnabled = true,
+}: {
+  documentAddress: import("@pe/agent-contracts").Address;
+  route: RouteStateHandle<ParameterLinksDocument>;
+  connected: boolean | null;
+  fieldOptionsEnabled?: boolean;
+}) {
   const document = route.slice;
   const stored = document?.profile ?? null;
   const remoteDraft = document?.draftProfile ?? null;
   const evaluation = document?.evaluation ?? null;
   const status = document?.status ?? null;
-
-  const bridgeConnected = useHostStatusQuery().data?.bridgeIsConnected ?? false;
-  const connected = route.connected && bridgeConnected;
 
   const [rightOpen, setRightOpen] = useState(true);
   const busy = route.busy;
@@ -319,6 +385,7 @@ function ParameterLinksWorkspace({
               <ProfileEditor
                 profile={editing}
                 disabled={busy != null || route.peaActive}
+                fieldOptionsEnabled={fieldOptionsEnabled}
                 onChange={onDraftChange}
               />
             </>

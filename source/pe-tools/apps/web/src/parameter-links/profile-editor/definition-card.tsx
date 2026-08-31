@@ -25,12 +25,14 @@ export function DefinitionCard({
   profile,
   definition,
   disabled,
+  fieldOptionsEnabled = true,
   target,
   onChange,
 }: {
   profile: ParameterLinkProfile;
   definition: ParameterLinkDefinition;
   disabled?: boolean;
+  fieldOptionsEnabled?: boolean;
   target?: string;
   onChange: (next: ParameterLinkProfile) => void;
 }) {
@@ -47,12 +49,12 @@ export function DefinitionCard({
     : Array.from(
         new Set(enabledAssignments.flatMap((assignment) => assignment.sourceElementUniqueIds)),
       );
-  const categories = useFieldOptions("category-ids", {}, target);
+  const categories = useFieldOptions("category-ids", {}, target, fieldOptionsEnabled);
   const elements = useFieldOptions(
     "element-unique-ids",
     { CategoryId: String(definition.sourceCategoryId) },
     target,
-    definition.sourceCategoryId !== 0,
+    fieldOptionsEnabled && definition.sourceCategoryId !== 0,
   );
   const sourceParameters = useFieldOptions(
     "parameter-identities",
@@ -62,7 +64,7 @@ export function DefinitionCard({
       ...(sourceElementIds.length ? { ElementUniqueIds: sourceElementIds.join("\n") } : {}),
     },
     target,
-    definition.sourceCategoryId !== 0,
+    fieldOptionsEnabled && definition.sourceCategoryId !== 0,
   );
   const targetCategoryId =
     definition.relationship === "sameElement"
@@ -87,13 +89,13 @@ export function DefinitionCard({
         : {}),
     },
     target,
-    targetCategoryId !== 0,
+    fieldOptionsEnabled && targetCategoryId !== 0,
   );
   const readableTargetParameters = useFieldOptions(
     "parameter-identities",
     { CategoryId: String(targetCategoryId), ParameterScope: "instance" },
     target,
-    targetCategoryId !== 0,
+    fieldOptionsEnabled && targetCategoryId !== 0,
   );
 
   return (

@@ -8,11 +8,13 @@ import { DefinitionCard } from "./definition-card";
 export function ProfileEditor({
   profile,
   disabled,
+  fieldOptionsEnabled,
   target,
   onChange,
 }: {
   profile: ParameterLinkProfile | null;
   disabled?: boolean;
+  fieldOptionsEnabled?: boolean;
   target?: string;
   onChange: (next: ParameterLinkProfile) => void;
 }) {
@@ -45,6 +47,7 @@ export function ProfileEditor({
           profile={profile}
           definition={definition}
           disabled={disabled}
+          fieldOptionsEnabled={fieldOptionsEnabled}
           target={target}
           onChange={onChange}
         />
