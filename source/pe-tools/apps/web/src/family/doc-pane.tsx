@@ -245,7 +245,7 @@ export function ProposalCard({
       >
         <span>{settled.mark}</span>
         <span className="truncate">{target}</span>
-        <span className="ml-auto shrink-0 opacity-70">{settled.word}</span>
+        <span className="ml-auto shrink-0 text-ink-2">{settled.word}</span>
       </div>
     );
   }
@@ -268,13 +268,13 @@ export function ProposalCard({
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
       <div className="face-mono t-caption text-ink-2">{target}</div>
-      <div className="face-mono t-label text-pea-ink">
+      <div className="face-mono t-label text-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
       <p className="mt-0.5 t-caption text-ink">{proposal.note}</p>
       {blockMd && (
         <p
-          className="face-mono mt-1 line-clamp-3 whitespace-pre-line t-caption text-ink-2"
+          className="face-mono mt-1 max-h-[3lh] overflow-hidden whitespace-pre-line t-caption text-ink-2"
           title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}
