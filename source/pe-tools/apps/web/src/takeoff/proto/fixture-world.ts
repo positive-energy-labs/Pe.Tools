@@ -5,9 +5,20 @@
  * exercisable with dense mid-project state and no Revit attached. Everything here is synthetic
  * or replayed project-a data; elementIds are null, so every write path is inert by construction.
  */
-import { address } from "@pe/agent-contracts";
+import {
+  address,
+  applyPatches,
+  takeoffsRouteState,
+  type RouteEnvelope,
+  type TakeoffSnapshot,
+  type TakeoffsRouteDocument,
+} from "@pe/agent-contracts";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
-import type { SessionSource, TakeoffHost } from "#/takeoff/store";
+import type { Scope, Slice } from "#/state/route-store";
+import { createTakeoffStore, type SessionSource, type TakeoffHost } from "#/takeoff/store";
 import type { World, WorldRoom, WorldZone } from "#/takeoff/world";
 
 import { loadMockWorldGeo, type GeoRoom, type GeoZone } from "./mock-geo";
@@ -86,28 +97,33 @@ const projectFixtureWorld = (fixture: MockWorld): World => ({
   })),
 });
 
-const fixtureWorld = loadMockWorldGeo()
-  .catch(() => mockWorld())
-  .then(projectFixtureWorld);
+const fallbackWorld = projectFixtureWorld(mockWorld());
+let loadedWorld: Promise<World> | undefined;
+const fixtureWorld = () =>
+  (loadedWorld ??= loadMockWorldGeo()
+    .then(projectFixtureWorld)
+    .catch(() => fallbackWorld));
+
+const snapshot = (world: World, observedAt: string): TakeoffSnapshot => ({
+  reading: {
+    at: address("C:\\Fixtures\\project-a Residence.rvt"),
+    version: null,
+    observedAt,
+  },
+  world,
+  zoneFrs: [],
+  regionsByZone: {},
+});
 
 export const createFixtureTakeoffHost = (): TakeoffHost => ({
   fixture: true,
-  async readSnapshot(_session, document, _views, write) {
-    const snapshot = {
-      reading: {
-        at: address(document.documentId),
-        version: null,
-        observedAt: new Date().toISOString(),
-      },
-      world: await fixtureWorld,
-      zoneFrs: [],
-      regionsByZone: {},
-    };
-    await write(snapshot);
-    return snapshot;
+  async readSnapshot(_session, _document, _views, write) {
+    const next = snapshot(await fixtureWorld(), new Date().toISOString());
+    await write(next);
+    return next;
   },
   async readViews() {
-    const world = await fixtureWorld;
+    const world = await fixtureWorld();
     return world.lanes.map((lane) => ({
       name: lane.view,
       level: lane.label,
@@ -121,7 +137,7 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
     return { path };
   },
   async readCandidates(_session, view) {
-    return (await fixtureWorld).zones
+    return (await fixtureWorld()).zones
       .filter((zone) => zone.zone.lane.view === view)
       .map((zone, index) => ({
         elementId: index + 1,
@@ -183,4 +199,46 @@ export const createFixtureSessionSource = (): SessionSource => {
       return () => undefined;
     },
   };
+};
+
+export const createFixtureTakeoffStore = (registry: AtomRegistry.AtomRegistry, scope: Scope) => {
+  const document = takeoffsRouteState.schema.parse({
+    bindings: {},
+    snapshot: snapshot(fallbackWorld, "2026-08-17T00:00:00.000Z"),
+    staged: [],
+  });
+  let envelope: RouteEnvelope<TakeoffsRouteDocument> = { version: 1, revision: 0, doc: document };
+  const value = (): Slice<TakeoffsRouteDocument> => ({
+    doc: envelope.doc,
+    revision: envelope.revision,
+    hydrated: true,
+    connected: false,
+    error: null,
+    peaActive: false,
+  });
+  const slice = Atom.make(AsyncResult.success(value()));
+  const writer = {
+    async apply(patches: Parameters<typeof applyPatches>[3]) {
+      const landed = applyPatches(
+        takeoffsRouteState,
+        envelope,
+        "human",
+        patches,
+        envelope.revision,
+      );
+      if (!landed.ok) return landed;
+      envelope = landed.envelope;
+      registry.set(slice, AsyncResult.success(value()));
+      return { ok: true as const, revision: envelope.revision, doc: envelope.doc };
+    },
+  };
+  return createTakeoffStore({
+    host: createFixtureTakeoffHost(),
+    sessions: createFixtureSessionSource(),
+    source: "fixture",
+    registry,
+    scope,
+    slice,
+    writer,
+  });
 };

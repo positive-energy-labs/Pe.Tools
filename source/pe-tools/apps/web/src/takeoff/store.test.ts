@@ -12,6 +12,7 @@ import {
 import type { Slice } from "#/state/route-store";
 
 import {
+  createFixtureTakeoffStore,
   createFixtureTakeoffHost,
   createFixtureSessionSource,
 } from "#/takeoff/proto/fixture-world";
@@ -256,6 +257,21 @@ function harness() {
 }
 
 describe("takeoff route store", () => {
+  it("starts the fixture lane with the dense project-a world before Host transport", () => {
+    const registry = AtomRegistry.make({ defaultIdleTTL: 400 });
+    registries.push(registry);
+    const store = createFixtureTakeoffStore(registry, {
+      documentAddress: address("C:\\Fixtures\\project-a Residence.rvt"),
+    });
+    const world = registry.get(store.atoms.world);
+
+    expect(world.docName).toBe("project-a Residence.rvt");
+    expect(world.zones.length).toBeGreaterThan(0);
+    expect(world.zones.flatMap((zone) => zone.rooms).length).toBeGreaterThan(0);
+    expect(world.zones.reduce((sum, zone) => sum + zone.zone.declaredSqft, 0)).toBeGreaterThan(0);
+    expect(world.zones.map((zone) => zone.name)).toContain("Great Room");
+  });
+
   it("produces a fixture snapshot accepted by the route document schema", async () => {
     const sessions = createFixtureSessionSource();
     const session = (await sessions.list())[0]!;

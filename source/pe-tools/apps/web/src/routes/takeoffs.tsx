@@ -18,10 +18,7 @@ import { fmtNum } from "#/components/master-table/model";
 import { Atlas } from "#/takeoff/atlas";
 import { createHostSessionSource, createLiveTakeoffHost } from "#/takeoff/host";
 import { DEFAULT_ARTIFACT_DIR, type CandidateRegion } from "#/takeoff/model";
-import {
-  createFixtureSessionSource,
-  createFixtureTakeoffHost,
-} from "#/takeoff/proto/fixture-world";
+import { createFixtureTakeoffStore } from "#/takeoff/proto/fixture-world";
 import {
   createTakeoffStore,
   TAKEOFF_SLOTS,
@@ -127,13 +124,16 @@ function TakeoffsStoreOwner({
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
   const store = useRouteStore(() => {
-    const created = createTakeoffStore({
-      host: source === "fixture" ? createFixtureTakeoffHost() : createLiveTakeoffHost(),
-      sessions: source === "fixture" ? createFixtureSessionSource() : createHostSessionSource(),
-      source,
-      registry: appAtomRegistry,
-      scope: { documentAddress },
-    });
+    const created =
+      source === "fixture"
+        ? createFixtureTakeoffStore(appAtomRegistry, { documentAddress })
+        : createTakeoffStore({
+            host: createLiveTakeoffHost(),
+            sessions: createHostSessionSource(),
+            source,
+            registry: appAtomRegistry,
+            scope: { documentAddress },
+          });
     for (const dir of readDirs().reverse()) created.actions.rememberDir(dir);
     return created;
   });
