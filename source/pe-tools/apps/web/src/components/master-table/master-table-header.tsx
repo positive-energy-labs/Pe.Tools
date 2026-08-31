@@ -130,7 +130,7 @@ function LeafHeader<Row>({
       rowSpan={rowSpan}
       style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
       className={cn(
-        "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-1 font-normal on-recess first:border-l-0",
+        "t-upper sticky z-sticky align-top whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-1 font-normal on-recess first:border-l-0",
         column.right ? "text-right" : "text-left",
         column.width,
         column.lock && "z-sticky",
