@@ -129,13 +129,13 @@ import { FamilyWorkspaceView } from "#/family/workspace-view";
 import { useFamilyWorkspaceCore } from "#/family/workspace-core";
 import { useFamilyColumns } from "#/family/workspace-columns";
 
-function useFamilyWorkspaceModel(store: FamilyStore, requestedFamily?: string) {
+function useFamilyWorkspaceModel(store: FamilyStore, requestedFamily?: string, source?: "fixture") {
   const core = useFamilyWorkspaceCore(store);
   const columnModel = useFamilyColumns(core);
   const { profile, stage, target, busy } = core;
 
   const picker = useAtomValue(store.atoms.picker);
-  const fleet = useFleet();
+  const fleet = useFleet({ enabled: source !== "fixture" });
   const feeds = {
     world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),
@@ -196,11 +196,13 @@ export type FamilyWorkspaceModel = ReturnType<typeof useFamilyWorkspaceModel>;
 export function FamilyWorkspace({
   store,
   requestedFamily,
+  source,
 }: {
   store: FamilyStore;
   requestedFamily?: string;
+  source?: "fixture";
 }) {
-  const model = useFamilyWorkspaceModel(store, requestedFamily);
+  const model = useFamilyWorkspaceModel(store, requestedFamily, source);
   return (
     <FamilyWorkspaceProvider value={model}>
       <FamilyWorkspaceView />
