@@ -75,7 +75,7 @@ export function LevelPlan({
   const frame = fitFrame(bounds, viewport, { padding, yAxis: "up" });
 
   return (
-    <div className="size-full">
+    <div className="relative size-full">
       <svg
         viewBox={`0 0 ${viewport.width} ${viewport.height}`}
         preserveAspectRatio="xMidYMid meet"
@@ -209,7 +209,7 @@ export function LevelPlan({
         })}
       </svg>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
         {ROOM_STATES.map((s) => (
           <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
         ))}
