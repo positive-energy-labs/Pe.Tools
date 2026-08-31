@@ -177,6 +177,12 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Owed
 
+- 8 repo-guard reds ride on main since the 2026-08-31 merge (`31f5d93`), all pre-existing branch
+  debt: `opacityDim` 22>21, `rawMeaningColor` 30>17, `no raw leading utilities` 5 sites,
+  `weight variables outside the foundation` 1 site (`workbench/lens.css:277`), `unregistered
+  classes` 11 sites, and the empty `design-allowlist.baseline.json` vs 197 live meaning/fill/stroke
+  sites. Classification table: `.artifacts/runs/merge-20260831/report.md` Round 2. Phase 4 pays.
+
 ### Style regression, main → review/design-system (opened 2026-08-30)
 
 - `/design-system`, its swatch, `/` and `/takeoffs` (fixture lane) ported 2026-08-30: 0
