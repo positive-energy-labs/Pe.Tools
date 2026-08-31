@@ -284,7 +284,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
               no settings document is open
             </EmptyState>
           )}
-
         </div>
       </div>
     </main>
@@ -342,9 +341,7 @@ function FieldRow({
         onCommit={(value) =>
           void store.actions.stage(row.path, parseLike(shown, value)).catch(() => undefined)
         }
-        note={
-          row.field?.review === "attention" ? "needs attention" : (proposal?.note ?? undefined)
-        }
+        note={row.field?.review === "attention" ? "needs attention" : (proposal?.note ?? undefined)}
       />
       {staged ? (
         <Verb

@@ -256,9 +256,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
         </PressContent>
       </Press>
       {open ? (
-        <div className="mt-1 mb-0.5 px-2 t-prose text-ink-2 whitespace-pre-wrap">
-          {text}
-        </div>
+        <div className="mt-1 mb-0.5 px-2 t-prose text-ink-2 whitespace-pre-wrap">{text}</div>
       ) : null}
     </div>
   );
@@ -284,11 +282,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
 
         <span
           className={`ml-auto t-caption face-mono tracking-[0.02em] ${
-            isError
-              ? "text-caution"
-              : status?.type === "running"
-                ? "text-ink-2"
-                : "text-done"
+            isError ? "text-caution" : status?.type === "running" ? "text-ink-2" : "text-done"
           }`}
         >
           {isError ? "err" : status?.type === "running" ? "run" : "ok"}

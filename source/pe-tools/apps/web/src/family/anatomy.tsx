@@ -104,8 +104,8 @@ export function AnatomyDrawing({
             constituents · {typeName}
             <HelpTip>
               The profile&rsquo;s own constituent list. Hovering one lights both the shape and the
-              table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS
-              it in the doc pane&rsquo;s lower half, where the half of it no parameter can drive —
+              table rows it drives, because there is only ever ONE thing in focus. Clicking OPENS it
+              in the doc pane&rsquo;s lower half, where the half of it no parameter can drive —
               direction, system type, where its frame sits — is edited.
             </HelpTip>
           </p>

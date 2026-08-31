@@ -33,10 +33,7 @@ export function FamiliesMatrix() {
         chips={chips}
         summary={
           <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 face-mono">
-            <span
-              className="text-ink"
-              title="Every family and type the applied scope resolved to."
-            >
+            <span className="text-ink" title="Every family and type the applied scope resolved to.">
               {totalFamilies} families · {totalTypes} types
             </span>
             <span

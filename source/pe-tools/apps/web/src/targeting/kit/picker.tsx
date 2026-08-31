@@ -112,148 +112,148 @@ export function Picker<K extends string>({
             className="block max-h-(--available-height) overflow-hidden rounded-lg outline-none"
             style={POP}
           >
-          <div
-            className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"
-            style={{ borderBottom: `1px solid ${token("line-2")}` }}
-          >
-            {chain.map((l, i) => {
-              const on = l.key === level;
-              const lab = b.labelOf(l);
-              return (
-                <span key={l.key} className="inline-flex items-baseline gap-1">
-                  {i > 0 ? (
-                    <span className="" style={{ color: token("ink-mute") }}>
-                      ›
-                    </span>
-                  ) : null}
-                  <Press
-                    type="button"
-                    onClick={() => (setLevel(l.key), setQ(""))}
-                    style={{
-                      padding: "0 3px",
-                      backgroundColor: on ? token("select") : "transparent",
-                      color: lab == null ? token("caution") : token("ink"),
-                      borderBottom: on ? `1px solid ${token("ink")}` : "1px solid transparent",
-                    }}
-                  >
-                    {lab ?? l.placeholder}
-                  </Press>
-                </span>
-              );
-            })}
-          </div>
-
-          <input
-            autoFocus
-            aria-label={`Search ${cur.key}`}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && hits[0]) {
-                b.pick(cur, hits[0].id);
-                advance();
-              }
-            }}
-            placeholder={`search ${cur.key}${opts ? ` · ${opts.length}` : ""}`}
-            className="w-full px-2 py-1"
-            style={{
-              backgroundColor: "transparent",
-              borderBottom: `1px solid ${token("line-2")}`,
-              outline: "none",
-              color: token("ink"),
-            }}
-          />
-          <div className="max-h-[min(16rem,calc(100dvh-6rem))] overflow-y-auto py-1">
-            {opts === null ? (
-              <div className="px-2 py-1" style={{ color: token("caution") }}>
-                no legal options — needs {cur.needs}
-              </div>
-            ) : curFeed?.state === "error" ? (
-              <div className="px-2 py-1" style={{ color: token("caution") }}>
-                {curFeed.note ?? "read failed"}
-              </div>
-            ) : opts.length === 0 ? (
-              <div className="px-2 py-1" style={{ color: token("ink-2") }}>
-                {curFeed?.state === "loading"
-                  ? "reading…"
-                  : cur.under && b.bound[cur.under] == null
-                    ? `bind ${cur.under} first`
-                    : cur.needs}
-              </div>
-            ) : hits.length === 0 ? (
-              <div className="px-2 py-1" style={{ color: token("ink-2") }}>
-                no match
-              </div>
-            ) : (
-              hits.map((o) => {
-                const on = b.isPicked(cur, o.id);
+            <div
+              className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"
+              style={{ borderBottom: `1px solid ${token("line-2")}` }}
+            >
+              {chain.map((l, i) => {
+                const on = l.key === level;
+                const lab = b.labelOf(l);
                 return (
-                  <Press
-                    key={o.id}
-                    type="button"
-                    tone="quiet"
-                    state={on ? "selected" : "rest"}
-                    onClick={() => {
-                      b.pick(cur, o.id);
-                      advance();
-                    }}
-                  >
-                    <PressContent geometry="baseline">
-                      {cur.multi ? <span className="">{on ? "☑" : "☐"}</span> : null}
-                      <span className="" style={{ color: token("ink") }}>
-                        {o.label}
+                  <span key={l.key} className="inline-flex items-baseline gap-1">
+                    {i > 0 ? (
+                      <span className="" style={{ color: token("ink-mute") }}>
+                        ›
                       </span>
-                      {o.sub ? (
-                        <span className="" style={{ color: token("ink-2") }}>
-                          {o.sub}
-                        </span>
-                      ) : null}
-                    </PressContent>
-                  </Press>
+                    ) : null}
+                    <Press
+                      type="button"
+                      onClick={() => (setLevel(l.key), setQ(""))}
+                      style={{
+                        padding: "0 3px",
+                        backgroundColor: on ? token("select") : "transparent",
+                        color: lab == null ? token("caution") : token("ink"),
+                        borderBottom: on ? `1px solid ${token("ink")}` : "1px solid transparent",
+                      }}
+                    >
+                      {lab ?? l.placeholder}
+                    </Press>
+                  </span>
                 );
-              })
-            )}
-            {belowHits.length > 0 ? (
-              <>
-                <div
-                  className="px-2 pt-1.5"
-                  style={{ color: token("ink-mute"), borderTop: `1px solid ${token("line-2")}` }}
-                >
-                  {b.labelOf(cur)} › {below!.key}
+              })}
+            </div>
+
+            <input
+              autoFocus
+              aria-label={`Search ${cur.key}`}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && hits[0]) {
+                  b.pick(cur, hits[0].id);
+                  advance();
+                }
+              }}
+              placeholder={`search ${cur.key}${opts ? ` · ${opts.length}` : ""}`}
+              className="w-full px-2 py-1"
+              style={{
+                backgroundColor: "transparent",
+                borderBottom: `1px solid ${token("line-2")}`,
+                outline: "none",
+                color: token("ink"),
+              }}
+            />
+            <div className="max-h-[min(16rem,calc(100dvh-6rem))] overflow-y-auto py-1">
+              {opts === null ? (
+                <div className="px-2 py-1" style={{ color: token("caution") }}>
+                  no legal options — needs {cur.needs}
                 </div>
-                {belowHits.map((o) => (
-                  <Press
-                    key={`below:${o.id}`}
-                    type="button"
-                    tone="quiet"
-                    state={b.isPicked(below!, o.id) ? "selected" : "rest"}
-                    onClick={() => {
-                      b.pick(below!, o.id);
-                      const after = chain[chain.indexOf(below!) + 1];
-                      if (after && !below!.multi) setLevel(after.key);
-                      else if (!below!.multi) b.setOpen(null);
-                      setQ("");
-                    }}
-                  >
-                    <PressContent geometry="baseline">
-                      {below!.multi ? (
-                        <span className="">{b.isPicked(below!, o.id) ? "☑" : "☐"}</span>
-                      ) : null}
-                      <span className="" style={{ color: token("ink") }}>
-                        {o.label}
-                      </span>
-                      {o.sub ? (
-                        <span className="" style={{ color: token("ink-2") }}>
-                          {o.sub}
+              ) : curFeed?.state === "error" ? (
+                <div className="px-2 py-1" style={{ color: token("caution") }}>
+                  {curFeed.note ?? "read failed"}
+                </div>
+              ) : opts.length === 0 ? (
+                <div className="px-2 py-1" style={{ color: token("ink-2") }}>
+                  {curFeed?.state === "loading"
+                    ? "reading…"
+                    : cur.under && b.bound[cur.under] == null
+                      ? `bind ${cur.under} first`
+                      : cur.needs}
+                </div>
+              ) : hits.length === 0 ? (
+                <div className="px-2 py-1" style={{ color: token("ink-2") }}>
+                  no match
+                </div>
+              ) : (
+                hits.map((o) => {
+                  const on = b.isPicked(cur, o.id);
+                  return (
+                    <Press
+                      key={o.id}
+                      type="button"
+                      tone="quiet"
+                      state={on ? "selected" : "rest"}
+                      onClick={() => {
+                        b.pick(cur, o.id);
+                        advance();
+                      }}
+                    >
+                      <PressContent geometry="baseline">
+                        {cur.multi ? <span className="">{on ? "☑" : "☐"}</span> : null}
+                        <span className="" style={{ color: token("ink") }}>
+                          {o.label}
                         </span>
-                      ) : null}
-                    </PressContent>
-                  </Press>
-                ))}
-              </>
-            ) : null}
-            {extra?.(cur)}
-          </div>
+                        {o.sub ? (
+                          <span className="" style={{ color: token("ink-2") }}>
+                            {o.sub}
+                          </span>
+                        ) : null}
+                      </PressContent>
+                    </Press>
+                  );
+                })
+              )}
+              {belowHits.length > 0 ? (
+                <>
+                  <div
+                    className="px-2 pt-1.5"
+                    style={{ color: token("ink-mute"), borderTop: `1px solid ${token("line-2")}` }}
+                  >
+                    {b.labelOf(cur)} › {below!.key}
+                  </div>
+                  {belowHits.map((o) => (
+                    <Press
+                      key={`below:${o.id}`}
+                      type="button"
+                      tone="quiet"
+                      state={b.isPicked(below!, o.id) ? "selected" : "rest"}
+                      onClick={() => {
+                        b.pick(below!, o.id);
+                        const after = chain[chain.indexOf(below!) + 1];
+                        if (after && !below!.multi) setLevel(after.key);
+                        else if (!below!.multi) b.setOpen(null);
+                        setQ("");
+                      }}
+                    >
+                      <PressContent geometry="baseline">
+                        {below!.multi ? (
+                          <span className="">{b.isPicked(below!, o.id) ? "☑" : "☐"}</span>
+                        ) : null}
+                        <span className="" style={{ color: token("ink") }}>
+                          {o.label}
+                        </span>
+                        {o.sub ? (
+                          <span className="" style={{ color: token("ink-2") }}>
+                            {o.sub}
+                          </span>
+                        ) : null}
+                      </PressContent>
+                    </Press>
+                  ))}
+                </>
+              ) : null}
+              {extra?.(cur)}
+            </div>
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>

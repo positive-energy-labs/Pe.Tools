@@ -78,9 +78,7 @@ function RoomPanel({
               </span>
               {MANUAL_J.map((mj) => (
                 <Fragment key={mj.field}>
-                  <span className="face-mono t-value pr-1.5 text-right text-ink-2">
-                    {mj.label}
-                  </span>
+                  <span className="face-mono t-value pr-1.5 text-right text-ink-2">{mj.label}</span>
                   <span>
                     <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
@@ -97,9 +95,7 @@ function RoomPanel({
               {open.map((flag) => (
                 <li key={flag}>
                   <p className="face-mono t-value text-alarm">{flag}</p>
-                  <p className="face-mono t-value text-ink-2">
-                    {FLAG_MEANING[flag] ?? "no blurb"}
-                  </p>
+                  <p className="face-mono t-value text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
 
                   <span className="mt-0.5 flex gap-1">
                     <Verb

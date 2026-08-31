@@ -75,9 +75,7 @@ export function AtlasVisual() {
                 type="button"
                 onClick={() => setPlanOpen(!planOpen)}
                 title={
-                  planOpen
-                    ? "collapse the plan — give the table the full height"
-                    : "show the plan"
+                  planOpen ? "collapse the plan — give the table the full height" : "show the plan"
                 }
                 tone="neutral"
                 size="caption"

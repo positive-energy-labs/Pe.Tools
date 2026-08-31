@@ -112,9 +112,7 @@ export function ContextBudgetBar({
       <BudgetBar breakdown={breakdown} cache={cache} />
 
       <div className="mt-1 grid grid-cols-2 gap-3 t-caption face-mono text-ink-2">
-        <span className="whitespace-nowrap">
-          reflect {fmtTok(mw.reflectionThreshold)}
-        </span>
+        <span className="whitespace-nowrap">reflect {fmtTok(mw.reflectionThreshold)}</span>
         <span className="text-right whitespace-nowrap">
           observe {fmtTok(mw.observationThreshold)}
         </span>

@@ -100,10 +100,7 @@ export function FamiliesReadoutBands() {
                 );
               })}
               {outsideProfile.map((family) => (
-                <tr
-                  key={`outside-${family.familyId}`}
-                  className="border-b border-line opacity-60"
-                >
+                <tr key={`outside-${family.familyId}`} className="border-b border-line opacity-60">
                   <td className="w-8 text-center">
                     <span className="face-mono t-value text-ink-2">✕</span>
                   </td>
@@ -285,7 +282,9 @@ export function FamiliesReadoutBands() {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="face-mono t-caption mt-1 max-h-40 overflow-auto p-2 text-ink-2 on-recess inset-ring">{entry.profileJson}</pre>
+                <pre className="face-mono t-caption mt-1 max-h-40 overflow-auto p-2 text-ink-2 on-recess inset-ring">
+                  {entry.profileJson}
+                </pre>
               )}
             </div>
           ))}

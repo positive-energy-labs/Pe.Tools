@@ -93,10 +93,7 @@ function Picker({
       {/* ponytail: explicit anchor on the trigger — the in-popup search input can't be the
           positioner anchor or it feedback-loops (roaming/jittering popup). */}
       <div ref={anchorRef} className={chatStyles.controlChips0()}>
-        <ComboboxTrigger
-          title={title}
-          render={<Press tone="quiet" size="value" />}
-        >
+        <ComboboxTrigger title={title} render={<Press tone="quiet" size="value" />}>
           <span className={chatStyles.controlChips1()}>{label}</span>
         </ComboboxTrigger>
       </div>

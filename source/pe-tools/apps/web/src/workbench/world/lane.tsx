@@ -82,7 +82,9 @@ export function WorldLane({
           <span className="ml-auto t-caption face-mono text-ink-2">{fmtTok(used)} loaded</span>
         </div>
         <div className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate t-caption">what pea sends the model · request order</span>
+          <span className="min-w-0 truncate t-caption">
+            what pea sends the model · request order
+          </span>
           <div className="ml-auto flex flex-none items-center gap-1.5">
             <Switcher
               ariaLabel="density"
@@ -163,10 +165,7 @@ export function WorldLane({
           const changed = diff && cache.changed.has(layer.id);
           const blast = blastOf(layer.rank);
           return (
-            <div
-              key={layer.id}
-              className="border-b-[0.5px] border-line [&>button]:w-full"
-            >
+            <div key={layer.id} className="border-b-[0.5px] border-line [&>button]:w-full">
               <Press
                 tone="quiet"
                 state={changed ? "selected" : "rest"}
@@ -214,9 +213,7 @@ export function WorldLane({
               </Press>
               {isOpen ? (
                 <div className="pt-0 pr-3 pb-2.5 pl-[29px] t-caption leading-relaxed">
-                  <p className="mt-0 mb-1.5 text-ink-2">
-                    {PLAIN_CAP[layer.id] ?? layer.label}
-                  </p>
+                  <p className="mt-0 mb-1.5 text-ink-2">{PLAIN_CAP[layer.id] ?? layer.label}</p>
                   {inspect && changed ? (
                     <p className="mt-0 mb-1.5">
                       ⚡ changed this send → {BLAST_LABEL[blast]}. {driftHint(blast)}
