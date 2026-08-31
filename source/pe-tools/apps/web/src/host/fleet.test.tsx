@@ -138,23 +138,46 @@ test("fleet fusion requires equal pid and process start", () => {
     process: identity,
     bridge: { bridge: "answering", sessionDescriptor: null },
   };
-  const session = (startMs: number, title: string): SessionFacts => ({
-    sessionId: title,
+  const storedSession: SessionFacts = {
+    sessionId: "bridge-user",
     sdkSessionId: "same-sdk-id",
     processId: identity.pid,
-    processStartUtcUnixMs: startMs,
+    processStartUtcUnixMs: 2_000,
     lane: "dev",
-    custody: "observed",
-    activeDocumentTitle: title,
+    custody: "controlled",
+    activeDocumentTitle: "connected document",
     openDocumentCount: 1,
-  });
+  };
 
-  const mismatch = fuseFleet([row], [session(2_000, "wrong start")])[0]!;
-  expect(mismatch.session).toBeUndefined();
-  expect(mismatch.openDocumentCount).toBe(0);
+  expect(fuseFleet([], [storedSession])).toEqual([
+    {
+      id: "bridge-user",
+      custody: "observed",
+      phase: "ready",
+      detail: "Host bridge is connected, but no exact SDK census row matched.",
+      lane: "dev",
+      pid: identity.pid,
+      activeDocumentTitle: "connected document",
+      openDocumentCount: 1,
+      session: storedSession,
+    },
+  ]);
 
-  const match = fuseFleet([row], [session(2_000, "wrong start"), session(1_000, "exact")])[0]!;
-  expect(match.session?.activeDocumentTitle).toBe("exact");
+  const mismatch = fuseFleet([row], [storedSession]);
+  expect(mismatch.map(({ id, custody, session }) => ({ id, custody, session }))).toEqual([
+    { id: String(identity.pid), custody: "observed", session: undefined },
+    { id: "bridge-user", custody: "observed", session: storedSession },
+  ]);
+
+  const exactSession = { ...storedSession, sessionId: "exact", processStartUtcUnixMs: 1_000 };
+  const match = fuseFleet([row], [exactSession]);
+  expect(match).toHaveLength(1);
+  expect(match[0]?.session).toBe(exactSession);
+
+  expect(fuseFleet([row, row], [exactSession]).map((world) => world.session?.sessionId)).toEqual([
+    "exact",
+    undefined,
+  ]);
 });
 
 function FleetProbe({ enabled }: { enabled: boolean }) {

@@ -166,7 +166,8 @@ export function fuseFleet(
   rows: readonly SessionObservation[],
   sessions: readonly SessionFacts[],
 ): WorldFacts[] {
-  return rows.map((row) => {
+  const claimedSessionIds = new Set<string>();
+  const worlds: WorldFacts[] = rows.map((row) => {
     const projected = projectObservation(row);
     const processStartUtcUnixMs = projected.process
       ? Date.parse(projected.process.processStartUtc)
@@ -175,10 +176,12 @@ export function fuseFleet(
       projected.process && Number.isFinite(processStartUtcUnixMs)
         ? sessions.find(
             (candidate) =>
+              !claimedSessionIds.has(candidate.sessionId) &&
               candidate.processId === projected.process!.pid &&
               candidate.processStartUtcUnixMs === processStartUtcUnixMs,
           )
         : undefined;
+    if (session) claimedSessionIds.add(session.sessionId);
     return {
       id: projected.id,
       custody: projected.custody,
@@ -193,6 +196,22 @@ export function fuseFleet(
       row,
     };
   });
+  worlds.push(
+    ...sessions
+      .filter((session) => !claimedSessionIds.has(session.sessionId))
+      .map((session) => ({
+        id: session.sessionId,
+        custody: "observed" as const,
+        phase: "ready" as const,
+        detail: "Host bridge is connected, but no exact SDK census row matched.",
+        lane: session.lane ?? undefined,
+        pid: session.processId,
+        activeDocumentTitle: session.activeDocumentTitle,
+        openDocumentCount: session.openDocumentCount,
+        session,
+      })),
+  );
+  return worlds;
 }
 
 interface FleetOptions {
