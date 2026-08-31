@@ -293,6 +293,15 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
                 reason="Clears this error line. It does not retry — re-run the verb that failed."
               />
             ) : null}
+            {!live && (
+              <Verb
+                label="leave fixture → live"
+                onClick={() =>
+                  void navigate({ search: (previous) => ({ ...previous, source: "live" }) })
+                }
+                reason="Switches this route back to the live lane, where reads and writes address the targeted Revit document"
+              />
+            )}
           </span>
         }
       />
@@ -300,18 +309,6 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   );
   const readoutBand = (
     <>
-      {!live && (
-        <div className="z-popup">
-          <Verb
-            label="leave fixture → live"
-            onClick={() =>
-              void navigate({ search: (previous) => ({ ...previous, source: "live" }) })
-            }
-            reason="Switches this route back to the live lane, where reads and writes address the targeted Revit document"
-          />
-        </div>
-      )}
-
       {panel === "adopt" && scope && <AdoptPanel store={store} />}
       {panel === "sync" && scope && <SyncPanel store={store} />}
     </>
