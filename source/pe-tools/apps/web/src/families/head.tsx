@@ -13,7 +13,13 @@ import { worldTrunk } from "#/targeting/world";
 const same = (left: readonly string[], right: readonly string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
-export function FamiliesHead({ store }: { store: FamiliesStore }) {
+export function FamiliesHead({
+  store,
+  fixture = false,
+}: {
+  store: FamiliesStore;
+  fixture?: boolean;
+}) {
   const target = useAtomValue(store.atoms.target);
   const profilePath = useAtomValue(store.atoms.profilePath);
   const draft = useAtomValue(store.atoms.draft);
@@ -21,7 +27,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
   const plan = useAtomValue(store.atoms.plan);
   const picker = useAtomValue(store.atoms.picker);
   const busy = useAtomValue(store.atoms.busy);
-  const fleet = useFleet();
+  const fleet = useFleet({ enabled: !fixture });
   const feeds = {
     world: worldTrunk.feed(fleet),
     profile: useAtomValue(store.feeds.profile),
