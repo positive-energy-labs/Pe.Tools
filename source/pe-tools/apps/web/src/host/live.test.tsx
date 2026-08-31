@@ -11,10 +11,9 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createElement } from "react";
-import { renderToString } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { LiveTakeoffsRoute, Route, TakeoffsRoute } from "#/routes/takeoffs";
+import { LiveTakeoffsRoute } from "#/routes/takeoffs";
 import { RootComponent } from "#/routes/__root";
 import { usePeInfo } from "./info";
 import { useHostLiveInvalidation } from "./live";
@@ -82,13 +81,9 @@ test("fixture root skips Host wires while ordinary routing keeps them", async ()
   expect(fetchMock).toHaveBeenCalledOnce();
 });
 
-test("fixture Takeoffs renders no store owner during server render", () => {
-  vi.spyOn(Route, "useSearch").mockReturnValue({
-    source: "fixture",
-    thread: undefined,
-    targeting: undefined,
-  });
-  expect(renderToString(createElement(TakeoffsRoute))).toBe("");
+test("Takeoffs owns its browser-only lifecycle at the route boundary", () => {
+  const route = readFileSync(join(process.cwd(), "src/routes/takeoffs.tsx"), "utf8");
+  expect(route).toContain('createFileRoute("/takeoffs")({\n  ssr: "data-only",');
 });
 
 test("opens host events only after PeInfo confirms Revit", async () => {

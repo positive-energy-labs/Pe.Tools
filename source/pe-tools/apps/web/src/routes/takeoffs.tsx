@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
@@ -51,6 +51,7 @@ export const resolvedWorldBinding = (
     : resolution.selector || null;
 
 export const Route = createFileRoute("/takeoffs")({
+  ssr: "data-only",
   validateSearch: (search: Record<string, unknown>) => ({
     source: search.source === "fixture" ? ("fixture" as const) : ("live" as const),
     thread: str(search.thread) || undefined,
@@ -77,20 +78,10 @@ export function TakeoffsRoute() {
   const { source } = Route.useSearch();
   const fixtureAddress = address("C:\\Fixtures\\project-a Residence.rvt");
   return source === "fixture" ? (
-    <FixtureTakeoffsRoute documentAddress={fixtureAddress} />
+    <TakeoffsStoreOwner source="fixture" documentAddress={fixtureAddress} />
   ) : (
     <LiveTakeoffsRoute />
   );
-}
-
-function FixtureTakeoffsRoute({
-  documentAddress,
-}: {
-  documentAddress: import("@pe/agent-contracts").Address;
-}) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted ? <TakeoffsStoreOwner source="fixture" documentAddress={documentAddress} /> : null;
 }
 
 export function LiveTakeoffsRoute() {
