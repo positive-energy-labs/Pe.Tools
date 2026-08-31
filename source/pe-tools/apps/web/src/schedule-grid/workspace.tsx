@@ -15,16 +15,27 @@ import { timeAgo } from "#/lib/utils";
 import { useRouteState } from "#/workbench/route-state";
 import { PendingStrip } from "#/schedule-grid/pending-strip";
 import { useScheduleGridColumns } from "#/schedule-grid/columns";
+import type { RouteStateHandle } from "#/workbench/route-state";
 
-export function ScheduleGridWorkspace({
+export type ScheduleGridState = Pick<
+  RouteStateHandle<import("@pe/agent-contracts").ScheduleGridDocument>,
+  "slice" | "hydrated" | "apply" | "command" | "peaActive" | "connected" | "busy" | "atoms"
+>;
+
+export function LiveScheduleGridWorkspace({
   documentAddress,
 }: {
   documentAddress: import("@pe/agent-contracts").Address;
 }) {
-  const { slice, hydrated, apply, command, peaActive, connected, busy, atoms } = useRouteState(
-    scheduleGridRouteState,
-    { documentAddress },
-  );
+  const state = useRouteState(scheduleGridRouteState, { documentAddress });
+  return <ScheduleGridWorkspace state={state} />;
+}
+
+export function ScheduleGridWorkspace({
+  state: { slice, hydrated, apply, command, peaActive, connected, busy, atoms },
+}: {
+  state: ScheduleGridState;
+}) {
   const document = slice;
   const snapshot = document?.snapshot ?? null;
   const catalog = document?.catalog ?? null;
