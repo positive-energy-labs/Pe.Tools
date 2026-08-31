@@ -7,7 +7,13 @@ const canonicalFixtures: Record<
   { canonicalReviewUrl: string; fixtureKind: "inherent-static" | "query-fixture" } | undefined
 > = {
   "/": { canonicalReviewUrl: "/", fixtureKind: "inherent-static" },
+  "/data-tables": {
+    canonicalReviewUrl: "/data-tables?source=fixture",
+    fixtureKind: "query-fixture",
+  },
   "/doc-lab": { canonicalReviewUrl: "/doc-lab?source=fixture", fixtureKind: "query-fixture" },
+  "/families": { canonicalReviewUrl: "/families?source=fixture", fixtureKind: "query-fixture" },
+  "/family": { canonicalReviewUrl: "/family?source=fixture", fixtureKind: "query-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
   "/settings": { canonicalReviewUrl: "/settings?source=fixture", fixtureKind: "query-fixture" },
   "/takeoffs": {
