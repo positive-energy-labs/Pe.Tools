@@ -280,10 +280,13 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - Per-domain host-call façades on the `host/familyfoundry.ts` pattern, plus universal
   `HostIssuePanel` adoption.
 
-### Duplication to collapse (counted 2026-08-29)
+### Duplication to collapse (recounted 2026-08-31, census `.artifacts/runs/route-census-20260831/report.md`)
 
-- `timeAgo` has six copies beside the canonical `lib/utils.ts` export.
-- Esc-handler with an input guard ×7, each with a different guard list.
+- `timeAgo` is consolidated: one implementation at `lib/utils.ts:10-18`, five importers. Done.
+- Global Escape handlers: three with input guards, every guard list different
+  (`families/workspace.tsx:130-138`, `takeoff/atlas.tsx:129-155`, `runs/browser/model.ts:165-187`),
+  plus one with **no** guard (`family/workspace-core.ts:84-94`). One keyboard policy owed.
+- Two hand-rolled Set multi-selects remain: `families/store.ts:75` and `routes/grilles.tsx:37`.
 - `ops/primitives.tsx` `DataTable<Row>` is a second, incompatible `Column<Row>` with 12 consumers;
   16 files still hand-roll a `<table>`.
 
