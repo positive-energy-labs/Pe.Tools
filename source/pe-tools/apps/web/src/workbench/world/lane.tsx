@@ -2,7 +2,6 @@ import { useAtomValue } from "@effect/atom-react";
 import { Key } from "#/components/anatomy";
 import type { ContextBreakdown, ContextItem } from "../chat-state";
 import { EmptyState } from "#/components/lang/empty";
-import { FactChip } from "#/components/lang/chip";
 import { Switcher } from "#/components/lang/switcher";
 import { cn } from "#/lib/utils";
 import { token } from "#/lib/token";
@@ -77,63 +76,65 @@ export function WorldLane({
 
   return (
     <div className="flex min-h-0 flex-col t-label text-ink-2">
-      <div className="sticky top-0 z-[2] flex items-center gap-2 border-y border-line bg-page px-3 py-2">
-        <h2 className="m-0 max-w-[14ch] t-label t-upper leading-tight text-ink">
-          What the agent sends the model
-        </h2>
-        <div className="ml-auto flex items-center gap-1.5">
-          <Switcher
-            ariaLabel="density"
-            value={density}
-            onChange={(density) => setWorld((previous) => ({ ...previous, density }))}
-            options={[
-              {
-                value: "plain",
-                label: "Plain",
-                title: "Lay-reader view — layer names and what each one is, no dev chrome",
-              },
-              {
-                value: "inspect",
-                label: "Inspect",
-                title: "Dev view — tokens, shares, cache state, budget bar, item bodies",
-              },
-            ]}
-          />
+      <div className="sticky top-0 z-[2] grid gap-1.5 border-y border-line bg-page px-3 py-2">
+        <div className="flex items-baseline gap-2">
+          <h2 className="m-0 t-label t-upper text-ink">Context ledger</h2>
+          <span className="ml-auto t-caption face-mono text-ink-2">{fmtTok(used)} loaded</span>
+        </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate t-caption">what pea sends the model · request order</span>
+          <div className="ml-auto flex flex-none items-center gap-1.5">
+            <Switcher
+              ariaLabel="density"
+              value={density}
+              onChange={(density) => setWorld((previous) => ({ ...previous, density }))}
+              options={[
+                {
+                  value: "plain",
+                  label: "Plain",
+                  title: "Lay-reader view — layer names and what each one is, no dev chrome",
+                },
+                {
+                  value: "inspect",
+                  label: "Inspect",
+                  title: "Dev view — tokens, shares, cache state, budget bar, item bodies",
+                },
+              ]}
+            />
 
-          <Press
-            type="button"
-            tone="quiet"
-            size="icon"
-            state="selected"
-            aria-pressed={diff}
-            onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
-            title={
-              cache.hasBaseline && sendNumber
-                ? `Highlight what changed vs send #${sendNumber - 1}`
-                : cache.hasBaseline
-                  ? "Highlight what changed since the last send"
-                  : "No previous send to compare yet"
-            }
-            disabled={!cache.hasBaseline}
-          >
-            Δ
-          </Press>
+            <Press
+              type="button"
+              tone="quiet"
+              size="icon"
+              state="selected"
+              aria-pressed={diff}
+              onClick={() => setWorld((previous) => ({ ...previous, diff: !previous.diff }))}
+              title={
+                cache.hasBaseline && sendNumber
+                  ? `Highlight what changed vs send #${sendNumber - 1}`
+                  : cache.hasBaseline
+                    ? "Highlight what changed since the last send"
+                    : "No previous send to compare yet"
+              }
+              disabled={!cache.hasBaseline}
+            >
+              Δ
+            </Press>
+          </div>
         </div>
       </div>
 
       {inspect ? (
-        <div className="flex flex-wrap items-center gap-1.5 px-3 pt-2 t-caption face-mono">
-          {sendNumber ? (
-            <FactChip title="This breakdown was captured at the last user send; streaming pushes within the turn do not advance it">
-              snapshot @ send #{sendNumber}
-            </FactChip>
-          ) : null}
-          <span>resolved from the live agent</span>
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 border-b-[0.5px] border-line px-3 py-1.5 t-caption face-mono">
+          <span title="This breakdown was captured at the last user send; streaming pushes within the turn do not advance it">
+            {sendNumber ? `send #${sendNumber}` : "snapshot"}
+          </span>
+          <span className="truncate text-right text-ink-mute">live agent · resolved snapshot</span>
         </div>
       ) : null}
 
       {inspect && cache.hasBaseline ? (
-        <div className="mx-3 mt-2 grid gap-1 border-t border-line pt-2 t-caption face-mono">
+        <div className="grid gap-1 border-b-[0.5px] border-line px-3 py-2 t-caption face-mono">
           <div className="mb-0.5 t-upper text-ink">Cache estimate</div>
           <div className="grid grid-cols-[9px_minmax(0,1fr)_auto] items-center gap-1.5">
             <span className="size-[9px] bg-done" />
@@ -147,7 +148,7 @@ export function WorldLane({
             <span>{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
-            <div className="px-2 py-1.5">
+            <div className="mt-0.5 border-l-2 border-caution pl-2 text-caution">
               Δ this send: {whySentence(layers, cache, totals.reprocessed)}
             </div>
           ) : null}
@@ -156,13 +157,16 @@ export function WorldLane({
 
       {inspect && breakdown ? <ContextBudgetBar breakdown={breakdown} cache={cache} /> : null}
 
-      <div className="mt-2.5">
+      <div className="mt-2.5 border-t-[0.5px] border-line">
         {layers.map((layer) => {
           const isOpen = open.has(layer.id);
           const changed = diff && cache.changed.has(layer.id);
           const blast = blastOf(layer.rank);
           return (
-            <div key={layer.id} className="[&>button]:w-full">
+            <div
+              key={layer.id}
+              className="border-b-[0.5px] border-line [&>button]:w-full"
+            >
               <Press
                 tone="quiet"
                 state={changed ? "selected" : "rest"}

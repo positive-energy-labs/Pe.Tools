@@ -141,7 +141,14 @@ export function Composer({
   return (
     <form onSubmit={submit} className={chatStyles.composer0()}>
       {showMenu ? (
-        <div role="listbox" aria-label="Commands" className={chatStyles.composer1()}>
+        <div
+          role="listbox"
+          aria-label="Commands"
+          className={cn(
+            chatStyles.composer1(),
+            "right-2 left-2 z-[8] mb-1.5 max-h-52 w-auto overflow-x-hidden overflow-y-auto p-1 shadow-sm [&>button]:w-full",
+          )}
+        >
           {matches.slice(0, 6).map((command) => (
             <Press
               key={`${command.kind}:${command.name}`}
@@ -160,7 +167,12 @@ export function Composer({
 
       {/* The composer carries state, but it belongs to the transcript rather than floating as a
           second card. One top rule and the artifact ground separate input from history. */}
-      <div className={cn(chatStyles.composer4(), "rounded-none border-x-0 border-b-0")}>
+      <div
+        className={cn(
+          chatStyles.composer4(),
+          "overflow-visible rounded-none border-x-0 border-b-0",
+        )}
+      >
         {topBar}
 
         {attachments.length > 0 ? (

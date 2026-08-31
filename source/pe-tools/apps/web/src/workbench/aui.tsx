@@ -153,12 +153,12 @@ function UserMoment() {
   if (!text && images.length === 0) return null;
   return (
     <MomentSection id={id} role="user">
-      <div className="mb-1.5 flex items-center gap-[7px]">
+      <div className="mb-1 flex items-center gap-2">
         <TurnTag id={id} />
         <span className="t-label t-upper text-ink-2">you</span>
         <MomentTime />
       </div>
-      <div className="ml-auto flex w-fit max-w-[80%] flex-col items-end gap-1.5">
+      <div className="ml-auto flex w-fit max-w-[76%] flex-col items-end gap-1.5">
         {images.map((src) => (
           <img
             key={src}
@@ -169,7 +169,9 @@ function UserMoment() {
         ))}
 
         {text ? (
-          <div className="rounded-sm bg-recess px-3 py-2 t-prose text-ink">{text}</div>
+          <div className="border-l-2 border-line-2 bg-recess px-3 py-1.5 t-prose text-ink">
+            {text}
+          </div>
         ) : null}
       </div>
     </MomentSection>
@@ -190,12 +192,12 @@ function AssistantMoment() {
   if (!hasContent && !running) return null;
   return (
     <MomentSection id={id} role="assistant">
-      <div className="mb-1.5 flex items-center gap-[7px]">
+      <div className="mb-1 flex items-center gap-2">
         <TurnTag id={id} />
         <span className="t-label t-upper text-ink">pea</span>
         <MomentTime />
       </div>
-      <div className="grid gap-1">
+      <div className="grid gap-[3px]">
         <AssistantParts />
 
         {running ? <span {...annotation("streaming-caret")} aria-hidden="true" /> : null}
@@ -240,7 +242,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
   return (
-    <div className="border-l border-line pl-1">
+    <div className="border-l-[0.5px] border-line-2 pl-2">
       <Press
         type="button"
         tone="quiet"
@@ -254,7 +256,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
         </PressContent>
       </Press>
       {open ? (
-        <div className="mt-1 mb-0.5 ml-1 px-2 t-prose text-ink-2 whitespace-pre-wrap">
+        <div className="mt-1 mb-0.5 px-2 t-prose text-ink-2 whitespace-pre-wrap">
           {text}
         </div>
       ) : null}
@@ -275,7 +277,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   const target = toolTarget(args);
   const pending = approval && approval.approved === undefined && !approval.resolution;
   return (
-    <div className="grid gap-1" data-tool-id={toolCallId}>
+    <div className="grid gap-0.5" data-tool-id={toolCallId}>
       <div {...annotation("tool-marker")} data-kind="tool" className={tone}>
         <span>⌗ {toolTitle(toolName)}</span>
         {target ? <code>{target}</code> : null}

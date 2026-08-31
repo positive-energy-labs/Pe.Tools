@@ -101,9 +101,6 @@ export function ContextBudgetBar({
   const prefix = segTok("tools") + segTok("system-prompt") + segTok("skills");
   const budget = prefix + mw.observationThreshold + mw.reflectionThreshold;
   const inContext = prefix + mw.messageTokens + mw.observationTokens;
-  const reflectAt =
-    ((segTok("tools") + segTok("system-prompt") + mw.reflectionThreshold) / budget) * 100;
-
   return (
     <div className="mx-3 mt-3">
       <div className="mb-1.5 grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
@@ -114,14 +111,11 @@ export function ContextBudgetBar({
       </div>
       <BudgetBar breakdown={breakdown} cache={cache} />
 
-      <div className="relative mt-1 h-7 t-caption face-mono text-ink-2">
-        <span
-          className="absolute top-0 -translate-x-full pr-2 whitespace-nowrap"
-          style={{ left: `${reflectAt}%` }}
-        >
+      <div className="mt-1 grid grid-cols-2 gap-3 t-caption face-mono text-ink-2">
+        <span className="whitespace-nowrap">
           reflect {fmtTok(mw.reflectionThreshold)}
         </span>
-        <span className="absolute right-0 bottom-0 whitespace-nowrap">
+        <span className="text-right whitespace-nowrap">
           observe {fmtTok(mw.observationThreshold)}
         </span>
       </div>
@@ -179,20 +173,24 @@ export function ContextRibbon({
             cache={cache}
             className="relative flex h-1.5 items-stretch overflow-hidden"
           />
-          <span className="absolute bottom-[calc(100%+8px)] left-0 hidden w-max max-w-[220px] flex-col gap-[3px] px-2.5 py-2 group-hover/ribbon:flex group-focus-visible/ribbon:flex">
+          <span className="absolute right-0 bottom-[calc(100%+6px)] z-[8] hidden w-[280px] max-w-[calc(100vw-2rem)] flex-col gap-1 border-[0.5px] border-line-2 on-artifact px-2.5 py-2 shadow-sm group-hover/ribbon:flex group-focus-within/ribbon:flex">
             {rows.map((row) => (
-              <span className="flex items-center gap-1.5 whitespace-nowrap" key={row.id}>
+              <span
+                className="grid grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-x-2"
+                key={row.id}
+              >
                 <span className="size-2 flex-none" style={{ backgroundColor: tone(row.id) }} />
-                {row.label}
-
-                {row.active ? <span className="ml-1">⟲</span> : null}
-                <span className="ml-auto">
+                <span className="min-w-0 truncate">
+                  {row.label}
+                  {row.active ? " · active" : ""}
+                </span>
+                <span className="text-right face-mono whitespace-nowrap">
                   {fmtTok(row.tok)}
                   {row.cap ? ` / ${fmtTok(row.cap)}` : ""}
                 </span>
               </span>
             ))}
-            <span className="mt-0.5">
+            <span className="mt-0.5 border-t-[0.5px] border-line pt-1.5 t-caption text-ink-2">
               {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
             </span>
           </span>

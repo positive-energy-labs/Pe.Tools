@@ -52,9 +52,9 @@ export function TargetWorld() {
   const chip = chipDescriptor(resolution);
   const options = worldTrunk.feed(fleet).options ?? [];
   return (
-    <div className={cn(chatStyles.chatTarget0(), "border-b-0 py-2")}>
+    <div className={cn(chatStyles.chatTarget0(), "border-b-0 py-2.5")}>
       <div className={cn(chatStyles.chatTarget1(), "mb-1")}>
-        <span className={cn(chatStyles.chatTarget2(), "text-ink")}>Target</span>
+        <span className={cn(chatStyles.chatTarget2(), "text-ink")}>World target</span>
         <span className={chatStyles.chatTarget3()}>{chip.tone}</span>
       </div>
 
