@@ -7,6 +7,7 @@ const canonicalFixtures: Record<
   { canonicalReviewUrl: string; fixtureKind: "inherent-static" | "query-fixture" } | undefined
 > = {
   "/": { canonicalReviewUrl: "/", fixtureKind: "inherent-static" },
+  "/chat": { canonicalReviewUrl: "/chat?source=fixture", fixtureKind: "query-fixture" },
   "/data-tables": {
     canonicalReviewUrl: "/data-tables?source=fixture",
     fixtureKind: "query-fixture",
@@ -15,6 +16,17 @@ const canonicalFixtures: Record<
   "/families": { canonicalReviewUrl: "/families?source=fixture", fixtureKind: "query-fixture" },
   "/family": { canonicalReviewUrl: "/family?source=fixture", fixtureKind: "query-fixture" },
   "/grilles": { canonicalReviewUrl: "/grilles", fixtureKind: "inherent-static" },
+  "/instances": { canonicalReviewUrl: "/instances?source=fixture", fixtureKind: "query-fixture" },
+  "/ops": { canonicalReviewUrl: "/ops?source=fixture", fixtureKind: "query-fixture" },
+  "/parameter-links": {
+    canonicalReviewUrl: "/parameter-links?source=fixture",
+    fixtureKind: "query-fixture",
+  },
+  "/runs": { canonicalReviewUrl: "/runs?source=fixture", fixtureKind: "query-fixture" },
+  "/schedule-grid": {
+    canonicalReviewUrl: "/schedule-grid?source=fixture",
+    fixtureKind: "query-fixture",
+  },
   "/settings": { canonicalReviewUrl: "/settings?source=fixture", fixtureKind: "query-fixture" },
   "/takeoffs": {
     canonicalReviewUrl: "/takeoffs?source=fixture",
