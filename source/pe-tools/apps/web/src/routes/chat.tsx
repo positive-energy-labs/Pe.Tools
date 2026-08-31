@@ -4,6 +4,7 @@ import { MODES } from "#/workbench/depth";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { ChatShell } from "#/components/chat-shell";
 import { CHAT_PLUGIN_ROUTES } from "#/workbench/route-chat-plugins";
+import { FixtureWorkbenchProvider } from "#/workbench/fixture";
 
 /**
  * Chat URL state — the single home for navigable/shareable state. TanStack Router owns all of it
@@ -21,7 +22,7 @@ export const PROMPT_MAX = 200;
 
 const DEFAULTS = { mode: "threads" as const };
 
-const chatSearchSchema = z.object({
+export const chatSearchSchema = z.object({
   thread: z.string().optional(),
   // .catch keeps stale bookmarks (e.g. the old mode=chat) from throwing — they fall back to default.
   mode: z
@@ -32,6 +33,7 @@ const chatSearchSchema = z.object({
   plugin: z.enum(CHAT_PLUGIN_ROUTES).optional().catch(undefined),
   target: z.string().optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
+  source: z.literal("fixture").optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/chat")({
@@ -43,7 +45,22 @@ export const Route = createFileRoute("/chat")({
 });
 
 function RouteComponent() {
-  const { plugin, thread, turn } = Route.useSearch();
+  const { plugin, source, thread, turn } = Route.useSearch();
+  return <ChatRouteContent plugin={plugin} source={source} thread={thread} turn={turn} />;
+}
+
+export function ChatRouteContent({
+  plugin,
+  source,
+  thread,
+  turn,
+}: Pick<z.infer<typeof chatSearchSchema>, "plugin" | "source" | "thread" | "turn">) {
+  if (source === "fixture")
+    return (
+      <FixtureWorkbenchProvider>
+        <ChatShell initialTurn={turn} plugin={plugin} />
+      </FixtureWorkbenchProvider>
+    );
   return (
     <WorkbenchProvider key={thread ?? "draft"}>
       <ChatShell initialTurn={turn} plugin={plugin} />

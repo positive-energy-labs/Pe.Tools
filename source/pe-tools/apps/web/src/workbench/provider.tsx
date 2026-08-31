@@ -57,7 +57,7 @@ const MESSAGE_LIMIT = 200;
 type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["session"]>;
 
 /** Connection handshake — which controller/session the native routes drive. */
-interface WorkbenchContextValue {
+export interface WorkbenchContextValue {
   store: ChatPageStore;
   config: WorkbenchEndpointConfig;
   chat: ChatState;
@@ -81,7 +81,7 @@ interface WorkbenchContextValue {
   setAccessLevel: (accessLevel: AccessLevel) => Promise<void>;
 }
 
-const WorkbenchContext = createContext<WorkbenchContextValue | undefined>(undefined);
+export const WorkbenchContext = createContext<WorkbenchContextValue | undefined>(undefined);
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const config = useMemo(() => resolveWorkbenchConfig(), []);
@@ -401,7 +401,10 @@ export function useWorkbench(): WorkbenchContextValue {
 }
 
 /** Drop a resolved call from both native gates (single-slot approval, keyed suspensions). */
-function withoutGate(display: ChatState["display"], toolCallId: string): ChatState["display"] {
+export function withoutGate(
+  display: ChatState["display"],
+  toolCallId: string,
+): ChatState["display"] {
   const suspensions = { ...display.pendingSuspensions };
   delete suspensions[toolCallId];
   return {
