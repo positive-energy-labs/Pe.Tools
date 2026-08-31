@@ -363,5 +363,11 @@ export function createFixtureFamiliesStore(registry: AtomRegistry.AtomRegistry) 
       }),
     },
   });
+  registry.set(store.atoms.draft, fixtureFamiliesDraft);
+  registry.set(store.atoms.applied, {
+    placementScope: fixtureFamiliesDraft.placement,
+    categoryNames: fixtureFamiliesDraft.categories,
+    familyNames: fixtureFamiliesDraft.families,
+  });
   return store;
 }

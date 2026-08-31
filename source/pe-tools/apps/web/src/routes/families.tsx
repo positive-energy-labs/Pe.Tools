@@ -1,11 +1,6 @@
-import { useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
-import {
-  createFixtureFamiliesStore,
-  fixtureFamiliesDraft,
-  fixtureFamilyRows,
-} from "#/families/fixture";
+import { createFixtureFamiliesStore, fixtureFamilyRows } from "#/families/fixture";
 import { createLiveFamiliesHost } from "#/families/host";
 import { createFamiliesStore } from "#/families/store";
 import { FamiliesWorkspace } from "#/families/workspace";
@@ -39,10 +34,6 @@ export function FamiliesRouteContent({ source }: { source?: "fixture" }) {
 
 export function FamiliesFixtureRoute() {
   const store = useRouteStore(() => createFixtureFamiliesStore(appAtomRegistry));
-  useEffect(() => {
-    store.actions.setDraft(fixtureFamiliesDraft);
-    void store.actions.applyScope().catch(() => undefined);
-  }, [store]);
   return <FamiliesWorkspace store={store} fixtureFamilies={fixtureFamilyRows} />;
 }
 

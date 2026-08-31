@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+
+import { createFixtureFamiliesStore, fixtureFamiliesDraft } from "#/families/fixture";
 
 const callHostRpc = vi.hoisted(() => vi.fn());
 vi.mock("#/host/client", () => ({ callHostRpc }));
@@ -25,12 +29,26 @@ describe("families fixture route", () => {
       thread: undefined,
     });
 
+    const registry = AtomRegistry.make();
+    const fixtureStore = createFixtureFamiliesStore(registry);
+    expect(registry.get(fixtureStore.atoms.applied)).toEqual({
+      placementScope: fixtureFamiliesDraft.placement,
+      categoryNames: fixtureFamiliesDraft.categories,
+      familyNames: fixtureFamiliesDraft.families,
+    });
+    expect(registry.get(fixtureStore.atoms.busy)).toBeNull();
+    expect(registry.get(fixtureStore.atoms.failure)).toBeNull();
+    fixtureStore.dispose();
+    registry.dispose();
+
     render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <FamiliesRouteContent source="fixture" />
-      </QueryClientProvider>,
+      <StrictMode>
+        <QueryClientProvider
+          client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+        >
+          <FamiliesRouteContent source="fixture" />
+        </QueryClientProvider>
+      </StrictMode>,
     );
 
     expect(await screen.findByText(/6 families .* 14 types .* 10 parameters/)).toBeTruthy();
@@ -43,6 +61,11 @@ describe("families fixture route", () => {
     expect(await screen.findByText("3 uncommon params hidden")).toBeTruthy();
     expect(await screen.findByText("3 actions")).toBeTruthy();
     expect(await screen.findByText("0 actions")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByText("resolving families")).toBeNull();
+      expect(screen.queryByText(/apply-scope failed/)).toBeNull();
+      expect(screen.queryByText(/scope applied to/)).toBeNull();
+    });
     expect(callHostRpc).not.toHaveBeenCalled();
   });
 });
