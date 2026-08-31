@@ -1,4 +1,10 @@
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+  useLocation,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { RegistryContext, useAtomSet, useAtomValue } from "@effect/atom-react";
@@ -50,9 +56,19 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
   component: RootComponent,
 });
 
-function RootComponent() {
+export function RootComponent() {
+  const fixture = useLocation({ select: (location) => location.search.source === "fixture" });
+  return (
+    <>
+      {!fixture && <HostLiveInvalidation />}
+      <Outlet />
+    </>
+  );
+}
+
+function HostLiveInvalidation() {
   useHostLiveInvalidation();
-  return <Outlet />;
+  return null;
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {

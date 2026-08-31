@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
@@ -77,10 +77,20 @@ export function TakeoffsRoute() {
   const { source } = Route.useSearch();
   const fixtureAddress = address("C:\\Fixtures\\project-a Residence.rvt");
   return source === "fixture" ? (
-    <TakeoffsStoreOwner source="fixture" documentAddress={fixtureAddress} />
+    <FixtureTakeoffsRoute documentAddress={fixtureAddress} />
   ) : (
     <LiveTakeoffsRoute />
   );
+}
+
+function FixtureTakeoffsRoute({
+  documentAddress,
+}: {
+  documentAddress: import("@pe/agent-contracts").Address;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted ? <TakeoffsStoreOwner source="fixture" documentAddress={documentAddress} /> : null;
 }
 
 export function LiveTakeoffsRoute() {
