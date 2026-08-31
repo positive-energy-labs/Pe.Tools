@@ -14,10 +14,16 @@ import { SAMPLE_DOC } from "#/grounded-doc/sample";
  * to highlight (and scroll) the other. The engine + view are standalone —
  * this route is just a harness around them.
  */
-export const Route = createFileRoute("/doc-lab")({ component: DocLabRoute });
+export const Route = createFileRoute("/doc-lab")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    source: search.source === "fixture" ? ("fixture" as const) : undefined,
+  }),
+  component: DocLabRoute,
+});
 
 function DocLabRoute() {
-  const engine = useGroundedDoc();
+  const { source } = Route.useSearch();
+  const engine = useGroundedDoc({ initialDoc: source === "fixture" ? SAMPLE_DOC : undefined });
   const focusedBlock = engine.blockById(engine.focus?.blockId);
   const focusedImage = engine.imageById(engine.focus?.blockId);
   const focused = focusedBlock
