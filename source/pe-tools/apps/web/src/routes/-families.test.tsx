@@ -33,10 +33,16 @@ describe("families fixture route", () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByText("1 families · 1 types · 1 parameters")).toBeTruthy();
-    expect(await screen.findByText(/1 of 1 planned families included/)).toBeTruthy();
-    expect(screen.getAllByText("Desk").length).toBeGreaterThan(0);
-    expect(await screen.findByText("1 action")).toBeTruthy();
+    expect(await screen.findByText(/6 families .* 14 types .* 10 parameters/)).toBeTruthy();
+    expect(
+      await screen.findByText(/3 of 5 planned families included .* 1 in scope but unclaimed/),
+    ).toBeTruthy();
+    expect(screen.getAllByText("VAV Terminal").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Supply Diffuser").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Water Closet").length).toBeGreaterThan(0);
+    expect(await screen.findByText("3 uncommon params hidden")).toBeTruthy();
+    expect(await screen.findByText("3 actions")).toBeTruthy();
+    expect(await screen.findByText("0 actions")).toBeTruthy();
     expect(callHostRpc).not.toHaveBeenCalled();
   });
 });
