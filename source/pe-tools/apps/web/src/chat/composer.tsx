@@ -132,8 +132,8 @@ export function Composer({
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         event.preventDefault();
         const step = event.key === "ArrowDown" ? 1 : -1;
-        setActiveCommand((current) =>
-          (current + step + visibleMatches.length) % visibleMatches.length,
+        setActiveCommand(
+          (current) => (current + step + visibleMatches.length) % visibleMatches.length,
         );
         return;
       }
