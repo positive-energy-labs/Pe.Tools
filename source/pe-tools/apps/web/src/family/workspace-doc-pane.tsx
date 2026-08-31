@@ -324,7 +324,7 @@ export function FamilyWorkspaceDocPane() {
         {/* proposals — margin annotations, docked as a stack above the spec */}
         <div className="p-2">
           <p
-            className="mb-1 t-label t-upper text-pea-ink"
+            className="mb-1 t-label t-upper text-ink-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
           >
             pea proposes — ephemeral, page-scoped
