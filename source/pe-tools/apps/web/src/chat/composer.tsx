@@ -1,7 +1,9 @@
 import { chatStyles } from "#/components/lang/chat-appearance";
 import {
+  useId,
   useMemo,
   useRef,
+  useState,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -52,6 +54,9 @@ export function Composer({
       attachments: typeof value === "function" ? value(previous.attachments) : value,
     }));
   const fileRef = useRef<HTMLInputElement>(null);
+  const menuId = useId();
+  const [activeCommand, setActiveCommand] = useState(0);
+  const [menuDismissed, setMenuDismissed] = useState(false);
 
   const commands = useMemo<SlashCommand[]>(
     () => [
@@ -67,7 +72,11 @@ export function Composer({
     slash !== undefined
       ? commands.filter((command) => command.name.toLowerCase().startsWith(slash))
       : [];
-  const showMenu = slash !== undefined && !text.includes(" ") && matches.length > 0;
+  const visibleMatches = matches.slice(0, 6);
+  const activeIndex = activeCommand % Math.max(visibleMatches.length, 1);
+  const selectedCommand = visibleMatches[activeIndex];
+  const showMenu =
+    !menuDismissed && slash !== undefined && !text.includes(" ") && visibleMatches.length > 0;
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !isRunning;
 
   const runBuiltin = (name: string): boolean => {
@@ -119,11 +128,26 @@ export function Composer({
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-    if (showMenu && event.key === "Tab") {
-      event.preventDefault();
-      const first = matches[0];
-      if (first) pick(first);
-      return;
+    if (showMenu) {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        setActiveCommand((current) =>
+          (current + step + visibleMatches.length) % visibleMatches.length,
+        );
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setMenuDismissed(true);
+        return;
+      }
+      if ((event.key === "Enter" && !event.shiftKey) || (event.key === "Tab" && !event.shiftKey)) {
+        event.preventDefault();
+        if (selectedCommand) pick(selectedCommand);
+        return;
+      }
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -142,6 +166,7 @@ export function Composer({
     <form onSubmit={submit} className={chatStyles.composer0()}>
       {showMenu ? (
         <div
+          id={menuId}
           role="listbox"
           aria-label="Commands"
           className={cn(
@@ -149,10 +174,17 @@ export function Composer({
             "right-2 left-2 z-[8] mb-1.5 max-h-52 w-auto overflow-x-hidden overflow-y-auto p-1 shadow-sm [&>button]:w-full",
           )}
         >
-          {matches.slice(0, 6).map((command) => (
+          {visibleMatches.map((command, index) => (
             <Press
               key={`${command.kind}:${command.name}`}
+              id={`${menuId}-${index}`}
               type="button"
+              role="option"
+              tabIndex={-1}
+              aria-selected={index === activeIndex}
+              state={index === activeIndex ? "selected" : "rest"}
+              onMouseEnter={() => setActiveCommand(index)}
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => pick(command)}
             >
               <PressContent geometry="baseline">
@@ -199,13 +231,23 @@ export function Composer({
         <div className={cn(chatStyles.composer8(), "px-2 py-1.5")}>
           <Textarea
             name="input"
+            aria-label="Message"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-expanded={showMenu}
+            aria-controls={showMenu ? menuId : undefined}
+            aria-activedescendant={showMenu ? `${menuId}-${activeIndex}` : undefined}
             size="compact"
             surface="embedded"
             placeholder="Ask Pea…  ( / for commands )"
             rows={1}
             autoFocus
             value={text}
-            onChange={(event) => setText(event.currentTarget.value)}
+            onChange={(event) => {
+              setText(event.currentTarget.value);
+              setActiveCommand(0);
+              setMenuDismissed(false);
+            }}
             onKeyDown={onKeyDown}
           />
           {/* Control row: attachments + session controls (model/access) left, send right. */}
