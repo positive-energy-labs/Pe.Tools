@@ -13,6 +13,33 @@ Delete this file when phase 5 completes. Verdicts live in `LEDGER.md` Decided (2
 | 4 | Re-cutover chat, takeoffs, family, then families, settings. Per-route clean-room allowed here only. Baselines shrink substantially | per-route visual proof; baseline deltas recorded | open |
 | 5 | Nits: 3 owed fixes from `.artifacts/handoffs/2026-08-31-web-dom-perf-census.md`, pane-hotkeys port if adopted, `TODO:`/`SHIM:` harvest | census greps clean | open |
 
+## Phase 2 frontier — route-state demiurge (round 1, 2026-08-31)
+
+Inputs: `.artifacts/runs/route-census-20260831/report.md`,
+`.artifacts/handoffs/2026-08-31-pane-hotkeys-implications.md`, DOM-perf census MasterTable ruling.
+
+Nouns (first principles): **lane** (live|fixture; today two spellings), **binding**
+(none|document|world; today 9 `RouteDocument` sites, one hand-rolled world gate, `/data-tables`
+ungated with live writes), **route document** (server-owned slice, SDK `RouteStateSpec`, LAW),
+**verbs** (busy/failure/receipt core), **feeds** (`TimedRead` provenance), **view state**
+(atoms-vs-useState split), **address** (URL schema; 7 routes validate `thread` and never read it),
+**workspace** (4 composition families; two pane files `components/lang/pane.tsx` and
+`components/ui/pane.tsx`), **shortcuts** (2 APIs, 4 Escape guard policies, 1 unguarded).
+Legacy nouns that may not survive: `workbench/` as home for route plumbing; `anatomy/Workspace`
+wrapper that sometimes renders no `PaneWorkspace`.
+
+Shapes on the table (verdict owed, re-openable):
+
+- S1 prose+patch: document the pattern, fix gate/param bugs, change no structure.
+- S2 route shell: one `defineAppRoute({ address, binding, store, workspace, shortcuts })` deep
+  module; shell owns lane, gate, store lifecycle, workspace, keyboard; `route-guard.test.ts`
+  enforces; routes become declarations. Recommended.
+- S3 routes-as-data: scaffolding generated from `RouteStateSpec`; only the 9 spec-backed routes
+  fit; deferred-compatible with S2.
+- S4 store-first canon: bless the domain-store pattern, migrate the three `useRouteState` routes
+  into it, leave layout/URL/keyboard free. Argued against: canonizes the heaviest boilerplate and
+  settles one axis of five.
+
 ## Laws for this effort
 
 - The SDK contract is fixed; only web-side state shape changes (LEDGER Decided 2026-08-31).
