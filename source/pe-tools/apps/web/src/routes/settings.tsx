@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
@@ -22,6 +22,7 @@ import { timeAgo } from "#/lib/utils";
 import { schemaFormModel } from "#/settings-panes/schema-form";
 import { SETTINGS_PRODUCT, type SettingsSlot } from "#/settings/product";
 import { createLiveSettingsHost } from "#/settings/host";
+import { createFixtureSettingsStore, fixtureSettingsPicker } from "#/settings/fixture";
 import { createSettingsStore, type SettingsStore } from "#/settings/store";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
@@ -29,18 +30,34 @@ import { TargetingHead } from "#/targeting/head";
 import { RouteDocument } from "#/workbench/route-document";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 
+export const settingsSearch = (
+  search: Record<string, unknown>,
+): { thread?: string; source?: "fixture" } => ({
+  thread:
+    typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
+  source: search.source === "fixture" ? "fixture" : undefined,
+});
+
 export const Route = createFileRoute("/settings")({
-  validateSearch: (search: Record<string, unknown>): { thread?: string } => ({
-    thread:
-      typeof search.thread === "string" && search.thread.trim() ? search.thread.trim() : undefined,
-  }),
+  validateSearch: settingsSearch,
   component: SettingsRoute,
 });
 
 function SettingsRoute() {
+  return <SettingsRouteContent source={Route.useSearch().source} />;
+}
+
+export function SettingsRouteContent({ source }: { source?: "fixture" }) {
+  if (source === "fixture") return <SettingsFixtureRoute />;
   return (
     <RouteDocument>{(at) => <SettingsStoreOwner key={at} documentAddress={at} />}</RouteDocument>
   );
+}
+
+function SettingsFixtureRoute() {
+  const store = useRouteStore(() => createFixtureSettingsStore(appAtomRegistry));
+  useEffect(() => store.actions.setPicker(fixtureSettingsPicker), [store]);
+  return <SettingsWorkspace store={store} />;
 }
 
 function SettingsStoreOwner({
