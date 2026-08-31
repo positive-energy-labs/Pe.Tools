@@ -16,7 +16,7 @@ import { tv } from "#/lib/tv";
 export const comboboxRecipe = tv({
   slots: {
     trigger: "[&_svg:not([class*='size-'])]:size-3.5",
-    list: "no-scrollbar max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
+    list: "no-scrollbar max-h-[min(15.75rem,calc(var(--available-height)-2.25rem))] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
     item: "relative flex min-h-7 w-full cursor-default items-center gap-2 rounded-md px-2 py-1 t-value outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink not-data-[variant=destructive]:data-highlighted:**:text-ink data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
     empty:
       "hidden w-full justify-center py-2 text-center t-value text-ink-2 group-data-empty/combobox-content:flex",
@@ -27,7 +27,18 @@ export const comboboxRecipe = tv({
   },
 });
 
-const Combobox = Primitive.Root;
+const ComboboxMultipleContext = React.createContext(false);
+
+function Combobox<Value, Multiple extends boolean | undefined = false>(
+  props: Primitive.Root.Props<Value, Multiple>,
+) {
+  return (
+    <ComboboxMultipleContext.Provider value={props.multiple === true}>
+      <Primitive.Root {...props} />
+    </ComboboxMultipleContext.Provider>
+  );
+}
+
 const ComboboxValue = (props: Omit<Primitive.Value.Props, "className">) => (
   <Primitive.Value data-slot="combobox-value" {...props} />
 );
@@ -88,6 +99,7 @@ function ComboboxContent({
   ...props
 }: Omit<Primitive.Popup.Props, "className"> &
   Pick<Primitive.Positioner.Props, "side" | "align" | "sideOffset" | "alignOffset" | "anchor">) {
+  const multiple = React.useContext(ComboboxMultipleContext);
   return (
     <Primitive.Portal>
       <Primitive.Positioner
@@ -100,8 +112,8 @@ function ComboboxContent({
       >
         <Primitive.Popup
           data-slot="combobox-content"
-          data-chips={!!anchor}
-          className="group/combobox-content relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-[calc(var(--anchor-width)+--spacing(7))] origin-(--transform-origin) overflow-hidden rounded-lg bg-artifact text-ink ring-1 ring-line duration-control data-[chips=true]:min-w-(--anchor-width) data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-7 *:data-[slot=input-group]:border-none *:data-[slot=input-group]:bg-line/20 *:data-[slot=input-group]:shadow-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          data-multiple={multiple}
+          className="group/combobox-content relative max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) min-w-40 overflow-hidden rounded-lg bg-artifact text-ink ring-1 ring-line data-[multiple=true]:min-w-(--anchor-width) *:data-[slot=input-group]:m-1 *:data-[slot=input-group]:mb-0 *:data-[slot=input-group]:h-7 *:data-[slot=input-group]:border-none *:data-[slot=input-group]:bg-line/20 *:data-[slot=input-group]:shadow-none"
           {...props}
         />
       </Primitive.Positioner>

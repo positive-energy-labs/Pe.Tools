@@ -235,5 +235,6 @@ export const PULSE_CSS = "@keyframes tp-pulse{0%,100%{opacity:.15}50%{opacity:1}
 export const POP: React.CSSProperties = {
   border: `1px solid ${token("line-2")}`,
   backgroundColor: token("page"),
-  minWidth: 320,
+  width: 320,
+  maxWidth: "calc(100vw - 16px)",
 };

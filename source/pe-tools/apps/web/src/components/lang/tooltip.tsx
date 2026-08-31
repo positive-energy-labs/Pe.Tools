@@ -7,7 +7,8 @@ export const tooltipRecipe = tv({
   slots: {
     trigger: "inline-flex items-center justify-center transition-colors",
     positioner: "z-popup",
-    popup: "max-w-sm border border-line-2 on-artifact px-3 py-2 t-label text-ink-2",
+    popup:
+      "max-h-(--available-height) max-w-[min(24rem,var(--available-width))] overflow-y-auto overscroll-contain border border-line-2 on-artifact px-3 py-2 t-label text-ink-2",
   },
   variants: {
     kind: {

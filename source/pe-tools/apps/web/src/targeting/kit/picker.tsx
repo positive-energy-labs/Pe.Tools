@@ -155,7 +155,7 @@ export function Picker<K extends string>({
               color: token("ink"),
             }}
           />
-          <div className="max-h-64 overflow-y-auto py-1">
+          <div className="max-h-[min(16rem,calc(100dvh-6rem))] overflow-y-auto py-1">
             {opts === null ? (
               <div className="px-2 py-1" style={{ color: token("caution") }}>
                 no legal options — needs {cur.needs}

@@ -11,7 +11,7 @@ export const selectRecipe = tv({
     icon: "text-ink-2",
     positioner: "isolate z-popup outline-none",
     content:
-      "z-popup max-h-(--available-height) min-w-(--anchor-width) origin-(--transform-origin) overflow-y-auto rounded-lg bg-artifact p-1 text-ink ring-1 ring-line outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+      "z-popup max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) overflow-y-auto rounded-lg bg-artifact p-1 text-ink ring-1 ring-line outline-none",
     item: "relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-8 pl-2 t-value outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink data-disabled:pointer-events-none data-disabled:opacity-50",
     indicator: "pointer-events-none absolute right-2 flex items-center justify-center",
     check: "size-3.5",

@@ -9,10 +9,9 @@ import { X as RiCloseLine } from "lucide-react";
 
 export const dialogRecipe = tv({
   slots: {
-    overlay:
-      "fixed inset-0 isolate z-modal bg-scrim duration-control supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+    overlay: "fixed inset-0 isolate z-modal bg-scrim supports-backdrop-filter:backdrop-blur-xs",
     content:
-      "fixed top-1/2 left-1/2 z-modal grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg bg-artifact p-4 t-value text-ink ring-1 ring-line duration-control outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+      "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg bg-artifact p-4 t-value text-ink ring-1 ring-line outline-none sm:max-w-sm",
     header: "flex flex-col gap-1",
     footer: "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
     title: "t-title",
