@@ -44,10 +44,15 @@ export interface GroundedDocEngine {
 const EMPTY_BLOCKS: GroundedBlock[] = [];
 const EMPTY_IMAGES: DocImage[] = [];
 
-export function useGroundedDoc(options?: { parseUrl?: string }): GroundedDocEngine {
+export function useGroundedDoc(options?: {
+  parseUrl?: string;
+  initialDoc?: ParsedDocView;
+}): GroundedDocEngine {
   const parseUrl = options?.parseUrl ?? "/api/pdf-audit/parse";
-  const [doc, setDocState] = useState<ParsedDocView | null>(null);
-  const [status, setStatus] = useState<GroundedDocStatus>({ phase: "empty" });
+  const [doc, setDocState] = useState<ParsedDocView | null>(options?.initialDoc ?? null);
+  const [status, setStatus] = useState<GroundedDocStatus>(
+    options?.initialDoc ? { phase: "ready" } : { phase: "empty" },
+  );
   const [hover, setHover] = useState<BlockFocus | null>(null);
   const [pinned, setPinned] = useState<BlockFocus | null>(null);
   const loadSeq = useRef(0);
