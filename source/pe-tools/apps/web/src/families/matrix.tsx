@@ -32,21 +32,32 @@ export function FamiliesMatrix() {
         onTableStateChange={store.actions.setTable}
         chips={chips}
         summary={
-          <span className="flex items-center gap-2">
-            <span title="Every family, type, and parameter the applied scope resolved to. Uncommon parameter columns may be hidden — the chip beside this says how many.">
-              {totalFamilies} families · {totalTypes} types · {params.length} parameters
+          <span className="inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1">
+            <span
+              className="text-ink"
+              title="Every family and type the applied scope resolved to."
+            >
+              {totalFamilies} families · {totalTypes} types
             </span>
-            <Verb
-              label="project → profile"
-              onClick={() => runProject()}
-              busy={busy === "project"}
-              disabled={pickedIds.size === 0}
-              reason={
-                pickedIds.size === 0
-                  ? "Nothing picked. Tick families in the pick column — projection runs the audit backwards, so it needs a source to read."
-                  : `Run the audit backwards: read ${pickedIds.size} picked famil${pickedIds.size === 1 ? "y" : "ies"} out of the model as profile JSON, so an existing family can seed a profile instead of being reconciled against one. Read-only.`
-              }
-            />
+            <span
+              className="text-ink-mute"
+              title="Every parameter the applied scope resolved to. Uncommon columns may be hidden by the chip beside this."
+            >
+              {params.length} fields
+            </span>
+            <span className="border-l border-line pl-2">
+              <Verb
+                label="project → profile"
+                onClick={() => runProject()}
+                busy={busy === "project"}
+                disabled={pickedIds.size === 0}
+                reason={
+                  pickedIds.size === 0
+                    ? "Nothing picked. Tick families in the pick column — projection runs the audit backwards, so it needs a source to read."
+                    : `Run the audit backwards: read ${pickedIds.size} picked famil${pickedIds.size === 1 ? "y" : "ies"} out of the model as profile JSON, so an existing family can seed a profile instead of being reconciled against one. Read-only.`
+                }
+              />
+            </span>
           </span>
         }
         empty={

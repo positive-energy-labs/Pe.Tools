@@ -59,10 +59,10 @@ export function FamiliesScopeBand() {
       )}
 
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1">
         <SectionLabel>
           <span title="Which families the table loads at all. Scope is a DRAFT until you apply it — the matrix op is the expensive one, so it never fires on a click.">
-            scope
+            draft
           </span>
         </SectionLabel>
         <div className="face-mono w-32">
@@ -150,13 +150,13 @@ export function FamiliesScopeBand() {
         ) : (
           <FactChip title="How many families the draft currently commits to. The matrix budget is sized to exactly this number, so nothing is silently truncated.">
             {pickedFamilies.length === draftFamilyNames.length
-              ? `${draftFamilyNames.length} families in draft`
-              : `${pickedFamilies.length} of ${draftFamilyNames.length} families in draft`}
+              ? `${draftFamilyNames.length} families`
+              : `${pickedFamilies.length} / ${draftFamilyNames.length} families`}
           </FactChip>
         )}
       </div>
 
-      <div className="border-b border-line px-4 py-1.5">
+      <div className="border-b border-line px-2 py-1">
         <VerbLane atoms={store.atoms} />
       </div>
       {matrixIssue && (

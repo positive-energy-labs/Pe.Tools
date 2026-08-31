@@ -4,6 +4,7 @@ import type { Column, Verdict } from "#/components/master-table/model";
 import type { FamilyParameterSnapshot } from "#/host/loaded-families-view";
 import { Press } from "#/components/lang/press";
 import type { FamiliesStore } from "#/families/store";
+import { cn } from "#/lib/utils";
 
 const COMMON_SHARE = 0.3;
 
@@ -139,7 +140,7 @@ export function useFamiliesColumns({
         label: "family",
         sort: (row) => row.familyName,
         search: (row) => row.familyName,
-        width: "w-56",
+        width: "w-48",
         cell: (row) => (
           <ReadCell
             value={row.familyName}
@@ -152,7 +153,7 @@ export function useFamiliesColumns({
         label: "type",
         sort: (row) => row.typeName,
         search: (row) => row.typeName,
-        width: "w-40",
+        width: "w-32",
         title:
           "One row per family TYPE, so the family name repeats down the column exactly as a spreadsheet would.",
         cell: (row) => (
@@ -187,6 +188,7 @@ export function useFamiliesColumns({
       {
         key: "plan-state",
         label: "plan",
+        width: "w-28",
         title:
           "What the compiled plan says about this family. The plan is a LENS: it tints rows and fills the decision queue, but it never hides a family or narrows the scope you asked for.",
         verdict: (row) => familyState(row.familyId),
@@ -201,7 +203,7 @@ export function useFamiliesColumns({
         group: cluster,
         title: `${col.name} — a ${col.kind} bound per ${col.isInstance ? "instance" : "type"}, present on ${col.familyCount} of ${totalFamilies} families in scope. That share is what put it in the "${cluster}" cluster; uncommon ones are hidden until you clear their chip.`,
         sort: (row) => row.values[col.key] ?? "",
-        width: "w-28",
+        width: "w-24",
         cell: (row) => {
           const scopeOf = row.scopes[col.key];
           const value = row.values[col.key] ?? "";
@@ -215,6 +217,11 @@ export function useFamiliesColumns({
                  `--cat-lichen`, a TAXONOMY colour carrying a value fact; the language has no
                  "derived" role to move it to, so it drops to the ink ladder
                  and separates from a project binding by italic rather than by hue. */
+              className={cn(
+                scopeOf === "ProjectBindingOnly" && "italic text-ink-mute",
+                row.formulas[col.key] === "Present" && "text-ink-2",
+                value === "Positive Energy" && "text-pea-ink",
+              )}
             />
           );
         },

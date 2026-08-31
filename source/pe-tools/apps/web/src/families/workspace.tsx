@@ -273,25 +273,25 @@ function useFamiliesWorkspaceModel(
     categories:
       applied && applied.categoryNames.length > 0
         ? {
-            label: `categories: ${applied.categoryNames.length}`,
+            label: `categories · ${applied.categoryNames.length}`,
             onClear: () => setDraftCategories([]),
           }
         : null,
     placement:
       placement !== LoadedFamilyPlacementScope.AllLoaded
         ? {
-            label: `placement: ${placement}`,
+            label: `placement · ${placement}`,
             onClear: () => setPlacement(LoadedFamilyPlacementScope.AllLoaded),
           }
         : null,
     uncommon:
       !showUncommon && uncommonCount > 0
-        ? { label: `${uncommonCount} uncommon params hidden`, onClear: () => setShowUncommon(true) }
+        ? { label: `uncommon · ${uncommonCount} hidden`, onClear: () => setShowUncommon(true) }
         : null,
     picked:
       pickedIds.size > 0
         ? {
-            label: `${pickedIds.size} picked for projection Â· esc clears`,
+            label: `projection · ${pickedIds.size} picked · esc`,
             onClear: () => setPickedIds(new Set()),
           }
         : null,

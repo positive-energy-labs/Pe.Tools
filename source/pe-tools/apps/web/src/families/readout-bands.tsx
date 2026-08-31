@@ -7,6 +7,7 @@ import { diagnosticLine } from "#/host/familyfoundry";
 import { familyFlag, provenanceSummary } from "#/families/plan";
 import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
+import { cn } from "#/lib/utils";
 
 export function FamiliesReadoutBands() {
   const { store, plan, includedPlanned, outsideProfile, excludedIds, applyData, projection } =
@@ -14,28 +15,47 @@ export function FamiliesReadoutBands() {
   return (
     <>
       {plan && (
-        <div className="max-h-56 overflow-auto border-b border-line px-4 py-2">
-          <div className="flex items-center gap-2">
+        <div className="max-h-48 overflow-auto border-b border-line px-2 py-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <SectionLabel>
               <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
                 decision queue
               </span>
             </SectionLabel>
-            <FactChip title="Included = ticked here AND carrying at least one lowered action. Unclaimed families are shown for honesty — the profile said nothing about them, so apply will not touch them.">
-              {includedPlanned.length} of {plan.entries.length} planned families included
-              {outsideProfile.length > 0
-                ? ` · ${outsideProfile.length} in scope but unclaimed`
-                : ""}
+            <FactChip title="Included = ticked here AND carrying at least one lowered action.">
+              {includedPlanned.length} / {plan.entries.length} included
             </FactChip>
+            {outsideProfile.length > 0 && (
+              <FactChip title="These families are in scope, but the profile made no claim about them, so apply will not touch them.">
+                {outsideProfile.length} unclaimed
+              </FactChip>
+            )}
           </div>
-          <table className="mt-1 w-full border-collapse">
+          <table className="mt-1 w-full table-fixed border-collapse">
+            <thead className="face-mono t-caption t-upper text-ink-mute">
+              <tr className="border-b border-line">
+                <th className="w-8 font-normal">
+                  <span className="sr-only">include</span>
+                </th>
+                <th className="w-56 text-left font-normal">family</th>
+                <th className="w-20 text-left font-normal">actions</th>
+                <th className="text-left font-normal">profile source</th>
+                <th className="w-80 text-left font-normal">exception</th>
+              </tr>
+            </thead>
             <tbody>
               {plan.entries.map((entry) => {
                 const flag = familyFlag(entry);
                 const excluded = excludedIds.has(entry.familyId);
                 return (
-                  <tr key={entry.familyId} className="border-b border-line">
-                    <td className="w-8">
+                  <tr
+                    key={entry.familyId}
+                    className={cn(
+                      "border-b border-line",
+                      (flag !== null || excluded) && "text-ink-mute",
+                    )}
+                  >
+                    <td className="w-8 text-center">
                       <Press
                         type="button"
                         disabled={flag !== null}
@@ -49,27 +69,31 @@ export function FamiliesReadoutBands() {
                         onClick={() => void store.actions.exclude(entry.familyId)}
                         tone="quiet"
                         size="value"
+                        state={flag !== null ? "disabled" : excluded ? "rest" : "selected"}
                       >
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </Press>
                     </td>
-                    <td className="face-mono t-value">{entry.familyName}</td>
+                    <td className="face-mono t-value w-56 truncate">{entry.familyName}</td>
                     <td
-                      className="face-mono t-value w-24"
+                      className="face-mono t-value w-20 truncate"
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className="face-mono t-caption text-ink-2"
+                      className="face-mono t-caption truncate text-ink-2"
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
                     </td>
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
-                    <td className="t-value text-ink-2 w-64" title={flag ?? ""}>
+                    <td
+                      className="face-mono t-caption w-80 truncate text-ink-mute"
+                      title={flag ?? ""}
+                    >
                       {flag ?? ""}
                     </td>
                   </tr>
@@ -78,14 +102,16 @@ export function FamiliesReadoutBands() {
               {outsideProfile.map((family) => (
                 <tr
                   key={`outside-${family.familyId}`}
-                  className="border-b border-line"
+                  className="border-b border-line opacity-60"
                 >
-                  <td className="w-8">
+                  <td className="w-8 text-center">
                     <span className="face-mono t-value text-ink-2">✕</span>
                   </td>
-                  <td className="face-mono t-value text-ink-mute">{family.familyName}</td>
-                  <td className="face-mono t-value w-24 text-ink-mute">—</td>
-                  <td className="t-value text-ink-mute" colSpan={2}>
+                  <td className="face-mono t-value w-56 truncate text-ink-mute">
+                    {family.familyName}
+                  </td>
+                  <td className="face-mono t-value w-20 text-ink-mute">—</td>
+                  <td className="face-mono t-caption truncate text-ink-mute" colSpan={2}>
                     in scope, but the bound profile does not claim this family
                   </td>
                 </tr>
