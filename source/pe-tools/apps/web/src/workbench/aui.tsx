@@ -187,7 +187,7 @@ function AssistantMoment() {
     <MomentSection id={id} role="assistant">
       <div className="mb-1.5 flex items-center gap-[7px]">
         <TurnTag id={id} />
-        <span className="t-label t-upper text-pea-ink">pea</span>
+        <span className="t-label t-upper text-ink">pea</span>
         <MomentTime />
       </div>
       <div className="grid gap-1">
