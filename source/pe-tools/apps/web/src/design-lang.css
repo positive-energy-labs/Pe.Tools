@@ -171,6 +171,23 @@
   border-bottom: 1px solid var(--pe-line);
 }
 
+/* The row rule that costs no height. A border on a `td` adds to the row box — measured, a
+   20px row with a 1px bottom border renders 21px — so a list-shaped row can only measure
+   --item-h if its rule is drawn INSIDE the cell. A pseudo element, not a box-shadow, so a
+   focus ring composes over it instead of replacing it (annotation round 2, 2026-08-31). */
+@utility hairline-b-inset {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    border-bottom: 1px solid var(--pe-line);
+  }
+}
+
 @utility hairline-rows {
   & > :not(:last-child) {
     border-bottom: 1px solid var(--pe-line);

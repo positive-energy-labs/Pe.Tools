@@ -132,7 +132,7 @@ export function useAtlasColumns({
         sort: ATLAS_COLUMN_SEMANTICS.zone.sort,
         search: (row) => row.zone.zone.key,
         cell: (row) => (
-          <span className="px-1.5">
+          <span className="px-(--item-pad-x)">
             <span
               className="mr-1 size-2"
               style={{ backgroundColor: `rgb(${row.zone.zone.color})` }}
@@ -248,11 +248,11 @@ export function useAtlasColumns({
         // the filterable words themselves: the open flag names, plain ink, no double mark.
         cell: (row) =>
           row.open.length > 0 ? (
-            <span className="px-1.5" title={row.open.join(", ")}>
+            <span className="px-(--item-pad-x)" title={row.open.join(", ")}>
               {row.open.join(", ")}
             </span>
           ) : row.room.decisions.length > 0 ? (
-            <span className="px-1.5">{row.room.decisions.length} decided</span>
+            <span className="px-(--item-pad-x)">{row.room.decisions.length} decided</span>
           ) : null,
       },
       {

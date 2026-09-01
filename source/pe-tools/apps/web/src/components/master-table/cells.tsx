@@ -99,7 +99,7 @@ export function CellSelect({
         if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
       }}
       className={cn(
-        "face-mono h-(--item-h) w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-select",
+        "face-mono h-(--item-h) w-full min-w-0 truncate rounded-none border-0 bg-transparent px-(--item-pad-x) outline-none focus:bg-select",
         invalid && "alarm-wash text-alarm",
         className,
       )}

@@ -4,7 +4,10 @@ import { tv, type VariantProps } from "#/lib/tv";
 import "./lang.css";
 
 export const pressRecipe = tv({
-  base: "cursor-pointer appearance-none border border-transparent bg-transparent focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
+  // `min-w-0`: a press is a flex/grid item wherever it sits in a row, and min-width:auto let
+  // its content push the row wider than the rail it lives in (measured, 2026-08-31). Its
+  // children own their own truncation.
+  base: "min-w-0 cursor-pointer appearance-none border border-transparent bg-transparent focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
   variants: {
     hover: {
       veil: "enabled:hover:veil",

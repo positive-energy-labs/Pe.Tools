@@ -69,8 +69,7 @@ export class RouteWorkspace {
       if (route.includes(":")) throw new Error(`route name '${route}' cannot contain ':'`);
       if (this.#registry.has(route)) throw new Error(`duplicate route '${route}'`);
       toJsonSchema(registration.spec.schema);
-      for (const command of Object.values(registration.spec.commands))
-        toJsonSchema(command.input);
+      for (const command of Object.values(registration.spec.commands)) toJsonSchema(command.input);
       this.#registry.set(route, registration);
     }
   }
@@ -286,8 +285,8 @@ export class RouteWorkspace {
             "error",
             errorMessage,
             guarded.command.mutatesExternal
-            ? "the external outcome is unknown; recover before another external mutation."
-            : "the command handler threw.",
+              ? "the external outcome is unknown; recover before another external mutation."
+              : "the command handler threw.",
           ),
         );
       }
@@ -379,8 +378,7 @@ const envelopeSchema = z.object({
 
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
   const parsed = envelopeSchema.safeParse(raw);
-  if (!parsed.success)
-    throw new Error(`invalid persisted envelope for route '${spec.route}'`);
+  if (!parsed.success) throw new Error(`invalid persisted envelope for route '${spec.route}'`);
   const doc = spec.schema.safeParse(parsed.data.doc);
   if (!doc.success) throw new Error(`invalid persisted document for route '${spec.route}'`);
   return {

@@ -36,6 +36,7 @@
  *   hairline so the shape has an edge, italic secondary ink so it is plainly not for pressing.
  *   A refusal a newcomer cannot decipher is indistinguishable from a rendering bug.
  */
+import { createContext, useContext } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, type LucideIcon } from "lucide-react";
 
 import { tv } from "#/lib/tv";
@@ -107,6 +108,19 @@ export type VerbProps =
       icon?: never;
     });
 
+/**
+ * CHROME (a pane header, ruled at annotation round 2, 2026-08-31): the un-gagged commit verb's
+ * reason renders as a PARAGRAPH, which a 32px header has no room for — measured, the `/family`
+ * parameters header's action row was 48px inside a 32px header with two 36ch paragraphs wrapping
+ * to three lines under the verbs beside them. In chrome a refusal renders as `title` like every
+ * other tone; the inline paragraph belongs to ceremony strips, where settled law gives it room.
+ * Re-openable: if a header ever needs the visible refusal back, it needs a taller header first.
+ */
+const VerbChromeContext = createContext(false);
+
+/** Marks a region as chrome — see `VerbChromeContext`. The pane header is its one consumer. */
+export const VerbChrome = VerbChromeContext.Provider;
+
 export function Verb(props: VerbProps) {
   const { label, onClick, reason, disabled, busy } = props;
   // Narrow on `props.tone`, not on the defaulted local — the discriminant is what carries
@@ -114,6 +128,7 @@ export function Verb(props: VerbProps) {
   const Icon = props.tone === "nav" ? NAV_ICON[props.direction] : props.icon;
   const tone = props.tone ?? "act";
   const inert = disabled === true || busy === true;
+  const chrome = useContext(VerbChromeContext);
   const slots = verbRecipe({ tone });
 
   return (
@@ -130,7 +145,7 @@ export function Verb(props: VerbProps) {
       </button>
       {/* THE UN-GAGGED COMMIT (fit reviews, ruled 2026-08-16): only a disabled commit verb says
           its reason on the surface; busy is not a refusal and every other tone keeps the title. */}
-      {tone === "commit" && disabled === true ? (
+      {tone === "commit" && disabled === true && !chrome ? (
         <span className={slots.reason()}>{reason}</span>
       ) : null}
     </>

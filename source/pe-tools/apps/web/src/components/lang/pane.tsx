@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { HelpTip } from "#/components/lang/help";
+import { VerbChrome } from "#/components/lang/verb";
 import { tv, type VariantProps } from "#/lib/tv";
 
 export type PaneKind = "navigation" | "visual" | "content" | "inspector";
@@ -87,7 +88,8 @@ export function Pane({
           </div>
           {actions != null && (
             <div data-slot="pane-actions" className="flex shrink-0 items-center gap-0.5">
-              {actions}
+              {/* A header is chrome: a verb's refusal hovers, it does not wrap (see `VerbChrome`). */}
+              <VerbChrome value>{actions}</VerbChrome>
             </div>
           )}
         </div>

@@ -158,15 +158,17 @@ export async function buildAgentControllerApp(
         if (scope instanceof Response) return scope;
         const parsed = write.schema.safeParse(await c.req.json().catch(() => null));
         if (!parsed.success)
-          return c.json(
-            { ok: false, kind: "error", error: "invalid body", hint: write.hint },
-            400,
-          );
+          return c.json({ ok: false, kind: "error", error: "invalid body", hint: write.hint }, 400);
         try {
           return c.json(await write.run(scope, c.req.param("route"), actor, parsed.data));
         } catch (error) {
           return c.json(
-            { ok: false, kind: "error", error: errorMessage(error), hint: "re-read the document before retrying." },
+            {
+              ok: false,
+              kind: "error",
+              error: errorMessage(error),
+              hint: "re-read the document before retrying.",
+            },
             403,
           );
         }
