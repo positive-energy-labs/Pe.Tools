@@ -36,6 +36,7 @@ import { OutcomeLine } from "#/components/lang/outcome";
 import { Section } from "#/components/lang/section";
 import { Verb } from "#/components/lang/verb";
 import { Gap } from "#/design-system/exhibit";
+import { ReadCell } from "#/components/master-table/cells";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
 import {
@@ -309,20 +310,17 @@ function ProposalTable({ items }: { items: readonly ProposalItem[] }) {
         lock: true,
         sort: (r) => r.param,
         search: (r) => r.param,
-        // GAP (MasterTable): `td` is `p-0`, `Column` has no cell-class hook — see /design-system §04.
-        cell: (r) => <span className="px-1.5 py-1">{r.param}</span>,
+        cell: (r) => <ReadCell value={r.param} />,
       },
       {
         key: "value",
         label: "value",
         search: (r) => shownValue(r),
-        // `foot="hover"` — ruled 2026-08-31: a card-scale cell inside a table cell may not wrap to
-        // two lines, so its footline collapses to the hover the row scale already uses.
-        cell: (r) => (
-          <span className="px-1.5 py-1">
-            <StateCell {...itemCell(r, "hover")} />
-          </span>
-        ),
+        // ROW SCALE, like every other table in the app (critic verdict row 5): rendering the
+        // card scale inside a `td` gave this page — the executable authority — a 4px vertical
+        // inset no route draws. Row scale already collapses the footline to the title, which is
+        // what `foot: "hover"` means one scale up.
+        cell: (r) => <StateCell {...itemCell(r, "hover")} scale="row" />,
       },
       {
         // The state word is `cellStateLabel` over the same props the cell renders — not a second
@@ -331,7 +329,7 @@ function ProposalTable({ items }: { items: readonly ProposalItem[] }) {
         label: "state",
         width: "w-24",
         facet: (r) => cellStateLabel(itemCell(r, "hover")),
-        cell: (r) => <span className="px-1.5 py-1">{cellStateLabel(itemCell(r, "hover"))}</span>,
+        cell: (r) => <ReadCell value={cellStateLabel(itemCell(r, "hover"))} />,
       },
     ],
     [],

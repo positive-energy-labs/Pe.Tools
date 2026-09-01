@@ -212,6 +212,22 @@
   background: var(--dl-cell-square);
 }
 
+/* ── LOCATE (ruled 2026-08-31, critic verdict 14) ─────────────────────────────────────────
+   THE MARKS ARE THE LOCATE TARGET. On an editable cell the input owns the content box (the caret
+   law), so the clickable body is the cell's padding — and the padding is exactly where the marks
+   live: the proposal fold reserves 14px on the right, the unsaved square 10px on the left. Both
+   already mean "there is something to go look at", so both already carry the click; this rule
+   only makes the affordance VISIBLE and stops it being an accident of mark spacing. Measured
+   2026-08-31 on /family: a proposed editable row cell is 179×19 with the input inset 10/14/2/3,
+   and `elementFromPoint` at either mark corner resolves to the cell, not the input.
+   The input keeps its own text cursor, so the caret is never mislabelled. */
+.dl-cell[data-locate] {
+  cursor: pointer;
+}
+.dl-cell[data-locate] .dl-cell-input {
+  cursor: text;
+}
+
 /* ── THE EDITABLE CELL (ruled 2026-08-16, R8) ─────────────────────────────────────────────
    The input IS the value slot: transparent, full-bleed, inheriting the cell's ink, weight and
    style, so every mark (wash, ring, fold, square, squiggle) composes around a caret instead of

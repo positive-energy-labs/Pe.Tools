@@ -87,6 +87,13 @@ export interface StateCellProps {
    * Locate what this cell describes (ruled 2026-08-16, fit reviews — families #14): a click on
    * the cell BODY when not editing. The marks stay non-focusable and an editable cell's clicks
    * belong to the caret — the input swallows them — so locate never contends with editing.
+   *
+   * RULED 2026-08-31 (critic verdict 14 — RE-OPENABLE): on an editable cell the input fills the
+   * body, so "the body" was a 2px strip of padding and the affordance was effectively unclickable.
+   * THE CELL'S MARKS ARE THE LOCATE TARGET: the proposal fold and the unsaved square already
+   * render outside the input and already mean "there is something to go look at", so they carry
+   * the click. A cell with `onLocate` and NO mark still locates on its body — there is nothing to
+   * aim at, but nothing is stolen either.
    */
   onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */

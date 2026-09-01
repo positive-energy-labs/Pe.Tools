@@ -174,10 +174,12 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
        * a proposal is a fact about the cell rather than about which reading is showing.
        *
        * `onLocate` is the cell's own: click the body and the card comes into the doc sidebar.
-       * TODO(core-reader): on an EDITABLE cell the input owns its clicks (the caret law), so the
-       * locate target is only the cell's padding. The grammar has no second body-click affordance
-       * that does not steal the caret, and inventing one here is exactly the improvisation that
-       * this pass deleted.
+       * RESOLVED 2026-08-31 (was TODO(core-reader), critic verdict 14): on an editable cell the
+       * input owns the content box, so the locate target IS the padding — and on a proposed cell
+       * the padding is the marks. Measured here: 179×19 cell, input inset 10/14/2/3, and a hit
+       * test at either the fold corner or the square corner resolves to the cell. The grammar now
+       * says so out loud (`data-locate` + the cursor rule in `lang.css`); the "2px strip" the
+       * critic measured was `--item-pad-x` on read-only cells, not this one.
        */
       const cell = (facts: StateCellProps) => (
         <NavStateCell
