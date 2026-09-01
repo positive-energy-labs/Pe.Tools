@@ -120,6 +120,7 @@ export const OPS_FIXTURE_SESSION: SessionFacts = {
   sessionId: "bridge-fixture-26",
   sdkSessionId: OPS_FIXTURE_TARGET,
   processId: 26026,
+  year: "2026",
   lane: "dev",
   custody: "controlled",
   activeDocumentId: OPS_FIXTURE_ADDRESS,
@@ -132,11 +133,9 @@ export const OPS_FIXTURE_WORLD_FACTS: WorldFacts = {
   id: OPS_FIXTURE_TARGET,
   custody: "controlled",
   phase: "ready",
+  detail: "fixture review fact",
   lane: "dev",
-  year: "2026",
   pid: 26026,
-  activeDocumentTitle: "Operations Fixture",
-  openDocumentCount: 2,
   session: OPS_FIXTURE_SESSION,
 };
 

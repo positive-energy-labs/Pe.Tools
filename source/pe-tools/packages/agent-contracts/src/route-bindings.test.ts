@@ -5,7 +5,6 @@ import {
   current,
   familiesRouteState,
   familyRouteState,
-  instancesRouteState,
   opsRouteState,
   settingsRouteState,
   takeoffsRouteState,
@@ -20,7 +19,6 @@ describe("document-scoped route bindings", () => {
       familyRouteState,
       familiesRouteState,
       settingsRouteState,
-      instancesRouteState,
       opsRouteState,
     ]) {
       const doc = spec.schema.parse({ bindings: { world: bind } });

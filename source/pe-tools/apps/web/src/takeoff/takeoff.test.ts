@@ -209,7 +209,14 @@ describe("typed snapshot projection", () => {
           observedAt: "2026-08-25T12:00:00.000Z",
         },
         snapshot: {
-          status: { systems: [] },
+          status: {
+            systems: [],
+            carriers: {
+              stage: "Adoption",
+              status: "needs-initialization",
+              missingCarrierGuids: ["b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001"],
+            },
+          },
           zoneFrs: [
             {
               elementId: 42,
@@ -236,6 +243,11 @@ describe("typed snapshot projection", () => {
       at: "11111111-1111-1111-1111-111111111111",
       version: "22222222-2222-2222-2222-222222222222",
       observedAt: "2026-08-25T12:00:00.000Z",
+    });
+    expect(snapshot.carriers).toEqual({
+      stage: "Adoption",
+      status: "needs-initialization",
+      missingCarrierGuids: ["b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001"],
     });
     expect(snapshot.world).toMatchObject({ docName: "project-a", lanes: [{ label: "Main" }] });
     expect(snapshot.world.zones[0]).toMatchObject({ name: "Main#01", tags: ["FC-8"] });

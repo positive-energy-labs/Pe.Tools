@@ -216,6 +216,8 @@ export const createLiveTakeoffHost = (): TakeoffHost => ({
     );
     return { text: `adopted ${adopted.adopted.length} zoning regions` };
   },
+  initializeCarrier: (session, stage) =>
+    callHostRpc("takeoffs.initialize-carrier", { stage }, { bridgeSessionId: session.sessionId }),
   async capture(session, lane) {
     const scope = { bridgeSessionId: session.sessionId };
     const prepared = await callHostRpc("takeoffs.prepare-capture", { view: lane.view }, scope);

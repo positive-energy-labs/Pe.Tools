@@ -4,19 +4,21 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import {
+  addressSchema,
   current,
   takeoffsRouteState,
   here,
   type RouteStatePatch,
   type RouteStateWriteResult,
   type StagedRoomEdit,
+  type TakeoffCarrierPreflight,
   type TakeoffSnapshot,
   type TakeoffsRouteDocument,
   type ViewFacts,
 } from "@pe/agent-contracts";
 
 import type { MasterTableState } from "#/components/master-table/model";
-import { documentAddress, resolveTarget, type SessionFacts } from "#/host/target";
+import { resolveTarget, type SessionFacts } from "#/host/target";
 import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import {
   createRouteStoreCore,
@@ -124,6 +126,14 @@ export interface TakeoffHost {
     session: SessionFacts,
     input: { readonly view: string; readonly items: readonly AdoptItem[] },
   ): Promise<{ readonly text: string }>;
+  initializeCarrier(
+    session: SessionFacts,
+    stage: TakeoffCarrierPreflight["stage"],
+  ): Promise<{
+    readonly status: string;
+    readonly bound?: string | null;
+    readonly remaining: readonly string[];
+  }>;
   capture(
     session: SessionFacts,
     lane: Pick<WorldLane, "view" | "label">,
@@ -350,6 +360,7 @@ export function createTakeoffStore(deps: {
   source?: "live" | "fixture";
   registry: AtomRegistry.AtomRegistry;
   scope: Scope;
+  target?: string;
   slice?: Atom.Atom<AsyncResult.AsyncResult<Slice<TakeoffsRouteDocument>, Error>>;
   writer?: {
     apply(patches: RouteStatePatch[]): Promise<RouteStateWriteResult>;
@@ -375,8 +386,10 @@ export function createTakeoffStore(deps: {
   const targetAtom = Atom.make((get) => {
     const result = get(takeoffsSlice);
     return AsyncResult.isSuccess(result)
-      ? (current(result.value.doc?.bindings.world, deps.scope.documentAddress)?.id ?? "")
-      : "";
+      ? (current(result.value.doc?.bindings.world, deps.scope.documentAddress)?.id ??
+          deps.target ??
+          "")
+      : (deps.target ?? "");
   }).pipe(owned("binding/target"));
   const ids = (bindings: TakeoffsRouteDocument["bindings"], prefix: string) =>
     Object.entries(bindings)
@@ -547,7 +560,7 @@ export function createTakeoffStore(deps: {
       const document = AsyncResult.isSuccess(active) ? active.value.value : null;
       const persisted = slice.value.doc?.snapshot;
       const at = document
-        ? documentAddress(document.session)
+        ? addressSchema.parse(document.documentId)
         : deps.host.fixture
           ? deps.scope.documentAddress
           : null;
@@ -606,7 +619,7 @@ export function createTakeoffStore(deps: {
         region,
         view: region.view,
         checked: region.role === "zoning-region",
-        name: meta?.name || region.typeName,
+        name: meta?.name || region.typeName || `${region.view} · ${region.elementId}`,
         systemTag: meta?.systemTag ?? "",
         ...patches[`${region.view}:${region.elementId}`],
       };
@@ -698,6 +711,12 @@ export function createTakeoffStore(deps: {
     return AsyncResult.isSuccess(result) && result.value.bound && result.value.value
       ? result.value.value.world
       : EMPTY_WORLD;
+  }).pipe(Atom.autoDispose);
+  const carrierPreflightAtom = Atom.make((get): TakeoffCarrierPreflight | null => {
+    const result = get(snapshotResult);
+    return AsyncResult.isSuccess(result) && result.value.bound && result.value.value
+      ? result.value.value.carriers
+      : null;
   }).pipe(Atom.autoDispose);
   const worldAtom = Atom.make((get): World => {
     const authority = get(authorityWorldAtom);
@@ -888,19 +907,6 @@ export function createTakeoffStore(deps: {
     if (!document.value) throw Error("no document bound");
     return document.value.session;
   };
-  const pickDocument = (documentId: string) =>
-    runVerb(
-      "open-document",
-      async () => {
-        const sessions = await settle(sessionsResult);
-        const resolution = resolveTarget(sessions.value, registry.get(targetAtom));
-        if (resolution.kind !== "resolved") throw Error("no world bound");
-        const { session } = resolution;
-        const recents = await settle(recentDocumentsResult);
-        return { text: await documentTrunk.pick(session, documentId, recents.value) };
-      },
-      ["snapshot", "takeoff-views", "candidates"],
-    ).catch(() => undefined);
   const unsubscribe = deps.sessions.subscribe((event) => {
     if (event.kind === "sessionsChanged") {
       write("host-event", "invalidate/sessions", () => registry.set(invalidateAtom, ["sessions"]));
@@ -937,13 +943,6 @@ export function createTakeoffStore(deps: {
     }) {
       const currentTarget = registry.get(targetAtom);
       const nextTarget = patch.bound?.world ?? currentTarget;
-      const sessions = registry.get(sessionsResult);
-      const resolution = AsyncResult.isSuccess(sessions)
-        ? resolveTarget(sessions.value.value, nextTarget)
-        : null;
-      const activeDocumentId =
-        resolution?.kind === "resolved" ? resolution.session.activeDocumentId : undefined;
-      const nextDocument = patch.bound?.rvt ?? activeDocumentId;
       if (patch.bound || patch.multi || patch.stage) {
         const patches: RouteStatePatch[] = [];
         if (nextTarget !== currentTarget)
@@ -976,12 +975,6 @@ export function createTakeoffStore(deps: {
         if (patch.stage) patches.push({ path: ["stage"], value: patch.stage });
         if (patches.length) void takeoffsWriter.apply(patches);
       }
-      if (
-        (deps.source ?? (deps.host.fixture ? "fixture" : "live")) === "live" &&
-        nextDocument &&
-        nextDocument !== activeDocumentId
-      )
-        void pickDocument(nextDocument);
     },
     settle,
     invalidate: (keys: readonly string[]) =>
@@ -1060,6 +1053,22 @@ export function createTakeoffStore(deps: {
         write("sync", "page/panel", () => registry.set(panelAtom, "sync"));
         return "opened sync";
       });
+    },
+    initializeCarrier(stage: TakeoffCarrierPreflight["stage"] = "Adoption") {
+      return runVerb(
+        "initialize-carrier",
+        async () => {
+          const session = await activeSession();
+          const result = await deps.host.initializeCarrier(session, stage);
+          return {
+            ...result,
+            text: result.bound
+              ? `bound ${result.bound}; ${result.remaining.length} carrier${result.remaining.length === 1 ? "" : "s"} remain`
+              : `${stage} carriers are ready`,
+          };
+        },
+        ["snapshot"],
+      );
     },
     clearFailure() {
       write("clear-failure", "failure", () => registry.set(core.failure, null));
@@ -1274,6 +1283,7 @@ export function createTakeoffStore(deps: {
       recentDocuments: recentDocumentsResult,
       viewFacts: viewFactsResult,
       snapshot: snapshotResult,
+      carrierPreflight: carrierPreflightAtom,
       candidates: candidatesResult,
       adoptRows: adoptRowsAtom,
       r10: r10Result,

@@ -32,6 +32,7 @@ import {
   routeDocumentAddress,
   routeDocumentChoices,
   routeDocumentSearch,
+  routeDocumentScope,
   routeDocumentTabHref,
 } from "./route-document";
 import type { SessionFacts } from "#/host/target";
@@ -58,6 +59,16 @@ describe("route document choice", () => {
     expect(fleet.useFleet.mock.calls).toEqual([[undefined]]);
   });
 
+  it("lets a route acquire its first document at the shared gate", () => {
+    render(
+      <RouteDocument sessions={[]} empty={(sessions) => `acquire from ${sessions.length} worlds`}>
+        {() => "route body"}
+      </RouteDocument>,
+    );
+
+    expect(screen.getByText("acquire from 0 worlds")).toBeTruthy();
+  });
+
   it("handles zero, one, and two open documents", () => {
     const one = routeDocumentChoices([session("pe.app-25", "project-a", "C:\\Models\\projectA.rvt")]);
     const two = routeDocumentChoices([
@@ -73,6 +84,19 @@ describe("route document choice", () => {
     render(<RouteDocumentPicker choices={two} onPick={pick} />);
     fireEvent.click(screen.getByRole("button", { name: "pe.app-26 · Tower" }));
     expect(pick).toHaveBeenCalledWith(address("C:\\Models\\Tower.rvt"));
+  });
+
+  it("distinguishes an inactive requested document from acquisition", () => {
+    const inactive = {
+      at: address("C:\\Models\\projectA.rvt"),
+      label: "pe.app-25 · project-a",
+      active: false,
+    };
+
+    expect(routeDocumentScope([inactive], inactive.at)).toEqual({ kind: "activate", choice: inactive });
+    expect(routeDocumentScope([inactive], address("C:\\Models\\Other.rvt"))).toEqual({
+      kind: "acquire",
+    });
   });
 
   it("opens the exact route and Address in a new tab", () => {

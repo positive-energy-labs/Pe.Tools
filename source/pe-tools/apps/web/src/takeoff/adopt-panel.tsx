@@ -23,7 +23,9 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
   const zones = useAtomValue(store.atoms.world).zones;
   const listed = useAtomValue(store.atoms.adoptRows);
   const candidates = useAtomValue(store.atoms.candidates);
+  const carriers = useAtomValue(store.atoms.carrierPreflight);
   const busy = useAtomValue(store.atoms.busy)?.id ?? null;
+  const needsInitialization = carriers?.status === "needs-initialization";
 
   const patchRow = (view: string, elementId: number, patch: Partial<AdoptRow>) =>
     store.actions.patchAdopt(view, elementId, patch);
@@ -44,6 +46,21 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
         tick the designer-drawn regions that are zones. adoption stamps them in place (role, guid,
         name, system tag) — re-adopt to edit. legends are ignored.
       </p>
+      {needsInitialization ? (
+        <div className="mt-2">
+          <OutcomeLine
+            kind="advisory"
+            label={`${carriers.missingCarrierGuids.length} carrier${carriers.missingCarrierGuids.length === 1 ? "" : "s"} need initialization`}
+            says={carriers.missingCarrierGuids.join(", ")}
+          />
+          <Verb
+            label="initialize next carrier"
+            disabled={busy !== null}
+            reason="Binds exactly one missing adoption carrier in its own Revit transaction and Host receipt."
+            onClick={() => void store.actions.initializeCarrier("Adoption").catch(() => undefined)}
+          />
+        </div>
+      ) : null}
       <div className="mt-2 max-h-96 overflow-y-auto">
         {(listed ?? []).map((r) => (
           <div
@@ -110,13 +127,15 @@ export function AdoptPanel({ store }: { store: TakeoffStore }) {
         <Verb
           tone="commit"
           label={`stamp ${picked.length} as zoning regions`}
-          disabled={busy !== null || picked.length === 0}
+          disabled={busy !== null || picked.length === 0 || needsInitialization}
           reason={
             busy !== null
               ? `${busy} is in flight`
-              : picked.length === 0
-                ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
-                : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} across ${new Set(picked.map((row) => row.view)).size} views. Idempotent: re-adopting edits in place.`
+              : needsInitialization
+                ? "initialize the listed Takeoff carriers first"
+                : picked.length === 0
+                  ? "tick at least one region — adoption stamps exactly what is ticked, never 'whatever is selected'"
+                  : `Writes role, guid, name and system tag onto ${picked.length} filled region${picked.length === 1 ? "" : "s"} across ${new Set(picked.map((row) => row.view)).size} views. Idempotent: re-adopting edits in place.`
           }
           onClick={adopt}
         />

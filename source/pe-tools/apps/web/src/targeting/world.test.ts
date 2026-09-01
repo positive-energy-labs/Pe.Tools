@@ -240,12 +240,14 @@ describe("targeting world", () => {
 
     await documentTrunk.pick(session(), "model-a", [cloud]);
     await documentTrunk.pick(session(), local.path, [local]);
+    await documentTrunk.activate(session(), "C:\\Models\\Already Open.rvt");
 
     expect(
       request.mock.calls.map(([, init]) => JSON.parse(init?.body as string) as unknown),
     ).toEqual([
       { path: "recent:Equal title.rvt", id: "pe.app-25", conflictPolicy: "keep" },
       { path: "C:\\Models\\Local.rvt", id: "pe.app-25" },
+      { path: "C:\\Models\\Already Open.rvt", id: "pe.app-25" },
     ]);
   });
 
@@ -263,5 +265,42 @@ describe("targeting world", () => {
     await expect(
       documentTrunk.pick(session(), "model-a", [recent("model-a", "cloud:a")]),
     ).rejects.toThrow("no file at recent:Equal title.rvt");
+  });
+
+  it("reopens the exact durable copy when clone reports that its output already exists", async () => {
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            diagnostics: [{ code: "doc.output-exists", detail: "output already exists" }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ result: { state: "ok" } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+    await documentTrunk.clone(
+      session(),
+      "C:\\Models\\Central.rvt",
+      "C:\\Models\\Central.PeTakeoffs.rvt",
+    );
+
+    expect(request.mock.calls.map(([url]) => url)).toEqual(["/docs/clone", "/docs/open"]);
+    expect(
+      request.mock.calls.map(([, init]) => JSON.parse(init?.body as string) as unknown),
+    ).toEqual([
+      {
+        source: "C:\\Models\\Central.rvt",
+        out: "C:\\Models\\Central.PeTakeoffs.rvt",
+        id: "pe.app-25",
+      },
+      { path: "C:\\Models\\Central.PeTakeoffs.rvt", id: "pe.app-25" },
+    ]);
   });
 });

@@ -5006,6 +5006,24 @@ export namespace TakeoffsDetectCapture {
   }
 }
 
+/** Bind the next missing Takeoff carrier for the requested stage in one transaction. */
+export namespace TakeoffsInitializeCarrier {
+  export namespace Req {
+    export type TakeoffCarrierStage = "Adoption" | "Materialization";
+
+    export interface Request {
+      stage?: TakeoffCarrierStage;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      status: string;
+      bound?: null | string;
+      remaining: string[];
+    }
+  }
+}
+
 /** Partition one Zoning Region from replay evidence and materialize Room Regions in one transaction. */
 export namespace TakeoffsPartition {
   export namespace Req {
@@ -5136,6 +5154,8 @@ export namespace TakeoffsSnapshot {
     export interface Request {}
   }
   export namespace Res {
+    export type TakeoffCarrierStage = "Adoption" | "Materialization";
+
     export interface Response {
       reading: Reading;
       snapshot: TakeoffSnapshotData;
@@ -5154,10 +5174,16 @@ export namespace TakeoffsSnapshot {
     }
     export interface TakeoffModelStatus {
       systems: TakeoffRegistrySystem[];
+      carriers: TakeoffCarrierPreflight;
     }
     export interface TakeoffRegistrySystem {
       guid: string;
       tag: string;
+    }
+    export interface TakeoffCarrierPreflight {
+      stage: TakeoffCarrierStage;
+      status: string;
+      missingCarrierGuids: string[];
     }
     export interface TakeoffRegionFacts {
       elementId: number;
@@ -5260,6 +5286,7 @@ export interface HostOps {
   "takeoffs.candidates": { request: TakeoffsCandidates.Req.Request; response: TakeoffsCandidates.Res.Response };
   "takeoffs.decisions": { request: TakeoffsDecisions.Req.Request; response: TakeoffsDecisions.Res.Response };
   "takeoffs.detect-capture": { request: TakeoffsDetectCapture.Req.Request; response: TakeoffsDetectCapture.Res.Response };
+  "takeoffs.initialize-carrier": { request: TakeoffsInitializeCarrier.Req.Request; response: TakeoffsInitializeCarrier.Res.Response };
   "takeoffs.partition": { request: TakeoffsPartition.Req.Request; response: TakeoffsPartition.Res.Response };
   "takeoffs.prepare-capture": { request: TakeoffsPrepareCapture.Req.Request; response: TakeoffsPrepareCapture.Res.Response };
   "takeoffs.rhvac-links": { request: TakeoffsRhvacLinks.Req.Request; response: TakeoffsRhvacLinks.Res.Response };
@@ -5330,6 +5357,7 @@ export const hostOpKeys = [
   "takeoffs.candidates",
   "takeoffs.decisions",
   "takeoffs.detect-capture",
+  "takeoffs.initialize-carrier",
   "takeoffs.partition",
   "takeoffs.prepare-capture",
   "takeoffs.rhvac-links",

@@ -154,13 +154,13 @@ export function createRouteStoreCore(route: string, registry: AtomRegistry.AtomR
             ? value.text
             : id;
       write(id, "receipt", () => registry.set(receipt, { verb: id, text, at: Date.now() }));
-      if (keys?.length)
-        write(id, `invalidate/${keys.join(",")}`, () => registry.set(invalidate, keys));
       return value;
     } catch (cause) {
       write(id, "failure", () => registry.set(failure, verbFailure(id, cause)));
       throw cause;
     } finally {
+      if (keys?.length)
+        write(id, `invalidate/${keys.join(",")}`, () => registry.set(invalidate, keys));
       if (busyTimer) clearInterval(busyTimer);
       busyTimer = undefined;
       inFlight = false;

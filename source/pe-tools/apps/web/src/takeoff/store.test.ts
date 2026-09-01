@@ -124,6 +124,7 @@ function harness() {
     list: 0,
     open: 0,
     adopt: 0,
+    initialize: 0,
   };
   let failSnapshot = false;
   let failR10 = false;
@@ -137,6 +138,7 @@ function harness() {
       version: "v1",
       observedAt: "2026-08-25T00:00:00Z",
     },
+    carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
     world: {
       docName: "Harness.rvt",
       r10Path: null,
@@ -222,6 +224,15 @@ function harness() {
     async adopt() {
       calls.adopt += 1;
       return { text: "adopted" };
+    },
+    async initializeCarrier(_session, stage) {
+      calls.initialize += 1;
+      expect(stage).toBe("Adoption");
+      return {
+        status: "needs-initialization",
+        bound: "b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001",
+        remaining: ["b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9002"],
+      };
     },
     async capture() {
       return { replayPath: "C:\\Takeoffs\\replay_Main.bin", rooms: 1, totalSqft: 100 };
@@ -946,6 +957,24 @@ describe("takeoff route store", () => {
       verb: "adopt",
       text: "2 regions across 2 views",
     });
+    store.dispose();
+  });
+
+  it("initializes one adoption carrier and invalidates the snapshot", async () => {
+    const h = harness();
+    const store = createStore({ host: h.host, sessions: h.sessions });
+    await store.actions.settle(store.atoms.snapshot);
+    const snapshotsBefore = h.calls.snapshot;
+
+    const result = await store.actions.initializeCarrier("Adoption");
+    await tick();
+
+    expect(result).toMatchObject({
+      bound: "b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001",
+      remaining: ["b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9002"],
+    });
+    expect(h.calls.initialize).toBe(1);
+    expect(h.calls.snapshot).toBeGreaterThan(snapshotsBefore);
     store.dispose();
   });
 

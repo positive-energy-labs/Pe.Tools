@@ -23,8 +23,8 @@
     "ready": "vp check && vp run -r test && vp run -r build && pnpm typegen:check",
     "typegen:check": "pnpm --filter @pe/host-contracts codegen:check",
     "test": "vp run -r test",
-    "dev": "pnpm --filter @pe/host dev",
-    "dev:no-revit": "pnpm --filter @pe/host dev:no-revit"
+    "dev": "vp run --filter @pe/host dev",
+    "dev:no-revit": "vp run --filter @pe/host dev:no-revit"
   },
   "devDependencies": {
     "jiti": "^2.7.0",

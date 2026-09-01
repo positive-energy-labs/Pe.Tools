@@ -124,7 +124,7 @@ public static class ZoneMaterializer
         IReadOnlyList<RoomResult> accepted, IReadOnlyList<ResidueResult> held,
         Action<string> log)
     {
-        TakeoffCarriers.EnsureBindings(doc);
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
         var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
             .Cast<FilledRegionType>().First();
         var existing = ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleRoomRegion);

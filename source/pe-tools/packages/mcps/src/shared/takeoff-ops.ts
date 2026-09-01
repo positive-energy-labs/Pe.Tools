@@ -1,4 +1,4 @@
-import { readingSchema } from "@pe/agent-contracts";
+import { readingSchema, takeoffCarrierPreflightSchema } from "@pe/agent-contracts";
 import type {
   LiveRegion,
   Resolution,
@@ -65,8 +65,9 @@ export function projectTakeoffSnapshot(
       name?: string;
       systemTag?: string;
     };
-    if (!meta.view || !meta.name) throw Error("Zoning Region provenance is missing view or name");
+    if (!meta.view) throw Error("Zoning Region provenance is missing view");
     const view = region.view || meta.view;
+    const name = meta.name?.trim() || `${view} · ${region.elementId}`;
     const label = levelByView.get(view) || view;
     let lane = lanes.find((item) => item.view === view);
     if (!lane) {
@@ -121,7 +122,7 @@ export function projectTakeoffSnapshot(
       },
       stage,
       tags,
-      name: meta.name,
+      name,
       rooms,
       residues,
       heldSqft: residues.reduce((sum, item) => sum + item.rawSqft, 0),
@@ -131,6 +132,7 @@ export function projectTakeoffSnapshot(
   });
   return {
     reading: readingSchema.parse(response.reading),
+    carriers: takeoffCarrierPreflightSchema.parse(snapshot.status.carriers),
     zoneFrs,
     regionsByZone,
     world: {

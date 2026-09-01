@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { useFleet, WorldFacts } from "#/host/fleet";
 
 const fleet = vi.hoisted(() => {
@@ -102,37 +102,66 @@ vi.mock("#/host/fleet", () => fleet);
 vi.mock("#/host/use-target", () => ({ useWorldLog: () => [] }));
 vi.mock("#/host/queries", () => ({ HOST_QUERY_KEY: ["host"] }));
 
-import { InstancesPage } from "#/routes/instances";
+import { InstancesPage, InstancesRouteContent } from "#/routes/instances";
 import { paneState } from "#/targeting/kit";
 import { product as defineProduct } from "#/targeting/model";
 import { worldTrunk } from "#/targeting/world";
 
+beforeEach(() => {
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn() });
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+});
+
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe("instances route", () => {
-  it("does not enable a default fleet query beside the all-session query", () => {
+  it("uses one all-session fleet query", () => {
     fleet.useFleet.mockClear();
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <InstancesPage />
+        <InstancesPage target="" setTarget={() => {}} />
       </QueryClientProvider>,
     );
 
-    expect(fleet.useFleet.mock.calls).toEqual([[{ all: true }], [{ enabled: false }]]);
+    expect(fleet.useFleet.mock.calls).toEqual([[{ all: true }]]);
   });
 
-  it("asks for a document before mounting the route document", () => {
+  it("mounts the lifecycle cockpit without a document", () => {
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <InstancesPage />
+        <InstancesPage target="" setTarget={() => {}} />
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText("pick a document")).toBeTruthy();
+    expect(screen.getByTestId("instances-workspace")).toBeTruthy();
+  });
+
+  it("uses the URL target in fixture mode", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <InstancesRouteContent
+          source="fixture"
+          target="session:fixture-dev-25"
+          setTarget={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+
+    const row = screen
+      .getAllByText("fixture-dev-25")
+      .map((element) => element.closest("tr"))
+      .find(Boolean);
+    expect(row?.className).toContain("on-select");
   });
 
   it("discloses census exceptions when no session identity can be formed", () => {
@@ -159,7 +188,7 @@ describe("instances route", () => {
 
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <InstancesPage />
+        <InstancesPage target="" setTarget={() => {}} />
       </QueryClientProvider>,
     );
 

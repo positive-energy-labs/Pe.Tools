@@ -3,6 +3,7 @@ import { HttpRouter, HttpServerResponse as Response } from "effect/unstable/http
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
 import {
+  docCloneArgv,
   docOpenArgv,
   docRecentsArgv,
   sessionHrArgv,
@@ -157,6 +158,12 @@ type DocOpenRequest = {
   readonly detach?: boolean;
 };
 
+type DocCloneRequest = {
+  readonly source: string;
+  readonly out: string;
+  readonly id: string;
+};
+
 export function docRecentsArgs(year?: string | null): string[] {
   return docRecentsArgv({ year: readOptionalString(year) });
 }
@@ -186,6 +193,27 @@ export function parseDocOpenRequest(
 
 export function docOpenArgs(request: DocOpenRequest): string[] {
   return docOpenArgv(request);
+}
+
+export function parseDocCloneRequest(
+  body: unknown,
+):
+  | { readonly ok: true; readonly request: DocCloneRequest }
+  | { readonly ok: false; readonly error: string } {
+  const record =
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+  const source = readOptionalString(record.source);
+  const out = readOptionalString(record.out);
+  const id = readOptionalString(record.id);
+  if (!source || !out || !id)
+    return { ok: false, error: "document clone requires source, out, and id" };
+  return { ok: true, request: { source, out, id } };
+}
+
+export function docCloneArgs(request: DocCloneRequest): string[] {
+  return docCloneArgv(request);
 }
 
 // Start and restart block on Revit readiness (cold boot is 180-300s; the CLI's own wait
@@ -334,4 +362,19 @@ const docsOpenRoute = HttpRouter.add("POST", "/docs/open", (req) =>
   }),
 );
 
-export const docsRoute = Layer.mergeAll(docsRecentsRoute, docsOpenRoute);
+const docsCloneRoute = HttpRouter.add("POST", "/docs/clone", (req) =>
+  Effect.gen(function* () {
+    const body = yield* Effect.result(req.json);
+    const parsed = parseDocCloneRequest(body._tag === "Success" ? body.success : null);
+    if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
+    const outcome = yield* executeSessionCli(
+      docCloneArgs(parsed.request),
+      runPeRevitCli,
+      DOC_OPEN_TIMEOUT_MS,
+      { action: "doc clone", id: parsed.request.id },
+    );
+    return jsonResponse(outcome);
+  }),
+);
+
+export const docsRoute = Layer.mergeAll(docsRecentsRoute, docsOpenRoute, docsCloneRoute);

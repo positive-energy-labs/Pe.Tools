@@ -1,7 +1,7 @@
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
 import type {
-  DocOpenResult,
+  DocOperationResult,
   DocRecentsResult,
   Envelope,
   RecentDocument,
@@ -222,6 +222,43 @@ const documentLink: Link = {
   liveness: null,
 };
 
+async function openSdkDocument(
+  session: SessionFacts,
+  path: string,
+  conflictPolicy?: "keep",
+): Promise<Partial<DocOperationResult>> {
+  if (!session.sdkSessionId) throw Error("open the document in Revit; this session is observed");
+  const response = await fetch("/docs/open", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      path,
+      id: session.sdkSessionId,
+      ...(conflictPolicy ? { conflictPolicy } : {}),
+    }),
+  });
+  const body = (await response.json()) as SdkEnvelope<DocOperationResult>;
+  if (!response.ok || body.result?.state !== "ok")
+    throw Error(sdkError(body, `document open failed (${response.status})`));
+  return body.result;
+}
+
+async function cloneSdkDocument(session: SessionFacts, source: string, out: string) {
+  if (!session.sdkSessionId) throw Error("clone the document in Revit; this session is observed");
+  const response = await fetch("/docs/clone", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ source, out, id: session.sdkSessionId }),
+  });
+  const body = (await response.json()) as SdkEnvelope<DocOperationResult>;
+  if (response.ok && body.result?.state === "ok") return body.result;
+  if (body.diagnostics?.some((diagnostic) => diagnostic.code === "doc.output-exists")) {
+    await openSdkDocument(session, out);
+    return;
+  }
+  throw Error(sdkError(body, `document clone failed (${response.status})`));
+}
+
 export const documentTrunk = {
   link: documentLink,
   async recents(year?: string): Promise<readonly RecentDocument[]> {
@@ -273,21 +310,21 @@ export const documentTrunk = {
     documentId: string,
     recents: readonly RecentDocument[],
   ): Promise<string> {
-    if (!session.sdkSessionId) throw Error("open the document in Revit; this session is observed");
     const recent = recents.find((item) => (item.modelGuid ?? item.path) === documentId);
     if (!recent) throw Error(`unknown recent document ${documentId}`);
-    const response = await fetch("/docs/open", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        path: recent.isCloud ? `recent:${recent.title}` : recent.path,
-        id: session.sdkSessionId,
-        ...(recent.isCloud ? { conflictPolicy: "keep" as const } : {}),
-      }),
-    });
-    const body = (await response.json()) as SdkEnvelope<DocOpenResult>;
-    if (!response.ok || body.result?.state !== "ok")
-      throw Error(sdkError(body, `document open failed (${response.status})`));
+    await openSdkDocument(
+      session,
+      recent.isCloud ? `recent:${recent.title}` : recent.path,
+      recent.isCloud ? "keep" : undefined,
+    );
     return `opened ${recent.title}`;
+  },
+  async activate(session: SessionFacts, path: string): Promise<string> {
+    await openSdkDocument(session, path);
+    return `activated ${path}`;
+  },
+  async clone(session: SessionFacts, source: string, out: string): Promise<string> {
+    await cloneSdkDocument(session, source, out);
+    return `opened ${out}`;
   },
 };

@@ -72,10 +72,14 @@ describe("route store kit", () => {
     );
 
     const hostError = Error("host broke");
-    await expect(core.runVerb("bad", async () => Promise.reject(hostError))).rejects.toBe(
-      hostError,
-    );
+    const invalidations = writes.filter((value) => Array.isArray(value) && value[0] === "snapshot");
+    await expect(
+      core.runVerb("bad", async () => Promise.reject(hostError), ["snapshot"]),
+    ).rejects.toBe(hostError);
     expect(registry.get(core.failure)).toMatchObject({ kind: "error", message: "host broke" });
+    expect(writes.filter((value) => Array.isArray(value) && value[0] === "snapshot")).toHaveLength(
+      invalidations.length + 1,
+    );
     await expect(
       core.runVerb("write", async () => ({
         ok: false,

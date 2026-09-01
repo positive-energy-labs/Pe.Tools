@@ -48,9 +48,7 @@ internal sealed class BridgeAgent : IDisposable {
 
     private readonly CancellationTokenSource _shutdown = new();
     private readonly ThrottleGate _throttleGate = new();
-    private readonly object _requestExecutionSync = new();
     private bool _disposed;
-    private string? _inFlightOperationKey;
 
     public BridgeAgent(
         SettingsRuntimeRegistry moduleRegistry,
@@ -231,34 +229,12 @@ internal sealed class BridgeAgent : IDisposable {
     private async Task HandleRequestAsync(BridgeRequest request, CancellationToken cancellationToken) {
         var startedAt = Stopwatch.GetTimestamp();
         var requestBytes = Encoding.UTF8.GetByteCount(request.PayloadJson);
-        var ownsInFlightMarker = false;
-        // Begin BEFORE the busy check and before any response frame: the receipt is what makes this
+        // Begin before dispatch and before any response frame: the receipt is what makes this
         // product op recoverable with `pe-revit op result <requestId>` when the caller dies mid-flight
-        // (a bridge frame reaches exactly one live socket and is gone). A rejected/busy request is a
-        // real request the caller made, so it gets a receipt too.
+        // (a bridge frame reaches exactly one live socket and is gone).
         var receipt = BeginOpReceipt(request);
 
         try {
-            lock (this._requestExecutionSync) {
-                if (this._inFlightOperationKey != null) {
-                    throw new BridgeOperationException(
-                        423,
-                        $"Revit is busy executing '{this._inFlightOperationKey}'. Retry '{request.OperationKey}' after the current request completes.",
-                        [
-                            BridgeOperationExceptions.Issue(
-                                "$",
-                                "RevitBusy",
-                                $"Revit is already executing '{this._inFlightOperationKey}'.",
-                                "Retry the request after the current bridge operation finishes."
-                            )
-                        ]
-                    );
-                }
-
-                this._inFlightOperationKey = request.OperationKey;
-                ownsInFlightMarker = true;
-            }
-
             Log.Information(
                 "Host bridge dispatch starting: OperationKey={OperationKey}, RequestId={RequestId}",
                 request.OperationKey,
@@ -269,14 +245,29 @@ internal sealed class BridgeAgent : IDisposable {
 
             Task<object?> responseTask;
             if (op.Thread == OpThread.Revit) {
-                responseTask = await this._revitTaskQueue.Run(
+                var run = await this._revitTaskQueue.RunForResult(
                     context => op.ExecuteAsync(
                         request.PayloadJson,
                         ResolveDocument(op, context.Cancellation),
                         context.Cancellation),
-                    new RevitRunOptions { Label = op.Key, Timeout = TimeSpan.FromMinutes(2) },
+                    new RevitRunOptions { Label = op.Key },
                     cancellationToken
                 ).ConfigureAwait(false);
+                if (run.Outcome == RevitTaskOutcome.Faulted)
+                    responseTask = run.GetValueOrThrow();
+                else if (!run.Ok) {
+                    await this.WriteRevitTaskOutcomeAsync(
+                        request,
+                        receipt,
+                        run.Outcome,
+                        run.Detail,
+                        startedAt,
+                        requestBytes,
+                        cancellationToken
+                    ).ConfigureAwait(false);
+                    return;
+                } else
+                    responseTask = run.Value!;
             } else {
                 responseTask = op.ExecuteAsync(request.PayloadJson, null, cancellationToken);
             }
@@ -395,13 +386,59 @@ internal sealed class BridgeAgent : IDisposable {
             CompleteOpReceipt(receipt, "failed",
                 JsonConvert.SerializeObject(new { error = ex.Message }, this._serializerSettings));
             await this.WriteFrameAsync(errorFrame, cancellationToken).ConfigureAwait(false);
-        } finally {
-            lock (this._requestExecutionSync) {
-                if (ownsInFlightMarker)
-                    this._inFlightOperationKey = null;
-            }
         }
     }
+
+    private async Task WriteRevitTaskOutcomeAsync(
+        BridgeRequest request,
+        object? receipt,
+        RevitTaskOutcome outcome,
+        string? detail,
+        long startedAt,
+        int requestBytes,
+        CancellationToken cancellationToken
+    ) {
+        var (verdict, statusCode) = RevitTaskOutcomeResponse(outcome);
+        var message = $"Revit task ended with '{verdict}' ({outcome})"
+                      + (string.IsNullOrWhiteSpace(detail) ? "." : $": {detail}");
+        var totalMs = GetElapsedMilliseconds(startedAt);
+        var responseJson = JsonConvert.SerializeObject(
+            new { error = message, statusCode, outcome = outcome.ToString(), verdict },
+            this._serializerSettings
+        );
+        CompleteOpReceipt(receipt, verdict, responseJson);
+        Log.Warning(
+            "Host bridge Revit task ended without a value: OperationKey={OperationKey}, RequestId={RequestId}, Outcome={Outcome}, Verdict={Verdict}",
+            request.OperationKey,
+            request.RequestId,
+            outcome,
+            verdict
+        );
+        await this.WriteFrameAsync(
+            new BridgeFrame(
+                BridgeFrameKind.Response,
+                Response: new BridgeResponse(
+                    request.RequestId,
+                    false,
+                    null,
+                    message,
+                    statusCode,
+                    [BridgeOperationExceptions.Issue("$", outcome.ToString(), message, null)],
+                    new PerformanceMetrics(totalMs, totalMs, 0, requestBytes, 0)
+                )
+            ),
+            cancellationToken
+        ).ConfigureAwait(false);
+    }
+
+    private static (string Verdict, int StatusCode) RevitTaskOutcomeResponse(RevitTaskOutcome outcome) => outcome switch {
+        RevitTaskOutcome.CancelledBeforeDispatch or RevitTaskOutcome.CancelledCooperatively => ("cancelled", 499),
+        RevitTaskOutcome.TimedOut => ("timed-out", 504),
+        RevitTaskOutcome.AbandonedStillRunning => ("abandoned-still-running", 423),
+        RevitTaskOutcome.RefusedQueueUnresponsive => ("rejected", 423),
+        RevitTaskOutcome.RefusedQueueDisposed => ("rejected", 503),
+        _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Expected a non-value Revit task outcome.")
+    };
 
     private static object? ResolveDocument(Op op, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();

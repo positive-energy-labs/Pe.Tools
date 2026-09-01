@@ -103,6 +103,7 @@ const snapshot = (world: World, observedAt: string): TakeoffSnapshot => ({
     version: null,
     observedAt,
   },
+  carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
   world,
   zoneFrs: [],
   regionsByZone: {},
@@ -150,6 +151,9 @@ export const createFixtureTakeoffHost = (): TakeoffHost => ({
   },
   async adopt(_session, input) {
     return { text: `fixture adopted ${input.items.length} zoning regions` };
+  },
+  async initializeCarrier() {
+    throw new Error("fixture takeoff host is read-only");
   },
   async capture() {
     throw new Error("fixture takeoff host is read-only");

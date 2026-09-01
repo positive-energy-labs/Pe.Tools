@@ -33,7 +33,7 @@ export const chatSearchSchema = z.object({
   plugin: z.enum(CHAT_PLUGIN_ROUTES).optional().catch(undefined),
   target: z.string().optional().catch(undefined),
   prompt: z.string().max(PROMPT_MAX).optional(),
-  source: z.literal("fixture").optional().catch(undefined),
+  source: z.enum(["live", "fixture"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/chat")({

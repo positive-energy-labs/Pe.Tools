@@ -160,6 +160,7 @@ async function createPeaPromptRuntime(request: PeaPromptRequest): Promise<PeaPro
     hostBaseUrl,
     protocol: "test",
     accessLevel: "trusted",
+    capabilities: { revit: true },
   });
   if (!handle.session) throw new Error("Expected Pea prompt runtime session.");
   return handle as PeaPromptRuntime;

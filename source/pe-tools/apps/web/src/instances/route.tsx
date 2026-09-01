@@ -1,8 +1,7 @@
 import type { Verdict } from "#/components/master-table/model";
 import { type WorldFacts, useFleet } from "#/host/fleet";
 import { type WorldStart } from "#/targeting/world";
-import { RouteDocument } from "#/workbench/route-document";
-import { AddressedInstancesPage } from "#/instances/workspace";
+import { InstancesWorkspace } from "#/instances/workspace";
 import { Input } from "#/components/lang/input";
 import { OutcomeLine } from "#/components/lang/outcome";
 
@@ -105,7 +104,13 @@ export function StartFields({
   );
 }
 
-export function InstancesPage() {
+export function InstancesPage({
+  target,
+  setTarget,
+}: {
+  target: string;
+  setTarget: (target: string) => void;
+}) {
   const fleet = useFleet({ all: true });
   const censusExceptions = fleet.unreadableReceipts
     .map((receipt) => `receipt ${receipt.id} · ${receipt.receiptPath} · ${receipt.detail}`)
@@ -123,9 +128,7 @@ export function InstancesPage() {
           />
         </aside>
       ) : null}
-      <RouteDocument sessions={fleet.sessions}>
-        {(at) => <AddressedInstancesPage documentAddress={at} fleet={fleet} />}
-      </RouteDocument>
+      <InstancesWorkspace target={target} setTarget={setTarget} fleet={fleet} />
     </>
   );
 }

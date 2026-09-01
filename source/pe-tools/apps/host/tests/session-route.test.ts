@@ -7,9 +7,11 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect, test } from "vite-plus/test";
 import {
+  docCloneArgs,
   docOpenArgs,
   docRecentsArgs,
   executeSessionCli,
+  parseDocCloneRequest,
   parseDocOpenRequest,
   parseSessionActionRequest,
   resolveStartProject,
@@ -122,6 +124,28 @@ test("document open requires path and id and maps optional arguments", () => {
     "--detach",
     "--conflict-policy",
     "keep",
+    "--json",
+  ]);
+});
+
+test("document clone requires source, output, and id", () => {
+  expect(parseDocCloneRequest({ source: "C:\\Models\\Central.rvt", id: "dev-25" })).toMatchObject({
+    ok: false,
+  });
+  const parsed = parseDocCloneRequest({
+    source: "C:\\Models\\Central.rvt",
+    out: "C:\\Models\\Central.PeTakeoffs.rvt",
+    id: "dev-25",
+  });
+  if (!parsed.ok) throw Error(parsed.error);
+  expect(docCloneArgs(parsed.request)).toEqual([
+    "doc",
+    "clone",
+    "C:\\Models\\Central.rvt",
+    "--id",
+    "dev-25",
+    "--out",
+    "C:\\Models\\Central.PeTakeoffs.rvt",
     "--json",
   ]);
 });

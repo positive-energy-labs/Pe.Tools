@@ -26,35 +26,83 @@ public static class TakeoffCarriers
     public const string RoleRoomRegion = "room-region";
     public const string RoleHeldResidue = "held-residue";
 
-    // Idempotent; caller owns the transaction. FR carriers ride an instance binding on Detail
-    // Items (FilledRegion has no category of its own that accepts bindings — proven read+write).
-    public static void EnsureBindings(Document document)
-    {
-        SharedParameterBinder.EnsureProjectBinding(document,
-            new SharedDefinitionSpec("_PE_TakeoffRole", SpecTypeId.String.Text,
+    private sealed record Carrier(SharedDefinitionSpec Definition, BuiltInCategory Category);
+
+    private static readonly IReadOnlyList<Carrier> AdoptionCarriers =
+    [
+        new(new SharedDefinitionSpec("_PE_TakeoffRole", SpecTypeId.String.Text,
                 Description: "Pe takeoff region role (zoning-region | room-region | held-residue).",
-                Guid: RoleGuid, Visible: false, UserModifiable: false),
-            [BuiltInCategory.OST_DetailComponents]);
-        SharedParameterBinder.EnsureProjectBinding(document,
-            new SharedDefinitionSpec("_PE_TakeoffGuid", SpecTypeId.String.Text,
+                Guid: RoleGuid, Visible: false, UserModifiable: false), BuiltInCategory.OST_DetailComponents),
+        new(new SharedDefinitionSpec("_PE_TakeoffGuid", SpecTypeId.String.Text,
                 Description: "Pe takeoff stable region identity.",
-                Guid: RegionGuid, Visible: false, UserModifiable: false),
-            [BuiltInCategory.OST_DetailComponents]);
-        SharedParameterBinder.EnsureProjectBinding(document,
-            new SharedDefinitionSpec("_PE_TakeoffProvenance", SpecTypeId.String.Text,
+                Guid: RegionGuid, Visible: false, UserModifiable: false), BuiltInCategory.OST_DetailComponents),
+        new(new SharedDefinitionSpec("_PE_TakeoffProvenance", SpecTypeId.String.Text,
                 Description: "Pe takeoff machine bookkeeping blob (run id, source hash, .r10 link, holds).",
-                Guid: ProvenanceGuid, Visible: false, UserModifiable: false),
-            [BuiltInCategory.OST_DetailComponents]);
-        SharedParameterBinder.EnsureProjectBinding(document,
-            new SharedDefinitionSpec("PE_M___RoomType", SpecTypeId.String.Text,
-                Description: "Takeoffs room classification used by Manual J assists.",
-                Guid: RoomTypeGuid),
-            [BuiltInCategory.OST_DetailComponents]);
-        SharedParameterBinder.EnsureProjectBinding(document,
-            new SharedDefinitionSpec("_PE_TakeoffSystemRegistry", SpecTypeId.String.Text,
+                Guid: ProvenanceGuid, Visible: false, UserModifiable: false), BuiltInCategory.OST_DetailComponents),
+        new(new SharedDefinitionSpec("_PE_TakeoffSystemRegistry", SpecTypeId.String.Text,
                 Description: "Versioned Pe takeoff System registry (GUID <-> tag).",
-                Guid: RegistryGuid, Visible: false, UserModifiable: false),
-            [BuiltInCategory.OST_ProjectInformation]);
+                Guid: RegistryGuid, Visible: false, UserModifiable: false), BuiltInCategory.OST_ProjectInformation),
+    ];
+
+    private static readonly Carrier RoomTypeCarrier = new(
+        new SharedDefinitionSpec("PE_M___RoomType", SpecTypeId.String.Text,
+            Description: "Takeoffs room classification used by Manual J assists.",
+            Guid: RoomTypeGuid),
+        BuiltInCategory.OST_DetailComponents);
+
+    public static TakeoffCarrierPreflight Preflight(
+        Document document,
+        TakeoffCarrierStage stage = TakeoffCarrierStage.Adoption)
+    {
+        var missing = Required(stage)
+            .Where(carrier => !IsBound(document, carrier))
+            .Select(carrier => carrier.Definition.Guid!.Value)
+            .ToList();
+        return new TakeoffCarrierPreflight(
+            stage,
+            missing.Count == 0 ? "ready" : "needs-initialization",
+            missing);
+    }
+
+    // Idempotent; caller owns the transaction. One call binds at most one carrier so each slow
+    // Revit binding has its own durable Host receipt.
+    public static TakeoffCarrierInitializationData InitializeNext(
+        Document document,
+        TakeoffCarrierStage stage)
+    {
+        var next = Required(stage).FirstOrDefault(carrier => !IsBound(document, carrier));
+        if (next == null)
+            return new TakeoffCarrierInitializationData("ready", null, []);
+
+        SharedParameterBinder.EnsureProjectBinding(
+            document,
+            next.Definition,
+            [next.Category]);
+        var remaining = Preflight(document, stage).MissingCarrierGuids;
+        return new TakeoffCarrierInitializationData(
+            remaining.Count == 0 ? "ready" : "needs-initialization",
+            next.Definition.Guid,
+            remaining);
+    }
+
+    public static void Require(Document document, TakeoffCarrierStage stage)
+    {
+        var preflight = Preflight(document, stage);
+        if (preflight.MissingCarrierGuids.Count > 0)
+            throw new TakeoffCarrierPrerequisiteException(preflight);
+    }
+
+    private static IReadOnlyList<Carrier> Required(TakeoffCarrierStage stage) => stage switch
+    {
+        TakeoffCarrierStage.Adoption => AdoptionCarriers,
+        TakeoffCarrierStage.Materialization => [.. AdoptionCarriers, RoomTypeCarrier],
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null),
+    };
+
+    private static bool IsBound(Document document, Carrier carrier)
+    {
+        var element = SharedParameterElement.Lookup(document, carrier.Definition.Guid!.Value);
+        return element != null && document.ParameterBindings.Contains(element.GetDefinition());
     }
 
     public static void WriteIdentity(FilledRegion region, string role, Guid guid)
@@ -96,7 +144,7 @@ public static class TakeoffCarriers
     {
         var parameter = document.ProjectInformation?.get_Parameter(RegistryGuid)
                         ?? throw new InvalidOperationException(
-                            "System registry parameter is not bound — run EnsureBindings first.");
+                            "System registry parameter is not bound — initialize Takeoff adoption carriers first.");
         string json = registry.Serialize();
         if (string.Equals(parameter.AsString(), json, StringComparison.Ordinal)) return;
         if (!parameter.Set(json))
@@ -107,8 +155,16 @@ public static class TakeoffCarriers
     {
         var parameter = region.get_Parameter(guid)
                         ?? throw new InvalidOperationException(
-                            $"carrier {guid} is not bound on {region.Id} — run EnsureBindings first.");
+                            $"carrier {guid} is not bound on {region.Id} — initialize the required Takeoff carriers first.");
         if (parameter.IsReadOnly || !parameter.Set(value))
             throw new InvalidOperationException($"Revit rejected carrier write {guid} on {region.Id}.");
     }
+}
+
+public sealed class TakeoffCarrierPrerequisiteException(TakeoffCarrierPreflight preflight)
+    : InvalidOperationException(
+        $"Takeoff {preflight.Stage} needs carrier initialization: " +
+        string.Join(", ", preflight.MissingCarrierGuids.Select(guid => guid.ToString("D"))))
+{
+    public TakeoffCarrierPreflight Preflight { get; } = preflight;
 }

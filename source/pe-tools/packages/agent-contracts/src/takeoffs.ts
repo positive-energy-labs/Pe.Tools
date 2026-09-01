@@ -172,6 +172,13 @@ const modelStatusSchema = z.object({
 });
 export type RegistrySystem = z.infer<typeof modelStatusSchema>["systems"][number];
 
+export const takeoffCarrierPreflightSchema = z.object({
+  stage: z.enum(["Adoption", "Materialization"]),
+  status: z.enum(["ready", "needs-initialization"]),
+  missingCarrierGuids: z.array(z.string()),
+});
+export type TakeoffCarrierPreflight = z.infer<typeof takeoffCarrierPreflightSchema>;
+
 const detectedRoomSchema = z.object({
   id: z.string(),
   rawSqft: z.number(),
@@ -230,6 +237,7 @@ export type WorldSystem = World["systems"][number];
 
 const takeoffSnapshotSchema = z.object({
   reading: readingSchema,
+  carriers: takeoffCarrierPreflightSchema,
   world: worldSchema,
   zoneFrs: z.array(candidateRegionSchema),
   regionsByZone: z.record(z.string(), z.array(liveRegionSchema)),

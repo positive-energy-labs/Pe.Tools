@@ -1,62 +1,77 @@
-import { useState } from "react";
-// TODO(sdk-beta132): `Leg` and `SessionRow` stopped being exported by the generated
-// pe-revit-contract at the beta.132 cutover; this file has 6 type errors that only per-file
-// `vp check` sees (the test path never type-checks it). Re-derive these fixture types from the
-// contract's current exports. Found 2026-08-31 by the route-shell spike.
-import type { Leg, SessionRow } from "@pe/host-contracts/pe-revit-contract";
+import type { SessionObservation } from "@pe/host-contracts/pe-revit-contract";
 
 import type { SessionFacts } from "#/host/target";
 import { InstancesWorkspace, type InstancesFleet } from "#/instances/workspace";
 
 const observedAt = "2026-08-30T18:30:00Z";
 
-const leg = (name: string, state: string, pid: number): Leg => ({
-  name,
-  state,
+const process = (pid: number, year: number) => ({
   pid,
-  how: state === "up" ? "health" : "pid",
-  kind: name,
-  legBecause: "fixture review fact",
-  observedAtUtc: observedAt,
-  url: name === "host" ? `http://127.0.0.1:${5000 + (pid % 1000)}` : null,
+  processStartUtc: observedAt,
+  executable: `C:\\Program Files\\Autodesk\\Revit ${year}\\Revit.exe`,
 });
 
-const row = (
-  value: Pick<SessionRow, "id" | "custody" | "lane" | "phase" | "pid" | "state" | "year"> &
-    Partial<SessionRow>,
-): SessionRow => ({
-  activeDocument: null,
+const receipt = (id: string) => ({
+  payload: "checkout" as const,
   buildStamp: "fixture",
-  detail: "fixture review fact",
-  documents: [],
-  ephemeral: false,
-  failedAtUtc: null,
-  failureCode: null,
-  failureDetail: null,
-  firstFailureEvent: null,
   generationId: "fixture-generation",
   generationRoot: "C:\\Fixtures\\generation",
-  journal: null,
-  legs: [],
+  overridePath: null,
+  receiptPath: `C:\\Fixtures\\${id}.json`,
+});
+
+const controlledRow = (
+  id: string,
+  year: number,
+  pid: number,
+  bridge: "ready" | "unresponsive-endpoint",
+): SessionObservation => ({
+  case: "controlled-active",
+  id,
+  year,
+  process: process(pid, year),
+  bridge:
+    bridge === "ready"
+      ? { bridge, sessionDescriptor: `C:\\Fixtures\\${id}.session.json` }
+      : { bridge },
+  detail: "fixture review fact",
   observedAtUtc: observedAt,
   origin: "fixture",
-  overriddenAssembly: null,
-  override: null,
-  payload: "Pe.App.dll",
-  port: null,
   project: "Pe.App",
-  receipt: "C:\\Fixtures\\session.json",
-  startedAtUtc: observedAt,
-  stoppedAtUtc: null,
-  testProject: null,
+  receipt: receipt(id),
   worktree: "C:\\Fixtures\\Pe.Tools",
-  ...value,
 });
+
+const observedRow: SessionObservation = {
+  case: "observed-active",
+  bridge: { bridge: "answering", sessionDescriptor: null },
+  observedAtUtc: observedAt,
+  process: process(2402, 2024),
+  year: 2024,
+};
+
+const bootingRow: SessionObservation = {
+  case: "controlled-pending",
+  attempt: {
+    attempt: "launched",
+    bridge: { bridge: "missing-endpoint" },
+    process: process(2603, 2026),
+  },
+  detail: "Revit is inside its startup window.",
+  id: "fixture-installed-26",
+  observedAtUtc: observedAt,
+  origin: "fixture",
+  project: "Pe.App",
+  receipt: receipt("fixture-installed-26"),
+  worktree: "C:\\Fixtures\\Pe.Tools",
+  year: 2026,
+};
 
 const controlled: SessionFacts = {
   sessionId: "bridge-fixture-dev-25",
   sdkSessionId: "fixture-dev-25",
   processId: 2501,
+  year: "2025",
   lane: "dev",
   custody: "controlled",
   activeDocumentId: "C:\\Models\\project-a Tower.rvt",
@@ -68,6 +83,7 @@ const controlled: SessionFacts = {
 const observed: SessionFacts = {
   sessionId: "bridge-observed-desktop",
   processId: 2402,
+  year: "2024",
   lane: "installed",
   custody: "observed",
   activeDocumentId: "C:\\Models\\Clinic Renovation.rvt",
@@ -83,87 +99,44 @@ const fixtureFleet: InstancesFleet = {
       id: "fixture-dev-25",
       custody: "controlled",
       phase: "ready",
+      detail: "fixture review fact",
       lane: "dev",
-      year: "25",
       pid: 2501,
-      activeDocumentTitle: "project-a Tower.rvt",
-      openDocumentCount: 2,
       session: controlled,
-      row: row({
-        id: "fixture-dev-25",
-        custody: "controlled",
-        lane: "dev",
-        phase: "ready",
-        pid: 2501,
-        state: "RUNNING",
-        year: "25",
-        legs: [leg("revit", "up", 2501), leg("host", "up", 2511)],
-      }),
+      row: controlledRow("fixture-dev-25", 2025, 2501, "ready"),
     },
     {
       id: "observed-desktop",
       custody: "observed",
       phase: "ready",
+      detail: "fixture review fact",
       lane: "installed",
-      year: "24",
       pid: 2402,
-      activeDocumentTitle: "Clinic Renovation.rvt",
-      openDocumentCount: 1,
       session: observed,
-      row: row({
-        id: "observed-desktop",
-        custody: "observed",
-        lane: "installed",
-        phase: "ready",
-        pid: 2402,
-        state: "OBSERVED",
-        year: "24",
-        receipt: null,
-        legs: [leg("revit", "up", 2402), leg("host", "up", 2412)],
-      }),
+      row: observedRow,
     },
     {
       id: "fixture-installed-26",
       custody: "controlled",
       phase: "booting",
+      detail: "Revit is inside its startup window.",
       lane: "installed",
-      year: "26",
       pid: 2603,
-      openDocumentCount: 0,
-      row: row({
-        id: "fixture-installed-26",
-        custody: "controlled",
-        lane: "installed",
-        phase: "booting",
-        pid: 2603,
-        state: "STARTING",
-        year: "26",
-        detail: "Revit is inside its startup window.",
-        legs: [leg("revit", "up", 2603), leg("host", "down", 2613)],
-      }),
+      row: bootingRow,
     },
     {
       id: "fixture-dev-24-stalled",
       custody: "controlled",
       phase: "unresponsive",
+      detail: "The process exists but the SDK bridge stopped answering.",
       lane: "dev",
-      year: "24",
       pid: 2404,
-      activeDocumentTitle: "Tower Core.rvt",
-      openDocumentCount: 1,
-      row: row({
-        id: "fixture-dev-24-stalled",
-        custody: "controlled",
-        lane: "dev",
-        phase: "unresponsive",
-        pid: 2404,
-        state: "UNRESPONSIVE",
-        year: "24",
-        detail: "The process exists but the SDK bridge stopped answering.",
-        legs: [leg("revit", "up", 2404), leg("host", "down", 2414)],
-      }),
+      row: controlledRow("fixture-dev-24-stalled", 2024, 2404, "unresponsive-endpoint"),
     },
   ],
+  unreadableReceipts: [],
+  processReadErrors: [],
+  registryRoot: "C:\\Fixtures\\sessions",
   isLoading: false,
   stale: false,
   error: null,
@@ -171,8 +144,13 @@ const fixtureFleet: InstancesFleet = {
   basis: ["fixture:instances"],
 };
 
-export function FixtureInstancesPage() {
-  const [target, setTarget] = useState("");
+export function FixtureInstancesPage({
+  target,
+  setTarget,
+}: {
+  target: string;
+  setTarget: (target: string) => void;
+}) {
   return (
     <InstancesWorkspace
       target={target}

@@ -3,7 +3,10 @@ import { address, type TakeoffsRouteDocument } from "@pe/agent-contracts";
 import { createTakeoffsCommandHandlers } from "../src/pea/takeoffs-commands.ts";
 
 const rawSnapshot = {
-  status: { systems: [] },
+  status: {
+    systems: [],
+    carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
+  },
   zoneFrs: [
     {
       elementId: 42,

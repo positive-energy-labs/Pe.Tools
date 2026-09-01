@@ -1,6 +1,6 @@
 import { token } from "#/lib/token";
 import { Workspace } from "#/components/anatomy";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
@@ -19,8 +19,15 @@ import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/
 import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
 import { documentTrunk, worldTrunk } from "#/targeting/world";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import { DIRS_KEY, PANES, readDirs, resolvedWorldBinding } from "#/takeoff/route";
+import {
+  DIRS_KEY,
+  PANES,
+  readDirs,
+  resolvedWorldBinding,
+  takeoffsWorkingCopyPath,
+} from "#/takeoff/route";
 import { AdoptPanel, SyncPanel } from "#/takeoff/adopt-panel";
+import { addressSchema } from "@pe/agent-contracts";
 
 export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const navigate = useNavigate({ from: "/takeoffs" });
@@ -67,6 +74,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const targetingLevel = useAtomValue(store.atoms.targetingLevel);
   const targetingQuery = useAtomValue(store.atoms.targetingQuery);
   const busy = busyState?.id ?? null;
+  const [documentFailure, setDocumentFailure] = useState<string | null>(null);
 
   const addDir = (d: string) => {
     const dirs = readDirs();
@@ -104,7 +112,41 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
     }),
     [resolution, sessions, activeDocument?.documentId, views, dir, r10, zones, stage],
   );
-  const setState = (patch: BindingPatch<TakeoffSlot>) => store.actions.setBindings(patch);
+  const moveToDocument = (documentId: string) => {
+    const at = addressSchema.safeParse(documentId);
+    if (at.success)
+      void navigate({
+        search: (previous) => ({ ...previous, doc: at.data }),
+        replace: true,
+      });
+  };
+  const switchDocument = async (documentId: string) => {
+    if (!session || !AsyncResult.isSuccess(recentDocumentsResult))
+      throw Error("document recents are not ready");
+    const recent = recentDocumentsResult.value.value.find(
+      (candidate) => (candidate.modelGuid ?? candidate.path) === documentId,
+    );
+    if (!recent) throw Error(`unknown recent document ${documentId}`);
+    if (recent.isCloud) throw Error("cloud Takeoffs working copies are not supported yet");
+    const destination = takeoffsWorkingCopyPath(recent.path);
+    if (destination === recent.path)
+      await documentTrunk.pick(session, recent.path, recentDocumentsResult.value.value);
+    else await documentTrunk.clone(session, recent.path, destination);
+    moveToDocument(destination);
+  };
+  const setState = (patch: BindingPatch<TakeoffSlot>) => {
+    store.actions.setBindings(patch);
+    const nextWorld = patch.bound?.world;
+    if (nextWorld && nextWorld !== state.bound.world)
+      void navigate({ search: (previous) => ({ ...previous, target: nextWorld, doc: undefined }) });
+    const nextDocument = patch.bound?.rvt;
+    if (live && nextDocument && nextDocument !== state.bound.rvt) {
+      setDocumentFailure(null);
+      void switchDocument(nextDocument).catch((error) =>
+        setDocumentFailure(error instanceof Error ? error.message : "document switch failed"),
+      );
+    }
+  };
   const boundZones = world.zones.filter((z) => zones.includes(z.zone.guid));
 
   const product = defineProduct(
@@ -286,6 +328,14 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         receipt={
           <span className="flex items-center gap-2">
             <VerbLane atoms={store.atoms} />
+            {documentFailure ? <span role="alert">{documentFailure}</span> : null}
+            {documentFailure ? (
+              <Verb
+                label="dismiss"
+                onClick={() => setDocumentFailure(null)}
+                reason="Clears the document switch error. It does not retry."
+              />
+            ) : null}
             {failure ? (
               <Verb
                 label="dismiss"

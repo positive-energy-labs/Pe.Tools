@@ -100,7 +100,7 @@ export function FamiliesHead({ store }: { store: FamiliesStore }) {
       product={product}
       b={b}
       runner={runner}
-      aside={
+      fact={
         plan ? (
           <FactChip title="The plan hash that the apply command must return unchanged.">
             plan hash · {plan.planHash.slice(0, 12)}

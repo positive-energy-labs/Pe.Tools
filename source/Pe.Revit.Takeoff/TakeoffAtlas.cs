@@ -53,7 +53,8 @@ public static class TakeoffAtlas
 
         var registry = TakeoffCarriers.ReadRegistry(doc);
         var status = new TakeoffModelStatus(
-            registry.Systems.Select(s => new TakeoffRegistrySystem(s.Guid, s.Tag)).ToList());
+            registry.Systems.Select(s => new TakeoffRegistrySystem(s.Guid, s.Tag)).ToList(),
+            TakeoffCarriers.Preflight(doc));
         return new TakeoffSnapshotData(status, zones, grouped);
     }
 
@@ -91,8 +92,11 @@ public static class TakeoffAtlas
 
     public static TakeoffAdoptResult AdoptZones(Document doc, TakeoffAdoptRequest request)
     {
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Adoption);
+        var unnamed = request.Items.FirstOrDefault(item => string.IsNullOrWhiteSpace(item.Name));
+        if (unnamed != null)
+            throw new InvalidOperationException($"FilledRegion {unnamed.ElementId} requires a zone name");
         var view = FindView(doc, request.View);
-        TakeoffCarriers.EnsureBindings(doc);
         var registry = TakeoffCarriers.ReadRegistry(doc);
         var adopted = new List<TakeoffAdopted>();
 
@@ -162,6 +166,7 @@ public static class TakeoffAtlas
         Document doc,
         TakeoffPartitionRequest request)
     {
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
         Action<string> log = static _ => { };
         var zone = new ZoneScope { Name = request.ZoneName, Loops = request.Loops };
         var snapshot = DetectSnapshot.Load(Environment.ExpandEnvironmentVariables(request.ReplayPath));
@@ -224,7 +229,7 @@ public static class TakeoffAtlas
 
     public static string WriteRoomType(Document doc, TakeoffRoomTypeRequest request)
     {
-        TakeoffCarriers.EnsureBindings(doc);
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
         var fr = doc.GetElement(request.ElementId.ToElementId()) as FilledRegion
                  ?? throw new InvalidOperationException($"element {request.ElementId} is not a FilledRegion");
         if (TakeoffCarriers.ReadIdentity(fr).Role != TakeoffCarriers.RoleRoomRegion)

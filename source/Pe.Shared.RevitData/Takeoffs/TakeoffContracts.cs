@@ -3,8 +3,23 @@ namespace Pe.Shared.RevitData.Takeoffs;
 public sealed record TakeoffViewFacts(long ElementId, int Regions);
 public sealed record TakeoffViewsData(IReadOnlyList<TakeoffViewFacts> Views);
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
+public enum TakeoffCarrierStage
+{
+    Adoption,
+    Materialization,
+}
+public sealed record TakeoffCarrierPreflight(
+    TakeoffCarrierStage Stage,
+    string Status,
+    IReadOnlyList<Guid> MissingCarrierGuids);
+public sealed record TakeoffCarrierInitializationRequest(TakeoffCarrierStage Stage = TakeoffCarrierStage.Adoption);
+public sealed record TakeoffCarrierInitializationData(
+    string Status,
+    Guid? Bound,
+    IReadOnlyList<Guid> Remaining);
 public sealed record TakeoffModelStatus(
-    IReadOnlyList<TakeoffRegistrySystem> Systems);
+    IReadOnlyList<TakeoffRegistrySystem> Systems,
+    TakeoffCarrierPreflight Carriers);
 public sealed record TakeoffRegionFacts(
     long ElementId,
     string TypeName,

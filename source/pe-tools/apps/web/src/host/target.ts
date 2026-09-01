@@ -18,6 +18,8 @@ export interface SessionFacts {
   lane: Lane | null;
   /** The id `pe-revit session list` prints, when this payload was launched by pe-revit. */
   sdkSessionId?: string;
+  /** Revit major version reported by the loaded bridge. */
+  year?: string;
   /**
    * `controlled` = pe-revit holds a receipt (full lifecycle); `observed` = it does not (reads
    * only). Disclosed by the broker. The UI must NOT re-implement the refusal — the SDK resolver
@@ -119,6 +121,7 @@ export function fromBridgeSessions(entries: readonly BridgeSessionListEntry[]): 
       // Anything outside the SDK's union is no lane at all, not an invented "unknown" member.
       lane: LANES.find((l) => l === e.lane) ?? null,
       sdkSessionId: e.sdkSessionId ?? undefined,
+      year: e.revitVersion ?? undefined,
       // The broker discloses custody; an entry that predates the field is treated as observed —
       // the read-only reading, which is the safe one to be wrong about.
       custody: CUSTODIES.find((c) => c === e.custody) ?? "observed",

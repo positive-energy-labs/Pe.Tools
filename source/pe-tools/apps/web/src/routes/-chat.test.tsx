@@ -67,7 +67,7 @@ test("literal chat fixture renders varied production turns without controller or
   expect(text).toContain("Apply the reviewed schedule update");
   expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Context budget" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /Context budget/ })).toBeTruthy();
   expect(document.querySelector('[data-tool-id="tool-read"]')).toBeTruthy();
   expect(document.querySelector('[data-tool-id="tool-receipt"]')).toBeTruthy();
   expect(document.querySelector('[data-tool-id="tool-approval"]')).toBeTruthy();

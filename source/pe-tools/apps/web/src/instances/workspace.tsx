@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { current, instancesRouteState, type Address } from "@pe/agent-contracts";
 import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
 import { Tag } from "#/components/lang/chip";
@@ -16,37 +15,9 @@ import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 import { product as defineProduct } from "#/targeting/model";
 import { worldTrunk, type WorldStart } from "#/targeting/world";
-import { useRouteState } from "#/workbench/route-state";
 import { Press } from "#/components/lang/press";
 import { Provenance } from "#/components/lang/section";
 import { StartFields, custodyVerdict, parseUtc, phaseVerdict, worldSub } from "#/instances/route";
-
-export function AddressedInstancesPage({
-  documentAddress,
-  fleet,
-}: {
-  documentAddress: Address;
-  fleet: InstancesFleet;
-}) {
-  const route = useRouteState(instancesRouteState, { documentAddress });
-  const target = current(route.slice?.bindings.world, documentAddress)?.id ?? "";
-  return (
-    <InstancesWorkspace
-      target={target}
-      setTarget={(nextTarget) =>
-        void route.apply([
-          {
-            path: ["bindings", "world"],
-            value: nextTarget
-              ? { id: nextTarget, label: nextTarget, at: documentAddress }
-              : undefined,
-          },
-        ])
-      }
-      fleet={fleet}
-    />
-  );
-}
 
 export type InstancesFleet = ReturnType<typeof useFleet>;
 

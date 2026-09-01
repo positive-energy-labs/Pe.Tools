@@ -57,6 +57,13 @@ internal sealed class RevitDataRequestService {
     private static TakeoffAdoptResult AdoptTakeoffRegionsCore(TakeoffAdoptRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => TakeoffAtlas.AdoptZones(document, request), "Pe Adopt Takeoff Regions");
 
+    [Op("takeoffs.initialize-carrier", Does = "Bind the next missing Takeoff carrier for the requested stage in one transaction.", Title = "Initialize Next Takeoff Carrier", Finds = ["takeoffs", "initialize", "carriers", "shared-parameters"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
+    private static TakeoffCarrierInitializationData InitializeTakeoffCarrierCore(TakeoffCarrierInitializationRequest request, ProjectDocument activeDocument) =>
+        RunTakeoff(
+            activeDocument.Value,
+            document => TakeoffCarriers.InitializeNext(document, request.Stage),
+            "Pe Initialize Takeoff Carrier");
+
     [Op("takeoffs.prepare-capture", Does = "Prepare the capture views for one Takeoff plan view in one transaction.", Title = "Prepare Takeoff Capture", Finds = ["takeoffs", "capture", "prepare", "views"], Intent = OpIntent.Mutate, Cost = OpCost.Mutation)]
     private static TakeoffCapturePrepared PrepareTakeoffCaptureCore(TakeoffPrepareCaptureRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => TakeoffAtlas.PrepareCapture(document, request), "Pe Prepare Takeoff Capture");
@@ -175,6 +182,14 @@ internal sealed class RevitDataRequestService {
             return result;
         } catch (BridgeOperationException) {
             throw;
+        } catch (TakeoffCarrierPrerequisiteException ex) {
+            throw BridgeOperationExceptions.Conflict(
+                ex.Message,
+                [BridgeOperationExceptions.Issue(
+                    "$",
+                    "TakeoffCarriersNeedInitialization",
+                    $"Missing carrier GUIDs: {string.Join(", ", ex.Preflight.MissingCarrierGuids.Select(guid => guid.ToString("D")))}",
+                    $"Call takeoffs.initialize-carrier with stage '{ex.Preflight.Stage}' until status is ready.")]);
         } catch (Exception ex) {
             throw BridgeOperationExceptions.Unexpected(
                 "TakeoffOperationException",

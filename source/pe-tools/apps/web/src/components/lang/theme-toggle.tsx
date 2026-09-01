@@ -7,12 +7,16 @@ type ThemeMode = "light" | "dark" | "auto";
 
 function getInitialMode(): ThemeMode {
   if (typeof window === "undefined") return "auto";
-  const stored = window.localStorage.getItem("theme");
-  return stored === "light" || stored === "dark" || stored === "auto" ? stored : "auto";
+  try {
+    const stored = window.localStorage.getItem("theme");
+    return stored === "light" || stored === "dark" || stored === "auto" ? stored : "auto";
+  } catch {
+    return "auto";
+  }
 }
 
 function applyThemeMode(mode: ThemeMode) {
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
   const resolved = mode === "auto" ? (prefersDark ? "dark" : "light") : mode;
 
   document.documentElement.classList.remove("light", "dark");
@@ -40,7 +44,7 @@ export function ThemeToggle() {
 
   // Track the system theme only while in auto.
   useEffect(() => {
-    if (mode !== "auto") return;
+    if (mode !== "auto" || !window.matchMedia) return;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => applyThemeMode("auto");
     media.addEventListener("change", onChange);
@@ -51,7 +55,11 @@ export function ThemeToggle() {
     const next = NEXT[mode];
     setMode(next);
     applyThemeMode(next);
-    window.localStorage.setItem("theme", next);
+    try {
+      window.localStorage.setItem("theme", next);
+    } catch {
+      // The theme still applies for this page when storage is unavailable.
+    }
   }
 
   const Icon = ICON[mode];

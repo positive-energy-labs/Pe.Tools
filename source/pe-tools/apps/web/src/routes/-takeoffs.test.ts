@@ -3,9 +3,18 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
 import { resolveTarget, type SessionFacts } from "#/host/target";
 import { documentTrunk } from "#/targeting/world";
-import { resolvedWorldBinding } from "./takeoffs";
+import { resolvedWorldBinding, takeoffsWorkingCopyPath } from "./takeoffs";
 
 describe("takeoffs document scope", () => {
+  it("uses one stable durable working-copy path", () => {
+    expect(takeoffsWorkingCopyPath("C:\\Models\\projectA.rvt")).toBe(
+      "C:\\Models\\projectA.PeTakeoffs.rvt",
+    );
+    expect(takeoffsWorkingCopyPath("C:\\Models\\projectA.PeTakeoffs.rvt")).toBe(
+      "C:\\Models\\projectA.PeTakeoffs.rvt",
+    );
+  });
+
   it("binds an implicit sole world and offers its active document", () => {
     const sessions: SessionFacts[] = [
       {
