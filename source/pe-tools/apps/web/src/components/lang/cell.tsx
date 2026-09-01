@@ -125,6 +125,7 @@ export function StateCell(props: StateCellProps) {
         data-seam={read.seam ? "" : undefined}
         data-never={read.never ? "" : undefined}
         data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
+        data-locate={props.onLocate != null ? "" : undefined}
         title={cellFactsText(props) ?? undefined}
       >
         {editable ? (
@@ -210,6 +211,7 @@ export function StateCell(props: StateCellProps) {
           data-seam={read.seam ? "" : undefined}
           data-never={read.never ? "" : undefined}
           data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
+          data-locate={props.onLocate != null ? "" : undefined}
         >
           {read.unsettled != null ? (
             <span className={slots.unsettled()} data-state={read.unsettled}>

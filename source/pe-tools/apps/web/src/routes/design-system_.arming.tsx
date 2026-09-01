@@ -39,7 +39,10 @@ const noop = () => {};
 /** The live instance's own phase. `armed` is not stored — the strip derives it from the reason,
  *  which is the ruling: arming is driven by supplying the reason, so there is no separate "arm"
  *  press to forget. */
-type Phase = "arming" | "refused" | "written";
+/* `landed` NOT `written`: the cell grammar rules that no proposal state is called `written`
+ * (ledger 2026-08-31), and a literal `written` phase in the executable design authority would be
+ * read as that state. This is the arming ceremony's own phase — the write went through. */
+type Phase = "arming" | "refused" | "landed";
 
 function ArmingRoute() {
   const [reason, setReason] = useState("");
@@ -52,7 +55,7 @@ function ArmingRoute() {
   const commit = () => {
     // The first commit refuses — that IS the case the ceremony exists for. After a re-plan the
     // same press lands, so the receipt and the refusal are reachable from the same button.
-    setPhase(replanned ? "written" : "refused");
+    setPhase(replanned ? "landed" : "refused");
   };
   const replan = () => {
     setReplanned(true);
@@ -87,7 +90,7 @@ function ArmingRoute() {
             again
           </p>
           <div className="max-w-[44rem] flex flex-col gap-2.5">
-            {phase === "written" ? (
+            {phase === "landed" ? (
               <>
                 <OutcomeLine
                   kind="receipt"
