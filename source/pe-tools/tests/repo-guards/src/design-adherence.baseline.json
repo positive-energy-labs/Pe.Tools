@@ -40,11 +40,11 @@
     }
   },
   "opacityDim": {
-    "total": 21,
+    "total": 20,
     "byArea": {
       "components": 17,
-      "family": 2,
-      "takeoff": 2
+      "families": 1,
+      "family": 2
     }
   },
   "longTitle": {
@@ -70,21 +70,21 @@
     }
   },
   "inlineColor": {
-    "total": 156,
+    "total": 145,
     "byArea": {
       "chat": 2,
       "components": 6,
       "design-system": 1,
       "family": 3,
-      "family-review": 39,
+      "family-review": 33,
       "grilles": 4,
       "host": 3,
       "ops": 27,
-      "param-tables": 11,
+      "param-tables": 7,
       "routes": 4,
       "runs": 27,
       "takeoff": 4,
-      "targeting": 16,
+      "targeting": 15,
       "workbench": 9
     }
   },

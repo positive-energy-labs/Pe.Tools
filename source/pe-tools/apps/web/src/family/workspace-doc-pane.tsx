@@ -52,7 +52,7 @@ export function FamilyWorkspaceDocPane() {
         {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
       </p>
 
-      <div className="mb-2 border-t border-line pt-1.5">
+      <div className="hairline-t mb-2 pt-1.5">
         <p className="face-mono t-label t-upper mb-0.5 flex items-center gap-1 text-ink-2">
           bindable dims — represented in the table
           <HelpTip>
@@ -101,7 +101,7 @@ export function FamilyWorkspaceDocPane() {
         })}
       </div>
 
-      <div className="border-t border-line pt-1.5">
+      <div className="hairline-t pt-1.5">
         <p
           className="face-mono t-label t-upper mb-0.5 text-ink-2"
           title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
@@ -136,7 +136,7 @@ export function FamilyWorkspaceDocPane() {
           {world.missingInRevit.has(name) && <span className="ml-1">⊘ not in Revit</span>}
         </p>
 
-        <div className="mb-2 border-t border-line pt-1.5">
+        <div className="hairline-t mb-2 pt-1.5">
           <p className="face-mono t-label t-upper mb-0.5 flex items-center gap-1 text-ink-2">
             family value {isFormula(authored) ? "· formula" : ""}
             <HelpTip>
@@ -175,7 +175,7 @@ export function FamilyWorkspaceDocPane() {
           )}
         </div>
 
-        <div className="mb-2 border-t border-line pt-1.5">
+        <div className="hairline-t mb-2 pt-1.5">
           <p
             className="face-mono t-label t-upper mb-0.5 text-ink-2"
             title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
@@ -204,7 +204,7 @@ export function FamilyWorkspaceDocPane() {
           )}
         </div>
 
-        <div className="border-t border-line pt-1.5">
+        <div className="hairline-t pt-1.5">
           <p
             className="face-mono t-label t-upper mb-0.5 text-ink-2"
             title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."
@@ -222,7 +222,7 @@ export function FamilyWorkspaceDocPane() {
             blocks.map((id) => (
               <p
                 key={id}
-                className="face-mono t-caption border-l border-line py-0.5 pl-1.5 text-ink-2"
+                className="hairline-l face-mono t-caption py-0.5 pl-1.5 text-ink-2"
                 title={`Block ${id} of ${world.spec?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
               >
                 <span>{id} · </span>
@@ -238,7 +238,7 @@ export function FamilyWorkspaceDocPane() {
   const inspectorPanel =
     inspect == null ? null : (
       <div className="flex max-h-[52%] min-h-0 shrink-0 flex-col border-t-2 border-line-2">
-        <div className="flex h-7 shrink-0 items-center gap-2 border-b border-line bg-recess px-2">
+        <div className="hairline-b flex h-7 shrink-0 items-center gap-2 bg-recess px-2">
           {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
           <span>
             <Tag>{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
@@ -321,7 +321,7 @@ export function FamilyWorkspaceDocPane() {
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* proposals — margin annotations, docked as a stack above the spec */}
-        <div className="border-b border-line bg-artifact px-2 py-1.5">
+        <div className="hairline-b bg-artifact px-2 py-1.5">
           <div
             className="mb-1 flex items-baseline gap-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."

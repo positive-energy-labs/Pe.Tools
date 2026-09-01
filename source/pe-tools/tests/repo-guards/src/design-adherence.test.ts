@@ -90,6 +90,10 @@ const ownsHost = (rel: string) =>
   /\/(?:host|store|queries|world)\.tsx?$/.test(rel);
 
 type Metric = { name: string; re: RegExp; where?: (rel: string) => boolean; min?: number };
+const OPACITY_DIM = /(?<![-\w])opacity-(?:\d+|\[[^\]]+\])|\bopacity:\s*[\d.]/g;
+const INLINE_COLOR =
+  /\b(?:color|borderColor|backgroundColor|background|fill|stroke):\s*(?=\S)(?:"(?!(?:currentColor|none|transparent|inherit)"\s*[,}])[^,}]+|'(?!(?:currentColor|none|transparent|inherit)'\s*[,}])[^,}]+|(?!["'])(?!(?:currentColor|none|transparent|inherit)\s*[,}])[^,}]+)/g;
+
 const METRICS: Metric[] = [
   { name: "rawTable", re: /<table\b/g, where: (r) => !r.startsWith("components/master-table/") },
   {
@@ -99,12 +103,12 @@ const METRICS: Metric[] = [
   },
   { name: "hostBelowRoute", re: /\b(?:callHostRpc|fetch)\(/g, where: (r) => !ownsHost(r) },
   { name: "escHandler", re: /key\s*===\s*["']Escape["']/g },
-  { name: "opacityDim", re: /(?<![-\w])opacity-(?:\d+|\[[^\]]+\])|\bopacity:\s*[\d.]/g },
+  { name: "opacityDim", re: OPACITY_DIM },
   { name: "longTitle", re: /title=(?:"[^"]{120,}"|\{`[^`]{120,}`\})/g },
   { name: "busyState", re: /\[(?:busy|running|pending|saving)\w*,\s*set\w+\]\s*=\s*useState/g },
   {
     name: "inlineColor",
-    re: /\b(?:color|borderColor|backgroundColor|background|fill|stroke):\s*(?!["']?(?:currentColor|none|transparent|inherit))[^,}]+/g,
+    re: INLINE_COLOR,
     where: (r) => r.endsWith(".tsx"),
   },
   {
@@ -140,7 +144,12 @@ const census = (): Census => {
     for (const f of FILES) {
       if (m.where && !m.where(f.rel)) continue;
       // inlineColor only counts inside style objects; the other metrics scan whole files.
-      const text = m.name === "inlineColor" ? onlyStyleObjects(f.text) : f.text;
+      const text =
+        m.name === "inlineColor"
+          ? onlyStyleObjects(f.text)
+          : m.name === "opacityDim"
+            ? stripKeyframes(f.text)
+            : f.text;
       for (const hit of text.matchAll(m.re)) {
         offences.push({ rel: f.rel, line: lineOf(text, hit.index), match: hit[0].slice(0, 80) });
       }
@@ -172,6 +181,25 @@ const onlyStyleObjects = (text: string): string => {
   return out + text.slice(i).replace(/[^\n]/g, " ");
 };
 
+/** Blank keyframe bodies while preserving line numbers for the opacity census. */
+const stripKeyframes = (text: string): string => {
+  let out = text;
+  for (const match of text.matchAll(/@keyframes\s+[\w-]+\s*\{/g)) {
+    let depth = 1;
+    let end = match.index + match[0].length;
+    while (end < text.length && depth > 0) {
+      if (text[end] === "{") depth++;
+      else if (text[end] === "}") depth--;
+      end++;
+    }
+    out =
+      out.slice(0, match.index) +
+      out.slice(match.index, end).replace(/[^\n]/g, " ") +
+      out.slice(end);
+  }
+  return out;
+};
+
 type Baseline = Record<string, { total: number; byArea: Record<string, number> }>;
 
 const table = (c: Census): string => {
@@ -197,6 +225,26 @@ describe("design adherence — component adoption ratchet", () => {
   it("prints the census", () => {
     console.log("\n" + table(current) + "\n");
     expect(Object.keys(current)).toEqual(METRICS.map((m) => m.name));
+  });
+
+  it("inlineColor excludes quoted and unquoted non-colors without hiding authored paint", () => {
+    const fixture = onlyStyleObjects(`
+      <div style={{ color: "transparent", borderColor: 'inherit', fill: none }} />
+      <div style={{ color: token("ink") }} />
+    `);
+    expect([...fixture.matchAll(INLINE_COLOR)].map((match) => match[0])).toEqual([
+      'color: token("ink") ',
+    ]);
+  });
+
+  it("opacityDim ignores keyframes without hiding UI dimming", () => {
+    const fixture = stripKeyframes(
+      "opacity-50; @keyframes pulse{0%,100%{opacity:.15}50%{opacity:1}} opacity: 0.5",
+    );
+    expect([...fixture.matchAll(OPACITY_DIM)].map((match) => match[0])).toEqual([
+      "opacity-50",
+      "opacity: 0",
+    ]);
   });
 
   for (const m of METRICS) {

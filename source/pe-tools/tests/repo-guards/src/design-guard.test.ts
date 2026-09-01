@@ -752,6 +752,18 @@ const LOADER_PRESENT = [
   "text-ink-2",
   "z-modal",
   "dl-cell",
+  "hairline-t",
+  "hairline-b",
+  "hairline-l",
+  "hairline-r",
+  "hairline-x",
+  "hairline-y",
+  "hairline-t-2",
+  "hairline-b-2",
+  "hairline-l-2",
+  "hairline-r-2",
+  "hairline-x-2",
+  "hairline-y-2",
 ];
 const LOADER_ABSENT = ["text-red-500", "text-xs", "font-mono"];
 const candidates = [
@@ -793,11 +805,19 @@ const TRUE_UNREGISTERED = REMAINDER.filter(
 
 /** Product code may author GEOMETRY plus TYPE (tier, face, case) and INK (the three text inks).
  *  Ruled 2026-08-30: the `{}` allowlist stripped ~1,100 `t-*`/`face-*` sites and left product
- *  text at browser defaults. Meaning hues, fills, strokes and elevation stay component-only. */
+ *  text at browser defaults. Meaning hues, fills, and colored strokes stay component-only. */
 const AUTHORING =
-  /^(?:t-(?:caption|label|value|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
+  /^(?:hairline-(?:[tblrxy])(?:-2)?|t-(?:caption|label|value|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
+const COLOR_ROLE =
+  "(?:page|artifact|recess|select|document|scrim|ink|ink-2|ink-mute|line|line-2|pea|pea-ink|alarm|caution|done|commit|on-commit|nav|on|viz-[1-6])(?:/[\\d.]+)?";
+const MEANING_FILL_STROKE = new RegExp(
+  `^(?:(?:bg|text|fill|stroke|from|via|to)-${COLOR_ROLE}|border(?:-[xytrblse])?-${COLOR_ROLE}|divide-${COLOR_ROLE}|ring-${COLOR_ROLE}|outline-${COLOR_ROLE}|hairline-(?:[tblrxy])(?:-2)?|on-(?:page|artifact|recess|select)|(?:ink|commit|alarm|pea|caution)-wash(?:-artifact)?|caution-hatch|inset-ring)$`,
+);
 const ALLOWLIST_VIOLATIONS = CLASS_USES.filter(
-  (use) => !use.rel.startsWith("components/") && !AUTHORING.test(baseClass(use.token)),
+  (use) =>
+    !use.rel.startsWith("components/") &&
+    MEANING_FILL_STROKE.test(baseClass(use.token)) &&
+    !AUTHORING.test(baseClass(use.token)),
 );
 const ALLOWLIST_BY_FILE = Object.fromEntries(
   [...new Set(ALLOWLIST_VIOLATIONS.map((use) => use.rel))]
@@ -991,6 +1011,20 @@ describe("design checks — code holds the boundary", () => {
       "gap-2",
       "bg-page",
       "shadow-sm",
+    ]);
+    const scopeFixture = classUses([
+      {
+        rel: "fixture.tsx",
+        text: '<div className="leading-tight sr-only outline-none rounded-lg shadow-sm tracking-tight bg-page border-line text-caution hairline-b" />',
+      },
+    ]).filter(
+      (use) =>
+        MEANING_FILL_STROKE.test(baseClass(use.token)) && !AUTHORING.test(baseClass(use.token)),
+    );
+    expect(scopeFixture.map((use) => use.token)).toEqual([
+      "bg-page",
+      "border-line",
+      "text-caution",
     ]);
     const increases = Object.entries(ALLOWLIST_BY_FILE)
       .filter(([rel, count]) => count > (ALLOWLIST_BASELINE[rel] ?? 0))

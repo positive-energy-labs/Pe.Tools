@@ -23,7 +23,7 @@ export function FamiliesReadoutBands() {
   return (
     <>
       {plan && (
-        <div className="max-h-44 overflow-auto border-b border-line px-2 py-1.5">
+        <div className="hairline-b max-h-44 overflow-auto px-2 py-1.5">
           <div className="sticky top-0 z-[1] flex flex-wrap items-center gap-1.5 bg-page py-0.5">
             <SectionLabel>
               <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
@@ -41,7 +41,7 @@ export function FamiliesReadoutBands() {
           </div>
           <table className="mt-0.5 w-full table-fixed border-collapse leading-tight">
             <thead className="face-mono t-caption t-upper text-ink-mute">
-              <tr className="border-b border-line">
+              <tr className="hairline-b">
                 <th className="w-8 font-normal">
                   <span className="sr-only">include</span>
                 </th>
@@ -58,10 +58,7 @@ export function FamiliesReadoutBands() {
                 return (
                   <tr
                     key={entry.familyId}
-                    className={cn(
-                      "border-b border-line",
-                      (flag !== null || excluded) && "text-ink-mute",
-                    )}
+                    className={cn("hairline-b", (flag !== null || excluded) && "text-ink-mute")}
                   >
                     <td className="w-8 text-center">
                       <Press
@@ -108,7 +105,7 @@ export function FamiliesReadoutBands() {
                 );
               })}
               {outsideProfile.map((family) => (
-                <tr key={`outside-${family.familyId}`} className="border-b border-line opacity-60">
+                <tr key={`outside-${family.familyId}`} className="hairline-b opacity-60">
                   <td className="w-8 text-center">
                     <span className="face-mono t-value text-ink-2">✕</span>
                   </td>
@@ -143,7 +140,7 @@ export function FamiliesReadoutBands() {
 
       {/* ── receipts ─────────────────────────────────────────────────────────────────────── */}
       {applyData && (
-        <div className="max-h-48 overflow-auto border-b border-line px-4 py-2">
+        <div className="hairline-b max-h-48 overflow-auto px-4 py-2">
           <div className="flex items-center gap-2">
             <SectionLabel>
               <span title="What apply actually did, per family, as the op reported it. Receipts are the fleet lane's trust layer — the counts here are the evidence, not the plan's promise.">
@@ -163,7 +160,7 @@ export function FamiliesReadoutBands() {
           <table className="mt-1 w-full border-collapse">
             <tbody>
               {applyData.receipts.map((entry) => (
-                <tr key={entry.familyId} className="border-b border-line">
+                <tr key={entry.familyId} className="hairline-b">
                   <td className="face-mono t-value w-56 truncate py-0.5">
                     {entry.familyName ?? `element ${entry.familyId}`}
                   </td>
@@ -235,7 +232,7 @@ export function FamiliesReadoutBands() {
 
       {/* ── projection: a lazily-rendered document, copyable ─────────────────────────────── */}
       {projection && (
-        <details className="border-b border-line px-4 py-2" open={fixture ? true : undefined}>
+        <details className="hairline-b px-4 py-2" open={fixture ? true : undefined}>
           <summary className="cursor-pointer">
             <SectionLabel>
               <span title="Each picked family read back out of the model as profile JSON. Nothing is written anywhere — copy it into a profile document if you want to keep it.">
