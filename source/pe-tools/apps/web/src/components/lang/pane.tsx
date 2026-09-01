@@ -7,7 +7,10 @@ export type PaneKind = "navigation" | "visual" | "content" | "inspector";
 export const paneRecipe = tv({
   slots: {
     root: "flex size-full min-h-0 min-w-0 flex-col overflow-hidden",
-    body: "min-h-0 min-w-0 flex-1",
+    // A pane body is a COLUMN, so a call site that docks a region under a scroller does not need
+    // a second scroller to get one (annotation round, 2026-08-31 — two stacked bars in the right
+    // sidebar were a pane body scrolling around a child that also scrolled).
+    body: "flex min-h-0 min-w-0 flex-1 flex-col",
   },
   variants: {
     kind: {

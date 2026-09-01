@@ -307,12 +307,14 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
       />
     </div>
   );
-  const readoutBand = (
-    <>
-      {panel === "adopt" && scope && <AdoptPanel store={store} />}
-      {panel === "sync" && scope && <SyncPanel store={store} />}
-    </>
-  );
+  // Null, not an empty fragment: the band's container pays inset for whatever it holds, so an
+  // absent panel must be absent, not an empty strip (annotation, 2026-08-31).
+  const readoutBand =
+    scope && panel === "adopt" ? (
+      <AdoptPanel store={store} />
+    ) : scope && panel === "sync" ? (
+      <SyncPanel store={store} />
+    ) : null;
   if (live && !session)
     return (
       <Workspace

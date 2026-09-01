@@ -19,13 +19,11 @@ export function AtlasWorkspace() {
       readoutBand={
         readoutBand ??
         (!geoReady ? (
-          <div className="px-2 py-1">
-            <OutcomeLine
-              kind="busy"
-              label="loading room geometry"
-              says="rooms draw as position dots until their boundaries land"
-            />
-          </div>
+          <OutcomeLine
+            kind="busy"
+            label="loading room geometry"
+            says="rooms draw as position dots until their boundaries land"
+          />
         ) : null)
       }
       navigation={<AtlasNavigation />}

@@ -270,6 +270,9 @@ export function FamilyWorkspaceDocPane() {
     <Pane
       kind="inspector"
       headerSurface="artifact"
+      // The spec region below is the pane's ONE scroller; the pane body only clips. Two scrollers
+      // in one sidebar stack two bars (scrollbar law, 2026-08-31).
+      scroll="clip"
       // The pane is a COLUMN: the spec and its proposals scroll in the upper half, the inspector
       // docks under them. Neither displaces the other — an inspector that replaced the spec would
       // take away the evidence at the exact moment you edit the number it justifies.
