@@ -91,7 +91,7 @@ export function MasterTableHeader<Row extends RowData>({
                 colSpan={header.colSpan}
                 rowSpan={header.rowSpan}
                 style={{ top: stickyTop(rowIndex) }}
-                className="t-caption t-upper sticky z-sticky whitespace-nowrap border-b border-l border-line bg-recess px-(--item-pad-x) py-px text-left text-ink-2 on-recess first:border-l-0"
+                className="t-label sticky z-sticky whitespace-nowrap border-b border-l border-line bg-recess px-(--item-pad-x) py-px text-left on-recess first:border-l-0"
               >
                 <table.FlexRender header={header} />
               </th>
@@ -147,7 +147,7 @@ function LeafHeader<Row>({
           hover="bare"
         >
           <PressContent geometry="block">
-            <span className="t-upper">{column.header ?? column.label}</span>
+            <span className="t-label">{column.header ?? column.label}</span>
             {direction && (
               <span className="ml-1 text-ink">
                 {direction === "asc" ? "↑" : "↓"}
@@ -157,7 +157,7 @@ function LeafHeader<Row>({
           </PressContent>
         </Press>
       ) : (
-        <span className="t-caption t-upper block text-ink-2">{column.header ?? column.label}</span>
+        <span className="t-label block">{column.header ?? column.label}</span>
       )}
       {children}
     </th>

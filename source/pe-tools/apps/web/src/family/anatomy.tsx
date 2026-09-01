@@ -100,7 +100,7 @@ export function AnatomyDrawing({
       <div className="flex min-w-0 flex-1">{views}</div>
       <div className="hairline-l w-72 shrink-0 overflow-y-auto p-2" data-surface="page">
         <div className="hairline-b -mx-2 -mt-2 mb-1.5 px-2 py-1.5" data-surface="recess">
-          <p className="face-mono t-label t-upper flex items-center gap-1 text-ink-2">
+          <p className="t-label t-upper flex items-center gap-1 text-ink-2">
             constituents · {typeName}
             <HelpTip>
               The profile&rsquo;s own constituent list. Hovering one lights both the shape and the

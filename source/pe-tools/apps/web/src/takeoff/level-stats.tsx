@@ -52,9 +52,7 @@ export function LevelStats({
       <ArtifactFrame
         head={
           <>
-            <span className="t-caption t-upper min-w-0 flex-1 truncate text-ink-2">
-              {level} — level totals
-            </span>
+            <span className="t-label min-w-0 flex-1 truncate">{level} — level totals</span>
             <Press type="button" onClick={onClose} tone="quiet" size="value">
               ×
             </Press>
@@ -85,7 +83,7 @@ export function LevelStats({
               />
             )}
           </div>
-          <p className="face-mono t-caption mt-0.5 text-ink-mute">
+          <p className="t-caption mt-0.5">
             {fmtNum(totalArea, 0)} sf declared on this level, by room state
           </p>
 

@@ -56,7 +56,7 @@ export function FamilyWorkspaceDocPane() {
       </p>
 
       <div className="hairline-t mb-2 pt-1.5">
-        <p className="face-mono t-label t-upper mb-0.5 flex items-center gap-1 text-ink-2">
+        <p className="t-label t-upper mb-0.5 flex items-center gap-1 text-ink-2">
           bindable dims — represented in the table
           <HelpTip>
             The constituent&rsquo;s bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE
@@ -106,7 +106,7 @@ export function FamilyWorkspaceDocPane() {
 
       <div className="hairline-t pt-1.5">
         <p
-          className="face-mono t-label t-upper mb-0.5 text-ink-2"
+          className="t-label t-upper mb-0.5 text-ink-2"
           title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
         >
           non-bindable metadata — lives only here
@@ -140,7 +140,7 @@ export function FamilyWorkspaceDocPane() {
         </p>
 
         <div className="hairline-t mb-2 pt-1.5">
-          <p className="face-mono t-label t-upper mb-0.5 flex items-center gap-1 text-ink-2">
+          <p className="t-label t-upper mb-0.5 flex items-center gap-1 text-ink-2">
             family value {isFormula(authored) ? "· formula" : ""}
             <HelpTip>
               THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows
@@ -176,7 +176,7 @@ export function FamilyWorkspaceDocPane() {
 
         <div className="hairline-t mb-2 pt-1.5">
           <p
-            className="face-mono t-label t-upper mb-0.5 text-ink-2"
+            className="t-label t-upper mb-0.5 text-ink-2"
             title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
           >
             drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
@@ -205,7 +205,7 @@ export function FamilyWorkspaceDocPane() {
 
         <div className="hairline-t pt-1.5">
           <p
-            className="face-mono t-label t-upper mb-0.5 text-ink-2"
+            className="t-label t-upper mb-0.5 text-ink-2"
             title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."
           >
             grounding
@@ -242,7 +242,7 @@ export function FamilyWorkspaceDocPane() {
           <span>
             <Tag>{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
           </span>
-          <span className="face-mono t-label min-w-0 flex-1 truncate text-ink">
+          <span className="t-label min-w-0 flex-1 truncate text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
           <Verb
@@ -326,7 +326,7 @@ export function FamilyWorkspaceDocPane() {
             className="mb-1 flex items-baseline gap-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
           >
-            <span className="face-mono t-label t-upper" data-tone="pea">
+            <span className="t-label t-upper" data-tone="pea">
               pea
             </span>
             <span className="t-label t-upper text-ink-2">proposals · ephemeral · page-scoped</span>

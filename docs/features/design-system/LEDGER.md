@@ -138,6 +138,91 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   freestanding control (input, select trigger, combobox chip holder). Both live in `base.css`
   beside `--space-unit`. A surface that needs a third height names it here before authoring one.
 
+- 2026-09-01 — Re-cutover grill verdicts (kaitpw). (1) Takeoffs opens the cutover, amending the
+  2026-08-31 seam order; chat follows. Pea-takeoffs integration lands within two sessions and is
+  the real test of the state model. (2) Fixture lane spells `?source=fixture`, resolved by the S2a
+  lane resolver, deliberately unadvertised in UI ("obscured unless u know"). (3)
+  `StateCellProps.placeholder` ships with `onLocate`; `ProposedCell` dies — same precedent as the
+  rejected `<Text>` wrapper. (4) `chat-appearance` is ruled a `lang/` primitive and improved
+  systemically, not folded into `chat/`.
+- 2026-09-01 — CellSelect adopts `Combobox`; the native `<select>` popup exception is REJECTED
+  (kaitpw). Perf gate: the popup stays unmounted when closed (base-ui default) and a cell mounts
+  the Combobox machinery on edit, not one root per resting cell; row heights on `/takeoffs` are
+  re-measured after adoption.
+- 2026-09-01 — The four candidate laws from goal `design-normalization-2` are ADOPTED, each at a
+  code home rather than `lens.house` prose (the skill holds only what code cannot): every product
+  route reachable from the front door (candidate guard: route census vs the front door's TOOLS
+  list); a human invokes every crossing into the live model (already the trichotomy — staging IS
+  the approval); a rejected cell commit restores the prior value and states the reason beside the
+  cell (StateCell contract, proven at the takeoffs cutover); a route owns its world and host calls
+  (the S2a shell's lane/binding resolvers).
+
+- 2026-09-01 — Front-door lamp lineup verdict (kaitpw): **L3 instrument cluster wins** ("instrument
+  cluster for header is best"). The demoted `t-label t-upper` wordmark is REJECTED — the title
+  "should be bigger", and the same complaint covers `/takeoffs`' route label. Direction: the
+  display face the user likes on the h1 (`face-display`, Spectral) at a smaller tier — `t-head`
+  24px, which nothing wears yet. Canon rewrite of L3 WAITS on the route-title demiurge (title may
+  move into the targeting kit with the targeting flow expanding below when a manifest exists);
+  the lineup stays mounted until then. Canon fixes already landed: wordmark tier, UpdateButton
+  `commit → act`, ThemeToggle nowrap, front-door page frame `px-6` inset.
+- 2026-09-01 — Type-tier lineup round 1 verdict (kaitpw, on the live `/takeoffs` fixture): **D is
+  KILLED** ("too loose" — the roomier caption leading fights density). A and B retire — "honestly
+  can't tell much of a difference", which is itself the round's finding (the tier words do no
+  visible work). **C advances** ("does feel less busy which is nice") with one amendment owed
+  before adoption: C's mono text is "all a bit too dim" — the caption bundle's `ink-mute` must
+  brighten (candidate: `ink-2`) in round 2. Not yet canon; the throwaway lineup stays mounted.
+
+- 2026-09-01 — Route-title demiurge: **S2 ADOPTED pending spike** (kaitpw: "yes s2 is what i
+  imagined"). `RouteHead` lives in the targeting kit: the route name at `t-head face-display`
+  (paying the owed "route heads have no head" line), with the targeting sentence/flow expanding
+  below when a manifest exists and the name standing alone when none does; `aside` carries chrome
+  like the front-door instrument cluster. Front door and product routes share the primitive. The
+  header lamp reads targeting's world facts (`targeting/world.ts` already consumes `host/fleet`),
+  retiring the lamp's private 5s `usePeInfo` poll. S1 (bigger label) and S4 (no titles) killed;
+  S3 (name inside `Product`) killed for taxing manifest-less routes. Spike consumers: `/takeoffs`
+  and `/`. The S2a shell mounts RouteHead when it lands.
+
+- 2026-09-01 — RouteHead spike PROVEN (report `.agent-reports/route-head-spike.md`; browser lane,
+  both consumers, light+dark). S2 landed cheaper than costed: `TargetingHead` hands itself to
+  `RouteHead` (`nameless` stops the recursion), so every sentence/flow consumer became an S2 route
+  head with zero call-site edits. Front door is canon: `RouteHead "Positive Energy"` + L3 cluster
+  aside; L1/L2 and the switcher deleted. Post-spike fixes (orchestrator, browser-verified):
+  `Product.name` is a proper noun — "Takeoffs"/"Instances" corrected; the manifest-case name
+  gutter is `pt-2` (ascender clip measured gone at 1440×699; rows still 50/50 at 20px). Owed from
+  the spike: re-read remaining `Product.name`s at their features; `/settings`, `/family`, `/ops`,
+  `/instances` heads converted but unrendered; TWO `aside` slots at two altitudes share one name
+  (rename `TargetingHead.aside` — candidate `fact` — before S2a adopts); chat's `mode="line"`
+  small label is the same datum drawn two ways, rule it; the lamp's private 5s poll still owed its
+  collapse into targeting world facts.
+
+- 2026-09-01 — **C2 ADOPTED** (kaitpw: "yes adopt c"): composite roles are the sub-prose tier
+  model. `t-label` = upper + tracked + medium + ink-2; `t-caption` = mono + ink-mute→**ink-2
+  floor** + tabular; `t-value` = plain ink; one word dresses the whole look and the bundle beats
+  call-site fragments. Mono floor: no mono text below `ink-2` unless genuinely absent/disabled.
+  Canonization rewrites the bundles into the tier owners (`base.css` + `design-lang.css`), fixes
+  the call sites C makes visibly wrong, and deletes the throwaway lineup.
+- 2026-09-01 — The instrument cluster (host lamp · release · theme) is ROUTEHEAD CHROME, not
+  front-door chrome (kaitpw: "I also wanted the instrument cluster there too"). `RouteHead`
+  renders it on the name line on every route; `aside` remains for extra route chrome. This
+  raises the priority of collapsing the lamp's private poll into targeting's world facts.
+
+- 2026-09-01 — C2 CANONIZED (report `.agent-reports/type-canon.md`; browser + deterministic
+  lanes). The three sub-prose tiers are composite bundles in both owners; the bundle beats
+  call-site fragments by sitting outside `@layer`; the ink floor carries a `:not()` escape for
+  meaning hues and `t-value` declares NO color (alarm spans 55 → 55, guarded). The four
+  section-head spellings collapse onto `t-label` alone; `t-upper` is retired on sub-prose tiers
+  (still legal on `t-value`+). Signatures: takeoffs 47 → 42, swatch 32 → 26. Throwaway lineup
+  deleted. Un-migrated breakage censused by grep, not seen: `/families`, `/family`,
+  `schema-to-field-render`, rest of `/design-system` (falls to their cutovers). The `.R10` 20px
+  leading anomaly is still untraced. TWO OPEN VERDICTS from the round: (1) mono rose 766 → 799
+  spans — every caption is now mono by bundle, and mono was already the majority face, straining
+  the "mono is the marked case" law; (2) the stage strip lost its ink-dim "verbs ready" signal to
+  the mono floor — if that read matters, the replacement is a mark, not a dimmer ink.
+- 2026-09-01 — Cluster falsification, owed to the S2a shell: a document-gated route (`/instances`,
+  and likely `/family`, takeoffs live lane) renders its refusal ABOVE `TargetingHead`, so
+  `RouteHead` and the host lamp never mount — absent exactly when "is the host alive" is the
+  question. Either the gate moves below the head or the shell mounts `RouteHead` above the gate.
+
 ### Route and state architecture (cross-route, owned here)
 
 - 2026-08-19 — THREE-HOME ADDRESSING: the sentence carries external bindings (test: it survives the
@@ -320,8 +405,7 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   Not Found — a mounted route must refuse in its own words (falls to the S2a route-shell
   cutover); scrollbar gutter no-shift needs a HEADED browser (headless Chrome gave overlay bars);
   the 11px prose tier and dark mode were never measured against the laws; hover/focus states
-  measured nowhere. One menu primitive for the cell vs header dropdown POPUPS is still an open
-  decision (chrome round §8).
+  measured nowhere. (The menu-primitive decision closed 2026-09-01: Combobox.)
 - Two web tests fail on main independent of the review deletion (found by the full-suite run,
   2026-08-31): `-chat.test.tsx` misses a "Context budget" button and `-families.test.tsx` misses
   the families summary line — debts of the annotation/density rounds, whose agents gated on
@@ -382,8 +466,10 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   Blocks `/instances`' attributed ledger rail and `/workbench`'s owed-approval lane.
 - The **gutter marker** (SURFACE-PHILOSOPHY §4): "a human decision is queued here" and "this row is
   unreachable" are ROW facts and the marker (count + locate) is not built.
-- The `review: "attention"` axis: a staged value can be contested with nothing in the grammar
-  saying so. Not `agree: "drift"` — the model holds no other value.
+- `Combobox` needs major improvement (kaitpw 2026-09-01, ruled with the CellSelect adoption): the
+  cell keyboard/commit contract, filling-trigger parity with the header facet, chips density, and
+  whatever the takeoffs cutover surfaces. It is now the one menu primitive, so its debts are
+  cross-route.
 - Three severities onto one caution: host ops report Info/Warning/Error while the meaning band has
   one alarm (reserved: the model disagrees) and one caution.
 - "Host disconnected" has no axis and no kind; routes hand-pick a chip tone for it.
@@ -448,8 +534,8 @@ Paid at the primitives; the rulings are above and the evidence is
 
 - The dropdown POPUP is still two languages: the triggers now read as one (mono, item height, 4px
   inset, chevron right), but `CellSelect` is a native `<select>` whose popup cannot be styled.
-  Unifying it needs a menu-primitive decision — either the cell adopts `Combobox` and pays the
-  keyboard/commit contract, or the native popup is accepted as the cell's one exception.
+  Decided 2026-09-01: the cell adopts `Combobox` and pays the keyboard/commit contract (see
+  Decided); lands with the takeoffs cutover.
 - Round 2 (2026-08-31) measured the round in real Chrome after the critic's pass: the scrollbar
   mechanism was FALSIFIED and fixed, the predicted +1px row was real and is fixed at the rule, the
   padding census is down to the two named insets, and 36/36 rail bars share one right edge.

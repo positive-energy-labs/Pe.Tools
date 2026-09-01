@@ -283,7 +283,7 @@ export function ProposalCard({
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
       <div className="face-mono t-caption text-ink-2">{target}</div>
-      <div className="face-mono t-label text-ink">
+      <div className="t-label text-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
       <p className="mt-0.5 text-ink">{proposal.note}</p>

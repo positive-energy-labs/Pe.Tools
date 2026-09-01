@@ -40,9 +40,9 @@ export function StageStrip<K extends string>({
               .join(" · ")}`}
           >
             <PressContent geometry="baseline">
-              <span className="face-mono t-upper">{s.label}</span>
+              <span className="t-label">{s.label}</span>
               {meter ? (
-                <span className={`face-mono t-upper ${ready === 0 ? "text-ink-mute" : "text-ink"}`}>
+                <span className={"t-caption"}>
                   {ready}/{s.verbs.length}
                 </span>
               ) : null}
@@ -65,7 +65,7 @@ export function PaneStrip<K extends string>({
 }) {
   return (
     <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="face-mono t-caption t-upper text-ink-mute">panes</span>
+      <span className="t-label">panes</span>
       {product.panes.map((p) => {
         const st = paneState(product, p, b);
         return (

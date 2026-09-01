@@ -49,7 +49,7 @@ export const verbRecipe = tv({
     reason: "max-w-[36ch] self-center t-caption text-ink-2 italic",
     group: "",
     groupHead: "mb-1.5 flex items-baseline gap-1.5 border-b border-line pb-[3px]",
-    groupTitle: "face-mono t-caption t-upper text-ink",
+    groupTitle: "t-label text-ink",
     groupRadius: "t-caption text-ink-2",
     row: "flex flex-wrap items-start gap-1.5",
   },

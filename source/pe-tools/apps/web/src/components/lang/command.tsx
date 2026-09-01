@@ -21,10 +21,9 @@ export const commandRecipe = tv({
     list: "no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
     empty: "py-6 text-center t-value",
     group:
-      "overflow-hidden p-1 text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:t-label **:[[cmdk-group-heading]]:t-upper **:[[cmdk-group-heading]]:text-ink-2",
+      "overflow-hidden p-1 text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:t-label **:[[cmdk-group-heading]]:text-ink-2",
     item: "group/command-item relative flex min-h-(--item-h) cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-0.5 t-prose outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-ink data-selected:bg-select data-selected:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-ink-2",
-    shortcut:
-      "ml-auto face-mono t-caption t-upper text-ink-2 group-data-selected/command-item:text-ink",
+    shortcut: "ml-auto t-label text-ink-2 group-data-selected/command-item:text-ink",
   },
 });
 

@@ -295,7 +295,7 @@ export function FamiliesReadoutBands() {
           {projection.projections.map((entry) => (
             <div key={entry.familyId} className="mt-2">
               <div className="flex items-center gap-2">
-                <span className="face-mono t-label">{entry.familyName ?? entry.familyId}</span>
+                <span className="t-label">{entry.familyName ?? entry.familyId}</span>
                 {entry.profileJson && (
                   <Verb
                     label="copy"

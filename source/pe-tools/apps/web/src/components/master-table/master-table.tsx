@@ -168,7 +168,7 @@ export function MasterTable<Row extends RowData>({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-2 py-1">
         <span
-          className="t-label t-upper text-ink-2"
+          className="t-label"
           title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
         >
           {scopeLabel}
@@ -297,7 +297,7 @@ export function MasterTable<Row extends RowData>({
               focused && column?.readState ? column.readState(focused.row.original) : undefined;
             if (!focused || !cellState) return null;
             return (
-              <div className="face-mono t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line bg-recess px-2 whitespace-nowrap on-recess">
+              <div className="t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line bg-recess px-2 whitespace-nowrap on-recess">
                 <Tag>{column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}</Tag>
                 <span className="truncate text-ink-2">
                   {cellFactsText(cellState) ??

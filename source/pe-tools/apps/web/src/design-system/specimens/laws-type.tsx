@@ -45,7 +45,7 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
       >
         <FactChip title="The plan this write was made against.">plan a91f#c04</FactChip>
         <CounterExample why="a human action is not a machine reading">
-          <span className="t-label face-mono text-ink">save changes</span>
+          <span className="t-label text-ink">save changes</span>
         </CounterExample>
       </Law>
 

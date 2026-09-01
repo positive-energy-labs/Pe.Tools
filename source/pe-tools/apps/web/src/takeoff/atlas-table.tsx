@@ -97,7 +97,7 @@ export function AtlasTable() {
                       fields · {fieldsMode}
                     </Press>
                   </span>
-                  <span className="text-ink-mute">j/k move · a/d decide</span>
+                  <span>j/k move · a/d decide</span>
                 </span>
               }
               empty={

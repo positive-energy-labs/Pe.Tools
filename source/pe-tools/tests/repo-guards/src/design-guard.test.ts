@@ -132,6 +132,51 @@ describe("design guard â€” current token authority", () => {
     }
   });
 
+  /* C2, 2026-09-01: the three sub-prose tiers are COMPOSITE ROLES — one word dresses the whole
+     look. This is the asserted law, so a call site can no longer half-dress a role: t-label owns
+     face + case + tracking + weight, t-caption owns face + tabular + tracking, and t-value owns
+     NOTHING but size and leading (it declares no colour, so an alarm/caution/pea cell keeps its
+     hue — a tier may not outrank a claim about meaning). */
+  it("bundles the three sub-prose tiers as composite roles in both owners", () => {
+    const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
+    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
+    const bundles = {
+      label: [
+        /font-family:\s*var\(--font-body\)/,
+        /font-weight:\s*var\(--weight-medium\)/,
+        /letter-spacing:\s*0\.08em/,
+        /text-transform:\s*uppercase/,
+      ],
+      caption: [
+        /font-family:\s*var\(--font-mono\)/,
+        /font-variant-numeric:\s*tabular-nums/,
+        /letter-spacing:\s*0\.04em/,
+      ],
+    } as const;
+    const blockOf = (text: string, head: string) => {
+      const at = text.indexOf(head);
+      return at === -1 ? "" : text.slice(at, text.indexOf("}", at) + 1);
+    };
+    for (const [tier, decls] of Object.entries(bundles)) {
+      for (const owner of [
+        { name: "base.css", block: blockOf(base, `.t-${tier} {`) },
+        { name: "design-lang.css", block: blockOf(lang, `@utility t-${tier} {`) },
+      ]) {
+        for (const decl of decls)
+          expect(owner.block, `${owner.name} bundle for t-${tier} is missing ${decl}`).toMatch(
+            decl,
+          );
+      }
+    }
+    // The ink floor is base.css-only: a @utility cannot carry the meaning-hue escape.
+    expect(base, "the t-caption/t-label ink floor").toMatch(
+      /\.t-caption:not\([^)]*\.text-alarm[^)]*\)[\s\S]{0,200}color:\s*var\(--pe-ink-2\)/,
+    );
+    // t-value must NOT declare a colour, or the alarm cells lose their hue.
+    const value = /\.t-value\s*\{[^}]*\}/s.exec(base)?.[0] ?? "";
+    expect(value, "t-value must declare no colour").not.toMatch(/color:/);
+  });
+
   it("projects the shared uppercase case marker through Tailwind", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
     const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";

@@ -65,7 +65,7 @@ function RoomPanel({
 
         {fieldsMode === "panel" && (
           <div className="px-2.5 py-2">
-            <p className="t-label t-upper mb-1 text-ink-2">manual j — this room</p>
+            <p className="t-label mb-1">manual j — this room</p>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
               <span className="face-mono pr-1.5 text-right text-ink-2">ceil ft</span>
               <span>
@@ -90,7 +90,7 @@ function RoomPanel({
 
         {open.length > 0 && (
           <div className="px-2.5 py-2">
-            <p className="t-label t-upper mb-1 text-ink-2">open calls — {open.length}</p>
+            <p className="t-label mb-1">open calls — {open.length}</p>
             <ul className="space-y-2">
               {open.map((flag) => (
                 <li key={flag}>
@@ -146,7 +146,7 @@ function RoomPanel({
         )}
 
         <div className="px-2.5 py-2">
-          <p className="t-label t-upper mb-1 text-ink-2">provenance</p>
+          <p className="t-label mb-1">provenance</p>
           <StatLine truncate={false} label="run" value={room.provenance.runId} />
           <StatLine
             truncate={false}
@@ -197,7 +197,7 @@ function RoomPanel({
         </div>
 
         <div className="px-2.5 py-2">
-          <p className="t-label t-upper mb-1 text-ink-2">addressable</p>
+          <p className="t-label mb-1">addressable</p>
           <p className="face-mono break-all px-1.5 py-1 text-ink-2" data-surface="recess">
             {url}
           </p>

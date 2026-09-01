@@ -109,7 +109,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
 
   const product = defineProduct(
     "takeoffs",
-    "takeoffs",
+    "Takeoffs",
     TAKEOFF_SLOTS,
   )({
     feeds,
@@ -273,7 +273,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
         runner={runner}
         mode={targeting}
         extra={addFolder}
-        aside={
+        fact={
           !live ? (
             <FactChip
               dashed

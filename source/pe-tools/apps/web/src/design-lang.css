@@ -64,14 +64,26 @@
   }
 }
 
+/* The three sub-prose tiers are composite roles (C2, 2026-09-01). base.css declares them; this
+   projects the same bundle so Tailwind knows the class exists. The ink floor and the meaning-hue
+   escape live in base.css — a `@utility` cannot carry the `:not()` guard. */
 @utility t-caption {
   font-size: var(--type-caption-size);
   line-height: var(--type-caption-line-height);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
 }
 
 @utility t-label {
+  /* The role owns its FACE too: a label nested inside a caption must not inherit mono. */
+  font-family: var(--font-body);
+  font-variant-numeric: normal;
   font-size: var(--type-label-size);
   line-height: var(--type-label-line-height);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 @utility t-value {

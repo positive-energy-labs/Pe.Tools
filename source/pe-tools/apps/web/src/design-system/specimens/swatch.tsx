@@ -38,15 +38,13 @@ export function SwatchSpecimens() {
             A lookup table, not a spec. Each recipe grid reads the shipping variant vocabulary, and
             each frame names the import path and its current static-import census.
           </p>
-          <p className="t-label face-mono text-ink-2">lang · the design language primitives</p>
+          <p className="t-label text-ink-2">lang · the design language primitives</p>
         </div>
         <LangWorkflowSpecimens />
         <LangCellSpecimens />
         <LangStatusSpecimens />
         <LangVerbSpecimens />
-        <p className="t-label face-mono text-ink-2">
-          ui · the surviving application component layer
-        </p>
+        <p className="t-label text-ink-2">ui · the surviving application component layer</p>
         <UiInputSpecimens />
         <UiSurfaceSpecimens />
         <UiLayoutSpecimens />

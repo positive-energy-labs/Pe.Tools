@@ -55,7 +55,7 @@ export function AtlasVisual() {
                 >
                   <span className="face-mono">
                     {lane.label}
-                    <span className="ml-1 text-ink-mute">{zs.length}</span>
+                    <span className="ml-1">{zs.length}</span>
                     {calls > 0 && (
                       <span className="ml-1" data-tone="alarm">
                         ·{calls}
@@ -92,7 +92,7 @@ export function AtlasVisual() {
               </Press>
             </span>
 
-            <span className="face-mono t-caption ml-auto min-w-0 truncate text-ink-mute">
+            <span className="t-caption ml-auto min-w-0 truncate">
               {selected ? `${selected.zone.key} in scope` : "whole house in scope"} · Esc clears
             </span>
           </>

@@ -219,7 +219,7 @@ export function LevelPlan({
         <Key tone={ABSENT_INK} label="held residue" seam />
         <Key tone={CURSOR_INK} label="cursor" />
         {skipped > 0 && (
-          <span className="face-mono t-caption text-ink-mute">
+          <span className="t-caption">
             {skipped} sub-{PLAN_MIN_SQFT} sf scribble{skipped === 1 ? "" : "s"} off-plan — see the
             rail
           </span>

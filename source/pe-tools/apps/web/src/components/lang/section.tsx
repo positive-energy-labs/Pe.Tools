@@ -6,10 +6,11 @@
  * CONSUMERS: src/ops/** (44 OpSection sites migrate here); route section heads shed their
  * hand-rolled copies during their passes.
  *
- * The head is SANS small-caps (the 2026-07-13 heads-are-sans ruling; t-upper carries the
- * tracking and the head's semibold), with an optional HelpTip beside the title (the one
- * legal home for region orientation) and an optional right-aligned aside for counts and
- * controls. Plain content is never enclosed — a section is a head and a hairline, not a box.
+ * The head is the t-label ROLE (C2, 2026-09-01): upper + tracking + medium + ink-2 in one word;
+ * the tier owns the whole look, so the call site names no case, weight or ink. HelpTip may sit
+ * beside the title (the one legal home for region orientation) and an optional right-aligned
+ * aside carries counts and controls. Plain content is never enclosed — a section is a head
+ * and a hairline, not a box.
  */
 import { tv } from "#/lib/tv";
 
@@ -19,7 +20,7 @@ export const sectionRecipe = tv({
   slots: {
     base: "min-w-0",
     head: "mb-1.5 flex items-baseline gap-2 border-b border-line pb-[3px]",
-    label: "m-0 t-label t-upper font-semibold text-ink",
+    label: "m-0 t-label",
     aside: "ml-auto flex items-center gap-1.5",
     provenance: "mt-1.5 mb-0 face-mono t-caption tracking-[0.02em] text-ink-2",
   },

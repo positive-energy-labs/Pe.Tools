@@ -30,8 +30,7 @@ import "./lang.css";
 export const helpTipRecipe = tv({
   slots: {
     mark: "grid size-[13px] cursor-help place-items-center rounded-sm border border-line-2 bg-transparent p-0 face-mono t-caption text-ink-2",
-    popup:
-      "z-popup w-max max-w-[38ch] border border-line-2 on-artifact px-2 py-[5px] t-label text-ink-2",
+    popup: "z-popup w-max max-w-[38ch] border border-line-2 on-artifact px-2 py-[5px] t-label",
   },
 });
 

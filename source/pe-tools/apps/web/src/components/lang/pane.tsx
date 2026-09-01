@@ -69,9 +69,7 @@ export function Pane({
           className="flex h-8 shrink-0 items-center gap-2 border-b border-line px-2"
         >
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            {title != null && (
-              <h2 className="t-label t-upper min-w-0 truncate text-ink-2">{title}</h2>
-            )}
+            {title != null && <h2 className="t-label min-w-0 truncate">{title}</h2>}
             {meta != null && (
               <span
                 title={typeof meta === "string" ? meta : undefined}

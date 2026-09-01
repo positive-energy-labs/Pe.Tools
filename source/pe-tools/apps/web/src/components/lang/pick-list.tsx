@@ -118,7 +118,7 @@ export function PickList({
         ) : (
           [...groups.entries()].map(([group, groupItems]) => (
             <div key={group} className="mb-1">
-              {group && <p className="t-label t-upper px-3 pb-0.5 pt-2 text-ink-2">{group}</p>}
+              {group && <p className="t-label px-3 pb-0.5 pt-2">{group}</p>}
               {groupItems.map((item) => {
                 index += 1;
                 const itemIndex = index;

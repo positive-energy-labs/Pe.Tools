@@ -47,14 +47,14 @@ export const armingStripRecipe = tv({
   slots: {
     base: "flex flex-col gap-[7px] border-l-2 px-[11px] py-[9px]",
     line: "flex flex-wrap items-baseline gap-2",
-    phase: "face-mono t-caption t-upper tabular-nums text-ink-2",
+    phase: "t-label tabular-nums",
     verb: "t-prose font-medium",
-    target: "face-mono t-label tabular-nums text-ink-2",
+    target: "t-label tabular-nums",
     input:
       "w-full border-0 border-l border-line-2 bg-on py-0.5 pr-0 pl-2 t-value text-ink italic outline-none placeholder:text-ink-mute focus-visible:veil",
     refusal: "m-0 max-w-[72ch] t-value",
     controls: "flex flex-wrap items-center gap-2",
-    caveat: "face-mono t-caption t-upper tabular-nums text-ink-2",
+    caveat: "t-label tabular-nums",
   },
   variants: {
     state: {
