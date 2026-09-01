@@ -15,8 +15,11 @@ export const pressRecipe = tv({
     frame: {
       none: "",
       // A press floating in pane-toolbar chrome reads as furniture without an edge; the frame
-      // recolors the border every press already carries (takeoffs annotations, 2026-08-31).
-      line: "border-line",
+      // recolors the border every press already carries (takeoffs annotations, 2026-08-31). A
+      // frame also owns its INSET — a border at zero inset reads as a tight box — and takes the
+      // item height so a framed press sits level with the row-shaped controls beside it
+      // (annotation round, 2026-08-31).
+      line: "inline-flex h-(--item-h) items-center border-line px-1",
     },
     tone: {
       neutral: "text-ink",

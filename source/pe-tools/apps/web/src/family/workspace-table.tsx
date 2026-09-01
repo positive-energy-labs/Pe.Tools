@@ -208,14 +208,24 @@ export function FamilyWorkspaceTable() {
       // The type's own NAME is the title while drilled in — a pane whose title still said
       // "parameters × types" would be claiming to show something it is not.
       title={drillType ?? "parameters × types"}
+      // The header keeps the mode WORD; what the mode means is orientation and hovers.
       meta={
         drillType
-          ? "one type, the same table — profile, spine, live"
+          ? "one type"
           : overlay === "live"
-            ? "LIVE OVERLAY — Revit's numbers in place, read-only; the alarm is where it disagrees"
+            ? "live overlay"
             : overlay === "saved"
-              ? "SAVED OVERLAY — what is on disk, read-only; caution is what save would overwrite"
-              : "every type, side by side — the spread is the audit"
+              ? "saved overlay"
+              : "all types"
+      }
+      help={
+        drillType
+          ? "One type, the same table — profile, spine and live side by side for the type you drilled into."
+          : overlay === "live"
+            ? "LIVE OVERLAY — Revit's numbers in place, read-only. The alarm is where the document disagrees with the profile."
+            : overlay === "saved"
+              ? "SAVED OVERLAY — what is on disk, read-only. Caution marks what a save would overwrite."
+              : "Every type side by side — the spread across types is the audit."
       }
       actions={
         drillType ? (

@@ -22,10 +22,11 @@ export function FamilyWorkspaceAnatomy() {
       kind="visual"
       headerSurface="recess"
       title="anatomy"
-      meta={
+      meta={anatomyCollapsed ? "collapsed" : stageType}
+      help={
         anatomyCollapsed
-          ? "collapsed — the header strip stays so the drawing is one click away"
-          : `drawn from the ${stageType} type`
+          ? "The drawing is collapsed. Its header strip stays, so the drawing is one click away and nothing about the page's shape changes."
+          : `Drawn from the ${stageType} type's own numbers in the profile — a reading of the document, not a render of Revit.`
       }
       actions={
         <Verb

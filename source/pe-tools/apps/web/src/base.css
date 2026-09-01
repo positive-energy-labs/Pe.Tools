@@ -103,10 +103,18 @@
     min-height: 100%;
   }
 
+  /* THE SCROLLBAR LAW (annotation round, 2026-08-31): one treatment everywhere. Thin, no track,
+     and the thumb is invisible until the pointer is inside the scroller it belongs to — a bar is
+     a position readout, not chrome. The gutter is reserved either way, so nothing shifts on
+     hover. The page body's bar is hidden outright (`no-scrollbar` on the scroll-away `main`). */
   [data-pe] {
     color-scheme: light;
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--pe-ink) 25%, transparent) transparent;
+    scrollbar-color: transparent transparent;
+  }
+
+  [data-pe] :hover {
+    scrollbar-color: color-mix(in srgb, var(--pe-ink) 22%, transparent) transparent;
   }
 
   [data-pe].dark {

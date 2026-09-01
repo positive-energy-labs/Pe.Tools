@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { HelpTip } from "#/components/lang/help";
 import { tv, type VariantProps } from "#/lib/tv";
 
 export type PaneKind = "navigation" | "visual" | "content" | "inspector";
@@ -7,7 +8,10 @@ export type PaneKind = "navigation" | "visual" | "content" | "inspector";
 export const paneRecipe = tv({
   slots: {
     root: "flex size-full min-h-0 min-w-0 flex-col overflow-hidden",
-    body: "min-h-0 min-w-0 flex-1",
+    // A pane body is a COLUMN, so a call site that docks a region under a scroller does not need
+    // a second scroller to get one (annotation round, 2026-08-31 — two stacked bars in the right
+    // sidebar were a pane body scrolling around a child that also scrolled).
+    body: "flex min-h-0 min-w-0 flex-1 flex-col",
   },
   variants: {
     kind: {
@@ -28,7 +32,15 @@ export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "scroll
   kind: PaneKind;
   headerSurface?: "page" | "artifact" | "recess" | "document";
   title?: ReactNode;
+  /**
+   * A SHORT machine fact about what the pane is showing — a count, a mode word, a key. It
+   * renders truncated on one line beside the title. Meta that cannot fit is not meta: prose
+   * that orients the region belongs in `help` (ruled at the annotation round, 2026-08-31 —
+   * a header that overflows is the primitive's defect, not the call site's).
+   */
   meta?: ReactNode;
+  /** Region orientation, one hover away. Renders as the header's `HelpTip`. */
+  help?: ReactNode;
   actions?: ReactNode;
   toolbar?: ReactNode;
   children: ReactNode;
@@ -39,12 +51,13 @@ export function Pane({
   headerSurface,
   title,
   meta,
+  help,
   actions,
   toolbar,
   scroll,
   children,
 }: PaneProps) {
-  const hasHeader = title != null || meta != null || actions != null;
+  const hasHeader = title != null || meta != null || help != null || actions != null;
   const { root, body } = paneRecipe({ kind, scroll });
   return (
     <section data-slot="pane" data-kind={kind} className={root()}>
@@ -58,7 +71,19 @@ export function Pane({
             {title != null && (
               <h2 className="t-label t-upper min-w-0 truncate text-ink-2">{title}</h2>
             )}
-            {meta != null && <span className="face-mono min-w-0 truncate text-ink-2">{meta}</span>}
+            {meta != null && (
+              <span
+                title={typeof meta === "string" ? meta : undefined}
+                className="face-mono min-w-0 truncate text-ink-2"
+              >
+                {meta}
+              </span>
+            )}
+            {help != null && (
+              <span className="shrink-0 self-center">
+                <HelpTip>{help}</HelpTip>
+              </span>
+            )}
           </div>
           {actions != null && (
             <div data-slot="pane-actions" className="flex shrink-0 items-center gap-0.5">

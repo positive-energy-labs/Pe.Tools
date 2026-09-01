@@ -235,7 +235,11 @@ export function MasterTable<Row extends RowData>({
           role="grid"
           aria-rowcount={visibleRows.length}
           aria-colcount={columns.length + (gutter ? 1 : 0)}
-          className="w-full border-collapse t-value"
+          // SEPARATE, not collapsed: a collapsed border belongs to the TABLE, so it does not travel
+          // with a sticky cell — it scrolls out from under the locked column and the header and
+          // leaves the page ground showing as a white seam. Every cell already draws its own
+          // `border-b border-l` with `first:border-l-0`, so nothing doubles (annotation, 2026-08-31).
+          className="w-full border-separate border-spacing-0 t-value"
         >
           <MasterTableHeader
             table={table}

@@ -32,10 +32,16 @@ export function Workspace({
   // notch retires the rail and the workspace pins (takeoffs annotations, 2026-08-31). Inner
   // scrollers chain back up to reveal it again.
   return (
-    <main className={cn("h-screen overflow-y-auto", className)}>
+    <main className={cn("no-scrollbar h-screen overflow-y-auto", className)}>
       {headRail}
       <div className="sticky top-0 flex h-screen min-h-0 flex-col">
-        {readoutBand}
+        {readoutBand != null && (
+          // The band is a READOUT under the rail, not a strip glued to it: the container owns the
+          // inset so every chip and outcome line in it breathes the same (annotation, 2026-08-31).
+          <div data-slot="readout-band" className="shrink-0 px-2 py-1.5">
+            {readoutBand}
+          </div>
+        )}
         {visual == null ? (
           table
         ) : (

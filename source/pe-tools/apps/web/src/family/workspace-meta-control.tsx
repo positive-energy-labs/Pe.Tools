@@ -35,7 +35,7 @@ export function FamilyMetaControl({ slug, meta }: { slug: string; meta: GeomMeta
       onChange={(event) => editMeta(slug, meta.key, event.target.value)}
       title={meta.note}
       aria-label={meta.label}
-      className="h-5 w-full px-1"
+      className="h-(--item-h) w-full px-1"
     >
       {(meta.options ?? []).map((option) => (
         <option key={option} value={option}>
