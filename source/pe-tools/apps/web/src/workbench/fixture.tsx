@@ -172,6 +172,14 @@ export function FixtureWorkbenchProvider({ children }: { children: ReactNode }) 
     }),
   );
   const [chat, setChat] = useState(CHAT_FIXTURE);
+  const [threads, setThreads] = useState([
+    {
+      id: "fixture-review",
+      title: "Level 2 coordination review",
+      updatedAt: at(37).toISOString(),
+    },
+    { id: "fixture-followup", title: "Air terminal follow-up", updatedAt: at(12).toISOString() },
+  ]);
   const sendPrompt = async (text: string, _attachments?: WorkbenchAttachment[]) => {
     const value = text.trim();
     if (value)
@@ -190,14 +198,7 @@ export function FixtureWorkbenchProvider({ children }: { children: ReactNode }) 
     config: { origin: "" },
     chat,
     loading: false,
-    threads: [
-      {
-        id: "fixture-review",
-        title: "Level 2 coordination review",
-        updatedAt: at(37).toISOString(),
-      },
-      { id: "fixture-followup", title: "Air terminal follow-up", updatedAt: at(12).toISOString() },
-    ],
+    threads,
     currentThreadId: "fixture-review",
     revit: false,
     isRunning: true,
@@ -207,6 +208,11 @@ export function FixtureWorkbenchProvider({ children }: { children: ReactNode }) 
     newThread: () => {},
     forkThread: async () => {},
     openThread: () => {},
+    renameThread: (threadId, title) => {
+      setThreads((items) =>
+        items.map((thread) => (thread.id === threadId ? { ...thread, title } : thread)),
+      );
+    },
     deleteThread: async () => {},
     resolveApproval: async (toolCallId) =>
       setChat((previous) => ({

@@ -55,9 +55,12 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
     operationError,
     newThread,
     openThread,
+    renameThread,
     deleteThread,
   } = useWorkbench();
   const [mode, setMode] = useMode();
+  const handleRenameThread = (id: string, title: string) => void renameThread(id, title);
+  const handleDeleteThread = (id: string) => void deleteThread(id);
   const paletteOpen = useAtomValue(store.atoms.paletteOpen);
   // The side lane is a SidePane (rendered inside the Lens grid) that owns its own width, drag,
   // collapse, and persistence (storageKey "pe.sideWidth").
@@ -173,7 +176,8 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
                   currentThreadId={currentThreadId}
                   onSelect={openThread}
                   onNew={newThread}
-                  onDelete={(id) => void deleteThread(id)}
+                  onRename={handleRenameThread}
+                  onDelete={handleDeleteThread}
                   onSearch={() => store.actions.setPaletteOpen(true)}
                 />
               }
@@ -232,7 +236,8 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
         onOpenChange={store.actions.setPaletteOpen}
         onSelect={openThread}
         onNew={newThread}
-        onDelete={(id) => void deleteThread(id)}
+        onRename={handleRenameThread}
+        onDelete={handleDeleteThread}
       />
     </main>
   );

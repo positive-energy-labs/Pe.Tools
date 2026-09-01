@@ -1,0 +1,44 @@
+diff --git a/dist/server/handlers/agent-controller.cjs b/dist/server/handlers/agent-controller.cjs
+--- a/dist/server/handlers/agent-controller.cjs
++++ b/dist/server/handlers/agent-controller.cjs
+@@ -153,7 +153,7 @@ const switchModelBodySchema = zod_v4.z.object({
+ });
+ const switchThreadBodySchema = zod_v4.z.object({ threadId: zod_v4.z.string() });
+ const createThreadBodySchema = zod_v4.z.object({ title: zod_v4.z.string().optional() });
+-const renameThreadBodySchema = zod_v4.z.object({ title: zod_v4.z.string() });
++const renameThreadBodySchema = zod_v4.z.object({ title: zod_v4.z.string().trim().min(1) });
+ const threadPathParams = zod_v4.z.object({
+ 	controllerId: zod_v4.z.string(),
+ 	resourceId: zod_v4.z.string(),
+@@ -1008,8 +1008,7 @@ const RENAME_AGENT_CONTROLLER_THREAD_ROUTE = require_route_builder.createRoute({
+ 	handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId, title, requestContext }) => {
+ 		try {
+ 			const session = await getSession(getAgentControllerOrThrow(mastra, controllerId), resourceId, { scope: sessionScope }, requestContext);
+-			if (session.thread.getId() !== threadId) await session.thread.switch({ threadId });
+-			await session.thread.rename({ title });
++			await session.thread.rename({ threadId, title });
+ 			return { ok: true };
+ 		} catch (error) {
+ 			return require_server_handlers_error.handleError(error, "error renaming controller thread");
+diff --git a/dist/server/handlers/agent-controller.js b/dist/server/handlers/agent-controller.js
+--- a/dist/server/handlers/agent-controller.js
++++ b/dist/server/handlers/agent-controller.js
+@@ -151,7 +151,7 @@ const switchModelBodySchema = z.object({
+ });
+ const switchThreadBodySchema = z.object({ threadId: z.string() });
+ const createThreadBodySchema = z.object({ title: z.string().optional() });
+-const renameThreadBodySchema = z.object({ title: z.string() });
++const renameThreadBodySchema = z.object({ title: z.string().trim().min(1) });
+ const threadPathParams = z.object({
+ 	controllerId: z.string(),
+ 	resourceId: z.string(),
+@@ -1005,8 +1005,7 @@ const RENAME_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
+ 	handler: async ({ mastra, controllerId, resourceId, sessionScope, threadId, title, requestContext }) => {
+ 		try {
+ 			const session = await getSession(getAgentControllerOrThrow(mastra, controllerId), resourceId, { scope: sessionScope }, requestContext);
+-			if (session.thread.getId() !== threadId) await session.thread.switch({ threadId });
+-			await session.thread.rename({ title });
++			await session.thread.rename({ threadId, title });
+ 			return { ok: true };
+ 		} catch (error) {
+ 			return handleError(error, "error renaming controller thread");

@@ -12,6 +12,7 @@ export const chatStyles = tv({
     threadTitleQuiet: "min-w-0 flex-1 truncate text-ink-2",
     paletteTitleActive: "flex-1 truncate text-ink",
     paletteTitleQuiet: "flex-1 truncate text-ink/85",
+    threadActionIcon: "size-3.5",
     statusError: "border-b border-line py-1.5 t-label text-caution",
     statusQuiet: "border-b border-line py-1.5 t-label",
     docSubActive: "block truncate t-caption face-mono text-ink",
@@ -76,7 +77,6 @@ export const chatStyles = tv({
     threadPalette1: "rounded-sm px-3 py-2 hover:veil",
     threadPalette2: "flex h-full flex-col",
     threadPalette3: "flex flex-col gap-1 p-2",
-    threadPalette4: "size-3.5",
     threadPalette5: "px-2 py-3",
     threadPalette6: "mt-auto flex flex-col gap-1 border-t-[0.5px] border-line p-2",
     threadPalette7: "size-4",
@@ -87,7 +87,6 @@ export const chatStyles = tv({
     threadPalette12: "size-4",
     threadPalette13: "flex-1",
     threadPalette14: "rounded-sm border border-line-2 px-1.5 py-0.5 t-caption face-mono text-ink-2",
-    threadPalette15: "size-3.5",
     worldBadge0: "truncate text-ink-2",
   },
 })();

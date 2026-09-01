@@ -1,5 +1,5 @@
 import { chatStyles } from "#/components/lang/chat-appearance";
-import { Plus, Search, X } from "lucide-react";
+import { Pencil, Plus, Search, X } from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -19,6 +19,49 @@ function ThreadDot({ active }: { active: boolean }) {
       aria-hidden
       className={active ? chatStyles.threadDotActive() : chatStyles.threadDotQuiet()}
     />
+  );
+}
+
+function ThreadActions({
+  thread,
+  onRename,
+  onDelete,
+}: {
+  thread: StoredThreadSummary;
+  onRename: (id: string, title: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <>
+      <Press
+        type="button"
+        aria-label="Rename thread"
+        title="Rename thread"
+        tone="quiet"
+        state="rest"
+        onClick={(event) => {
+          event.stopPropagation();
+          const title = window.prompt("Rename thread", thread.title)?.trim();
+          if (title !== undefined && title !== "" && title !== thread.title)
+            void onRename(thread.id, title);
+        }}
+      >
+        <Pencil className={chatStyles.threadActionIcon()} />
+      </Press>
+      <Press
+        type="button"
+        aria-label="Delete thread"
+        title="Delete thread"
+        tone="quiet"
+        state="rest"
+        onClick={(event) => {
+          event.stopPropagation();
+          void onDelete(thread.id);
+        }}
+      >
+        <X className={chatStyles.threadActionIcon()} />
+      </Press>
+    </>
   );
 }
 
@@ -43,6 +86,7 @@ export function ThreadList({
   currentThreadId,
   onSelect,
   onNew,
+  onRename,
   onDelete,
   onSearch,
   limit = 5,
@@ -51,6 +95,7 @@ export function ThreadList({
   currentThreadId: string;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onSearch: () => void;
   limit?: number;
@@ -75,18 +120,7 @@ export function ThreadList({
               >
                 {thread.title}
               </span>
-              <Press
-                type="button"
-                title="Delete thread"
-                tone="quiet"
-                state="rest"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete(thread.id);
-                }}
-              >
-                <X className={chatStyles.threadPalette4()} />
-              </Press>
+              <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />
             </div>
           );
         })}
@@ -134,6 +168,7 @@ export function ThreadPalette({
   onOpenChange,
   onSelect,
   onNew,
+  onRename,
   onDelete,
 }: {
   threads: StoredThreadSummary[];
@@ -142,6 +177,7 @@ export function ThreadPalette({
   onOpenChange: (open: boolean) => void;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
 }) {
   return (
@@ -186,18 +222,7 @@ export function ThreadPalette({
                 >
                   {thread.title}
                 </span>
-                <Press
-                  type="button"
-                  title="Delete thread"
-                  tone="quiet"
-                  state="rest"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDelete(thread.id);
-                  }}
-                >
-                  <X className={chatStyles.threadPalette15()} />
-                </Press>
+                <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />
               </CommandItem>
             );
           })}

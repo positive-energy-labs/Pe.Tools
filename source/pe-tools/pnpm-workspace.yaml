@@ -25,6 +25,10 @@ overrides:
   "@mastra/code-sdk@1.4.0>zod": 4.3.6
   "mastracode@0.35.0>zod": 4.3.6
 patchedDependencies:
+  # SHIM: Remove when upstream core supports owned target-thread renames and clears settled approval display state.
+  "@mastra/core@1.61.0": patches/@mastra__core@1.61.0.patch
+  # SHIM: Remove when upstream server forwards threadId to rename without calling session.thread.switch.
+  "@mastra/server@1.61.0": patches/@mastra__server@1.61.0.patch
   vite-plus@0.2.1: patches/vite-plus@0.2.1.patch
 peerDependencyRules:
   allowAny:

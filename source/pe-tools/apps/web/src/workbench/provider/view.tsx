@@ -220,6 +220,20 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [gotoThread],
   );
 
+  const renameThread = useCallback(
+    async (threadId: string, title: string) => {
+      const next = title.trim();
+      if (!api || !next) return;
+      try {
+        await api.session.renameThread(threadId, next);
+        await refreshThreads();
+      } catch (caught) {
+        setError(errorMessage(caught));
+      }
+    },
+    [api, refreshThreads],
+  );
+
   const deleteThread = useCallback(
     async (threadId: string) => {
       if (!api) return;
@@ -309,6 +323,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       newThread,
       forkThread,
       openThread,
+      renameThread,
       deleteThread,
       resolveApproval,
       setModel,

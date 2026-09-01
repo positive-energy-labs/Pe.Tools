@@ -38,6 +38,7 @@ export interface WorkbenchContextValue {
   newThread: () => void;
   forkThread: () => Promise<void>;
   openThread: (threadId: string) => void;
+  renameThread: (threadId: string, title: string) => void | Promise<void>;
   deleteThread: (threadId: string) => Promise<void>;
   resolveApproval: (toolCallId: string, optionId?: string) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;

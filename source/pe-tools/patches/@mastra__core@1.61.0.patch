@@ -1,0 +1,158 @@
+diff --git a/dist/agent-controller/session.d.ts b/dist/agent-controller/session.d.ts
+index c05ae9f..668aa66 100644
+--- a/dist/agent-controller/session.d.ts
++++ b/dist/agent-controller/session.d.ts
+@@ -327,8 +327,9 @@ export declare class SessionThread {
+         title?: string;
+         id?: string;
+     }): Promise<AgentControllerThread>;
+-    /** Rename the session's active thread. No-op when unbound or storageless. */
+-    rename({ title }: {
++    /** Rename a thread, defaulting to the active thread. No-op when unbound or storageless. */
++    rename({ threadId, title }: {
++        threadId?: string;
+         title: string;
+     }): Promise<void>;
+     /** Clone a thread (and its messages), bind the session to the clone, and rebind the stream. */
+@@ -1008,6 +1009,7 @@ export declare class SessionDisplayState {
+      * `display_state_changed`.
+      */
+     clearPendingSuspensions(): void;
++    clearPendingApproval(): boolean;
+     /**
+      * Clear the modified-files tally without touching the rest of the snapshot.
+      * Used after a clone, which starts the cloned thread with a clean working set
+diff --git a/dist/agent-controller-DnS5KSfl.cjs b/dist/agent-controller-DnS5KSfl.cjs
+index bb70f63..a2947b1 100644
+--- a/dist/agent-controller-DnS5KSfl.cjs
++++ b/dist/agent-controller-DnS5KSfl.cjs
+@@ -1577,13 +1577,12 @@ var SessionThread = class {
+ 		await this.ensureCurrentSubscription();
+ 		return thread;
+ 	}
+-	/** Rename the session's active thread. No-op when unbound or storageless. */
+-	async rename({ title }) {
++	/** Rename a thread, defaulting to the active thread. No-op when unbound or storageless. */
++	async rename({ threadId = this.#threadId, title }) {
+ 		const store = this.#store;
+-		const threadId = this.#threadId;
+ 		if (!threadId || !store?.hasStorage()) return;
+-		const thread = await store.getById({ threadId });
+-		if (thread) await store.saveThread({ thread: {
++		const thread = await this.#requireOwnedThread({ threadId });
++		await store.saveThread({ thread: {
+ 			...thread,
+ 			title,
+ 			updatedAt: /* @__PURE__ */ new Date()
+@@ -2790,6 +2789,11 @@ var SessionDisplayState = class {
+ 	clearPendingSuspensions() {
+ 		this.#state.pendingSuspensions.clear();
+ 	}
++	clearPendingApproval() {
++		if (!this.#state.pendingApproval) return false;
++		this.#state.pendingApproval = null;
++		return true;
++	}
+ 	/**
+ 	* Clear the modified-files tally without touching the rest of the snapshot.
+ 	* Used after a clone, which starts the cloned thread with a clean working set
+@@ -3514,10 +3518,11 @@ var Session = class {
+ 	* notifies subscribers so stale suspension UI doesn't linger.
+ 	*/
+ 	abort() {
+-		const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
++		const hadPendingPrompt = this.displayState.get().pendingSuspensions.size > 0 || this.displayState.get().pendingApproval !== null;
+ 		this.displayState.clearPendingSuspensions();
++		this.displayState.clearPendingApproval();
+ 		this.abortRun();
+-		if (hadPendingSuspensions) this.emit({
++		if (hadPendingPrompt) this.emit({
+ 			type: "display_state_changed",
+ 			displayState: this.displayState.get()
+ 		});
+@@ -3552,6 +3557,7 @@ var Session = class {
+ 	* the run as-is.
+ 	*/
+ 	respondToToolApproval({ decision, toolCallId, requestContext, declineContext }) {
++		const wasArmed = this.approval.isArmed();
+ 		this.approval.respond({
+ 			decision,
+ 			toolCallId,
+@@ -3562,6 +3568,10 @@ var Session = class {
+ 				if (category) this.grantCategory(category);
+ 			}
+ 		});
++		if (wasArmed && !this.approval.isArmed() && this.displayState.clearPendingApproval()) this.emit({
++			type: "display_state_changed",
++			displayState: this.displayState.get()
++		});
+ 	}
+ 	/**
+ 	* Build the agent message input for a user turn, attaching any files as
+diff --git a/dist/agent-controller-sWTmXOK3.js b/dist/agent-controller-sWTmXOK3.js
+index c3ffac6..04e073d 100644
+--- a/dist/agent-controller-sWTmXOK3.js
++++ b/dist/agent-controller-sWTmXOK3.js
+@@ -1577,13 +1577,12 @@ var SessionThread = class {
+ 		await this.ensureCurrentSubscription();
+ 		return thread;
+ 	}
+-	/** Rename the session's active thread. No-op when unbound or storageless. */
+-	async rename({ title }) {
++	/** Rename a thread, defaulting to the active thread. No-op when unbound or storageless. */
++	async rename({ threadId = this.#threadId, title }) {
+ 		const store = this.#store;
+-		const threadId = this.#threadId;
+ 		if (!threadId || !store?.hasStorage()) return;
+-		const thread = await store.getById({ threadId });
+-		if (thread) await store.saveThread({ thread: {
++		const thread = await this.#requireOwnedThread({ threadId });
++		await store.saveThread({ thread: {
+ 			...thread,
+ 			title,
+ 			updatedAt: /* @__PURE__ */ new Date()
+@@ -2790,6 +2789,11 @@ var SessionDisplayState = class {
+ 	clearPendingSuspensions() {
+ 		this.#state.pendingSuspensions.clear();
+ 	}
++	clearPendingApproval() {
++		if (!this.#state.pendingApproval) return false;
++		this.#state.pendingApproval = null;
++		return true;
++	}
+ 	/**
+ 	* Clear the modified-files tally without touching the rest of the snapshot.
+ 	* Used after a clone, which starts the cloned thread with a clean working set
+@@ -3514,10 +3518,11 @@ var Session = class {
+ 	* notifies subscribers so stale suspension UI doesn't linger.
+ 	*/
+ 	abort() {
+-		const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
++		const hadPendingPrompt = this.displayState.get().pendingSuspensions.size > 0 || this.displayState.get().pendingApproval !== null;
+ 		this.displayState.clearPendingSuspensions();
++		this.displayState.clearPendingApproval();
+ 		this.abortRun();
+-		if (hadPendingSuspensions) this.emit({
++		if (hadPendingPrompt) this.emit({
+ 			type: "display_state_changed",
+ 			displayState: this.displayState.get()
+ 		});
+@@ -3552,6 +3557,7 @@ var Session = class {
+ 	* the run as-is.
+ 	*/
+ 	respondToToolApproval({ decision, toolCallId, requestContext, declineContext }) {
++		const wasArmed = this.approval.isArmed();
+ 		this.approval.respond({
+ 			decision,
+ 			toolCallId,
+@@ -3562,6 +3568,10 @@ var Session = class {
+ 				if (category) this.grantCategory(category);
+ 			}
+ 		});
++		if (wasArmed && !this.approval.isArmed() && this.displayState.clearPendingApproval()) this.emit({
++			type: "display_state_changed",
++			displayState: this.displayState.get()
++		});
+ 	}
+ 	/**
+ 	* Build the agent message input for a user turn, attaching any files as

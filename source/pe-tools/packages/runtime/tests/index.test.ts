@@ -34,6 +34,47 @@ const expectedPermissionRules = {
   },
 } as const;
 
+test("session approval decisions clear the canonical display gate", async () => {
+  const session = new Session({ resourceId: "resource", id: "session", ownerId: "owner" });
+  const snapshots: Array<string | null> = [];
+  const unsubscribe = session.subscribe((event) => {
+    if (event.type === "display_state_changed")
+      snapshots.push(event.displayState.pendingApproval?.toolCallId ?? null);
+  });
+
+  try {
+    const approved = session.approval.arm({ toolName: "shell", toolCallId: "approved" });
+    session.emit({
+      type: "tool_approval_required",
+      toolCallId: "approved",
+      toolName: "shell",
+      args: {},
+    });
+
+    session.respondToToolApproval({ decision: "approve", toolCallId: "stale" });
+    expect(session.displayState.get().pendingApproval?.toolCallId).toBe("approved");
+
+    session.respondToToolApproval({ decision: "approve", toolCallId: "approved" });
+    await expect(approved).resolves.toMatchObject({ decision: "approve" });
+    expect(session.displayState.get().pendingApproval).toBeNull();
+    expect(snapshots.at(-1)).toBeNull();
+
+    const aborted = session.approval.arm({ toolName: "shell", toolCallId: "aborted" });
+    session.emit({
+      type: "tool_approval_required",
+      toolCallId: "aborted",
+      toolName: "shell",
+      args: {},
+    });
+    session.abort();
+    await expect(aborted).resolves.toMatchObject({ decision: "decline" });
+    expect(session.displayState.get().pendingApproval).toBeNull();
+    expect(snapshots.at(-1)).toBeNull();
+  } finally {
+    unsubscribe();
+  }
+});
+
 test("runtime controller close closes injected storage", async () => {
   let storageCloseCount = 0;
   const config: RuntimeInjectedControllerConfig = {
@@ -114,6 +155,26 @@ test(
       expect(sessionA.permissions.getRules()).toEqual(expectedPermissionRules.ask);
       expect(sessionB.permissions.getRules()).toEqual(expectedPermissionRules.ask);
       expect(await runtime.controller.createSession({ resourceId, scope: "A" })).toBe(sessionA);
+
+      const app = await buildAgentControllerApp({ runtime, label: "pea" });
+      const rename = (title: string) =>
+        app.fetch(
+          new Request(
+            `http://local/api/agent-controller/pea/sessions/${encodeURIComponent(resourceId)}/threads/B?sessionScope=A`,
+            {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ title }),
+            },
+          ),
+        );
+      const renamed = await rename("  renamed B  ");
+      expect(renamed.status).toBe(200);
+      expect(await renamed.json()).toEqual({ ok: true });
+      expect(sessionA.thread.getId()).toBe("A");
+      expect((await sessionA.thread.getById({ threadId: "B" }))?.title).toBe("renamed B");
+      expect((await rename(" ")).status).toBe(400);
+
       expect(() => sessionA.thread.set({ threadId: "B" })).toThrow("immutable");
       expect(sessionA.thread.getId()).toBe("A");
       expect(() => sessionA.thread.clear()).toThrow("immutable");
