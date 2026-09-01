@@ -103,6 +103,56 @@ the caution edge — the 1px role would change their computed border. Report:
 - M4 wrapper mandate: everything through `Section`/`Pane`. FALSIFIED — fixed DOM topology is the
   reason the debt exists.
 
+Typography ground (2026-08-31, `a49fddd`): PROVEN[browser, herdr dev server :3001, a49fddd,
+2026-08-31]. `[data-pe] body` now sets the value tier (`base.css:135-136`); 11 browser-default
+text offenders → 0 across 13 route states with zero explicit-tier fixes needed. The check is
+`vp run --no-cache @pe/web#type-sweep -- <baseUrl> <routes...>` (`apps/web/scripts/type-sweep.mjs`),
+browser-lane. Report: `.artifacts/runs/type-ground-20260831/report.md`.
+
+Round 4 planned (state-attribute convention, the M2 mechanism folded into M1): promote
+`data-tone` from a `FactChip` incidental (`components/lang/chip.tsx:71`) to a language-wide
+convention. Language CSS styles the closed tone set `{meta, caution, done, alarm, commit, nav,
+pea}` at two intensities: `[data-tone=x]` sets ink only; `[data-tone=x][data-wash]` adds the
+tinted fill + border from ONE canonical alpha recipe (today `cap.tsx:72-75` hand-mixes /50 /12
+vs /55 /10). Selection ground rides `aria-selected`/`aria-expanded`/`[data-selected]`, never
+`token("select")` at call sites. Spike files: `workbench/world/cap.tsx` (wash),
+`takeoff/room-panel.tsx` (ink), `family/workspace-doc-pane.tsx` (pea),
+`targeting/kit/picker.tsx` (selection), `family-review/proto-editor/composed-params.tsx`
+(provenance `SOURCE_TONE`). Expected kill: the `rawMeaningColor` red (30 sites). Runs on the
+scout line after the typography round lands, same tree.
+
+light-dark() collapse (2026-08-31, `spike/light-dark` @ `4eb2b7f`):
+PROVEN[browser, worktree :3010, 4eb2b7f, 2026-08-31]. All 23 dual-theme tokens collapsed into
+single `light-dark()` declarations, net −20 LOC in `base.css`; guards unchanged at 5 reds.
+Twelve computed-value spot checks equal against git-pinned old literals in both themes,
+verified through the real theme mechanism (class + inline `colorScheme`,
+`theme-toggle.tsx:26`; the CSS `color-scheme` rules cover the pre-hydration window). The 15
+`dark:` Tailwind variants in `components/lang/` are out of scope and still ride the `.dark`
+class. Merge to main owed, after the tone round lands (one writer per tree). Report:
+`Pe.Tools-light-dark/.artifacts/runs/light-dark-20260831/report.md`.
+
+Round 4 (2026-08-31, `e099dc7`): PROVEN[deterministic+browser, main checkout, e099dc7,
+2026-08-31], verified on a clean line (98/101). The tone attribute convention shipped:
+`lang.css` owns `[data-tone={alarm,caution,done,commit,nav,pea}]` ink,
+`[data-tone][data-wash]` canonical fill (0.5px currentColor 55% border, 10% fill into
+`--pe-on`), and the select ground on `aria-selected/aria-expanded/aria-pressed/data-selected`,
+with an SVG fill projection. `rawMeaningColor` 30 → 0 with a 0 baseline; inlineColor 145 → 131;
+meaning allowlist 87 → 75; guards 5 → 3 reds. One intentional visual delta: the cap wash
+recipes unified. New guard: invalid `data-tone` values rejected. Report:
+`.artifacts/runs/tone-attr-20260831/report.md`.
+
+light-dark merge (2026-08-31): `spike/light-dark` merged to main clean (`base.css` auto-merge,
+−20 LOC), guards still 3 reds, and the composition proven in the harness preview on merged
+main: `data-tone=alarm` ink equals `--pe-alarm` through `light-dark()` in both themes. The
+worktree, branch, and themer session are retired; the report copy is at
+`.artifacts/runs/light-dark-20260831/report.md`.
+
+Queued round — t-value shim sweep (user-asked 2026-08-31): the body default (`a49fddd`) makes
+restated `t-value` classes shims; census counts 75 occurrences in 37 files (`face-body`: zero).
+Gate is computed-style equality per file: strip, diff computed styles on the rendering routes,
+revert any file that moved. Keep variant-API tiers (`press.tsx` size recipe) and design-system
+specimens. Runs on the scout line after the tone round; same tree.
+
 ## Laws for this effort
 
 - The SDK contract is fixed; only web-side state shape changes (LEDGER Decided 2026-08-31).

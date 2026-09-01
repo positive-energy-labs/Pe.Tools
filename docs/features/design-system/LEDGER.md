@@ -216,10 +216,10 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - `/data-tables` performs live Revit reads/writes with no document gate
   (`routes/data-tables.tsx:116-135`). Deferred by the 2026-08-31 priority law; falls to the S2a
   cutover crusade.
-- 5 repo-guard reds ride on main (was 8 at the merge; round 2 `2a75f94` fixed opacityDim and the
-  meaning population, first honest baseline 87): `rawMeaningColor` 30>17, `no raw leading
-  utilities` 5 sites, `weight variables outside the foundation` 1 site (`workbench/lens.css:277`),
-  `unregistered classes` 11 sites. Phase 4 pays.
+- 3 repo-guard reds ride on main (was 8 at the merge; `2a75f94` fixed opacityDim and the meaning
+  population, `e099dc7` cleared rawMeaningColor to 0): `no raw leading utilities` 5 sites,
+  `weight variables outside the foundation` 1 site (`workbench/lens.css:277`), `unregistered
+  classes` 11 sites (overlaps the leading sites). Phase 4 pays.
 - The design guards misreport (found 2026-08-31 by the intent census,
   `.artifacts/runs/meaning-census-20260831/report.md`): the inline-color regex at
   `design-adherence.test.ts:107` backtracks past its optional quote, so 11 literal
