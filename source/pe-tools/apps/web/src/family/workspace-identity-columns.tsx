@@ -1,57 +1,46 @@
 import type { Column, MasterTableState } from "#/components/master-table/model";
-import { ReadCell } from "#/components/master-table/cells";
+import { token } from "#/lib/token";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
-import { ProposedCell } from "#/family/marks";
 import { bindingOf, isFormula, pinnedSort, sortDirOf, type PRow } from "#/family/model";
 import type { FamilyWorkspaceCore } from "#/family/workspace-core";
 
 export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
-  const { world, draft, setInspect, verdictOf, proposalsAt, proposalsOn, locate, consumers } = core;
+  const { world, draft, setInspect, proposalsAt, proposalsOn, locate, consumers } = core;
+  /**
+   * THE VERDICT RAIL — a COUNT, not a control (ruled 2026-08-31, per-cell grounding). It used to
+   * carry a 24px pea icon-press inside a 20px row, which was the locate affordance improvised
+   * where the grammar had none. The grammar has one now: locate is the cell's own `onLocate`, so
+   * the rail went back to what a rail is — one glance down the table saying WHERE pea has read,
+   * readable without reading a single value, and deciding nothing.
+   */
   const railColumn = (): Column<PRow> => ({
     key: "rail",
     label: "",
     group: "PARAMETER",
     width: "w-6",
     title:
-      "The verdict rail — the page's answer to 'where do proposals live', readable top to bottom without reading a single value. A dot means one proposal on this row; a counted chip means several. Clicking either LOCATES them in the sidebar; it never decides anything, because a verdict belongs next to the spec text that justifies it.",
+      "The proposal rail — the page's answer to 'where has pea read', readable top to bottom without reading a single value. A dot means one proposal on this row; a number means several. It decides nothing and locates nothing: click the CELL that wears the fold to bring its card into the sidebar, because that is the cell the proposal is about.",
     cell: (row) => {
-      const open = proposalsOn(row.name);
-      const accepted = world.proposals.filter(
-        (entry) => entry.param === row.name && verdictOf(entry.id) === "accepted",
-      );
-      if (open.length === 0)
-        return accepted.length > 0 ? (
-          <ReadCell
-            value="✓"
-            reason="Every proposal on this row is settled, and at least one was accepted — the value is in the profile, and its citation is still live in the sidebar."
-          />
-        ) : null;
-
-      const where = open
+      const standing = proposalsOn(row.name);
+      if (standing.length === 0) return null;
+      const where = standing
         .map(
           (entry) =>
             `${entry.typeName ?? "family value"}: ${entry.current ?? "—"} → ${entry.proposed}`,
         )
         .join(" · ");
       return (
-        <span className="flex h-(--item-h) items-center justify-center">
-          <Press
-            type="button"
-            onClick={() => locate(open[0]!)}
-            size={open.length === 1 ? "icon" : "caption"}
-            tone="agent"
-            aria-label={`locate ${open.length} proposal(s) on ${row.name}`}
-            title={
-              open.length === 1
-                ? `One open proposal on ${row.name} — ${where}. Click to bring its card into view in the doc sidebar, where accept and deny sit beside the spec text. Nothing pops over the table.`
-                : `${open.length} open proposals on ${row.name}, at different types — ${where}. The row is contested more than once; the corner folds in the cells say WHICH cells. Click to bring the cards into view.`
-            }
-            /* Pea's identity, never the commit colour: a MARK takes `--pe-pea` (the display rung),
-               a counted chip is text and takes pea's ink. */
-          >
-            {open.length > 1 ? open.length : null}
-          </Press>
+        <span
+          className="face-mono flex h-(--item-h) items-center justify-center t-caption"
+          data-tone="pea"
+          title={
+            standing.length === 1
+              ? `One proposal standing on ${row.name} — ${where}. Click the cell that wears the fold to bring its card into the doc sidebar, where accept and deny sit beside the spec text.`
+              : `${standing.length} proposals standing on ${row.name}, at different types — ${where}. The row is contested more than once; the folds in the cells say WHICH cells, and clicking one brings its card into view.`
+          }
+        >
+          {standing.length > 1 ? standing.length : "●"}
         </span>
       );
     },
@@ -119,18 +108,30 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         blocks.length > 0
           ? ` Grounded in ${blocks.join(", ")} of ${world.spec?.fileName ?? "the spec"} — hover the row to light it in the sidebar.`
           : " Ungrounded: nothing in the spec claims this number."
-      }${family.length > 0 ? ` Pea proposes a FAMILY-LEVEL value here: ${family[0]!.current ?? "—"} → ${family[0]!.proposed}. Accepting it moves every type that does not override.` : ""}${
+      }${family.length > 0 ? ` Pea proposes a FAMILY-LEVEL value here: ${family[0]!.current ?? "—"} → ${family[0]!.proposed}. Click this cell to bring the card into the sidebar; accepting it moves every type that does not override.` : ""}${
         drives.length > 0
           ? ` Drives ${drives.map((entry) => `${entry.slug}.${entry.property}`).join(", ")} — this row IS those dimensions, which is why they have no rows of their own.`
           : row.kind === "profile"
             ? " Drives no geometry the profile declares — it is schedule data, or it is dead."
             : ""
       }`;
+      // TODO(core-reader): a FAMILY-LEVEL proposal has no value cell of its own — the family-value
+      // column is gone, and this identity cell is two lines, so it cannot be a row-scale
+      // `StateCell`. It therefore draws the fold and takes the locate click itself, with the
+      // grammar's own guard (a click on an inner Press belongs to that Press). The reader has no
+      // way to hand `StateCellProps` to a non-`StateCell` cell; that is the gap.
       return (
-        <ProposedCell
-          proposals={family}
-          onLocate={locate}
-          where={`the family value of ${row.name}`}
+        <span
+          className="flex min-h-(--item-h) w-full items-center"
+          style={family[0] ? { boxShadow: `inset 0 -1.5px 0 0 ${token("pea")}` } : undefined}
+          onClick={
+            family[0]
+              ? (event) => {
+                  if ((event.target as HTMLElement).closest("input,button") != null) return;
+                  locate(family[0]!);
+                }
+              : undefined
+          }
         >
           <span className="min-w-0 flex-1 px-1.5" title={reason}>
             <span>
@@ -178,7 +179,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
               </span>
             )}
           </span>
-        </ProposedCell>
+        </span>
       );
     },
   });

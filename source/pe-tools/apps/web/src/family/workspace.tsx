@@ -32,14 +32,20 @@
  *   changes the table's geometry, and neither carries a verdict.
  *
  *   CARDS = DECIDABLE. Accept and deny live only on the sidebar cards, next to the spec text that
- *   justifies them. Clicking a rail dot or a corner fold focuses the card(s); nothing pops over
- *   the table, so the evidence and the decision are never hidden by the affordance that reached
- *   them.
+ *   justifies them. Clicking the CELL brings its card into view (`StateCell`'s own `onLocate`);
+ *   nothing pops over the table, so the evidence and the decision are never hidden by the
+ *   affordance that reached them. The rail counts and points; it decides and locates nothing.
+ *
+ *   ONE LIFECYCLE, TWO RUNGS (ruled 2026-08-31). A cell holds pea's PROPOSAL and the draft's
+ *   STAGED value, and nothing else. Accept stages pea's value and leaves the proposal standing
+ *   behind it, which is how the square is known to be pea's ink. Deny CLEARS the proposal — there
+ *   is no denied state to draw, the cell simply shows the real value again. Re-open puts it back.
  *
  *   TYPING BEATS PROPOSING. A proposed cell is an ordinary editable cell. The moment you commit
- *   your own value into it the proposal linkage is SEVERED — no accept, no deny, the card settles
- *   to "superseded by your edit". Grounding is untouched: a citation is a fact about where a
- *   number came from, not a fact about pea.
+ *   your own value into it the proposal is CLEARED — the same outcome as a denial, because the
+ *   proposal has nothing left to argue for. `superseded` was a fourth state for that and it is
+ *   deleted. Grounding is untouched: a citation is a fact about where a number came from, not a
+ *   fact about pea.
  *
  * THE GHOST-ROW LAW, in the user's words:
  *

@@ -1,8 +1,9 @@
 import type { Column } from "#/components/master-table/model";
-import { ReadCell, TextCell } from "#/components/master-table/cells";
+import { ReadCell } from "#/components/master-table/cells";
+import { cellFromTrichotomy, type StateCellProps } from "#/components/lang/cell";
 import { PressContent } from "#/components/anatomy/press-content";
 import { Press } from "#/components/lang/press";
-import { NavStateCell, ProposedCell } from "#/family/marks";
+import { NavStateCell } from "#/family/marks";
 import {
   MARK_TITLE,
   agreementOf,
@@ -10,6 +11,7 @@ import {
   draftValueAt,
   isFormula,
   isUnsavedAt,
+  proposalCell,
   savedValueAt,
   type PRow,
 } from "#/family/model";
@@ -112,9 +114,14 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
         // without the row growing a pixel. The route-drawn RefusalNote this replaced is deleted.
         return (
           <NavStateCell
-            value={literal}
-            stage={isUnsavedAt(world, draft, saved, row, typeName) ? "staged" : "clean"}
-            stagedBy="you"
+            {...cellFromTrichotomy(
+              // A ghost has no proposal — pea cannot argue about a number nothing can reach — so
+              // the reader draws it from the staged rung alone, exactly as it draws every other
+              // cell. The hand-assembled `stage`/`stagedBy` pair this replaced was the same
+              // derivation written a second time.
+              proposalCell([], isUnsavedAt(world, draft, saved, row, typeName) ? literal : null),
+              { value: literal },
+            )}
             note={`The literal itself, as ONE cell across every type — EDITABLE. Typing here rewrites the number frozen into the geometry; it does not make it reachable. That is what binding is for. Emptying it is refused out loud — a dimension with no number is not a state.${
               isUnsavedAt(world, draft, saved, row, typeName)
                 ? ` UNSAVED — the file ${diskLiteral === null ? "does not carry this dimension at all" : `carries ${diskLiteral}`}; saving writes ${literal}.`
@@ -143,93 +150,94 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
       const diskValue = savedValueAt(saved, row, typeName);
       const draftValue = draftValueAt(world, draft, row, typeName);
       const unsaved = isUnsavedAt(world, draft, saved, row, typeName);
+      const unsavedNote =
+        unsaved && overlay === "draft"
+          ? ` UNSAVED — ${
+              diskValue === null
+                ? `"${row.name}" is not in the file at all; saving adds it, resolving to ${draftValue} at ${typeName}.`
+                : `the file resolves ${typeName} to ${diskValue}; saving writes ${draftValue}.`
+            } The square sits opposite pea's fold so the two marks can never be confused.`
+          : "";
       const groundedNote = grounded
         ? ` Grounded in ${(world.grounding[row.name] ?? []).join(", ")} of ${world.spec?.fileName ?? "the spec"}.`
         : "";
 
-      const marks = (inner: React.ReactNode) => (
-        <ProposedCell
-          proposals={proposals}
-          onLocate={locate}
-          where={`${row.name} at ${typeName}`}
-          unsaved={
-            overlay === "draft" && unsaved
-              ? `UNSAVED — ${
-                  diskValue === null
-                    ? `"${row.name}" is not in the file at all; saving adds it, resolving to ${draftValue} at ${typeName}.`
-                    : `the file resolves ${typeName} to ${diskValue}; saving writes ${draftValue}.`
-                } The square sits opposite pea's fold so the two marks can never be confused.`
-              : null
-          }
-        >
-          {inner}
-        </ProposedCell>
+      /**
+       * THE TRICHOTOMY AT THIS COORDINATE, read ONCE through the shared reader (ruled 2026-08-31)
+       * — pea's standing proposal and the draft's unsaved value in, `StateCellProps` out. Every
+       * branch below supplies only what is its own: which substrate's number it is showing, the
+       * prose that explains it, and whether it can be typed into.
+       *
+       * The STAGED rung is a draft fact, so it only reads under the draft overlay: under ⇄ live
+       * and ⇄ saved the number shown is not the draft's, and a caution square beside it would be
+       * pointing at a value that is not there. The proposal FOLD survives every overlay, because
+       * a proposal is a fact about the cell rather than about which reading is showing.
+       *
+       * `onLocate` is the cell's own: click the body and the card comes into the doc sidebar.
+       * TODO(core-reader): on an EDITABLE cell the input owns its clicks (the caret law), so the
+       * locate target is only the cell's padding. The grammar has no second body-click affordance
+       * that does not steal the caret, and inventing one here is exactly the improvisation that
+       * this pass deleted.
+       */
+      const cell = (facts: StateCellProps) => (
+        <NavStateCell
+          {...cellFromTrichotomy(
+            proposalCell(proposals, overlay === "draft" && unsaved ? draftValue : null),
+            facts,
+          )}
+          onLocate={proposals[0] ? () => locate(proposals[0]!) : undefined}
+        />
       );
 
       // ── ⇄ LIVE: Revit's number, in the cell it is a reading of ──────────────────────────────
       if (overlay === "live") {
         if (world.missingInRevit.has(row.name))
-          return marks(
-            <ReadCell
-              value="not in Revit"
-              reason={`${MARK_TITLE["only-profile"]}${groundedNote}`}
-            />,
-          );
+          return cell({
+            value: "not in Revit",
+            note: `${MARK_TITLE["only-profile"]}${groundedNote}`,
+          });
         const entry = draft.live[row.name]?.[typeName];
         if (!entry)
-          return marks(
-            <ReadCell
-              value="·"
-              reason={`${MARK_TITLE.unread} Re-read the family before treating this dot as a match.${groundedNote}`}
-            />,
-          );
-        return marks(
-          <ReadCell
-            value={entry.value}
-            reason={
-              drifted
-                ? `DRIFT — Revit carries ${entry.value} at ${typeName}; the draft resolves to ${draftValue}. ${MARK_TITLE.drift} Read-only here: editing a live number is not a thing that exists, which is why apply is the write path and its verbs are lit in this overlay.${groundedNote}`
-                : `${typeName} — ${entry.value}. ${MARK_TITLE[agreementOf(world, draft, row, typeName)]}${groundedNote}`
-            }
-          />,
-        );
+          return cell({
+            value: "·",
+            note: `${MARK_TITLE.unread} Re-read the family before treating this dot as a match.${groundedNote}`,
+          });
+        return cell({
+          value: entry.value,
+          note: drifted
+            ? `DRIFT — Revit carries ${entry.value} at ${typeName}; the draft resolves to ${draftValue}. ${MARK_TITLE.drift} Read-only here: editing a live number is not a thing that exists, which is why apply is the write path and its verbs are lit in this overlay.${groundedNote}`
+            : `${typeName} — ${entry.value}. ${MARK_TITLE[agreementOf(world, draft, row, typeName)]}${groundedNote}`,
+        });
       }
 
       // ── ⇄ SAVED: the disk's number, and what save would write over it ───────────────────────
       if (overlay === "saved") {
         if (diskValue === null)
-          return marks(
-            <ReadCell
-              value="new — not on disk"
-              reason={`"${row.name}" is not in the saved profile at all: this page created it. Saving adds the whole parameter, and this type will resolve to ${draftValue}.${groundedNote}`}
-            />,
-          );
+          return cell({
+            value: "new — not on disk",
+            note: `"${row.name}" is not in the saved profile at all: this page created it. Saving adds the whole parameter, and this type will resolve to ${draftValue}.${groundedNote}`,
+          });
         const willWrite = diskValue !== draftValue;
-        return marks(
-          <ReadCell
-            value={
-              <>
-                {diskValue || "—"}
-                {willWrite && <span className="ml-1">→</span>}
-              </>
-            }
-            reason={
-              willWrite
-                ? `The file resolves ${typeName} to ${diskValue || "nothing"}; saving writes ${draftValue} over it. The caution arrow is the direction of that write — it is a warning, not a drift: nothing about Revit is claimed here.${groundedNote}`
-                : `The file already resolves ${typeName} to ${diskValue}. Saving writes nothing into this cell.${groundedNote}`
-            }
-          />,
-        );
+        return cell({
+          value: (
+            <>
+              {diskValue || "—"}
+              {willWrite && <span className="ml-1">→</span>}
+            </>
+          ),
+          note: willWrite
+            ? `The file resolves ${typeName} to ${diskValue || "nothing"}; saving writes ${draftValue} over it. The caution arrow is the direction of that write — it is a warning, not a drift: nothing about Revit is claimed here.${groundedNote}`
+            : `The file already resolves ${typeName} to ${diskValue}. Saving writes nothing into this cell.${groundedNote}`,
+        });
       }
 
       // ── DRAFT: the staged document, editable ────────────────────────────────────────────────
       //
-      // NOT migrated onto the editable `StateCell` (adoption pass 2026-08-16, findings #13/#14):
-      // an override-less type cell shows the FAMILY value as a placeholder — the inheritance
-      // showing through, not a value the type holds — and the grammar's editable slot has no
-      // placeholder, so an empty `StateCell` here would claim "no value" where the cell resolves
-      // to the authored one. The fold also LOCATES here (the notch is a button); `StateCell`'s
-      // fold is CSS. Both stay honest on `ProposedCell` + `TextCell` until the axes can say them.
+      // MIGRATED onto the editable `StateCell` (2026-08-31, proposal-state demiurge). The two
+      // reasons this cell stayed on `ProposedCell` + `TextCell` are both closed: the grammar's
+      // editable slot HAS a placeholder now, so the inheritance can show through honestly, and
+      // the fold LOCATES through the cell's own `onLocate` instead of a button improvised beside
+      // it. `ProposedCell` was deleted rather than kept — it had nothing left to say.
       if (isFormula(authored))
         return (
           <ReadCell
@@ -238,20 +246,18 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
           />
         );
       const override = draft.types[typeName]?.[row.name];
-      return marks(
-        <TextCell
-          value={override ?? ""}
-          placeholder={authored}
-          title={
-            proposals.length > 0
-              ? `Pea proposes ${proposals[0]!.proposed} here — but this cell is ORDINARY. Type your own value and the proposal is severed on the spot: no accept, no deny, the card settles to "superseded by your edit". ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
-              : override === undefined
-                ? `"${typeName}" inherits ${authored || "nothing"} from the family — the grey number is the inheritance showing through, not a value this type holds. Type here to make it differ.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
-                : `"${typeName}" overrides the family value ${authored} with ${override}. Clear the cell to go back to inheriting.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
-          }
-          onCommit={(next) => editOverride(row.name, typeName, next)}
-        />,
-      );
+      return cell({
+        value: override ?? "",
+        placeholder: authored,
+        note: `${
+          proposals.length > 0
+            ? `Pea proposes ${proposals[0]!.proposed} here — but this cell is ORDINARY. Type your own value and the proposal is CLEARED on the spot: no accept, no deny, and the cell simply shows what you typed. ${override === undefined ? `Until then the type inherits ${authored || "nothing"}.` : `The type currently overrides with ${override}.`}${groundedNote}`
+            : override === undefined
+              ? `"${typeName}" inherits ${authored || "nothing"} from the family — the grey number is the inheritance showing through, not a value this type holds. Type here to make it differ.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
+              : `"${typeName}" overrides the family value ${authored} with ${override}. Clear the cell to go back to inheriting.${drifted ? ` The alarm underline says Revit disagrees; switch to ⇄ live to read its number in place.` : ""}${groundedNote}`
+        }${unsavedNote}`,
+        onCommit: (next) => editOverride(row.name, typeName, next),
+      });
     },
   });
 

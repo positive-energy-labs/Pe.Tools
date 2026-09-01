@@ -7,7 +7,8 @@ import { Verb } from "#/components/lang/verb";
 import { Pane } from "#/components/lang/pane";
 import { SpecSheet, SpecText, ProposalCard } from "#/family/doc-pane";
 import { NavStateCell } from "#/family/marks";
-import { bindingOf, isFormula, type PageWorld } from "#/family/model";
+import { cellFromTrichotomy } from "#/components/lang/cell";
+import { bindingOf, isFormula, proposalCell, type PageWorld } from "#/family/model";
 import { boundParam, type GeomConstituent } from "#/family/world";
 import { useFamilyWorkspace } from "#/family/workspace-context";
 import { FamilyMetaControl } from "#/family/workspace-meta-control";
@@ -30,14 +31,16 @@ export function FamilyWorkspaceDocPane() {
     inspect,
     setInspect,
     cardRefs,
-    verdictOf,
+    proposalState,
     proposalsAt,
     openProposals,
+    locate,
     rows,
     consumers,
     say,
     accept,
     deny,
+    reopen,
     editAuthored,
     editLiteral,
     litBlocks,
@@ -151,15 +154,11 @@ export function FamilyWorkspaceDocPane() {
               the staged square + bold, and a refused empty commit is the cell's own restore +
               caution note — the route's refusal paragraph this replaced is deleted. */}
           <NavStateCell
-            value={authored}
-            stage={
-              family.length > 0
-                ? "proposed"
-                : (saved.authored[name] ?? null) !== authored
-                  ? "staged"
-                  : "clean"
-            }
-            stagedBy={family.length > 0 ? "pea" : "you"}
+            {...cellFromTrichotomy(
+              proposalCell(family, (saved.authored[name] ?? null) !== authored ? authored : null),
+              { value: authored },
+            )}
+            onLocate={family[0] ? () => locate(family[0]!) : undefined}
             note={
               isFormula(authored)
                 ? `A FORMULA — ${authored}. Its result is derived, so no type may override it and Revit's number for it is an output rather than a competing value. Edit the expression here; change what feeds it to change the result.`
@@ -169,8 +168,8 @@ export function FamilyWorkspaceDocPane() {
           />
           {family.length > 0 && (
             <p className="face-mono t-caption mt-1" data-tone="pea">
-              pea proposes {family[0]!.proposed} here — the card is above; typing your own value
-              severs it instead.
+              pea proposes {family[0]!.proposed} here — click the cell to bring the card into view;
+              typing your own value clears the proposal instead.
             </p>
           )}
         </div>
@@ -283,9 +282,9 @@ export function FamilyWorkspaceDocPane() {
         <>
           <FactChip
             tone="pea"
-            title="Open proposals waiting on a verdict. They are ephemeral — page-scoped, never written, gone on reload. Only accept makes one real."
+            title="Pea's readings still STANDING on this page — open, or accepted and now staged. They are ephemeral: page-scoped, never written, gone on reload. Accepting stages the value; denying clears the proposal and the cell shows its real value again."
           >
-            {openProposals.length} open
+            {openProposals.length} standing
           </FactChip>
           <Switcher
             ariaLabel="doc mode"
@@ -341,7 +340,7 @@ export function FamilyWorkspaceDocPane() {
               <ProposalCard
                 key={proposal.id}
                 proposal={proposal}
-                verdict={verdictOf(proposal.id)}
+                state={proposalState(proposal)}
                 // A card lights either because it is the one you located, or because its whole ROW
                 // is the one you located — the two-proposal case has to light both cards or the
                 // count on the rail would be pointing at something the sidebar refuses to show.
@@ -353,6 +352,7 @@ export function FamilyWorkspaceDocPane() {
                 specFileName={world.spec?.fileName ?? null}
                 onAccept={() => accept(proposal)}
                 onDeny={() => deny(proposal)}
+                onReopen={() => reopen(proposal)}
                 onHover={(on) => {
                   setFocus(on ? { kind: "param", id: proposal.param } : null);
                   setFocusedProposal(on ? proposal.id : null);
