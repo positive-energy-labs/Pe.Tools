@@ -285,7 +285,7 @@ public sealed class DeploymentRuntimeContractTests {
     [Test]
     public void Installed_product_grammar_resolves_the_host_executable_and_pea_launcher() {
         // Consumer-side pin: the installed lane resolves host/pea through Pe.Revit.Loader's
-        // InstalledProduct, so this fixtures a minimal install root (as `pe-revit install apply`
+        // InstalledProduct, so this fixtures a minimal install root (as `pe-revit install converge`
         // writes it) and asserts our payload names ("host", "pea") land where the launchers expect.
         // The full round-trip grammar contract is owned by the SDK repo's Loader.Tests.
         var appBase = Path.Combine(Path.GetTempPath(), $"pe-installed-product-{Guid.NewGuid():N}");
@@ -308,6 +308,7 @@ public sealed class DeploymentRuntimeContractTests {
 
             var hostVersionDir = Path.Combine(appBase, "bin", "host", "versions", hostVersion);
             Directory.CreateDirectory(hostVersionDir);
+            File.WriteAllText(Path.Combine(hostVersionDir, "install.manifest.json"), "{}");
             File.WriteAllText(Path.Combine(appBase, "bin", "host", "current.txt"), hostVersion);
             var hostExe = Path.Combine(hostVersionDir, "Pe.Host.exe");
             File.WriteAllText(hostExe, string.Empty);

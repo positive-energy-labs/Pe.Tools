@@ -69,7 +69,7 @@ test("host boundary: service file, status, static SPA, mastra mount, graceful sh
         mastraLayer: StubMastraLive,
         lifecycle: { latch, handle },
         webRoot: webDir,
-        includeInstallGc: false,
+        includeInstallConverge: false,
       });
       yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
     }),

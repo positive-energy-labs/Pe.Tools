@@ -63,10 +63,12 @@ dotnet tool run pe-revit -- <command> --json
 
 - Run `test --plan` or `session start --plan` before first Revit contact in a checkout. `pe-revit test --project <P>` chooses deterministic or fresh from the project; `--attach --id <session>` chooses attached.
 - `session list` is the machine census. It projects controlled rows from receipts and observed rows from exact Revit process identity. `--all` adds gone, failed, and unreadable evidence.
+- `session start --quarantine` is the opt-in clean boot for Revit 2025.3+; it disables third-party add-ins only for that session and restores the native store when the session ends.
 - Custody is authority. `controlled` means the SDK holds a receipt and may mutate the session. `observed` means read-only discovery; lifecycle and document mutations must refuse it.
 - `session hr --id <session>` is the edit loop. Its hot or cold verdict proves delivery, not product behavior. Re-run the behavior.
 - Use `doc current` before acting on a document. Use `op list`, `op status`, and `op result` to recover durable operation receipts after interruption.
 - Terminal `dotnet build` and `publish` are isolated compile or artifact lanes. Raw `dotnet test` is forbidden for Revit-backed projects.
+- `install status|converge|remove` is the install surface. `converge` is the only mutator and owns cleanup; self-update uses `install converge --release latest --json`.
 - Never use `Stop-Process`, `taskkill`, or direct Revit launch. `pe-revit session` owns controlled Revit lifecycle. Never mutate installed product state without explicit authority.
 
 ## Host, web, Pea, and browser

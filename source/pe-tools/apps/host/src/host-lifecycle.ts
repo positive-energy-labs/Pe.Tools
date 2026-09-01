@@ -78,7 +78,7 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
     sourceRoot: hostOwnership.lane === "dev" ? (hostOwnership.sourceRoot ?? undefined) : undefined,
     shutdown: hostProcessIdentity.shutdownPath,
     // Service-file schema 3: the relative path a READER may probe to decide this host is UP.
-    // `pe-revit session status` narrates companion legs and never starts them, so without this it
+    // `pe-revit session list` narrates companion legs and never starts them, so without this it
     // can only infer liveness from a TCP accept — and a reused port makes a stranger look like us.
     // Declaring the health path is what gets this leg the `health` rung instead of the `tcp` one.
     health: hostProcessIdentity.healthPath,
@@ -91,7 +91,7 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
  * registers on the bridge and tells us. It cannot be written at claim time — the claim happens on
  * bind, long before any Revit process connects — so this is an in-place amendment of our OWN file.
  *
- * Why it matters: without it, `session status` can only match this host to a session by LANE, and
+ * Why it matters: without it, `session list` can only match this host to a session by LANE, and
  * it says so in as many words (`legBecause: "lane match and NOT proof that this host serves this
  * session"`). With it, the leg is an association the SDK can actually stand behind.
  *

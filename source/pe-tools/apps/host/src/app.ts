@@ -183,7 +183,7 @@ function readInstallReceipt(): InstallReceipt | null {
   }
 }
 
-// Match `install apply --release latest`: GitHub's latest stable release is the authority.
+// Match `install converge --release latest`: GitHub's latest stable release is the authority.
 async function readHostUpdateStatus(): Promise<HostUpdateStatus> {
   const receipt = readInstallReceipt();
   const installedVersion = receipt?.releaseVersion ?? null;
@@ -239,7 +239,7 @@ const hostUpdateRoute = HttpRouter.add("POST", "/host/update", () =>
         );
 
       const launch = peRevitLauncher();
-      const args = ["install", "apply", "--release", "latest", "--json"] as const;
+      const args = ["install", "converge", "--release", "latest", "--json"] as const;
       await new Promise<void>((resolve, reject) => {
         const child = spawn(launch.cmd, [...launch.args, ...args], {
           cwd: launch.cwd,
@@ -284,16 +284,16 @@ const hostUpdateStatusRoute = HttpRouter.add("GET", "/host/update", () =>
   Effect.promise(async () => Response.jsonUnsafe(await readHostUpdateStatus())),
 );
 
-// Routine cleanup, always on: the kernel's `install gc` prunes version dirs (keep 3), sweeps
-// the manifest's declared legacy paths and rename-aside strays — lock-tolerant and idempotent.
+// Routine convergence, always on: the kernel prunes version dirs, sweeps the manifest's declared
+// legacy paths and rename-aside strays, and repairs selectors — lock-tolerant and idempotent.
 // Runs at host start and on every Revit session disconnect (the moment its file locks vanish),
-// so hot-swap releases never accumulate cruft. Failures are swallowed: gc is best-effort.
-const runInstallGc = Effect.gen(function* () {
+// so hot-swap releases never accumulate cruft. Failures are swallowed: convergence is best-effort.
+const runInstallConverge = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const launch = peRevitLauncher();
   yield* Effect.result(
     spawner.string(
-      ChildProcess.make(launch.cmd, [...launch.args, "install", "gc", "--json"], {
+      ChildProcess.make(launch.cmd, [...launch.args, "install", "converge", "--json"], {
         cwd: launch.cwd,
       }),
     ),
@@ -303,7 +303,7 @@ const runInstallGc = Effect.gen(function* () {
 /**
  * Service-file schema 3, second half: once a Revit payload registers on the bridge and reports the
  * pe-revit session it belongs to, amend this host's service file to name that session. That is what
- * turns `session status`'s companion leg from a lane guess into a real association — the SDK reads
+ * turns `session list`'s companion observation from a lane guess into a real association — the SDK reads
  * the file, and the file now says which session this host serves.
  *
  * A host serves at most one Revit session in practice, but nothing enforces it; the LAST session to
@@ -335,20 +335,20 @@ const ServedSessionLive = Layer.effectDiscard(
   }),
 );
 
-const InstallGcLive = Layer.effectDiscard(
+const InstallConvergeLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    yield* Effect.forkScoped(runInstallGc);
+    yield* Effect.forkScoped(runInstallConverge);
     const bridge = yield* RevitBridge;
     yield* Effect.forkScoped(
       Stream.fromPubSub(bridge.events).pipe(
         Stream.filter((event) => event.kind === "disconnected"),
-        Stream.runForEach(() => runInstallGc),
+        Stream.runForEach(() => runInstallConverge),
       ),
     );
   }),
 );
 
-function makeRevitComposition(includeInstallGc: boolean) {
+function makeRevitComposition(includeInstallConverge: boolean) {
   return {
     provider: RevitBridgeLive,
     routes: Layer.mergeAll(
@@ -364,7 +364,7 @@ function makeRevitComposition(includeInstallGc: boolean) {
       docsRoute,
       callRoute,
       ServedSessionLive,
-      ...(includeInstallGc ? [InstallGcLive] : []),
+      ...(includeInstallConverge ? [InstallConvergeLive] : []),
     ),
   };
 }
@@ -387,10 +387,10 @@ export interface HttpLiveOptions {
   /** Built SPA directory, or null to skip static serving (dev/vite). */
   readonly webRoot: string | null;
   /**
-   * Whether to run the background install-gc sweeps. Omitted in the boundary test so it does not
+   * Whether to run background install convergence. Omitted in the boundary test so it does not
    * spawn the install kernel; defaults on for production.
    */
-  readonly includeInstallGc?: boolean;
+  readonly includeInstallConverge?: boolean;
   /** Test sentinel for the complete Revit/SDK/proxy composition. */
   readonly revitCompositionFactory?: typeof makeRevitComposition;
 }
@@ -419,7 +419,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
 
   if (options.capabilities.revit) {
     const revitComposition = (options.revitCompositionFactory ?? makeRevitComposition)(
-      options.includeInstallGc !== false,
+      options.includeInstallConverge !== false,
     );
     return HttpRouter.serve(Layer.mergeAll(revitComposition.routes, CommonAppLive)).pipe(
       Layer.provide(withMastraDegrade(options.mastraLayer)),

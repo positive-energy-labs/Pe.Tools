@@ -68,7 +68,7 @@ test("dev serves Vite and Effect from one Node server", async () => {
         Layer.launch(
           makeHttpLive({
             capabilities: { revit: true },
-            includeInstallGc: false,
+            includeInstallConverge: false,
             lifecycle: { handle, latch },
             mastraLayer: StubMastraLive,
             nodeServer,

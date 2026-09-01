@@ -65,7 +65,7 @@ export type BridgeSessionView = {
   readonly processId?: number;
   readonly processStartUtcUnixMs?: number | null;
   readonly lane?: Lane | null;
-  /** The id `pe-revit session status` prints for this session, when the payload reported one. */
+  /** The id `pe-revit session list` prints for this session, when the payload reported one. */
   readonly sdkSessionId?: string | null;
   /** Disclosed, never enforced — the SDK resolver is what actually refuses mutation on observed. */
   readonly custody?: Custody;
@@ -148,7 +148,7 @@ function describeSessions(sessions: readonly SessionTargetCandidate[]): string {
 
 // The selector words ARE the SDK's custody and lane values, not a parallel product grammar:
 // `controlled`/`observed` come from `Custody`, `dev`/`installed` from `Lane`. `session:<id>`
-// addresses a pe-revit session by the id `session status` prints. Pid and bridge session id stay
+// addresses a pe-revit session by the id `session list` prints. Pid and bridge session id stay
 // broker-local addressing, for a connection the SDK's registry may not know about at all.
 const CUSTODIES: readonly Custody[] = ["controlled", "observed"];
 
