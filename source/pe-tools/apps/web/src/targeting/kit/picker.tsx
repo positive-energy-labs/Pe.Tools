@@ -108,7 +108,8 @@ export function Picker<K extends string>({
         >
           <Popover.Popup
             aria-label={`Choose ${cur.key}`}
-            className="block max-h-(--available-height) w-80 max-w-(--available-width) overflow-hidden rounded-lg bg-artifact text-ink ring-1 ring-line outline-none"
+            className="block max-h-(--available-height) w-80 max-w-(--available-width) overflow-hidden rounded-lg text-ink ring-1 outline-none"
+            data-surface="artifact"
           >
             <div
               className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"

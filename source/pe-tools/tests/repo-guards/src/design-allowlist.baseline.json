@@ -1,24 +1,3 @@
 {
-  "families/readout-bands.tsx": 2,
-  "family/anatomy-fixture-views.tsx": 1,
-  "family/anatomy-model-views.tsx": 1,
-  "family/anatomy.tsx": 2,
-  "family/doc-pane.tsx": 3,
-  "family/workspace-doc-pane.tsx": 3,
-  "family/workspace-table.tsx": 2,
-  "family/workspace-view.tsx": 4,
-  "lib/schema-to-field-render/array-field.tsx": 2,
-  "lib/schema-to-field-render/field-metadata.tsx": 3,
-  "lib/schema-to-field-render/object-field.tsx": 1,
-  "routes/settings.tsx": 1,
-  "takeoff/atlas-navigation.tsx": 2,
-  "takeoff/atlas-workspace.tsx": 3,
-  "takeoff/level-plan.tsx": 2,
-  "takeoff/level-stats.tsx": 1,
-  "takeoff/room-panel.tsx": 1,
-  "takeoff/zone-peek.tsx": 1,
-  "targeting/kit/picker.tsx": 2,
-  "workbench/aui.tsx": 4,
-  "workbench/world/bar.tsx": 1,
-  "workbench/world/lane.tsx": 6
+  "family/workspace-table.tsx": 2
 }

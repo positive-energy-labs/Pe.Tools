@@ -671,8 +671,13 @@ const classUses = (files: Entry[] = FILES): ClassUse[] => {
 };
 
 const TONE_VALUES = new Set(["alarm", "caution", "done", "commit", "nav", "pea"]);
+const SURFACE_VALUES = new Set(["page", "artifact", "recess", "document"]);
 
-const invalidDataTones = (files: Entry[] = FILES): Offence[] => {
+const invalidDataValues = (
+  attribute: string,
+  allowed: ReadonlySet<string>,
+  files: Entry[] = FILES,
+): Offence[] => {
   const out: Offence[] = [];
   for (const file of files.filter((f) => f.rel.endsWith(".tsx"))) {
     const source = ts.createSourceFile(
@@ -683,9 +688,9 @@ const invalidDataTones = (files: Entry[] = FILES): Offence[] => {
       ts.ScriptKind.TSX,
     );
     const visit = (node: ts.Node): void => {
-      if (ts.isJsxAttribute(node) && node.name.getText(source) === "data-tone") {
+      if (ts.isJsxAttribute(node) && node.name.getText(source) === attribute) {
         const check = (value: ts.Node): void => {
-          if (ts.isStringLiteralLike(value) && !TONE_VALUES.has(value.text)) {
+          if (ts.isStringLiteralLike(value) && !allowed.has(value.text)) {
             out.push({
               rel: file.rel,
               line: source.getLineAndCharacterOfPosition(value.getStart(source)).line + 1,
@@ -713,6 +718,11 @@ const invalidDataTones = (files: Entry[] = FILES): Offence[] => {
   }
   return out;
 };
+
+const invalidDataTones = (files: Entry[] = FILES): Offence[] =>
+  invalidDataValues("data-tone", TONE_VALUES, files);
+const invalidDataSurfaces = (files: Entry[] = FILES): Offence[] =>
+  invalidDataValues("data-surface", SURFACE_VALUES, files);
 
 const CLASS_USES = classUses();
 const webRequire = createRequire(join(ROOT, "../package.json"));
@@ -803,12 +813,19 @@ const LOADER_PRESENT = [
   "hairline-x",
   "hairline-y",
   "hairline-rows",
+  "hairline-t-faint",
+  "hairline-b-faint",
+  "hairline-l-faint",
+  "hairline-x-faint",
+  "hairline-y-faint",
   "hairline-t-2",
   "hairline-b-2",
   "hairline-l-2",
   "hairline-r-2",
   "hairline-x-2",
   "hairline-y-2",
+  "boundary-t",
+  "boundary-l",
 ];
 const LOADER_ABSENT = ["text-red-500", "text-xs", "font-mono"];
 const candidates = [
@@ -852,11 +869,11 @@ const TRUE_UNREGISTERED = REMAINDER.filter(
  *  Ruled 2026-08-30: the `{}` allowlist stripped ~1,100 `t-*`/`face-*` sites and left product
  *  text at browser defaults. Meaning hues, fills, and colored strokes stay component-only. */
 const AUTHORING =
-  /^(?:hairline-(?:(?:[tblrxy])(?:-2)?|rows)|t-(?:caption|label|value|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
+  /^(?:hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|t-(?:caption|label|value|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
 const COLOR_ROLE =
   "(?:page|artifact|recess|select|document|scrim|ink|ink-2|ink-mute|line|line-2|pea|pea-ink|alarm|caution|done|commit|on-commit|nav|on|viz-[1-6])(?:/[\\d.]+)?";
 const MEANING_FILL_STROKE = new RegExp(
-  `^(?:(?:bg|text|fill|stroke|from|via|to)-${COLOR_ROLE}|border(?:-[xytrblse])?-${COLOR_ROLE}|divide-${COLOR_ROLE}|ring-${COLOR_ROLE}|outline-${COLOR_ROLE}|hairline-(?:(?:[tblrxy])(?:-2)?|rows)|on-(?:page|artifact|recess|select)|(?:ink|commit|alarm|pea|caution)-wash(?:-artifact)?|caution-hatch|inset-ring)$`,
+  `^(?:(?:bg|text|fill|stroke|from|via|to)-${COLOR_ROLE}|border(?:-[xytrblse])?-${COLOR_ROLE}|divide-${COLOR_ROLE}|ring-${COLOR_ROLE}|outline-${COLOR_ROLE}|hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|on-(?:page|artifact|recess|select)|(?:ink|commit|alarm|pea|caution)-wash(?:-artifact)?|caution-hatch|inset-ring)$`,
 );
 const ALLOWLIST_VIOLATIONS = CLASS_USES.filter(
   (use) =>
@@ -1022,6 +1039,15 @@ describe("design checks — code holds the boundary", () => {
     expect(offences, report(offences)).toEqual([]);
   });
 
+  it("data-surface values come from the closed surface set", () => {
+    const fixture = invalidDataSurfaces([
+      { rel: "fixture.tsx", text: '<div data-surface="panel" />' },
+    ]);
+    expect(fixture.map((offence) => offence.match)).toEqual(["panel"]);
+    const offences = invalidDataSurfaces();
+    expect(offences, report(offences)).toEqual([]);
+  });
+
   it("loads the app CSS graph before checking candidates", () => {
     expect(LOADER_PRESENT.filter((candidate) => !registered.has(candidate))).toEqual([]);
     expect(LOADER_ABSENT.filter((candidate) => registered.has(candidate))).toEqual([]);
@@ -1069,7 +1095,7 @@ describe("design checks — code holds the boundary", () => {
     const scopeFixture = classUses([
       {
         rel: "fixture.tsx",
-        text: '<div className="leading-tight sr-only outline-none rounded-lg shadow-sm tracking-tight bg-page border-line text-caution hairline-b hairline-rows" />',
+        text: '<div className="leading-tight sr-only outline-none rounded-lg shadow-sm tracking-tight bg-page border-line text-caution hairline-b hairline-rows hairline-b-faint boundary-t" />',
       },
     ]).filter(
       (use) =>

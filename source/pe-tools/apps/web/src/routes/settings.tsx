@@ -183,7 +183,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
   const runner = useRunner(product, bindings, busy?.id ?? null);
 
   return (
-    <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-page">
+    <main className="flex h-screen min-h-0 flex-col overflow-hidden" data-surface="page">
       <TargetingHead
         product={product}
         b={bindings}

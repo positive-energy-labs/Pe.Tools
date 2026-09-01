@@ -76,7 +76,7 @@ export function WorldLane({
 
   return (
     <div className="flex min-h-0 flex-col t-label text-ink-2">
-      <div className="hairline-y sticky top-0 z-[2] grid gap-1.5 bg-page px-3 py-2">
+      <div className="hairline-y sticky top-0 z-[2] grid gap-1.5 px-3 py-2" data-surface="page">
         <div className="flex items-baseline gap-2">
           <h2 className="m-0 t-label t-upper text-ink">Context ledger</h2>
           <span className="ml-auto t-caption face-mono text-ink-2">{fmtTok(used)} loaded</span>
@@ -127,7 +127,7 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 border-b-[0.5px] border-line px-3 py-1.5 t-caption face-mono">
+        <div className="hairline-b-faint grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2 px-3 py-1.5 t-caption face-mono">
           <span title="This breakdown was captured at the last user send; streaming pushes within the turn do not advance it">
             {sendNumber ? `send #${sendNumber}` : "snapshot"}
           </span>
@@ -136,7 +136,7 @@ export function WorldLane({
       ) : null}
 
       {inspect && cache.hasBaseline ? (
-        <div className="grid gap-1 border-b-[0.5px] border-line px-3 py-2 t-caption face-mono">
+        <div className="hairline-b-faint grid gap-1 px-3 py-2 t-caption face-mono">
           <div className="mb-0.5 t-upper text-ink">Cache estimate</div>
           <div className="grid grid-cols-[9px_minmax(0,1fr)_auto] items-center gap-1.5">
             <span
@@ -167,13 +167,13 @@ export function WorldLane({
 
       {inspect && breakdown ? <ContextBudgetBar breakdown={breakdown} cache={cache} /> : null}
 
-      <div className="mt-2.5 border-t-[0.5px] border-line">
+      <div className="hairline-t-faint mt-2.5">
         {layers.map((layer) => {
           const isOpen = open.has(layer.id);
           const changed = diff && cache.changed.has(layer.id);
           const blast = blastOf(layer.rank);
           return (
-            <div key={layer.id} className="border-b-[0.5px] border-line [&>button]:w-full">
+            <div key={layer.id} className="hairline-b-faint [&>button]:w-full">
               <Press
                 tone="quiet"
                 state={changed ? "selected" : "rest"}
@@ -289,7 +289,10 @@ export function ItemRow({
           <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap t-caption face-mono">
             {blast ? (
               <span
-                className={cn(BLAST_BASE, !BLAST_TONE[blast] && "text-ink-2 border-line-2")}
+                className={cn(
+                  BLAST_BASE,
+                  !BLAST_TONE[blast] && "hairline-x-faint hairline-y-faint text-ink-2",
+                )}
                 data-tone={BLAST_TONE[blast]}
                 data-wash={BLAST_TONE[blast] ? "" : undefined}
               >

@@ -26,6 +26,7 @@ export const paneRecipe = tv({
 
 export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "scroll"> {
   kind: PaneKind;
+  headerSurface?: "page" | "artifact" | "recess" | "document";
   title?: ReactNode;
   meta?: ReactNode;
   actions?: ReactNode;
@@ -33,7 +34,16 @@ export interface PaneProps extends Pick<VariantProps<typeof paneRecipe>, "scroll
   children: ReactNode;
 }
 
-export function Pane({ kind, title, meta, actions, toolbar, scroll, children }: PaneProps) {
+export function Pane({
+  kind,
+  headerSurface,
+  title,
+  meta,
+  actions,
+  toolbar,
+  scroll,
+  children,
+}: PaneProps) {
   const hasHeader = title != null || meta != null || actions != null;
   const { root, body } = paneRecipe({ kind, scroll });
   return (
@@ -41,6 +51,7 @@ export function Pane({ kind, title, meta, actions, toolbar, scroll, children }: 
       {hasHeader && (
         <div
           data-slot="pane-header"
+          data-surface={headerSurface}
           className="flex h-8 shrink-0 items-center gap-2 border-b border-line px-2"
         >
           <div className="flex min-w-0 flex-1 items-baseline gap-2">

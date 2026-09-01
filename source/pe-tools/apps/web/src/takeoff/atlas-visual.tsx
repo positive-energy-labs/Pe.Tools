@@ -36,6 +36,7 @@ export function AtlasVisual() {
     <Suspense fallback={<div className="t-label p-2 text-ink-2">reading plan…</div>}>
       <Pane
         kind="visual"
+        headerSurface="recess"
         toolbar={
           <>
             {world.lanes.map((lane) => {

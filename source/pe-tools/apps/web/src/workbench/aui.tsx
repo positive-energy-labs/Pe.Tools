@@ -164,12 +164,12 @@ function UserMoment() {
             key={src}
             src={src}
             alt="attachment"
-            className="max-h-64 rounded-sm border-[0.5px] border-line-2 object-contain"
+            className="hairline-x-faint hairline-y-faint max-h-64 rounded-sm object-contain"
           />
         ))}
 
         {text ? (
-          <div className="border-l-2 border-line-2 bg-recess px-3 py-1.5 t-prose text-ink">
+          <div className="boundary-l px-3 py-1.5 t-prose text-ink" data-surface="recess">
             {text}
           </div>
         ) : null}
@@ -247,7 +247,7 @@ const ReasoningPart: ReasoningMessagePartComponent = ({ text }) => {
   const [open, setOpen] = useState(false);
   if (!text.trim()) return null;
   return (
-    <div className="border-l-[0.5px] border-line-2 pl-2">
+    <div className="hairline-l-faint pl-2">
       <Press
         type="button"
         tone="quiet"

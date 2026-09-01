@@ -193,7 +193,7 @@ export function ContextRibbon({
                     </span>
                   </span>
                 ))}
-                <span className="mt-0.5 border-t-[0.5px] border-line pt-1.5 t-caption text-ink-2">
+                <span className="hairline-t-faint mt-0.5 pt-1.5 t-caption text-ink-2">
                   {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
                 </span>
               </span>

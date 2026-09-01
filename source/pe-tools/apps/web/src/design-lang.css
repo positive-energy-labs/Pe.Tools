@@ -177,6 +177,28 @@
   }
 }
 
+@utility hairline-t-faint {
+  border-top: 0.5px solid var(--pe-line);
+}
+
+@utility hairline-b-faint {
+  border-bottom: 0.5px solid var(--pe-line);
+}
+
+@utility hairline-l-faint {
+  border-left: 0.5px solid var(--pe-line);
+}
+
+@utility hairline-x-faint {
+  border-right: 0.5px solid var(--pe-line);
+  border-left: 0.5px solid var(--pe-line);
+}
+
+@utility hairline-y-faint {
+  border-top: 0.5px solid var(--pe-line);
+  border-bottom: 0.5px solid var(--pe-line);
+}
+
 @utility hairline-t-2 {
   border-top: 1px solid var(--pe-line-2);
 }
@@ -201,6 +223,14 @@
 @utility hairline-y-2 {
   border-top: 1px solid var(--pe-line-2);
   border-bottom: 1px solid var(--pe-line-2);
+}
+
+@utility boundary-t {
+  border-top: 2px solid var(--pe-line-2);
+}
+
+@utility boundary-l {
+  border-left: 2px solid var(--pe-line-2);
 }
 
 @utility bg-document {

@@ -237,8 +237,8 @@ export function FamilyWorkspaceDocPane() {
 
   const inspectorPanel =
     inspect == null ? null : (
-      <div className="flex max-h-[52%] min-h-0 shrink-0 flex-col border-t-2 border-line-2">
-        <div className="hairline-b flex h-7 shrink-0 items-center gap-2 bg-recess px-2">
+      <div className="boundary-t flex max-h-[52%] min-h-0 shrink-0 flex-col">
+        <div className="hairline-b flex h-7 shrink-0 items-center gap-2 px-2" data-surface="recess">
           {/* A machine tag naming the inspected object's kind — the lang tag voice. */}
           <span>
             <Tag>{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
@@ -269,6 +269,7 @@ export function FamilyWorkspaceDocPane() {
   const docPane = (
     <Pane
       kind="inspector"
+      headerSurface="artifact"
       // The pane is a COLUMN: the spec and its proposals scroll in the upper half, the inspector
       // docks under them. Neither displaces the other — an inspector that replaced the spec would
       // take away the evidence at the exact moment you edit the number it justifies.
@@ -321,7 +322,7 @@ export function FamilyWorkspaceDocPane() {
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* proposals — margin annotations, docked as a stack above the spec */}
-        <div className="hairline-b bg-artifact px-2 py-1.5">
+        <div className="hairline-b px-2 py-1.5" data-surface="artifact">
           <div
             className="mb-1 flex items-baseline gap-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."

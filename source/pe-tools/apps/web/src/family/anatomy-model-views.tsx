@@ -120,7 +120,8 @@ export function ModelViews({
             <svg
               key={view.key}
               viewBox={`0 0 ${BOX} ${BOX}`}
-              className="hairline-r face-mono h-full min-w-0 flex-1 bg-artifact last:border-r-0"
+              className="hairline-r face-mono h-full min-w-0 flex-1 last:border-r-0"
+              data-surface="artifact"
               role="img"
               aria-label={`family ${view.key} view`}
             >

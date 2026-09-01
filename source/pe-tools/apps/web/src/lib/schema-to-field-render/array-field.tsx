@@ -96,7 +96,7 @@ export function ArrayField({
         </Combobox>
       ) : isObjectArray && itemNode?.properties ? (
         <div className="hairline-t">
-          <div className="flex items-center justify-between bg-artifact px-2 py-1">
+          <div className="flex items-center justify-between px-2 py-1" data-surface="artifact">
             <span className="face-mono t-caption t-upper text-ink-2">
               {(Array.isArray(field.value) ? field.value : []).length} items
             </span>
@@ -112,7 +112,7 @@ export function ArrayField({
             {(Array.isArray(field.value) ? (field.value as unknown[]) : []).map((_, index) => {
               const childPathPrefix = `${path}.${index}`;
               return (
-                <div key={childPathPrefix} className="space-y-2 border-l-2 border-line-2 px-3 py-2">
+                <div key={childPathPrefix} className="boundary-l space-y-2 px-3 py-2">
                   <div className="flex items-center justify-between">
                     <span className="face-mono t-caption t-upper text-ink-2">item {index + 1}</span>
                     <Verb

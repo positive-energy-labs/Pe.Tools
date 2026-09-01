@@ -85,7 +85,10 @@ function FieldMetadataTooltip({
                 {formattedDefault !== undefined ? (
                   <div className="space-y-1">
                     <div className="t-label t-upper text-ink">Default</div>
-                    <pre className="face-mono t-value whitespace-pre-wrap break-words bg-recess px-2 py-1 text-ink">
+                    <pre
+                      className="face-mono t-value whitespace-pre-wrap break-words px-2 py-1 text-ink"
+                      data-surface="recess"
+                    >
                       {formattedDefault}
                     </pre>
                   </div>
@@ -141,13 +144,19 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
                 ) : null}
                 <div className="space-y-1">
                   <div className="t-label t-upper text-ink">Before</div>
-                  <pre className="face-mono t-value whitespace-pre-wrap break-words bg-recess px-2 py-1 text-ink">
+                  <pre
+                    className="face-mono t-value whitespace-pre-wrap break-words px-2 py-1 text-ink"
+                    data-surface="recess"
+                  >
                     {beforeDisplay}
                   </pre>
                 </div>
                 <div className="space-y-1">
                   <div className="t-label t-upper text-ink">After</div>
-                  <pre className="face-mono t-value whitespace-pre-wrap break-words bg-recess px-2 py-1 text-ink">
+                  <pre
+                    className="face-mono t-value whitespace-pre-wrap break-words px-2 py-1 text-ink"
+                    data-surface="recess"
+                  >
                     {afterDisplay}
                   </pre>
                 </div>

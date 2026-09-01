@@ -36,7 +36,7 @@ export function SpecText({
     );
   return (
     <div>
-      <div className="hairline-b flex items-center gap-2 bg-recess px-2 py-1">
+      <div className="hairline-b flex items-center gap-2 px-2 py-1" data-surface="recess">
         <Tag>source</Tag>
         <span className="face-mono t-caption min-w-0 flex-1 truncate text-ink-2">
           {spec.fileName}
@@ -144,7 +144,8 @@ export function SpecSheet({
               <div className="face-mono t-caption mb-0.5 text-ink-2">page {page}</div>
               <svg
                 viewBox="0 0 100 130"
-                className="block w-full border border-line-2 bg-document"
+                className="hairline-x-2 hairline-y-2 block w-full"
+                data-surface="document"
                 role="img"
                 aria-label={`stand-in page ${page}`}
               >

@@ -84,7 +84,10 @@ export function AtlasNavigation() {
             if (zs.length === 0) return null;
             return (
               <div key={lane.label}>
-                <div className="hairline-b t-caption t-upper face-mono sticky top-0 z-sticky bg-recess px-2 py-0.5 text-ink-2 on-recess">
+                <div
+                  className="hairline-b t-caption t-upper face-mono sticky top-0 z-sticky px-2 py-0.5 text-ink-2"
+                  data-surface="recess"
+                >
                   {lane.label} · {zs.length}
                 </div>
                 <ul>

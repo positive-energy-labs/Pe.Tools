@@ -36,6 +36,38 @@
   fill: var(--pe-select);
 }
 
+/* Closed semantic planes. Call sites name the plane; the language owns its ground and ink. */
+:where([data-surface="page"]) {
+  --pe-surface: var(--pe-page);
+}
+
+:where([data-surface="artifact"]) {
+  --pe-surface: var(--pe-artifact);
+}
+
+:where([data-surface="recess"]) {
+  --pe-surface: var(--pe-recess);
+}
+
+:where([data-surface="document"]) {
+  --pe-surface: var(--pe-document);
+}
+
+:where(
+  [data-surface="page"],
+  [data-surface="artifact"],
+  [data-surface="recess"],
+  [data-surface="document"]
+) {
+  background: var(--pe-surface);
+  --pe-on: var(--pe-surface);
+  --tw-ring-color: var(--pe-line);
+}
+
+:where(svg [data-surface]) {
+  fill: var(--pe-surface);
+}
+
 .prose-pe a {
   color: var(--pe-nav);
 }

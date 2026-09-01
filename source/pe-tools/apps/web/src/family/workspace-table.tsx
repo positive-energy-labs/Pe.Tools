@@ -50,8 +50,10 @@ export function FamilyWorkspaceTable() {
         ? focusedParts.has(row.slug ?? "")
         : focusedParams.has(row.name) || pinnedParam === row.name;
     return cn(
+      // TODO(design): Keep the directional caution gradient until data-tone wash can express it.
       row.kind === "ghost" && "caution-wash-artifact",
       row.key === firstGhostKey && "[&>td]:hairline-t-2",
+      // TODO(design): Keep on-select until the selection state selector also propagates --pe-on.
       focused && "on-select",
     );
   };
@@ -201,6 +203,7 @@ export function FamilyWorkspaceTable() {
   const tablePane = (
     <Pane
       kind="content"
+      headerSurface="recess"
       scroll="clip"
       // The type's own NAME is the title while drilled in — a pane whose title still said
       // "parameters × types" would be claiming to show something it is not.

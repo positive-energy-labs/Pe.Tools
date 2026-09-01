@@ -24,7 +24,10 @@ export function FamiliesReadoutBands() {
     <>
       {plan && (
         <div className="hairline-b max-h-44 overflow-auto px-2 py-1.5">
-          <div className="sticky top-0 z-[1] flex flex-wrap items-center gap-1.5 bg-page py-0.5">
+          <div
+            className="sticky top-0 z-[1] flex flex-wrap items-center gap-1.5 py-0.5"
+            data-surface="page"
+          >
             <SectionLabel>
               <span title="One row per family the plan touched, plus the families in scope it did not claim. This is the last place to change your mind: apply runs exactly the rows still ticked here.">
                 decision queue
@@ -285,7 +288,10 @@ export function FamiliesReadoutBands() {
                 )}
               </div>
               {entry.profileJson && (
-                <pre className="face-mono t-caption mt-1 max-h-40 overflow-auto p-2 text-ink-2 on-recess inset-ring">
+                <pre
+                  className="face-mono t-caption mt-1 max-h-40 overflow-auto p-2 text-ink-2 inset-ring"
+                  data-surface="recess"
+                >
                   {entry.profileJson}
                 </pre>
               )}

@@ -79,7 +79,7 @@ export function LevelStats({
 
             {unpartitionedSqft > 0 && (
               <span
-                className="border border-line-2"
+                className="hairline-x-2 hairline-y-2"
                 title={`not partitioned — ${fmtNum(unpartitionedSqft, 0)} sf declared, no rooms yet`}
                 style={{ width: `${(unpartitionedSqft / Math.max(totalArea, 1)) * 100}%` }}
               />

@@ -198,7 +198,9 @@ function RoomPanel({
 
         <div className="px-2.5 py-2">
           <p className="t-label t-upper mb-1 text-ink-2">addressable</p>
-          <p className="face-mono break-all px-1.5 py-1 text-ink-2 on-recess">{url}</p>
+          <p className="face-mono break-all px-1.5 py-1 text-ink-2" data-surface="recess">
+            {url}
+          </p>
         </div>
       </div>
     </Pane>

@@ -119,7 +119,10 @@ export function ZonePeek({
         </svg>
       </div>
 
-      <div className="hairline-y face-mono t-caption flex flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-0.5 text-ink-2 on-recess">
+      <div
+        className="hairline-y face-mono t-caption flex flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-0.5 text-ink-2"
+        data-surface="recess"
+      >
         <Key tone={CURSOR_INK} label="cursor room" />
         <Key tone={stateInk("call")} label="needs a call" />
         {zone.residues.length > 0 && (
