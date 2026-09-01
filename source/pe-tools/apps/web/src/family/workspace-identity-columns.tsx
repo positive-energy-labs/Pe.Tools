@@ -140,7 +140,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
               : undefined
           }
         >
-          <span className="min-w-0 flex-1 px-1.5" title={reason}>
+          <span className="min-w-0 flex-1 px-(--item-pad-x)" title={reason}>
             <span>
               {row.kind === "live-only" ? (
                 <span>{row.name}</span>

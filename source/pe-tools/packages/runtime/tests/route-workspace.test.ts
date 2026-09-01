@@ -280,9 +280,10 @@ test("mask, schema, and human command gate are enforced", async () => {
     ok: false,
     hint: expect.stringContaining("human-only"),
   });
-  expect(
-    await w.apply("agent", [{ path: ["values", "bad"], value: 42 }], 0),
-  ).toMatchObject({ ok: false, error: "the patched document is invalid" });
+  expect(await w.apply("agent", [{ path: ["values", "bad"], value: 42 }], 0)).toMatchObject({
+    ok: false,
+    error: "the patched document is invalid",
+  });
   expect(await w.apply("human", [{ path: ["count"], value: 1 }], 0)).toMatchObject({ ok: true });
   expect(await w.cmd("agent", "external", {}, 1)).toMatchObject({
     ok: false,
@@ -325,13 +326,7 @@ test("external replay precedes revision checks and rejects request-id collisions
     result: { mutated: true },
   });
   expect(
-    await w.cmd(
-      "human",
-      "external",
-      { a: 1, nested: { x: 1, y: 2 }, b: 2 },
-      99,
-      "request-1",
-    ),
+    await w.cmd("human", "external", { a: 1, nested: { x: 1, y: 2 }, b: 2 }, 99, "request-1"),
   ).toMatchObject({ ok: true, revision: 0, result: { mutated: true } });
   expect(external).toHaveBeenCalledOnce();
 
@@ -340,13 +335,7 @@ test("external replay precedes revision checks and rejects request-id collisions
     code: "request_id_conflict",
   });
   expect(
-    await w.cmd(
-      "human",
-      "external",
-      { a: 2, nested: { x: 1, y: 2 }, b: 2 },
-      0,
-      "request-1",
-    ),
+    await w.cmd("human", "external", { a: 2, nested: { x: 1, y: 2 }, b: 2 }, 0, "request-1"),
   ).toMatchObject({ ok: false, code: "request_id_conflict" });
   expect(external).toHaveBeenCalledOnce();
 });
@@ -500,14 +489,17 @@ test("route event stream publishes an applied revision and ends on abort", async
     expect((await readSse(reader)).revision).toBe(0);
 
     await fetch(`${base}/pe/route-state/test-route/apply?doc=${doc}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          patches: [{ path: ["values", "sse"], value: "landed" }],
-          expectedRevision: 0,
-        }),
-      });
-    expect(await readSse(reader)).toMatchObject({ revision: 1, doc: { values: { sse: "landed" } } });
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        patches: [{ path: ["values", "sse"], value: "landed" }],
+        expectedRevision: 0,
+      }),
+    });
+    expect(await readSse(reader)).toMatchObject({
+      revision: 1,
+      doc: { values: { sse: "landed" } },
+    });
 
     abort.abort();
     const ended = await reader.read().then(

@@ -49,6 +49,10 @@
   --item-h: 1.25rem;
   --control-h: 1.5rem;
   --item-pad-x: 0.125rem;
+  /* The second inset role, and the only one: a cell whose BODY carries a mark (pea's corner
+     fold, the unsaved square) must leave the mark room. Everything else is --item-pad-x
+     (annotation round 2, 2026-08-31 — the census found five edge paddings in the wild). */
+  --item-mark-pad-x: 0.625rem;
   --font-body: "Open Sans", system-ui, -apple-system, sans-serif;
   --font-display: "Spectral", Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
@@ -109,6 +113,13 @@
      hover. The page body's bar is hidden outright (`no-scrollbar` on the scroll-away `main`). */
   [data-pe] {
     color-scheme: light;
+  }
+
+  /* `scrollbar-width` does NOT inherit — declaring it once on the root styled the root and
+     nothing else, and every inner scroller computed `auto` (measured in Chrome, 2026-08-31).
+     `:where()` keeps this at zero specificity so `no-scrollbar` still wins. `scrollbar-color`
+     DOES inherit, but it rides the same declaration so the law reads as one thing. */
+  :where([data-pe], [data-pe] *) {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
   }

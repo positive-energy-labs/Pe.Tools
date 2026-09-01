@@ -152,7 +152,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
     const literal = bindingOf(world, draft, slug, property);
     if (binding?.slug === slug && binding.property === property)
       return (
-        <span className="flex h-(--item-h) items-center px-1">
+        <span className="flex h-(--item-h) items-center px-(--item-pad-x)">
           {bindPicker(slug, property, row.dataType)}
         </span>
       );
@@ -246,7 +246,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
           const state = agreementOf(world, draft, row, typeName);
           return (
             <span
-              className="px-1.5"
+              className="px-(--item-pad-x)"
               style={{ color: VERDICT_INK[AGREEMENT_TONE[state]] }}
               title={MARK_TITLE[state]}
             >

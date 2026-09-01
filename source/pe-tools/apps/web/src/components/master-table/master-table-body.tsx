@@ -188,7 +188,9 @@ export function MasterTableBody<Row extends RowData>({
                       onMouseEnter={cell.getSelectionExtendHandler()}
                       style={column.lock ? { left: gutter ? gutterWidth : 0 } : undefined}
                       className={cn(
-                        "border-b border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
+                        // The row rule is drawn INSIDE the cell: a border on a td adds to the row box and put
+                        // every list row at 21px (measured, annotation round 2 2026-08-31).
+                        "hairline-b-inset border-l border-line p-0 outline-none first:border-l-0 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-line-2",
                         selection & 2 && "on-select",
                         column.right && "text-right",
                         column.width,
@@ -222,7 +224,7 @@ function GutterCell<Row>({ row, gutter, width }: { row: Row; gutter: Gutter<Row>
       data-master-gutter=""
       title={owed?.title}
       style={{ width, minWidth: width }}
-      className="sticky left-0 z-[5] border-b border-line bg-on p-0 text-center align-middle"
+      className="hairline-b-inset sticky left-0 z-[5] bg-on p-0 text-center align-middle"
     >
       {owed && (
         <span className="face-mono t-caption" style={{ color: token(owed.tone ?? "caution") }}>

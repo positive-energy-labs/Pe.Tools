@@ -29,6 +29,7 @@ export function ZoneStateBar({
   // rooms shows more, thinner segments, never a wider bar (annotation verdict 2026-08-31).
   return (
     <span
+      data-zone-bar=""
       className={cn("flex h-2.5 w-10 items-center gap-px", className)}
       title={`${zone.zone.key} — ${states.length} rooms · ${census
         .map((c) => `${c.n} ${STATE_META[c.s].label}`)
