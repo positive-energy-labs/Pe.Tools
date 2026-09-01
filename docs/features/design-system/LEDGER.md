@@ -83,6 +83,26 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   `t-upper` with no hover veil; the header facet trigger fills its cell, chevron on the right
   edge, mono choices; `StateDot` gains `bar` — a zone's state bar is a fixed width with
   proportional segments, never wider for more rooms.
+- 2026-08-31 — SCROLLBAR LAW (annotation round): one treatment for every scroller, declared once
+  at `[data-pe]` in `base.css` — `scrollbar-width: thin`, no track, and a thumb that is invisible
+  until the pointer is inside the scroller that owns it (`[data-pe] :hover`). The gutter is
+  reserved either way, so nothing shifts. The page body's bar is hidden outright: the scroll-away
+  `main` in `anatomy/workspace.tsx` wears `no-scrollbar`. A pane may show ONE bar: a `Pane` body is
+  a flex column, so a call site that docks a region under a scroller uses `scroll="clip"` and its
+  own inner scroller rather than nesting two.
+- 2026-08-31 — PANE HEADER: `meta` is a SHORT machine fact (a count, a mode word, a key) and
+  renders truncated with its own text as the native title; region orientation is `help`, which
+  renders the header's `HelpTip`. Meta that overflows was the primitive's defect, not the call
+  site's. Header controls share the item height: `Switcher` carries `--item-h` on the GROUP and
+  fills it with its options (a 20px option inside a bordered group measured 22px beside `Verb`).
+- 2026-08-31 — A framed press (`Press frame="line"`) owns its inset and the item height; a border
+  at zero inset reads as a tight box. Switcher census: `components/lang/switcher.tsx` is the ONLY
+  switcher — `param-tables/variants/switcher.tsx` (`VariantSwitcher`, a dev-only prototype dock
+  with zero importers) was deleted, not folded.
+- 2026-08-31 — `MasterTable` draws SEPARATE borders (`border-separate border-spacing-0`). A
+  collapsed border belongs to the table, not the cell, so it does not travel with a sticky cell:
+  that is the white seam at the locked column's left edge. Every cell already draws its own
+  `border-b border-l` with `first:border-l-0`, so nothing doubles.
 - 2026-08-31 — TWO HEIGHTS, no third yet (round-1 reshape, from the verdict "standardize a general
   list-item height... two, three max"): `--item-h` (20px) sizes every list-shaped row — table row,
   select/combobox/command menu item, pick-list item, `Verb` — and `--control-h` (24px) sizes every
@@ -382,16 +402,15 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ### Annotation backlog (2026-08-31, dispatched to primitives)
 
-- Scrollbar law: one thin brutalist scrollbar treatment in `base.css`; the page-body scrollbar is
-  always hidden (the scroll-away `main` in `anatomy/workspace.tsx` currently shows one); two
-  stacked bars (right sidebar panes) is the defect the law exists to kill.
-- `Press` `frame="line"` needs padding — a border with zero inset reads as a tight box.
-- Pane-header meta prose overflows (family): meta belongs in `HelpTip`, not inline; header
-  controls (`Switcher`, `Verb`) must share one height. Census the suspected second switcher.
-- Rail zone bars right-align inside the pick item; cell dropdown (`CellSelect`) and header facet
-  popup still read as two languages — one menu primitive owed.
-- Verdict-rail sticky header shows a white line at its left edge (family, first locked column).
-- Readout-band FactChip needs breathing room from the rail above.
+Paid at the primitives; the rulings are above and the evidence is
+`.artifacts/runs/delegate-20260831/chrome-report.md`. What the round did NOT close:
+
+- The dropdown POPUP is still two languages: the triggers now read as one (mono, item height, 4px
+  inset, chevron right), but `CellSelect` is a native `<select>` whose popup cannot be styled.
+  Unifying it needs a menu-primitive decision — either the cell adopts `Combobox` and pays the
+  keyboard/commit contract, or the native popup is accepted as the cell's one exception.
+- Every claim in the round is DOM/geometry reasoning, not eye proof: no screenshot lane ran. The
+  scroll-away rail, the seam, the flush bar and the hover-only scrollbar are unproven to the eye.
 
 ### Open questions carried forward
 
