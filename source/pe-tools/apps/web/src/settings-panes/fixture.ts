@@ -100,17 +100,14 @@ const fixtureFields: Record<string, SettingsFieldState> = {
       confidence: "high",
     },
     staged: null,
-    review: "none",
   },
   "/IsItemized": {
     proposal: null,
     staged: { value: false },
-    review: "good",
   },
   "/Fields/1/ColumnHeaderOverride": {
     proposal: null,
     staged: { value: "REFRIGERANT TYPE (FULL DESIGNATION)" },
-    review: "attention",
   },
 };
 

@@ -97,9 +97,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
     [schemaJson, snapshot?.rawContent],
   );
   const stagedCount = Object.values(fields).filter((field) => field.staged != null).length;
-  const attentionCount = Object.values(fields).filter(
-    (field) => field.review === "attention" && field.staged != null,
-  ).length;
   const proposalRows = rows.filter((row) => row.field?.proposal && row.field.staged == null);
   const aside = (
     <>
@@ -197,12 +194,6 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
           <VerbLane atoms={store.atoms} />
           {sliceError ? (
             <OutcomeLine kind="error" label="route stream failed" says={sliceError} />
-          ) : null}
-          {attentionCount > 0 ? (
-            <OutcomeLine
-              kind="error"
-              label={`${attentionCount} staged field${attentionCount === 1 ? "" : "s"} need attention before save`}
-            />
           ) : null}
 
           {snapshot && formModel ? (
@@ -341,7 +332,7 @@ function FieldRow({
         onCommit={(value) =>
           void store.actions.stage(row.path, parseLike(shown, value)).catch(() => undefined)
         }
-        note={row.field?.review === "attention" ? "needs attention" : (proposal?.note ?? undefined)}
+        note={proposal?.note ?? undefined}
       />
       {staged ? (
         <Verb
@@ -356,12 +347,7 @@ function FieldRow({
             label="deny"
             disabled={busy}
             reason="Clear Pea's proposal."
-            onClick={() =>
-              patchField(store, [
-                { path: ["fields", row.path, "proposal"] },
-                { path: ["fields", row.path, "review"], value: "none" },
-              ])
-            }
+            onClick={() => patchField(store, [{ path: ["fields", row.path, "proposal"] }])}
           />
           <Verb
             label="approve"
@@ -370,7 +356,6 @@ function FieldRow({
             onClick={() =>
               patchField(store, [
                 { path: ["fields", row.path, "staged"], value: { value: proposal.value } },
-                { path: ["fields", row.path, "review"], value: "good" },
               ])
             }
           />

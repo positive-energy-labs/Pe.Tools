@@ -266,7 +266,6 @@ export interface ProposalCell {
     confidence?: "high" | "low";
   } | null;
   staged: { value: string } | null;
-  review: "none" | "good" | "attention";
 }
 
 export interface ProposalItem {
@@ -305,7 +304,6 @@ export const PROPOSAL_SEED: readonly ProposalItem[] = [
         note: "UL listing on the submittal",
       },
       staged: null,
-      review: "none",
     },
   },
   {
@@ -321,7 +319,6 @@ export const PROPOSAL_SEED: readonly ProposalItem[] = [
       },
       // Accepted verbatim: the staged value IS pea's, so the square is pea's ink.
       staged: { value: "Motor — FDCL-611" },
-      review: "none",
     },
   },
   {
@@ -338,7 +335,6 @@ export const PROPOSAL_SEED: readonly ProposalItem[] = [
         note: "inferred from the motor schedule, not stated directly",
       },
       staged: null,
-      review: "attention",
     },
   },
   {
@@ -350,7 +346,6 @@ export const PROPOSAL_SEED: readonly ProposalItem[] = [
     cell: {
       proposal: { value: "115 V", by: "pea", confidence: "high" },
       staged: { value: "120 V" },
-      review: "none",
     },
   },
 ];

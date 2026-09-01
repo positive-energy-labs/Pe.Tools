@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Check, RotateCcw, X } from "lucide-react";
 
-import { type CellReview, cellSummary, stagedEntries } from "@pe/agent-contracts";
+import { stagedEntries } from "@pe/agent-contracts";
 
 import { Verb } from "#/components/lang/verb";
 import type { RouteStateHandle } from "./route-state";
@@ -14,7 +14,6 @@ export interface ReviewerCell {
     note?: string | null;
   } | null;
   staged?: { value?: unknown; delete?: true } | null;
-  review: CellReview;
 }
 
 export interface CellTrichotomyReviewerProps {
@@ -41,10 +40,9 @@ export function CellTrichotomyReviewer({
   const items = Object.entries(cells).filter(
     ([, cell]) => cell.proposal != null || cell.staged != null,
   );
-  const summary = cellSummary(cells);
   const stagedCount = stagedEntries(cells).length;
-  const canCommit =
-    stagedCount > 0 && stagedEntries(cells).every(([, cell]) => cell.review !== "attention");
+  // Staging IS the human's approval (ruled 2026-08-31): no review gate stands between it and commit.
+  const canCommit = stagedCount > 0;
 
   const approve = (key: string, cell: ReviewerCell) =>
     void state
@@ -56,23 +54,12 @@ export function CellTrichotomyReviewer({
               ? { delete: true }
               : { value: cell.proposal?.value },
         },
-        { path: [segment, key, "review"], value: "good" },
       ])
       .catch(() => undefined);
   const deny = (key: string) =>
-    void state
-      .apply([
-        { path: [segment, key, "proposal"] },
-        { path: [segment, key, "review"], value: "none" },
-      ])
-      .catch(() => undefined);
+    void state.apply([{ path: [segment, key, "proposal"] }]).catch(() => undefined);
   const undo = (key: string) =>
-    void state
-      .apply([
-        { path: [segment, key, "staged"] },
-        { path: [segment, key, "review"], value: "none" },
-      ])
-      .catch(() => undefined);
+    void state.apply([{ path: [segment, key, "staged"] }]).catch(() => undefined);
 
   return (
     <div className="mt-1.5 w-full">
@@ -125,12 +112,7 @@ export function CellTrichotomyReviewer({
       </div>
 
       <div className="flex items-center justify-between gap-2 pt-1.5">
-        <span className="min-w-0 truncate">
-          {state.failure?.message ??
-            (summary.attention > 0
-              ? `${summary.attention} value${summary.attention === 1 ? " needs" : "s need"} review`
-              : reviewHint)}
-        </span>
+        <span className="min-w-0 truncate">{state.failure?.message ?? reviewHint}</span>
 
         <Verb
           tone="commit"
@@ -139,9 +121,7 @@ export function CellTrichotomyReviewer({
           disabled={!canCommit || state.busy != null}
           reason={
             !canCommit
-              ? stagedCount === 0
-                ? "Nothing staged yet — approve a proposal first"
-                : "Blocked: staged values still need review"
+              ? "Nothing staged yet — approve a proposal first"
               : "Write every staged value through — this leaves the page"
           }
           onClick={() => void state.command(commitCommand).catch(() => undefined)}

@@ -10,12 +10,7 @@
  */
 import { z } from "zod";
 import type { RouteStateSpec } from "./route-state.ts";
-import {
-  LOW_CONFIDENCE_REFINE_ERROR,
-  lowConfidenceIsFlagged,
-  trichotomyAgentMask,
-  trichotomyCellSchema,
-} from "./trichotomy.ts";
+import { trichotomyAgentMask, trichotomyCellSchema } from "./trichotomy.ts";
 
 /** String-valued trichotomy cell — no provenance extension (schedule cells have no PDF source). */
 export const scheduleGridCellSchema = trichotomyCellSchema(z.string());
@@ -89,18 +84,14 @@ export type ScheduleGridSnapshot = z.infer<typeof scheduleGridSnapshotSchema>;
 
 /* ── The document ──────────────────────────────────────────────────────────── */
 
-export const scheduleGridDocumentSchema = z
-  .object({
-    /** Every schedule in the bound document — the picker both actors choose from. */
-    catalog: scheduleCatalogSchema.nullish(),
-    snapshot: scheduleGridSnapshotSchema.nullish(),
-    /** `${rowNumber}::${columnNumber}` -> cell trichotomy state. */
-    cells: z.record(z.string(), scheduleGridCellSchema).default({}),
-    pushedAt: z.string().nullish(),
-  })
-  .refine((document) => lowConfidenceIsFlagged(document.cells), {
-    error: LOW_CONFIDENCE_REFINE_ERROR,
-  });
+export const scheduleGridDocumentSchema = z.object({
+  /** Every schedule in the bound document — the picker both actors choose from. */
+  catalog: scheduleCatalogSchema.nullish(),
+  snapshot: scheduleGridSnapshotSchema.nullish(),
+  /** `${rowNumber}::${columnNumber}` -> cell trichotomy state. */
+  cells: z.record(z.string(), scheduleGridCellSchema).default({}),
+  pushedAt: z.string().nullish(),
+});
 export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
 
 export const scheduleGridRouteState = {

@@ -78,9 +78,6 @@ export function useScheduleGridColumns(
                     : "read-only — this parameter cannot be written from a schedule";
             const note =
               [
-                cell?.review === "attention"
-                  ? "needs review — flagged; push refuses while it stands"
-                  : null,
                 (isStaged || isProposal) && shown !== current ? `was ${current || "—"}` : null,
                 isProposal
                   ? cell?.proposal?.note

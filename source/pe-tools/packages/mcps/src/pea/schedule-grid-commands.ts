@@ -1,12 +1,12 @@
-/**
- * /schedule-grid command handlers — the side-effectful work the agent write mask forbids.
+﻿/**
+ * /schedule-grid command handlers â€” the side-effectful work the agent write mask forbids.
  *
  * `catalog` lists every schedule in the document (revit.catalog.schedules, Summary)
  * so either actor can choose one. `refresh` reads one rendered Revit schedule
  * (revit.detail.schedules, Rows + includeBindings) into the snapshot, carrying each
  * cell's binding handle; resolving a different schedule clears the cells. `push`
- * (human only) redeems every staged cell's binding handle — target element ids +
- * parameter id — through revit.apply.parameter-values in one host-owned transaction,
+ * (human only) redeems every staged cell's binding handle â€” target element ids +
+ * parameter id â€” through revit.apply.parameter-values in one host-owned transaction,
  * folds successes into the snapshot, and clears those cells; failures stay staged.
  *
  * See route-state-commands.ts for the handler idiom (getDoc/setDoc, hint-rich errors).
@@ -101,8 +101,8 @@ export function createScheduleGridCommandHandlers(
           issues.length > 0
             ? ` (${issues.slice(0, 3).join("; ")})`
             : query.kind === "CurrentActiveView"
-              ? " — open a schedule view, or pass a scheduleName/scheduleId."
-              : ` — no schedule matched ${scheduleName ?? scheduleId}. Check the name/id, or open a schedule view.`;
+              ? " â€” open a schedule view, or pass a scheduleName/scheduleId."
+              : ` â€” no schedule matched ${scheduleName ?? scheduleId}. Check the name/id, or open a schedule view.`;
         throw new Error(`No schedule resolved${detail}`);
       }
 
@@ -141,7 +141,7 @@ export function createScheduleGridCommandHandlers(
         takenAt: new Date().toISOString(),
       });
 
-      // Re-reading the same schedule preserves cells; a different schedule clears them —
+      // Re-reading the same schedule preserves cells; a different schedule clears them â€”
       // cell keys are row/column positions and would misapply against the new bindings.
       const document = ctx.getDoc();
       const previousScheduleId = document.snapshot?.scheduleId;
@@ -212,7 +212,7 @@ export function createScheduleGridCommandHandlers(
         }
       },
       clear: (doc, key) => {
-        doc.cells[key] = { review: "none" };
+        doc.cells[key] = {};
       },
       stamp: (doc, isoNow) => {
         doc.pushedAt = isoNow;
@@ -221,7 +221,7 @@ export function createScheduleGridCommandHandlers(
   };
 }
 
-/** Choose the query kind from the caller's reference: id → references, name → names, else active view. */
+/** Choose the query kind from the caller's reference: id â†’ references, name â†’ names, else active view. */
 function buildScheduleQuery(
   scheduleName: string | undefined,
   scheduleId: number | undefined,

@@ -105,10 +105,9 @@ export const fixtureScheduleGridDocument = scheduleGridDocumentSchema.parse({
         note: "align with the issued airflow schedule",
         confidence: "high",
       },
-      review: "good",
     },
-    "102::1": { staged: { value: "VAV-2A" }, review: "good" },
-    "103::3": { staged: { value: "12500 CFM" }, review: "attention" },
+    "102::1": { staged: { value: "VAV-2A" } },
+    "103::3": { staged: { value: "12500 CFM" } },
     "104::3": {
       proposal: {
         value: "500 CFM",
@@ -116,7 +115,6 @@ export const fixtureScheduleGridDocument = scheduleGridDocumentSchema.parse({
         note: "cut sheet differs from the model",
         confidence: "low",
       },
-      review: "attention",
     },
   },
   pushedAt: null,

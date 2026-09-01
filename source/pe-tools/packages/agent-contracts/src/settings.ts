@@ -12,14 +12,9 @@
  */
 import { z } from "zod";
 import { routeBindingsSchema, type RouteStateSpec } from "./route-state.ts";
-import {
-  cellReviewSchema,
-  LOW_CONFIDENCE_REFINE_ERROR,
-  lowConfidenceIsFlagged,
-  trichotomyAgentMask,
-} from "./trichotomy.ts";
+import { trichotomyAgentMask } from "./trichotomy.ts";
 
-/* ── Field trichotomy — settings keep the shared proposal/staged/review shape.
+/* ── Field trichotomy — settings keep the shared proposal/staged shape.
    A staged `{ value }` assigns JSON; `{ delete: true }` removes the property. ── */
 
 const settingsFieldEditSchema = z
@@ -55,7 +50,6 @@ export const settingsFieldStateSchema = z.object({
     })
     .nullish(),
   staged: settingsFieldEditSchema.nullish(),
-  review: cellReviewSchema.default("none"),
 });
 export type SettingsFieldState = z.infer<typeof settingsFieldStateSchema>;
 
@@ -96,17 +90,13 @@ export type SettingsSnapshot = z.infer<typeof settingsSnapshotSchema>;
 
 /* ── The document ──────────────────────────────────────────────────────────── */
 
-const settingsRouteDocumentSchema = z
-  .object({
-    bindings: routeBindingsSchema,
-    documentId: settingsDocumentIdSchema.nullable().default(null),
-    /** field pointer -> trichotomy state. Keys are RFC 6901 JSON Pointers into the parsed raw JSON. */
-    fields: z.record(z.string(), settingsFieldStateSchema).default({}),
-    savedAt: z.string().nullish(),
-  })
-  .refine((document) => lowConfidenceIsFlagged(document.fields), {
-    error: LOW_CONFIDENCE_REFINE_ERROR,
-  });
+const settingsRouteDocumentSchema = z.object({
+  bindings: routeBindingsSchema,
+  documentId: settingsDocumentIdSchema.nullable().default(null),
+  /** field pointer -> trichotomy state. Keys are RFC 6901 JSON Pointers into the parsed raw JSON. */
+  fields: z.record(z.string(), settingsFieldStateSchema).default({}),
+  savedAt: z.string().nullish(),
+});
 export type SettingsRouteDocument = z.infer<typeof settingsRouteDocumentSchema>;
 
 export const settingsRouteState = {

@@ -165,6 +165,22 @@
   border-left: 9px solid transparent;
 }
 
+/* THE COUNTER-PROPOSAL (ruled 2026-08-31, review deletion): pea argues against a value that is
+   already staged or written — proposal and staged both stand, values differing. The fold ALONE
+   draws (pea authored an argument here); the body stays with the staged/shown value, because a
+   wash would claim the shown value is pea's, which is exactly what it is not. */
+.dl-cell[data-contest] {
+  padding-right: calc(var(--item-mark-pad-x) + 4px);
+}
+.dl-cell[data-contest]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-top: 9px solid var(--pe-pea-ink);
+  border-left: 9px solid transparent;
+}
+
 /* 1 · uneditable/disabled owns the body — declared AFTER the proposal so the CASCADE, not
       discipline, enforces precedence. Greyed italic is the settled "look but don't touch". */
 .dl-cell[data-body="locked"] {

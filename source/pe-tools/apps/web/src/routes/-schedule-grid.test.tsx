@@ -39,7 +39,6 @@ test("literal schedule-grid fixture renders and edits dense local state without 
   expect(text).toContain("Cabinet Unit Heater");
   expect(text).toContain("2 proposed");
   expect(text).toContain("2 staged");
-  expect(text).toContain("1 need review");
   expect(screen.getAllByTitle(/blocked: TypeParameter/)).toHaveLength(7);
   expect(screen.getAllByTitle(/calculated/).length).toBeGreaterThan(0);
 

@@ -19,9 +19,7 @@
 import { z } from "zod";
 import type { RouteStateSpec } from "./route-state.ts";
 import {
-  LOW_CONFIDENCE_REFINE_ERROR,
   cellProposalSchema,
-  lowConfidenceIsFlagged,
   trichotomyAgentMask,
   trichotomyCellWithProposal,
 } from "./trichotomy.ts";
@@ -122,19 +120,13 @@ export type SpecDoc = z.infer<typeof specDocSchema>;
 
 /* ── The document ──────────────────────────────────────────────────────────── */
 
-export const familyTypesDocumentSchema = z
-  .object({
-    snapshot: familyTypesSnapshotSchema.nullish(),
-    doc: specDocSchema.nullish(),
-    /** cellKey -> cell trichotomy state. */
-    cells: z.record(z.string(), familyTypesCellSchema).default({}),
-    pushedAt: z.string().nullish(),
-  })
-  // Post-patch invariant: a low-confidence proposal that isn't flagged is a silent risk.
-  // Rejecting teaches pea the invariant through the returned zod error.
-  .refine((document) => lowConfidenceIsFlagged(document.cells), {
-    error: LOW_CONFIDENCE_REFINE_ERROR,
-  });
+export const familyTypesDocumentSchema = z.object({
+  snapshot: familyTypesSnapshotSchema.nullish(),
+  doc: specDocSchema.nullish(),
+  /** cellKey -> cell trichotomy state. */
+  cells: z.record(z.string(), familyTypesCellSchema).default({}),
+  pushedAt: z.string().nullish(),
+});
 export type FamilyTypesDocument = z.infer<typeof familyTypesDocumentSchema>;
 
 export const familyTypesRouteState = {

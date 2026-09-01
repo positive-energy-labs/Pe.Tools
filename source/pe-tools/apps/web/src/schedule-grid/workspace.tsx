@@ -45,14 +45,14 @@ export function ScheduleGridWorkspace({
 
   const staged = Object.entries(cells).filter(([, cell]) => cell.staged != null);
   const stagedCount = staged.length;
-  const attention = staged.filter(([, cell]) => cell.review === "attention").length;
   const proposalCount = Object.values(cells).filter(
     (cell) => cell.proposal != null && cell.staged == null,
   ).length;
   const pending = Object.entries(cells).filter(
     ([, cell]) => cell.proposal != null || cell.staged != null,
   );
-  const pushable = stagedCount > 0 && attention === 0;
+  // Staging IS the approval (ruled 2026-08-31): no review gate stands before push.
+  const pushable = stagedCount > 0;
 
   const runCommand = (
     kind: "catalog" | "refresh" | "push",
@@ -61,30 +61,18 @@ export function ScheduleGridWorkspace({
   ) => void command(kind, input, receipt);
 
   const stageValue = (key: string, value: string) =>
-    void apply([
-      { path: ["cells", key, "staged"], value: { value } },
-      { path: ["cells", key, "review"], value: "good" },
-    ]);
+    void apply([{ path: ["cells", key, "staged"], value: { value } }]);
   const stageEdit = (key: string, value: string): string | void => {
     if (value.length === 0)
       return "an empty value cannot be staged — type a value, or leave the cell as it was";
     const patches: { path: (string | number)[]; value?: unknown }[] = [
       { path: ["cells", key, "staged"], value: { value } },
-      { path: ["cells", key, "review"], value: "good" },
     ];
     if (cells[key]?.proposal != null) patches.push({ path: ["cells", key, "proposal"] });
     void apply(patches);
   };
-  const deny = (key: string) =>
-    void apply([
-      { path: ["cells", key, "proposal"] },
-      { path: ["cells", key, "review"], value: "none" },
-    ]);
-  const undo = (key: string) =>
-    void apply([
-      { path: ["cells", key, "staged"] },
-      { path: ["cells", key, "review"], value: "none" },
-    ]);
+  const deny = (key: string) => void apply([{ path: ["cells", key, "proposal"] }]);
+  const undo = (key: string) => void apply([{ path: ["cells", key, "staged"] }]);
 
   const columnHeader = (columnNumber: number) =>
     snapshot?.columns.find((column) => column.columnNumber === columnNumber)?.headerText ??
@@ -103,9 +91,7 @@ export function ScheduleGridWorkspace({
   const pushReason =
     stagedCount === 0
       ? "Nothing is staged yet — approve a proposal or type into a cell first. Push writes staged values through the bridge into Revit."
-      : attention > 0
-        ? `${attention} staged cell${attention === 1 ? "" : "s"} need review before anything is written.`
-        : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
+      : `Write ${stagedCount} staged cell${stagedCount === 1 ? "" : "s"} through the bridge into Revit — the only verb here that leaves the page.`;
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
@@ -258,14 +244,13 @@ export function ScheduleGridWorkspace({
                 gutter={(row) => {
                   const owed = snapshot.columns.filter(
                     (column) =>
-                      cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.review ===
-                      "attention",
+                      cells[scheduleCellKey(row.rowNumber, column.columnNumber)]?.proposal != null,
                   ).length;
                   return owed > 0
                     ? {
                         count: owed,
                         tone: "caution" as const,
-                        title: `${owed} staged cell${owed === 1 ? "" : "s"} on this row ${owed === 1 ? "is" : "are"} flagged for review — push refuses while any remain`,
+                        title: `${owed} pea proposal${owed === 1 ? "" : "s"} on this row await${owed === 1 ? "s" : ""} a verdict — accept stages, deny clears`,
                       }
                     : null;
                 }}
@@ -302,7 +287,6 @@ export function ScheduleGridWorkspace({
               pending={pending}
               proposalCount={proposalCount}
               stagedCount={stagedCount}
-              attention={attention}
               columnHeader={columnHeader}
               currentText={currentText}
               stageValue={stageValue}

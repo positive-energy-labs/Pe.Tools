@@ -115,12 +115,6 @@ export function createSettingsCommandHandlers(
       const stagedPaths = stagedEntries(document.fields);
       if (stagedPaths.length === 0)
         return { writeApplied: false, saved: 0, reason: "nothing staged" };
-      const attention = stagedPaths.filter(([, field]) => field.review === "attention");
-      if (attention.length > 0) {
-        throw new Error(
-          `Save blocked: ${attention.length} staged field${attention.length === 1 ? "" : "s"} need review (review is "attention").`,
-        );
-      }
 
       const parsed = parseRawContent(snapshot.rawContent);
       for (const [path, field] of stagedPaths) {
@@ -154,7 +148,7 @@ export function createSettingsCommandHandlers(
 
       const latest = ctx.getDoc();
       for (const [path] of stagedPaths) {
-        latest.fields[path] = { review: "none" };
+        latest.fields[path] = {};
       }
       latest.savedAt = new Date().toISOString();
       await ctx.setDoc(latest);

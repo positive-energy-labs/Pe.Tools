@@ -157,7 +157,7 @@ test("refresh preserves cells on a same-schedule re-read and clears them on a sw
   const { handlers, restore } = withHostCall(() => detailResponse());
   const document = emptyDoc();
   const key = scheduleCellKey(1, 2);
-  document.cells[key] = { proposal: { value: "150 VA", by: "pea" }, review: "none" };
+  document.cells[key] = { proposal: { value: "150 VA", by: "pea" } };
   try {
     // Same schedule (42 → 42): cells survive the re-read.
     document.snapshot = detailResponse().entries[0] as unknown as ScheduleGridDocument["snapshot"];
@@ -247,7 +247,7 @@ test("push expands a type-parameter cell to one edit per target element id, then
   const document = emptyDoc();
   document.snapshot = detailResponse().entries[0] as unknown as ScheduleGridDocument["snapshot"];
   const key = scheduleCellKey(1, 2);
-  document.cells[key] = { staged: { value: "150 VA" }, review: "good" };
+  document.cells[key] = { staged: { value: "150 VA" } };
 
   try {
     const result = await handlers.push({}, ctxFor(document));
@@ -261,7 +261,7 @@ test("push expands a type-parameter cell to one edit per target element id, then
     // Fold + clear: snapshot value updated, binding display refreshed, cell reset.
     expect(document.snapshot?.rows[0]?.values[1]).toBe("150 VA");
     expect(document.snapshot?.rows[0]?.bindings[0]?.displayValue).toBe("150 VA");
-    expect(document.cells[key]).toEqual({ review: "none" });
+    expect(document.cells[key]).toEqual({});
     expect(result).toEqual({ applied: 1, failures: [] });
   } finally {
     restore();
@@ -280,7 +280,7 @@ test("push fails a non-editable / blocked cell without calling Revit", async () 
   entry.rows[0].bindings[0].blocker = "ReadOnlyParameter";
   document.snapshot = entry as unknown as ScheduleGridDocument["snapshot"];
   const key = scheduleCellKey(1, 2);
-  document.cells[key] = { staged: { value: "150 VA" }, review: "good" };
+  document.cells[key] = { staged: { value: "150 VA" } };
 
   try {
     const result = (await handlers.push({}, ctxFor(document))) as {
@@ -297,16 +297,6 @@ test("push fails a non-editable / blocked cell without calling Revit", async () 
   } finally {
     restore();
   }
-});
-
-test("push blocks when a staged cell still needs review", async () => {
-  const document = emptyDoc();
-  document.cells[scheduleCellKey(1, 2)] = { staged: { value: "9" }, review: "attention" };
-  const handlers = createScheduleGridCommandHandlers({ hostBaseUrl: "http://127.0.0.1:9" });
-
-  await expect(handlers.push({}, ctxFor(document))).rejects.toThrow(
-    "Commit blocked: 1 staged cell need review.",
-  );
 });
 
 test("command input schemas accept the web client payloads", () => {

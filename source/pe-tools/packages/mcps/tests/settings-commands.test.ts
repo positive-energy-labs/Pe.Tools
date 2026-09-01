@@ -113,7 +113,7 @@ test("settings save refetches and uses the file version without persisting it", 
         },
         documentId: DOCUMENT_ID,
         fields: {
-          "/x": { proposal: null, staged: { value: 2 }, review: "good" },
+          "/x": { proposal: null, staged: { value: 2 } },
         },
         savedAt: null,
       };
@@ -127,7 +127,7 @@ test("settings save refetches and uses the file version without persisting it", 
         "settings.document.save",
       ]);
       expect(calls.every(({ target }) => target === null)).toBe(true);
-      expect(document.fields["/x"]).toEqual({ review: "none" });
+      expect(document.fields["/x"]).toEqual({});
       expect(document).not.toHaveProperty("snapshot");
     },
   );

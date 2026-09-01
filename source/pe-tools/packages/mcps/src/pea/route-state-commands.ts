@@ -1,5 +1,5 @@
-/**
- * /family-types command handlers — the server-side implementations the route-state
+﻿/**
+ * /family-types command handlers â€” the server-side implementations the route-state
  * dispatcher runs for `parse_spec`, `refresh_snapshot`, and `push`.
  *
  * These are the side-effectful work the agent write mask forbids doing by hand: OCR a
@@ -171,7 +171,7 @@ export function createFamilyTypesCommandHandlers(
         }
       },
       clear: (doc, key) => {
-        doc.cells[key] = { review: "none" };
+        doc.cells[key] = {};
       },
       stamp: (doc, isoNow) => {
         doc.pushedAt = isoNow;
@@ -180,7 +180,7 @@ export function createFamilyTypesCommandHandlers(
   };
 }
 
-/* ── parameter-links ─────────────────────────────────────────────────────── */
+/* â”€â”€ parameter-links â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export function createParameterLinksCommandHandlers(
   options: { hostBaseUrl?: string } = {},

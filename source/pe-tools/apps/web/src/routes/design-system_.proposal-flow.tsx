@@ -84,7 +84,11 @@ function ProposalFlow() {
 
   const open = items.filter(isOpen).length;
   const staged = items.filter((i) => i.cell.staged != null).length;
-  const attention = items.filter((i) => i.cell.review === "attention").length;
+  // No review field stands (ruled 2026-08-31): "needs a person" is DERIVED — a low-confidence
+  // proposal still open is the thing a human must look at before anything else.
+  const attention = items.filter(
+    (i) => i.cell.proposal != null && i.cell.staged == null && i.cell.proposal.confidence === "low",
+  ).length;
 
   /* The three moves ARE the machine's moves — no route-local verdict enum sits between them and
      the cell. Accept promotes the proposal into `staged`; deny CLEARS the proposal; undo puts the

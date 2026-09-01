@@ -35,6 +35,13 @@ export interface StateCellProps {
    */
   stagedBy?: "pea" | "you";
   /**
+   * THE COUNTER-PROPOSAL (ruled 2026-08-31, review deletion): pea's standing proposed value when
+   * it is NOT what the cell shows — proposal and staged both present, values differing. Draws the
+   * fold alone (no body wash — the shown value is not pea's) and rides the facts/footline. This
+   * is pea's in-cell voice against a staged value; its other channel is chat.
+   */
+  counterValue?: string;
+  /**
    * Whether the cell can be written at all. Anything but `editable` owns the body.
    * RULED 2026-08-31 (proposal-state demiurge): `readonly` and `excluded` were one rendering
    * under two names — they collapse into `locked` and the distinction rides `capReason`, which
@@ -122,10 +129,17 @@ export function cellFromTrichotomy(
     staged != null && proposal != null && proposal.by === "pea" && staged.value === proposal.value
       ? "pea"
       : "you";
+  // Pea arguing against a staged value: both rungs stand and disagree. The fold draws; see
+  // `counterValue` on StateCellProps.
+  const contested =
+    staged != null && proposal != null && proposal.value !== staged.value
+      ? String(proposal.value)
+      : undefined;
   return {
     ...facts,
     stage,
     ...(stage === "staged" ? { stagedBy } : {}),
+    ...(contested != null ? { counterValue: contested } : {}),
     confidence: facts.confidence ?? proposal?.confidence ?? undefined,
     note: facts.note ?? proposal?.note ?? undefined,
   };
@@ -150,6 +164,8 @@ export function parseCell(
 interface CellRead {
   /** The only two things allowed to own the cell BODY. */
   body: "proposed" | "locked" | null;
+  /** Pea's fold without the body: a standing proposal against the shown/staged value. */
+  contested: boolean;
   /** No real element behind it — the reserved dashed seam edge. */
   seam: boolean;
   /** The one squiggle slot; one winner. */
@@ -170,6 +186,7 @@ export function readCell(p: StateCellProps): CellRead {
   const stage = p.stage ?? "clean";
   return {
     body: locked ? "locked" : stage === "proposed" ? "proposed" : null,
+    contested: !locked && stage !== "proposed" && p.counterValue != null,
     seam: cap === "nohome",
     unsettled:
       p.agree === "drift"
@@ -227,6 +244,7 @@ export function cellStateLabel(p: StateCellProps): CellStateName {
 export function cellFactsText(p: StateCellProps): string | null {
   const parts: string[] = [];
   if (p.agree === "drift" && p.modelValue != null) parts.push(`model holds ${p.modelValue}`);
+  if (p.counterValue != null) parts.push(`pea proposes ${p.counterValue}`);
   if (p.capReason != null) parts.push(p.capReason);
   if (p.note != null)
     parts.push(p.confidence != null ? `${p.confidence} confidence — ${p.note}` : p.note);

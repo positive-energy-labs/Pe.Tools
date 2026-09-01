@@ -2,7 +2,7 @@
  * Commit as a first-class primitive.
  *
  * Every trichotomy route's human-only commit command (push/save/apply) is the same
- * fold: take the staged set → refuse if any cell needs review → expand cells into
+ * fold: take the staged set → expand cells into
  * transport edits → run ONE transaction → fold successes into the doc and clear
  * them → keep failures staged for retry → stamp → return a structured result.
  * Four routes hand-rolled this; the substrate now owns it. Routes supply only the
@@ -39,7 +39,7 @@ export interface CommitCommandOptions<TDoc, TCell extends TrichotomyCellLike, TE
   run(edits: TEdit[], doc: TDoc, target: string | undefined): Promise<CommitFailure[]>;
   /** Fold one successfully committed cell into the doc (mutate in place). */
   fold(doc: TDoc, key: string, cell: TCell): void;
-  /** Reset one committed cell (mutate in place) — e.g. `doc.cells[key] = { review: "none" }`. */
+  /** Reset one committed cell (mutate in place) — e.g. `doc.cells[key] = {}`. */
   clear(doc: TDoc, key: string): void;
   /** Stamp the doc after a commit (mutate in place) — e.g. `doc.pushedAt = isoNow`. */
   stamp?(doc: TDoc, isoNow: string): void;
@@ -58,13 +58,6 @@ export function defineCommitCommand<TDoc, TCell extends TrichotomyCellLike, TEdi
     const doc = ctx.getDoc();
     const staged = stagedEntries(options.select(doc));
     if (staged.length === 0) return { applied: 0, failures: [] } satisfies CommitResult;
-
-    const attention = staged.filter(([, cell]) => cell.review === "attention");
-    if (attention.length > 0) {
-      throw new Error(
-        `Commit blocked: ${attention.length} staged cell${attention.length === 1 ? "" : "s"} need review.`,
-      );
-    }
 
     if (options.freshness) {
       const takenAt = options.freshness.takenAt(doc);

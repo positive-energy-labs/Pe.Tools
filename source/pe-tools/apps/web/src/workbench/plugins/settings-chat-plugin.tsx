@@ -40,7 +40,6 @@ export function SettingsChatPlugin({
       <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1">
         <Metric value={openProposals} label="open proposals" />
         <Metric value={summary.staged} label="staged" />
-        <Metric value={summary.attention} label="need attention" issue />
         <Link
           className="ml-auto"
           to={isFamilyModel ? "/family" : "/chat"}

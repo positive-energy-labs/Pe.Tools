@@ -26,7 +26,6 @@ test("a proposal may carry multiple citations", () => {
         { blockId: "img-1", note: "dimension callout in figure" },
       ],
     },
-    review: "none",
   });
   expect(parsed.proposal?.sources).toHaveLength(2);
 });
@@ -34,7 +33,6 @@ test("a proposal may carry multiple citations", () => {
 test("a malformed citation is rejected", () => {
   const result = settingsFieldStateSchema.safeParse({
     proposal: { value: "24in", sources: [{ rowIdx: 2 }] },
-    review: "none",
   });
   expect(result.success).toBe(false);
 });

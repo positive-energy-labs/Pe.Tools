@@ -73,6 +73,14 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   `review` are parallel machines owed deletion; one shared reader derives `StateCellProps` from
   a trichotomy cell so routes cannot re-derive the mapping. `cap{readonly,excluded}` collapse to
   locked + reason; `nohome` stays — it draws the seam. `stagedBy` plumbs from `proposal.by`.
+- 2026-08-31 — REVIEW IS DELETED from the trichotomy (ruled kaitpw: "staged + attention doesn't
+  seem load bearing… I don't really want pea to be able to flag staged"). The cell is two fields,
+  `proposal | staged`. Staging IS the human's approval; validation is DERIVED from the value,
+  never stored; pea's disagreement channels are chat or the COUNTER-PROPOSAL — proposal and
+  staged both standing with different values draws pea's fold alone (`data-contest`, no body
+  wash) and says `pea proposes X` in the facts. The commit/save attention gates, the
+  low-confidence refine, pea's `review` mask path, and `CellReview` are all gone; old persisted
+  docs parse unchanged (zod strips the dead key).
 - 2026-08-31 — Per-cell grounding stays even when several cells cite one OCR block (kaitpw).
   The card-scale footline may not wrap a cell to two lines: it collapses to hover; the 10px
   floor forbids shrinking it. Locate is the cell's own `onLocate`; family's rail locate icon
@@ -314,10 +322,10 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   the 11px prose tier and dark mode were never measured against the laws; hover/focus states
   measured nowhere. One menu primitive for the cell vs header dropdown POPUPS is still an open
   decision (chrome round §8).
-- The `review` field's deletion from the trichotomy is argued (validation is derived, pea's voice
-  is chat or a counter-proposal, staging is the approval, arming is the write gate) but NOT ruled;
-  the counter-proposal rendering gap (proposal + staged both present draws nothing of pea's) rides
-  with that ruling.
+- Two web tests fail on main independent of the review deletion (found by the full-suite run,
+  2026-08-31): `-chat.test.tsx` misses a "Context budget" button and `-families.test.tsx` misses
+  the families summary line — debts of the annotation/density rounds, whose agents gated on
+  targeted tests only. Diagnose and fix with the takeoffs cutover.
 - The design guards misreport (found 2026-08-31 by the intent census,
   `.artifacts/runs/meaning-census-20260831/report.md`): the inline-color regex at
   `design-adherence.test.ts:107` backtracks past its optional quote, so 11 literal

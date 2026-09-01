@@ -123,6 +123,7 @@ export function StateCell(props: StateCellProps) {
         onClick={locate}
         data-body={read.body ?? undefined}
         data-seam={read.seam ? "" : undefined}
+        data-contest={read.contested ? "" : undefined}
         data-never={read.never ? "" : undefined}
         data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
         data-locate={props.onLocate != null ? "" : undefined}
@@ -209,6 +210,7 @@ export function StateCell(props: StateCellProps) {
           className={slots.base()}
           data-body={read.body ?? undefined}
           data-seam={read.seam ? "" : undefined}
+          data-contest={read.contested ? "" : undefined}
           data-never={read.never ? "" : undefined}
           data-unsaved={read.unsaved === "pea" ? "pea" : read.unsaved === "you" ? "" : undefined}
           data-locate={props.onLocate != null ? "" : undefined}

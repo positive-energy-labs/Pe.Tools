@@ -13,29 +13,6 @@ import {
   createParameterLinksCommandHandlers,
 } from "../src/pea/route-state-commands.ts";
 
-test("family types push rejects staged cells that still need review before calling Revit", async () => {
-  const document: FamilyTypesDocument = {
-    snapshot: null,
-    doc: null,
-    pushedAt: null,
-    cells: {
-      "MOCP::Type A": { staged: { value: "15 A" }, review: "attention" },
-    },
-  };
-  const push = createFamilyTypesCommandHandlers({ hostBaseUrl: "http://127.0.0.1:1" }).push;
-
-  await expect(
-    push(
-      {},
-      {
-        documentAddress: DOCUMENT_ADDRESS,
-        getDoc: () => document,
-        setDoc: async () => undefined,
-      },
-    ),
-  ).rejects.toThrow("Commit blocked: 1 staged cell need review.");
-});
-
 // The dispatcher hands handlers `input.safeParse(payload).data`, and zod strips undeclared keys —
 // so each command schema must accept exactly what the web plugin sends (route-chat-plugins.tsx):
 // `{}` for refresh, `{ profile }` for preview/apply. A schema/client mismatch here silently

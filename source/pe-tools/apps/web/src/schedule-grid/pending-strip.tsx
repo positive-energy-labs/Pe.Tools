@@ -12,7 +12,6 @@ export function PendingStrip({
   pending,
   proposalCount,
   stagedCount,
-  attention,
   columnHeader,
   currentText,
   stageValue,
@@ -23,7 +22,6 @@ export function PendingStrip({
   pending: [string, CellState][];
   proposalCount: number;
   stagedCount: number;
-  attention: number;
   columnHeader: (columnNumber: number) => string;
   currentText: (key: string) => string | null;
   stageValue: (key: string, value: string) => void;
@@ -55,14 +53,6 @@ export function PendingStrip({
             >
               {stagedCount} staged
             </FactChip>
-            {attention > 0 ? (
-              <FactChip
-                tone="caution"
-                title="Flagged staged cells — push refuses while any remain."
-              >
-                {attention} need review
-              </FactChip>
-            ) : null}
           </>
         }
       >
