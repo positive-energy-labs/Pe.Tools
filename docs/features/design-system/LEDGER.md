@@ -164,6 +164,22 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   elements not filling parents, missing edge padding, uneven text density) is a named demiurge
   subject; it enters instrument-first with a computed-style census on the priority routes.
 
+- 2026-08-31 — Phase 3 closed: the design-language laws are settled and enforced. (1) Typography
+  ground: the body sets the value tier; tiers are pinned at component recipes, defaulted at the
+  body, restated nowhere; check is `@pe/web#type-sweep`. (2) Tone: meaning color rides
+  `data-tone` (+`data-wash`); raw meaning utilities outside `components/` are a 0-baseline red.
+  (3) Selection rides `aria-selected`/`aria-expanded`/`aria-pressed`/`data-selected`. (4) Lines
+  and planes: `hairline-*` (with `-2`, `-faint`, `rows`), `boundary-*`, `data-surface`; the
+  meaning allowlist is 2 deliberate entries, both commented in `family/workspace-table.tsx`.
+  (5) Theme: one `light-dark()` declaration per token; dark mode is class + inline
+  `color-scheme`. New vocabulary lands as role + guard registration + failing check + ledger
+  line in one commit. Laws written into `apps/web/AGENTS.md`. Rounds 1-7 evidence:
+  `.artifacts/runs/{meaning-census,meaning-round2,type-ground,tone-attr,tvalue-sweep,hairline-cont,surface-roles}-20260831/`.
+- 2026-08-31 — Accepted small visual normalizations during phase 3, all named in reports: the
+  cache-cap washes unified onto the canonical `data-wash` recipe; three former 0.5px
+  `--pe-line-2` edges (attachment frame, reasoning rail, neutral blast badge) normalized to
+  `--pe-line` under `hairline-*-faint`.
+
 ## Tried & rejected
 
 - 2026-08-15 — The TanStack **Spreadsheet example** as the component: ~3,941 TS/TSX + 895 CSS lines
