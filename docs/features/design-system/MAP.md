@@ -85,6 +85,15 @@ Shapes on the table (verdict owed):
 - M1 vocabulary extension: add the missing roles (directional hairline, surface-role-on-slot,
   inline status mark, selectable-row state, source-provenance tone) as registered authored
   classes; fix the guard regexes; ratchet honestly. Recommended core.
+
+Round 2 (2026-08-31, `2a75f94`): PROVEN[deterministic, main checkout, 2a75f94, 2026-08-31] and
+verified on a clean line. Guard reds 8 → 5. The three classifier bugs fixed, each with a
+regression fixture. A positive color-role filter replaced the inverse `AUTHORING` population
+(197 → 104 true meaning sites). Twelve `hairline-{t,b,l,r,x,y}[-2]` roles registered in
+`design-lang.css`; 17 exact 1px migrations in the three heaviest files; 87 is the first honest
+stored meaning baseline. Deliberately unmigrated: 0.5px lane rules, the 2px inspector boundary,
+the caution edge — the 1px role would change their computed border. Report:
+`.artifacts/runs/meaning-round2-20260831/report.md`.
 - M2 modern-CSS recanonization: call sites express state via data attributes; `@layer`ed language
   CSS owns all color (`light-dark()`, `oklch()` roles). Deeper module; candidate mechanism for M1's
   roles rather than a competing whole.
