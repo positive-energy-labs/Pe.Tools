@@ -132,6 +132,8 @@
     background: var(--pe-page);
     color: var(--pe-ink);
     font-family: var(--font-body);
+    font-size: var(--type-value-size);
+    line-height: var(--type-value-line-height);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }

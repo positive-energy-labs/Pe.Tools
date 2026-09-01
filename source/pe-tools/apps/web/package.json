@@ -10,6 +10,7 @@
     "dev": "vp dev --port 3000",
     "generate-routes": "tsr generate",
     "fixture-census": "node scripts/fixture-census.ts",
+    "type-sweep": "node scripts/type-sweep.mjs",
     "build": "vp build",
     "preview": "vp preview",
     "test": "vp test",
