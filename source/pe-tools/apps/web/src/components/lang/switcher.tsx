@@ -16,9 +16,12 @@ import "./lang.css";
 
 export const switcherRecipe = tv({
   slots: {
-    base: "inline-flex shrink-0 items-center rounded-sm border border-line-2",
+    // The group carries the item height and the options fill it: a switcher and a `Verb` in one
+    // pane header must measure the same, and a 20px option inside a bordered group is 22px
+    // (two-height law, annotation round 2026-08-31).
+    base: "inline-flex h-(--item-h) shrink-0 items-center rounded-sm border border-line-2",
     option:
-      "h-5 cursor-pointer border-0 bg-transparent px-1.5 face-mono t-caption tracking-[0.05em] tabular-nums text-ink-2 enabled:hover:veil",
+      "h-full cursor-pointer border-0 bg-transparent px-1.5 face-mono t-caption tracking-[0.05em] tabular-nums text-ink-2 enabled:hover:veil",
   },
   variants: {
     state: {
