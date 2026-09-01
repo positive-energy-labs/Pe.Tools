@@ -385,11 +385,10 @@ export function createTakeoffStore(deps: {
   }).pipe(owned("bindings"));
   const targetAtom = Atom.make((get) => {
     const result = get(takeoffsSlice);
+    const target = deps.target?.trim();
     return AsyncResult.isSuccess(result)
-      ? (current(result.value.doc?.bindings.world, deps.scope.documentAddress)?.id ??
-          deps.target ??
-          "")
-      : (deps.target ?? "");
+      ? (target ?? current(result.value.doc?.bindings.world, deps.scope.documentAddress)?.id ?? "")
+      : (target ?? "");
   }).pipe(owned("binding/target"));
   const ids = (bindings: TakeoffsRouteDocument["bindings"], prefix: string) =>
     Object.entries(bindings)
@@ -941,17 +940,8 @@ export function createTakeoffStore(deps: {
       readonly bound?: Partial<Bound<TakeoffSlot>>;
       readonly multi?: Multi<TakeoffSlot>;
     }) {
-      const currentTarget = registry.get(targetAtom);
-      const nextTarget = patch.bound?.world ?? currentTarget;
       if (patch.bound || patch.multi || patch.stage) {
         const patches: RouteStatePatch[] = [];
-        if (nextTarget !== currentTarget)
-          patches.push({
-            path: ["bindings", "world"],
-            value: nextTarget
-              ? { id: nextTarget, label: nextTarget, at: deps.scope.documentAddress }
-              : undefined,
-          });
         for (const key of ["folder", "r10"] as const) {
           const id = patch.bound?.[key];
           if (id !== undefined)

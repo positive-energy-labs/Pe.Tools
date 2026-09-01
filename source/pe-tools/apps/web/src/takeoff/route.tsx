@@ -14,7 +14,7 @@ import { RouteDocument, routeDocumentChoices } from "#/workbench/route-document"
 import { usePeInfo } from "#/host/info";
 import { TakeoffsPage } from "#/takeoff/route-workspace";
 import { useFleet } from "#/host/fleet";
-import { documentTrunk } from "#/targeting/world";
+import { documentTrunk, openLocalDocuments } from "#/targeting/world";
 import { DocGroup, DocRow, extOf } from "#/chat/doc-picker";
 import { RouteHead } from "#/targeting/head";
 import { routeDocumentTabHref } from "#/workbench/route-document";
@@ -112,15 +112,14 @@ export function LiveTakeoffsDocumentRoute({ target = "" }: { target?: string }) 
   const choices = useMemo(() => {
     if (!session || !documents.data)
       return routeDocumentChoices(session ? [session] : fleet.sessions);
-    return documents.data.openDocuments.flatMap((document) => {
-      if (!document.isActive && document.isModelInCloud) return [];
-      const parsed = addressSchema.safeParse(document.cloudModelGuid ?? document.path);
+    return openLocalDocuments(documents.data).flatMap((document) => {
+      const parsed = addressSchema.safeParse(document.id);
       return parsed.success
         ? [
             {
               at: parsed.data,
-              label: `${session.sdkSessionId ?? session.sessionId} · ${document.title}`,
-              active: document.isActive,
+              label: `${session.sdkSessionId ?? session.sessionId} · ${document.label}`,
+              active: document.active,
             },
           ]
         : [];

@@ -17,7 +17,7 @@ import { TAKEOFF_SLOTS, type TakeoffSlot, type TakeoffStore } from "#/takeoff/st
 import { TargetingHead } from "#/targeting/head";
 import { useBindings, useRunner, type BindingPatch, type BindingState } from "#/targeting/kit";
 import { product as defineProduct, type Feeds, type Link } from "#/targeting/model";
-import { documentTrunk, worldTrunk } from "#/targeting/world";
+import { documentTrunk, openLocalDocuments, worldTrunk } from "#/targeting/world";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import {
   DIRS_KEY,
@@ -28,6 +28,7 @@ import {
 } from "#/takeoff/route";
 import { AdoptPanel, SyncPanel } from "#/takeoff/adopt-panel";
 import { addressSchema } from "@pe/agent-contracts";
+import { useHostOp } from "#/host/queries";
 
 export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const navigate = useNavigate({ from: "/takeoffs" });
@@ -60,6 +61,11 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
   const sessions = targetingFleet.sessions;
   const resolution = resolveTarget(sessions, target);
   const session = resolution.kind === "resolved" ? resolution.session : null;
+  const documentSession = useHostOp("revit.context.document-session", undefined, {
+    bridgeSessionId: session?.sessionId,
+    enabled: live && session !== null,
+  });
+  const openDocuments = documentSession.data ? openLocalDocuments(documentSession.data) : [];
   const scope: HostSessionScope | null = session ? { bridgeSessionId: session.sessionId } : null;
   const activeDocument =
     AsyncResult.isSuccess(activeDocumentResult) && activeDocumentResult.value.bound
@@ -91,6 +97,7 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
       activeDocumentResult,
       live ? recentDocumentsResult : undefined,
       live ? "live" : "fixture",
+      openDocuments,
     ),
     views: useAtomValue(store.feeds.views),
     zones: useAtomValue(store.feeds.zones),
@@ -121,6 +128,10 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
       });
   };
   const switchDocument = async (documentId: string) => {
+    if (openDocuments.some((document) => document.id === documentId)) {
+      moveToDocument(documentId);
+      return;
+    }
     if (!session || !AsyncResult.isSuccess(recentDocumentsResult))
       throw Error("document recents are not ready");
     const recent = recentDocumentsResult.value.value.find(
@@ -135,10 +146,12 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
     moveToDocument(destination);
   };
   const setState = (patch: BindingPatch<TakeoffSlot>) => {
-    store.actions.setBindings(patch);
     const nextWorld = patch.bound?.world;
-    if (nextWorld && nextWorld !== state.bound.world)
+    if (nextWorld && nextWorld !== state.bound.world) {
       void navigate({ search: (previous) => ({ ...previous, target: nextWorld, doc: undefined }) });
+      return;
+    }
+    store.actions.setBindings(patch);
     const nextDocument = patch.bound?.rvt;
     if (live && nextDocument && nextDocument !== state.bound.rvt) {
       setDocumentFailure(null);

@@ -449,68 +449,7 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("binds equal-titled sessions by distinct document identity without an RPC", async () => {
-    const h = harness();
-    const patches: RouteStatePatch[][] = [];
-    const title = "Equal title.rvt";
-    const sessions: SessionSource = {
-      ...h.sessions,
-      async list() {
-        return [
-          {
-            sessionId: "bridge-a",
-            sdkSessionId: "world-a",
-            processId: 41,
-            lane: "dev",
-            custody: "controlled",
-            activeDocumentTitle: title,
-            activeDocumentId: "C:\\Models\\A.rvt",
-            openDocumentCount: 1,
-          },
-          {
-            sessionId: "bridge-b",
-            sdkSessionId: "world-b",
-            processId: 42,
-            lane: "dev",
-            custody: "controlled",
-            activeDocumentTitle: title,
-            activeDocumentId: "C:\\Models\\B.rvt",
-            openDocumentCount: 1,
-          },
-        ];
-      },
-    };
-    const store = createStore({ host: h.host, sessions }, (next) => patches.push(next));
-    await store.actions.settle(store.atoms.sessions);
-
-    store.actions.setBindings({ bound: { world: "session:world-a" } });
-    await tick();
-    const first = await store.actions.settle(store.atoms.activeDocument);
-    expect(h.calls.doc).toBe(1);
-
-    store.actions.setBindings({ bound: { world: "session:world-b" } });
-    await tick();
-    const second = await store.actions.settle(store.atoms.activeDocument);
-    expect(h.calls.doc).toBe(2);
-
-    expect([first.value?.documentId, second.value?.documentId]).toEqual([
-      "C:\\Models\\A.rvt",
-      "C:\\Models\\B.rvt",
-    ]);
-    expect(first.value?.title).toBe(second.value?.title);
-    expect(
-      patches.flatMap((batch) =>
-        batch.flatMap((patch) =>
-          patch.path[0] === "bindings" && patch.path[1] === "world"
-            ? [(patch.value as { id: string }).id]
-            : [],
-        ),
-      ),
-    ).toEqual(["session:world-a", "session:world-b"]);
-    store.dispose();
-  });
-
-  it("binds another document without clearing the snapshot", async () => {
+  it("does not persist a destination world into the departing document", async () => {
     const h = harness();
     h.hold();
     const patches: RouteStatePatch[][] = [];
@@ -558,20 +497,18 @@ describe("takeoff route store", () => {
         slice,
         host: h.host,
         sessions,
+        target: "session:other",
       },
       (next) => patches.push(next),
     );
     await store.actions.settle(store.atoms.sessions);
 
+    expect(store.atoms.registry.get(store.atoms.target)).toBe("session:other");
+
     store.actions.setBindings({ bound: { world: "session:other" } });
     await tick();
 
-    expect(patches).toContainEqual([
-      {
-        path: ["bindings", "world"],
-        value: expect.objectContaining({ id: "session:other" }),
-      },
-    ]);
+    expect(patches).toEqual([]);
     const landed = store.atoms.registry.get(store.slices.takeoffs);
     expect(AsyncResult.getOrThrow(landed).doc?.snapshot).toEqual(h.snapshot);
     h.release();

@@ -6,6 +6,8 @@ import type {
   Envelope,
   RecentDocument,
 } from "@pe/host-contracts/pe-revit-contract";
+import type { HostOpResponse } from "@pe/host-contracts/operation-types";
+import { addressSchema } from "@pe/agent-contracts";
 
 import type { WorldFacts } from "#/host/fleet";
 import { mintSelector, type SessionFacts } from "#/host/target";
@@ -211,6 +213,16 @@ type ActiveDocument = {
   readonly title: string;
 };
 
+export const openLocalDocuments = (
+  session: HostOpResponse<"revit.context.document-session">,
+) =>
+  session.openDocuments.flatMap((document) => {
+    const path = !document.isModelInCloud && addressSchema.safeParse(document.path);
+    return path && path.success
+      ? [{ id: path.data, label: document.title, active: document.isActive }]
+      : [];
+  });
+
 const documentLink: Link = {
   key: "rvt",
   under: "world",
@@ -272,13 +284,8 @@ export const documentTrunk = {
     active: AsyncResult.AsyncResult<TimedRead<ActiveDocument | null>, Error>,
     recents?: AsyncResult.AsyncResult<TimedRead<readonly RecentDocument[]>, Error>,
     lane: Lane = "live",
+    open: readonly Option[] = [],
   ): Feed {
-    if (!recents)
-      return feed(
-        active,
-        (document) => (document ? [{ id: document.documentId, label: document.title }] : []),
-        lane,
-      );
     if (AsyncResult.isFailure(active))
       return {
         options: null,
@@ -288,19 +295,24 @@ export const documentTrunk = {
         note: String(Cause.squash(active.cause)),
       };
     return feed(
-      recents,
-      (items) => {
-        const current = AsyncResult.isSuccess(active) ? active.value.value : null;
-        return [
-          ...(current ? [{ id: current.documentId, label: current.title }] : []),
-          ...items
-            .filter((item) => (item.modelGuid ?? item.path) !== current?.documentId)
-            .map((item) => ({
-              id: item.modelGuid ?? item.path,
-              label: item.title,
-              sub: item.isCloud ? "cloud" : item.path,
-            })),
-        ];
+      active,
+      (current) => {
+        const options: Option[] = current
+          ? [{ id: current.documentId, label: current.title }]
+          : [];
+        const seen = new Set(options.map((option) => option.id));
+        for (const option of open) {
+          if (!seen.has(option.id)) options.push(option);
+          seen.add(option.id);
+        }
+        if (recents && AsyncResult.isSuccess(recents))
+          for (const item of recents.value.value) {
+            const id = item.modelGuid ?? item.path;
+            if (seen.has(id)) continue;
+            options.push({ id, label: item.title, sub: item.isCloud ? "cloud" : item.path });
+            seen.add(id);
+          }
+        return options;
       },
       lane,
     );
