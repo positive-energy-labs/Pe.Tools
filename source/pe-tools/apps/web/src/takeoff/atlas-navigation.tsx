@@ -97,7 +97,10 @@ export function AtlasNavigation() {
                     const on = z.zone.key === zoneKey;
                     const off = !onPlan(z);
                     return (
-                      <li key={z.zone.key}>
+                      // A grid item stretches: an inline-block button in a block list item is
+                      // only as wide as its text, which is why the zone bar never reached the
+                      // right edge (annotation round, 2026-08-31).
+                      <li key={z.zone.key} className="grid">
                         <Press
                           type="button"
                           onClick={() => selectZone(on ? null : z)}

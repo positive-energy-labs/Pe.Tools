@@ -32,11 +32,11 @@
   "escHandler": {
     "total": 7,
     "byArea": {
+      "chat": 1,
       "components": 2,
       "family-review": 2,
       "runs": 1,
-      "takeoff": 1,
-      "targeting": 1
+      "takeoff": 1
     }
   },
   "opacityDim": {
@@ -70,7 +70,7 @@
     }
   },
   "inlineColor": {
-    "total": 131,
+    "total": 129,
     "byArea": {
       "chat": 2,
       "components": 6,
@@ -80,7 +80,7 @@
       "grilles": 4,
       "host": 3,
       "ops": 27,
-      "param-tables": 7,
+      "param-tables": 5,
       "routes": 4,
       "runs": 27,
       "takeoff": 4,

@@ -56,7 +56,11 @@ function ComboboxTrigger({
     <Primitive.Trigger
       data-slot="combobox-trigger"
       className={
-        fill ? `${trigger()} flex w-full min-w-0 items-center justify-between gap-1` : trigger()
+        // A filling trigger reads as the CellSelect it sits above: mono, item height, the same
+        // 4px inset, chevron on the right edge (dropdown parity, 2026-08-31).
+        fill
+          ? `${trigger()} flex h-(--item-h) w-full min-w-0 items-center justify-between gap-1 px-1 face-mono`
+          : trigger()
       }
       {...props}
     >
