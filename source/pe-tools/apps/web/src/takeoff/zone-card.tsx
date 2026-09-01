@@ -51,7 +51,7 @@ export function ZoneCard({
       data-selected={entity.selected || undefined}
       data-dirty={entity.dirty || undefined}
       data-conflict={entity.conflict || undefined}
-      className="absolute top-1 left-1 z-raised max-h-[calc(100%-0.5rem)] w-64 overflow-y-auto"
+      className="absolute top-1 left-1 z-raised max-h-[calc(100%-2rem)] w-64 overflow-y-auto"
     >
       <ArtifactFrame
         head={

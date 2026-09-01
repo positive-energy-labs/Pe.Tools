@@ -144,9 +144,10 @@ function LeafHeader<Row>({
           title="Sort by this column. Clicking again flips the direction; shift-click appends it as a tie-breaker behind the sorts already applied, numbered in the header."
           tone="quiet"
           size="caption"
+          hover="bare"
         >
           <PressContent geometry="block">
-            {column.header ?? column.label}
+            <span className="t-upper">{column.header ?? column.label}</span>
             {direction && (
               <span className="ml-1 text-ink">
                 {direction === "asc" ? "↑" : "↓"}
@@ -196,6 +197,7 @@ function ColFilter({
     >
       <div ref={anchorRef} className="mt-0.5 flex">
         <ComboboxTrigger
+          fill
           aria-label={`${label} filter`}
           title="Narrow the table to one value of this column. The choices are every value present across ALL rows, so they stay put as other filters move."
         >
@@ -208,7 +210,7 @@ function ColFilter({
         <ComboboxList>
           {(choice: FacetChoice) => (
             <ComboboxItem key={choice.value ?? "\u0000all"} value={choice}>
-              <span className={cn("truncate", choice.value === null && "text-ink-2")}>
+              <span className={cn("face-mono truncate", choice.value === null && "text-ink-2")}>
                 {choice.label}
               </span>
             </ComboboxItem>

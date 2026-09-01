@@ -139,10 +139,12 @@ export function ReadCell({
 
 /** The verdict swatch. Tone is the NARROW meaning-role union — never a raw CSS colour
  * (takeoffs #11, ruled 2026-08-16 R5; `stateColumn`, which took any string, died with it). */
-export function StateDot({ tone, dim }: { tone: VerdictTone; dim?: boolean }) {
+export function StateDot({ tone, dim, bar }: { tone: VerdictTone; dim?: boolean; bar?: boolean }) {
   return (
     <span
-      className="inline-block size-2 shrink-0 rounded-[1px] align-middle"
+      className={
+        bar ? "h-full min-w-0 flex-1" : "inline-block size-2 shrink-0 rounded-[1px] align-middle"
+      }
       style={{ backgroundColor: VERDICT_INK[tone], opacity: dim ? 0.35 : 1 }}
     />
   );

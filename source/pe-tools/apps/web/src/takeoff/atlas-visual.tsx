@@ -48,6 +48,7 @@ export function AtlasVisual() {
                   type="button"
                   onClick={() => setLevel(lane.label)}
                   size="caption"
+                  frame="line"
                   tone={lane.label === level ? "neutral" : "quiet"}
                   state={lane.label === level ? "selected" : "rest"}
                   title={`${lane.view}${lane.replayPath ? " · captured this session" : " · not captured yet"}`}
@@ -70,6 +71,7 @@ export function AtlasVisual() {
                 type="button"
                 onClick={() => setStatsOpen(!statsOpen)}
                 size="caption"
+                frame="line"
                 tone="neutral"
                 state={statsOpen ? "selected" : "rest"}
                 title="level-wide totals — the whole-building dashboard was noise; the level is the unit you actually work in"
@@ -84,6 +86,7 @@ export function AtlasVisual() {
                 }
                 tone="neutral"
                 size="caption"
+                frame="line"
               >
                 <span className="face-mono">{planOpen ? "▴ hide plan" : "▾ show plan"}</span>
               </Press>

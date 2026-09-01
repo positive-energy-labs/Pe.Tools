@@ -92,6 +92,7 @@ export function AtlasTable() {
                       }
                       tone="neutral"
                       size="caption"
+                      frame="line"
                     >
                       fields · {fieldsMode}
                     </Press>

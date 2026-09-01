@@ -64,6 +64,12 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   padding. Folded into `base.css` `:root`; the 24px middle variant and the throwaway switcher were
   deleted on verdict. Consequence: caption, label and value now share one 10px size and differ
   only by face, case and weight — see open questions.
+- 2026-08-31 — Takeoffs annotation round, the language-level pieces: the targeting head sits in
+  outer scroll flow and the work area pins full-viewport (`anatomy/workspace.tsx`, all Workspace
+  routes); `Press` grows `hover: veil|bare` and `frame: none|line`; sortable table headers wear
+  `t-upper` with no hover veil; the header facet trigger fills its cell, chevron on the right
+  edge, mono choices; `StateDot` gains `bar` — a zone's state bar is a fixed width with
+  proportional segments, never wider for more rooms.
 - 2026-08-31 — TWO HEIGHTS, no third yet (round-1 reshape, from the verdict "standardize a general
   list-item height... two, three max"): `--item-h` (20px) sizes every list-shaped row — table row,
   select/combobox/command menu item, pick-list item, `Verb` — and `--control-h` (24px) sizes every

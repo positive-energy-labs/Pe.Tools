@@ -43,12 +43,25 @@ const ComboboxValue = (props: Omit<Primitive.Value.Props, "className">) => (
   <Primitive.Value data-slot="combobox-value" {...props} />
 );
 
-function ComboboxTrigger({ children, ...props }: Omit<Primitive.Trigger.Props, "className">) {
+function ComboboxTrigger({
+  children,
+  fill,
+  ...props
+}: Omit<Primitive.Trigger.Props, "className"> & {
+  /** Stretch to the anchor's width with the chevron pinned to the right edge. */
+  fill?: boolean;
+}) {
   const { trigger } = comboboxRecipe();
   return (
-    <Primitive.Trigger data-slot="combobox-trigger" className={trigger()} {...props}>
+    <Primitive.Trigger
+      data-slot="combobox-trigger"
+      className={
+        fill ? `${trigger()} flex w-full min-w-0 items-center justify-between gap-1` : trigger()
+      }
+      {...props}
+    >
       {children}
-      <ChevronDown className="pointer-events-none size-3.5 text-ink-2" />
+      <ChevronDown className="pointer-events-none size-3.5 shrink-0 text-ink-2" />
     </Primitive.Trigger>
   );
 }

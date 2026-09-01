@@ -25,6 +25,8 @@ export function ZoneStateBar({
   const census = ROOM_STATES.map((s) => ({ s, n: states.filter((x) => x === s).length })).filter(
     (x) => x.n > 0,
   );
+  // The bar is a FIXED width (the caller's), right-aligned by its flex parent: a zone with more
+  // rooms shows more, thinner segments, never a wider bar (annotation verdict 2026-08-31).
   return (
     <span
       className={cn("flex h-2.5 w-10 items-center gap-px", className)}
@@ -33,7 +35,7 @@ export function ZoneStateBar({
         .join(", ")}`}
     >
       {states.map((s, i) => (
-        <StateDot key={i} {...stateMeta(s)} dim={s === "unreviewed"} />
+        <StateDot key={i} bar {...stateMeta(s)} dim={s === "unreviewed"} />
       ))}
     </span>
   );
