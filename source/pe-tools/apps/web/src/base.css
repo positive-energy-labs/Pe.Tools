@@ -1,39 +1,45 @@
 /* PE's portable design foundation. The app imports this file; standalone artifacts may link it. */
 :root {
   /* Ground */
-  --pe-page: #fdfaf2;
-  --pe-artifact: #f1eee6;
-  --pe-recess: #e4e1d9;
-  --pe-select: #d9d6ce;
+  --pe-page: light-dark(#fdfaf2, #15120d);
+  --pe-artifact: light-dark(#f1eee6, #1e1c16);
+  --pe-recess: light-dark(#e4e1d9, #27251f);
+  --pe-select: light-dark(#d9d6ce, #33302a);
   --pe-document: #fff;
   --pe-scrim: rgb(0 0 0 / 80%);
 
   /* Ink */
-  --pe-ink: #38352d;
-  --pe-ink-2: #5f5a4e;
-  --pe-ink-mute: #888682;
-  --pe-line: color-mix(in srgb, #38352d 12%, transparent);
-  --pe-line-2: color-mix(in srgb, #38352d 22%, transparent);
+  --pe-ink: light-dark(#38352d, #eeebe2);
+  --pe-ink-2: light-dark(#5f5a4e, #c1bcae);
+  --pe-ink-mute: light-dark(#888682, #868481);
+  --pe-line: light-dark(
+    color-mix(in srgb, #38352d 12%, transparent),
+    color-mix(in srgb, #eeebe2 14%, transparent)
+  );
+  --pe-line-2: light-dark(
+    color-mix(in srgb, #38352d 22%, transparent),
+    color-mix(in srgb, #eeebe2 26%, transparent)
+  );
 
   /* Meaning */
-  --pe-pea: #42815e;
-  --pe-pea-ink: #296948;
-  --pe-alarm: #8e4120;
-  --pe-caution: #77531b;
-  --pe-done: #486531;
-  --pe-commit: #325e88;
-  --pe-on-commit: #fdfaf2;
-  --pe-nav: #325e88;
+  --pe-pea: light-dark(#42815e, #74b48f);
+  --pe-pea-ink: light-dark(#296948, #8dcda7);
+  --pe-alarm: light-dark(#8e4120, #fba381);
+  --pe-caution: light-dark(#77531b, #ddb47e);
+  --pe-done: light-dark(#486531, #a7c890);
+  --pe-commit: light-dark(#325e88, #92c1f1);
+  --pe-on-commit: light-dark(#fdfaf2, #15120d);
+  --pe-nav: light-dark(#325e88, #92c1f1);
 
   /* Plumbing and parallel data-viz palette */
   --pe-on: var(--pe-page);
   --pe-veil: color-mix(in srgb, var(--pe-ink) 10%, transparent);
-  --viz-1: oklch(0.47 0.085 249.5);
-  --viz-2: oklch(0.47 0.085 155);
-  --viz-3: oklch(0.47 0.045 230);
-  --viz-4: oklch(0.47 0.085 123);
-  --viz-5: oklch(0.47 0.085 58);
-  --viz-6: oklch(0.47 0.055 85);
+  --viz-1: light-dark(oklch(0.47 0.085 249.5), oklch(0.795 0.085 249.5));
+  --viz-2: light-dark(oklch(0.47 0.085 155), oklch(0.795 0.085 155));
+  --viz-3: light-dark(oklch(0.47 0.045 230), oklch(0.795 0.045 230));
+  --viz-4: light-dark(oklch(0.47 0.085 123), oklch(0.795 0.085 123));
+  --viz-5: light-dark(oklch(0.47 0.085 58), oklch(0.795 0.085 58));
+  --viz-6: light-dark(oklch(0.47 0.055 85), oklch(0.795 0.055 85));
 
   --radius: 0.125rem;
   --space-unit: 0.25rem;
@@ -76,32 +82,6 @@
   --z-modal: 50;
   --z-notice: 60;
   --z-dev: 9999;
-}
-
-.dark {
-  --pe-page: #15120d;
-  --pe-artifact: #1e1c16;
-  --pe-recess: #27251f;
-  --pe-select: #33302a;
-  --pe-ink: #eeebe2;
-  --pe-ink-2: #c1bcae;
-  --pe-ink-mute: #868481;
-  --pe-line: color-mix(in srgb, #eeebe2 14%, transparent);
-  --pe-line-2: color-mix(in srgb, #eeebe2 26%, transparent);
-  --pe-pea: #74b48f;
-  --pe-pea-ink: #8dcda7;
-  --pe-alarm: #fba381;
-  --pe-caution: #ddb47e;
-  --pe-done: #a7c890;
-  --pe-commit: #92c1f1;
-  --pe-on-commit: #15120d;
-  --pe-nav: #92c1f1;
-  --viz-1: oklch(0.795 0.085 249.5);
-  --viz-2: oklch(0.795 0.085 155);
-  --viz-3: oklch(0.795 0.045 230);
-  --viz-4: oklch(0.795 0.085 123);
-  --viz-5: oklch(0.795 0.085 58);
-  --viz-6: oklch(0.795 0.055 85);
 }
 
 @layer base {
