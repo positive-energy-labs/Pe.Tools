@@ -2,7 +2,6 @@ import { token } from "#/lib/token";
 import { useEffect } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import type { ContextBreakdown, ContextItem } from "../chat-state";
-import { cn } from "#/lib/utils";
 import { useWorkbench } from "../provider";
 import {
   computeCacheView,
@@ -70,15 +69,17 @@ export const CACHE_BASE =
   "rounded-sm border-[0.5px] px-[5px] py-px t-caption face-mono whitespace-nowrap";
 
 export const CACHE_TONE = {
-  cached: "text-done border-done/50 bg-done/12",
-  reproc: "text-caution border-caution/55 bg-caution/10",
+  cached: "done",
+  reprocessed: "caution",
 } as const;
 
 export function CacheBadge({ state }: { state: CacheState }) {
   if (state === "unknown") return null;
   return (
     <span
-      className={cn(CACHE_BASE, state === "cached" ? CACHE_TONE.cached : CACHE_TONE.reproc)}
+      className={CACHE_BASE}
+      data-tone={CACHE_TONE[state]}
+      data-wash
       title="≈ inferred from a frontend snapshot diff, not provider usage"
     >
       {state === "cached" ? "≈ cached" : "≈ reproc"}
@@ -103,10 +104,10 @@ export const PILL_TONE: Record<NonNullable<ContextItem["state"]>, string> = {
 
 export const BLAST_BASE = "rounded-sm border-[0.5px] px-1 t-caption face-mono whitespace-nowrap";
 
-export const BLAST_TONE: Record<Blast, string> = {
-  prefix: "text-caution border-caution/50 bg-caution/8",
-  system: "text-ink-2 border-line-2",
-  free: "text-done border-done/50 bg-done/10",
+export const BLAST_TONE: Record<Blast, "caution" | "done" | undefined> = {
+  prefix: "caution",
+  system: undefined,
+  free: "done",
 };
 
 export const WORLD_ROW =

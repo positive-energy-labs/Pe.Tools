@@ -70,13 +70,13 @@
     }
   },
   "inlineColor": {
-    "total": 145,
+    "total": 131,
     "byArea": {
       "chat": 2,
       "components": 6,
       "design-system": 1,
       "family": 3,
-      "family-review": 33,
+      "family-review": 25,
       "grilles": 4,
       "host": 3,
       "ops": 27,
@@ -84,16 +84,13 @@
       "routes": 4,
       "runs": 27,
       "takeoff": 4,
-      "targeting": 15,
+      "targeting": 9,
       "workbench": 9
     }
   },
   "rawMeaningColor": {
-    "total": 17,
-    "byArea": {
-      "schedule-grid": 4,
-      "workbench": 13
-    }
+    "total": 0,
+    "byArea": {}
   },
   "dlLeak": {
     "total": 0,

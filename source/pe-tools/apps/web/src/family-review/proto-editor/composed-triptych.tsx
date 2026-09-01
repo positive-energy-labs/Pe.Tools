@@ -112,9 +112,8 @@ export function Triptych({
                 const paint = {
                   fill: geo.isVoid
                     ? "none"
-                    : on
-                      ? token("select")
-                      : `color-mix(in srgb, ${token("ink")} 10%, transparent)`,
+                    : `color-mix(in srgb, ${token("ink")} 10%, transparent)`,
+                  "data-selected": on && !geo.isVoid ? "" : undefined,
                   stroke: on ? token("ink") : token("ink-2"),
                   strokeWidth: on ? 1.6 : 1,
                   className: geo.isVoid ? "dash-void" : undefined,

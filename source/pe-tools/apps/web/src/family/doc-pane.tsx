@@ -162,7 +162,8 @@ export function SpecSheet({
                         y={y}
                         width={width}
                         height={height}
-                        fill={lit ? token("select") : "transparent"}
+                        fill="transparent"
+                        data-selected={lit ? "" : undefined}
                         /* A neutral mark, not a hue: a fill cannot separate at this size, so
                            the highest-contrast neutral is what lights it (takeoffs #8). */
                         stroke={lit ? token("ink") : token("line-2")}

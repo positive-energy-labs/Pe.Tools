@@ -43,11 +43,18 @@ const SOURCE_WORD: Record<ParamCell["source"], string> = {
   missing: "unset",
 };
 
-const SOURCE_TONE: Record<ParamCell["source"], string> = {
-  override: token("ink"),
-  value: token("ink-mute"),
-  formula: token("ink-2"),
-  missing: token("caution"),
+const SOURCE_TONE: Record<ParamCell["source"], "caution" | undefined> = {
+  override: undefined,
+  value: undefined,
+  formula: undefined,
+  missing: "caution",
+};
+
+const SOURCE_INK: Record<ParamCell["source"], string> = {
+  override: "text-ink",
+  value: "text-ink-mute",
+  formula: "text-ink-2",
+  missing: "",
 };
 
 const clamp = (value: number, hi: number) => Math.max(0, Math.min(value, hi));
@@ -294,8 +301,8 @@ function Cell({
       onFocus={onPick}
       onClick={onPick}
       className="px-2 py-0.5"
+      data-selected={on || focused ? "" : undefined}
       style={{
-        backgroundColor: on || focused ? token("select") : "transparent",
         outline: "none",
         whiteSpace: "nowrap",
       }}
@@ -325,6 +332,8 @@ function GridText({
         readOnly={!editing || locked}
         value={draft ?? cell.text}
         title={title}
+        className={locked ? "text-ink-mute" : SOURCE_INK[cell.source]}
+        data-tone={locked ? undefined : SOURCE_TONE[cell.source]}
         onChange={(event) => setDraft(event.target.value)}
         onDoubleClick={() => !locked && setDraft(cell.text)}
         onKeyDown={(event) => {
@@ -351,7 +360,6 @@ function GridText({
           border: "none",
           borderBottom: editing ? `0.5px solid ${token("ink")}` : "0.5px solid transparent",
           borderRadius: 0,
-          color: locked ? token("ink-mute") : SOURCE_TONE[cell.source],
           cursor: locked ? "not-allowed" : "text",
         }}
       />

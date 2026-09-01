@@ -87,12 +87,11 @@ export function Picker<K extends string>({
           render={<Press type="button" />}
           disabled={inert}
           title={title}
+          data-tone={caution ? "caution" : undefined}
           style={{
             padding: 0,
             cursor: inert ? "not-allowed" : "pointer",
-            backgroundColor: open ? token("select") : "transparent",
             borderBottom: `1px solid ${caution ? token("caution") : token("ink")}`,
-            color: caution ? token("caution") : token("ink"),
             whiteSpace: "nowrap",
             animation: lit ? "tp-pulse var(--motion-control) ease-in-out infinite" : undefined,
           }}
@@ -128,10 +127,10 @@ export function Picker<K extends string>({
                     <Press
                       type="button"
                       onClick={() => (setLevel(l.key), setQ(""))}
+                      data-selected={on ? "" : undefined}
+                      data-tone={lab == null ? "caution" : undefined}
                       style={{
                         padding: "0 3px",
-                        backgroundColor: on ? token("select") : "transparent",
-                        color: lab == null ? token("caution") : token("ink"),
                         borderBottom: on ? `1px solid ${token("ink")}` : "1px solid transparent",
                       }}
                     >
@@ -164,11 +163,11 @@ export function Picker<K extends string>({
             />
             <div className="max-h-[min(16rem,calc(100dvh-6rem))] overflow-y-auto py-1">
               {opts === null ? (
-                <div className="px-2 py-1" style={{ color: token("caution") }}>
+                <div className="px-2 py-1" data-tone="caution">
                   no legal options — needs {cur.needs}
                 </div>
               ) : curFeed?.state === "error" ? (
-                <div className="px-2 py-1" style={{ color: token("caution") }}>
+                <div className="px-2 py-1" data-tone="caution">
                   {curFeed.note ?? "read failed"}
                 </div>
               ) : opts.length === 0 ? (

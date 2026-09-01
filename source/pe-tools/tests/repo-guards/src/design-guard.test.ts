@@ -670,6 +670,50 @@ const classUses = (files: Entry[] = FILES): ClassUse[] => {
   return [...new Map(out.map((use) => [`${use.rel}:${use.line}:${use.token}`, use])).values()];
 };
 
+const TONE_VALUES = new Set(["alarm", "caution", "done", "commit", "nav", "pea"]);
+
+const invalidDataTones = (files: Entry[] = FILES): Offence[] => {
+  const out: Offence[] = [];
+  for (const file of files.filter((f) => f.rel.endsWith(".tsx"))) {
+    const source = ts.createSourceFile(
+      file.rel,
+      file.text,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node: ts.Node): void => {
+      if (ts.isJsxAttribute(node) && node.name.getText(source) === "data-tone") {
+        const check = (value: ts.Node): void => {
+          if (ts.isStringLiteralLike(value) && !TONE_VALUES.has(value.text)) {
+            out.push({
+              rel: file.rel,
+              line: source.getLineAndCharacterOfPosition(value.getStart(source)).line + 1,
+              match: value.text,
+            });
+            return;
+          }
+          if (ts.isJsxExpression(value) && value.expression) check(value.expression);
+          else if (ts.isConditionalExpression(value)) {
+            check(value.whenTrue);
+            check(value.whenFalse);
+          } else if (
+            ts.isParenthesizedExpression(value) ||
+            ts.isAsExpression(value) ||
+            ts.isSatisfiesExpression(value)
+          )
+            check(value.expression);
+        };
+        if (node.initializer) check(node.initializer);
+        return;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+  }
+  return out;
+};
+
 const CLASS_USES = classUses();
 const webRequire = createRequire(join(ROOT, "../package.json"));
 const viteRequire = createRequire(webRequire.resolve("@tailwindcss/vite"));
@@ -968,6 +1012,15 @@ const BAD_SPECIMEN_PATHS = REQUIRED_SPECIMEN_PATHS.filter(
 ).map((importPath) => `${importPath}: ${SPECIMEN_PATH_USES.get(importPath) ?? 0} frames`);
 
 describe("design checks — code holds the boundary", () => {
+  it("data-tone values come from the closed tone set", () => {
+    const fixture = invalidDataTones([
+      { rel: "fixture.tsx", text: '<span data-tone="warning" />' },
+    ]);
+    expect(fixture.map((offence) => offence.match)).toEqual(["warning"]);
+    const offences = invalidDataTones();
+    expect(offences, report(offences)).toEqual([]);
+  });
+
   it("loads the app CSS graph before checking candidates", () => {
     expect(LOADER_PRESENT.filter((candidate) => !registered.has(candidate))).toEqual([]);
     expect(LOADER_ABSENT.filter((candidate) => registered.has(candidate))).toEqual([]);

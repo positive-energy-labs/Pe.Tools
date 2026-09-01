@@ -59,7 +59,6 @@ export function ModelViews({
   const span = Math.max(...AXES.map((axis) => bounds[axis][1] - bounds[axis][0]));
   const scale = (BOX - 2 * M) / span;
 
-  const partFill = (slug: string) => (focusedParts.has(slug) ? token("select") : "transparent");
   const partStroke = (slug: string) => (focusedParts.has(slug) ? token("ink") : token("ink-2"));
   const connectorStroke = (slug: string) =>
     focusedParts.has(slug) ? token("ink") : token("viz-4");
@@ -112,7 +111,6 @@ export function ModelViews({
               X={X}
               Y={Y}
               scale={scale}
-              partFill={partFill}
               connectorStroke={connectorStroke}
               hover={hover}
             />
@@ -201,7 +199,8 @@ export function ModelViews({
                 /* THE ONE LEGAL DASH AMONG PARTS: a void must never read as material. */
                 const shared = {
                   ...hover(geo.slug),
-                  fill: geo.isVoid ? "none" : partFill(geo.slug),
+                  fill: geo.isVoid ? "none" : "transparent",
+                  "data-selected": active && !geo.isVoid ? "" : undefined,
                   stroke: geo.isVoid
                     ? active
                       ? token("ink")

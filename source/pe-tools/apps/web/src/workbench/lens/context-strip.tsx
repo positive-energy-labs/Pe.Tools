@@ -31,13 +31,8 @@ export function ContextStrip({ state, depth }: { state: ChatState; depth: "read"
           {plan.map((entry) => (
             <div className={PLAN_ITEM} data-status={entry.status} key={entry.id}>
               <span
-                className={
-                  entry.status === "completed"
-                    ? "text-done"
-                    : entry.status === "in_progress"
-                      ? "text-ink"
-                      : "text-ink-2"
-                }
+                className={entry.status === "in_progress" ? "text-ink" : "text-ink-2"}
+                data-tone={entry.status === "completed" ? "done" : undefined}
               >
                 {entry.status === "completed" ? "✓" : entry.status === "in_progress" ? "▸" : "○"}
               </span>

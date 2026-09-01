@@ -168,7 +168,7 @@ export function FamilyWorkspaceDocPane() {
             onCommit={(next) => editAuthored(name, next)}
           />
           {family.length > 0 && (
-            <p className="face-mono t-caption mt-1 text-pea-ink">
+            <p className="face-mono t-caption mt-1" data-tone="pea">
               pea proposes {family[0]!.proposed} here — the card is above; typing your own value
               severs it instead.
             </p>
@@ -326,7 +326,9 @@ export function FamilyWorkspaceDocPane() {
             className="mb-1 flex items-baseline gap-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
           >
-            <span className="face-mono t-label t-upper text-pea-ink">pea</span>
+            <span className="face-mono t-label t-upper" data-tone="pea">
+              pea
+            </span>
             <span className="t-label t-upper text-ink-2">proposals · ephemeral · page-scoped</span>
           </div>
           {world.proposals.length === 0 ? (

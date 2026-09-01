@@ -220,8 +220,8 @@ export function useFamiliesColumns({
               className={cn(
                 scopeOf === "ProjectBindingOnly" && "italic text-ink-mute",
                 row.formulas[col.key] === "Present" && "text-ink-2",
-                value === "Positive Energy" && "text-pea-ink",
               )}
+              data-tone={value === "Positive Energy" ? "pea" : undefined}
             />
           );
         },

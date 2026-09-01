@@ -50,7 +50,6 @@ export function FixtureViews({
     .filter((name) => name !== typeName)
     .map((name) => ({ typeName: name, parts: buildParts(world, draft, name) }));
 
-  const partFill = (slug: string) => (focusedParts.has(slug) ? token("select") : "transparent");
   const partStroke = (slug: string) => (focusedParts.has(slug) ? token("ink") : token("ink-2"));
   /** Connectors are a KIND, not a state — the one legitimate viz spend on this page. */
   const connectorStroke = (slug: string) =>
@@ -156,7 +155,8 @@ export function FixtureViews({
                 /* THE ONE LEGAL DASH AMONG PARTS: a void must never read as material. */
                 const shared = {
                   ...hover(part.slug),
-                  fill: part.isVoid ? "none" : partFill(part.slug),
+                  fill: part.isVoid ? "none" : "transparent",
+                  "data-selected": active && !part.isVoid ? "" : undefined,
                   stroke: part.isVoid
                     ? active
                       ? token("ink")
@@ -202,7 +202,8 @@ export function FixtureViews({
                     cx={X(u)}
                     cy={Y(v)}
                     r={r}
-                    fill={partFill(part.slug)}
+                    fill="transparent"
+                    data-selected={active ? "" : undefined}
                     stroke={stroke}
                     strokeWidth={active ? 1.4 : 0.8}
                   >

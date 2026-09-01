@@ -54,7 +54,11 @@ export function AtlasVisual() {
                   <span className="face-mono">
                     {lane.label}
                     <span className="ml-1 text-ink-mute">{zs.length}</span>
-                    {calls > 0 && <span className="ml-1 text-alarm">·{calls}</span>}
+                    {calls > 0 && (
+                      <span className="ml-1" data-tone="alarm">
+                        ·{calls}
+                      </span>
+                    )}
                   </span>
                 </Press>
               );

@@ -139,7 +139,11 @@ export function WorldLane({
         <div className="grid gap-1 border-b-[0.5px] border-line px-3 py-2 t-caption face-mono">
           <div className="mb-0.5 t-upper text-ink">Cache estimate</div>
           <div className="grid grid-cols-[9px_minmax(0,1fr)_auto] items-center gap-1.5">
-            <span className="size-[9px] bg-done" />
+            <span
+              className="size-[9px]"
+              data-tone="done"
+              style={{ backgroundColor: "currentColor" }}
+            />
             <span>cache-read · 0.1×</span>
             <span>{fmtTok(totals.cached)}</span>
           </div>
@@ -150,7 +154,11 @@ export function WorldLane({
             <span>{fmtTok(totals.reprocessed)}</span>
           </div>
           {diff && cache.changed.size > 0 && cache.horizonRank !== null ? (
-            <div className="mt-0.5 border-l-2 border-caution pl-2 text-caution">
+            <div
+              className="mt-0.5 border-l-2 pl-2"
+              data-tone="caution"
+              style={{ borderColor: "currentColor" }}
+            >
               Δ this send: {whySentence(layers, cache, totals.reprocessed)}
             </div>
           ) : null}
@@ -241,8 +249,11 @@ export function WorldLane({
 
       {inspect ? (
         <div className="hairline-t mt-2 px-3 pt-2 pb-3 t-caption leading-relaxed text-ink-mute">
-          cache state <span className={cn(CACHE_BASE, CACHE_TONE.cached)}>≈ inferred</span> from a
-          frontend snapshot diff — the provider only reports aggregate cache totals.
+          cache state{" "}
+          <span className={CACHE_BASE} data-tone={CACHE_TONE.cached} data-wash>
+            ≈ inferred
+          </span>{" "}
+          from a frontend snapshot diff — the provider only reports aggregate cache totals.
         </div>
       ) : null}
     </div>
@@ -277,7 +288,13 @@ export function ItemRow({
           </span>
           <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap t-caption face-mono">
             {blast ? (
-              <span className={`${BLAST_BASE} ${BLAST_TONE[blast]}`}>{BLAST_LABEL[blast]}</span>
+              <span
+                className={cn(BLAST_BASE, !BLAST_TONE[blast] && "text-ink-2 border-line-2")}
+                data-tone={BLAST_TONE[blast]}
+                data-wash={BLAST_TONE[blast] ? "" : undefined}
+              >
+                {BLAST_LABEL[blast]}
+              </span>
             ) : null}
             {item.state ? (
               <span className={`${PILL_BASE} ${PILL_TONE[item.state]}`}>

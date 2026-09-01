@@ -137,7 +137,8 @@ export function AnatomyDrawing({
                 <span className="face-mono min-w-0 flex-1 truncate text-ink">{part.slug}</span>
                 {unbound > 0 && (
                   <span
-                    className="face-mono t-caption ml-auto shrink-0 text-caution"
+                    className="face-mono t-caption ml-auto shrink-0"
+                    data-tone="caution"
                     title={`${unbound} of this constituent's dimensions are frozen literals no parameter drives. They are the ghost rows at the bottom of the table.`}
                   >
                     {unbound}⚠

@@ -1,3 +1,45 @@
+/* Closed semantic tones. Call sites declare state; the language owns its rendering. */
+:where([data-tone="alarm"]) {
+  color: var(--pe-alarm);
+}
+
+:where([data-tone="caution"]) {
+  color: var(--pe-caution);
+}
+
+:where([data-tone="done"]) {
+  color: var(--pe-done);
+}
+
+:where([data-tone="commit"]) {
+  color: var(--pe-commit);
+}
+
+:where([data-tone="nav"]) {
+  color: var(--pe-nav);
+}
+
+:where([data-tone="pea"]) {
+  color: var(--pe-pea-ink);
+}
+
+:where([data-tone][data-wash]) {
+  border: 0.5px solid color-mix(in srgb, currentColor 55%, transparent);
+  background: color-mix(in srgb, currentColor 10%, var(--pe-on));
+}
+
+:where([aria-selected="true"], [aria-expanded="true"], [aria-pressed="true"], [data-selected]) {
+  background-color: var(--pe-select);
+}
+
+:where(svg [aria-selected="true"], svg [data-selected]) {
+  fill: var(--pe-select);
+}
+
+.prose-pe a {
+  color: var(--pe-nav);
+}
+
 /* =============================================================================================
    StateCell precedence — the only hand CSS left in components/lang.
    =============================================================================================

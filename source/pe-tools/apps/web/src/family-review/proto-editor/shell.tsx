@@ -158,8 +158,8 @@ export function StatePanel({
                   onClick={() => editor.setFocus(change.path)}
                   title={`Show ${change.path} in the json pane`}
                   size="caption"
+                  data-selected={editor.focus === change.path ? "" : undefined}
                   style={{
-                    backgroundColor: editor.focus === change.path ? token("select") : "transparent",
                     border: "none",
                     borderRadius: "var(--radius)",
                     cursor: "pointer",
@@ -247,10 +247,10 @@ export function RefToken({
         type="button"
         title={title}
         onClick={() => setOpen((prev) => !prev)}
+        data-selected={open ? "" : undefined}
         style={{
           padding: "0 1px",
           cursor: "pointer",
-          backgroundColor: open ? token("select") : "transparent",
           border: "none",
           borderBottom: `0.5px solid ${bound ? token("ink") : token("caution")}`,
           borderRadius: 0,
@@ -290,8 +290,8 @@ export function RefToken({
                     setOpen(false);
                   }}
                   size="label"
+                  data-selected={option === value ? "" : undefined}
                   style={{
-                    backgroundColor: option === value ? token("select") : "transparent",
                     border: "none",
                     cursor: "pointer",
                     color: token("ink"),
@@ -338,10 +338,10 @@ export function TextToken({
         if (event.key === "Enter") event.currentTarget.blur();
         if (event.key === "Escape") setDraft(null);
       }}
+      data-selected={draft != null ? "" : undefined}
       style={{
         width,
         padding: "0 2px",
-        backgroundColor: draft != null ? token("select") : "transparent",
         border: "none",
         borderBottom: `0.5px solid ${value ? token("ink") : token("caution")}`,
         borderRadius: 0,
@@ -363,8 +363,8 @@ export function TypeStage({ editor }: { editor: Editor }) {
           title={`Resolve every value on this surface for the ${name} type`}
           onClick={() => editor.setTypeName(name)}
           size="label"
+          data-selected={name === editor.typeName ? "" : undefined}
           style={{
-            backgroundColor: name === editor.typeName ? token("select") : "transparent",
             border: "none",
             borderRadius: "var(--radius)",
             cursor: "pointer",

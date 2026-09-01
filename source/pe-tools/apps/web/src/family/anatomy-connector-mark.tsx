@@ -10,7 +10,6 @@ export function ConnectorMark({
   X,
   Y,
   scale,
-  partFill,
   connectorStroke,
   hover,
 }: {
@@ -21,7 +20,6 @@ export function ConnectorMark({
   X: (value: number) => number;
   Y: (value: number) => number;
   scale: number;
-  partFill: (slug: string) => string;
   connectorStroke: (slug: string) => string;
   hover: (slug: string) => ReturnType<typeof hoverProps>;
 }) {
@@ -48,7 +46,8 @@ export function ConnectorMark({
           cx={X(u)}
           cy={Y(v)}
           r={(conn.w / 2) * scale}
-          fill={partFill(conn.slug)}
+          fill="transparent"
+          data-selected={active ? "" : undefined}
           stroke={stroke}
           strokeWidth={active ? 1.4 : 0.8}
         >
@@ -64,7 +63,8 @@ export function ConnectorMark({
           y={Y(v + conn.h / 2)}
           width={conn.w * scale}
           height={conn.h * scale}
-          fill={partFill(conn.slug)}
+          fill="transparent"
+          data-selected={active ? "" : undefined}
           stroke={stroke}
           strokeWidth={active ? 1.4 : 0.8}
         >
@@ -78,7 +78,8 @@ export function ConnectorMark({
         cx={X(u)}
         cy={Y(v)}
         r={3}
-        fill={partFill(conn.slug)}
+        fill="transparent"
+        data-selected={active ? "" : undefined}
         stroke={stroke}
         strokeWidth={active ? 1.4 : 0.8}
       >

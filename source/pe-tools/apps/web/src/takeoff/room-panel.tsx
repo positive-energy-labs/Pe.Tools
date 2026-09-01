@@ -94,7 +94,9 @@ function RoomPanel({
             <ul className="space-y-2">
               {open.map((flag) => (
                 <li key={flag}>
-                  <p className="face-mono t-value text-alarm">{flag}</p>
+                  <p className="face-mono t-value" data-tone="alarm">
+                    {flag}
+                  </p>
                   <p className="face-mono t-value text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
 
                   <span className="mt-0.5 flex gap-1">

@@ -36,10 +36,10 @@ export const chipRecipe = tv({
   variants: {
     tone: {
       meta: {},
-      caution: { base: "text-caution" },
-      done: { base: "text-done" },
-      alarm: { base: "text-alarm" },
-      pea: { base: "text-pea-ink" },
+      caution: {},
+      done: {},
+      alarm: {},
+      pea: {},
     },
     state: {
       solid: {},
@@ -68,7 +68,7 @@ export function FactChip({ children, tone = "meta", dashed, title }: FactChipPro
   return (
     <span
       className={base()}
-      data-tone={tone}
+      data-tone={tone === "meta" ? undefined : tone}
       data-seam={dashed === true ? "" : undefined}
       title={title}
     >

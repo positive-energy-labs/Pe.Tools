@@ -99,7 +99,7 @@ export function LevelStats({
             <StatLine
               label="calls"
               value={calls === 0 ? "none open" : `${calls} rooms need a human`}
-              tone={calls > 0 ? "text-alarm" : "text-done"}
+              tone={calls > 0 ? "alarm" : "done"}
             />
             <StatLine label="held" value={`${fmtNum(held, 0)} sf residue`} />
             <StatLine
@@ -109,7 +109,7 @@ export function LevelStats({
                   ? "closed — every declared foot accounted"
                   : `${fmtNum(residual, 0)} sf unaccounted`
               }
-              tone={Math.abs(residual) < 1 ? "text-done" : "text-alarm"}
+              tone={Math.abs(residual) < 1 ? "done" : "alarm"}
             />
           </div>
         </div>

@@ -121,7 +121,6 @@ export function Verb(props: VerbProps) {
       <button
         type="button"
         className={slots.base()}
-        data-tone={tone}
         disabled={inert}
         onClick={onClick}
         title={reason}

@@ -229,7 +229,12 @@ class PartsBoundary extends Component<{ children: ReactNode }, { error?: string 
     console.error("[workbench] message-part render failed", error, info.componentStack);
   }
   render(): ReactNode {
-    if (this.state.error) return <div className="t-prose text-caution">{this.state.error}</div>;
+    if (this.state.error)
+      return (
+        <div className="t-prose" data-tone="caution">
+          {this.state.error}
+        </div>
+      );
     return this.props.children;
   }
 }
@@ -281,9 +286,8 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         {target ? <code>{target}</code> : null}
 
         <span
-          className={`ml-auto t-caption face-mono tracking-[0.02em] ${
-            isError ? "text-caution" : status?.type === "running" ? "text-ink-2" : "text-done"
-          }`}
+          className={`ml-auto t-caption face-mono tracking-[0.02em] ${status?.type === "running" ? "text-ink-2" : ""}`}
+          data-tone={isError ? "caution" : status?.type === "running" ? undefined : "done"}
         >
           {isError ? "err" : status?.type === "running" ? "run" : "ok"}
         </span>

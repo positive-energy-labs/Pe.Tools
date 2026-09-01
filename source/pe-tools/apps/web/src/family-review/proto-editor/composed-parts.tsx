@@ -167,12 +167,7 @@ export function SentenceGrids({
                   <div
                     key={`${row.id}/${cell.slot}`}
                     className="flex items-baseline gap-1 px-1"
-                    style={{
-                      backgroundColor:
-                        selected === row.id || focused(row.pointer)
-                          ? token("select")
-                          : "transparent",
-                    }}
+                    data-selected={selected === row.id || focused(row.pointer) ? "" : undefined}
                   >
                     <SlotCell editor={editor} cell={cell} rowId={row.id} onSelect={onSelect} />
                   </div>

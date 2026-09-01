@@ -4,7 +4,7 @@ import { tv, type VariantProps } from "#/lib/tv";
 import "./lang.css";
 
 export const pressRecipe = tv({
-  base: "cursor-pointer appearance-none border border-transparent bg-transparent enabled:hover:veil focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed aria-pressed:bg-select aria-expanded:bg-select",
+  base: "cursor-pointer appearance-none border border-transparent bg-transparent enabled:hover:veil focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
   variants: {
     tone: {
       neutral: "text-ink",
@@ -21,7 +21,7 @@ export const pressRecipe = tv({
     },
     state: {
       rest: "",
-      selected: "bg-select text-ink",
+      selected: "text-ink",
       disabled: "disabled:opacity-40 disabled:italic",
       focused: "z-raised outline-2 outline-ink",
     },
@@ -34,6 +34,11 @@ export type PressProps = Omit<React.ComponentProps<"button">, "className" | "siz
 
 export function Press({ type, tone, size, state, ...props }: PressProps) {
   return (
-    <button type={type ?? "button"} className={pressRecipe({ tone, size, state })} {...props} />
+    <button
+      type={type ?? "button"}
+      className={pressRecipe({ tone, size, state })}
+      data-selected={state === "selected" ? "" : undefined}
+      {...props}
+    />
   );
 }

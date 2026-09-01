@@ -9,7 +9,7 @@ export function StatLine({
 }: {
   label: string;
   value: string;
-  tone?: string;
+  tone?: "alarm" | "caution" | "done" | "commit" | "nav" | "pea";
   muted?: boolean;
   truncate?: boolean;
 }) {
@@ -21,8 +21,8 @@ export function StatLine({
           "min-w-0 flex-1",
           truncate ? "truncate" : "break-words",
           muted && "text-ink-2",
-          tone,
         )}
+        data-tone={tone}
       >
         {value}
       </span>

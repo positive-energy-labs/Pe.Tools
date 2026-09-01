@@ -119,13 +119,19 @@ export function ReadCell({
   value,
   reason,
   className,
+  "data-tone": dataTone,
 }: {
   value: React.ReactNode;
   reason?: string;
   className?: string;
+  "data-tone"?: "alarm" | "caution" | "done" | "commit" | "nav" | "pea";
 }) {
   return (
-    <span title={reason} className={cn("face-mono t-value block truncate px-1.5", className)}>
+    <span
+      title={reason}
+      className={cn("face-mono t-value block truncate px-1.5", className)}
+      data-tone={dataTone}
+    >
       {value}
     </span>
   );
