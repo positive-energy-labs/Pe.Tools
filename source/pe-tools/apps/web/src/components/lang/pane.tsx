@@ -47,9 +47,7 @@ export function Pane({ kind, title, meta, actions, toolbar, scroll, children }: 
             {title != null && (
               <h2 className="t-label t-upper min-w-0 truncate text-ink-2">{title}</h2>
             )}
-            {meta != null && (
-              <span className="face-mono t-value min-w-0 truncate text-ink-2">{meta}</span>
-            )}
+            {meta != null && <span className="face-mono min-w-0 truncate text-ink-2">{meta}</span>}
           </div>
           {actions != null && (
             <div data-slot="pane-actions" className="flex shrink-0 items-center gap-0.5">

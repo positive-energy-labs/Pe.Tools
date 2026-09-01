@@ -17,12 +17,12 @@ export const comboboxRecipe = tv({
   slots: {
     trigger: "[&_svg:not([class*='size-'])]:size-3.5",
     list: "no-scrollbar max-h-[min(15.75rem,calc(var(--available-height)-2.25rem))] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
-    item: "relative flex min-h-7 w-full cursor-default items-center gap-2 rounded-md px-2 py-1 t-value outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink not-data-[variant=destructive]:data-highlighted:**:text-ink data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+    item: "relative flex min-h-7 w-full cursor-default items-center gap-2 rounded-md px-2 py-1 outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink not-data-[variant=destructive]:data-highlighted:**:text-ink data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
     empty:
-      "hidden w-full justify-center py-2 text-center t-value text-ink-2 group-data-empty/combobox-content:flex",
+      "hidden w-full justify-center py-2 text-center text-ink-2 group-data-empty/combobox-content:flex",
     chips:
-      "flex min-h-7 flex-wrap items-center gap-1 rounded-md border border-line bg-line/20 bg-clip-padding px-2 py-0.5 t-value transition-colors focus-within:border-line-2 focus-within:ring-2 focus-within:ring-line-2/30 has-aria-invalid:border-caution has-aria-invalid:ring-2 has-aria-invalid:ring-caution/20 has-data-[slot=combobox-chip]:px-1 dark:bg-line/30 dark:has-aria-invalid:border-caution/50 dark:has-aria-invalid:ring-caution/40",
-    chip: "flex h-[calc(--spacing(4.75))] w-fit items-center justify-center gap-1 rounded-[calc(var(--radius-sm)-2px)] bg-ink-2/10 px-1.5 t-value font-medium whitespace-nowrap text-ink has-disabled:pointer-events-none has-disabled:cursor-not-allowed has-disabled:opacity-50 has-data-[slot=combobox-chip-remove]:pr-0",
+      "flex min-h-7 flex-wrap items-center gap-1 rounded-md border border-line bg-line/20 bg-clip-padding px-2 py-0.5 transition-colors focus-within:border-line-2 focus-within:ring-2 focus-within:ring-line-2/30 has-aria-invalid:border-caution has-aria-invalid:ring-2 has-aria-invalid:ring-caution/20 has-data-[slot=combobox-chip]:px-1 dark:bg-line/30 dark:has-aria-invalid:border-caution/50 dark:has-aria-invalid:ring-caution/40",
+    chip: "flex h-[calc(--spacing(4.75))] w-fit items-center justify-center gap-1 rounded-[calc(var(--radius-sm)-2px)] bg-ink-2/10 px-1.5 font-medium whitespace-nowrap text-ink has-disabled:pointer-events-none has-disabled:cursor-not-allowed has-disabled:opacity-50 has-data-[slot=combobox-chip-remove]:pr-0",
     chipInput: "min-w-16 flex-1 outline-none",
   },
 });

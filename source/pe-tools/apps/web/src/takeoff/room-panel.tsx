@@ -52,7 +52,7 @@ function RoomPanel({
       <div className="-m-2 divide-y divide-line">
         <div className="px-2.5 py-2">
           <h2 className="t-title text-ink">{room.name}</h2>
-          <p className="face-mono t-value mt-1 flex flex-wrap items-center gap-x-1.5 text-ink-2">
+          <p className="face-mono mt-1 flex flex-wrap items-center gap-x-1.5 text-ink-2">
             <StateDot {...stateMeta(state)} />
             <FactChip tone={state === "call" ? "alarm" : undefined} title={STATE_META[state].note}>
               {STATE_META[state].label}
@@ -67,7 +67,7 @@ function RoomPanel({
           <div className="px-2.5 py-2">
             <p className="t-label t-upper mb-1 text-ink-2">manual j — this room</p>
             <div className="grid grid-cols-[4rem_1fr] items-center gap-y-1">
-              <span className="face-mono t-value pr-1.5 text-right text-ink-2">ceil ft</span>
+              <span className="face-mono pr-1.5 text-right text-ink-2">ceil ft</span>
               <span>
                 <NumberCell
                   value={room.ceilingFt}
@@ -78,7 +78,7 @@ function RoomPanel({
               </span>
               {MANUAL_J.map((mj) => (
                 <Fragment key={mj.field}>
-                  <span className="face-mono t-value pr-1.5 text-right text-ink-2">{mj.label}</span>
+                  <span className="face-mono pr-1.5 text-right text-ink-2">{mj.label}</span>
                   <span>
                     <ManualJField room={room} field={mj.field} onPatch={onPatch} />
                   </span>
@@ -94,10 +94,10 @@ function RoomPanel({
             <ul className="space-y-2">
               {open.map((flag) => (
                 <li key={flag}>
-                  <p className="face-mono t-value" data-tone="alarm">
+                  <p className="face-mono" data-tone="alarm">
                     {flag}
                   </p>
-                  <p className="face-mono t-value text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
+                  <p className="face-mono text-ink-2">{FLAG_MEANING[flag] ?? "no blurb"}</p>
 
                   <span className="mt-0.5 flex gap-1">
                     <Verb
@@ -198,7 +198,7 @@ function RoomPanel({
 
         <div className="px-2.5 py-2">
           <p className="t-label t-upper mb-1 text-ink-2">addressable</p>
-          <p className="face-mono t-value break-all px-1.5 py-1 text-ink-2 on-recess">{url}</p>
+          <p className="face-mono break-all px-1.5 py-1 text-ink-2 on-recess">{url}</p>
         </div>
       </div>
     </Pane>

@@ -14,7 +14,7 @@ export function StatLine({
   truncate?: boolean;
 }) {
   return (
-    <p className="face-mono flex gap-1.5 t-value">
+    <p className="face-mono flex gap-1.5">
       <span className="w-16 shrink-0 text-right text-ink-2">{label}</span>
       <span
         className={cn(

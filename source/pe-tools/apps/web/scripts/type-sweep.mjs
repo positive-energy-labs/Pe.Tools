@@ -4,9 +4,11 @@ import { pathToFileURL } from "node:url";
 
 const args = process.argv.slice(2);
 if (args[0] === "--") args.shift();
+const probeTValue = args.includes("--probe-t-value");
+if (probeTValue) args.splice(args.indexOf("--probe-t-value"), 1);
 const [baseUrl, ...routes] = args;
 if (!baseUrl || routes.length === 0) {
-  console.error("usage: vp run type-sweep -- <base-url> <route> [route ...]");
+  console.error("usage: vp run type-sweep -- <base-url> [--probe-t-value] <route> [route ...]");
   process.exit(2);
 }
 
@@ -35,17 +37,33 @@ const browserDefault = await page.evaluate(() => {
 });
 
 for (const routeSpec of routes) {
-  const targeting = routeSpec.endsWith("#targeting");
-  const route = targeting ? routeSpec.slice(0, -"#targeting".length) : routeSpec;
+  const mode = routeSpec.match(/#(targeting|room|zone|field-details)$/)?.[1];
+  const route = mode ? routeSpec.slice(0, -(mode.length + 1)) : routeSpec;
   await page.goto(new URL(route, baseUrl).href, { waitUntil: "domcontentloaded", timeout: 30_000 });
   await page.waitForTimeout(1_500);
 
-  if (targeting) {
+  if (mode === "targeting") {
     const trigger = page.locator('[aria-haspopup="dialog"]').first();
     await trigger.click();
     const search = page.locator('[aria-label^="Search "]').first();
     await search.fill("__type_sweep_no_match__");
     await page.waitForTimeout(100);
+  }
+  if (mode === "room") {
+    await page.getByText("room table", { exact: true }).click();
+    await page
+      .locator("tbody tr")
+      .first()
+      .evaluate((row) => row.click());
+    await page.waitForTimeout(100);
+  }
+  if (mode === "zone") {
+    await page.locator('button[title*="sf declared"]').first().click();
+    await page.waitForTimeout(100);
+  }
+  if (mode === "field-details") {
+    await page.getByRole("button", { name: "Field details" }).first().hover();
+    await page.waitForTimeout(250);
   }
 
   const offenders = await page.evaluate((defaults) => {
@@ -134,6 +152,86 @@ for (const routeSpec of routes) {
   console.log(`${routeSpec}\t${offenders.length}`);
   for (const offender of offenders) {
     console.log(`  ${offender.reason}\t${offender.path}\t${JSON.stringify(offender.text)}`);
+  }
+
+  if (probeTValue) {
+    const probes = await page.evaluate(() => {
+      const tier = /^t-(caption|label|value|prose|title|head|display)$/;
+      const visible = (element) => {
+        const style = getComputedStyle(element);
+        return (
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          element.getClientRects().length > 0
+        );
+      };
+      const pathOf = (element) => {
+        const parts = [];
+        for (
+          let current = element;
+          current && current !== document.body;
+          current = current.parentElement
+        ) {
+          const id = current.id ? `#${current.id}` : "";
+          const siblings = current.parentElement
+            ? [...current.parentElement.children].filter(
+                (child) => child.tagName === current.tagName,
+              )
+            : [];
+          const nth = siblings.length > 1 ? `:nth-of-type(${siblings.indexOf(current) + 1})` : "";
+          parts.unshift(`${current.localName}${id}${nth}`);
+          if (parts.length === 6) break;
+        }
+        return `body > ${parts.join(" > ")}`;
+      };
+      const ancestorTier = (element) => {
+        for (let current = element.parentElement; current; current = current.parentElement) {
+          const found = [...current.classList].find((name) => tier.test(name));
+          if (found) return found;
+        }
+        return "body";
+      };
+      const sourceOf = (element) => {
+        const key = Object.keys(element).find((name) => name.startsWith("__reactFiber$"));
+        for (let fiber = key ? element[key] : null; fiber; fiber = fiber.return) {
+          const stack = fiber._debugStack?.stack;
+          const match = stack?.match(/\/src\/[^?\n)]+:\d+:\d+/);
+          if (match) return match[0].slice(1);
+        }
+        return null;
+      };
+
+      return [...document.querySelectorAll(".t-value")].filter(visible).map((element) => {
+        const before = getComputedStyle(element);
+        const fontSize = before.fontSize;
+        const lineHeight = before.lineHeight;
+        element.classList.remove("t-value");
+        const after = getComputedStyle(element);
+        const nextFontSize = after.fontSize;
+        const nextLineHeight = after.lineHeight;
+        element.classList.add("t-value");
+        return {
+          changed: fontSize !== nextFontSize || lineHeight !== nextLineHeight,
+          before: `${fontSize}/${lineHeight}`,
+          after: `${nextFontSize}/${nextLineHeight}`,
+          ancestorTier: ancestorTier(element),
+          source: sourceOf(element),
+          path: pathOf(element),
+          text: (element.textContent ?? element.getAttribute("aria-label") ?? "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 80),
+        };
+      });
+    });
+    console.log(
+      `${routeSpec}\tt-value ${probes.filter((probe) => probe.changed).length}/${probes.length} changed`,
+    );
+    for (const probe of probes) {
+      console.log(
+        `  ${probe.changed ? "LOAD" : "SAME"}\t${probe.before} -> ${probe.after}\t${probe.ancestorTier}\t${probe.source ?? probe.path}\t${JSON.stringify(probe.text)}`,
+      );
+    }
   }
 }
 

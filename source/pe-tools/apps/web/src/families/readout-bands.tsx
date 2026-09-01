@@ -79,9 +79,9 @@ export function FamiliesReadoutBands() {
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </Press>
                     </td>
-                    <td className="face-mono t-value w-56 truncate">{entry.familyName}</td>
+                    <td className="face-mono w-56 truncate">{entry.familyName}</td>
                     <td
-                      className="face-mono t-value w-20 truncate"
+                      className="face-mono w-20 truncate"
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
@@ -107,12 +107,10 @@ export function FamiliesReadoutBands() {
               {outsideProfile.map((family) => (
                 <tr key={`outside-${family.familyId}`} className="hairline-b opacity-60">
                   <td className="w-8 text-center">
-                    <span className="face-mono t-value text-ink-2">✕</span>
+                    <span className="face-mono text-ink-2">✕</span>
                   </td>
-                  <td className="face-mono t-value w-56 truncate text-ink-mute">
-                    {family.familyName}
-                  </td>
-                  <td className="face-mono t-value w-20 text-ink-mute">—</td>
+                  <td className="face-mono w-56 truncate text-ink-mute">{family.familyName}</td>
+                  <td className="face-mono w-20 text-ink-mute">—</td>
                   <td className="face-mono t-caption truncate text-ink-mute" colSpan={2}>
                     in scope, but the bound profile does not claim this family
                   </td>
@@ -161,7 +159,7 @@ export function FamiliesReadoutBands() {
             <tbody>
               {applyData.receipts.map((entry) => (
                 <tr key={entry.familyId} className="hairline-b">
-                  <td className="face-mono t-value w-56 truncate py-0.5">
+                  <td className="face-mono w-56 truncate py-0.5">
                     {entry.familyName ?? `element ${entry.familyId}`}
                   </td>
                   <td className="w-20 py-0.5">

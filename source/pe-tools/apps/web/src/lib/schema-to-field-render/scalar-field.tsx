@@ -73,9 +73,7 @@ export function ScalarField({
               size="sm"
               onCheckedChange={field.change}
             />
-            <span className="face-mono t-value text-ink-2">
-              {field.value ? "Enabled" : "Disabled"}
-            </span>
+            <span className="face-mono text-ink-2">{field.value ? "Enabled" : "Disabled"}</span>
           </div>
         ) : options.length > 0 && allowsCustomValue ? (
           <>

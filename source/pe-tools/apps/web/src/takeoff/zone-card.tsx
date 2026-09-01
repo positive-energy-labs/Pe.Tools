@@ -57,7 +57,7 @@ export function ZoneCard({
         head={
           <>
             <ZoneThumb zone={zone.zone} className="size-4" />
-            <span className="face-mono t-value shrink-0">{zone.zone.key}</span>
+            <span className="face-mono shrink-0">{zone.zone.key}</span>
             <span className="t-label min-w-0 flex-1 truncate text-ink-2">{zone.name}</span>
             <Press
               type="button"
@@ -92,7 +92,7 @@ export function ZoneCard({
               </FactChip>
             )}
           </div>
-          <div className="face-mono t-value flex items-center gap-1.5 text-ink-2">
+          <div className="face-mono flex items-center gap-1.5 text-ink-2">
             <ZoneStateBar zone={zone} states={states} className="w-16" />
             <span title={STAGE_BLURB[zone.stage]}>
               {zone.rooms.length} rooms · {fmtNum(zone.zone.declaredSqft, 0)} sf · {zone.stage}
@@ -109,7 +109,7 @@ export function ZoneCard({
             </FactChip>
           )}
           {zoneSystems.map((s) => (
-            <p key={s.tag} className="face-mono t-value text-ink-2">
+            <p key={s.tag} className="face-mono text-ink-2">
               {s.tag} · {fmtNum(s.sensibleBtuh, 0)} Btu/h
               {s.overCap ? ` — over the ${SENSIBLE_CAP_BTUH.toLocaleString()} cap` : ""}
             </p>

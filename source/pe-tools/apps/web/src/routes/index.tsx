@@ -281,7 +281,7 @@ function App() {
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
             <span className="size-2" />
-            <span className="t-value text-ink">Positive Energy</span>
+            <span className="text-ink">Positive Energy</span>
           </div>
           <div className="flex items-center gap-3">
             <UpdateButton />

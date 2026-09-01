@@ -281,7 +281,7 @@ export function ProposalCard({
       <div className="face-mono t-label text-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
-      <p className="mt-0.5 t-value leading-snug text-ink">{proposal.note}</p>
+      <p className="mt-0.5 leading-snug text-ink">{proposal.note}</p>
       {blockMd && (
         <p
           className="face-mono mt-1 max-h-[3lh] overflow-hidden border-l border-line pl-1.5 whitespace-pre-line t-caption text-ink-2"

@@ -66,7 +66,7 @@ export default function RunBrowser() {
   }
 
   if (!runs) {
-    return <div className="p-8 t-value text-ink-2">loading run pool…</div>;
+    return <div className="p-8 text-ink-2">loading run pool…</div>;
   }
 
   if (runs.length === 0 || !curId) {
