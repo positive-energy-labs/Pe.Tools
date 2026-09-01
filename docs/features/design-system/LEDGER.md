@@ -64,6 +64,19 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   padding. Folded into `base.css` `:root`; the 24px middle variant and the throwaway switcher were
   deleted on verdict. Consequence: caption, label and value now share one 10px size and differ
   only by face, case and weight — see open questions.
+- 2026-08-31 — Proposal-state demiurge (round 2, kaitpw: "B definitely, + D, and no denied
+  state"): the trichotomy (`agent-contracts/src/trichotomy.ts` — proposal → staged → committed,
+  `review` marks aside) is the ONE proposal lifecycle. No `denied` state: a denial clears the
+  proposal and the cell shows the real value again. No `written` state: commit clears `staged`;
+  saved/unsaved and fresh/stale carry what those two tried to say. Family's
+  `ProposalVerdict`/`CellVerdict` (`family/world.ts:145`) and the proposal-flow fixture's
+  `review` are parallel machines owed deletion; one shared reader derives `StateCellProps` from
+  a trichotomy cell so routes cannot re-derive the mapping. `cap{readonly,excluded}` collapse to
+  locked + reason; `nohome` stays — it draws the seam. `stagedBy` plumbs from `proposal.by`.
+- 2026-08-31 — Per-cell grounding stays even when several cells cite one OCR block (kaitpw).
+  The card-scale footline may not wrap a cell to two lines: it collapses to hover; the 10px
+  floor forbids shrinking it. Locate is the cell's own `onLocate`; family's rail locate icon
+  (`family/marks.tsx`) dies into it.
 - 2026-08-31 — Takeoffs annotation round, the language-level pieces: the targeting head sits in
   outer scroll flow and the work area pins full-viewport (`anatomy/workspace.tsx`, all Workspace
   routes); `Press` grows `hover: veil|bare` and `frame: none|line`; sortable table headers wear
@@ -366,6 +379,19 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - Two hand-rolled Set multi-selects remain: `families/store.ts:75` and `routes/grilles.tsx:37`.
 - `ops/primitives.tsx` `DataTable<Row>` is a second, incompatible `Column<Row>` with 12 consumers;
   16 files still hand-roll a `<table>`.
+
+### Annotation backlog (2026-08-31, dispatched to primitives)
+
+- Scrollbar law: one thin brutalist scrollbar treatment in `base.css`; the page-body scrollbar is
+  always hidden (the scroll-away `main` in `anatomy/workspace.tsx` currently shows one); two
+  stacked bars (right sidebar panes) is the defect the law exists to kill.
+- `Press` `frame="line"` needs padding — a border with zero inset reads as a tight box.
+- Pane-header meta prose overflows (family): meta belongs in `HelpTip`, not inline; header
+  controls (`Switcher`, `Verb`) must share one height. Census the suspected second switcher.
+- Rail zone bars right-align inside the pick item; cell dropdown (`CellSelect`) and header facet
+  popup still read as two languages — one menu primitive owed.
+- Verdict-rail sticky header shows a white line at its left edge (family, first locked column).
+- Readout-band FactChip needs breathing room from the rail above.
 
 ### Open questions carried forward
 
