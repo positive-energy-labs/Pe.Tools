@@ -17,7 +17,14 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
   const railColumn = (): Column<PRow> => ({
     key: "rail",
     label: "",
-    group: "PARAMETER",
+    // THE GROUP ROW CARRIES ONLY WHAT THE COLUMN ROW CANNOT (2026-08-31). The group label read
+    // "PARAMETER" over columns already labelled "parameter" and "state" — the word said nothing
+    // the leaf labels did not. The group is kept (every column must carry one: an ungrouped
+    // column spans both header rows and distorts the measured height the sticky offset comes
+    // from) but its LABEL is empty, so the identity block is grouped by its rule and named by its
+    // leaves. "PROFILE" over the type columns stays: nothing at the leaf level says the three
+    // type columns are one document.
+    group: "",
     width: "w-6",
     title:
       "The proposal rail — the page's answer to 'where has pea read', readable top to bottom without reading a single value. A dot means one proposal on this row; a number means several. It decides nothing and locates nothing: click the CELL that wears the fold to bring its card into the sidebar, because that is the cell the proposal is about.",
@@ -55,7 +62,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
   const identityColumn = (state: MasterTableState): Column<PRow> => ({
     key: "param",
     label: "parameter",
-    group: "PARAMETER",
+    group: "",
     width: "w-64",
     // Sorting NEVER lifts a ghost above a parameter — the rank rides in front of the name. See
     // pinnedSort: this is an emulation of a row-pinning primitive MasterTable does not have.

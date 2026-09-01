@@ -57,7 +57,7 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
     label: "state",
     title:
       "The row's worst verdict across all three types — what this parameter is most asking of you. Filter it to work one kind of trouble at a time. A ghost row's state is `unbound`, which is filterable like any other: that is how you ask the table for every number in this family that nothing can reach.",
-    group: "PARAMETER",
+    group: "",
     width: "w-36",
     facet: (row) => rowVerdict(row).word,
     // The state column SURVIVES the live column's death, and is careful about why. It carries no

@@ -9,6 +9,17 @@ import { Seam, SectionLabel } from "#/families/readout-primitives";
 import { useFamiliesWorkspace } from "#/families/workspace-context";
 import { cn } from "#/lib/utils";
 
+/**
+ * THE TWO READOUT TABLES, on the ruled idiom (2026-08-31, `MasterTable` draws SEPARATE borders).
+ * A row is `--item-h` and every rule is drawn by the CELL, because a collapsed border belongs to
+ * the table and does not travel with its cell. Neither of these is a `MasterTable`: they are
+ * fixed-shape readouts inside a 176px band that already carries its own label and chips, and a
+ * `MasterTable` would bring a second search box, scope label and summary row into it. Porting the
+ * decision queue when it grows sort/filter/facet needs is recorded as owed.
+ */
+const QUEUE_ROW = "h-(--item-h)";
+const QUEUE_CELL = "hairline-b px-(--item-pad-x) align-middle";
+
 export function FamiliesReadoutBands() {
   const {
     fixture,
@@ -42,16 +53,22 @@ export function FamiliesReadoutBands() {
               </FactChip>
             )}
           </div>
-          <table className="mt-0.5 w-full table-fixed border-collapse leading-tight">
+          {/* THE RULED TABLE IDIOM (2026-08-31): separate borders at zero spacing, rows at
+              `--item-h`, tier type. This queue was the last table in the app drawn the old way —
+              `border-collapse` + a raw `leading-tight` + rows that measured 12.5-15px, stacked
+              directly above the 20px families matrix on the same page. A collapsed border belongs
+              to the TABLE, so every rule here is drawn by the CELL instead (`hairline-b`), which
+              is the same move `MasterTable` made and the reason its rules survive a sticky cell. */}
+          <table className="mt-0.5 w-full table-fixed border-separate border-spacing-0 t-value">
             <thead className="face-mono t-caption t-upper text-ink-mute">
-              <tr className="hairline-b">
-                <th className="w-8 font-normal">
+              <tr className={QUEUE_ROW}>
+                <th className={cn(QUEUE_CELL, "w-8 font-normal")}>
                   <span className="sr-only">include</span>
                 </th>
-                <th className="w-56 text-left font-normal">family</th>
-                <th className="w-20 text-left font-normal">actions</th>
-                <th className="text-left font-normal">profile source</th>
-                <th className="w-80 text-left font-normal">exception</th>
+                <th className={cn(QUEUE_CELL, "w-56 text-left font-normal")}>family</th>
+                <th className={cn(QUEUE_CELL, "w-20 text-left font-normal")}>actions</th>
+                <th className={cn(QUEUE_CELL, "text-left font-normal")}>profile source</th>
+                <th className={cn(QUEUE_CELL, "w-80 text-left font-normal")}>exception</th>
               </tr>
             </thead>
             <tbody>
@@ -61,9 +78,9 @@ export function FamiliesReadoutBands() {
                 return (
                   <tr
                     key={entry.familyId}
-                    className={cn("hairline-b", (flag !== null || excluded) && "text-ink-mute")}
+                    className={cn(QUEUE_ROW, (flag !== null || excluded) && "text-ink-mute")}
                   >
-                    <td className="w-8 text-center">
+                    <td className={cn(QUEUE_CELL, "w-8 text-center")}>
                       <Press
                         type="button"
                         disabled={flag !== null}
@@ -82,16 +99,18 @@ export function FamiliesReadoutBands() {
                         {flag !== null ? "✕" : excluded ? "□" : "▪"}
                       </Press>
                     </td>
-                    <td className="face-mono w-56 truncate">{entry.familyName}</td>
+                    <td className={cn(QUEUE_CELL, "face-mono w-56 truncate")}>
+                      {entry.familyName}
+                    </td>
                     <td
-                      className="face-mono w-20 truncate"
+                      className={cn(QUEUE_CELL, "face-mono w-20 truncate")}
                       title="Lowered actions: the concrete parameter edits the plan compiled for this family. Zero means the family already matches the profile."
                     >
                       {entry.plan.loweredActions.length} action
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className="face-mono t-caption truncate text-ink-2"
+                      className={cn(QUEUE_CELL, "face-mono t-caption truncate text-ink-2")}
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
@@ -99,7 +118,7 @@ export function FamiliesReadoutBands() {
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
                     <td
-                      className="face-mono t-caption w-80 truncate text-ink-mute"
+                      className={cn(QUEUE_CELL, "face-mono t-caption w-80 truncate text-ink-mute")}
                       title={flag ?? ""}
                     >
                       {flag ?? ""}
@@ -108,13 +127,18 @@ export function FamiliesReadoutBands() {
                 );
               })}
               {outsideProfile.map((family) => (
-                <tr key={`outside-${family.familyId}`} className="hairline-b opacity-60">
-                  <td className="w-8 text-center">
+                <tr key={`outside-${family.familyId}`} className={cn(QUEUE_ROW, "opacity-60")}>
+                  <td className={cn(QUEUE_CELL, "w-8 text-center")}>
                     <span className="face-mono text-ink-2">✕</span>
                   </td>
-                  <td className="face-mono w-56 truncate text-ink-mute">{family.familyName}</td>
-                  <td className="face-mono w-20 text-ink-mute">—</td>
-                  <td className="face-mono t-caption truncate text-ink-mute" colSpan={2}>
+                  <td className={cn(QUEUE_CELL, "face-mono w-56 truncate text-ink-mute")}>
+                    {family.familyName}
+                  </td>
+                  <td className={cn(QUEUE_CELL, "face-mono w-20 text-ink-mute")}>—</td>
+                  <td
+                    className={cn(QUEUE_CELL, "face-mono t-caption truncate text-ink-mute")}
+                    colSpan={2}
+                  >
                     in scope, but the bound profile does not claim this family
                   </td>
                 </tr>
@@ -158,14 +182,14 @@ export function FamiliesReadoutBands() {
               </FactChip>
             )}
           </div>
-          <table className="mt-1 w-full border-collapse">
+          <table className="mt-1 w-full border-separate border-spacing-0 t-value">
             <tbody>
               {applyData.receipts.map((entry) => (
-                <tr key={entry.familyId} className="hairline-b">
-                  <td className="face-mono w-56 truncate py-0.5">
+                <tr key={entry.familyId} className={QUEUE_ROW}>
+                  <td className={cn(QUEUE_CELL, "face-mono w-56 truncate")}>
                     {entry.familyName ?? `element ${entry.familyId}`}
                   </td>
-                  <td className="w-20 py-0.5">
+                  <td className={cn(QUEUE_CELL, "w-20")}>
                     <FactChip
                       tone={entry.success ? "done" : "alarm"}
                       title={
@@ -179,14 +203,14 @@ export function FamiliesReadoutBands() {
                     </FactChip>
                   </td>
                   <td
-                    className="face-mono t-caption w-40 py-0.5 text-ink-2"
+                    className={cn(QUEUE_CELL, "face-mono t-caption w-40 text-ink-2")}
                     title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
                   >
                     {entry.parametersChanged} changed · +{entry.diffSummary.added} −
                     {entry.diffSummary.removed} ~{entry.diffSummary.modified}
                   </td>
                   <td
-                    className="face-mono t-caption truncate py-0.5 text-ink-2"
+                    className={cn(QUEUE_CELL, "face-mono t-caption truncate text-ink-2")}
                     title={
                       entry.operationsRun.length > 0
                         ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
@@ -195,7 +219,7 @@ export function FamiliesReadoutBands() {
                   >
                     {entry.operationsRun.join(" · ") || (entry.error ?? "")}
                   </td>
-                  <td className="w-24 py-0.5 text-right">
+                  <td className={cn(QUEUE_CELL, "w-24 text-right")}>
                     {entry.artifactDirectoryPath && (
                       /* Leaving the app entirely — nav:out, which is the direction browsers
                          already taught. It writes nothing, so it is not blue-filled. */
