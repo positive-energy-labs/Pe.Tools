@@ -40,6 +40,11 @@ Call sites declare state; the language CSS owns what state looks like. Concretel
 5. **Theme.** Every dual-theme token is one `light-dark()` declaration in `base.css`. Dark mode
    is the `.dark` class plus inline `color-scheme` (set by the theme toggle); a class-only
    toggle resolves `light-dark()` wrong — test theme claims through the real toggle.
+6. **Density (settled 2026-08-31, density round 1).** Two heights, both in `base.css`:
+   `--item-h` (20px) for every list-shaped row — table row, menu/combobox/command item,
+   pick-list item, `Verb` — and `--control-h` (24px) for every freestanding control. Author them
+   as `h-(--item-h)` / `min-h-(--item-h)` / `h-(--control-h)`; a raw `h-7`/`h-6` on a row or
+   control is a restatement. A third height is a ledger decision, not a call-site improvisation.
 
 New vocabulary lands as: the CSS role in `components/lang/lang.css` or `design-lang.css`, its
 registration in the guard's `AUTHORING`/loader lists, a guard that fails when it is misused,

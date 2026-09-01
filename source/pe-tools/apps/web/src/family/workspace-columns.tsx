@@ -152,12 +152,12 @@ export function useFamilyColumns(core: FamilyWorkspaceCore) {
     const literal = bindingOf(world, draft, slug, property);
     if (binding?.slug === slug && binding.property === property)
       return (
-        <span className="flex h-7 items-center px-1">
+        <span className="flex h-(--item-h) items-center px-1">
           {bindPicker(slug, property, row.dataType)}
         </span>
       );
     return (
-      <span className="flex h-7 items-center gap-1 px-1.5">
+      <span className="flex h-(--item-h) items-center gap-1 px-(--item-pad-x)">
         <StateDot tone="caution" />
         <span
           title={`UNBOUND — ${literal} is frozen into the geometry of ${slug}. Nothing in the profile, no type, and no schedule can reach it.`}

@@ -7,12 +7,12 @@ export const selectRecipe = tv({
   slots: {
     value: "truncate",
     trigger:
-      "flex h-7 w-full items-center justify-between gap-2 rounded-md border border-line bg-transparent px-2 t-value whitespace-nowrap outline-none transition-colors hover:bg-line/50 focus-visible:border-line-2 focus-visible:ring-2 focus-visible:ring-line-2/30 disabled:pointer-events-none disabled:opacity-50 data-[popup-open]:bg-recess [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+      "flex h-(--control-h) w-full items-center justify-between gap-2 rounded-md border border-line bg-transparent px-2 t-value whitespace-nowrap outline-none transition-colors hover:bg-line/50 focus-visible:border-line-2 focus-visible:ring-2 focus-visible:ring-line-2/30 disabled:pointer-events-none disabled:opacity-50 data-[popup-open]:bg-recess [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
     icon: "text-ink-2",
     positioner: "isolate z-popup outline-none",
     content:
       "z-popup max-h-(--available-height) w-(--anchor-width) max-w-(--available-width) overflow-y-auto rounded-lg bg-artifact p-1 text-ink ring-1 ring-line outline-none",
-    item: "relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-8 pl-2 t-value outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink data-disabled:pointer-events-none data-disabled:opacity-50",
+    item: "relative flex min-h-(--item-h) cursor-default items-center gap-2 rounded-md py-1 pr-8 pl-2 t-value outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink data-disabled:pointer-events-none data-disabled:opacity-50",
     indicator: "pointer-events-none absolute right-2 flex items-center justify-center",
     check: "size-3.5",
   },

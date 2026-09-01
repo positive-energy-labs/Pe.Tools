@@ -131,12 +131,12 @@
   display: block;
   width: 100%;
   height: 100%;
-  /* % height does not resolve inside a td, so the fallback IS the law: the h-7 row (28px)
-     minus its 1px bottom rule. If the row height ever changes, this changes with it. */
-  min-height: calc(1.75rem - 1px);
+  /* % height does not resolve inside a td, so the fallback IS the law: the --item-h row
+     minus its 1px bottom rule. */
+  min-height: calc(var(--item-h) - 1px);
   padding-top: 0;
   padding-bottom: 0;
-  line-height: calc(1.75rem - 1px);
+  line-height: calc(var(--item-h) - 1px);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;

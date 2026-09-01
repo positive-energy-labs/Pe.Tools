@@ -4,7 +4,7 @@ import { Input } from "#/components/lang/input";
 import { tv } from "#/lib/tv";
 
 export const pickListRecipe = tv({
-  base: "flex w-full items-baseline gap-2 border-l-2 px-3 py-1 text-left t-value",
+  base: "flex min-h-(--item-h) w-full items-baseline gap-2 border-l-2 px-3 py-0.5 text-left t-value",
   variants: {
     active: { true: "border-ink bg-select text-ink", false: "border-transparent text-ink" },
     cursored: { true: "bg-recess", false: "" },

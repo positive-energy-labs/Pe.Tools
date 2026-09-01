@@ -91,7 +91,7 @@ export function MasterTableHeader<Row extends RowData>({
                 colSpan={header.colSpan}
                 rowSpan={header.rowSpan}
                 style={{ top: stickyTop(rowIndex) }}
-                className="t-caption t-upper sticky z-sticky whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-px text-left text-ink-2 on-recess first:border-l-0"
+                className="t-caption t-upper sticky z-sticky whitespace-nowrap border-b border-l border-line bg-recess px-(--item-pad-x) py-px text-left text-ink-2 on-recess first:border-l-0"
               >
                 <table.FlexRender header={header} />
               </th>
@@ -130,7 +130,7 @@ function LeafHeader<Row>({
       rowSpan={rowSpan}
       style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
       className={cn(
-        "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line bg-recess px-1.5 py-1 font-normal on-recess first:border-l-0",
+        "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line bg-recess px-(--item-pad-x) py-1 font-normal on-recess first:border-l-0",
         column.right ? "text-right" : "text-left",
         column.width,
         column.lock && "z-sticky",

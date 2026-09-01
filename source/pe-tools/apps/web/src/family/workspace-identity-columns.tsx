@@ -35,7 +35,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         )
         .join(" · ");
       return (
-        <span className="flex h-7 items-center justify-center">
+        <span className="flex h-(--item-h) items-center justify-center">
           <Press
             type="button"
             onClick={() => locate(open[0]!)}
@@ -85,7 +85,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         const literal = bindingOf(world, draft, slug, property);
         const dim = world.geomBySlug.get(slug)?.dims.find((entry) => entry.property === property);
         return (
-          <span className="flex h-7 min-w-0 items-center px-1.5">
+          <span className="flex h-(--item-h) min-w-0 items-center px-(--item-pad-x)">
             <Press
               type="button"
               onClick={() => setInspect({ kind: "part", slug })}

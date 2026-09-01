@@ -99,7 +99,7 @@ export function CellSelect({
         if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
       }}
       className={cn(
-        "face-mono h-7 w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-select",
+        "face-mono h-(--item-h) w-full min-w-0 truncate rounded-none border-0 bg-transparent px-1 outline-none focus:bg-select",
         invalid && "alarm-wash text-alarm",
         className,
       )}
@@ -129,7 +129,7 @@ export function ReadCell({
   return (
     <span
       title={reason}
-      className={cn("face-mono block truncate px-1.5", className)}
+      className={cn("face-mono block truncate px-(--item-pad-x)", className)}
       data-tone={dataTone}
     >
       {value}
@@ -161,7 +161,7 @@ export const VERDICT_INK: Record<VerdictTone, string> = {
  * verdict keeps the word in secondary ink and lets the dot carry the tone. */
 export function VerdictCell({ verdict }: { verdict: Verdict }) {
   return (
-    <span className="face-mono block truncate px-1.5" title={verdict.note}>
+    <span className="face-mono block truncate px-(--item-pad-x)" title={verdict.note}>
       <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
       <span className={verdict.tone === "alarm" ? "text-alarm" : "text-ink-2"}>{verdict.word}</span>
     </span>

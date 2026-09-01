@@ -67,7 +67,7 @@ export function ProposedCell({
 
   return (
     <span
-      className="flex min-h-7 w-full items-center"
+      className="flex min-h-(--item-h) w-full items-center"
       style={first ? { boxShadow: `inset 0 -1.5px 0 0 ${token("pea")}` } : undefined}
     >
       {children}

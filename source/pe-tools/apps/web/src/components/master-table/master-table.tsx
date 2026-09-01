@@ -179,7 +179,7 @@ export function MasterTable<Row extends RowData>({
             onChange={(event) => updateState((state) => ({ ...state, query: event.target.value }))}
             placeholder={searchPlaceholder}
             title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-            className="face-mono t-value h-6 w-44 rounded-sm border border-line-2 bg-transparent px-1.5 outline-none focus:border-line-2 focus:veil"
+            className="face-mono t-value h-(--control-h) w-44 rounded-sm border border-line-2 bg-transparent px-1.5 outline-none focus:border-line-2 focus:veil"
           />
         )}
         {resolvedState.query && (
