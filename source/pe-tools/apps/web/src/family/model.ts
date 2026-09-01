@@ -21,7 +21,6 @@ import {
   WORLD,
   boundParam,
   type GeomConstituent,
-  type ProposalVerdict,
   type ProtoLive,
   type ProtoLiveValue,
   type ProtoParam,
@@ -213,15 +212,49 @@ export const AGREEMENT_RANK: Agreement[] = [
 // ── draft state ─────────────────────────────────────────────────────────────────────────────────
 
 /**
- * A proposal's fate on this page. The world's three, plus the one only the TABLE can produce:
- * `superseded` — the user typed their own value into the proposed cell, so there is nothing left
- * to accept or deny. It is deliberately NOT "denied": denying is a judgement about pea's reading,
- * superseding is the user simply having gone first.
- *
- * The cell grammar cannot draw this state at all (SURFACE-PHILOSOPHY §3 owes a specimen for it),
- * so it lives only on the sidebar card, muted.
+ * PEA'S PROPOSAL AT ONE CELL, contract-shaped (`agent-contracts/src/trichotomy.ts`), so the shared
+ * reader can turn it into `StateCellProps` without family re-deriving the mapping. `source` is
+ * family's grounding EXTENSION of the core proposal — which spec block the reading came from —
+ * exactly as the contract says domain provenance rides (a per-route extension, not core).
  */
-export type CellVerdict = ProposalVerdict | "superseded";
+export interface FamilyProposal {
+  value: string;
+  by: "pea";
+  note: string;
+  confidence?: "high" | "low";
+  source: ProtoProposal;
+}
+
+/**
+ * THE TRICHOTOMY AT ONE COORDINATE (ruled 2026-08-31, proposal-state demiurge). Pea's still-
+ * standing proposal, and what the draft has staged there — the two rungs, and there are no others.
+ *
+ * There is no `denied` and no `superseded`: denying CLEARS the proposal and typing your own value
+ * clears it too, and a cleared proposal is simply absent, so the cell shows the real value again.
+ * There is no `accepted` either — accepting stages pea's value, and the reader derives `pea` for
+ * the square from `staged.value === proposal.value`. Every one of those was a fact this page used
+ * to remember; all of them are now read off the two rungs.
+ */
+export function proposalCell(
+  proposals: ProtoProposal[],
+  stagedValue: string | null,
+): { proposal: FamilyProposal | null; staged: { value: string } | null } {
+  // A cell may be argued about twice; the FIRST standing proposal owns the cell's one slot and
+  // the rail says how many there are. Ranking them is a decision nothing on this page can make.
+  const first = proposals[0];
+  return {
+    proposal: first
+      ? {
+          value: first.proposed,
+          by: "pea",
+          note: first.note,
+          ...(first.confidence ? { confidence: first.confidence } : {}),
+          source: first,
+        }
+      : null,
+    staged: stagedValue === null ? null : { value: stagedValue },
+  };
+}
 
 export interface Draft {
   /** paramName → family-level authored value, or "= formula". */
@@ -230,7 +263,13 @@ export interface Draft {
   types: Record<string, Record<string, string>>;
   /** paramName → typeName → what Revit carries. */
   live: Record<string, Record<string, ProtoLiveValue>>;
-  verdicts: Record<string, CellVerdict>;
+  /**
+   * PROPOSAL IDS THAT NO LONGER STAND — denied, or beaten by your own edit. Not a verdict and not
+   * a cell state: a cleared proposal is absent, and the cell it aimed at shows the real value.
+   * It is kept as a LIST rather than forgotten so re-open can put the proposal back, which is the
+   * only undo a page-scoped proposal can have.
+   */
+  cleared: string[];
   /**
    * The geometry's mutable half, keyed slug → { dims, meta }. Only VALUES live here; the
    * constituent list and each dim's dataType are fixture and never move. A dim's value is its
@@ -250,7 +289,7 @@ export function initialDraft(world: PageWorld): Draft {
     authored: Object.fromEntries(world.params.map((param) => [param.name, param.value])),
     types: structuredClone(world.source.profile.types),
     live: structuredClone(world.live?.values ?? {}),
-    verdicts: {},
+    cleared: [],
     geom: Object.fromEntries(
       world.geom.map((part) => [
         part.slug,

@@ -7,7 +7,7 @@ import { token } from "#/lib/token";
  * camera: it draws where the blocks sit on the page, not what they say, which is the one question
  * the text mode cannot answer. It announces itself as a stand-in rather than pretending.
  *
- * PROPOSALS DOCK ON TOP OF IT, so the verdict is always beside the spec text that justifies it —
+ * PROPOSALS DOCK ON TOP OF IT, so the decision is always beside the spec text that justifies it —
  * the whole reason the table's rail and folds only ever LOCATE and never decide.
  */
 import { EmptyState } from "#/components/lang/empty";
@@ -16,7 +16,7 @@ import { FactChip, Tag } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { Verb } from "#/components/lang/verb";
 import { Switcher } from "#/components/lang/switcher";
-import { hashOf, type CellVerdict } from "#/family/model";
+import { hashOf } from "#/family/model";
 import type { ProtoProposal, ProtoSpec } from "#/family/world";
 
 export function SpecText({
@@ -195,23 +195,26 @@ export function SpecSheet({
 
 export function ProposalCard({
   proposal,
-  verdict,
+  state,
   focused,
   blockMd,
   specFileName,
   onAccept,
   onDeny,
+  onReopen,
   onHover,
   register,
 }: {
   proposal: ProtoProposal;
   /** Named so the citation line can say WHICH document it read from. */
   specFileName?: string | null;
-  verdict: CellVerdict;
+  /** The proposal's place in the ONE lifecycle, derived from the draft by `proposalState`. */
+  state: "open" | "taken" | "cleared";
   focused: boolean;
   blockMd: string | null;
   onAccept: () => void;
   onDeny: () => void;
+  onReopen: () => void;
   onHover: (on: boolean) => void;
   register: (node: HTMLDivElement | null) => void;
 }) {
@@ -220,31 +223,25 @@ export function ProposalCard({
     : `${proposal.param} · family value`;
 
   // A settled proposal collapses to one line rather than disappearing: the sidebar keeps the
-  // record that a claim was made and answered, and the citation link stays hoverable.
-  if (verdict !== "open") {
-    const settled = {
-      accepted: {
-        mark: "✓",
-        word: "accepted",
-        colour: token("done"),
-        note: `Accepted — the table now reads ${proposal.proposed} for ${target}. The proposal itself was never persisted; only the value it argued for is in the document, and its citation is still live.`,
-      },
-      denied: {
-        mark: "—",
-        word: "denied",
-        colour: token("ink-mute"),
-        note: `Denied — the profile keeps its own value for ${target}. Nothing was written, and the citation is unaffected: grounding is a fact about the spec, not about pea.`,
-      },
-      superseded: {
-        mark: "—",
-        word: "superseded by your edit",
-        colour: token("ink-mute"),
-        // MUTED, never `--pe-done`: nothing of pea's was adopted. Accepted and superseded look
-        // different because they ARE different — one is agreement, the other is being overtaken.
-        // The CELL shows nothing at all; the grammar has no `severed` stage.
-        note: `Superseded — you typed your own value into ${target}, so pea's ${proposal.proposed} has nothing left to argue for. There was no accept and no deny; the cell simply moved on. The grounding citation is untouched, because where a number came from is a separate fact from what pea read.`,
-      },
-    }[verdict];
+  // record that a claim was made and answered, and the citation link stays hoverable. TWO
+  // outcomes, not four — `accepted`, `denied` and `superseded` were three names for two facts.
+  if (state !== "open") {
+    const settled =
+      state === "taken"
+        ? {
+            mark: "✓",
+            word: "accepted · staged",
+            colour: token("done"),
+            note: `Accepted — the draft now stages ${proposal.proposed} for ${target}, and the cell wears PEA's square because the staged value is the one pea argued for. The proposal was never persisted; only the value it argued for is in the draft, and its citation is still live. Saving is what writes it.`,
+          }
+        : {
+            mark: "—",
+            word: "cleared",
+            colour: token("ink-mute"),
+            // MUTED, never `--pe-done`: nothing of pea's was adopted. Denying and being beaten to
+            // the cell are ONE outcome — the proposal is gone and the cell shows the real value.
+            note: `Cleared — either you denied it or you typed your own value into ${target} first. Pea's ${proposal.proposed} no longer stands, the cell shows the real value again, and nothing was written. The grounding citation is untouched, because where a number came from is a separate fact from what pea read. Re-open puts the proposal back.`,
+          };
     return (
       <div
         ref={register}
@@ -257,6 +254,13 @@ export function ProposalCard({
         <span>{settled.mark}</span>
         <span className="truncate">{target}</span>
         <span className="ml-auto shrink-0 text-ink-2">{settled.word}</span>
+        {state === "cleared" && (
+          <Verb
+            label="re-open"
+            onClick={onReopen}
+            reason={`Put pea's reading of ${target} back on the table. Clearing it was page state, not a decision written anywhere, so this is a plain undo — the cell wears its fold again and accept and deny come back.`}
+          />
+        )}
       </div>
     );
   }
@@ -305,7 +309,7 @@ export function ProposalCard({
         <Verb
           label="deny"
           onClick={onDeny}
-          reason="Throw the proposal away and keep the profile as authored. The card collapses to a struck line so the sidebar still records that it was answered."
+          reason="Clear the proposal. It stops standing, the cell goes back to showing the profile's real value and draws nothing, and the profile is unchanged. The card collapses to one line carrying a re-open verb, so the sidebar still records that it was answered and the denial is undoable."
         />
       </div>
     </div>

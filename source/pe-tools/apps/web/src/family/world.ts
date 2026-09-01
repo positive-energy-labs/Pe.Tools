@@ -140,9 +140,10 @@ export interface ProtoProposal {
   proposed: string;
   sourceBlockId: string;
   note: string;
+  /** Pea's own confidence in the reading. Contract-shaped (`cellProposalSchema`), so the shared
+   * cell reader carries it to the cell without family re-deriving it from the prose. */
+  confidence?: "high" | "low";
 }
-
-export type ProposalVerdict = "open" | "accepted" | "denied";
 
 export interface ProtoWorld {
   profile: ProtoProfile;
@@ -619,6 +620,7 @@ export const WORLD: ProtoWorld = {
       current: null,
       proposed: "5in",
       sourceBlockId: "b4",
+      confidence: "low",
       note: 'LOW CONFIDENCE — read the compact cabinet\'s duct as 5", but the block below gives FC42-C a 6" duct. Check the text before accepting; the two readings cannot both be right.',
     },
   ],

@@ -11,7 +11,6 @@ import {
   paramNameFor,
   paramsInFocus,
   partsInFocus,
-  type CellVerdict,
   type Draft,
   type Focus,
   type PRow,
@@ -101,24 +100,41 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     cardRefs.current[focusedProposal]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [focusedProposal]);
 
-  const verdictOf = (id: string): CellVerdict => draft.verdicts[id] ?? "open";
+  /** A proposal STANDS until it is cleared. Accepting does not clear it: the reader wants it
+   * behind the staged value, because that is the only evidence that the square is pea's ink. */
+  const stands = (entry: ProtoProposal): boolean => !draft.cleared.includes(entry.id);
 
-  /** Every OPEN proposal aimed at exactly one cell: a type override, or the family-level value.
-   * A list, not a single one — a cell may be argued about twice, and hiding the second would be
-   * the surface lying about how much is outstanding. */
+  /**
+   * WHAT BECAME OF PEA'S READING — derived from the draft, never remembered.
+   *   cleared — denied, or beaten by your own edit. Gone; the cell shows the real value.
+   *   taken   — the draft now STAGES exactly what it argued for. That is what accept does, and
+   *             typing the same number yourself is indistinguishable, which is honest.
+   *   open    — still owed a decision.
+   */
+  const proposalState = (entry: ProtoProposal): "open" | "taken" | "cleared" => {
+    if (!stands(entry)) return "cleared";
+    const value = entry.typeName
+      ? draft.types[entry.typeName]?.[entry.param]
+      : draft.authored[entry.param];
+    const disk = entry.typeName
+      ? saved.types[entry.typeName]?.[entry.param]
+      : saved.authored[entry.param];
+    return value === entry.proposed && value !== disk ? "taken" : "open";
+  };
+
+  /** Every standing proposal aimed at exactly one cell: a type override, or the family-level
+   * value. A list, not a single one — a cell may be argued about twice, and hiding the second
+   * would be the surface lying about how much is outstanding. */
   const proposalsAt = (param: string, typeName: string | null): ProtoProposal[] =>
     world.proposals.filter(
-      (entry) =>
-        entry.param === param &&
-        (entry.typeName ?? null) === typeName &&
-        verdictOf(entry.id) === "open",
+      (entry) => entry.param === param && (entry.typeName ?? null) === typeName && stands(entry),
     );
 
-  /** Every open proposal anywhere on a parameter's row — what the RAIL counts. */
+  /** Every standing proposal anywhere on a parameter's row — what the RAIL counts. */
   const proposalsOn = (param: string): ProtoProposal[] =>
-    world.proposals.filter((entry) => entry.param === param && verdictOf(entry.id) === "open");
+    world.proposals.filter((entry) => entry.param === param && stands(entry));
 
-  const openProposals = world.proposals.filter((entry) => verdictOf(entry.id) === "open");
+  const openProposals = world.proposals.filter((entry) => stands(entry));
 
   /** Locate: point the sidebar at a proposal without deciding anything about it. */
   const locate = (proposal: ProtoProposal) => {
@@ -192,34 +208,42 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
       } else {
         next.authored[proposal.param] = proposal.proposed;
       }
-      next.verdicts[proposal.id] = "accepted";
       next.dirty = true;
       return next;
     });
     say(`accepted ${proposal.param} = ${proposal.proposed}`);
   };
 
+  /** DENY CLEARS. There is no denied state to draw: the proposal stops standing, so the cell goes
+   * back to showing the real value and draws nothing. The card keeps a one-line record with a
+   * re-open verb, which is the whole undo — the proposal itself never left this page. */
   const deny = (proposal: ProtoProposal) => {
+    setDraft((previous) => ({ ...previous, cleared: [...previous.cleared, proposal.id] }));
+    say(`denied — the proposal is gone and ${proposal.param} shows its real value again`);
+  };
+
+  /** Put a cleared proposal back. Page-scoped view state, not a cell state. */
+  const reopen = (proposal: ProtoProposal) => {
     setDraft((previous) => ({
       ...previous,
-      verdicts: { ...previous.verdicts, [proposal.id]: "denied" },
+      cleared: previous.cleared.filter((id) => id !== proposal.id),
     }));
-    say(`denied a proposal — the profile is unchanged`);
+    say(`re-opened pea's reading of ${proposal.param}`);
   };
 
   /**
-   * TYPING BEATS PROPOSING. Committing your own value into a cell severs every open proposal
-   * aimed at that exact cell — including an empty commit, which hands the type back to inheriting
-   * and is just as much a decision. There is no verdict left to give: pea argued for a number and
-   * you wrote a different one, so accept and deny both became meaningless. The card settles muted,
-   * never on `--pe-done` — nothing of pea's was adopted.
+   * TYPING BEATS PROPOSING. Committing your own value into a cell CLEARS every proposal aimed at
+   * that exact cell — including an empty commit, which hands the type back to inheriting and is
+   * just as much a decision. `superseded` was a fourth state for this, and it is deleted: pea
+   * argued for a number and you wrote a different one, so the proposal is simply gone, exactly as
+   * a denial leaves it. The card says which of the two happened; the cell has nothing to say.
    */
   const sever = (next: Draft, param: string, typeName: string | null) => {
     for (const entry of world.proposals) {
       if (entry.param !== param) continue;
       if ((entry.typeName ?? null) !== typeName) continue;
-      if ((next.verdicts[entry.id] ?? "open") !== "open") continue;
-      next.verdicts[entry.id] = "superseded";
+      if (next.cleared.includes(entry.id)) continue;
+      next.cleared.push(entry.id);
     }
   };
 
@@ -538,7 +562,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     setBinding,
     cardRefs,
     say,
-    verdictOf,
+    proposalState,
     proposalsAt,
     proposalsOn,
     openProposals,
@@ -550,6 +574,7 @@ export function useFamilyWorkspaceCore(store: FamilyStore) {
     unsavedCount,
     accept,
     deny,
+    reopen,
     sever,
     editAuthored,
     editOverride,
