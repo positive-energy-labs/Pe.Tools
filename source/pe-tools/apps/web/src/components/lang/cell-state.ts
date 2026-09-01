@@ -1,3 +1,4 @@
+import type { TrichotomyCellLike } from "@pe/agent-contracts";
 import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is NOT here on purpose —
@@ -29,16 +30,17 @@ export interface StateCellProps {
    * Who staged it — pea's square is pea's ink, yours is caution and carries the bold.
    * RULED 2026-08-16 (consolidation batch): authorship is a QUALIFIER of staging, not a fifth
    * axis — it only reads when `stage` is not clean. Census tables count four axes + qualifier.
-   *
-   * ponytail: the state model has no author on `staged`; `trichotomy.ts` stores `by` and every
-   * consumer discards it.
-   * The prop exists because the RENDERING is ruled; callers default to "you" until the model
-   * carries the fact. Upgrade path: plumb `staged.by` through the trichotomy payload and drop
-   * the default.
+   * `cellFromTrichotomy` derives it from `proposal.by` and the staged value; hand-written
+   * callers that have no proposal behind the staging pass "you".
    */
   stagedBy?: "pea" | "you";
-  /** Whether the cell can be written at all. Anything but `editable` owns the body. */
-  cap?: "editable" | "readonly" | "excluded" | "nohome";
+  /**
+   * Whether the cell can be written at all. Anything but `editable` owns the body.
+   * RULED 2026-08-31 (proposal-state demiurge): `readonly` and `excluded` were one rendering
+   * under two names — they collapse into `locked` and the distinction rides `capReason`, which
+   * is the only place it was ever legible. `nohome` stays: it draws the seam.
+   */
+  cap?: "editable" | "locked" | "nohome";
   /** Why it refuses edits. Present exactly when `cap` is not `editable`; ranks first on the footline. */
   capReason?: string;
   /** Where the number came from. Renders as the plain-underline citation, last on the footline. */
@@ -54,6 +56,14 @@ export interface StateCellProps {
    * (default) keeps the footline — pea's card and standalone specimens have room for it.
    */
   scale?: "card" | "row";
+  /**
+   * Where the card-scale footline goes. RULED 2026-08-31 (per-cell grounding): the footline may
+   * not wrap a cell to two lines, and the 10px floor forbids shrinking it — so inside a
+   * constrained context (a table cell at card scale) it collapses to `hover`, the same `title`
+   * the row scale uses. `inline` keeps it where the card has room: pea's chat card, specimens.
+   * Row scale is always hover; this only reads at card scale.
+   */
+  foot?: "inline" | "hover";
   /**
    * THE EDITABLE CELL (ruled 2026-08-16, consolidation batch R8 — families #6, "the strongest
    * finding of the sweep"). Present ⇒ the value slot renders as a caret-safe input; every mark
@@ -81,6 +91,37 @@ export interface StateCellProps {
   onLocate?: () => void;
   /** Cell-to-cell navigation hook (Enter/Tab/arrows). Return true when the move was taken. */
   onNavigate?: (dir: "up" | "down" | "left" | "right") => boolean;
+}
+
+/**
+ * THE ONE READER (ruled 2026-08-31, proposal-state demiurge). A trichotomy cell —
+ * `agent-contracts/src/trichotomy.ts`, proposal → staged → committed — plus the caller's own
+ * facts (the shown value, agreement, freshness, capability) becomes `StateCellProps` HERE, so no
+ * route re-derives the mapping and no two surfaces can disagree about what a proposal looks like.
+ *
+ * What the trichotomy does NOT have, on purpose:
+ * - no `denied`: a denial CLEARS the proposal upstream and the cell shows the real value again.
+ * - no `written`: a commit CLEARS `staged`; saved/unsaved and fresh/stale carry that signal.
+ */
+export function cellFromTrichotomy(
+  cell: Pick<TrichotomyCellLike, "proposal" | "staged">,
+  facts: StateCellProps,
+): StateCellProps {
+  const { proposal, staged } = cell;
+  // Staging is the later rung, so it wins the stage slot; a proposal still standing behind a
+  // staged value is authorship evidence, not a second state.
+  const stage = staged != null ? "staged" : proposal != null ? "proposed" : "clean";
+  const stagedBy =
+    staged != null && proposal != null && proposal.by === "pea" && staged.value === proposal.value
+      ? "pea"
+      : "you";
+  return {
+    ...facts,
+    stage,
+    ...(stage === "staged" ? { stagedBy } : {}),
+    confidence: facts.confidence ?? proposal?.confidence ?? undefined,
+    note: facts.note ?? proposal?.note ?? undefined,
+  };
 }
 
 /** Round for display without float noise: 22.200000762 -> "22.2", 599.99994 -> "600". */

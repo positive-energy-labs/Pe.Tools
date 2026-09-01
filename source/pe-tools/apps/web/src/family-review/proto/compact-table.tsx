@@ -99,7 +99,7 @@ export function CompactTable<Row>({
                     {edit ? (
                       <NavStateCell
                         value={edit.value}
-                        cap={edit.onCommit ? "editable" : "readonly"}
+                        cap={edit.onCommit ? "editable" : "locked"}
                         capReason={edit.capReason}
                         stage={edit.staged ? "staged" : "clean"}
                         stagedBy="you"

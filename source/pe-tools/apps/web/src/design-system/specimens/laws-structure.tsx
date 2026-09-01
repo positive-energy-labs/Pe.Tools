@@ -14,7 +14,7 @@ const row = (key: string) => PARAM_ROWS.find((item) => item.key === key)!;
 
 const ORDER_SPECIMENS: readonly StateCellProps[] = [
   { value: "26 in", fresh: "unverified" },
-  { value: "84 in", cap: "readonly" },
+  { value: "84 in", cap: "locked" },
   { value: "36 in", stage: "staged" },
   { value: "24 in" },
   { value: "1.75 in", agree: "drift", modelValue: "1.375 in" },

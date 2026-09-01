@@ -56,7 +56,15 @@ export function trichotomyAgentMask(cellsSegment = "cells"): string[][] {
 /* ── shared cell queries (the logic previously copy-pasted per plugin) ─────── */
 
 export interface TrichotomyCellLike {
-  proposal?: { confidence?: "high" | "low" | null | undefined } | null | undefined;
+  proposal?:
+    | {
+        value?: unknown;
+        by?: "pea" | "human" | undefined;
+        note?: string | null | undefined;
+        confidence?: "high" | "low" | null | undefined;
+      }
+    | null
+    | undefined;
   staged?: { value?: unknown } | null | undefined;
   review: CellReview;
 }

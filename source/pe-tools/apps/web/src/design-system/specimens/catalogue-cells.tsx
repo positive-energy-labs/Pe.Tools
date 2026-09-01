@@ -72,12 +72,8 @@ export function CatalogueCells() {
           ))}
         </div>
         <CounterExample why="a proposal on a locked cell is swallowed, and the caller receives no refusal">
-          <StateCell value="84 in" cap="readonly" capReason="driven by formula" stage="proposed" />
+          <StateCell value="84 in" cap="locked" capReason="driven by formula" stage="proposed" />
         </CounterExample>
-        <Gap>
-          readonly and excluded are different refusals but share one visual body. Their footline
-          carries the difference in words.
-        </Gap>
       </Demo>
 
       <Demo
