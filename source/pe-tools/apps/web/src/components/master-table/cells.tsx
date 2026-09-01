@@ -1,4 +1,3 @@
-import { token } from "#/lib/token";
 /**
  * MASTER-TABLE CELL RENDERERS — thin wrappers over the language, not a second editor.
  *
@@ -151,11 +150,11 @@ export function StateDot({ tone, dim, bar }: { tone: VerdictTone; dim?: boolean;
 }
 
 export const VERDICT_INK: Record<VerdictTone, string> = {
-  alarm: token("alarm"),
-  caution: token("caution"),
-  done: token("done"),
-  ink: token("ink-2"),
-  mute: token("ink-mute"),
+  alarm: "var(--pe-alarm)",
+  caution: "var(--pe-caution)",
+  done: "var(--pe-done)",
+  ink: "var(--pe-ink-2)",
+  mute: "var(--pe-ink-mute)",
 };
 
 /** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The
