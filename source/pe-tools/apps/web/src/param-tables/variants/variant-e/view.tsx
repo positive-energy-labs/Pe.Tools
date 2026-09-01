@@ -126,7 +126,7 @@ export function VariantE() {
       return {
         scale: "row",
         value: fmtNum(cur, 1),
-        cap: "readonly",
+        cap: "locked",
         capReason:
           cur !== wants
             ? `formula-owned on this type — authored ${fact.label} says ${fmtNum(wants, 1)}, the formula holds ${fmtNum(cur, 1)}; a write refuses`

@@ -101,7 +101,7 @@ export function useScheduleGridColumns(
               value: shown,
               stage: isStaged ? "staged" : isProposal ? "proposed" : "clean",
               stagedBy: "you",
-              cap: binding == null ? "nohome" : editable ? "editable" : "readonly",
+              cap: binding == null ? "nohome" : editable ? "editable" : "locked",
               capReason,
               note,
               onCommit: editable ? (text) => stageEdit(key, text) : undefined,

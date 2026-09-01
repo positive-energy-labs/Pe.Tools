@@ -55,7 +55,14 @@ export const stateCellRecipe = tv({
 
 import { cellFactsText, fmtNum, parseCell, readCell, type StateCellProps } from "./cell-state";
 
-export { CELL_STATE_ORDER, cellFactsText, cellStateLabel, fmtNum, parseCell } from "./cell-state";
+export {
+  CELL_STATE_ORDER,
+  cellFactsText,
+  cellFromTrichotomy,
+  cellStateLabel,
+  fmtNum,
+  parseCell,
+} from "./cell-state";
 export type { CellStateName, StateCellProps, Unsettled } from "./cell-state";
 
 export function StateCell(props: StateCellProps) {
@@ -186,8 +193,16 @@ export function StateCell(props: StateCellProps) {
       </span>,
     );
 
+  // RULED 2026-08-31: a card-scale cell in a constrained context may not wrap to two lines, and
+  // the 10px floor forbids shrinking the footline — so it collapses to the same hover the row
+  // scale uses. `title` on the wrapper, `cellFactsText`, one ranking for both.
+  const hoverFoot = props.foot === "hover";
   return (
-    <span className={slots.wrapper()} onClick={locate}>
+    <span
+      className={slots.wrapper()}
+      onClick={locate}
+      title={hoverFoot ? (cellFactsText(props) ?? undefined) : undefined}
+    >
       <span className={slots.line()}>
         <span
           className={slots.base()}
@@ -210,7 +225,7 @@ export function StateCell(props: StateCellProps) {
           </span>
         ) : null}
       </span>
-      {facts.length > 0 ? (
+      {facts.length > 0 && !hoverFoot ? (
         <span className={slots.foot()}>
           {facts.map((f, i) => (
             <span key={i}>

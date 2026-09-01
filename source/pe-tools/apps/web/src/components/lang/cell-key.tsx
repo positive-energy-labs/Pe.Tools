@@ -86,12 +86,12 @@ const AXES: readonly KeyAxis[] = [
     axis: "capability",
     asks: "can it be written at all?",
     items: [
-      // GRAMMAR GAP: `readonly` and `excluded` are two different refusals — a formula
-      // drives it · the model never bound it — and render as ONE greyed-italic body. The key can
-      // only show what the cell draws, so it shows one specimen and names both.
+      // RULED 2026-08-31: one refusal RENDERING, and the reason carries which refusal it is —
+      // `readonly` and `excluded` were the same greyed-italic body under two names, so they
+      // collapsed into `locked` + `capReason`. The key shows the one specimen the cell draws.
       {
-        label: "locked — formula-driven or excluded",
-        specimen: <StateCell value="84 in" cap="readonly" />,
+        label: "locked — the reason says which refusal",
+        specimen: <StateCell value="84 in" cap="locked" />,
       },
       {
         label: "seam — no element behind it",

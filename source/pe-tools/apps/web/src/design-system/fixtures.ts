@@ -18,7 +18,7 @@
  *   · staged by YOU and staged by PEA on two cells — the square's colour is the only difference,
  *     which is the one thing the state model still cannot supply: staging has no author. Here it
  *     is a fixture field; in production it is inferred from the wrong fact.
- *   · every capability refusal that renders differently: readonly · excluded · nohome.
+ *   · both capability refusals that render differently: locked (reason carries which) · nohome.
  *   · a value long enough to prove the footline clamp and the no-icons-in-cells ruling.
  */
 import type { StateCellProps } from "#/components/lang/cell";
@@ -39,7 +39,7 @@ export interface ParamRow {
   agree: "agree" | "drift";
   stage: "clean" | "proposed" | "staged";
   stagedBy?: "pea" | "you";
-  cap: "editable" | "readonly" | "excluded" | "nohome";
+  cap: "editable" | "locked" | "nohome";
   capReason?: string;
   grounding?: { doc: string; page: number };
   confidence?: "high" | "low";
@@ -106,7 +106,7 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     fresh: "fresh",
     agree: "agree",
     stage: "clean",
-    cap: "readonly",
+    cap: "locked",
     capReason: "driven by formula: Sill Height + Rough Opening",
   },
   {
@@ -163,7 +163,7 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     fresh: "fresh",
     agree: "agree",
     stage: "clean",
-    cap: "readonly",
+    cap: "locked",
     capReason: "Revit forbids writing this parameter",
   },
   {
@@ -188,7 +188,7 @@ export const PARAM_ROWS: readonly ParamRow[] = [
     fresh: "fresh",
     agree: "agree",
     stage: "clean",
-    cap: "excluded",
+    cap: "locked",
     capReason: "parameter dropped by Revit: not bound to this category",
   },
   {
@@ -252,20 +252,32 @@ export function ageText(row: ParamRow): string {
    accepting in the card moves the value in the table. That IS the property that won round 1 —
    one cell grammar everywhere — and it is only provable when the two share a world. */
 
+/**
+ * ONE LIFECYCLE (ruled 2026-08-31, proposal-state demiurge): the fixture holds a TRICHOTOMY cell
+ * — `proposal` → `staged` → committed — and nothing else. The old `review: open|accepted|denied`
+ * was a parallel machine; it is gone. A denial CLEARS the proposal (the cell shows the real value
+ * again) and a commit CLEARS `staged` into `current`.
+ */
+export interface ProposalCell {
+  proposal: {
+    value: string;
+    by: "pea" | "human";
+    note?: string;
+    confidence?: "high" | "low";
+  } | null;
+  staged: { value: string } | null;
+  review: "none" | "good" | "attention";
+}
+
 export interface ProposalItem {
   key: string;
   param: string;
-  /** What the document holds today. `null` ⇒ the parameter is empty. */
+  /** What the document holds today — what a commit writes into. `null` ⇒ the parameter is empty. */
   current: string | null;
-  /** What pea wants it to be. */
-  proposed: string;
-  confidence: "high" | "low";
-  note?: string;
   grounding?: { doc: string; page: number };
-  /** Set when Revit disagrees with `current` — drift travels independently of the proposal. */
+  /** Set when Revit disagrees with what is shown — drift travels independently of the proposal. */
   modelValue?: string;
-  /** Review state. `open` = pea proposes · `accepted` = staged by pea · `denied` = struck. */
-  review: "open" | "accepted" | "denied";
+  cell: ProposalCell;
 }
 
 export const PROPOSAL_THREAD: readonly { who: "you" | "pea"; text: string }[] = [
@@ -284,39 +296,62 @@ export const PROPOSAL_SEED: readonly ProposalItem[] = [
     key: "fireRating",
     param: "Fire Rating",
     current: null,
-    proposed: "2 hr",
-    confidence: "high",
-    note: "UL listing on the submittal",
     grounding: { doc: "Overhead Door 421 submittal.pdf", page: 4 },
-    review: "open",
+    cell: {
+      proposal: {
+        value: "2 hr",
+        by: "pea",
+        confidence: "high",
+        note: "UL listing on the submittal",
+      },
+      staged: null,
+      review: "none",
+    },
   },
   {
     key: "operatorType",
     param: "Operator Type",
     current: "Manual",
-    proposed: "Motor — FDCL-611",
-    confidence: "high",
-    note: "spec section 08 33 23",
-    review: "accepted",
+    cell: {
+      proposal: {
+        value: "Motor — FDCL-611",
+        by: "pea",
+        confidence: "high",
+        note: "spec section 08 33 23",
+      },
+      // Accepted verbatim: the staged value IS pea's, so the square is pea's ink.
+      staged: { value: "Motor — FDCL-611" },
+      review: "none",
+    },
   },
   {
     /* the two-marks crucible, one scale up: an open proposal on a value the model also disputes. */
     key: "connectedLoad",
     param: "Connected Load",
     current: "100 VA",
-    proposed: "150 VA",
-    confidence: "low",
-    note: "inferred from the motor schedule, not stated directly",
     modelValue: "100 VA",
-    review: "open",
+    cell: {
+      proposal: {
+        value: "150 VA",
+        by: "pea",
+        confidence: "low",
+        note: "inferred from the motor schedule, not stated directly",
+      },
+      staged: null,
+      review: "attention",
+    },
   },
   {
+    /* BOTH squares, from one rule: a human staged something other than what pea proposed, so
+       `stagedBy` derives "you" — caution + bold — with no fixture field asserting authorship. */
     key: "voltage",
     param: "Voltage",
     current: null,
-    proposed: "115 V",
-    confidence: "high",
-    review: "denied",
+    cell: {
+      proposal: { value: "115 V", by: "pea", confidence: "high" },
+      staged: { value: "120 V" },
+      review: "none",
+    },
   },
 ];
 

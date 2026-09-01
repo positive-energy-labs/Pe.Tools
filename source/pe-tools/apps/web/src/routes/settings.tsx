@@ -336,7 +336,7 @@ function FieldRow({
         value={display(shown)}
         stage={staged ? "staged" : proposal ? "proposed" : "clean"}
         stagedBy="you"
-        cap={busy ? "readonly" : "editable"}
+        cap={busy ? "locked" : "editable"}
         capReason={busy ? "A settings verb is running." : undefined}
         onCommit={(value) =>
           void store.actions.stage(row.path, parseLike(shown, value)).catch(() => undefined)
