@@ -59,6 +59,16 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-08-29 — Opacity is not a de-emphasis mechanism. Locked is italic + `ink-mute`.
 - 2026-08-29 — A cell carries a `shown` reading and a bound `authority`; drift is
   `shown.value !== authority.value`, `stale` is superseded. The type is the spec (`StateCellProps`).
+- 2026-08-31 — Density round 1 winner **C (extreme)**: "honestly extreme is the best" (kaitpw).
+  20px list rows, 10px caption/label/value at 1.2 line-height, 11px prose at 1.4, 2px cell edge
+  padding. Folded into `base.css` `:root`; the 24px middle variant and the throwaway switcher were
+  deleted on verdict. Consequence: caption, label and value now share one 10px size and differ
+  only by face, case and weight — see open questions.
+- 2026-08-31 — TWO HEIGHTS, no third yet (round-1 reshape, from the verdict "standardize a general
+  list-item height... two, three max"): `--item-h` (20px) sizes every list-shaped row — table row,
+  select/combobox/command menu item, pick-list item, `Verb` — and `--control-h` (24px) sizes every
+  freestanding control (input, select trigger, combobox chip holder). Both live in `base.css`
+  beside `--space-unit`. A surface that needs a third height names it here before authoring one.
 
 ### Route and state architecture (cross-route, owned here)
 
@@ -361,3 +371,10 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - "Update check unavailable" conflates endpoint 500, dead network, and a dev proxy with no host.
 - Write the route pattern into `apps/web/AGENTS.md` (currently 3 lines) — a pattern, not a framework.
 - `workbench/provider.tsx` + its adapter (chat internals) are untouched by every pass so far.
+- The 2026-08-31 density verdict collapsed caption/label/value to one 10px size. Either the three
+  tiers stay as roles (face/case/weight only) or two of them merge; decide before the ADR 0004
+  table is rewritten.
+- `/takeoffs` has "a lot of obvious problems" (kaitpw, 2026-08-31, unenumerated). Ruled to its
+  phase-4 cutover round, not before: route fixes on an unsettled density law get redone. Family
+  rows whose identity cell wraps to two lines still break the 20px rhythm (`density round 1`,
+  measured); nowrap/ellipsis lands at the same cutover.
