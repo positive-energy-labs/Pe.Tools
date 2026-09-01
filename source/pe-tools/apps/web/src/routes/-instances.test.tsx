@@ -275,8 +275,17 @@ describe("instances route", () => {
     answer(
       new Response(
         JSON.stringify({
-          result: { state: "refused" },
-          diagnostics: [{ code: "session.failed", detail: "restart was refused" }],
+          result: {
+            id: "pe.app-25",
+            state: "stop-blocked",
+            legs: [],
+            dropped: [],
+            reopened: null,
+          },
+          diagnostics: [
+            { code: "session.stop-blocked", detail: "restart stop was blocked", fix: null },
+          ],
+          nextSteps: [],
         }),
         { status: 409, headers: { "content-type": "application/json" } },
       ),
@@ -286,11 +295,10 @@ describe("instances route", () => {
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "restart",
-        ok: false,
-        state: "refused",
-        diagnostics: ["restart was refused"],
+        result: expect.objectContaining({ state: "stop-blocked", legs: [] }),
+        diagnostics: [expect.objectContaining({ code: "session.stop-blocked" })],
       }),
     );
-    expect(worldTrunk.describe(record.mock.calls[0]![0])).toContain("restart was refused");
+    expect(worldTrunk.describe(record.mock.calls[0]![0])).toContain("restart stop was blocked");
   });
 });

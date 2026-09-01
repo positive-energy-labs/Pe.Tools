@@ -141,11 +141,19 @@ export function LiveTakeoffsDocumentRoute({ target = "" }: { target?: string }) 
       empty={(sessions) => <TakeoffsDocumentOpen sessions={sessions} target={target} />}
     >
       {(at) => (
-        <TakeoffsStoreOwner key={`live:${at}`} source="live" documentAddress={at} target={target} />
+        <TakeoffsStoreOwner
+          key={liveTakeoffsStoreKey(session?.sessionId ?? target, at)}
+          source="live"
+          documentAddress={at}
+          target={target}
+        />
       )}
     </RouteDocument>
   );
 }
+
+export const liveTakeoffsStoreKey = (sessionId: string, documentAddress: string) =>
+  `live:${sessionId}:${documentAddress}`;
 
 export function TakeoffsDocumentOpen({
   sessions,

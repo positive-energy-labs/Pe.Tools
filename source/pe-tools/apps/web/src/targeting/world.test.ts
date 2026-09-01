@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import type { RecentDocument, SessionObservation } from "@pe/host-contracts/pe-revit-contract";
+import type {
+  Envelope,
+  RecentDocument,
+  SessionObservation,
+} from "@pe/host-contracts/pe-revit-contract";
 
 import type { WorldFacts } from "#/host/fleet";
 import { resolveTarget, type SessionFacts } from "#/host/target";
-import { documentTrunk, worldTrunk } from "#/targeting/world";
+import { documentTrunk, worldTrunk, type WorldLifecycleReceipt } from "#/targeting/world";
 
 const session = (overrides: Partial<SessionFacts> = {}): SessionFacts => ({
   sessionId: "bridge-25",
@@ -51,11 +55,28 @@ const observation = (id: string, pid: number): SessionObservation => ({
 
 afterEach(() => vi.restoreAllMocks());
 
-const lifecycleVerbs = () =>
+const envelope = <T>(result: T, diagnostics: Envelope<T>["diagnostics"] = []): Envelope<T> => ({
+  binary: {
+    assembly: null,
+    hostExecutable: null,
+    informationalVersion: "0.1.0-beta.143",
+    origin: "checkout",
+    sha256: null,
+  },
+  command: { commandManifest: null, commandRoot: "C:\\sdk", commandRule: "exact", cwd: "C:\\repo" },
+  diagnostics,
+  guide: "pe-revit guide session",
+  nextSteps: ["inspect session list"],
+  related: ["session list"],
+  resolved: null,
+  result,
+});
+
+const lifecycleVerbs = (settled: (receipt: WorldLifecycleReceipt) => void = () => {}) =>
   worldTrunk.verbs<"world">({
     start: () => ({ lane: "installed", year: "25", doc: "Model.rvt" }),
     started: () => {},
-    settled: () => {},
+    settled,
     failed: () => {},
     finished: () => {},
   });
@@ -146,8 +167,51 @@ describe("targeting world", () => {
       expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
   });
 
-  it("refuses every lifecycle verb for an observed world before HTTP", async () => {
-    const request = vi.spyOn(globalThis, "fetch");
+  it("lets the SDK decide lifecycle custody for an observed world", async () => {
+    const settled = vi.fn<(receipt: WorldLifecycleReceipt) => void>();
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const { action } = JSON.parse(init?.body as string) as { action: "restart" | "stop" };
+      const result =
+        action === "restart"
+          ? {
+              id: "bridge-user",
+              state: "failed" as const,
+              legs: [
+                {
+                  name: "custody",
+                  status: "failed",
+                  detail: "observed",
+                  observedAtUtc: "2026-09-01T00:00:00Z",
+                },
+              ],
+              dropped: [],
+              reopened: null,
+            }
+          : {
+              id: "bridge-user",
+              state: "blocked" as const,
+              legs: [
+                {
+                  name: "custody",
+                  status: "blocked",
+                  detail: "observed",
+                  observedAtUtc: "2026-09-01T00:00:00Z",
+                },
+              ],
+            };
+      return new Response(
+        JSON.stringify(
+          envelope(result, [
+            {
+              code: action === "restart" ? "session.no-match" : "session.stop-blocked",
+              detail: "session is observed",
+              fix: null,
+            },
+          ]),
+        ),
+        { status: 409, headers: { "content-type": "application/json" } },
+      );
+    });
     const observed: WorldFacts = {
       id: "bridge-user",
       custody: "observed",
@@ -164,23 +228,40 @@ describe("targeting world", () => {
 
     const feed = worldFeed([observed]);
     const bound = { world: "observed" };
-    for (const verb of Object.values(lifecycleVerbs())) {
-      expect(verb.refuse(bound, { world: feed })).toContain("observed world Revit 77 is read-only");
-      expect(await verb.run(bound, { world: feed })).toContain(
-        "pe-revit does not control its lifecycle",
-      );
+    const verbs = lifecycleVerbs(settled);
+    for (const verb of [verbs.restart, verbs.stop]) {
+      expect(verb.refuse(bound, { world: feed })).toBeNull();
+      expect(await verb.run(bound, { world: feed })).toContain("session is observed");
     }
-    expect(request).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(settled.mock.calls[0]![0]).toMatchObject({
+      action: "restart",
+      result: { state: "failed", legs: [{ name: "custody" }] },
+      diagnostics: [{ code: "session.no-match" }],
+      nextSteps: ["inspect session list"],
+    });
   });
 
   it("posts the SDK session body for every controlled lifecycle verb", async () => {
-    const request = vi.spyOn(globalThis, "fetch").mockImplementation(
-      async () =>
-        new Response(JSON.stringify({ result: { state: "ok" } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-    );
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const body = JSON.parse(init?.body as string) as { action: "start" | "restart" | "stop" };
+      const result =
+        body.action === "start"
+          ? { id: "pe.app-25", state: "failed" as const, legs: [] }
+          : body.action === "restart"
+            ? {
+                id: "pe.app-25",
+                state: "failed" as const,
+                legs: [],
+                dropped: [],
+                reopened: null,
+              }
+            : { id: "pe.app-25", state: "stopped" as const };
+      return new Response(JSON.stringify(envelope(result)), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
     const controlled: WorldFacts = {
       id: "pe.app-25",
       custody: "controlled",

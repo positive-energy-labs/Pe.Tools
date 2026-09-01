@@ -5,6 +5,15 @@ import type {
   DocRecentsResult,
   Envelope,
   RecentDocument,
+  SessionHrColdResult,
+  SessionHrFailureResult,
+  SessionHrHotResult,
+  SessionStartFailureResult,
+  SessionStartPlanResult,
+  SessionStartResult,
+  SessionStopDetailResult,
+  SessionStopFailureResult,
+  SessionStopResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 import { addressSchema } from "@pe/agent-contracts";
@@ -40,13 +49,17 @@ export interface WorldStart {
   readonly doc?: string;
 }
 
-export interface WorldLifecycleReceipt {
-  readonly action: WorldLifecycleAction;
-  readonly ok: boolean;
-  readonly state: string;
-  readonly diagnostics: readonly string[];
-  readonly nextSteps: readonly string[];
-}
+type WorldLifecycleResults = {
+  readonly start: SessionStartPlanResult | SessionStartResult | SessionStartFailureResult;
+  readonly restart: SessionHrHotResult | SessionHrColdResult | SessionHrFailureResult;
+  readonly stop: SessionStopResult | SessionStopDetailResult | SessionStopFailureResult;
+};
+
+export type WorldLifecycleReceipt = {
+  [Action in WorldLifecycleAction]: { readonly action: Action } & Envelope<
+    WorldLifecycleResults[Action]
+  >;
+}[WorldLifecycleAction];
 
 type WorldOption = Option & { readonly world: WorldFacts };
 
@@ -67,18 +80,14 @@ const selectedWorld = <K extends string>(bound: Bound<K>, feeds: Feeds<K>) => {
   return (option as WorldOption | undefined)?.world;
 };
 
-const lifecycleRefusal = (action: WorldLifecycleAction, world?: WorldFacts) => {
-  if (world?.custody === "observed")
-    return `observed world ${worldLabel(world)} is read-only; pe-revit does not control its lifecycle`;
-  if (action !== "start" && !world) return `${action} needs a bound world`;
-  return null;
-};
+const lifecycleRefusal = (action: WorldLifecycleAction, world?: WorldFacts) =>
+  action !== "start" && !world ? `${action} needs a bound world` : null;
 
-async function runLifecycle(
-  action: WorldLifecycleAction,
+async function runLifecycle<Action extends WorldLifecycleAction>(
+  action: Action,
   world?: WorldFacts,
   start?: WorldStart,
-): Promise<WorldLifecycleReceipt> {
+): Promise<Extract<WorldLifecycleReceipt, { readonly action: Action }>> {
   const denied = lifecycleRefusal(action, world);
   if (denied) throw Error(denied);
   if (action === "start" && !start) throw Error("start needs lane and year");
@@ -95,23 +104,18 @@ async function runLifecycle(
           },
     ),
   });
-  const body = (await response.json()) as SdkEnvelope<{ readonly state: string }>;
-  const diagnostics = (body.diagnostics ?? []).map(
-    (diagnostic) => diagnostic.detail ?? diagnostic.code,
-  );
-  return {
-    action,
-    ok: response.ok && diagnostics.length === 0,
-    state: body.result?.state ?? (response.ok ? "answered" : "failed"),
-    diagnostics,
-    nextSteps: body.nextSteps ?? [],
-  };
+  const body = (await response.json()) as SdkEnvelope<WorldLifecycleResults[Action]>;
+  if (!body.result)
+    throw Error(sdkError(body, `${action} failed (${response.status})`));
+  return { action, ...body } as Extract<WorldLifecycleReceipt, { readonly action: Action }>;
 }
 
 const describe = (receipt: WorldLifecycleReceipt) =>
-  [`${receipt.action} · ${receipt.state}`, ...receipt.diagnostics, ...receipt.nextSteps].join(
-    " · ",
-  );
+  [
+    `${receipt.action} · ${receipt.result.state}`,
+    ...receipt.diagnostics.map((diagnostic) => diagnostic.detail ?? diagnostic.code),
+    ...receipt.nextSteps,
+  ].join(" · ");
 
 const lifecycleVerb = <K extends string>(
   action: WorldLifecycleAction,

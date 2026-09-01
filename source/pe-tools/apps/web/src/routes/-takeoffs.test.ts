@@ -5,6 +5,7 @@ import { address } from "@pe/agent-contracts";
 import { resolveTarget, type SessionFacts } from "#/host/target";
 import { documentTrunk, openLocalDocuments } from "#/targeting/world";
 import { routeDocumentScope } from "#/workbench/route-document";
+import { liveTakeoffsStoreKey } from "#/takeoff/route";
 import { resolvedWorldBinding, takeoffsWorkingCopyPath } from "./takeoffs";
 
 describe("takeoffs document scope", () => {
@@ -71,6 +72,11 @@ describe("takeoffs document scope", () => {
         address("C:\\Models\\Other.rvt"),
       ),
     ).toMatchObject({ kind: "activate" });
+  });
+
+  it("remounts a same-path document when its Revit world changes", () => {
+    const at = "C:\\Models\\Shared.rvt";
+    expect(liveTakeoffsStoreKey("bridge-a", at)).not.toBe(liveTakeoffsStoreKey("bridge-b", at));
   });
 });
 

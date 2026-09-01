@@ -75,8 +75,8 @@ export function InstancesWorkspace({
         { atMs: Date.now(), actor: "you", label: worldTrunk.describe(receipt) },
       ]);
       setOutcome({
-        kind: receipt.ok ? "receipt" : "advisory",
-        text: receipt.diagnostics[0] ?? worldTrunk.describe(receipt),
+        kind: receipt.diagnostics.length === 0 ? "receipt" : "advisory",
+        text: receipt.diagnostics[0]?.detail ?? worldTrunk.describe(receipt),
         says: receipt.nextSteps.length ? receipt.nextSteps.join(" · ") : undefined,
       });
     },
