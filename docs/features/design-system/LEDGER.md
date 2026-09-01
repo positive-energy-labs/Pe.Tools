@@ -103,6 +103,27 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   collapsed border belongs to the table, not the cell, so it does not travel with a sticky cell:
   that is the white seam at the locked column's left edge. Every cell already draws its own
   `border-b border-l` with `first:border-l-0`, so nothing doubles.
+- 2026-08-31 — SCROLLBAR LAW, AMENDED after measurement: `scrollbar-width` does NOT inherit, so
+  the one declaration at `[data-pe]` styled the root and every inner scroller computed `auto`. It
+  lives at `:where([data-pe], [data-pe] *)` — one declaration still, zero specificity so
+  `no-scrollbar` wins. `scrollbar-color` inherits and rides along.
+- 2026-08-31 — A ROW'S RULE COSTS NO HEIGHT. A border on a `td` adds to the row box, so a 20px row
+  with a 1px bottom border measures 21px — the density verdict cannot hold while the separator is a
+  border. `hairline-b-inset` (`design-lang.css`) draws it as an absolutely-positioned `::after`
+  inside the cell: costs no height, travels with a sticky cell, and composes under a focus ring
+  (a `box-shadow` would have been replaced by Tailwind's ring). `.dl-cell[data-scale="row"]` drops
+  its `calc(var(--item-h) - 1px)` fudge — a row-scale cell is the whole `--item-h`. Measured:
+  `/takeoffs` 173/173 rows at 20px, `/family` 13/13.
+- 2026-08-31 — TWO CELL INSETS, both named: `--item-pad-x` (2px) is the cell edge, and
+  `--item-mark-pad-x` (10px) is for a cell whose BODY carries a mark — pea's fold, the unsaved
+  square — which needs room for it. `locked` draws no mark and takes the plain edge. The census
+  found five values in the wild (2, 4, 6, 10, 0); it reads 2px + the three marked cells now.
+- 2026-08-31 — A PANE HEADER IS CHROME: a verb's reason renders as `title` there, never as inline
+  prose. The un-gagged commit verb (2026-08-16) keeps its visible refusal in ceremony strips, where
+  settled law gives it room; a 32px header has none — measured, `/family`'s action row was 48px
+  inside a 32px header with two 36ch paragraphs overlapping the verbs. Implemented as the
+  `VerbChrome` context that `Pane` provides around its actions, not at call sites. Re-openable: a
+  header that wants the visible refusal back needs a taller header first, which is a ruling.
 - 2026-08-31 — TWO HEIGHTS, no third yet (round-1 reshape, from the verdict "standardize a general
   list-item height... two, three max"): `--item-h` (20px) sizes every list-shaped row — table row,
   select/combobox/command menu item, pick-list item, `Verb` — and `--control-h` (24px) sizes every
@@ -409,8 +430,16 @@ Paid at the primitives; the rulings are above and the evidence is
   inset, chevron right), but `CellSelect` is a native `<select>` whose popup cannot be styled.
   Unifying it needs a menu-primitive decision — either the cell adopts `Combobox` and pays the
   keyboard/commit contract, or the native popup is accepted as the cell's one exception.
-- Every claim in the round is DOM/geometry reasoning, not eye proof: no screenshot lane ran. The
-  scroll-away rail, the seam, the flush bar and the hover-only scrollbar are unproven to the eye.
+- Round 2 (2026-08-31) measured the round in real Chrome after the critic's pass: the scrollbar
+  mechanism was FALSIFIED and fixed, the predicted +1px row was real and is fixed at the rule, the
+  padding census is down to the two named insets, and 36/36 rail bars share one right edge.
+  Evidence: `.artifacts/runs/delegate-20260831/chrome-report.md` §Round 2 + `chrome-shots/`.
+- Still open from the measurement: 7 `/takeoffs` rows measure 24px with no descendant over 20px —
+  the extra 4px is on the row box and is not isolated. One `/family` row measures 21px by design
+  (the ghost-section opener's `hairline-t-2` boundary). The `/families` decision queue is still
+  drawn in the pre-ruling idiom (12.5–15px rows, `border-collapse`) and belongs to that route.
+- Gutter reservation on hover stays UNPROVEN: headless Chrome gives overlay scrollbars, so the
+  "no layout shift when the thumb appears" claim needs a headed browser.
 
 ### Open questions carried forward
 
