@@ -12,6 +12,7 @@
 ## Live proof
 
 - SDK `0.1.0-beta.141` released to `eng/sdk-feed` from `970d96ceeb672fc117517b32574becbfd286e8f2`; Pe.Tools pins and generated TypeScript contract moved in lockstep.
+- Instances POSTed its normal Host `/sessions` start contract and cold-started controlled Revit 2026 session `goal-instances-proof-r26`: PID 43784 reached bridge `ready` with build stamp `37b4e2b26d7e`. The durable SDK receipt was re-read, then the exact disposable session stopped cleanly through `pe-revit session stop`.
 - R26 controlled session refused the R25 source before Revit could show the Model Upgrade dialog (`doc.revit-year-mismatch`), with the process preserved.
 - R25 clone saved as `MEP_ArchitectA_ProjectA_R25_detached_20260811.PeTakeoffs.rvt`. After adoption, `doc close --intent keep` advanced the file from 321,961,984 to 322,744,320 bytes and timestamp to `2026-09-01T10:34:43.94Z`; exact reopen receipt `e4bbb1836f0845968d971d53bcccd913` succeeded.
 - Current Host snapshot on the reopened file reports 71 zoning regions across Attic, Gatehouse, Lower, Main, Pool House, and Upper views; carrier status is ready with zero missing GUIDs.
