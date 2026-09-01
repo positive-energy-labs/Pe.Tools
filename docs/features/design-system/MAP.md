@@ -160,6 +160,16 @@ typography law re-swept clean on all 24 route/interaction modes. Report:
 Emergent law candidate for the ledger when phase 3 closes: tiers are pinned at the component
 recipe, defaulted at the body, and RESTATED nowhere.
 
+Round 6 hairline continuation (2026-08-31, `5bab47b`): PROVEN[deterministic+browser, main
+checkout, 5bab47b, 2026-08-31], verified (93/96 — the suite shrank by 5 because
+`design-guard.test.ts:1089` registers one staleness test per allowlisted file and 5 files
+drained to zero; benign, confirmed by name-diffing old vs new test registration). Allowlist
+75 → 48 via 27 hairline migrations; `hairline-rows` added (six `divide-y divide-line` sites
+forced it; no `-2` variant, no site existed). Residue fully classified: 30 surface/elevation
+(deferred bucket, verdict owed), 18 named structural exceptions (16 excluded border shapes,
+1 legacy caution gradient, 1 `on-select` propagation), 0 data-viz, 0 unclassified. Report:
+`.artifacts/runs/hairline-cont-20260831/report.md`.
+
 ## Laws for this effort
 
 - The SDK contract is fixed; only web-side state shape changes (LEDGER Decided 2026-08-31).
