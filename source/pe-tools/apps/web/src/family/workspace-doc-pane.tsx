@@ -277,11 +277,8 @@ export function FamilyWorkspaceDocPane() {
       // docks under them. Neither displaces the other — an inspector that replaced the spec would
       // take away the evidence at the exact moment you edit the number it justifies.
       title="doc"
-      meta={
-        world.spec
-          ? `${world.spec.fileName} · ${world.spec.blocks.length} blocks`
-          : "no spec attached"
-      }
+      meta={world.spec ? `${world.spec.fileName} · ${world.spec.blocks.length} blocks` : "no spec"}
+      help="The source document this profile cites. Citations resolve into its blocks, so what is attached here decides what a proposal can point at."
       actions={
         <>
           <FactChip
