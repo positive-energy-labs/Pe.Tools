@@ -149,6 +149,20 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   `store` and `useWorkspace` stay route-owned; that ruling is deferred to the first complex-route
   cutover. Evidence: `spike/route-shell`, three routes, two spike rounds. Canon build lands with
   the cutover, not as throwaway round 3.
+- 2026-08-31 — Meaning-system demiurge round 1: M1 vocabulary extension adopted as core (register
+  the missing roles, directional hairline first; fix the three guard bugs; ratchet honestly). M2
+  modern-CSS mechanisms fold into M1 as implementation, not a competing rewrite. M3 (guard-fix
+  only) and M4 (wrapper mandate) FALSIFIED by the intent census
+  (`.artifacts/runs/meaning-census-20260831/report.md`).
+- 2026-08-31 — Typography default law: unstyled text must land in-system. The language base layer
+  sets the default face, size, and leading so a bare element is never browser-default; tiers
+  (`t-*`, `face-*`) become deviations from a good default, not requirements. User: "the bad font
+  shows most in the hidden places", named stake: the targeting dropdown's search text and "none
+  found" text. Bar: near-zero boilerplate at call sites.
+- 2026-08-31 — Density law: "in general denser and smaller is better, conventional accessibility
+  sizes do not work well for our use-case." Layout debt (overflow, unequal list-item heights,
+  elements not filling parents, missing edge padding, uneven text density) is a named demiurge
+  subject; it enters instrument-first with a computed-style census on the priority routes.
 
 ## Tried & rejected
 
@@ -207,6 +221,13 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   `weight variables outside the foundation` 1 site (`workbench/lens.css:277`), `unregistered
   classes` 11 sites, and the empty `design-allowlist.baseline.json` vs 197 live meaning/fill/stroke
   sites. Classification table: `.artifacts/runs/merge-20260831/report.md` Round 2. Phase 4 pays.
+- The design guards misreport (found 2026-08-31 by the intent census,
+  `.artifacts/runs/meaning-census-20260831/report.md`): the inline-color regex at
+  `design-adherence.test.ts:107` backtracks past its optional quote, so 11 literal
+  `transparent`/`inherit` values count as debt; the opacity regex at `design-adherence.test.ts:102`
+  counts animation keyframes as dimming; the class guard's inverse `AUTHORING` filter counts 23
+  typography/shape/accessibility utilities as "meaning, fill and stroke". Fix falls to phase 3
+  with the meaning-system verdict.
 
 ### Style regression, main → review/design-system (opened 2026-08-30)
 

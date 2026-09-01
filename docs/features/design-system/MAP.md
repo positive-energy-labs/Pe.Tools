@@ -63,6 +63,37 @@ evidence), 3. only then rule whether the store belongs in the shell at all. `ctx
 fixture-lane test. Side finding, proven on main: `instances/fixture.tsx` has 6 type errors since
 the beta.132 contract cutover (`TODO(sdk-beta132)` at the site).
 
+## Phase 3 frontier — meaning-system demiurge (round 1, 2026-08-31)
+
+Input: `.artifacts/runs/meaning-census-20260831/report.md` (intent census of all 4 guard
+populations, reproduced exactly against the guard's own AST/regexes).
+
+Round-1 findings, evidence-backed:
+
+- The 197-site debt is not 197 problems. 126 sites are ONE intent: a directional hairline on a
+  row/band that already has an owner (`Section`/`Pane`/`ArtifactFrame` cannot cover it without
+  wrapper DOM). 32 are surface/elevation. 23 are guard scope false positives (typography, `sr-only`,
+  focus-reset counted as "meaning, fill and stroke").
+- The guard itself is buggy: the inline regex's optional quote backtracks, so all 11 literal
+  `transparent`/`inherit` values are counted despite the lookahead
+  (`design-adherence.test.ts:107`); the opacity regex counts animation keyframes as dimming.
+- Forever-exceptions confirmed: runtime data-viz series, source-provided RGB, SVG ghost/keyframe
+  opacity, the token specimen. These belong in a legitimate allowlist, not debt.
+
+Shapes on the table (verdict owed):
+
+- M1 vocabulary extension: add the missing roles (directional hairline, surface-role-on-slot,
+  inline status mark, selectable-row state, source-provenance tone) as registered authored
+  classes; fix the guard regexes; ratchet honestly. Recommended core.
+- M2 modern-CSS recanonization: call sites express state via data attributes; `@layer`ed language
+  CSS owns all color (`light-dark()`, `oklch()` roles). Deeper module; candidate mechanism for M1's
+  roles rather than a competing whole.
+- M3 guard-first only: fix regexes and scope, migrate to existing components, add nothing.
+  FALSIFIED for the hairline intent — the census proves existing components structurally cannot
+  cover it.
+- M4 wrapper mandate: everything through `Section`/`Pane`. FALSIFIED — fixed DOM topology is the
+  reason the debt exists.
+
 ## Laws for this effort
 
 - The SDK contract is fixed; only web-side state shape changes (LEDGER Decided 2026-08-31).
