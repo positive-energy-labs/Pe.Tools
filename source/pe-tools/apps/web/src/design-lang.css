@@ -171,6 +171,12 @@
   border-bottom: 1px solid var(--pe-line);
 }
 
+@utility hairline-rows {
+  & > :not(:last-child) {
+    border-bottom: 1px solid var(--pe-line);
+  }
+}
+
 @utility hairline-t-2 {
   border-top: 1px solid var(--pe-line-2);
 }

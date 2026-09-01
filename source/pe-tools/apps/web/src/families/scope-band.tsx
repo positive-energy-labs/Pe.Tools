@@ -59,7 +59,7 @@ export function FamiliesScopeBand() {
       )}
 
       {/* ── scope: placement → draft categories → picked families, explicit apply ────────── */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-2 py-1">
+      <div className="hairline-b flex flex-wrap items-center gap-1.5 px-2 py-1">
         <SectionLabel>
           <span title="Which families the table loads at all. Scope is a DRAFT until you apply it — the matrix op is the expensive one, so it never fires on a click.">
             scope draft
@@ -156,7 +156,7 @@ export function FamiliesScopeBand() {
         )}
       </div>
 
-      <div className="border-b border-line px-2 py-1 empty:hidden">
+      <div className="hairline-b px-2 py-1 empty:hidden">
         <VerbLane atoms={store.atoms} />
       </div>
       {matrixIssue && (

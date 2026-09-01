@@ -276,7 +276,7 @@ export function FieldLegendRow({
   path?: string;
 }) {
   return (
-    <div className="face-mono t-label t-upper flex w-full items-center gap-1 border-b border-line pb-1 text-ink-2">
+    <div className="hairline-b face-mono t-label t-upper flex w-full items-center gap-1 pb-1 text-ink-2">
       <span>{label}</span>
       {required ? <RequiredBadge /> : null}
       <FieldMetadataTooltip description={description} defaultValue={defaultValue} />

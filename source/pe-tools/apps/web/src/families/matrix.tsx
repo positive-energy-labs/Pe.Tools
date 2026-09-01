@@ -42,7 +42,7 @@ export function FamiliesMatrix() {
             >
               {params.length} parameters
             </span>
-            <span className="border-l border-line pl-2">
+            <span className="hairline-l pl-2">
               <Verb
                 label="project → profile"
                 onClick={() => runProject()}

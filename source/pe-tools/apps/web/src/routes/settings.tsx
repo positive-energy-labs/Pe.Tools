@@ -254,7 +254,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                     </>
                   }
                 >
-                  <div className="divide-y divide-line">
+                  <div className="hairline-rows">
                     {proposalRows.map((row) => (
                       <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
                     ))}
@@ -273,7 +273,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                 </>
               }
             >
-              <div className="divide-y divide-line">
+              <div className="hairline-rows">
                 {rows.map((row) => (
                   <FieldRow key={row.path} row={row} busy={busy != null} store={store} />
                 ))}

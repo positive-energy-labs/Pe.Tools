@@ -95,7 +95,7 @@ export function ArrayField({
           </ComboboxContent>
         </Combobox>
       ) : isObjectArray && itemNode?.properties ? (
-        <div className="border-t border-line">
+        <div className="hairline-t">
           <div className="flex items-center justify-between bg-artifact px-2 py-1">
             <span className="face-mono t-caption t-upper text-ink-2">
               {(Array.isArray(field.value) ? field.value : []).length} items
@@ -108,7 +108,7 @@ export function ArrayField({
               }}
             />
           </div>
-          <div className="divide-y divide-line">
+          <div className="hairline-rows">
             {(Array.isArray(field.value) ? (field.value as unknown[]) : []).map((_, index) => {
               const childPathPrefix = `${path}.${index}`;
               return (

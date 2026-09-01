@@ -27,7 +27,7 @@ export function AtlasNavigation() {
   return (
     <Suspense fallback={<div className="t-label p-2 text-ink-2">reading zones…</div>}>
       <Pane kind="navigation" title="zones" meta={`${world.zones.length} declared`}>
-        <div className="border-b border-line px-2 py-1.5">
+        <div className="hairline-b px-2 py-1.5">
           <div className="t-caption t-upper mb-1 text-ink-2">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {ROOM_STATES.map((s) => (
@@ -43,7 +43,7 @@ export function AtlasNavigation() {
           </div>
         </div>
 
-        <div className="border-b border-line px-2 py-1.5">
+        <div className="hairline-b px-2 py-1.5">
           <div className="t-caption t-upper mb-1 text-ink-2">zone pipeline — global filter</div>
           <div className="flex flex-col">
             {stageCounts.map(({ stage, n }, i) => {
@@ -84,7 +84,7 @@ export function AtlasNavigation() {
             if (zs.length === 0) return null;
             return (
               <div key={lane.label}>
-                <div className="t-caption t-upper face-mono sticky top-0 z-sticky border-b border-line bg-recess px-2 py-0.5 text-ink-2 on-recess">
+                <div className="hairline-b t-caption t-upper face-mono sticky top-0 z-sticky bg-recess px-2 py-0.5 text-ink-2 on-recess">
                   {lane.label} · {zs.length}
                 </div>
                 <ul>

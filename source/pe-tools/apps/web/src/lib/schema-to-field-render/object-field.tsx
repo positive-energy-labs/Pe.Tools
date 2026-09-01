@@ -28,7 +28,7 @@ export function ObjectField({
         />
       </legend>
       <FieldMessages messages={field.errors} compact />
-      <div className="divide-y divide-line">
+      <div className="hairline-rows">
         {propertyEntries.map(([childKey, childNodeRef]) => {
           const childPath = `${path}.${childKey}`;
           return (

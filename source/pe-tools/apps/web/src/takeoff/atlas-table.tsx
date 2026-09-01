@@ -77,7 +77,7 @@ export function AtlasTable() {
                       {scopeCalls} open call{scopeCalls === 1 ? "" : "s"}
                     </FactChip>
                   )}
-                  <span className="shrink-0 border-l border-line pl-2">
+                  <span className="hairline-l shrink-0 pl-2">
                     <Press
                       type="button"
                       onClick={() =>

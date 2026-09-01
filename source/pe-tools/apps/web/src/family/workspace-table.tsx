@@ -51,7 +51,7 @@ export function FamilyWorkspaceTable() {
         : focusedParams.has(row.name) || pinnedParam === row.name;
     return cn(
       row.kind === "ghost" && "caution-wash-artifact",
-      row.key === firstGhostKey && "[&>td]:border-t [&>td]:border-t-line-2",
+      row.key === firstGhostKey && "[&>td]:hairline-t-2",
       focused && "on-select",
     );
   };

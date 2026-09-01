@@ -209,7 +209,7 @@ export function LevelPlan({
         })}
       </svg>
 
-      <div className="pointer-events-none flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-line bg-recess px-2 py-0.5 on-recess">
+      <div className="hairline-t pointer-events-none flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 bg-recess px-2 py-0.5 on-recess">
         {ROOM_STATES.map((s) => (
           <Key key={s} tone={stateInk(s)} label={STATE_META[s].label} />
         ))}

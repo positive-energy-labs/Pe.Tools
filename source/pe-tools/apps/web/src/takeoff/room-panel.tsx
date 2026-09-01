@@ -49,7 +49,7 @@ function RoomPanel({
 
   return (
     <Pane kind="inspector" title="room" meta={`${zone.zone.key} · ${zone.zone.lane.label}`}>
-      <div className="-m-2 divide-y divide-line">
+      <div className="hairline-rows -m-2">
         <div className="px-2.5 py-2">
           <h2 className="t-title text-ink">{room.name}</h2>
           <p className="face-mono mt-1 flex flex-wrap items-center gap-x-1.5 text-ink-2">

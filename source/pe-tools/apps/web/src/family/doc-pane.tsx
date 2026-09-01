@@ -36,7 +36,7 @@ export function SpecText({
     );
   return (
     <div>
-      <div className="flex items-center gap-2 border-b border-line bg-recess px-2 py-1">
+      <div className="hairline-b flex items-center gap-2 bg-recess px-2 py-1">
         <Tag>source</Tag>
         <span className="face-mono t-caption min-w-0 flex-1 truncate text-ink-2">
           {spec.fileName}
@@ -249,7 +249,7 @@ export function ProposalCard({
         ref={register}
         onMouseEnter={() => onHover(true)}
         onMouseLeave={() => onHover(false)}
-        className="face-mono flex items-baseline gap-1 border-b border-line py-0.5 t-caption last:border-b-0"
+        className="hairline-b face-mono flex items-baseline gap-1 py-0.5 t-caption last:border-b-0"
         title={settled.note}
         style={{ color: settled.colour }}
       >
@@ -265,7 +265,7 @@ export function ProposalCard({
       ref={register}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
-      className="mb-1 border-b border-line py-1 pl-2 last:mb-0 last:border-b-0"
+      className="hairline-b mb-1 py-1 pl-2 last:mb-0 last:border-b-0"
       /* Pea's identity, never the commit colour: the card edge is a MARK (`--pe-pea`, the display
          rung) and the focus wash is mixed from pea's ink. */
       style={{
@@ -284,7 +284,7 @@ export function ProposalCard({
       <p className="mt-0.5 leading-snug text-ink">{proposal.note}</p>
       {blockMd && (
         <p
-          className="face-mono mt-1 max-h-[3lh] overflow-hidden border-l border-line pl-1.5 whitespace-pre-line t-caption text-ink-2"
+          className="hairline-l face-mono mt-1 max-h-[3lh] overflow-hidden pl-1.5 whitespace-pre-line t-caption text-ink-2"
           title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}

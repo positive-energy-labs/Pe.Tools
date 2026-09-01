@@ -64,7 +64,7 @@ export function AtlasVisual() {
               );
             })}
 
-            <span className="ml-1 flex items-center gap-1 border-l border-line pl-1">
+            <span className="hairline-l ml-1 flex items-center gap-1 pl-1">
               <Press
                 type="button"
                 onClick={() => setStatsOpen(!statsOpen)}
