@@ -154,7 +154,7 @@ async function acquireServiceLease(
         delete process.env[LEASE_TOKEN_ENV];
         return { path, token: inheritedToken, inherited: true };
       }
-    } catch { }
+    } catch {}
   }
   const deadline = Date.now() + timeoutMs;
   do {
@@ -173,7 +173,7 @@ async function acquireServiceLease(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") return null;
       if (await leaseOwnerIsGone(path)) {
-        await rm(path, { force: true }).catch(() => { });
+        await rm(path, { force: true }).catch(() => {});
         continue;
       }
       await delay(100);
@@ -187,7 +187,7 @@ async function releaseServiceLease(lease: ServiceLease): Promise<void> {
   try {
     const owner = JSON.parse(await readFile(lease.path, "utf8")) as { token?: unknown };
     if (owner.token === lease.token) await rm(lease.path, { force: true });
-  } catch { }
+  } catch {}
 }
 
 async function describeLeaseOwner(path: string): Promise<string> {
@@ -209,7 +209,7 @@ async function leaseOwnerIsGone(path: string): Promise<boolean> {
   try {
     const owner = JSON.parse(await readFile(path, "utf8")) as { pid?: unknown };
     if (typeof owner.pid === "number") return !(await pidIsAlive(owner.pid));
-  } catch { }
+  } catch {}
   try {
     return Date.now() - (await stat(path)).mtimeMs > 2_000;
   } catch {
@@ -333,7 +333,7 @@ export async function sweepDeadServiceFiles(
     if (opts?.exclude?.includes(name)) continue;
     const file = await readServiceFile(appBase, name);
     if (!file || !(await recordedOwnerVerifiablyGone(file))) continue;
-    await rm(serviceFilePath(appBase, name), { force: true }).catch(() => { });
+    await rm(serviceFilePath(appBase, name), { force: true }).catch(() => {});
     swept.push(name);
   }
   return swept;
@@ -373,7 +373,7 @@ export async function writeServiceFile(
   try {
     await rename(temp, path);
   } finally {
-    await rm(temp, { force: true }).catch(() => { });
+    await rm(temp, { force: true }).catch(() => {});
   }
 }
 
@@ -720,18 +720,18 @@ async function spawnAndWait(
     };
     child = opts.spawnCommand
       ? spawn(opts.spawnCommand.command, [...(opts.spawnCommand.args ?? [])], {
-        cwd: opts.spawnCommand.cwd,
-        shell: opts.spawnCommand.shell ?? false,
-        detached: true,
-        stdio: ["ignore", logFd, logFd],
-        env: spawnEnv,
-      })
+          cwd: opts.spawnCommand.cwd,
+          shell: opts.spawnCommand.shell ?? false,
+          detached: true,
+          stdio: ["ignore", logFd, logFd],
+          env: spawnEnv,
+        })
       : spawn(opts.entryPath!, [...(opts.spawnArgs ?? [])], {
-        cwd: dirname(opts.entryPath!),
-        detached: true,
-        stdio: ["ignore", logFd, logFd],
-        env: spawnEnv,
-      });
+          cwd: dirname(opts.entryPath!),
+          detached: true,
+          stdio: ["ignore", logFd, logFd],
+          env: spawnEnv,
+        });
     await new Promise<void>((resolve, reject) => {
       const onSpawn = () => {
         child!.off("error", onError);
