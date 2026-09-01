@@ -52,7 +52,7 @@ export function FamilyWorkspaceView() {
               }
             />
           }
-          aside={
+          fact={
             <>
               {validation && (
                 <FactChip

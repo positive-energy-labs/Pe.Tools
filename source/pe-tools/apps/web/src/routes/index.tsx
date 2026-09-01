@@ -1,8 +1,6 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
-  DownloadCloud,
   FileScan,
   Boxes,
   History,
@@ -18,122 +16,8 @@ import {
   Terminal,
 } from "lucide-react";
 
-import { ThemeToggle } from "#/components/lang/theme-toggle";
-import { FactChip } from "#/components/lang/chip";
-import { OutcomeLine } from "#/components/lang/outcome";
-import { Verb } from "#/components/lang/verb";
+import { RouteHead } from "#/targeting/head";
 import { Card } from "#/components/lang/card";
-
-type InstallStatus = {
-  installed: boolean;
-  releaseVersion: string | null;
-};
-
-async function readInstallStatus(): Promise<InstallStatus> {
-  const response = await fetch("/host/install");
-  if (!response.ok) throw new Error(`install status failed (${response.status})`);
-  return response.json() as Promise<InstallStatus>;
-}
-
-async function waitForVersionChange(previousVersion: string | null): Promise<string> {
-  const deadline = Date.now() + 180_000;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
-    try {
-      const next = await readInstallStatus();
-      if (next.releaseVersion && next.releaseVersion !== previousVersion)
-        return next.releaseVersion;
-    } catch {
-      // The old host exits after commit; retry until its replacement owns the service.
-    }
-  }
-  throw new Error("Update started, but the new host did not come back within 3 minutes.");
-}
-
-/** Acknowledge the update before the versioned host restarts, then poll the receipt until the
- * replacement host proves the new release. The Revit add-in remains staged until Revit restarts. */
-function UpdateButton() {
-  const installed = useQuery({
-    queryKey: ["host-install"],
-    queryFn: readInstallStatus,
-  });
-  const available = useQuery({
-    queryKey: ["host-update"],
-    queryFn: async () => {
-      const response = await fetch("/host/update");
-      if (!response.ok) throw new Error(`update check failed (${response.status})`);
-      return response.json() as Promise<{
-        installedVersion: string | null;
-        latestVersion: string | null;
-        updateAvailable: boolean;
-        error?: string;
-      }>;
-    },
-  });
-  const update = useMutation({
-    mutationFn: async () => {
-      const previousVersion =
-        installed.data?.releaseVersion ?? available.data?.installedVersion ?? null;
-      if (!previousVersion) throw new Error("Installed version is not available.");
-      const res = await fetch("/host/update", { method: "POST" });
-      const body = (await res.json()) as {
-        accepted?: boolean;
-        reason?: string;
-        installedVersion?: string | null;
-        error?: string;
-      };
-      if (res.status === 409 && body.reason === "already-current" && body.installedVersion)
-        return { changed: false, releaseVersion: body.installedVersion };
-      if (!res.ok || body.accepted !== true)
-        throw new Error(body.error ?? `update failed (${res.status})`);
-      return { changed: true, releaseVersion: await waitForVersionChange(previousVersion) };
-    },
-    onSuccess: async () => {
-      await Promise.all([installed.refetch(), available.refetch()]);
-    },
-  });
-
-  return (
-    <div className="flex items-center gap-2">
-      {installed.data?.releaseVersion && (
-        <FactChip title="the host release currently installed as a service">
-          v{installed.data.releaseVersion}
-        </FactChip>
-      )}
-      {available.data?.error && <OutcomeLine kind="advisory" label="update check unavailable" />}
-      {update.isSuccess &&
-        (update.data.changed ? (
-          <OutcomeLine
-            kind="receipt"
-            label={`updated to ${update.data.releaseVersion}`}
-            says="staged for the next Revit start; this Revit keeps its loaded version"
-          />
-        ) : (
-          <OutcomeLine
-            kind="advisory"
-            label={`already on ${update.data.releaseVersion}`}
-            says="the latest release is installed"
-          />
-        ))}
-      {update.isError && (
-        <OutcomeLine kind="error" label={String(update.error?.message ?? update.error)} />
-      )}
-      {installed.data?.releaseVersion &&
-        (available.data?.updateAvailable || update.isPending) &&
-        !update.isSuccess && (
-          <Verb
-            tone="commit"
-            label="update"
-            icon={DownloadCloud}
-            busy={update.isPending}
-            disabled={update.isPending}
-            onClick={() => update.mutate()}
-            reason="Download and install the latest host release — the running Revit keeps its loaded add-in until it restarts"
-          />
-        )}
-    </div>
-  );
-}
 
 export const Route = createFileRoute("/")({ component: App });
 
@@ -276,27 +160,18 @@ const DEV_TOOLS = [
 function App() {
   const tools = import.meta.env.DEV ? [...TOOLS, ...DEV_TOOLS] : TOOLS;
   return (
-    <div className="min-h-screen">
-      <header>
-        <div className="flex items-center justify-between py-4">
-          <div className="flex items-center gap-2">
-            <span className="size-2" />
-            <span className="text-ink">Positive Energy</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <UpdateButton />
-            <ThemeToggle />
-          </div>
-        </div>
+    <div className="min-h-screen px-6">
+      <header className="py-4">
+        <RouteHead name="Positive Energy" />
       </header>
 
       <main className="py-16">
         <section className="max-w-2xl">
           <p className="t-label mb-3 text-ink-2">
             <span className="t-upper">Internal tools</span> ·{" "}
-            <span className="face-mono">update proof 0.6.22</span>
+            <span className="t-caption">update proof 0.6.22</span>
           </p>
-          <h1 className="t-display face-display text-ink">Healthy people, healthy planet.</h1>
+          <p className="t-display face-display text-ink">Healthy people, healthy planet.</p>
           <p className="t-prose mt-4 text-ink-2">
             A small workbench of internal tools — the Pea agent, Revit data, and the host pipeline.
             Pick one to get started.
@@ -314,7 +189,7 @@ function App() {
                   <ArrowUpRight className="size-4 text-ink-2" />
                 </div>
                 <div>
-                  <p className="t-caption t-upper text-ink-2">{tool.label}</p>
+                  <p className="t-label">{tool.label}</p>
                   <h2 className="t-title mt-0.5 text-ink">{tool.title}</h2>
                   <p className="t-prose mt-1.5 text-ink-2">{tool.description}</p>
                 </div>

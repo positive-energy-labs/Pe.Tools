@@ -57,10 +57,17 @@ export function ThemeToggle() {
   const Icon = ICON[mode];
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
+  // `t-value`, not `t-label`: the canonized label bundle carries CASE, so "Auto" read as "AUTO".
+  // This is a control's own word, not a section head.
   return (
-    <Press onClick={cycle} aria-label={label} title={label} size="label" tone="neutral">
-      <Icon className="size-3.5" />
-      {LABEL[mode]}
+    <Press onClick={cycle} aria-label={label} title={label} size="value" tone="neutral">
+      {/* `Press` is `min-w-0` (it is a flex item wherever it sits), so an icon + word in a header
+       * row wrapped to two lines and stood taller than the controls beside it. The glyph and its
+       * word are ONE mark: they ride a nowrap inline row. */}
+      <span className="inline-flex items-center gap-1 whitespace-nowrap">
+        <Icon className="size-3.5" />
+        {LABEL[mode]}
+      </span>
     </Press>
   );
 }

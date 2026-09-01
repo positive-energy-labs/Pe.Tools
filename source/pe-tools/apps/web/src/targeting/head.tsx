@@ -12,6 +12,7 @@ import {
   type Bindings,
   type Runner,
 } from "#/targeting/kit";
+import { InstrumentCluster } from "#/targeting/cluster";
 import { targets, type Link, type Product, type Verb } from "#/targeting/model";
 import { Press } from "#/components/lang/press";
 
@@ -56,23 +57,93 @@ function verbButton<K extends string>(v: Verb<K>, runner: Runner<K>) {
   );
 }
 
-export function TargetingHead<K extends string>({
-  product,
-  b,
-  runner,
-  receipt,
-  extra,
-  aside,
-  mode = "sentence",
-}: {
+export interface TargetingHeadProps<K extends string> {
   product: Product<K>;
   b: Bindings<K>;
   runner: Runner<K>;
   receipt?: React.ReactNode;
   extra?: (link: Link<K>) => React.ReactNode;
-  aside?: React.ReactNode;
+  /** A machine fact drawn INSIDE the sentence (the fixture chip, a schema verdict). Renamed from
+   * `aside` on 2026-09-01: `RouteHead.aside` is furniture on the name line, and one word drawn at
+   * two altitudes is two marks (law 1). */
+  fact?: React.ReactNode;
   mode?: "sentence" | "flow" | "line";
+  /** Set by `RouteHead`, which owns the route name above the sentence. Internal: no call site
+   * outside this module passes it. */
+  nameless?: boolean;
+}
+
+/**
+ * ROUTE HEAD (S2, adopted 2026-09-01) — the route's name, and the manifest expanding BELOW it.
+ *
+ * The name sits on the page ground, never inside the sentence's frame: a route name carries no
+ * state, and law 7 says nothing is enclosed that carries none. `manifest` is the SAME
+ * `TargetingHead` every product route already renders — given a `Product` and its bindings the
+ * sentence expands below the name; given none (the front door) the name stands alone below it.
+ *
+ * The INSTRUMENT CLUSTER rides the name line on EVERY route (ruled 2026-09-01) — host, release
+ * and theme are facts about the machine the whole app runs on, not about one route. `aside` is
+ * extra route chrome beside it.
+ */
+export function RouteHead<K extends string>({
+  name,
+  aside,
+  manifest,
+}: {
+  name: string;
+  /** EXTRA route chrome, beside the cluster. Not the sentence's `fact` — that one names a datum
+   * inside the sentence; this one is furniture on the name's line. */
+  aside?: React.ReactNode;
+  manifest?: TargetingHeadProps<K>;
 }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-2">
+      {/* With a manifest the name heads an ArtifactFrame, so it takes the frame head's own inset
+       * and a top gutter — the workspace rail gives its outer flow no room, and a 24px display
+       * face clipped its ascenders against the viewport edge (measured on `/takeoffs`). Alone
+       * (front door) it takes none and sits on the page's own frame. */}
+      <div
+        className={
+          manifest
+            ? "flex min-w-0 items-center justify-between gap-4 px-2.5 pt-2"
+            : "flex min-w-0 items-center justify-between gap-4"
+        }
+      >
+        <h1 className="t-head face-display text-ink">{name}</h1>
+        <span className="flex shrink-0 items-center gap-3">
+          {aside}
+          <InstrumentCluster />
+        </span>
+      </div>
+      {manifest ? <TargetingHead {...manifest} nameless /> : null}
+    </div>
+  );
+}
+
+/**
+ * S2: every sentence/flow head IS a route head, so `TargetingHead` hands itself to `RouteHead`
+ * and comes back as its manifest. `nameless` is what stops the recursion. `line` (chat's
+ * embedded sentence) is NOT a route head and keeps the small inline label.
+ *
+ * Dispatch lives in its own component because the branch is above a hook: `TargetingSentence`
+ * owns `useState`, so it may never be conditionally mounted from inside itself.
+ */
+export function TargetingHead<K extends string>(props: TargetingHeadProps<K>) {
+  const { nameless, mode = "sentence", product } = props;
+  if (nameless || mode === "line") return <TargetingSentence {...props} mode={mode} />;
+  return <RouteHead name={product.name} manifest={{ ...props, mode }} />;
+}
+
+function TargetingSentence<K extends string>({
+  product,
+  b,
+  runner,
+  receipt,
+  extra,
+  fact,
+  mode = "sentence",
+  nameless,
+}: TargetingHeadProps<K>) {
   const [expanded, setExpanded] = useState(false);
   const verbs = [...b.stage.verbs].sort(
     (x, y) => Number(x.kind === "commit") - Number(y.kind === "commit"),
@@ -125,7 +196,7 @@ export function TargetingHead<K extends string>({
 
   const line = (
     <>
-      <span className="t-label t-upper text-ink">{product.name}</span>
+      {nameless ? null : <span className="t-label">{product.name}</span>}
       <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
         {targets(product).map((t) => {
           const dim = t.dir !== null && !b.demanded.has(t.key);
@@ -152,7 +223,7 @@ export function TargetingHead<K extends string>({
           );
         })}
       </span>
-      {aside}
+      {fact}
       <SeamChip product={product} />
     </>
   );
@@ -164,7 +235,7 @@ export function TargetingHead<K extends string>({
       {expanded ? (
         <>
           <div
-            className="face-mono t-caption t-upper grid px-2.5 pt-1.5 pb-0.5 text-ink-mute"
+            className="t-label grid px-2.5 pt-1.5 pb-0.5"
             style={{
               gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
               columnGap: "1rem",
@@ -191,7 +262,7 @@ export function TargetingHead<K extends string>({
         runner={runner}
         receipt={receipt}
         extra={extra}
-        aside={aside}
+        fact={fact}
       >
         {body}
       </TargetingFlow>

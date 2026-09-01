@@ -120,7 +120,7 @@ export function InstancesWorkspace({
     },
   });
   const fixtureRefusal = () => "fixture worlds are read-only";
-  const product = defineProduct("instances", "instances", { world: worldTrunk.link })({
+  const product = defineProduct("instances", "Instances", { world: worldTrunk.link })({
     feeds,
     stages: [
       {
@@ -247,7 +247,7 @@ export function InstancesWorkspace({
               <OutcomeLine kind={outcome.kind} label={outcome.text} says={outcome.says} />
             ) : undefined
           }
-          aside={
+          fact={
             stage === "declare" ? (
               <StartFields
                 year={startYear}

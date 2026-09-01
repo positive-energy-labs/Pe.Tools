@@ -113,9 +113,7 @@ function Rail<K extends string>({
     <div
       className={`flex min-w-0 flex-col justify-center gap-1.5 ${side === "left" ? "items-end" : "items-start"}`}
     >
-      <span className="face-mono t-caption t-upper px-1 text-ink-mute">
-        {side === "left" ? "reads" : "writes · syncs"}
-      </span>
+      <span className="t-label px-1">{side === "left" ? "reads" : "writes · syncs"}</span>
       {links.length ? (
         links.map((link) => (
           <Terminal
@@ -141,7 +139,7 @@ export function TargetingFlow<K extends string>({
   runner,
   receipt,
   extra,
-  aside,
+  fact,
   children,
 }: {
   product: Product<K>;
@@ -149,7 +147,7 @@ export function TargetingFlow<K extends string>({
   runner: Runner<K>;
   receipt?: React.ReactNode;
   extra?: (link: Link<K>) => React.ReactNode;
-  aside?: React.ReactNode;
+  fact?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const allTrunks = trunks(product);
@@ -164,8 +162,8 @@ export function TargetingFlow<K extends string>({
         <ArtifactFrame
           head={
             <>
-              <span className="t-label t-upper text-ink">{product.name}</span>
-              <span className="face-mono t-caption t-upper text-ink-mute">trunks</span>
+              <span className="t-label">{product.name}</span>
+              <span className="t-label">trunks</span>
               {ends.map((end) => (
                 <span key={end.key} className="face-mono t-caption text-ink-2">
                   {pathOf(product, end.key)
@@ -175,7 +173,7 @@ export function TargetingFlow<K extends string>({
                 </span>
               ))}
               <span className="ml-auto" />
-              {aside}
+              {fact}
               <SeamChip product={product} />
             </>
           }
