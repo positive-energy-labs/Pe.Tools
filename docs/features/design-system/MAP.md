@@ -147,11 +147,18 @@ main: `data-tone=alarm` ink equals `--pe-alarm` through `light-dark()` in both t
 worktree, branch, and themer session are retired; the report copy is at
 `.artifacts/runs/light-dark-20260831/report.md`.
 
-Queued round — t-value shim sweep (user-asked 2026-08-31): the body default (`a49fddd`) makes
-restated `t-value` classes shims; census counts 75 occurrences in 37 files (`face-body`: zero).
-Gate is computed-style equality per file: strip, diff computed styles on the rendering routes,
-revert any file that moved. Keep variant-API tiers (`press.tsx` size recipe) and design-system
-specimens. Runs on the scout line after the tone round; same tree.
+Round 5 t-value sweep (2026-08-31, `ab22ea4`): PROVEN[browser+deterministic, main checkout,
+ab22ea4, 2026-08-31], verified (98/101, 3 reds). Of 74 authored `t-value` lines, 37 deleted in
+14 files, 37 kept in 22 files. The kept map is the finding: nearly all component-level keeps
+are shadow-defense against `t-caption` swatch/tooltip regions — component recipes PIN their
+tier so the component reads identically in any region; route-level restatements were the shims
+and are gone. The probe (`type-sweep.mjs --probe-t-value`) removes each DOM `t-value`, diffs
+computed size/leading, restores, and prints SAME or LOAD with the shadowing ancestor. The
+typography law re-swept clean on all 24 route/interaction modes. Report:
+`.artifacts/runs/tvalue-sweep-20260831/report.md`.
+
+Emergent law candidate for the ledger when phase 3 closes: tiers are pinned at the component
+recipe, defaulted at the body, and RESTATED nowhere.
 
 ## Laws for this effort
 
