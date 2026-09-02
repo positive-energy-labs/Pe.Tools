@@ -26,7 +26,7 @@ function DesignSystem() {
         <ThesisSpecimen />
         <DesignSystemLaws />
         <DesignSystemSpecimens />
-        <p className="t-caption face-mono text-ink-mute">
+        <p className="t-small face-mono text-ink-mute">
           exhaustive component variants live at <Link to="/design-system/swatch">the swatch</Link>
         </p>
       </main>

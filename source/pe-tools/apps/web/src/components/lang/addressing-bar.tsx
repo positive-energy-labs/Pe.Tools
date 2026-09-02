@@ -26,7 +26,7 @@ import "./lang.css";
 export const addressingBarRecipe = tv({
   slots: {
     base: "flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-2",
-    name: "t-label tracking-[0.3em]",
+    name: "t-small t-upper tracking-[0.3em]",
     seam: "ml-auto",
   },
 });

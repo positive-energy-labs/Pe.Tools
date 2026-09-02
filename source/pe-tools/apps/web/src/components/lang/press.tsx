@@ -35,9 +35,9 @@ export const pressRecipe = tv({
       agent: "text-pea-ink pea-wash",
     },
     size: {
-      caption: "t-caption",
-      label: "t-label",
-      value: "t-value",
+      caption: "t-small face-mono",
+      label: "t-small t-upper",
+      value: "t-small",
       title: "t-title",
       icon: "inline-flex size-6 shrink-0 items-center justify-center rounded-sm [&>svg]:pointer-events-none [&>svg]:shrink-0",
     },

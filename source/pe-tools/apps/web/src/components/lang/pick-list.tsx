@@ -4,7 +4,7 @@ import { Input } from "#/components/lang/input";
 import { tv } from "#/lib/tv";
 
 export const pickListRecipe = tv({
-  base: "flex min-h-(--item-h) w-full items-baseline gap-2 border-l-2 px-3 py-0.5 text-left t-value",
+  base: "flex min-h-(--item-h) w-full items-baseline gap-2 border-l-2 px-3 py-0.5 text-left t-small",
   variants: {
     active: { true: "border-ink bg-select text-ink", false: "border-transparent text-ink" },
     cursored: { true: "bg-recess", false: "" },
@@ -112,13 +112,13 @@ export function PickList({
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto py-1" role="listbox">
         {items.length === 0 ? (
-          <div className="px-3 py-2 t-value text-ink-2">{emptyNote}</div>
+          <div className="px-3 py-2 t-small text-ink-2">{emptyNote}</div>
         ) : flat.length === 0 ? (
-          <div className="px-3 py-2 t-value text-ink-2">Nothing matches “{query.trim()}”.</div>
+          <div className="px-3 py-2 t-small text-ink-2">Nothing matches “{query.trim()}”.</div>
         ) : (
           [...groups.entries()].map(([group, groupItems]) => (
             <div key={group} className="mb-1">
-              {group && <p className="t-label px-3 pb-0.5 pt-2">{group}</p>}
+              {group && <p className="t-small t-upper px-3 pb-0.5 pt-2">{group}</p>}
               {groupItems.map((item) => {
                 index += 1;
                 const itemIndex = index;
@@ -139,7 +139,7 @@ export function PickList({
                   >
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     {item.meta != null && (
-                      <span className="face-mono t-caption shrink-0 text-ink-2">{item.meta}</span>
+                      <span className="t-small face-mono shrink-0 text-ink-2">{item.meta}</span>
                     )}
                   </button>
                 );

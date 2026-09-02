@@ -69,8 +69,10 @@
   & .dl-sq,
   & .dl-cite {
     font-family: var(--font-mono);
+    font-size: var(--type-small-size);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.04em;
+    line-height: var(--type-small-line-height);
   }
 }
 

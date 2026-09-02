@@ -173,7 +173,7 @@ function TakeoffsClusterFallback({ target = "" }: { target?: string }) {
   return (
     <main className="min-h-screen px-6 py-4">
       <RouteHead name="Takeoffs" />
-      <p className="t-caption face-mono mt-1 text-ink-2">
+      <p className="t-small face-mono mt-1 text-ink-2">
         no document bound — pick a session and stage a document below
       </p>
       <div className="mx-auto mt-5 max-w-6xl">

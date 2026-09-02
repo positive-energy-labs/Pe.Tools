@@ -60,12 +60,8 @@
   --weight-medium: 500;
   --weight-strong: 600;
   --weight-bold: 700;
-  --type-caption-size: 10px;
-  --type-caption-line-height: 1.2;
-  --type-label-size: 10px;
-  --type-label-line-height: 1.2;
-  --type-value-size: 10px;
-  --type-value-line-height: 1.2;
+  --type-small-size: 10px;
+  --type-small-line-height: 1.2;
   --type-prose-size: 11px;
   --type-prose-line-height: 1.4;
   --type-title-size: 16px;
@@ -137,8 +133,8 @@
     background: var(--pe-page);
     color: var(--pe-ink);
     font-family: var(--font-body);
-    font-size: var(--type-value-size);
-    line-height: var(--type-value-line-height);
+    font-size: var(--type-small-size);
+    line-height: var(--type-small-line-height);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -148,6 +144,10 @@
   }
   [data-pe] :where(code, pre, kbd, samp) {
     font-family: var(--font-mono);
+  }
+
+  :where([data-pe] .t-small) {
+    color: var(--pe-ink-2);
   }
 
   [data-pe] :focus-visible {
@@ -271,7 +271,7 @@
 [data-pe] .tag {
   color: var(--pe-ink-2);
   font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
+  font-size: var(--type-small-size);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -352,8 +352,8 @@
   line-height: var(--type-prose-line-height);
 }
 [data-pe] .prose-pe :where(code, pre, table, kbd, figcaption) {
-  font-size: var(--type-value-size);
-  line-height: var(--type-value-line-height);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
 }
 [data-pe] .prose-pe :where(p, ul, ol, li, pre) {
   font-weight: var(--weight-regular);
@@ -369,40 +369,9 @@
   box-shadow: none;
 }
 
-/* Type is tier x face x case. The three sub-prose tiers are COMPOSITE ROLES (C2 adopted
-   2026-09-01, measured on the /takeoffs fixture): one word dresses the whole look, so a call site
-   cannot half-dress a role. They live outside @layer base on purpose — unlayered beats Tailwind's
-   utilities layer, so the bundle wins over a call-site fragment like `text-ink-mute` or
-   `face-mono`. That is the whole mechanism: the role, not the fragment, is authority. */
-[data-pe] .t-caption {
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-line-height);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-}
-[data-pe] .t-label {
-  /* The role owns its FACE too: a label nested inside a caption must not inherit mono. */
-  font-family: var(--font-body);
-  font-variant-numeric: normal;
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line-height);
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-/* The value tier declares NO colour. Plain ink is already the body's, so the alarm/caution/pea
-   cells keep their hue — a tier may not outrank a claim about meaning. */
-[data-pe] .t-value {
-  font-size: var(--type-value-size);
-  line-height: var(--type-value-line-height);
-}
-/* The ink floor for the two dressed roles, split out so a meaning hue still wins. Mono never
-   sits below ink-2 (round-2 verdict): mono means a machine measured this, which is a claim, not
-   a disabled control. Something genuinely absent or locked needs its own mark, not a dimmer ink. */
-[data-pe] .t-caption:not(.text-alarm, .text-caution, .text-done, .text-pea, .text-commit),
-[data-pe] .t-label:not(.text-alarm, .text-caution, .text-done, .text-pea, .text-commit) {
-  color: var(--pe-ink-2);
+[data-pe] .t-small {
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
 }
 [data-pe] .t-prose {
   font-size: var(--type-prose-size);
@@ -437,7 +406,7 @@
   font-family: var(--font-display);
 }
 [data-pe] .t-upper {
-  font-weight: var(--weight-strong);
+  font-weight: var(--weight-medium);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }

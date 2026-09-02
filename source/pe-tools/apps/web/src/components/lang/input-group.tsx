@@ -8,7 +8,7 @@ export const inputGroupRecipe = tv({
   slots: {
     root: "group/input-group relative flex h-7 w-full min-w-0 items-center rounded-md border border-line bg-line/20 transition-colors outline-none in-data-[slot=combobox-content]:focus-within:border-inherit in-data-[slot=combobox-content]:focus-within:ring-0 has-data-[align=block-end]:rounded-md has-data-[align=block-start]:rounded-md has-[[data-slot=input-group-control]:focus-visible]:border-line-2 has-[[data-slot][aria-invalid=true]]:border-caution has-[[data-slot][aria-invalid=true]]:ring-2 has-[[data-slot][aria-invalid=true]]:ring-caution/20 has-[textarea]:rounded-md has-[>[data-align=block-end]]:h-auto has-[>[data-align=block-end]]:flex-col has-[>[data-align=block-start]]:h-auto has-[>[data-align=block-start]]:flex-col has-[>textarea]:h-auto dark:bg-line/30 dark:has-[[data-slot][aria-invalid=true]]:ring-caution/40 has-[>[data-align=block-end]]:[&>input]:pt-3 has-[>[data-align=block-start]]:[&>input]:pb-3 has-[>[data-align=inline-end]]:[&>input]:pr-1.5 has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
     addon:
-      "flex h-auto cursor-text items-center justify-center gap-1 py-2 t-value font-medium text-ink-2 select-none group-data-[disabled=true]/input-group:opacity-50 **:data-[slot=kbd]:rounded-[calc(var(--radius-sm)-2px)] **:data-[slot=kbd]:bg-ink-2/10 **:data-[slot=kbd]:px-1 **:data-[slot=kbd]:t-caption [&>svg:not([class*='size-'])]:size-3.5",
+      "flex h-auto cursor-text items-center justify-center gap-1 py-2 t-small font-medium text-ink-2 select-none group-data-[disabled=true]/input-group:opacity-50 **:data-[slot=kbd]:rounded-[calc(var(--radius-sm)-2px)] **:data-[slot=kbd]:bg-ink-2/10 **:data-[slot=kbd]:px-1 [&>svg:not([class*='size-'])]:size-3.5",
   },
   variants: {
     align: {

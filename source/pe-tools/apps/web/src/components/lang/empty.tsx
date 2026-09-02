@@ -20,7 +20,7 @@ import "./lang.css";
 
 export const emptyStateRecipe = tv({
   slots: {
-    base: "block t-label text-ink-mute italic",
+    base: "block t-small t-upper text-ink-mute italic",
     exit: "text-ink-2 not-italic before:text-ink-mute before:content-['_—_']",
   },
   variants: { state: { scope: {}, filter: {} } },

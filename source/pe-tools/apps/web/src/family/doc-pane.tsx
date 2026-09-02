@@ -38,7 +38,7 @@ export function SpecText({
     <div>
       <div className="hairline-b flex items-center gap-2 px-2 py-1" data-surface="recess">
         <Tag>source</Tag>
-        <span className="face-mono t-caption min-w-0 flex-1 truncate text-ink-2">
+        <span className="t-small face-mono min-w-0 flex-1 truncate text-ink-2">
           {spec.fileName}
         </span>
         <Tag>{spec.blocks.length} blocks</Tag>
@@ -141,7 +141,7 @@ export function SpecSheet({
           const blocks = spec.blocks.filter((block) => block.page === page);
           return (
             <div key={page} style={{ width: `${100 * zoom}%`, minWidth: 180 }}>
-              <div className="face-mono t-caption mb-0.5 text-ink-2">page {page}</div>
+              <div className="t-small face-mono mb-0.5 text-ink-2">page {page}</div>
               <svg
                 viewBox="0 0 100 130"
                 className="hairline-x-2 hairline-y-2 block w-full"
@@ -247,7 +247,7 @@ export function ProposalCard({
         ref={register}
         onMouseEnter={() => onHover(true)}
         onMouseLeave={() => onHover(false)}
-        className="hairline-b face-mono flex items-baseline gap-1 py-0.5 t-caption last:border-b-0"
+        className="hairline-b flex items-baseline gap-1 py-0.5 t-small face-mono last:border-b-0"
         title={settled.note}
         style={{ color: settled.colour }}
       >
@@ -282,14 +282,14 @@ export function ProposalCard({
       }}
       title="A pea proposal — ephemeral and page-scoped. It is not in the document and never will be; accepting is what writes the value, and leaving the page throws the proposal away."
     >
-      <div className="face-mono t-caption text-ink-2">{target}</div>
-      <div className="t-label text-ink">
+      <div className="t-small face-mono text-ink-2">{target}</div>
+      <div className="t-small t-upper text-ink">
         {proposal.current ?? "—"} → {proposal.proposed}
       </div>
       <p className="mt-0.5 text-ink">{proposal.note}</p>
       {blockMd && (
         <p
-          className="hairline-l face-mono mt-1 max-h-[3lh] overflow-hidden pl-1.5 whitespace-pre-line t-caption text-ink-2"
+          className="hairline-l mt-1 max-h-[3lh] overflow-hidden pl-1.5 whitespace-pre-line t-small face-mono text-ink-2"
           title={`Read from ${proposal.sourceBlockId} of ${specFileName ?? "the spec"} — the source text verbatim, so the claim is checkable without leaving the page.`}
         >
           {blockMd}

@@ -42,7 +42,7 @@ export function AtlasTable() {
         }
       : null;
   return (
-    <Suspense fallback={<div className="t-label p-2 text-ink-2">reading rooms…</div>}>
+    <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading rooms…</div>}>
       <Pane kind="content" headerSurface="recess" scroll="clip">
         <PaneSplit
           axis="horizontal"

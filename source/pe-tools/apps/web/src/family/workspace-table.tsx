@@ -94,7 +94,7 @@ export function FamilyWorkspaceTable() {
       onTableStateChange={setTableState}
       summary={
         <span className="inline-flex flex-wrap items-center gap-1">
-          <span className="face-mono t-caption text-ink-2">
+          <span className="t-small face-mono text-ink-2">
             {Object.keys(world.grounding).length} grounded · {openProposals.length} open ·{" "}
             {world.typeNames.length} types
           </span>

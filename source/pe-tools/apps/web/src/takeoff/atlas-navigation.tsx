@@ -25,16 +25,16 @@ export function AtlasNavigation() {
     stageCounts,
   } = useAtlasWorkspace();
   return (
-    <Suspense fallback={<div className="t-label p-2 text-ink-2">reading zones…</div>}>
+    <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading zones…</div>}>
       <Pane kind="navigation" title="zones" meta={`${world.zones.length} declared`}>
         <div className="hairline-b px-2 py-1.5">
-          <div className="t-label mb-1">room states — one per room</div>
+          <div className="t-small t-upper mb-1">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {ROOM_STATES.map((s) => (
               <span
                 key={s}
                 title={STATE_META[s].note}
-                className="face-mono t-caption inline-flex items-center gap-1 text-ink-2"
+                className="t-small face-mono inline-flex items-center gap-1 text-ink-2"
               >
                 <StateDot tone={STATE_META[s].tone} dim={s === "unreviewed"} />
                 {STATE_META[s].label}
@@ -44,7 +44,7 @@ export function AtlasNavigation() {
         </div>
 
         <div className="hairline-b px-2 py-1.5">
-          <div className="t-label mb-1">zone pipeline — global filter</div>
+          <div className="t-small t-upper mb-1">zone pipeline — global filter</div>
           <div className="flex flex-col">
             {stageCounts.map(({ stage, n }, i) => {
               const on = stageFilter === stage;
@@ -85,7 +85,7 @@ export function AtlasNavigation() {
             return (
               <div key={lane.label}>
                 <div
-                  className="hairline-b t-label sticky top-0 z-sticky px-2 py-0.5"
+                  className="hairline-b t-small t-upper sticky top-0 z-sticky px-2 py-0.5"
                   data-surface="recess"
                 >
                   {lane.label} · {zs.length}

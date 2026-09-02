@@ -23,7 +23,9 @@ export function SchemaToFieldRender({
     [schemaDocument, validationResult],
   );
   if (rootEntries.length === 0) {
-    return <p className="t-label text-ink-mute italic">Schema has no editable properties.</p>;
+    return (
+      <p className="t-small t-upper text-ink-mute italic">Schema has no editable properties.</p>
+    );
   }
 
   return (

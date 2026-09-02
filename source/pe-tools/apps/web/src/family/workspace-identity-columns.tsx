@@ -39,7 +39,7 @@ export function useFamilyIdentityColumns(core: FamilyWorkspaceCore) {
         .join(" · ");
       return (
         <span
-          className="face-mono flex h-(--item-h) items-center justify-center t-caption"
+          className="flex h-(--item-h) items-center justify-center t-small face-mono"
           data-tone="pea"
           title={
             standing.length === 1

@@ -33,10 +33,10 @@ import "./lang.css";
 
 export const outcomeLineRecipe = tv({
   slots: {
-    base: "grid grid-cols-[14px_minmax(0,auto)_minmax(0,1fr)] items-baseline gap-[7px] py-0.5 face-mono t-value tracking-[0.02em] tabular-nums [&>svg]:size-[11px] [&>svg]:self-center",
+    base: "grid grid-cols-[14px_minmax(0,auto)_minmax(0,1fr)] items-baseline gap-[7px] py-0.5 face-mono t-small tracking-[0.02em] [&>svg]:size-[11px] [&>svg]:self-center",
     icon: "",
     label: "",
-    says: "overflow-hidden text-ellipsis whitespace-nowrap t-label text-ink-2 italic",
+    says: "overflow-hidden text-ellipsis whitespace-nowrap t-small t-upper text-ink-2 italic",
   },
   variants: {
     state: {

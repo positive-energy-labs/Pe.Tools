@@ -167,9 +167,9 @@ function App() {
 
       <main className="py-16">
         <section className="max-w-2xl">
-          <p className="t-label mb-3 text-ink-2">
+          <p className="t-small t-upper mb-3 text-ink-2">
             <span className="t-upper">Internal tools</span> ·{" "}
-            <span className="t-caption">update proof 0.6.22</span>
+            <span className="t-small face-mono">update proof 0.6.22</span>
           </p>
           <p className="t-display face-display text-ink">Healthy people, healthy planet.</p>
           <p className="t-prose mt-4 text-ink-2">
@@ -189,13 +189,13 @@ function App() {
                   <ArrowUpRight className="size-4 text-ink-2" />
                 </div>
                 <div>
-                  <p className="t-label">{tool.label}</p>
+                  <p className="t-small t-upper">{tool.label}</p>
                   <h2 className="t-title mt-0.5 text-ink">{tool.title}</h2>
                   <p className="t-prose mt-1.5 text-ink-2">{tool.description}</p>
                 </div>
               </Card>
               {"satellites" in tool && (
-                <p className="t-caption face-mono flex flex-wrap gap-x-2 px-1 text-ink-2">
+                <p className="t-small face-mono flex flex-wrap gap-x-2 px-1 text-ink-2">
                   {tool.satellites.map((satellite) => (
                     <Link key={satellite.to} to={satellite.to}>
                       /{satellite.label}

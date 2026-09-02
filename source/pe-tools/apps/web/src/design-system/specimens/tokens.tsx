@@ -199,8 +199,8 @@ export function TokenSpecimens() {
       {TOKEN_GROUPS.map((g) => (
         <div key={g.group} className="flex flex-col gap-1.5">
           <div className="flex items-baseline gap-3 pb-1">
-            <span className="t-caption t-upper text-ink">{g.group}</span>
-            <span className="t-caption text-ink-mute">{g.asks}</span>
+            <span className="t-small face-mono t-upper text-ink">{g.group}</span>
+            <span className="t-small face-mono text-ink-mute">{g.asks}</span>
           </div>
           {g.tokens.map((t) => (
             <div
@@ -212,9 +212,11 @@ export function TokenSpecimens() {
                 style={{ backgroundColor: `var(${t.token})` }}
                 title={values[t.token] ?? t.token}
               />
-              <span className="t-caption face-mono text-ink">{t.token}</span>
-              <span className="min-w-0 t-label text-ink-2">{t.means}</span>
-              <span className="col-span-3 t-caption text-ink-mute sm:col-span-1">{t.modes}</span>
+              <span className="t-small face-mono text-ink">{t.token}</span>
+              <span className="min-w-0 t-small t-upper text-ink-2">{t.means}</span>
+              <span className="col-span-3 t-small face-mono text-ink-mute sm:col-span-1">
+                {t.modes}
+              </span>
             </div>
           ))}
         </div>

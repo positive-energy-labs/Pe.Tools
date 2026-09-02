@@ -8,7 +8,7 @@ export const cardRecipe = tv({
     root: "flex flex-col gap-3 rounded-lg border border-line bg-artifact text-ink",
     header: "flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between",
     title: "t-title text-ink",
-    description: "t-value text-ink-2",
+    description: "t-small text-ink-2",
     action: "flex flex-wrap gap-2",
     content: "p-5 pt-0",
     footer: "flex items-center gap-2 p-5 pt-0",

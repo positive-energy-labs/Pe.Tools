@@ -227,7 +227,7 @@ function GutterCell<Row>({ row, gutter, width }: { row: Row; gutter: Gutter<Row>
       className="hairline-b-inset sticky left-0 z-[5] bg-on p-0 text-center align-middle"
     >
       {owed && (
-        <span className="face-mono t-caption" style={{ color: token(owed.tone ?? "caution") }}>
+        <span className="t-small face-mono" style={{ color: token(owed.tone ?? "caution") }}>
           {owed.count}
         </span>
       )}

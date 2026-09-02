@@ -202,7 +202,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                 head={
                   <>
                     <Tag>schema ledger</Tag>
-                    <span className="t-label min-w-0 flex-1 truncate text-ink">
+                    <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
                       {snapshot.documentId.relativePath}
                     </span>
                     {snapshot.versionToken ? (
@@ -258,7 +258,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
               head={
                 <>
                   <Tag>field readout</Tag>
-                  <span className="t-label min-w-0 flex-1 truncate text-ink">
+                  <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
                     {snapshot.documentId.relativePath}
                   </span>
                 </>
@@ -321,7 +321,7 @@ function FieldRow({
   const shown = staged ? row.field?.staged?.value : proposal ? proposal.value : row.current;
   return (
     <div className="grid min-h-9 grid-cols-[minmax(15rem,0.75fr)_minmax(0,1.25fr)_auto] items-center gap-2 px-3 py-0.5">
-      <div className="t-label min-w-0 break-words text-ink-2">{row.path}</div>
+      <div className="t-small t-upper min-w-0 break-words text-ink-2">{row.path}</div>
       <StateCell
         scale="row"
         value={display(shown)}

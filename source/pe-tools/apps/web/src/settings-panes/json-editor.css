@@ -8,8 +8,8 @@
   overflow: auto;
   tab-size: 2;
   font-family: var(--font-mono);
-  font-size: var(--type-value-size);
-  line-height: var(--type-value-line-height);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
 }
 
 [data-json-pane] pre.th-code {

@@ -97,7 +97,7 @@ export function ArrayField({
       ) : isObjectArray && itemNode?.properties ? (
         <div className="hairline-t">
           <div className="flex items-center justify-between px-2 py-1" data-surface="artifact">
-            <span className="face-mono t-caption t-upper text-ink-2">
+            <span className="t-small face-mono t-upper text-ink-2">
               {(Array.isArray(field.value) ? field.value : []).length} items
             </span>
             <Verb
@@ -114,7 +114,7 @@ export function ArrayField({
               return (
                 <div key={childPathPrefix} className="boundary-l space-y-2 px-3 py-2">
                   <div className="flex items-center justify-between">
-                    <span className="face-mono t-caption t-upper text-ink-2">item {index + 1}</span>
+                    <span className="t-small face-mono t-upper text-ink-2">item {index + 1}</span>
                     <Verb
                       label="remove"
                       reason={`Drop item ${index + 1} from this list. The change lives in the form until save writes it.`}
@@ -150,7 +150,7 @@ export function ArrayField({
         />
       )}
       {isObjectArray ? null : (
-        <span className="t-caption text-ink-2">
+        <span className="t-small face-mono text-ink-2">
           {isPrimitiveArray
             ? "Multi-value combobox with searchable suggestions and removable chips."
             : "Array is currently edited as JSON for the MVP."}

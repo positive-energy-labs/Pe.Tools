@@ -25,7 +25,7 @@ export const coverageBarRecipe = tv({
     segment: "border-r border-on",
     rest: "bg-recess",
     legend: "mt-1 flex flex-wrap gap-x-3 gap-y-0.5",
-    key: "inline-flex items-center gap-1 face-mono t-caption tabular-nums text-ink",
+    key: "inline-flex items-center gap-1 t-small face-mono text-ink",
     dot: "inline-block size-[7px] rounded-[1px]",
     label: "text-ink-2",
     total: "text-ink-2",

@@ -72,6 +72,26 @@
   color: var(--pe-nav);
 }
 
+:where([cmdk-group-heading]) {
+  font-size: var(--type-small-size);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.08em;
+  line-height: var(--type-small-line-height);
+  text-transform: uppercase;
+}
+
+:where([data-pe] [data-slot="input"]::file-selector-button) {
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
+}
+
+@media (min-width: 48rem) {
+  :where([data-pe] [data-slot="input"], [data-pe] [data-slot="textarea"]) {
+    font-size: var(--type-small-size);
+    line-height: var(--type-small-line-height);
+  }
+}
+
 /* =============================================================================================
    StateCell precedence — the only hand CSS left in components/lang.
    =============================================================================================
@@ -293,7 +313,7 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
+  font-size: var(--type-small-size);
   font-style: italic;
   color: var(--pe-caution);
   background: color-mix(in srgb, var(--pe-caution) 12%, var(--pe-on));
@@ -332,7 +352,7 @@
    is unmissable and still costs zero row height. */
 .dl-ghost {
   font-family: var(--font-mono);
-  font-size: var(--type-label-size);
+  font-size: var(--type-small-size);
   color: var(--pe-alarm);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
@@ -353,11 +373,11 @@
   display: block;
   margin-top: 1px;
   font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
+  font-size: var(--type-small-size);
   letter-spacing: 0.02em;
   font-style: normal;
   font-weight: var(--weight-regular);
-  line-height: var(--type-caption-line-height);
+  line-height: var(--type-small-line-height);
   color: var(--pe-ink-2);
   overflow: hidden;
   text-overflow: ellipsis;

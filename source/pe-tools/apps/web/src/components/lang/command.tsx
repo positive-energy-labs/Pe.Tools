@@ -17,15 +17,15 @@ import { tv } from "#/lib/tv";
 export const commandRecipe = tv({
   slots: {
     root: "flex size-full flex-col overflow-hidden rounded-lg bg-artifact p-2 text-ink",
-    input: "w-full t-value outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+    input: "w-full t-small outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
     list: "no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
-    empty: "py-6 text-center t-value",
+    empty: "py-6 text-center t-small",
     group:
-      "overflow-hidden text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:t-label **:[[cmdk-group-heading]]:text-ink-2",
+      "overflow-hidden text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:text-ink-2",
     // The keyboard cursor is the selection FILL and nothing else — a rail plus a fill marks the
     // same row twice (annotation round, 2026-09-01).
     item: "group/command-item relative flex min-h-(--item-h) cursor-default items-center gap-2 rounded-sm px-2 t-prose outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-select data-selected:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-ink-2",
-    shortcut: "ml-auto t-label text-ink-2 group-data-selected/command-item:text-ink",
+    shortcut: "ml-auto t-small t-upper text-ink-2 group-data-selected/command-item:text-ink",
   },
 });
 

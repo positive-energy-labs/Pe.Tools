@@ -26,12 +26,12 @@ import "./lang.css";
 
 export const chipRecipe = tv({
   slots: {
-    base: "inline-flex h-[18px] max-w-[34ch] items-center gap-[5px] overflow-hidden whitespace-nowrap border border-line bg-artifact px-[5px] face-mono t-caption tracking-[0.03em] text-ink-2",
+    base: "inline-flex h-[18px] max-w-[34ch] items-center gap-[5px] overflow-hidden whitespace-nowrap border border-line bg-artifact px-[5px] t-small face-mono tracking-[0.03em] text-ink-2",
     label: "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
     count: "text-ink-2 tabular-nums",
     remove:
       "veil grid size-3 cursor-pointer place-items-center border-0 bg-transparent text-ink-2 focus-visible:outline focus-visible:outline-line-2 [&>svg]:size-[9px]",
-    tag: "t-label tabular-nums",
+    tag: "t-small t-upper tabular-nums",
   },
   variants: {
     tone: {

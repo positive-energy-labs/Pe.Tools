@@ -65,7 +65,7 @@ export function ThemeToggle() {
   const Icon = ICON[mode];
   const label = `Theme: ${LABEL[mode]}${mode === "auto" ? " (system)" : ""}. Click to change.`;
 
-  // `t-value`, not `t-label`: the canonized label bundle carries CASE, so "Auto" read as "AUTO".
+  // `t-small`, not `t-small t-upper`: the canonized label bundle carries CASE, so "Auto" read as "AUTO".
   // This is a control's own word, not a section head.
   return (
     <Press onClick={cycle} aria-label={label} title={label} size="value" tone="neutral">

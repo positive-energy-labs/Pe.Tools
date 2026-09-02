@@ -141,7 +141,7 @@ describe("design guard â€” current token authority", () => {
   it("projects every type tier through shared raw size and line-height values", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
     const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
-    for (const tier of ["caption", "label", "value", "prose", "title", "head", "display"]) {
+    for (const tier of ["small", "prose", "title", "head", "display"]) {
       const block = new RegExp(
         `(?:\\.t-${tier}|@utility\\s+t-${tier})\\s*\\{(?=[^}]*font-size:\\s*var\\(--type-${tier}-size\\))(?=[^}]*line-height:\\s*var\\(--type-${tier}-line-height\\))[^}]*\\}`,
         "s",
@@ -151,51 +151,28 @@ describe("design guard â€” current token authority", () => {
     }
   });
 
-  /* C2, 2026-09-01: the three sub-prose tiers are COMPOSITE ROLES — one word dresses the whole
-     look. This is the asserted law, so a call site can no longer half-dress a role: t-label owns
-     face + case + tracking + weight, t-caption owns face + tabular + tracking, and t-value owns
-     NOTHING but size and leading (it declares no colour, so an alarm/caution/pea cell keeps its
-     hue — a tier may not outrank a claim about meaning). */
-  it("bundles the three sub-prose tiers in base.css only", () => {
+  it("keeps size, face and uppercase as independent type axes", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
-    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
-    const bundles = {
-      label: [
-        /font-family:\s*var\(--font-body\)/,
-        /font-weight:\s*var\(--weight-medium\)/,
-        /letter-spacing:\s*0\.08em/,
-        /text-transform:\s*uppercase/,
-      ],
-      caption: [
-        /font-family:\s*var\(--font-mono\)/,
-        /font-variant-numeric:\s*tabular-nums/,
-        /letter-spacing:\s*0\.04em/,
-      ],
-    } as const;
     const blockOf = (text: string, head: string) => {
       const at = text.indexOf(head);
       return at === -1 ? "" : text.slice(at, text.indexOf("}", at) + 1);
     };
-    for (const [tier, decls] of Object.entries(bundles))
-      for (const decl of decls)
-        expect(blockOf(base, `.t-${tier} {`), `base.css bundle for t-${tier}`).toMatch(decl);
-    expect(lang).not.toMatch(/@utility\s+t-(?:caption|label|value)\b/);
-    // The ink floor is base.css-only: a @utility cannot carry the meaning-hue escape.
-    expect(base, "the t-caption/t-label ink floor").toMatch(
-      /\.t-caption:not\([^)]*\.text-alarm[^)]*\)[\s\S]{0,200}color:\s*var\(--pe-ink-2\)/,
-    );
-    // t-value must NOT declare a colour, or the alarm cells lose their hue.
-    const value = /\.t-value\s*\{[^}]*\}/s.exec(base)?.[0] ?? "";
-    expect(value, "t-value must declare no colour").not.toMatch(/color:/);
+    expect(blockOf(base, ".t-small {")).toMatch(/font-size:\s*var\(--type-small-size\)/);
+    expect(blockOf(base, ".t-small {")).toMatch(/line-height:\s*var\(--type-small-line-height\)/);
+    expect(blockOf(base, ".face-mono {")).toMatch(/font-family:\s*var\(--font-mono\)/);
+    expect(blockOf(base, ".face-mono {")).toMatch(/font-variant-numeric:\s*tabular-nums/);
+    expect(blockOf(base, ".t-upper {")).toMatch(/font-weight:\s*var\(--weight-medium\)/);
+    expect(blockOf(base, ".t-upper {")).toMatch(/letter-spacing:\s*0\.08em/);
+    expect(blockOf(base, ".t-upper {")).toMatch(/text-transform:\s*uppercase/);
   });
 
-  it("owns the shared uppercase case marker in base.css", () => {
+  it("keeps data-tone above t-small's layered zero-specificity default ink", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
-    const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
-    const rule =
-      /(?:\.t-upper|@utility\s+t-upper)\s*\{(?=[^}]*font-weight:\s*var\(--weight-strong\))(?=[^}]*letter-spacing:\s*0\.08em)(?=[^}]*text-transform:\s*uppercase)[^}]*\}/s;
-    expect(base, "base.css wiring for t-upper").toMatch(rule);
-    expect(lang, "design-lang.css must not redeclare t-upper").not.toMatch(rule);
+    const lang = FILES.find((f) => f.rel === "components/lang/lang.css")?.text ?? "";
+    expect(base).toMatch(
+      /@layer base\s*\{[\s\S]*:where\(\[data-pe\] \.t-small\)\s*\{[^}]*color:\s*var\(--pe-ink-2\)/,
+    );
+    expect(lang).toMatch(/:where\(\[data-tone="alarm"\]\)\s*\{[^}]*color:/);
   });
 
   it("projects the shared weight variables through Tailwind", () => {
@@ -859,7 +836,7 @@ const LOADER_PRESENT = [
   "flex",
   "h-4",
   "face-mono",
-  "t-caption",
+  "t-small",
   "text-ink-2",
   "z-modal",
   "dl-cell",
@@ -926,7 +903,7 @@ const TRUE_UNREGISTERED = REMAINDER.filter(
  *  Ruled 2026-08-30: the `{}` allowlist stripped ~1,100 `t-*`/`face-*` sites and left product
  *  text at browser defaults. Meaning hues, fills, and colored strokes stay component-only. */
 const AUTHORING =
-  /^(?:hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|t-(?:caption|label|value|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
+  /^(?:hairline-(?:(?:[tblrxy])(?:-2|-faint)?|rows)|boundary-[tl]|t-(?:small|prose|title|head|display|upper)|face-(?:mono|display)|text-(?:ink|ink-2|ink-mute)|(?:(?:flex|grid)(?:-.+)?|inline-(?:flex|grid|block)|block|hidden|(?:shrink|grow)(?:-.+)?|basis-.+|gap(?:-[xy])?-.+|space-[xy]-.+|[pm][xytrblse]?-.+|[wh]-.+|size-.+|(?:min|max)-[wh]-.+|(?:absolute|relative|fixed|sticky)|(?:inset|top|right|bottom|left)(?:-[xy])?-.+|(?:translate|rotate|scale|origin)(?:-[xy])?-.+|overflow(?:-[xy])?(?:-.+)?|truncate|text-(?:left|center|right|justify|start|end|ellipsis)|whitespace-.+|break-(?:words|all|normal|keep)|items-.+|justify-.+|self-.+|content-.+|place-(?:items|content|self)-.+|align-.+|col-.+|row-.+|object-.+|aspect-.+|table-(?:auto|fixed)|border-collapse|resize(?:-[xy])?|pointer-events-.+|cursor-.+|select-none|list-none|\[writing-mode:.+\]|transition-transform|duration-.+|(?:group|peer)(?:\/.+)?|z-.+))$/;
 const COLOR_ROLE =
   "(?:page|artifact|recess|select|document|scrim|ink|ink-2|ink-mute|line|line-2|pea|pea-ink|alarm|caution|done|commit|on-commit|nav|on|viz-[1-6])(?:/[\\d.]+)?";
 const MEANING_FILL_STROKE = new RegExp(
@@ -1131,7 +1108,7 @@ describe("design checks — code holds the boundary", () => {
           <div className={\`flex \${on ? "text-ink" : ""}\`} />;
           cn("grid", { border: on });
           tv({
-            base: "t-label",
+            base: "t-small",
             slots: { root: "gap-2" },
             variants: { tone: { x: "bg-page" } },
             compoundVariants: [{ tone: "x", class: "shadow-sm" }],
@@ -1144,7 +1121,7 @@ describe("design checks — code holds the boundary", () => {
       "text-ink",
       "grid",
       "border",
-      "t-label",
+      "t-small",
       "gap-2",
       "bg-page",
       "shadow-sm",

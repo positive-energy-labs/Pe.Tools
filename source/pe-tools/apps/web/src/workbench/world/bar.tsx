@@ -105,14 +105,14 @@ export function ContextBudgetBar({
   return (
     <div className="mx-3 mt-3">
       <div className="mb-1.5 grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-2">
-        <span className="t-label text-ink">Context budget</span>
-        <span className="text-right t-caption face-mono">
+        <span className="t-small t-upper text-ink">Context budget</span>
+        <span className="text-right t-small face-mono">
           {fmtTok(inContext)} / {fmtTok(budget)} · OM windows
         </span>
       </div>
       <BudgetBar breakdown={breakdown} cache={cache} />
 
-      <div className="mt-1 grid grid-cols-2 gap-3 t-caption face-mono text-ink-2">
+      <div className="mt-1 grid grid-cols-2 gap-3 t-small face-mono text-ink-2">
         <span className="whitespace-nowrap">reflect {fmtTok(mw.reflectionThreshold)}</span>
         <span className="text-right whitespace-nowrap">
           observe {fmtTok(mw.observationThreshold)}
@@ -193,7 +193,7 @@ export function ContextRibbon({
                     </span>
                   </span>
                 ))}
-                <span className="hairline-t-faint mt-0.5 pt-1.5 t-caption text-ink-2">
+                <span className="hairline-t-faint mt-0.5 pt-1.5 t-small face-mono text-ink-2">
                   {fmtTok(inContext)} in context · tinted = loaded, empty = headroom to compaction
                 </span>
               </span>

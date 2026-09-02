@@ -241,7 +241,7 @@ const SPECIMENS: readonly Specimen[] = [
     defects: [
       "FIXED — the single-value width floor keeps long option labels readable without changing the input's anchor ownership.",
       "no explicit anchor is passed, unlike BOTH other combobox consumers, which each wrote an anchor `div` with a comment explaining that the in-popup input must not be the positioner anchor. Nothing in the API says which shape needs it — the knowledge lives in two ponytail comments.",
-      "OBSERVED — flips at the bottom edge (correct), but the description sub-line is `t-caption text-ink-2` here and `t-value text-ink-2` in the picker chip: the same option list, rendered at two sizes by two consumers.",
+      "OBSERVED — flips at the bottom edge (correct), but the description sub-line is `t-small face-mono text-ink-2` here and `t-small text-ink-2` in the picker chip: the same option list, rendered at two sizes by two consumers.",
     ],
     render: () => <FieldSelectSpecimen />,
   },

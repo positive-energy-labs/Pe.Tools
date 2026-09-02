@@ -15,7 +15,7 @@ export const LAW_POINTERS = [
   ["refuse per option", "VerbProps.reason"],
   ["orientation hides behind a mark", "lens.house law 3"],
   ["a stand-in announces itself", "lens.house law 8"],
-  ["type is tier × face × case", "lens.house law 6"],
+  ["small type takes opt-in marks", "lens.house law 6"],
   ["provenance rides with the value", "StateCellProps.grounding"],
   ["ceremony scales with blast radius", "ArmingStrip"],
 ] as const;
