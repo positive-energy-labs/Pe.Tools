@@ -159,6 +159,7 @@ describe("design guard â€” current token authority", () => {
     };
     expect(blockOf(base, ".t-small {")).toMatch(/font-size:\s*var\(--type-small-size\)/);
     expect(blockOf(base, ".t-small {")).toMatch(/line-height:\s*var\(--type-small-line-height\)/);
+    expect(blockOf(base, ".t-small {")).not.toMatch(/\bcolor\s*:/);
     expect(blockOf(base, ".face-mono {")).toMatch(/font-family:\s*var\(--font-mono\)/);
     expect(blockOf(base, ".face-mono {")).toMatch(/font-variant-numeric:\s*tabular-nums/);
     expect(blockOf(base, ".t-upper {")).toMatch(/font-weight:\s*var\(--weight-medium\)/);
@@ -166,12 +167,13 @@ describe("design guard â€” current token authority", () => {
     expect(blockOf(base, ".t-upper {")).toMatch(/text-transform:\s*uppercase/);
   });
 
-  it("keeps data-tone above t-small's layered zero-specificity default ink", () => {
+  it("keeps data-tone above the layered zero-specificity mark inks", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
     const lang = FILES.find((f) => f.rel === "components/lang/lang.css")?.text ?? "";
     expect(base).toMatch(
-      /@layer base\s*\{[\s\S]*:where\(\[data-pe\] \.t-small\)\s*\{[^}]*color:\s*var\(--pe-ink-2\)/,
+      /@layer base\s*\{[\s\S]*:where\(\[data-pe\] \.face-mono, \[data-pe\] \.t-upper\)\s*\{[^}]*color:\s*var\(--pe-ink-2\)/,
     );
+    expect(base).not.toMatch(/:where\(\[data-pe\] \.t-small\)\s*\{[^}]*\bcolor\s*:/);
     expect(lang).toMatch(/:where\(\[data-tone="alarm"\]\)\s*\{[^}]*color:/);
   });
 
