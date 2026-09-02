@@ -45,9 +45,7 @@ function Tag({ linked, hot }: { linked: Linked; hot: boolean }) {
       style={{ width: CARD_W }}
     >
       <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
-        <span className={`t-small t-upper ${hot ? "text-ink" : ""}`}>
-          {pane.title || pane.kind} · keys
-        </span>
+        <span className={`t-small t-upper ${hot ? "text-ink" : ""}`}>{pane.label} · keys</span>
       </div>
       <div className="hairline-t grid grid-cols-[auto_1fr] items-center gap-x-2.5 gap-y-1 px-2.5 py-2">
         {paneShortcuts(pane).map((shortcut) => (
@@ -298,7 +296,7 @@ function ChartArea({
                   strokeWidth={on ? 2 : 1}
                 />
                 <text x={x + 8} y={y + 16} fill="currentColor" fontSize={10} fontFamily="inherit">
-                  {pane.index + 1} {pane.title || pane.kind}
+                  {pane.index + 1} {pane.label}
                 </text>
               </g>
             );

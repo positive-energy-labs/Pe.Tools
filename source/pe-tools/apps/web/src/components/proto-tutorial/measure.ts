@@ -12,6 +12,7 @@ export interface MeasuredPane {
   id: string | null;
   kind: PaneKindWord;
   title: string;
+  label: string;
   rect: DOMRect;
   el: HTMLElement;
   model: ModelPane<string> | null;
@@ -56,6 +57,7 @@ export function measureLayout(): MeasuredLayout | null {
       id,
       kind,
       title,
+      label: title || modelPane?.label || kind,
       rect: el.getBoundingClientRect(),
       el,
       model: modelPane,
@@ -87,7 +89,7 @@ export interface ProtoPaneShortcut {
 export function paneShortcuts(pane: MeasuredPane): ProtoPaneShortcut[] {
   const focus: ProtoPaneShortcut = {
     hotkey: `Alt+${pane.index + 1}`,
-    label: `focus ${pane.title || pane.kind}`,
+    label: `focus ${pane.label}`,
     wired: pane.hasShortcuts,
     needs: pane.hasShortcuts ? undefined : "pane-owned shortcuts",
   };

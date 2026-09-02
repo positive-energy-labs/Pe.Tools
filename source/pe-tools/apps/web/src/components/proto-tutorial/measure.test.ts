@@ -25,7 +25,7 @@ test("pane ids win and titles only join panes without ids", () => {
   });
   document.body.innerHTML = `
     <section data-slot="pane" data-kind="content" data-pane-id="structural">
-      <div data-slot="pane-header"><h2>title fallback</h2></div>
+      <div data-slot="pane-header"><h2>rendered title</h2></div>
     </section>
     <section data-slot="pane" data-kind="content">
       <div data-slot="pane-header"><h2>title fallback</h2></div>
@@ -34,4 +34,5 @@ test("pane ids win and titles only join panes without ids", () => {
   const layout = measureLayout();
 
   expect(layout?.panes.map((pane) => pane.model?.key)).toEqual(["structural", "fallback"]);
+  expect(layout?.panes.map((pane) => pane.label)).toEqual(["rendered title", "title fallback"]);
 });
