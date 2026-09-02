@@ -1,10 +1,84 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, test } from "vite-plus/test";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 
 import { Pane, PaneWorkspace } from "#/components/lang/pane";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+test("pane focus owns its hotkeys, halo, and fading shortcut card", async () => {
+  vi.useFakeTimers();
+  const run = vi.fn();
+  const { container } = render(
+    <Pane
+      id="rooms"
+      kind="content"
+      shortcuts={[{ hotkey: "J", label: "next room", callback: run }]}
+    >
+      <button type="button">Room row</button>
+      <input aria-label="Room name" />
+    </Pane>,
+  );
+
+  act(() => screen.getByRole("button", { name: "Room row" }).focus());
+  expect(container.querySelector("[data-slot='pane']")?.getAttribute("data-active")).toBe("true");
+  expect(screen.getByLabelText("rooms keyboard shortcuts").dataset.visible).toBe("true");
+
+  fireEvent.keyDown(screen.getByRole("button", { name: "Room row" }), {
+    key: "j",
+    code: "KeyJ",
+  });
+  expect(run).toHaveBeenCalledOnce();
+
+  act(() => screen.getByRole("textbox", { name: "Room name" }).focus());
+  fireEvent.keyDown(screen.getByRole("textbox", { name: "Room name" }), {
+    key: "j",
+    code: "KeyJ",
+  });
+  expect(run).toHaveBeenCalledOnce();
+
+  await act(() => vi.advanceTimersByTimeAsync(4000));
+  expect(screen.getByLabelText("rooms keyboard shortcuts").dataset.visible).toBe("false");
+  expect(screen.getByRole("button", { name: "Show rooms keyboard shortcuts" })).toBeTruthy();
+});
+
+test("the nearest nested pane owns a conflicting shortcut", () => {
+  const outer = vi.fn();
+  const inner = vi.fn();
+  const { container } = render(
+    <Pane
+      id="rooms"
+      kind="content"
+      shortcuts={[{ hotkey: "J", label: "next room", callback: outer }]}
+    >
+      <Pane
+        id="room"
+        kind="inspector"
+        shortcuts={[{ hotkey: "J", label: "next room", callback: inner }]}
+      >
+        <button type="button">Room detail</button>
+      </Pane>
+    </Pane>,
+  );
+
+  act(() => screen.getByRole("button", { name: "Room detail" }).focus());
+  fireEvent.keyDown(screen.getByRole("button", { name: "Room detail" }), {
+    key: "j",
+    code: "KeyJ",
+  });
+
+  expect(inner).toHaveBeenCalledOnce();
+  expect(outer).not.toHaveBeenCalled();
+  expect(container.querySelector("[data-pane-id='rooms']")?.getAttribute("data-active")).toBe(
+    "false",
+  );
+  expect(container.querySelector("[data-pane-id='room']")?.getAttribute("data-active")).toBe(
+    "true",
+  );
+});
 
 test("the actions slot renders caller JSX in the header", () => {
   let selected = "";

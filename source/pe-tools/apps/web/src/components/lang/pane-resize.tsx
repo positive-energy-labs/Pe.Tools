@@ -291,7 +291,7 @@ export function PaneSplit({ axis, start, end, resize, grow }: PaneSplitProps) {
     return (
       <div
         className={[
-          "min-h-0 min-w-0 overflow-hidden",
+          "min-h-0 min-w-0 overflow-hidden has-[[data-slot=pane][data-active=true]]:overflow-visible",
           sized ? "shrink-0" : "flex-1",
           // A fixed split has no handle to draw the seam — the end side carries the hairline.
           resize == null && side === "end" && (horizontal ? "border-l" : "border-t"),

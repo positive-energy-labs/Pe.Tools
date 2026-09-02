@@ -31,12 +31,15 @@ export function AtlasVisual() {
     levelZones,
     cursorRow,
     selectZone,
+    scopeShortcuts,
   } = useAtlasWorkspace();
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading plan…</div>}>
       <Pane
+        id="plan"
         kind="visual"
         headerSurface="recess"
+        shortcuts={scopeShortcuts}
         toolbar={
           <>
             {world.lanes.map((lane) => {

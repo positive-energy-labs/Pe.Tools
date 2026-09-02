@@ -74,7 +74,7 @@ export function PaneWorkspace({
     >
       {navigation != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden border-r border-line"
+          className="min-h-0 min-w-0 overflow-hidden border-r border-line has-[[data-slot=pane][data-active=true]]:overflow-visible"
           style={{ gridColumn: 1, gridRow: "1 / 4" }}
         >
           {navigation}
@@ -97,13 +97,16 @@ export function PaneWorkspace({
         </div>
       )}
 
-      <div className="min-h-0 min-w-0 overflow-hidden" style={{ gridColumn: 3, gridRow: 1 }}>
+      <div
+        className="min-h-0 min-w-0 overflow-hidden has-[[data-slot=pane][data-active=true]]:overflow-visible"
+        style={{ gridColumn: 3, gridRow: 1 }}
+      >
         {visual}
       </div>
 
       {inspector != null && (
         <div
-          className="min-h-0 min-w-0 overflow-hidden border-l border-line"
+          className="min-h-0 min-w-0 overflow-hidden border-l border-line has-[[data-slot=pane][data-active=true]]:overflow-visible"
           style={{ gridColumn: 5, gridRow: inspectorSpan === "full" ? "1 / 4" : 1 }}
         >
           {inspector}
@@ -155,7 +158,7 @@ export function PaneWorkspace({
       )}
 
       <div
-        className="min-h-0 min-w-0 overflow-hidden"
+        className="min-h-0 min-w-0 overflow-hidden has-[[data-slot=pane][data-active=true]]:overflow-visible"
         style={{ gridColumn: inspectorSpan === "visual" ? "3 / 6" : 3, gridRow: 3 }}
       >
         {content}
