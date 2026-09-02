@@ -146,6 +146,7 @@ export function Pane({
       data-slot="pane"
       data-kind={kind}
       data-pane-id={id}
+      data-has-shortcuts={shortcuts.length > 0 || undefined}
       data-active={active}
       data-surface={kind === "visual" ? "artifact" : "page"}
       tabIndex={-1}

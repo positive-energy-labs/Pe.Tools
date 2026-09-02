@@ -15,6 +15,7 @@ import {
 import { InstrumentCluster } from "#/targeting/cluster";
 import { targets, type Link, type Product, type Verb } from "#/targeting/model";
 import { Press } from "#/components/lang/press";
+import { setCurrentManifest } from "#/components/proto-tutorial/manifest-ref";
 
 function Demand<K extends string>({
   product,
@@ -146,6 +147,7 @@ function TargetingSentence<K extends string>({
   mode = "sentence",
   nameless,
 }: TargetingHeadProps<K>) {
+  setCurrentManifest({ product, b, runner });
   const [expanded, setExpanded] = useState(false);
   const verbs = [...b.stage.verbs].sort(
     (x, y) => Number(x.kind === "commit") - Number(y.kind === "commit"),
