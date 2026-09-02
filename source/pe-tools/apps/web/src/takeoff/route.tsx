@@ -207,5 +207,8 @@ export function TakeoffsStoreOwner({
     for (const dir of readDirs().reverse()) created.actions.rememberDir(dir);
     return created;
   });
+  useEffect(() => {
+    if (source === "live") void store.actions.reconcileWorld();
+  }, [source, store]);
   return <TakeoffsPage store={store} />;
 }

@@ -966,6 +966,26 @@ export function createTakeoffStore(deps: {
         if (patches.length) void takeoffsWriter.apply(patches);
       }
     },
+    async reconcileWorld() {
+      const target = deps.target?.trim();
+      if (!target) return;
+      const document = await settle(activeDocumentResult);
+      if (document.value?.documentId !== deps.scope.documentAddress) return;
+      if (current(registry.get(bindingsAtom).world, deps.scope.documentAddress)?.id === target)
+        return;
+      expectRouteWrite(
+        await takeoffsWriter.apply([
+          {
+            path: ["bindings", "world"],
+            value: {
+              id: target,
+              label: target,
+              at: deps.scope.documentAddress,
+            },
+          },
+        ]),
+      );
+    },
     settle,
     invalidate: (keys: readonly string[]) =>
       write("invalidate", keys.join(","), () => registry.set(invalidateAtom, keys)),

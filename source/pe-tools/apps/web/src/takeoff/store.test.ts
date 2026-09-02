@@ -515,6 +515,66 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
+  it("reconciles the URL world once after the destination document owns the store", async () => {
+    const h = harness();
+    h.setDocumentTitle("Other.rvt");
+    const patches: RouteStatePatch[][] = [];
+    const store = createStore(
+      {
+        host: h.host,
+        sessions: h.sessions,
+        scope: { documentAddress: address("C:\\Models\\Other.rvt") },
+        target: "session:dev-26",
+      },
+      (next) => patches.push(next),
+    );
+
+    await store.actions.reconcileWorld();
+
+    const worldPatches = () =>
+      patches.flat().filter((patch) => patch.path[0] === "bindings" && patch.path[1] === "world");
+    expect(worldPatches()).toEqual([
+      {
+        path: ["bindings", "world"],
+        value: {
+          id: "session:dev-26",
+          label: "session:dev-26",
+          at: address("C:\\Models\\Other.rvt"),
+        },
+      },
+    ]);
+    expect(
+      AsyncResult.getOrThrow(store.atoms.registry.get(store.slices.takeoffs)).doc?.bindings.world,
+    ).toEqual({
+      id: "session:dev-26",
+      label: "session:dev-26",
+      at: address("C:\\Models\\Other.rvt"),
+    });
+
+    const matchedPatches: RouteStatePatch[][] = [];
+    const reconciled = AsyncResult.getOrThrow(store.atoms.registry.get(store.slices.takeoffs));
+    const matchedStore = createStore(
+      {
+        host: h.host,
+        sessions: h.sessions,
+        scope: { documentAddress: address("C:\\Models\\Other.rvt") },
+        target: "session:dev-26",
+        slice: Atom.make(AsyncResult.success(reconciled)),
+      },
+      (next) => matchedPatches.push(next),
+    );
+
+    await matchedStore.actions.reconcileWorld();
+
+    expect(
+      matchedPatches
+        .flat()
+        .filter((patch) => patch.path[0] === "bindings" && patch.path[1] === "world"),
+    ).toEqual([]);
+    matchedStore.dispose();
+    store.dispose();
+  });
+
   it("writes the fixture host read into the document and renders only that slice", async () => {
     const patches: RouteStatePatch[][] = [];
     const store = createStore(
