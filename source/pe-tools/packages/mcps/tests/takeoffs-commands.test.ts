@@ -75,7 +75,13 @@ test("takeoffs audit produces and sets the document snapshot", async () => {
   };
   try {
     const document: TakeoffsRouteDocument = {
-      bindings: {},
+      bindings: {
+        world: {
+          id: "session:dev-26",
+          label: "dev-26",
+          at: address("C:\\Models\\Harness.rvt"),
+        },
+      },
       snapshot: null,
       staged: [],
     };

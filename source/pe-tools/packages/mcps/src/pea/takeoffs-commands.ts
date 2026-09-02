@@ -1,4 +1,6 @@
 import {
+  current,
+  type RouteStateCommandContext,
   type RouteStateCommandHandlers,
   type StagedRoomEdit,
   type TakeoffsRouteDocument,
@@ -18,15 +20,20 @@ export function createTakeoffsCommandHandlers(
   options: { hostBaseUrl?: string } = {},
 ): RouteStateCommandHandlers<TakeoffsRouteDocument> {
   const hostBaseUrl = resolveHostBaseUrl(options.hostBaseUrl);
-  const runtime = () =>
-    new HostRpcCaller({
+  const runtime = (ctx: RouteStateCommandContext<TakeoffsRouteDocument>) => {
+    const bridgeSessionId = current(ctx.getDoc().bindings.world, ctx.documentAddress)?.id;
+    if (!bridgeSessionId)
+      throw Error("route document has no world binding; select a world on the route first");
+    return new HostRpcCaller({
       hostBaseUrl,
+      bridgeSessionId,
     });
+  };
 
   return {
     adopt: async (raw, ctx) => {
       const input = raw as Selection;
-      const caller = runtime();
+      const caller = runtime(ctx);
       const before = await readSnapshot(caller);
       const candidates = before.zoneFrs.filter(
         (zone) =>
@@ -51,7 +58,7 @@ export function createTakeoffsCommandHandlers(
 
     audit: async (raw, ctx) => {
       const input = raw as Selection;
-      const caller = runtime();
+      const caller = runtime(ctx);
       const before = await readSnapshot(caller);
       const prepared = await caller.call("takeoffs.prepare-capture", { view: input.view });
       const capture = await caller.call("takeoffs.detect-capture", { level: prepared.level });
@@ -76,6 +83,7 @@ export function createTakeoffsCommandHandlers(
 
     sync: async (raw, ctx) => {
       const input = raw as Selection;
+      const caller = runtime(ctx);
       const document = ctx.getDoc();
       const path = document.snapshot?.world.r10Path;
       if (!path) throw Error("No .r10 is bound in the takeoff snapshot.");
@@ -86,7 +94,6 @@ export function createTakeoffsCommandHandlers(
           .filter((zone) => selected.size === 0 || selected.has(zone.zone.guid))
           .flatMap((zone) => zone.rooms)
           .filter((room) => room.r10 && edits.has(room.guid)) ?? [];
-      const caller = runtime();
       const opened = await caller.call("rhvac.open", { path });
       const byId = new Map(opened.rooms.map((room) => [room.identifier, room]));
       const updates = rooms.map((room) => {
