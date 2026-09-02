@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MastraClient } from "@mastra/client-js";
 import { afterEach, expect, it, vi } from "vite-plus/test";
+import { Press } from "#/components/lang/press";
 
 const route = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -69,9 +70,9 @@ it("removes a thread from the rendered list after deletion succeeds", async () =
   function ThreadRows() {
     const workbench = useWorkbench();
     return workbench.threads.map((thread) => (
-      <button key={thread.id} onClick={() => void workbench.deleteThread(thread.id)}>
+      <Press key={thread.id} size="value" onClick={() => void workbench.deleteThread(thread.id)}>
         {thread.title}
-      </button>
+      </Press>
     ));
   }
 

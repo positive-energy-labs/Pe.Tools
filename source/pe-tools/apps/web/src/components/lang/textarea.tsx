@@ -17,9 +17,17 @@ export const textareaRecipe = tv({
 function Textarea({
   size,
   surface,
+  face,
   ...props
-}: Omit<React.ComponentProps<"textarea">, "className"> & VariantProps<typeof textareaRecipe>) {
-  return <textarea data-slot="textarea" className={textareaRecipe({ size, surface })} {...props} />;
+}: Omit<React.ComponentProps<"textarea">, "className"> &
+  VariantProps<typeof textareaRecipe> & { face?: "mono" }) {
+  return (
+    <textarea
+      data-slot="textarea"
+      className={`${textareaRecipe({ size, surface })}${face === "mono" ? " face-mono" : ""}`}
+      {...props}
+    />
+  );
 }
 
 export { Textarea };

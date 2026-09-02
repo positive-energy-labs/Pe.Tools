@@ -27,10 +27,18 @@ function SelectValue(props: Omit<SelectPrimitive.Value.Props, "className">) {
   return <SelectPrimitive.Value data-slot="select-value" className={value()} {...props} />;
 }
 
-function SelectTrigger({ children, ...props }: Omit<SelectPrimitive.Trigger.Props, "className">) {
+function SelectTrigger({
+  children,
+  face,
+  ...props
+}: Omit<SelectPrimitive.Trigger.Props, "className"> & { face?: "mono" }) {
   const { trigger, icon } = selectRecipe();
   return (
-    <SelectPrimitive.Trigger data-slot="select-trigger" className={trigger()} {...props}>
+    <SelectPrimitive.Trigger
+      data-slot="select-trigger"
+      className={`${trigger()}${face === "mono" ? " face-mono" : ""}`}
+      {...props}
+    >
       {children}
       <SelectPrimitive.Icon className={icon()}>
         <RiArrowDownSLine />

@@ -78,10 +78,12 @@ export function ArrayField({
           <ComboboxChips>
             <ComboboxValue>
               {(Array.isArray(field.value) ? field.value : []).map((item: unknown) => (
-                <ComboboxChip key={String(item)}>{String(item)}</ComboboxChip>
+                <ComboboxChip key={String(item)} face="mono">
+                  {String(item)}
+                </ComboboxChip>
               ))}
             </ComboboxValue>
-            <ComboboxChipsInput placeholder={placeholder || "Search or type a value"} />
+            <ComboboxChipsInput face="mono" placeholder={placeholder || "Search or type a value"} />
           </ComboboxChips>
           <ComboboxContent>
             <ComboboxEmpty>No matching suggestions.</ComboboxEmpty>
@@ -137,6 +139,7 @@ export function ArrayField({
         </div>
       ) : (
         <Textarea
+          face="mono"
           size="tall"
           value={JSON.stringify(field.value ?? [], null, 2)}
           onChange={(event) => {

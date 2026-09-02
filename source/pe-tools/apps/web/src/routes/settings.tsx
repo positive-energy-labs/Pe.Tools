@@ -218,7 +218,7 @@ function SettingsWorkspace({ store }: { store: SettingsStore }) {
                   </>
                 }
               >
-                <div className="px-3 py-1.5 [&_[data-slot=combobox-chip-input]]:face-mono [&_[data-slot=combobox-chip]]:face-mono [&_[data-slot=input]]:face-mono [&_[data-slot=select-trigger]]:face-mono [&_[data-slot=textarea]]:face-mono">
+                <div className="px-3 py-1.5">
                   <SchemaToFieldRender
                     schema={formModel.schema}
                     moduleKey={snapshot.documentId.moduleKey}

@@ -12,6 +12,7 @@
 import { useCellNavigation } from "#/components/master-table/cell-navigation";
 import { StateCell, fmtNum } from "#/components/lang/cell";
 import type { Verdict, VerdictTone } from "#/components/master-table/model";
+import { token } from "#/lib/token";
 import { cn } from "#/lib/utils";
 
 export function TextCell({
@@ -151,11 +152,11 @@ export function StateDot({ tone, dim, bar }: { tone: VerdictTone; dim?: boolean;
 }
 
 export const VERDICT_INK: Record<VerdictTone, string> = {
-  alarm: "var(--pe-alarm)",
-  caution: "var(--pe-caution)",
-  done: "var(--pe-done)",
-  ink: "var(--pe-ink-2)",
-  mute: "var(--pe-ink-mute)",
+  alarm: token("alarm"),
+  caution: token("caution"),
+  done: token("done"),
+  ink: token("ink-2"),
+  mute: token("ink-mute"),
 };
 
 /** How a `verdict:` column draws — the table calls this itself (master-table.tsx resolve). The

@@ -216,7 +216,7 @@ export function WorldLane({
                 </span>
               </Press>
               {isOpen ? (
-                <div className="pt-0 pr-3 pb-2.5 pl-[29px] t-small face-mono leading-relaxed">
+                <div className="pt-0 pr-3 pb-2.5 pl-[29px] t-prose face-mono">
                   <p className="mt-0 mb-1.5 text-ink-2">{PLAIN_CAP[layer.id] ?? layer.label}</p>
                   {inspect && changed ? (
                     <p className="mt-0 mb-1.5">
@@ -244,7 +244,7 @@ export function WorldLane({
       </div>
 
       {inspect ? (
-        <div className="hairline-t mt-2 px-3 pt-2 pb-3 t-small face-mono leading-relaxed text-ink-mute">
+        <div className="hairline-t mt-2 px-3 pt-2 pb-3 t-prose face-mono text-ink-mute">
           cache state{" "}
           <span className={CACHE_BASE} data-tone={CACHE_TONE.cached} data-wash>
             ≈ inferred

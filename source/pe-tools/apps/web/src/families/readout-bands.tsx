@@ -55,7 +55,7 @@ export function FamiliesReadoutBands() {
           </div>
           {/* THE RULED TABLE IDIOM (2026-08-31): separate borders at zero spacing, rows at
               `--item-h`, tier type. This queue was the last table in the app drawn the old way —
-              `border-collapse` + a raw `leading-tight` + rows that measured 12.5-15px, stacked
+              `border-collapse` + a raw compact leading + rows that measured 12.5-15px, stacked
               directly above the 20px families matrix on the same page. A collapsed border belongs
               to the TABLE, so every rule here is drawn by the CELL instead (`hairline-b`), which
               is the same move `MasterTable` made and the reason its rules survive a sticky cell. */}

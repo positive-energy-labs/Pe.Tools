@@ -18,11 +18,17 @@ export const inputRecipe = tv({
 function Input({
   type,
   surface,
+  face,
   ...props
 }: Omit<React.ComponentProps<"input">, "className"> &
-  import("#/lib/tv").VariantProps<typeof inputRecipe>) {
+  import("#/lib/tv").VariantProps<typeof inputRecipe> & { face?: "mono" }) {
   return (
-    <InputPrimitive type={type} data-slot="input" className={inputRecipe({ surface })} {...props} />
+    <InputPrimitive
+      type={type}
+      data-slot="input"
+      className={`${inputRecipe({ surface })}${face === "mono" ? " face-mono" : ""}`}
+      {...props}
+    />
   );
 }
 

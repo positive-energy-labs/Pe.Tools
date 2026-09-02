@@ -4,6 +4,7 @@ import type { DoctorResult, Envelope, RecentDocument } from "@pe/host-contracts/
 import { EmptyState } from "#/components/lang/empty";
 import { StateCell } from "#/components/lang/cell";
 import { OutcomeLine, type OutcomeKind } from "#/components/lang/outcome";
+import { Press } from "#/components/lang/press";
 import { Verb as VerbButton } from "#/components/lang/verb";
 import { MasterTable } from "#/components/master-table/master-table";
 import type { Column } from "#/components/master-table/model";
@@ -400,16 +401,16 @@ export function InstancesCluster({
       <div className="flex items-center gap-2">
         <span className="t-small face-mono text-ink-2">year</span>
         {years.map((candidate) => (
-          <button
+          <Press
             key={candidate}
-            type="button"
-            className={`t-small face-mono border px-2 py-0.5 ${
-              yearPick === candidate ? "border-ink text-ink" : "border-ink-mute text-ink-mute"
-            }`}
+            size="caption"
+            frame="line"
+            tone="quiet"
+            state={yearPick === candidate ? "selected" : "rest"}
             onClick={() => setYearPick((previous) => (previous === candidate ? null : candidate))}
           >
             20{candidate}
-          </button>
+          </Press>
         ))}
       </div>
       {/* Wrappers neutralize MasterTable's `flex-1` (basis 0): unwrapped, the column split its
@@ -463,18 +464,18 @@ export function InstancesCluster({
           }
         />
       </div>
-      <div className="sticky bottom-0 z-40 border border-line p-3" data-surface="page">
+      <div className="hairline-x sticky bottom-0 z-sticky p-3" data-surface="page">
         {staged ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="t-small face-mono text-ink-2">staged</span>
-            <span className="t-body text-ink">
+            <span className="t-prose text-ink">
               {staged.kind === "open"
                 ? `open ${staged.doc.title} in ${worldTrunk.label(staged.world)}`
                 : `start a new 20${staged.year} session opening ${staged.doc.title}`}
             </span>
             {staged.kind === "start" ? (
               <input
-                className="t-small face-mono border border-line bg-transparent px-2 py-1 text-ink"
+                className="hairline-x hairline-y t-small face-mono bg-transparent px-2 py-1 text-ink"
                 aria-label="session name"
                 placeholder="name this session"
                 value={sessionName}
@@ -505,7 +506,7 @@ export function InstancesCluster({
         ) : pickedWorld ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="t-small face-mono text-ink-2">session</span>
-            <span className="t-body text-ink">{worldTrunk.label(pickedWorld)}</span>
+            <span className="t-prose text-ink">{worldTrunk.label(pickedWorld)}</span>
             <VerbButton
               tone="act"
               label="restart"

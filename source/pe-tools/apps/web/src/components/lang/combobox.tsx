@@ -176,11 +176,16 @@ function ComboboxChips(
 function ComboboxChip({
   children,
   showRemove = true,
+  face,
   ...props
-}: Omit<Primitive.Chip.Props, "className"> & { showRemove?: boolean }) {
+}: Omit<Primitive.Chip.Props, "className"> & { showRemove?: boolean; face?: "mono" }) {
   const { chip } = comboboxRecipe();
   return (
-    <Primitive.Chip data-slot="combobox-chip" className={chip()} {...props}>
+    <Primitive.Chip
+      data-slot="combobox-chip"
+      className={`${chip()}${face === "mono" ? " face-mono" : ""}`}
+      {...props}
+    >
       {children}
       {showRemove && (
         <Primitive.ChipRemove
@@ -193,9 +198,18 @@ function ComboboxChip({
     </Primitive.Chip>
   );
 }
-function ComboboxChipsInput(props: Omit<Primitive.Input.Props, "className">) {
+function ComboboxChipsInput({
+  face,
+  ...props
+}: Omit<Primitive.Input.Props, "className"> & { face?: "mono" }) {
   const { chipInput } = comboboxRecipe();
-  return <Primitive.Input data-slot="combobox-chip-input" className={chipInput()} {...props} />;
+  return (
+    <Primitive.Input
+      data-slot="combobox-chip-input"
+      className={`${chipInput()}${face === "mono" ? " face-mono" : ""}`}
+      {...props}
+    />
+  );
 }
 function useComboboxAnchor() {
   return React.useRef<HTMLDivElement | null>(null);

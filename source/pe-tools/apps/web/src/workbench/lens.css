@@ -276,7 +276,7 @@
   font-family: var(--font-body);
   font-size: var(--type-title-size);
   line-height: var(--type-title-line-height);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   letter-spacing: -0.01em;
 }
 /* A hairline at every you↔pea boundary: the transcript reads as a ledger of alternating speaker
