@@ -11,10 +11,10 @@ export const pressRecipe = tv({
   // `min-w-0`: a press is a flex/grid item wherever it sits in a row, and min-width:auto let
   // its content push the row wider than the rail it lives in (measured, 2026-08-31). Its
   // children own their own truncation.
-  base: "inline-flex min-w-0 cursor-pointer items-center gap-1 appearance-none border border-transparent bg-transparent focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
+  base: "inline-flex min-w-0 cursor-pointer items-center gap-1 appearance-none border border-transparent bg-transparent focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
   variants: {
     hover: {
-      veil: "enabled:hover:veil",
+      veil: "veil",
       // A press whose hover ground would read as meaning (table headers on recess) keeps the
       // ink shift from its tone and no veil (takeoffs annotations, 2026-08-31).
       bare: "",

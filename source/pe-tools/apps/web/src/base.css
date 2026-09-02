@@ -181,11 +181,6 @@
   }
 }
 
-[data-pe] .page-wrap {
-  width: min(1080px, calc(100% - 2rem));
-  margin-inline: auto;
-}
-
 [data-pe] .z-raised {
   z-index: var(--z-raised);
 }
@@ -263,23 +258,8 @@
   text-underline-offset: 3px;
 }
 
-[data-pe] .squiggle-drift {
-  text-decoration-color: var(--pe-alarm);
-}
-[data-pe] .squiggle-stale,
 [data-pe] .squiggle-unsettled {
   text-decoration-color: var(--pe-caution);
-}
-[data-pe] .squiggle-unverified {
-  text-decoration-color: var(--pe-ink-mute);
-}
-
-[data-pe] .ghost-drift {
-  color: var(--pe-alarm);
-  font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  text-decoration: line-through;
-  white-space: nowrap;
 }
 
 [data-pe] .citation {

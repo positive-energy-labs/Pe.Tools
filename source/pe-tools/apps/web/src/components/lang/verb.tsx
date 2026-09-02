@@ -45,7 +45,7 @@ import "./lang.css";
 
 export const verbRecipe = tv({
   slots: {
-    base: "inline-flex h-(--item-h) cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-value font-medium text-ink enabled:hover:veil focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-recess disabled:text-ink-2 disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
+    base: "veil inline-flex h-(--item-h) cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-value font-medium text-ink focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-recess disabled:text-ink-2 disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
     reason: "max-w-[36ch] self-center t-caption text-ink-2 italic",
     group: "",
     groupHead: "mb-1.5 flex items-baseline gap-1.5 border-b border-line pb-[3px]",

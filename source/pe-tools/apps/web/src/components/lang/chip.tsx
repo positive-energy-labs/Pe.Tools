@@ -30,7 +30,7 @@ export const chipRecipe = tv({
     label: "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
     count: "text-ink-2 tabular-nums",
     remove:
-      "grid size-3 cursor-pointer place-items-center border-0 bg-transparent text-ink-2 enabled:hover:veil focus-visible:veil focus-visible:outline focus-visible:outline-line-2 [&>svg]:size-[9px]",
+      "veil grid size-3 cursor-pointer place-items-center border-0 bg-transparent text-ink-2 focus-visible:outline focus-visible:outline-line-2 [&>svg]:size-[9px]",
     tag: "t-label tabular-nums",
   },
   variants: {

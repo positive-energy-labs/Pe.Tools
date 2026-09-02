@@ -145,7 +145,7 @@ export function MasterTableBody<Row extends RowData>({
             active={activeKey === key}
             activeRowRef={activeRowRef}
             className={cn(
-              "h-(--item-h) scroll-mt-12 hover:veil",
+              "veil h-(--item-h) scroll-mt-12",
               activeKey === key && "on-select",
               rowClassName?.(tableRow.original),
             )}

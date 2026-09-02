@@ -111,4 +111,4 @@ export const BLAST_TONE: Record<Blast, "caution" | "done" | undefined> = {
 };
 
 export const WORLD_ROW =
-  "grid w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 py-1 text-left tabular-nums [font:inherit] hover:veil";
+  "veil grid w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 py-1 text-left tabular-nums [font:inherit]";

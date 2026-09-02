@@ -9,7 +9,7 @@ export const chatStyles = tv({
     threadRowActive:
       "group/row flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 t-prose on-select",
     threadRowQuiet:
-      "group/row flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 t-prose hover:veil",
+      "veil group/row flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 t-prose",
     threadTitleActive: "min-w-0 flex-1 truncate text-ink",
     threadTitleQuiet: "min-w-0 flex-1 truncate text-ink-2",
     paletteTitleActive: "flex-1 truncate text-ink",
@@ -76,7 +76,7 @@ export const chatStyles = tv({
     docPicker5: "block truncate t-label text-ink",
     docPicker6: "t-caption face-mono shrink-0 text-ink",
     threadPalette0: "grid min-h-screen place-items-center bg-page font-sans",
-    threadPalette1: "rounded-sm px-3 py-2 hover:veil",
+    threadPalette1: "veil rounded-sm px-3 py-2",
     threadPalette2: "flex h-full flex-col",
     threadPalette3: "flex flex-col gap-1 p-2",
     threadPalette5: "px-2 py-3",

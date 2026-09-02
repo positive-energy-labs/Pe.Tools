@@ -51,7 +51,7 @@ export const armingStripRecipe = tv({
     verb: "t-prose font-medium",
     target: "t-label tabular-nums",
     input:
-      "w-full border-0 border-l border-line-2 bg-on py-0.5 pr-0 pl-2 t-value text-ink italic outline-none placeholder:text-ink-mute focus-visible:veil",
+      "w-full border-0 border-l border-line-2 bg-on py-0.5 pr-0 pl-2 t-value text-ink italic outline-none placeholder:text-ink-mute",
     refusal: "m-0 max-w-[72ch] t-value",
     controls: "flex flex-wrap items-center gap-2",
     caveat: "t-label tabular-nums",

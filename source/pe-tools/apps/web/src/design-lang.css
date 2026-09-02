@@ -64,59 +64,6 @@
   }
 }
 
-/* The three sub-prose tiers are composite roles (C2, 2026-09-01). base.css declares them; this
-   projects the same bundle so Tailwind knows the class exists. The ink floor and the meaning-hue
-   escape live in base.css — a `@utility` cannot carry the `:not()` guard. */
-@utility t-caption {
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-line-height);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-}
-
-@utility t-label {
-  /* The role owns its FACE too: a label nested inside a caption must not inherit mono. */
-  font-family: var(--font-body);
-  font-variant-numeric: normal;
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line-height);
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-@utility t-value {
-  font-size: var(--type-value-size);
-  line-height: var(--type-value-line-height);
-}
-
-@utility t-prose {
-  font-size: var(--type-prose-size);
-  line-height: var(--type-prose-line-height);
-}
-
-@utility t-title {
-  font-size: var(--type-title-size);
-  line-height: var(--type-title-line-height);
-}
-
-@utility t-head {
-  font-size: var(--type-head-size);
-  line-height: var(--type-head-line-height);
-}
-
-@utility t-display {
-  font-size: var(--type-display-size);
-  line-height: var(--type-display-line-height);
-}
-
-@utility t-upper {
-  font-weight: var(--weight-strong);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 @utility cell-key-values {
   & .dl-cell,
   & .dl-sq,
@@ -133,10 +80,6 @@
   &::-webkit-scrollbar {
     display: none;
   }
-}
-
-@utility veil {
-  background-image: var(--fill-veil);
 }
 
 @utility ink-wash {
@@ -260,36 +203,4 @@
 
 @utility boundary-l {
   border-left: 2px solid var(--pe-line-2);
-}
-
-@utility bg-document {
-  background: var(--pe-document);
-}
-
-@utility bg-scrim {
-  background: var(--pe-scrim);
-}
-
-@utility caution-hatch {
-  background-image: var(--pattern-caution-hatch);
-}
-
-@utility shadow-float {
-  box-shadow: var(--shadow-float);
-}
-
-@utility shadow-modal {
-  box-shadow: var(--shadow-modal);
-}
-
-@utility duration-control {
-  transition-duration: var(--motion-control);
-}
-
-@utility z-notice {
-  z-index: var(--z-notice);
-}
-
-@utility z-dev {
-  z-index: var(--z-dev);
 }

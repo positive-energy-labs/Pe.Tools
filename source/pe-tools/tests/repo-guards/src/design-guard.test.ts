@@ -88,6 +88,25 @@ const FILES: Entry[] = collect(ROOT, "", [], /\.(?:tsx?|css)$/);
 const JSON_FILES: Entry[] = collect(ROOT, "", [], /\.json$/);
 
 describe("design guard â€” current token authority", () => {
+  it("declares each authored class in one CSS owner", () => {
+    const owners = ["base.css", "design-lang.css", "components/lang/lang.css"];
+    const declarations = new Map<string, string[]>();
+    for (const owner of owners) {
+      const css = stripComments(FILES.find((file) => file.rel === owner)?.text ?? "");
+      const names = [
+        ...css.matchAll(/^\s*(?:\[data-pe\]\s+)?\.([\w-]+)(?=\s*[,{}]|[[:])/gm),
+        ...css.matchAll(/@utility\s+([\w-]+)/g),
+      ].map((match) => match[1]);
+      for (const name of new Set(names))
+        declarations.set(name, [...(declarations.get(name) ?? []), owner]);
+    }
+    const duplicates = [...declarations]
+      .filter(([, classOwners]) => classOwners.length > 1)
+      .map(([name, classOwners]) => `${name}: ${classOwners.join(", ")}`)
+      .sort();
+    expect(duplicates).toEqual([]);
+  });
+
   it("has no retired --r-* tokens", () => {
     const offences = scan(FILES, /--r-[\w-]+/g);
     expect(offences, report(offences)).toEqual([]);
@@ -128,7 +147,7 @@ describe("design guard â€” current token authority", () => {
         "s",
       );
       expect(base, `base.css wiring for t-${tier}`).toMatch(block);
-      expect(lang, `design-lang.css wiring for t-${tier}`).toMatch(block);
+      expect(lang, `design-lang.css must not redeclare t-${tier}`).not.toMatch(block);
     }
   });
 
@@ -137,7 +156,7 @@ describe("design guard â€” current token authority", () => {
      face + case + tracking + weight, t-caption owns face + tabular + tracking, and t-value owns
      NOTHING but size and leading (it declares no colour, so an alarm/caution/pea cell keeps its
      hue — a tier may not outrank a claim about meaning). */
-  it("bundles the three sub-prose tiers as composite roles in both owners", () => {
+  it("bundles the three sub-prose tiers in base.css only", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
     const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
     const bundles = {
@@ -157,17 +176,10 @@ describe("design guard â€” current token authority", () => {
       const at = text.indexOf(head);
       return at === -1 ? "" : text.slice(at, text.indexOf("}", at) + 1);
     };
-    for (const [tier, decls] of Object.entries(bundles)) {
-      for (const owner of [
-        { name: "base.css", block: blockOf(base, `.t-${tier} {`) },
-        { name: "design-lang.css", block: blockOf(lang, `@utility t-${tier} {`) },
-      ]) {
-        for (const decl of decls)
-          expect(owner.block, `${owner.name} bundle for t-${tier} is missing ${decl}`).toMatch(
-            decl,
-          );
-      }
-    }
+    for (const [tier, decls] of Object.entries(bundles))
+      for (const decl of decls)
+        expect(blockOf(base, `.t-${tier} {`), `base.css bundle for t-${tier}`).toMatch(decl);
+    expect(lang).not.toMatch(/@utility\s+t-(?:caption|label|value)\b/);
     // The ink floor is base.css-only: a @utility cannot carry the meaning-hue escape.
     expect(base, "the t-caption/t-label ink floor").toMatch(
       /\.t-caption:not\([^)]*\.text-alarm[^)]*\)[\s\S]{0,200}color:\s*var\(--pe-ink-2\)/,
@@ -177,13 +189,13 @@ describe("design guard â€” current token authority", () => {
     expect(value, "t-value must declare no colour").not.toMatch(/color:/);
   });
 
-  it("projects the shared uppercase case marker through Tailwind", () => {
+  it("owns the shared uppercase case marker in base.css", () => {
     const base = FILES.find((f) => f.rel === "base.css")?.text ?? "";
     const lang = FILES.find((f) => f.rel === "design-lang.css")?.text ?? "";
     const rule =
       /(?:\.t-upper|@utility\s+t-upper)\s*\{(?=[^}]*font-weight:\s*var\(--weight-strong\))(?=[^}]*letter-spacing:\s*0\.08em)(?=[^}]*text-transform:\s*uppercase)[^}]*\}/s;
     expect(base, "base.css wiring for t-upper").toMatch(rule);
-    expect(lang, "design-lang.css wiring for t-upper").toMatch(rule);
+    expect(lang, "design-lang.css must not redeclare t-upper").not.toMatch(rule);
   });
 
   it("projects the shared weight variables through Tailwind", () => {
@@ -226,9 +238,9 @@ describe("design guard â€” current token authority", () => {
     expect(base.match(/repeating-linear-gradient/g)?.length).toBe(1);
     expect(base).toContain("--fill-veil: linear-gradient(var(--pe-veil), var(--pe-veil));");
     expect(base).toContain("background-image: var(--pattern-caution-hatch);");
-    expect(lang).toContain("background-image: var(--pattern-caution-hatch);");
     expect(base).toContain("background-image: var(--fill-veil);");
-    expect(lang).toContain("background-image: var(--fill-veil);");
+    expect(lang).not.toContain("background-image: var(--pattern-caution-hatch);");
+    expect(lang).not.toContain("background-image: var(--fill-veil);");
   });
 
   it("routes the prose plugin's size and weight-bearing elements through the design tiers", () => {
