@@ -97,9 +97,10 @@ export function CellSelect({
       onKeyDown={(e) => {
         if (e.key === "Tab" && move?.(e.shiftKey ? "left" : "right")) e.preventDefault();
       }}
+      data-tone={invalid ? "alarm" : undefined}
+      data-wash={invalid ? "" : undefined}
       className={cn(
-        "face-mono h-(--item-h) w-full min-w-0 truncate rounded-none border-0 bg-transparent px-(--item-pad-x) outline-none focus:bg-select",
-        invalid && "alarm-wash text-alarm",
+        "face-mono h-(--item-h) w-full min-w-0 truncate rounded-none border-0 bg-transparent px-(--item-pad-x) outline-none focus:outline focus:outline-line-2",
         className,
       )}
     >
@@ -164,7 +165,12 @@ export function VerdictCell({ verdict }: { verdict: Verdict }) {
   return (
     <span className="face-mono block truncate px-(--item-pad-x)" title={verdict.note}>
       <StateDot tone={verdict.tone} dim={verdict.dim} />{" "}
-      <span className={verdict.tone === "alarm" ? "text-alarm" : "text-ink-2"}>{verdict.word}</span>
+      <span
+        className={verdict.tone === "alarm" ? undefined : "text-ink-2"}
+        data-tone={verdict.tone === "alarm" ? "alarm" : undefined}
+      >
+        {verdict.word}
+      </span>
     </span>
   );
 }

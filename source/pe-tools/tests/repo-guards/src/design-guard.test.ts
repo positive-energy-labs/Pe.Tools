@@ -882,6 +882,18 @@ const baseClass = (candidate: string): string => {
   return candidate.slice(start).replace(/^!|!$/g, "").replace(/^-/, "");
 };
 
+const RETIRED_TONE_AND_GROUND_CLASSES = new Set([
+  "text-alarm",
+  "text-caution",
+  "text-done",
+  "text-pea",
+  "text-commit",
+  "bg-page",
+  "bg-artifact",
+  "bg-recess",
+  "bg-select",
+]);
+
 const DEAD_CSS_CLASSES = new Map<string, Set<string>>(
   [...CSS_BY_REL]
     .filter(([rel]) => !LIVE_CSS.has(rel))
@@ -1064,6 +1076,16 @@ const BAD_SPECIMEN_PATHS = REQUIRED_SPECIMEN_PATHS.filter(
 ).map((importPath) => `${importPath}: ${SPECIMEN_PATH_USES.get(importPath) ?? 0} frames`);
 
 describe("design checks — code holds the boundary", () => {
+  it("has no retired tone or ground class spellings", () => {
+    const offences = CLASS_USES.filter((use) =>
+      RETIRED_TONE_AND_GROUND_CLASSES.has(baseClass(use.token)),
+    );
+    expect(
+      offences,
+      report(offences.map((offence) => ({ ...offence, match: offence.token }))),
+    ).toEqual([]);
+  });
+
   it("data-tone values come from the closed tone set", () => {
     const fixture = invalidDataTones([
       { rel: "fixture.tsx", text: '<span data-tone="warning" />' },

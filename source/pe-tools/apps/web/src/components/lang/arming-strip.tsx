@@ -61,11 +61,9 @@ export const armingStripRecipe = tv({
       unarmed: { base: "border-line-2 on-artifact" },
       armed: {
         base: "border-commit commit-wash-artifact",
-        phase: "text-commit",
       },
       refused: {
         base: "border-alarm alarm-wash-artifact",
-        phase: "text-alarm",
       },
     },
   },
@@ -115,7 +113,9 @@ export function ArmingStrip({
       <ArtifactFrame>
         <div className={slots.base()} data-phase="refused">
           <div className={slots.line()}>
-            <span className={slots.phase()}>refused</span>
+            <span className={slots.phase()} data-tone="alarm">
+              refused
+            </span>
             <span className={slots.verb()}>{verb}</span>
           </div>
           <p className={slots.refusal()}>{state.refusal}</p>
@@ -138,7 +138,9 @@ export function ArmingStrip({
     <ArtifactFrame>
       <div className={slots.base()} data-phase={armed ? "armed" : "unarmed"}>
         <div className={slots.line()}>
-          <span className={slots.phase()}>{armed ? "armed" : "unarmed"}</span>
+          <span className={slots.phase()} data-tone={armed ? "commit" : undefined}>
+            {armed ? "armed" : "unarmed"}
+          </span>
           <span className={slots.verb()}>{verb}</span>
           <span className={slots.target()}>{target}</span>
           <FactChip title="The plan this write was made against.">plan {planHash}</FactChip>

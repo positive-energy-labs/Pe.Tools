@@ -5,7 +5,7 @@ import { tv } from "#/lib/tv";
 
 export const cardRecipe = tv({
   slots: {
-    root: "flex flex-col gap-3 rounded-lg border border-line bg-artifact text-ink",
+    root: "flex flex-col gap-3 rounded-lg border border-line text-ink",
     header: "flex flex-col gap-3 p-5 sm:flex-row sm:items-start sm:justify-between",
     title: "t-title text-ink",
     description: "t-small text-ink-2",
@@ -30,6 +30,7 @@ function Card({
       "data-slot": "card",
       className: root(),
       ...props,
+      "data-surface": "artifact",
     },
   });
 }

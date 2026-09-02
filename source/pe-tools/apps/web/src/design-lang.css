@@ -20,10 +20,6 @@
   --font-weight-bold: var(--weight-bold);
   --default-transition-duration: var(--motion-control);
 
-  --color-page: var(--pe-page);
-  --color-artifact: var(--pe-artifact);
-  --color-recess: var(--pe-recess);
-  --color-select: var(--pe-select);
   --color-document: var(--pe-document);
   --color-scrim: var(--pe-scrim);
   --color-ink: var(--pe-ink);
@@ -31,12 +27,7 @@
   --color-ink-mute: var(--pe-ink-mute);
   --color-line: var(--pe-line);
   --color-line-2: var(--pe-line-2);
-  --color-pea: var(--pe-pea);
   --color-pea-ink: var(--pe-pea-ink);
-  --color-alarm: var(--pe-alarm);
-  --color-caution: var(--pe-caution);
-  --color-done: var(--pe-done);
-  --color-commit: var(--pe-commit);
   --color-on-commit: var(--pe-on-commit);
   --color-nav: var(--pe-nav);
   --color-on: var(--pe-on);
@@ -205,4 +196,23 @@
 
 @utility boundary-l {
   border-left: 2px solid var(--pe-line-2);
+}
+
+@utility border-alarm {
+  border-color: var(--pe-alarm);
+}
+
+@utility border-caution {
+  border-color: var(--pe-caution);
+}
+
+@utility border-commit {
+  border-color: var(--pe-commit);
+}
+
+@utility ring-caution {
+  --tw-ring-color: var(--pe-caution);
+}
+@utility decoration-caution {
+  text-decoration-color: var(--pe-caution);
 }

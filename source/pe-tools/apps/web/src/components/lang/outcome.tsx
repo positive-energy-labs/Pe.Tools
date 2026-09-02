@@ -41,11 +41,11 @@ export const outcomeLineRecipe = tv({
   variants: {
     state: {
       busy: { base: "text-ink-2", icon: "animate-spin" },
-      receipt: { base: "text-done" },
-      refused: { base: "text-alarm" },
+      receipt: { base: "" },
+      refused: { base: "" },
       advisory: { base: "text-ink-2" },
       error: {
-        base: "text-caution",
+        base: "",
         label: "decoration-caution underline decoration-wavy underline-offset-3",
       },
     },
@@ -53,6 +53,12 @@ export const outcomeLineRecipe = tv({
 });
 
 export type OutcomeKind = "busy" | "receipt" | "refused" | "advisory" | "error";
+
+const OUTCOME_TONE: Partial<Record<OutcomeKind, "done" | "alarm" | "caution">> = {
+  receipt: "done",
+  refused: "alarm",
+  error: "caution",
+};
 
 const OUTCOME_ICON: Record<OutcomeKind, LucideIcon> = {
   busy: LoaderCircle,
@@ -74,7 +80,7 @@ export function OutcomeLine({ kind, label, says }: OutcomeLineProps) {
   const Icon = OUTCOME_ICON[kind];
   const slots = outcomeLineRecipe({ state: kind });
   return (
-    <div className={slots.base()} data-kind={kind}>
+    <div className={slots.base()} data-kind={kind} data-tone={OUTCOME_TONE[kind]}>
       <Icon className={slots.icon()} />
       <span className={slots.label()}>{label}</span>
       {says != null ? <span className={slots.says()}>{says}</span> : <span />}

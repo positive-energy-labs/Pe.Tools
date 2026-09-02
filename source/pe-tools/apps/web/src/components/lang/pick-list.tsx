@@ -6,8 +6,8 @@ import { tv } from "#/lib/tv";
 export const pickListRecipe = tv({
   base: "flex min-h-(--item-h) w-full items-baseline gap-2 border-l-2 px-3 py-0.5 text-left t-small",
   variants: {
-    active: { true: "border-ink bg-select text-ink", false: "border-transparent text-ink" },
-    cursored: { true: "bg-recess", false: "" },
+    active: { true: "border-ink text-ink", false: "border-transparent text-ink" },
+    cursored: { true: "", false: "" },
     disabled: { true: "opacity-50", false: "" },
   },
 });
@@ -130,6 +130,7 @@ export function PickList({
                     type="button"
                     role="option"
                     aria-selected={active}
+                    data-surface={cursored && !active ? "recess" : undefined}
                     data-pick-index={itemIndex}
                     disabled={disabled}
                     title={item.hint}

@@ -205,7 +205,7 @@ export function Composer({
         {attachments.length > 0 ? (
           <div className={chatStyles.composer5()}>
             {attachments.map((attachment, index) => (
-              <span key={index} className={chatStyles.composer6()}>
+              <span key={index} className={chatStyles.composer6()} data-surface="recess">
                 {attachment.name ?? "attachment"}
                 <Press
                   type="button"
@@ -284,7 +284,11 @@ export function Composer({
           </div>
         </div>
         {/* a failed operation is an ERROR (caution) — the alarm is reserved for disagreement */}
-        {operationError ? <span className={chatStyles.composer14()}>{operationError}</span> : null}
+        {operationError ? (
+          <span className={chatStyles.composer14()} data-tone="caution">
+            {operationError}
+          </span>
+        ) : null}
       </div>
     </form>
   );

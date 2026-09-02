@@ -160,7 +160,9 @@ export function Lens({
             <div {...annotation("chat")} ref={chatRef}>
               {moments.length === 0 ? (
                 <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
-                  <h1 className={chatStyles.emptyMark()}>Pea</h1>
+                  <h1 className={chatStyles.emptyMark()} data-tone="pea">
+                    Pea
+                  </h1>
                   <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
                     no messages in this thread yet
                   </EmptyState>

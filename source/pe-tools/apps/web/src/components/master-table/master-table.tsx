@@ -297,7 +297,7 @@ export function MasterTable<Row extends RowData>({
               focused && column?.readState ? column.readState(focused.row.original) : undefined;
             if (!focused || !cellState) return null;
             return (
-              <div className="t-small t-upper flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line bg-recess px-2 whitespace-nowrap on-recess">
+              <div className="t-small t-upper flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line px-2 whitespace-nowrap on-recess">
                 <Tag>{column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}</Tag>
                 <span className="truncate text-ink-2">
                   {cellFactsText(cellState) ??

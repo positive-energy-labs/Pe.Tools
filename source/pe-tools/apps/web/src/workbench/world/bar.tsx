@@ -22,7 +22,7 @@ export function whySentence(layers: Layer[], cache: CacheView, reprocessed: numb
 }
 
 export const BAR =
-  "relative flex h-[13px] items-stretch overflow-hidden rounded-sm border-[0.5px] border-line-2 bg-page";
+  "relative flex h-[13px] items-stretch overflow-hidden rounded-sm border-[0.5px] border-line-2 on-page";
 
 export const BAR_WIN = "relative min-w-[2px] border-l-[0.5px] border-line";
 

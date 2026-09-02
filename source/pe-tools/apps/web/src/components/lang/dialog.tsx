@@ -11,7 +11,7 @@ export const dialogRecipe = tv({
   slots: {
     overlay: "fixed inset-0 isolate z-modal bg-scrim supports-backdrop-filter:backdrop-blur-xs",
     content:
-      "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg bg-artifact text-ink ring-1 ring-line outline-none sm:max-w-lg",
+      "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg text-ink ring-1 ring-line outline-none sm:max-w-lg",
     header: "flex flex-col gap-1",
     footer: "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
     title: "t-title",
@@ -55,7 +55,12 @@ function DialogContent({
   return (
     <DialogPortal>
       <DialogOverlay />
-      <DialogPrimitive.Popup data-slot="dialog-content" className={content()} {...props}>
+      <DialogPrimitive.Popup
+        data-slot="dialog-content"
+        className={content()}
+        {...props}
+        data-surface="artifact"
+      >
         {children}
         {showCloseButton && (
           <span className="absolute top-3 right-3">

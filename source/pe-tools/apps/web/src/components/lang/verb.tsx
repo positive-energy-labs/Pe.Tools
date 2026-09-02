@@ -45,7 +45,7 @@ import "./lang.css";
 
 export const verbRecipe = tv({
   slots: {
-    base: "veil inline-flex h-(--item-h) cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-small font-medium text-ink focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:bg-recess disabled:text-ink-2 disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
+    base: "veil inline-flex h-(--item-h) cursor-pointer items-center gap-[5px] whitespace-nowrap border border-transparent bg-transparent px-2 t-small font-medium text-ink focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed disabled:border-line-2 disabled:text-ink-2 disabled:italic [&>svg]:size-[13px] [&>svg]:shrink-0",
     reason: "max-w-[36ch] self-center t-small face-mono text-ink-2 italic",
     group: "",
     groupHead: "mb-1.5 flex items-baseline gap-1.5 border-b border-line pb-[3px]",
@@ -56,11 +56,9 @@ export const verbRecipe = tv({
   variants: {
     tone: {
       act: { base: "ink-wash" },
-      commit: { base: "bg-commit text-on-commit" },
+      commit: { base: "" },
       nav: { base: "px-1 text-nav enabled:hover:underline enabled:hover:underline-offset-3" },
-      agent: {
-        base: "text-pea-ink pea-wash",
-      },
+      agent: { base: "" },
     },
   },
   defaultVariants: { tone: "act" },
@@ -136,6 +134,12 @@ export function Verb(props: VerbProps) {
       <button
         type="button"
         className={slots.base()}
+        data-tone={
+          !inert && tone === "commit" ? "commit" : !inert && tone === "agent" ? "pea" : undefined
+        }
+        data-fill={!inert && tone === "commit" ? "solid" : undefined}
+        data-wash={!inert && tone === "agent" ? "" : undefined}
+        data-surface={inert ? "recess" : undefined}
         disabled={inert}
         onClick={onClick}
         title={reason}

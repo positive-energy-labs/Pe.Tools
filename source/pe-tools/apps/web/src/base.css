@@ -355,6 +355,10 @@
   font-size: var(--type-small-size);
   line-height: var(--type-small-line-height);
 }
+[data-pe] .prose-pe :where(code, pre) {
+  background: var(--pe-artifact);
+  --pe-on: var(--pe-artifact);
+}
 [data-pe] .prose-pe :where(p, ul, ol, li, pre) {
   font-weight: var(--weight-regular);
 }

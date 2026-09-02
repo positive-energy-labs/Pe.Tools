@@ -66,7 +66,7 @@ function ThreadActions({
 
 export function ThreadEmpty() {
   return (
-    <main className={chatStyles.threadPalette0()}>
+    <main className={chatStyles.threadPalette0()} data-surface="page">
       <a href="/chat" className={chatStyles.threadPalette1()}>
         <EmptyState story="scope" exit="open the thread palette">
           pick or start a thread

@@ -28,7 +28,13 @@
   background: color-mix(in srgb, currentColor 10%, var(--pe-on));
 }
 
-:where([aria-selected="true"], [aria-expanded="true"], [aria-pressed="true"], [data-selected]) {
+:where(
+  [aria-selected="true"],
+  [aria-expanded="true"],
+  [aria-pressed="true"],
+  [data-selected],
+  [data-highlighted]
+) {
   background-color: var(--pe-select);
 }
 
@@ -66,6 +72,15 @@
 
 :where(svg [data-surface]) {
   fill: var(--pe-surface);
+}
+
+:where([data-tone][data-fill="tone"]) {
+  background-color: currentColor;
+}
+
+:where([data-tone="commit"][data-fill="solid"]) {
+  background-color: var(--pe-commit);
+  color: var(--pe-on-commit);
 }
 
 .prose-pe a {

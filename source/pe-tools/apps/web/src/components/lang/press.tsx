@@ -32,7 +32,7 @@ export const pressRecipe = tv({
       neutral: "text-ink",
       quiet: "text-ink-2 enabled:hover:text-ink",
       nav: "text-nav enabled:hover:underline enabled:hover:underline-offset-3",
-      agent: "text-pea-ink pea-wash",
+      agent: "",
     },
     size: {
       caption: "t-small face-mono",
@@ -59,6 +59,8 @@ export function Press({ type, tone, size, state, hover, frame, ...props }: Press
     <button
       type={type ?? "button"}
       className={pressRecipe({ tone, size, state, hover, frame })}
+      data-tone={tone === "agent" ? "pea" : undefined}
+      data-wash={tone === "agent" ? "" : undefined}
       data-selected={state === "selected" ? "" : undefined}
       {...props}
     />

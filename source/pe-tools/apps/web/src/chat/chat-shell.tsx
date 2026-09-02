@@ -136,6 +136,7 @@ function Surface({
       data-chat="surface"
       data-mode={mode}
       data-plugin={plugin}
+      data-surface="page"
       className={chatStyles.chatShell0()}
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
@@ -150,7 +151,15 @@ function Surface({
                 {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
                     your call is owed (caution), error = a bridge/run error (caution — NOT the
                     alarm), idle = muted. */}
-                <span title={status} className={chatStyles.chatShell4()} data-s={status} />
+                <span
+                  title={status}
+                  className={chatStyles.chatShell4()}
+                  data-s={status}
+                  data-tone={
+                    status === "running" ? "pea" : status === "idle" ? undefined : "caution"
+                  }
+                  data-fill={status === "idle" ? undefined : "tone"}
+                />
                 <WorldBadge world={world} />
               </>
             }
@@ -160,6 +169,7 @@ function Surface({
         <div aria-live="polite" className={chatStyles.chatShell7()}>
           {statusLine ? (
             <div
+              data-tone={error || operationError ? "caution" : undefined}
               className={
                 error || operationError ? chatStyles.statusError() : chatStyles.statusQuiet()
               }

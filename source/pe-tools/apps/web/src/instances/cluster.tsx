@@ -463,7 +463,7 @@ export function InstancesCluster({
           }
         />
       </div>
-      <div className="sticky bottom-0 z-40 border border-line bg-page p-3">
+      <div className="sticky bottom-0 z-40 border border-line p-3" data-surface="page">
         {staged ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="t-small face-mono text-ink-2">staged</span>
