@@ -30,13 +30,12 @@
     }
   },
   "escHandler": {
-    "total": 7,
+    "total": 6,
     "byArea": {
       "chat": 1,
       "components": 2,
       "family-review": 2,
-      "runs": 1,
-      "takeoff": 1
+      "runs": 1
     }
   },
   "opacityDim": {
