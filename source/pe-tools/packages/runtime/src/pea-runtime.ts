@@ -612,7 +612,6 @@ export const peaNativeToolCategories = {
   mastra_workspace_grep: "read",
   mastra_workspace_search: "read",
   mastra_workspace_index: "read",
-  mastra_workspace_versions: "read",
   mastra_workspace_lsp_inspect: "read",
   mastra_workspace_get_process_output: "read",
   mastra_workspace_write_file: "edit",

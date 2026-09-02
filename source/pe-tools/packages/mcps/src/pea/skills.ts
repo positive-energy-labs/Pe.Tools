@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import path from "node:path";
 import { productIdentity } from "@pe/host-contracts/contracts";
@@ -29,9 +29,7 @@ Writes are off. The product is a map of what is actually there, in the user's wo
 4. Every line of the report carries its stake: the operation or script that produced it and the document or view it came from. A plausible count is not a stake.
 5. Broad inventories go to an artifact; the reply carries the findings and the exceptions.
 
-## Report
-
-Scope, evidence used, findings, what was not inspected, artifacts, and the next move: a change to draft, a diagnosis to run, or a decision the user owns.
+A small question gets a one-sentence answer with its stake. A full survey reports scope, evidence used, findings, what was not inspected, artifacts, and the next move: a change to draft, a diagnosis to run, or a decision the user owns.
 `,
   },
   {
@@ -56,9 +54,7 @@ The model does not lie and cannot be treated. The only product is the cause, fro
 
 View type and template controls, discipline, detail level and display style, phase and phase filter, design options, worksets, category visibility, view filters and overrides, element hide and isolate, temporary modes, crop, scope box, and section box, plan view range, plan regions and underlay, link visibility, display mode, linked view, and load state, imports and point clouds, graphics settings. View collectors report candidate drawn elements, not pixels on screen; use a view capture when the pixels matter.
 
-## Report
-
-Cause, the evidence that proves it, what would turn it green, and what was not inspected. The user decides the fix.
+Report the cause, the evidence that proves it, what would turn it green, and what was not inspected. The user decides the fix. A cause that is one sentence stays one sentence.
 `,
   },
   {
@@ -102,9 +98,7 @@ Plausibility is not proof. A successful call proves that the call completed; the
 4. Stamp the verdict: PROVEN with what was read and when, FALSIFIED with what broke, or UNPROVEN with why. Fewer than that is void.
 5. Rank by consequence: one wrong element outranks twenty cosmetic misses.
 
-## Report
-
-Outcome, evidence, skipped or failed items, and what remains unproven.
+Report the verdict with its readback. Skipped or failed items and what remains unproven are listed only when there are any.
 `,
   },
   {
@@ -142,60 +136,63 @@ description: Write and run a C# Revit script when code is the clearest way to in
 - Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
 - Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
 
-## Pod rules
+A Pod is a workspace with a root pod.json declaring entrypoints; the build-pod skill defines it and owns building or adapting one.
 
-A Pod is a shareable scripting workspace: a project file for build and language support, src/ for C# scripts, optional supporting files, and a root pod.json that turns it into strict Pod mode. Loose workspaces run only the selected file. Pods validate the manifest, compile every src/**/*.cs, and run only declared entrypoints. Import and export are source-first and exclude generated, runtime, IDE, machine-specific, and DLL payloads.
-
-## Report
-
-Script path or inline name, permission mode, diagnostics, key output, artifacts, and the verification readback.
+For a probe, report the answer and the permission mode it ran under. For a mutation, add the script path, diagnostics, and the verification readback.
 `,
   },
   {
     name: "build-pod",
     content: String.raw`---
 name: build-pod
-description: Turn a repeated workflow or an add-in idea into a shareable Pod. Use when the user says "make this a Pod", "I want a button that", "every week I have to", "share this with my team", or when the same script has run twice. Shape first, then make it real, then delete what did not earn its place.
+description: Turn a repeated workflow or an add-in idea into a shareable Pod, or adapt a Pod the user already has. Use when the user says "make this a Pod", "automate this", "every week I have to", "share this with my team", "update my Pod", "my Pod stopped working", or when the same script has run twice. Shape first, then make it real, then delete what did not earn its place.
 ---
 
 # Build Pod
 
 The user supplies intent and ideas; you handle the code. Nothing that does not connect to the workflow, nothing longer than it must be.
 
+## What a Pod is
+
+A Pod is a scripting workspace the user runs from Pea and shares as source: a project file for build and language support, src/ for C# scripts, optional supporting files, and a root pod.json that declares the Pod id and its entrypoints. A workspace without pod.json is loose and runs only the selected file. A Pod validates its manifest, compiles every src/**/*.cs, and runs only declared entrypoints. Import and export are source-first and exclude generated, runtime, IDE, machine-specific, and DLL payloads.
+
+A Pod is not a ribbon button or a Revit add-in. Say so when the user asks for one: what they get is an entrypoint they run by asking Pea, shareable with anyone who has Pea.
+
 ## Loop
 
 1. Name the nouns from the user's workflow, not from the API: what they start with, what they want at the end, what they decide along the way. Settle the intent before anything compounds.
-2. Lay out two or three shapes side by side, from the simplest script to the fuller add-in, and say what each makes impossible. The user picks; one shape on the table is always one you would argue against.
+2. Lay out two or three shapes side by side, from one inline probe to a multi-entrypoint Pod, and say what each makes impossible. The user picks; one shape on the table is always one you would argue against.
 3. Bootstrap the workspace, then make the chain real end to end on the real model: one entrypoint, one readback, before any polish. Stubs and placeholders are scaffolding; count them and strike them one per round.
 4. Drive the whole workflow by hand with the user on real parts. That is the bar for done, and it gets a proof readback.
 5. Purge: delete anything the working Pod does not need. Keep the why in a short README the user can hand to a colleague.
 
-## Report
+## Adapting an existing Pod
 
-What the Pod does in the user's words, how to run it, what it will not do, and what remains scaffolding.
+Read pod.json and the entrypoints before touching anything. Run the current entrypoint ReadOnly to see what it does today, name the change in the user's words, then change one entrypoint at a time and read back. A Pod that stopped working is diagnosed from its compiler and runtime diagnostics first, not rewritten.
+
+When more than a sentence is needed, report what the Pod does in the user's words, how to run it, what it will not do, and what remains scaffolding.
 `,
   },
   {
     name: "author-pe-settings",
     content: String.raw`---
 name: author-pe-settings
-description: Author, validate, or debug a Pe settings document such as a Family Foundry profile. Use when the user edits profiles or settings, a run produced diagnostics or artifacts to explain, or validation fails.
+description: Propose, validate, or debug a Pe settings document such as a Family Foundry profile. Use when the user edits profiles or settings, has the settings page open, a run produced diagnostics or artifacts to explain, or validation fails. You propose; the human stages and saves.
 ---
 
 # Author Pe Settings
 
-Settings and profiles are authored documents with a schema and a validator. Diagnostics drive the repair; the validator is the contract.
+Settings documents are co-edited with the user in their browser. Pea proposes field values; the user reviews, stages, and saves. Never write behind a document the user is looking at.
 
 ## Method
 
-- Use host-reported workspace paths and the available schemas. Edit the files directly.
-- Start from produced artifacts and diagnostics before changing a profile. Keep authored intent, generated output, and runtime proof distinct.
-- Repair the first diagnostic, revalidate, repeat. Use a focused script only when artifacts do not explain the failure.
-- Keep generated proof artifacts separate from source profiles.
+1. Read the live routes first (route_state_read with no arguments). If the document is bound on route="settings", read that route to get the document, its schema, and the agent write mask.
+2. Start from diagnostics and artifacts before proposing. Keep authored intent, generated output, and runtime proof distinct.
+3. Propose only inside the write mask (route_state_apply on fields), then run command="validate" with includeProposals so the user sees a schema-valid proposal. Repair the first diagnostic, revalidate, repeat.
+4. Stop for review. Saving is human-only; do not refetch, splice, or write the file yourself while it is bound.
+5. Direct file editing is the fallback only when no route binds the document, and you say so before editing. Use host-reported paths and the available schemas, then validate through the host.
 
-## Report
-
-Files changed, validation result, diagnostics fixed or remaining, artifacts inspected, and any follow-up the user owns.
+When more than a sentence is needed, report the fields proposed, the validation result, diagnostics fixed or remaining, and what the user must stage or decide.
 `,
   },
   {
@@ -203,8 +200,6 @@ Files changed, validation result, diagnostics fixed or remaining, artifacts insp
     content: String.raw`---
 name: place-mep-ducts
 description: Lay out ductwork in Revit - rough in a supply, return, or exhaust trunk on a level, branch to air terminals, draft a collision-free layout the user can refine, then commit real ducts and fittings. Use for lay out ductwork, run a duct, rough in supply on a level, route duct to these terminals, duct clash check.
-metadata:
-  goal: true
 ---
 
 # Lay Out MEP Ducts: DECLARE -> SOLVE -> DRAFT -> DIFF -> COMMIT
@@ -313,6 +308,16 @@ For interactive nudging or diagnosing a single leg, use the fluent session (Star
   },
 ];
 
+// Skill directories this product once bundled and no longer does. Materialization removes exactly
+// these on upgrade; every other directory under the skills root is the user's and is never touched.
+export const retiredPeaSkillNames: readonly string[] = [
+  "audit-visible-revit-equipment",
+  "inspect-active-revit-document",
+  "author-family-foundry-profile",
+  "debug-family-foundry-artifacts",
+  "validate-pe-settings-workspace",
+];
+
 export const peaStandardSkillsRoot = path.join(".agents", "skills");
 export const peaProductHomeEnvVar = "PE_TOOLS_PRODUCT_HOME";
 const peaDocumentsRootEnvVar = "PE_TOOLS_DOCUMENTS_ROOT";
@@ -351,6 +356,12 @@ export async function materializeBundledPeaSkills(
 ): Promise<MaterializedPeaSkill[]> {
   const skillsRoot = resolvePeaStandardSkillsRoot(options);
   await mkdir(skillsRoot, { recursive: true });
+
+  for (const name of retiredPeaSkillNames) {
+    if (bundledPeaSkills.some((skill) => skill.name === name))
+      throw new Error(`Pea skill '${name}' is both bundled and retired.`);
+    await rm(path.join(skillsRoot, name), { recursive: true, force: true });
+  }
 
   const materialized: MaterializedPeaSkill[] = [];
   for (const skill of bundledPeaSkills) {
