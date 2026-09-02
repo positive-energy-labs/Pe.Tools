@@ -1,4 +1,5 @@
-import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
+import { Context, Deferred, Effect, Layer, Ref, Schema } from "effect";
+import { makeLedger, type Ledger } from "./ledger.ts";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
 import { capture } from "@pe/runtime";
@@ -75,13 +76,11 @@ export type BridgeSessionView = {
 
 /**
  * A bridge frame worth relaying to browsers: Revit events, state syncs, connects/disconnects.
- * `seq`/`atMs` are broker truth stamped at publish (queue-provenance §"timestamp on events");
- * `origin` carries the caller's x-pe-origin where a caller exists — these four frames are
- * Revit-originated, so it is usually absent until the QueueLedger round threads it through.
+ * The world ledger stamps `epoch`/`seq`/`atMs` at publish (see `ledger.ts`); `origin` carries the
+ * caller's x-pe-origin where a caller exists — these four frames are Revit-originated, so it is
+ * usually absent until the QueueLedger round threads it through.
  */
 export type HostBridgeEvent = {
-  readonly seq: number;
-  readonly atMs: number;
   readonly sessionId: string;
   readonly kind: "event" | "state-sync" | "connected" | "disconnected";
   readonly eventName?: string;
@@ -295,9 +294,8 @@ export class RevitBridge extends Context.Service<
     readonly handleConnection: (
       req: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
-    readonly events: PubSub.PubSub<HostBridgeEvent>;
-    /** Snapshot of the bounded event ring, oldest first — replay for late-joining browsers. */
-    readonly ledger: Effect.Effect<readonly HostBridgeEvent[]>;
+    /** The `world` ledger: stamped bridge events, replayed and streamed by `/ledger/world`. */
+    readonly ledger: Ledger<HostBridgeEvent>;
   }
 >()("RevitBridge") {}
 
@@ -370,20 +368,8 @@ export const RevitBridgeLive = Layer.effect(
   Effect.gen(function* () {
     const sessions = yield* Ref.make(new Map<string, Session>());
     const currentSessionId = yield* Ref.make<string | null>(null);
-    const events = yield* PubSub.unbounded<HostBridgeEvent>();
-
-    // Ring + monotonic seq, stamped here so every subscriber and the replay ledger agree on
-    // ordering and broker-clock timestamps (tabs used to invent their own — that shim is dead).
-    const eventLedger: HostBridgeEvent[] = [];
-    let eventSeq = 0;
-    const emit = (event: Omit<HostBridgeEvent, "seq" | "atMs">) =>
-      Effect.suspend(() => {
-        const entry: HostBridgeEvent = { ...event, seq: ++eventSeq, atMs: Date.now() };
-        eventLedger.push(entry);
-        if (eventLedger.length > EVENT_LEDGER_CAPACITY) eventLedger.shift();
-        return PubSub.publish(events, entry);
-      });
-    const ledger = Effect.sync<readonly HostBridgeEvent[]>(() => [...eventLedger]);
+    const ledger = makeLedger<HostBridgeEvent>({ name: "world", capacity: EVENT_LEDGER_CAPACITY });
+    const emit = (event: HostBridgeEvent) => Effect.sync(() => void ledger.emit(event));
 
     const viewSession = Effect.fnUntraced(function* (session: Session) {
       return {
@@ -694,6 +680,6 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.all([...map.values()].map((session) => viewSession(session)));
     });
 
-    return { invoke, snapshot, list, handleConnection, events, ledger };
+    return { invoke, snapshot, list, handleConnection, ledger };
   }),
 );

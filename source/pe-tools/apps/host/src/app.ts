@@ -9,6 +9,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
+import { ledgerRoutes } from "./ledger.ts";
 import { getHostStatus } from "./local-ops.ts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -34,35 +35,6 @@ export { resolveWebRoot } from "./static-spa.ts";
 
 const bridgeWsRoute = HttpRouter.add("GET", BRIDGE_PATH, (req) =>
   Effect.flatMap(RevitBridge, (bridge) => bridge.handleConnection(req)),
-);
-
-// SSE relay of bridge events (Revit document changes, state syncs, session
-// connect/disconnect) so browser query caches can invalidate without polling.
-// ponytail: no heartbeat frames; EventSource auto-reconnects. Add a keep-alive comment
-// line if a proxy starts dropping idle streams.
-const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge;
-    const encoder = new TextEncoder();
-    const body = Stream.fromPubSub(bridge.events).pipe(
-      Stream.map((event) => encoder.encode(`data: ${JSON.stringify(event)}\n\n`)),
-    );
-    return Response.stream(body, {
-      contentType: "text/event-stream",
-      headers: { "cache-control": "no-cache", connection: "keep-alive" },
-    });
-  }),
-);
-
-// Bounded replay of the bridge-event ring (broker truth, not tab observation): browsers fetch
-// this once, then stay live on /events, deduping by `seq`. A plain JSON snapshot beats
-// `?since=` replay-then-live on the SSE route — client-side seq dedupe sidesteps the
-// subscribe/snapshot race with no stream plumbing.
-const bridgeLedgerRoute = HttpRouter.add("GET", "/ledger", () =>
-  Effect.gen(function* () {
-    const bridge = yield* RevitBridge;
-    return Response.jsonUnsafe({ events: yield* bridge.ledger });
-  }),
 );
 
 // Runtime operation catalog for browsers/typegen: proxies host.ops.catalog to the
@@ -327,7 +299,7 @@ const ServedSessionLive = Layer.effectDiscard(
     const bridge = yield* RevitBridge;
     const { handle: handleDeferred } = yield* HostLifecycle;
     yield* Effect.forkScoped(
-      Stream.fromPubSub(bridge.events).pipe(
+      Stream.fromPubSub(bridge.ledger.events).pipe(
         Stream.filter((event) => event.kind === "connected"),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
@@ -352,7 +324,7 @@ const InstallConvergeLive = Layer.effectDiscard(
     yield* Effect.forkScoped(runInstallConverge);
     const bridge = yield* RevitBridge;
     yield* Effect.forkScoped(
-      Stream.fromPubSub(bridge.events).pipe(
+      Stream.fromPubSub(bridge.ledger.events).pipe(
         Stream.filter((event) => event.kind === "disconnected"),
         Stream.runForEach(() => runInstallConverge),
       ),
@@ -365,8 +337,6 @@ function makeRevitComposition(includeInstallConverge: boolean) {
     provider: RevitBridgeLive,
     routes: Layer.mergeAll(
       bridgeWsRoute,
-      bridgeEventsRoute,
-      bridgeLedgerRoute,
       opsCatalogRoute,
       settingsSchemaRoute,
       hostStatusRoute,
@@ -426,6 +396,7 @@ export function makeHttpLive(options: HttpLiveOptions) {
 
   const CommonAppLive = Layer.mergeAll(
     adminShutdownRoute,
+    ledgerRoutes,
     MastraMountLive,
     options.viteServer ? viteWebLayer(options.viteServer) : staticSpaLayer(options.webRoot),
   );

@@ -1,9 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 
 import type { SessionFacts } from "#/host/target";
 import { usePeInfo } from "#/host/info";
-import { subscribeHostEvents, type HostLedgerEvent } from "#/host/live";
+import { useLedger, type Stamped } from "#/host/ledger";
 import { worldTrunk } from "#/targeting/world";
+
+/** Broker bridge event as stamped on the `world` ledger (host `HostBridgeEvent`). */
+export type HostLedgerEvent = Stamped<{
+  sessionId: string;
+  kind: "event" | "state-sync" | "connected" | "disconnected";
+  eventName?: string;
+  payloadJson?: string | null;
+  origin?: string;
+  docTitle?: string | null;
+  docChanged?: boolean;
+  prevDocTitle?: string | null;
+}>;
 
 type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
 
@@ -53,50 +65,22 @@ function toWorldEvent(event: HostLedgerEvent, sessions: SessionFacts[]): WorldEv
 }
 
 /**
- * Broker-fed world history: replays the host's bounded event ring (`GET /ledger`) once, then
- * stays live on the shared /events SSE subscription, deduping by broker `seq`. Timestamps are
- * broker truth (`atMs` stamped at publish), not tab observation.
+ * Broker-fed world history: the `world` ledger replayed then live, one reducer. Timestamps are
+ * broker truth (`atMs` stamped at publish), not tab observation. A host restart is a new epoch, so
+ * the log resets instead of dropping the new boot's events.
  */
 export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
   const revit = usePeInfo().data?.capabilities.revit === true;
-  const [log, setLog] = useState<WorldEvent[]>([]);
-  const lastSeq = useRef(0);
-  // Label enrichment only — the effect must not re-run on session-list churn.
+  // Label enrichment only — the ledger must not reopen on session-list churn.
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
-
-  useEffect(() => {
-    if (!revit) return;
-    let cancelled = false;
-    const accept = (event: HostLedgerEvent) => {
-      if (event.seq <= lastSeq.current) return; // already replayed or delivered
-      lastSeq.current = event.seq;
+  const [log] = useLedger<HostLedgerEvent, WorldEvent[]>(
+    revit ? "world" : null,
+    (current, event) => {
       const world = toWorldEvent(event, sessionsRef.current);
-      if (world) setLog((l) => [...l.slice(-(LOG_CAP - 1)), world]);
-    };
-    // Subscribe first and buffer, so nothing published between the /ledger snapshot
-    // and the SSE attach is lost; seq dedupe removes the overlap.
-    let replayed = false;
-    const buffer: HostLedgerEvent[] = [];
-    const unsubscribe = subscribeHostEvents((event) =>
-      replayed ? accept(event) : buffer.push(event),
-    );
-    const flush = (events: HostLedgerEvent[]) => {
-      if (cancelled) return;
-      for (const event of events) accept(event);
-      for (const event of buffer) accept(event);
-      buffer.length = 0;
-      replayed = true;
-    };
-    void fetch("/ledger")
-      .then((res) => (res.ok ? (res.json() as Promise<{ events: HostLedgerEvent[] }>) : null))
-      .then((body) => flush(body?.events ?? []))
-      .catch(() => flush([]));
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [revit]);
-
+      return world ? [...current.slice(-(LOG_CAP - 1)), world] : current;
+    },
+    () => [],
+  );
   return log;
 }

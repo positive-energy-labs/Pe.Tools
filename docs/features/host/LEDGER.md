@@ -6,6 +6,7 @@ design-system ledger, not restated here.
 
 ## Decided
 
+- 2026-09-02 — One ledger primitive (`apps/host/src/ledger.ts` `makeLedger`): a named ring with a boot epoch, host-stamped seq, replay by `after=epoch:seq`, and SSE. `GET /ledger/:name` and `GET /ledger/:name/events` replace `/ledger` and `/events`; the bridge registers `world`, the agent runtime registers `thread:<id>` per materialized session. A different epoch is a reset, never a gap, which ends the world-log drop after a host restart. The SSE route sends an opening comment frame so `EventSource` fires `open` on a quiet ledger (headers otherwise wait for the first entry).
 - 2026-08-26 — Repository guards live in their own `@pe/repo-guards` workspace package; the web route lane runs route code alone, so its result remains route signal.
 - 2026-08-26 — `Reading.Here(Document)` mints document addresses in `Pe.Revit.Extensions.ProjDocument`; `Pe.Shared.RevitData` owns only the Revit-free `Reading` record because it may not reference the Revit API.
 

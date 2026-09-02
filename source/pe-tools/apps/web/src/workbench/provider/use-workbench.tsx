@@ -109,7 +109,9 @@ export function toFiles(attachments: WorkbenchAttachment[] | undefined): Message
   return files.length ? files : undefined;
 }
 
+/** The echo carries the same id the host will persist, so the canonical row upserts it in place. */
 export function optimisticMessage(
+  id: string,
   content: string,
   files: MessageFile[] | undefined,
 ): MastraDBMessage {
@@ -119,7 +121,7 @@ export function optimisticMessage(
     parts.push({ type: "file", mimeType: file.mediaType, data: file.data });
   }
   return {
-    id: `local-user-${Date.now()}`,
+    id,
     role: "user",
     createdAt: new Date(),
     content: { format: 2, parts },

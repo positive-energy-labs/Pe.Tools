@@ -7,6 +7,7 @@ import { createRouteRegistrations } from "@pe/mcps";
 import { buildAgentControllerApp } from "@pe/runtime";
 import { createPeaRuntime, type PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { productRoot } from "./host-ownership.ts";
+import { attachThreadLedgers } from "./thread-ledger.ts";
 import { setAgentRuntimeStatus } from "./local-ops.ts";
 
 /**
@@ -120,6 +121,7 @@ export function makeMastraRuntimeLive(
       const handle = yield* Effect.acquireRelease(
         Effect.tryPromise(async () => {
           const runtime = await createPeaRuntime({ hostBaseUrl, protocol: "web", capabilities });
+          attachThreadLedgers(runtime);
           const app = await buildAgentControllerApp({
             runtime,
             label: "pea",

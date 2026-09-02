@@ -37,6 +37,18 @@ export interface ChatState {
   errors: string[];
 }
 
+/**
+ * A user turn is the optimistic echo (role `user`) or a user signal. The persisted row says
+ * `type: "user"` with text parts; the live `message_start` says it under `content.metadata.signal`
+ * with a `data-user-message` part. Same turn, two shapes.
+ */
+export function isUserTurn(message: MastraDBMessage): boolean {
+  if (message.role === "user") return true;
+  if (message.role !== "signal") return false;
+  const signal = readRecord(readRecord(message.content.metadata)?.signal);
+  return message.type === "user" || signal?.type === "user";
+}
+
 export function emptyChatState(): ChatState {
   return {
     display: {},
@@ -48,32 +60,37 @@ export function emptyChatState(): ChatState {
   };
 }
 
-export interface HydrateInputs {
-  session?: { modelId?: string; running?: boolean; tasks?: unknown[]; omProgress?: OmProgress };
+/** The host thread ledger's snapshot (`packages/runtime/src/thread-wire.ts` `ThreadSnapshot`), as JSON. */
+export interface ChatSnapshot {
+  type: "snapshot";
+  display: ChatDisplay;
   messages: MastraDBMessage[];
-  inspect: PeInspect;
-  models: AgentControllerAvailableModel[];
+  models: { currentId?: string; available: AgentControllerAvailableModel[] };
   permissions?: PermissionRules;
+  inspect: PeInspect;
 }
 
-export function hydrateChatState(inputs: HydrateInputs): ChatState {
-  const session = inputs.session;
-  return {
-    ...emptyChatState(),
-    display: {
-      isRunning: session?.running ?? false,
-      tasks: (session?.tasks ?? []) as ChatDisplay["tasks"],
-      omProgress: session?.omProgress,
-    },
-    messages: inputs.messages,
-    inspect: inputs.inspect,
-    models: { currentId: session?.modelId || undefined, available: inputs.models },
-    access: accessLevelFromPermissions(inputs.permissions),
-  };
+/** A client-local change reduced through the same function as host events. */
+export interface ChatPatch {
+  type: "patch";
+  patch: Partial<Omit<ChatState, "display">> & { display?: Partial<ChatDisplay> };
 }
 
-export function applyEvent(state: ChatState, event: KnownAgentControllerEvent): ChatState {
+export type ChatEvent = KnownAgentControllerEvent | ChatSnapshot | ChatPatch;
+
+export function applyEvent(state: ChatState, event: ChatEvent): ChatState {
   switch (event.type) {
+    case "snapshot":
+      return {
+        display: event.display,
+        messages: event.messages,
+        inspect: event.inspect,
+        models: event.models,
+        access: accessLevelFromPermissions(event.permissions),
+        errors: [],
+      };
+    case "patch":
+      return { ...state, ...event.patch, display: { ...state.display, ...event.patch.display } };
     case "display_state_changed":
       return { ...state, display: event.displayState };
     case "message_start":
@@ -93,19 +110,10 @@ export function applyEvent(state: ChatState, event: KnownAgentControllerEvent): 
   }
 }
 
+// The optimistic echo shares the persisted id (`clientMessageId`), so id is the only identity.
 function upsertMessage(messages: MastraDBMessage[], next: MastraDBMessage): MastraDBMessage[] {
   const index = messages.findIndex((message) => message.id === next.id);
   if (index >= 0) return messages.map((message, at) => (at === index ? next : message));
-  // assistant-ui message array (id count changes under mounted rows). ponytail: text-equality twin
-  if (next.role === "user") {
-    const twin = messages.findIndex(
-      (message) =>
-        message.id.startsWith("local-user-") &&
-        message.role === "user" &&
-        messageText(message) === messageText(next),
-    );
-    if (twin >= 0) return messages.map((message, at) => (at === twin ? next : message));
-  }
   return [...messages, next];
 }
 
@@ -318,7 +326,7 @@ export function selectBreakdown(state: ChatState): ContextBreakdown | undefined 
     return undefined;
 
   const segments: ContextSegment[] = [];
-  const chat = state.messages.filter((m) => m.role === "user" || m.role === "assistant");
+  const chat = state.messages.filter((m) => isUserTurn(m) || m.role === "assistant");
   const messageTokens = chat.reduce((sum, m) => sum + estimateTokens(messageText(m)), 0);
   if (messageTokens > 0)
     segments.push({

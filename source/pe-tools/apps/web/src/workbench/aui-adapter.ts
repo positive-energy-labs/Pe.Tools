@@ -9,6 +9,7 @@ import {
   stringify,
   toolTarget,
   type ChatDisplay,
+  isUserTurn,
   type ChatState,
 } from "./chat-state";
 
@@ -18,7 +19,7 @@ type LikePart = LikeContent[number];
 export function toThreadMessages(state: ChatState): ThreadMessageLike[] {
   const display = state.display;
   const chat = state.messages.filter(
-    (message) => message.role === "user" || message.role === "assistant",
+    (message) => isUserTurn(message) || message.role === "assistant",
   );
   const lastAssistantId = [...chat].reverse().find((m) => m.role === "assistant")?.id;
   const streamingId = display.isRunning ? display.currentMessage?.id : undefined;
@@ -50,10 +51,12 @@ export function toThreadMessages(state: ChatState): ThreadMessageLike[] {
       } else if (part.type === "data-signal" || part.type === "data-user-message") {
         const data = readRecord(part.data);
         const text = signalText(data?.contents);
-        if (text && data?.tagName === "route-workspace") content.push({ type: "text", text });
+        if (text && (isUserTurn(message) || data?.tagName === "route-workspace")) {
+          content.push({ type: "text", text });
+        }
       }
     }
-    if (message.role === "user")
+    if (isUserTurn(message))
       return {
         role: "user",
         content: content.length > 0 ? content : [{ type: "text", text: "" }],

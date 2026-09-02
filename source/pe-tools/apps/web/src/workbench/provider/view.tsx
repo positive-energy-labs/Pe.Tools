@@ -1,31 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import {
-  MastraClient,
-  isKnownAgentControllerEvent,
-  type PermissionPolicy,
-  type ToolCategory,
-} from "@mastra/client-js";
+import { MastraClient, type PermissionPolicy, type ToolCategory } from "@mastra/client-js";
 import { resolveWorkbenchConfig } from "../config";
 import {
   accessLevelFromPermissions,
   applyEvent,
   emptyChatState,
-  hydrateChatState,
   selectApprovals,
   selectRunStatus,
   PERMISSION_LEVELS,
   type AccessLevel,
+  type ChatEvent,
   type ChatState,
-  type PeInspect,
 } from "../chat-state";
 import { usePeInfo } from "#/host/info";
-import { fetchPeInspect } from "#/host/inspect";
+import { useLedger } from "#/host/ledger";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import { createChatPageStore, type WorkbenchAttachment } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
-import { MESSAGE_LIMIT, WorkbenchContext } from "./thread-summary";
+import { WorkbenchContext } from "./thread-summary";
 import {
   errorMessage,
   forkSessionThread,
@@ -42,6 +36,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const search = useSearch({ from: "/chat" });
   const { thread } = search;
   const currentThreadId = thread ?? "";
+  // What the user is looking at when they send: rides every message as its `binding`.
+  const doc = useSearch({
+    strict: false,
+    select: (value) => (value as { doc?: string | null }).doc ?? null,
+  });
   const store = useRouteStore(() =>
     createChatPageStore({
       registry: appAtomRegistry,
@@ -55,21 +54,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const infoQuery = usePeInfo(config);
   const info = infoQuery.data;
-  const [chat, setChat] = useState<ChatState>(emptyChatState);
-  const chatRef = useRef(chat);
-  chatRef.current = chat;
-  const settlingApprovalsRef = useRef(new Set<string>());
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [threadsLoading, setThreadsLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [mintedThreadId] = useState(() => crypto.randomUUID());
-  const connectionIdRef = useRef(0);
-  const connectionRef = useRef<{
-    id: number;
-    threadId: string;
-    promise: Promise<void>;
-    dispose: () => void;
-  } | null>(null);
+  // The host ledger exists once the session is materialized; null until then (or for a draft thread).
+  const [ledgerName, setLedgerName] = useState<string | null>(null);
+  const settlingApprovalsRef = useRef(new Set<string>());
 
   const api = useMemo(() => {
     if (!info || !currentThreadId) return undefined;
@@ -78,14 +69,6 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     );
     return { controller, session: controller.session(info.resourceId, currentThreadId) };
   }, [config.origin, currentThreadId, info]);
-
-  const status = selectRunStatus(chat);
-  const isRunning = status === "running" || status === "waiting";
-
-  const gotoThread = useCallback(
-    (threadId: string, replace = false) => store.actions.openThread(threadId, replace),
-    [store],
-  );
 
   const refreshThreads = useCallback(async () => {
     if (!api) return undefined;
@@ -99,90 +82,42 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     }
   }, [api]);
 
-  const hydrate = useCallback(
-    async (threadId: string, options?: { silent?: boolean }) => {
-      if (!api) return;
-      if (!options?.silent) setLoading(true);
-      try {
-        const [session, messages, inspect, models, permissions] = await Promise.all([
-          api.session.state({ threadId }).catch(() => undefined),
-          api.session.listMessages(threadId, MESSAGE_LIMIT).catch(() => []),
-          fetchPeInspect(config).catch(() => ({}) as PeInspect),
-          api.controller.listModels().catch(() => []),
-          api.session.getPermissions().catch(() => undefined),
-        ]);
-        setChat(hydrateChatState({ session, messages, inspect, models, permissions }));
-        setError(undefined);
-      } catch (caught) {
-        setError(errorMessage(caught));
-      } finally {
-        if (!options?.silent) setLoading(false);
-      }
+  const openLedger = useCallback(async () => {
+    if (!api) throw new Error("thread is not ready");
+    await api.session.create({ threadId: currentThreadId });
+    setLedgerName(`thread:${currentThreadId}`);
+  }, [api, currentThreadId]);
+
+  const [chat, dispatch, ready] = useLedger<ChatEvent, ChatState>(
+    ledgerName,
+    applyEvent,
+    emptyChatState,
+    {
+      onEntry: (entry) => {
+        if (entry.type === "thread_created" || entry.type === "thread_deleted") {
+          void refreshThreads();
+        }
+      },
+      // The host restarted: its thread ledger is gone until the session is materialized again.
+      onClosed: () => {
+        setLedgerName(null);
+        void openLedger().catch((caught) => setError(errorMessage(caught)));
+      },
     },
-    [api, config],
   );
+  const loading = threadsLoading || (ledgerName !== null && !ready);
 
-  const terminalError = useCallback((caught: unknown) => {
-    setError(errorMessage(caught));
-    setChat((previous) => applyEvent(previous, { type: "agent_end", reason: "error" }));
-  }, []);
+  const status = selectRunStatus(chat);
+  const isRunning = status === "running" || status === "waiting";
 
-  const connect = useCallback(() => {
-    if (!api || !currentThreadId) return Promise.reject(new Error("thread is not ready"));
-    if (connectionRef.current?.threadId === currentThreadId) return connectionRef.current.promise;
-    connectionRef.current?.dispose();
-    let active = true;
-    let unsubscribe = () => {};
-    const dispose = () => {
-      active = false;
-      unsubscribe();
-    };
-    const id = ++connectionIdRef.current;
-    const pending = (async () => {
-      await api.session.create({ threadId: currentThreadId });
-      if (!active) return;
-      await Promise.all([refreshThreads(), hydrate(currentThreadId)]);
-      if (!active) return;
-      const subscription = await api.session.subscribe({
-        reconnect: true,
-        onReconnect: () => void hydrate(currentThreadId, { silent: true }),
-        onEvent: (event) => {
-          if (!isKnownAgentControllerEvent(event)) return;
-          setChat((previous) => applyEvent(previous, event));
-          if (event.type === "thread_created" || event.type === "thread_deleted") {
-            void refreshThreads();
-          }
-        },
-        onError: terminalError,
-      });
-      if (!active) subscription.unsubscribe();
-      else unsubscribe = subscription.unsubscribe;
-    })();
-    const connection = {
-      id,
-      threadId: currentThreadId,
-      promise: pending.catch((caught) => {
-        if (connectionRef.current?.id === id) connectionRef.current = null;
-        dispose();
-        throw caught;
-      }),
-      dispose,
-    };
-    connectionRef.current = connection;
-    return connection.promise;
-  }, [api, currentThreadId, hydrate, refreshThreads, terminalError]);
-
-  useEffect(() => {
-    return () => {
-      if (connectionRef.current?.threadId !== currentThreadId) return;
-      connectionRef.current.dispose();
-      connectionRef.current = null;
-    };
-  }, [currentThreadId]);
+  const gotoThread = useCallback(
+    (threadId: string, replace = false) => store.actions.openThread(threadId, replace),
+    [store],
+  );
 
   useEffect(() => {
     if (!infoQuery.error) return;
-    setLoading(false);
+    setThreadsLoading(false);
     setError(errorMessage(infoQuery.error));
   }, [infoQuery.error]);
 
@@ -190,65 +125,62 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     if (!currentThreadId) void gotoThread(mintedThreadId, true);
   }, [currentThreadId, gotoThread, mintedThreadId]);
 
+  // A stored thread opens its ledger now; a draft thread waits for its first send.
   useEffect(() => {
     if (!api) return;
     let cancelled = false;
+    setLedgerName(null);
+    setThreadsLoading(true);
     void (async () => {
       try {
-        setChat(emptyChatState());
-        setLoading(true);
         const available = await refreshThreads();
         if (cancelled) return;
-        if (!available?.some((thread) => thread.id === currentThreadId)) {
-          setLoading(false);
-          return;
-        }
-        await connect();
+        if (available?.some((item) => item.id === currentThreadId)) await openLedger();
       } catch (caught) {
-        if (!cancelled) terminalError(caught);
+        if (!cancelled) setError(errorMessage(caught));
+      } finally {
+        if (!cancelled) setThreadsLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [api, connect, currentThreadId, refreshThreads, terminalError]);
+  }, [api, currentThreadId, openLedger, refreshThreads]);
 
   const sendPrompt = useCallback(
     async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
       if ((!prompt && !attachments?.length) || !api) return;
       const files = toFiles(attachments);
+      const clientMessageId = crypto.randomUUID();
       try {
-        await connect();
-        setChat((previous) => ({
-          ...applyEvent(previous, {
-            type: "message_start",
-            message: optimisticMessage(prompt, files),
-          }),
-          display: { ...previous.display, isRunning: true },
-          errors: [],
-        }));
+        if (!ledgerName) await openLedger();
+        dispatch({
+          type: "message_start",
+          message: optimisticMessage(clientMessageId, prompt, files),
+        });
+        dispatch({ type: "patch", patch: { display: { isRunning: true }, errors: [] } });
         setError(undefined);
-        await api.session.sendMessage({ content: prompt, files });
+        await api.session.sendMessage(
+          { content: prompt, files },
+          { requestContext: { clientMessageId, binding: { doc, target: search.target ?? null } } },
+        );
       } catch (caught) {
         setError(errorMessage(caught));
-        setChat((previous) => ({
-          ...previous,
-          display: { ...previous.display, isRunning: false },
-        }));
+        dispatch({ type: "patch", patch: { display: { isRunning: false } } });
       }
     },
-    [api, connect],
+    [api, dispatch, doc, ledgerName, openLedger, search.target],
   );
 
   const cancel = useCallback(() => {
     if (!api) return;
-    for (const approval of selectApprovals(chatRef.current.display)) {
+    for (const approval of selectApprovals(chat.display)) {
       void rejectApproval(api.session, approval).catch(() => undefined);
     }
     void api.session.abort().catch(() => undefined);
-    setChat((previous) => ({ ...previous, display: { ...previous.display, isRunning: false } }));
-  }, [api]);
+    dispatch({ type: "patch", patch: { display: { isRunning: false } } });
+  }, [api, chat.display, dispatch]);
 
   const newThread = useCallback(() => {
     void gotoThread(crypto.randomUUID());
@@ -289,7 +221,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       if (!api) return;
       try {
         await api.session.deleteThread(threadId);
-        setThreads((previous) => previous.filter((thread) => thread.id !== threadId));
+        setThreads((previous) => previous.filter((item) => item.id !== threadId));
         if (threadId === currentThreadId) await gotoThread(crypto.randomUUID());
         else await refreshThreads();
       } catch (caught) {
@@ -308,9 +240,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       if (settlingApprovalsRef.current.has(toolCallId)) return;
       settlingApprovalsRef.current.add(toolCallId);
       const reject = optionId?.startsWith("reject") ?? false;
-      const approval = selectApprovals(chatRef.current.display).find(
-        (item) => item.toolCallId === toolCallId,
-      );
+      const approval = selectApprovals(chat.display).find((item) => item.toolCallId === toolCallId);
       try {
         if (approval?.suspended) {
           await api.session.respondToToolSuspension(
@@ -326,7 +256,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         settlingApprovalsRef.current.delete(toolCallId);
       }
     },
-    [api],
+    [api, chat.display],
   );
 
   const setModel = useCallback(
@@ -354,12 +284,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           ),
         );
         const rules = await api.session.getPermissions().catch(() => undefined);
-        setChat((previous) => ({ ...previous, access: accessLevelFromPermissions(rules) }));
+        dispatch({ type: "patch", patch: { access: accessLevelFromPermissions(rules) } });
       } catch (caught) {
         setError(errorMessage(caught));
       }
     },
-    [api],
+    [api, dispatch],
   );
 
   const operationError = error ?? chat.errors[0];

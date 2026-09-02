@@ -6,6 +6,7 @@ import {
   selectApprovals,
   selectRunStatus,
   selectToolCalls,
+  type ChatEvent,
   type ChatState,
 } from "./chat-state.ts";
 
@@ -16,8 +17,7 @@ const userMessage = (id: string, text: string): MastraDBMessage => ({
   content: { format: 2, parts: [{ type: "text", text }] },
 });
 
-const reduce = (events: KnownAgentControllerEvent[], from = emptyChatState()) =>
-  events.reduce(applyEvent, from);
+const reduce = (events: ChatEvent[], from = emptyChatState()) => events.reduce(applyEvent, from);
 
 test("display_state_changed is assigned whole — running, tools and tasks come from it", () => {
   const state = reduce([
@@ -36,12 +36,32 @@ test("display_state_changed is assigned whole — running, tools and tasks come 
   expect(call).toMatchObject({ id: "t1", title: "grep", status: "in_progress", target: "a.ts" });
 });
 
-test("the optimistic user echo is replaced in place by the server's canonical turn", () => {
+test("the optimistic user echo and the canonical turn share an id and upsert in place", () => {
   const state = reduce([
-    { type: "message_start", message: userMessage("local-user-1", "hello") },
-    { type: "message_end", message: userMessage("server-1", "hello") },
-  ] as KnownAgentControllerEvent[]);
-  expect(state.messages.map((message) => message.id)).toEqual(["server-1"]);
+    { type: "message_start", message: userMessage("client-1", "hello") },
+    { type: "message_start", message: userMessage("client-2", "again") },
+    { type: "message_end", message: userMessage("client-1", "hello") },
+  ]);
+  expect(state.messages.map((message) => message.id)).toEqual(["client-1", "client-2"]);
+});
+
+test("a snapshot replaces the whole state and a patch merges display", () => {
+  const state = reduce([
+    { type: "error", error: { name: "Error", message: "stale" } },
+    {
+      type: "snapshot",
+      display: { isRunning: true },
+      messages: [userMessage("m1", "hi")],
+      models: { currentId: "gpt", available: [] },
+      inspect: {},
+    },
+    { type: "patch", patch: { display: { isRunning: false }, access: "trusted" } },
+  ]);
+  expect(state.errors).toEqual([]);
+  expect(state.messages.map((message) => message.id)).toEqual(["m1"]);
+  expect(state.models.currentId).toBe("gpt");
+  expect(state.display.isRunning).toBe(false);
+  expect(state.access).toBe("trusted");
 });
 
 test("an error event's detail survives; a silent bad end falls back to Run failed.", () => {

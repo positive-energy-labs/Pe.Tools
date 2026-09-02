@@ -81,3 +81,46 @@ test("a pending approval gates its tool call and nothing else", () => {
   expect(parts.find((part) => part.toolCallId === "t1")!.approval!.id).toBe("t1");
   expect(parts.find((part) => part.toolCallId === "t2")!.approval).toBeUndefined();
 });
+
+test("a persisted user turn (signal row of type user) projects as a user message", () => {
+  const state = {
+    ...emptyChatState(),
+    messages: [
+      {
+        id: "client-1",
+        role: "signal",
+        type: "user",
+        createdAt: new Date(0),
+        content: { format: 2, parts: [{ type: "text", text: "hello" }] },
+      } as MastraDBMessage,
+      message([{ type: "text", text: "ok" }]),
+    ],
+  };
+  expect(toThreadMessages(state).map((m) => m.role)).toEqual(["user", "assistant"]);
+});
+
+test("a live user signal (metadata.signal.type user, data-user-message part) projects with its text", () => {
+  const state = {
+    ...emptyChatState(),
+    messages: [
+      {
+        id: "client-2",
+        role: "signal",
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: "data-user-message",
+              data: { type: "user", tagName: "user", contents: "live" },
+            },
+          ],
+          metadata: { signal: { type: "user", tagName: "user", contents: "live" } },
+        },
+      } as unknown as MastraDBMessage,
+    ],
+  };
+  const [turn] = toThreadMessages(state);
+  expect(turn?.role).toBe("user");
+  expect(turn?.content).toEqual([{ type: "text", text: "live" }]);
+});

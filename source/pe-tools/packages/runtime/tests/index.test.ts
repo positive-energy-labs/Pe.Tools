@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { Session } from "@mastra/core/agent-controller";
+import { createSignal } from "@mastra/core/agent";
 import { RequestContext } from "@mastra/core/request-context";
 import { LocalSandbox } from "@mastra/core/workspace";
 import { TOOL_CATEGORIES, getToolsForCategory } from "@mastra/code-sdk/permissions";
@@ -418,9 +419,11 @@ test(
     const root = await mkdtemp(path.join(os.tmpdir(), "pea-native-permissions-"));
     const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
     process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
-    const sendMessage = vi
-      .spyOn(Session.prototype, "sendMessage")
-      .mockResolvedValue({ stub: true } as never);
+    const sendSignal = vi.spyOn(Session.prototype, "sendSignal").mockReturnValue({
+      id: "stub",
+      type: "user",
+      accepted: Promise.resolve({ accepted: true }),
+    } as never);
     let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
     const expected = {
       yolo: false,
@@ -446,9 +449,9 @@ test(
         session.permissions.setForTool({ toolName: "script_execute", policy: "deny" }),
       ]);
       expect(await session.thread.getSetting({ key: "pea.permissions" })).toEqual(expected);
-      await expect(session.sendMessage({ content: "guarded before restart" })).resolves.toEqual({
-        stub: true,
-      });
+      await expect(
+        session.sendMessage({ content: "guarded before restart" }),
+      ).resolves.toBeUndefined();
 
       await runtime.close?.();
       runtime = await createPeaRuntime({ workspaceRoot: root, protocol: "web" });
@@ -459,13 +462,13 @@ test(
       });
       expect(session.permissions.getRules()).toEqual(expected.permissionRules);
       expect(await session.thread.getSetting({ key: "pea.permissions" })).toEqual(expected);
-      await expect(session.sendMessage({ content: "guarded after restart" })).resolves.toEqual({
-        stub: true,
-      });
-      expect(sendMessage).toHaveBeenCalledTimes(2);
+      await expect(
+        session.sendMessage({ content: "guarded after restart" }),
+      ).resolves.toBeUndefined();
+      expect(sendSignal).toHaveBeenCalledTimes(2);
     } finally {
       await runtime?.close?.();
-      sendMessage.mockRestore();
+      sendSignal.mockRestore();
       if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
       else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
     }
@@ -704,3 +707,57 @@ const trustedRecord = { yolo: false, permissionRules: { ...expected.trusted, too
 } else throw new Error(\`Unknown probe mode '\${mode}'.\`);
 `;
 }
+
+test(
+  "a send persists the client message id and binding on the signal row",
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pea-send-signal-"));
+    const previousStateDirectory = process.env.PE_TOOLS_STATE_DIR;
+    process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
+    const sent: unknown[] = [];
+    const sendSignal = vi.spyOn(Session.prototype, "sendSignal").mockImplementation(((
+      input: unknown,
+    ) => {
+      sent.push(input);
+      return { id: "stub", type: "user", accepted: Promise.resolve({ accepted: true }) };
+    }) as never);
+    let runtime: Awaited<ReturnType<typeof createPeaRuntime>> | undefined;
+    try {
+      runtime = await createPeaRuntime({ workspaceRoot: root, protocol: "web" });
+      const session = await runtime.controller.createSession({
+        resourceId: runtime.resourceId,
+        scope: "browser-thread",
+        threadId: "browser-thread",
+      });
+      const requestContext = new RequestContext();
+      requestContext.set("clientMessageId", "client-7");
+      requestContext.set("binding", { doc: "revit://doc/1", target: "selection" });
+      await session.sendMessage({
+        content: "hello",
+        files: [
+          { data: "data:text/plain;base64,aGk=", mediaType: "text/plain", filename: "a.txt" },
+        ],
+        requestContext,
+      });
+      expect(sent).toHaveLength(1);
+      // The vendor serializer is the same one the DB row goes through: id and metadata survive.
+      const row = createSignal(sent[0] as never).toDBMessage({ threadId: "browser-thread" });
+      expect(row.id).toBe("client-7");
+      expect(row.content.metadata).toMatchObject({
+        signal: {
+          id: "client-7",
+          metadata: { binding: { doc: "revit://doc/1", target: "selection" } },
+        },
+      });
+      const text = row.content.parts.map((part) => ("text" in part ? part.text : "")).join("\n");
+      expect(text).toContain("hello");
+      expect(text).toContain("[File: a.txt]\n```\nhi\n```");
+    } finally {
+      await runtime?.close?.();
+      sendSignal.mockRestore();
+      if (previousStateDirectory === undefined) delete process.env.PE_TOOLS_STATE_DIR;
+      else process.env.PE_TOOLS_STATE_DIR = previousStateDirectory;
+    }
+  },
+  runtimeTestTimeout,
+);
