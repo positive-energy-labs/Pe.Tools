@@ -6,6 +6,7 @@ import { NumberCell, StateDot } from "#/components/master-table/cells";
 import { fmtNum } from "#/components/master-table/model";
 import { Verb } from "#/components/lang/verb";
 import { Pane } from "#/components/lang/pane";
+import type { PaneShortcut } from "#/components/lang/pane";
 import { ManualJField } from "#/takeoff/manual-j-field";
 import type { Verdict } from "#/takeoff/atlas";
 import { FLAG_MEANING } from "#/takeoff/model";
@@ -30,6 +31,7 @@ function RoomPanel({
   decided,
   live,
   fieldsMode,
+  shortcuts,
   onDecide,
   onPatch,
   url,
@@ -38,6 +40,7 @@ function RoomPanel({
   decided: Readonly<Record<string, Verdict>>;
   live: boolean;
   fieldsMode: "columns" | "panel";
+  shortcuts: readonly PaneShortcut[];
   onDecide: (room: WorldRoom, flag: string, verb: Verdict) => void;
   onPatch: (patch: RoomEdit) => void;
   url: string;
@@ -48,7 +51,13 @@ function RoomPanel({
     .filter((x): x is { flag: string; verb: Verdict } => x.verb !== undefined);
 
   return (
-    <Pane kind="inspector" title="room" meta={`${zone.zone.key} · ${zone.zone.lane.label}`}>
+    <Pane
+      id="room"
+      kind="inspector"
+      title="room"
+      meta={`${zone.zone.key} · ${zone.zone.lane.label}`}
+      shortcuts={shortcuts}
+    >
       <div className="hairline-rows -m-2">
         <div className="px-2.5 py-2">
           <h2 className="t-title text-ink">{room.name}</h2>

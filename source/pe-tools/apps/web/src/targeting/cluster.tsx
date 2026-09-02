@@ -18,6 +18,7 @@ import { FactChip } from "#/components/lang/chip";
 import { OutcomeLine } from "#/components/lang/outcome";
 import { ThemeToggle } from "#/components/lang/theme-toggle";
 import { Verb } from "#/components/lang/verb";
+import { ProtoTutorialButton } from "#/components/proto-tutorial/overlay";
 import { StateDot } from "#/components/master-table/cells";
 import { fetchPeInfo } from "#/host/info";
 import {
@@ -179,6 +180,7 @@ export function InstrumentCluster({ live = true }: { live?: boolean }) {
           </span>
         </FactChip>
         <UpdateButton enabled={live} />
+        <ProtoTutorialButton />
         <ThemeToggle />
       </span>
     </ArtifactFrame>

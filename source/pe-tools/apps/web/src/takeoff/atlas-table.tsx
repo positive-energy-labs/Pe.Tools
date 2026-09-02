@@ -31,6 +31,7 @@ export function AtlasTable() {
     scopeCalls,
     scopeSqft,
     proposedUrl,
+    reviewShortcuts,
   } = useAtlasWorkspace();
   const rowKey = (row: Row) => row.room.guid;
   const gutter = (row: Row) =>
@@ -43,7 +44,13 @@ export function AtlasTable() {
       : null;
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading rooms…</div>}>
-      <Pane kind="content" headerSurface="recess" scroll="clip">
+      <Pane
+        id="rooms"
+        kind="content"
+        headerSurface="recess"
+        scroll="clip"
+        shortcuts={reviewShortcuts}
+      >
         <PaneSplit
           axis="horizontal"
           resize={{
@@ -134,6 +141,7 @@ export function AtlasTable() {
                 row={cursorRow}
                 live={live}
                 fieldsMode={fieldsMode}
+                shortcuts={reviewShortcuts}
                 onDecide={decide}
                 onPatch={(patch) => actions.patch(cursorRow.room.guid, patch)}
                 url={proposedUrl}

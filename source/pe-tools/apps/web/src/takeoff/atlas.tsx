@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 
 import type { MasterTableState } from "#/components/master-table/model";
 import { useTableChips } from "#/components/anatomy";
+import type { PaneShortcut } from "#/components/lang/pane";
 import { atlasRoomState, type AtlasRow as Row, type TakeoffStore } from "#/takeoff/store";
 import {
   STAGE_ORDER,
@@ -126,38 +127,64 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     return [...set].sort();
   }, [world]);
 
-  const keydown = useRef<(event: KeyboardEvent) => void>(() => undefined);
-  keydown.current = (e) => {
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.isContentEditable)) return;
-    if (e.key === "Escape") {
-      setZoneKey(null);
-      setCursor(null);
-      return;
-    }
-    if (e.key === "j" || e.key === "k") {
-      e.preventDefault();
-      if (visibleRows.length === 0) return;
-      const i = visibleRows.findIndex((r) => r.room.guid === cursor);
-      const next = e.key === "j" ? Math.min(visibleRows.length - 1, i + 1) : Math.max(0, i - 1);
-      setCursor(visibleRows[i === -1 ? 0 : next]!.room.guid);
-      return;
-    }
-    if ((e.key === "a" || e.key === "d") && cursorRow) {
-      if (cursorRow.open.length === 0) return;
-      e.preventDefault();
-      decide(cursorRow.room, cursorRow.open[0]!, e.key === "a" ? "accept" : "dismiss");
-    }
-  };
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => keydown.current(event);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   const decide = (room: WorldRoom, flag: string, verb: Verdict) => {
     actions.decide(room, flag, verb);
   };
+
+  const clearScope = () => {
+    setZoneKey(null);
+    setCursor(null);
+  };
+  const moveCursor = (delta: -1 | 1) => {
+    if (visibleRows.length === 0) return;
+    const current = visibleRows.findIndex((row) => row.room.guid === cursor);
+    const next = Math.max(0, Math.min(visibleRows.length - 1, current + delta));
+    setCursor(visibleRows[current === -1 ? 0 : next]!.room.guid);
+  };
+  const decideCurrent = (verdict: Verdict) => {
+    const flag = cursorRow?.open[0];
+    if (cursorRow && flag) decide(cursorRow.room, flag, verdict);
+  };
+  const reviewShortcuts: readonly PaneShortcut[] = [
+    {
+      hotkey: "J",
+      label: "next room",
+      callback: () => moveCursor(1),
+      options: { enabled: visibleRows.length > 0 },
+    },
+    {
+      hotkey: "K",
+      label: "previous room",
+      callback: () => moveCursor(-1),
+      options: { enabled: visibleRows.length > 0 },
+    },
+    {
+      hotkey: "A",
+      label: "accept first call",
+      callback: () => decideCurrent("accept"),
+      options: { enabled: (cursorRow?.open.length ?? 0) > 0 },
+    },
+    {
+      hotkey: "D",
+      label: "dismiss first call",
+      callback: () => decideCurrent("dismiss"),
+      options: { enabled: (cursorRow?.open.length ?? 0) > 0 },
+    },
+    {
+      hotkey: "Escape",
+      label: "clear room scope",
+      callback: clearScope,
+      options: { ignoreInputs: true, enabled: zoneKey !== null || cursor !== null },
+    },
+  ];
+  const scopeShortcuts: readonly PaneShortcut[] = [
+    {
+      hotkey: "Escape",
+      label: "clear room scope",
+      callback: clearScope,
+      options: { ignoreInputs: true, enabled: zoneKey !== null || cursor !== null },
+    },
+  ];
 
   const selectZone = (z: WorldZone | null) => {
     setZoneKey(z ? z.zone.key : null);
@@ -225,6 +252,8 @@ function useAtlasModel({ store, headRail, sidePanel, readoutBand }: AtlasProps) 
     levelZones,
     visibleRows,
     cursorRow,
+    reviewShortcuts,
+    scopeShortcuts,
     decide,
     selectZone,
     columns,

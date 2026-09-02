@@ -23,10 +23,17 @@ export function AtlasNavigation() {
     filteredZones,
     selectZone,
     stageCounts,
+    scopeShortcuts,
   } = useAtlasWorkspace();
   return (
     <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading zones…</div>}>
-      <Pane kind="navigation" title="zones" meta={`${world.zones.length} declared`}>
+      <Pane
+        id="zones"
+        kind="navigation"
+        title="zones"
+        meta={`${world.zones.length} declared`}
+        shortcuts={scopeShortcuts}
+      >
         <div className="hairline-b px-2 py-1.5">
           <div className="t-small t-upper mb-1">room states — one per room</div>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
