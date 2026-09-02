@@ -1,5 +1,4 @@
 import {
-  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -231,17 +230,25 @@ export function Pane({
                   <span>4s</span>
                 </div>
                 <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 p-2.5">
-                  {shortcuts.map((shortcut, index) => (
-                    <Fragment key={`${index}:${shortcut.label}`}>
-                      <kbd
-                        data-surface="recess"
-                        className="face-mono t-small min-w-7 border border-line-2 px-1.5 py-0.5 text-center"
+                  {shortcuts.map((shortcut, index) => {
+                    const enabled = shortcut.options?.enabled !== false;
+                    return (
+                      <div
+                        key={`${index}:${shortcut.label}`}
+                        data-slot="pane-shortcut"
+                        data-enabled={enabled}
+                        className={enabled ? "contents" : "contents text-ink-mute"}
                       >
-                        {typeof shortcut.hotkey === "string" ? shortcut.hotkey : "custom"}
-                      </kbd>
-                      <span className="whitespace-nowrap">{shortcut.label}</span>
-                    </Fragment>
-                  ))}
+                        <kbd
+                          data-surface="recess"
+                          className="face-mono t-small min-w-7 border border-line-2 px-1.5 py-0.5 text-center"
+                        >
+                          {typeof shortcut.hotkey === "string" ? shortcut.hotkey : "custom"}
+                        </kbd>
+                        <span className="whitespace-nowrap">{shortcut.label}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </aside>
               <button

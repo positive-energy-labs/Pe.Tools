@@ -80,6 +80,40 @@ test("the nearest nested pane owns a conflicting shortcut", () => {
   );
 });
 
+test("the shortcut card mutes disabled rows", () => {
+  render(
+    <Pane
+      id="rooms"
+      kind="content"
+      shortcuts={[
+        {
+          hotkey: "A",
+          label: "disabled action",
+          callback: () => undefined,
+          options: { enabled: false },
+        },
+        {
+          hotkey: "D",
+          label: "enabled action",
+          callback: () => undefined,
+          options: { enabled: true },
+        },
+      ]}
+    >
+      <button type="button">Room row</button>
+    </Pane>,
+  );
+
+  act(() => screen.getByRole("button", { name: "Room row" }).focus());
+  const disabled = screen.getByText("disabled action").closest("[data-slot='pane-shortcut']");
+  const enabled = screen.getByText("enabled action").closest("[data-slot='pane-shortcut']");
+
+  expect(disabled?.getAttribute("data-enabled")).toBe("false");
+  expect(disabled?.classList.contains("text-ink-mute")).toBe(true);
+  expect(enabled?.getAttribute("data-enabled")).toBe("true");
+  expect(enabled?.classList.contains("text-ink-mute")).toBe(false);
+});
+
 test("the actions slot renders caller JSX in the header", () => {
   let selected = "";
   render(
