@@ -146,12 +146,12 @@ export function TakeoffsPage({ store }: { store: TakeoffStore }) {
     moveToDocument(destination);
   };
   const setState = (patch: BindingPatch<TakeoffSlot>) => {
+    store.actions.setBindings(patch);
     const nextWorld = patch.bound?.world;
     if (nextWorld && nextWorld !== state.bound.world) {
       void navigate({ search: (previous) => ({ ...previous, target: nextWorld, doc: undefined }) });
       return;
     }
-    store.actions.setBindings(patch);
     const nextDocument = patch.bound?.rvt;
     if (live && nextDocument && nextDocument !== state.bound.rvt) {
       setDocumentFailure(null);

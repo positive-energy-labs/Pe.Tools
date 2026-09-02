@@ -942,7 +942,7 @@ export function createTakeoffStore(deps: {
     }) {
       if (patch.bound || patch.multi || patch.stage) {
         const patches: RouteStatePatch[] = [];
-        for (const key of ["folder", "r10"] as const) {
+        for (const key of ["world", "folder", "r10"] as const) {
           const id = patch.bound?.[key];
           if (id !== undefined)
             patches.push({
@@ -1179,7 +1179,7 @@ export function createTakeoffStore(deps: {
           if (plan.untagged > 0) throw Error(`${plan.untagged} eligible rooms have no system tag`);
           const session = await activeSession();
           const result = await deps.host.syncRhvac(session, path, plan.inserts);
-          clearStaging();
+          await clearStaging();
           write("sync", "page/panel", () => registry.set(panelAtom, null));
           return result;
         },

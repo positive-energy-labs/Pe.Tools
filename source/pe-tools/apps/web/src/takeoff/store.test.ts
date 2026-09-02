@@ -365,7 +365,7 @@ describe("takeoff route store", () => {
         doc: {
           bindings: {
             world: {
-              id: "session:dev-26",
+              id: "session:dev-26" as const,
               label: "dev-26",
               at: address("C:\\Models\\Test.rvt"),
             },
@@ -413,7 +413,7 @@ describe("takeoff route store", () => {
         doc: {
           bindings: {
             world: {
-              id: "session:dev-26",
+              id: "session:dev-26" as const,
               label: "dev-26",
               at: address("C:\\Models\\Test.rvt"),
             },
@@ -449,69 +449,27 @@ describe("takeoff route store", () => {
     store.dispose();
   });
 
-  it("does not persist a destination world into the departing document", async () => {
+  it("persists the selected world and reads it back as the command target", async () => {
     const h = harness();
-    h.hold();
     const patches: RouteStatePatch[][] = [];
-    const sessions: SessionSource = {
-      ...h.sessions,
-      async list() {
-        return [
-          ...(await h.sessions.list()),
-          {
-            sessionId: "bridge-other",
-            sdkSessionId: "other",
-            processId: 43,
-            lane: "dev",
-            custody: "controlled",
-            year: "2026",
-            activeDocumentTitle: "Other.rvt",
-            activeDocumentId: "C:\\Models\\Other.rvt",
-            openDocumentCount: 1,
-          },
-        ];
-      },
-    };
-    const slice = Atom.make(
-      AsyncResult.success({
-        doc: {
-          bindings: {
-            world: {
-              id: "session:dev-26",
-              label: "dev-26",
-              at: address("C:\\Models\\Test.rvt"),
-            },
-          },
-          snapshot: h.snapshot,
-          staged: [],
-        },
-        revision: 0,
-        hydrated: true,
-        connected: true,
-        error: null,
-        peaActive: false,
-      }),
-    );
-    const store = createStore(
-      {
-        slice,
-        host: h.host,
-        sessions,
-        target: "session:other",
-      },
-      (next) => patches.push(next),
-    );
-    await store.actions.settle(store.atoms.sessions);
-
-    expect(store.atoms.registry.get(store.atoms.target)).toBe("session:other");
+    const store = createStore({ host: h.host, sessions: h.sessions }, (next) => patches.push(next));
 
     store.actions.setBindings({ bound: { world: "session:other" } });
     await tick();
 
-    expect(patches).toEqual([]);
-    const landed = store.atoms.registry.get(store.slices.takeoffs);
-    expect(AsyncResult.getOrThrow(landed).doc?.snapshot).toEqual(h.snapshot);
-    h.release();
+    expect(patches).toEqual([
+      [
+        {
+          path: ["bindings", "world"],
+          value: {
+            id: "session:other",
+            label: "session:other",
+            at: address("C:\\Models\\Test.rvt"),
+          },
+        },
+      ],
+    ]);
+    expect(store.atoms.registry.get(store.atoms.target)).toBe("session:other");
     store.dispose();
   });
 
