@@ -10,6 +10,7 @@ import {
   type Product,
 } from "#/targeting/model";
 import { Press } from "#/components/lang/press";
+import { token } from "#/lib/token";
 import type { Bindings, Runner } from "./direction-glyph";
 import { DIR_GLYPH, PULSE_CSS, freshnessWord } from "./direction-glyph";
 import { PressContent } from "#/components/anatomy/press-content";
@@ -90,7 +91,7 @@ export function Picker<K extends string>({
           style={{
             padding: 0,
             cursor: inert ? "not-allowed" : "pointer",
-            borderBottom: `1px solid ${caution ? "var(--pe-caution)" : "var(--pe-ink)"}`,
+            borderBottom: `1px solid ${token(caution ? "caution" : "ink")}`,
             whiteSpace: "nowrap",
             animation: lit ? "tp-pulse var(--motion-control) ease-in-out infinite" : undefined,
           }}
@@ -112,7 +113,7 @@ export function Picker<K extends string>({
           >
             <div
               className="flex flex-wrap items-baseline gap-1 px-2 pt-1.5 pb-1"
-              style={{ borderBottom: "1px solid var(--pe-line-2)" }}
+              style={{ borderBottom: `1px solid ${token("line-2")}` }}
             >
               {chain.map((l, i) => {
                 const on = l.key === level;
@@ -120,7 +121,7 @@ export function Picker<K extends string>({
                 return (
                   <span key={l.key} className="inline-flex items-baseline gap-1">
                     {i > 0 ? (
-                      <span className="" style={{ color: "var(--pe-ink-mute)" }}>
+                      <span className="" style={{ color: token("ink-mute") }}>
                         ›
                       </span>
                     ) : null}
@@ -131,7 +132,7 @@ export function Picker<K extends string>({
                       data-tone={lab == null ? "caution" : undefined}
                       style={{
                         padding: "0 3px",
-                        borderBottom: on ? "1px solid var(--pe-ink)" : "1px solid transparent",
+                        borderBottom: on ? `1px solid ${token("ink")}` : "1px solid transparent",
                       }}
                     >
                       {lab ?? l.placeholder}
@@ -156,9 +157,9 @@ export function Picker<K extends string>({
               className="w-full px-2 py-1"
               style={{
                 backgroundColor: "transparent",
-                borderBottom: "1px solid var(--pe-line-2)",
+                borderBottom: `1px solid ${token("line-2")}`,
                 outline: "none",
-                color: "var(--pe-ink)",
+                color: token("ink"),
               }}
             />
             <div className="max-h-[min(16rem,calc(100dvh-6rem))] overflow-y-auto py-1">
@@ -171,7 +172,7 @@ export function Picker<K extends string>({
                   {curFeed.note ?? "read failed"}
                 </div>
               ) : opts.length === 0 ? (
-                <div className="px-2 py-1" style={{ color: "var(--pe-ink-2)" }}>
+                <div className="px-2 py-1" style={{ color: token("ink-2") }}>
                   {curFeed?.state === "loading"
                     ? "reading…"
                     : cur.under && b.bound[cur.under] == null
@@ -179,7 +180,7 @@ export function Picker<K extends string>({
                       : cur.needs}
                 </div>
               ) : hits.length === 0 ? (
-                <div className="px-2 py-1" style={{ color: "var(--pe-ink-2)" }}>
+                <div className="px-2 py-1" style={{ color: token("ink-2") }}>
                   no match
                 </div>
               ) : (
@@ -198,11 +199,11 @@ export function Picker<K extends string>({
                     >
                       <PressContent geometry="baseline">
                         {cur.multi ? <span className="">{on ? "☑" : "☐"}</span> : null}
-                        <span className="" style={{ color: "var(--pe-ink)" }}>
+                        <span className="" style={{ color: token("ink") }}>
                           {o.label}
                         </span>
                         {o.sub ? (
-                          <span className="" style={{ color: "var(--pe-ink-2)" }}>
+                          <span className="" style={{ color: token("ink-2") }}>
                             {o.sub}
                           </span>
                         ) : null}
@@ -216,8 +217,8 @@ export function Picker<K extends string>({
                   <div
                     className="px-2 pt-1.5"
                     style={{
-                      color: "var(--pe-ink-mute)",
-                      borderTop: "1px solid var(--pe-line-2)",
+                      color: token("ink-mute"),
+                      borderTop: `1px solid ${token("line-2")}`,
                     }}
                   >
                     {b.labelOf(cur)} › {below!.key}
@@ -240,11 +241,11 @@ export function Picker<K extends string>({
                         {below!.multi ? (
                           <span className="">{b.isPicked(below!, o.id) ? "☑" : "☐"}</span>
                         ) : null}
-                        <span className="" style={{ color: "var(--pe-ink)" }}>
+                        <span className="" style={{ color: token("ink") }}>
                           {o.label}
                         </span>
                         {o.sub ? (
-                          <span className="" style={{ color: "var(--pe-ink-2)" }}>
+                          <span className="" style={{ color: token("ink-2") }}>
                             {o.sub}
                           </span>
                         ) : null}

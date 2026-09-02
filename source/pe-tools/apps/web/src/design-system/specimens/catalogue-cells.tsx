@@ -63,11 +63,11 @@ export function CatalogueCells() {
               key={row.key}
               className="grid grid-cols-1 items-baseline gap-x-5 gap-y-1 py-2 sm:grid-cols-[8rem_minmax(0,22rem)_minmax(0,1fr)]"
             >
-              <span className="t-caption face-mono text-ink-mute">{row.param}</span>
+              <span className="t-small face-mono text-ink-mute">{row.param}</span>
               <span className="min-w-0">
                 <StateCell {...cellProps(row)} />
               </span>
-              <span className="t-caption text-ink-2">{note}</span>
+              <span className="t-small face-mono text-ink-2">{note}</span>
             </div>
           ))}
         </div>

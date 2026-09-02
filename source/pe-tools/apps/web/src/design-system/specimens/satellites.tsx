@@ -47,15 +47,15 @@ export function SatelliteSpecimens() {
             key={s.to}
             className="grid grid-cols-1 items-baseline gap-x-6 gap-y-1 py-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]"
           >
-            <Link to={s.to} className="t-value text-ink">
+            <Link to={s.to} className="t-small text-ink">
               {s.name}
-              <span className="ml-2 t-caption face-mono text-ink-mute">{s.to}</span>
+              <span className="ml-2 t-small face-mono text-ink-mute">{s.to}</span>
             </Link>
-            <p className="t-value text-ink-2">{s.purpose}</p>
+            <p className="t-small text-ink-2">{s.purpose}</p>
           </div>
         ))}
       </div>
-      <p className="max-w-[80ch] t-label text-ink-mute">
+      <p className="max-w-[80ch] t-small t-upper text-ink-mute">
         Satellites mock their worlds by construction — null identities, no host calls — and say so
         on the surface. That requirement closes only if a satellite is ever promoted to a real
         route.

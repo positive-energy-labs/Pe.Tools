@@ -128,7 +128,7 @@ function MomentTime() {
   );
   if (!at) return null;
   return (
-    <span className="ml-auto t-caption face-mono tracking-[0.02em] text-ink-2">
+    <span className="ml-auto t-small face-mono tracking-[0.02em] text-ink-2">
       {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
     </span>
   );
@@ -155,7 +155,7 @@ function UserMoment() {
     <MomentSection id={id} role="user">
       <div className="mb-1 flex items-center gap-2">
         <TurnTag id={id} />
-        <span className="t-label t-upper text-ink-2">you</span>
+        <span className="t-small t-upper text-ink-2">you</span>
         <MomentTime />
       </div>
       <div className="ml-auto flex w-fit max-w-[76%] flex-col items-end gap-1.5">
@@ -194,7 +194,7 @@ function AssistantMoment() {
     <MomentSection id={id} role="assistant">
       <div className="mb-1 flex items-center gap-2">
         <TurnTag id={id} />
-        <span className="t-label t-upper text-ink">pea</span>
+        <span className="t-small t-upper text-ink">pea</span>
         <MomentTime />
       </div>
       <div className="grid gap-[3px]">
@@ -286,7 +286,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         {target ? <code>{target}</code> : null}
 
         <span
-          className={`ml-auto t-caption face-mono tracking-[0.02em] ${status?.type === "running" ? "text-ink-2" : ""}`}
+          className={`ml-auto t-small face-mono tracking-[0.02em] ${status?.type === "running" ? "text-ink-2" : ""}`}
           data-tone={isError ? "caution" : status?.type === "running" ? undefined : "done"}
         >
           {isError ? "err" : status?.type === "running" ? "run" : "ok"}

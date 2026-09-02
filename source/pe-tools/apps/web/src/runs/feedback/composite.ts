@@ -100,7 +100,7 @@ function overlaySvg(
       if (first) {
         const [x, y] = [(first[0] - vp.minX) * vp.pxPerFt, (vp.maxY - first[1]) * vp.pxPerFt];
         parts.push(
-          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="var(--font-mono)" font-size="var(--type-value-size)" font-weight="var(--weight-bold)">⚑ ${svgEscape(room.id)}</text>`,
+          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="var(--font-mono)" font-size="var(--type-small-size)" font-weight="var(--weight-bold)">⚑ ${svgEscape(room.id)}</text>`,
         );
       }
     }
@@ -136,7 +136,7 @@ function overlaySvg(
       if (first) {
         const [x, y] = [(first[0] - vp.minX) * vp.pxPerFt, (vp.maxY - first[1]) * vp.pxPerFt];
         parts.push(
-          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="var(--font-mono)" font-size="var(--type-value-size)" font-weight="var(--weight-bold)">⚑ residue ${svgEscape(res.id)}</text>`,
+          `<text x="${(x + 4).toFixed(1)}" y="${(y + 14).toFixed(1)}" fill="${alarm}" font-family="var(--font-mono)" font-size="var(--type-small-size)" font-weight="var(--weight-bold)">⚑ residue ${svgEscape(res.id)}</text>`,
         );
       }
     }

@@ -4,7 +4,7 @@ import { Input as InputPrimitive } from "@base-ui/react/input";
 import { tv } from "#/lib/tv";
 
 export const inputRecipe = tv({
-  base: "h-(--control-h) w-full min-w-0 rounded-md border border-line bg-line/20 px-2 py-0.5 t-prose transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:t-value file:font-medium file:text-ink placeholder:text-ink-2 focus-visible:border-line-2 focus-visible:ring-2 focus-visible:ring-line-2/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-caution aria-invalid:ring-2 aria-invalid:ring-caution/20 md:t-value dark:bg-line/30 dark:aria-invalid:border-caution/50 dark:aria-invalid:ring-caution/40",
+  base: "h-(--control-h) w-full min-w-0 rounded-md border border-line bg-line/20 px-2 py-0.5 t-prose transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:font-medium file:text-ink placeholder:text-ink-2 focus-visible:border-line-2 focus-visible:ring-2 focus-visible:ring-line-2/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-caution aria-invalid:ring-caution dark:bg-line/30",
   variants: {
     surface: {
       field: "",
@@ -18,11 +18,17 @@ export const inputRecipe = tv({
 function Input({
   type,
   surface,
+  face,
   ...props
 }: Omit<React.ComponentProps<"input">, "className"> &
-  import("#/lib/tv").VariantProps<typeof inputRecipe>) {
+  import("#/lib/tv").VariantProps<typeof inputRecipe> & { face?: "mono" }) {
   return (
-    <InputPrimitive type={type} data-slot="input" className={inputRecipe({ surface })} {...props} />
+    <InputPrimitive
+      type={type}
+      data-slot="input"
+      className={`${inputRecipe({ surface })}${face === "mono" ? " face-mono" : ""}`}
+      {...props}
+    />
   );
 }
 

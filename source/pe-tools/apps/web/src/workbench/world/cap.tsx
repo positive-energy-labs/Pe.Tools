@@ -66,7 +66,7 @@ export function fmtTok(tokens: number): string {
 }
 
 export const CACHE_BASE =
-  "rounded-sm border-[0.5px] px-[5px] py-px t-caption face-mono whitespace-nowrap";
+  "rounded-sm border-[0.5px] px-[5px] py-px t-small face-mono whitespace-nowrap";
 
 export const CACHE_TONE = {
   cached: "done",
@@ -94,7 +94,7 @@ export const PILL_LABEL: Record<NonNullable<ContextItem["state"]>, string> = {
 };
 
 export const PILL_BASE =
-  "rounded-sm border-[0.5px] px-[5px] py-px t-caption face-mono whitespace-nowrap";
+  "rounded-sm border-[0.5px] px-[5px] py-px t-small face-mono whitespace-nowrap";
 
 export const PILL_TONE: Record<NonNullable<ContextItem["state"]>, string> = {
   in: "text-ink-2 border-line-2",
@@ -102,7 +102,7 @@ export const PILL_TONE: Record<NonNullable<ContextItem["state"]>, string> = {
   off: "text-ink-mute border-line",
 };
 
-export const BLAST_BASE = "rounded-sm border-[0.5px] px-1 t-caption face-mono whitespace-nowrap";
+export const BLAST_BASE = "rounded-sm border-[0.5px] px-1 t-small face-mono whitespace-nowrap";
 
 export const BLAST_TONE: Record<Blast, "caution" | "done" | undefined> = {
   prefix: "caution",
@@ -111,4 +111,4 @@ export const BLAST_TONE: Record<Blast, "caution" | "done" | undefined> = {
 };
 
 export const WORLD_ROW =
-  "grid w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 py-1 text-left tabular-nums [font:inherit] hover:veil";
+  "veil grid w-full cursor-pointer items-center gap-1.5 border-0 bg-transparent px-3 py-1 text-left tabular-nums [font:inherit]";

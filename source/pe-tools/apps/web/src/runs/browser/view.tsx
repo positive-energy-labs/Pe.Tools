@@ -75,7 +75,7 @@ export default function RunBrowser() {
         <EmptyState story="scope" exit="run the takeoff harness to fill the pool">
           No runs captured yet
         </EmptyState>
-        <p className="t-label text-ink-2">
+        <p className="t-small t-upper text-ink-2">
           Every run of{" "}
           <span className="face-mono text-ink">
             ZoneBoundedDetectTests.ProjectA_zones_partition_within_declared_scope
@@ -85,7 +85,7 @@ export default function RunBrowser() {
         </p>
         {pool && (
           <p
-            className="face-mono t-caption break-all text-ink-2"
+            className="t-small face-mono break-all text-ink-2"
             title="The run pool this page is reading — PE_TAKEOFF_RUNS_DIR if set, else <repo>/.artifacts/takeoff-runs."
           >
             pool {pool}

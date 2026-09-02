@@ -1,7 +1,7 @@
-import { chatStyles } from "#/components/lang/chat-appearance";
 import { token } from "#/lib/token";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
+import { docSubRowRecipe } from "./appearance";
 /**
  * DocPicker rows — the one visual vocabulary for picking a document, shared by every
  * mount (the sentence's doc slot, the .rvt/.rfa chips). The look is the poc/chip-a
@@ -26,9 +26,9 @@ export function extOf(path: string): string | undefined {
 /** Year/section band header, e.g. "REVIT 2025 · 4". */
 export function DocGroup({ label, aside }: { label: string; aside?: string }) {
   return (
-    <div className={chatStyles.docPicker0()}>
-      <span className={chatStyles.docPicker1()}>{label}</span>
-      {aside ? <span className={chatStyles.docPicker2()}>{aside}</span> : null}
+    <div className="flex items-baseline gap-2 px-2 pb-0.5 pt-1.5">
+      <span className="t-small t-upper">{label}</span>
+      {aside ? <span className="t-small face-mono text-ink-2">{aside}</span> : null}
     </div>
   );
 }
@@ -63,7 +63,7 @@ export function DocRow({
       <PressContent geometry="row">
         {ext ? (
           <span
-            className={chatStyles.docPicker3()}
+            className="hairline-x-faint hairline-y-faint t-small face-mono shrink-0 rounded-sm px-1"
             style={{
               borderColor: EXT_COLOR[ext] ?? token("line-2"),
               color: EXT_COLOR[ext] ?? token("ink-2"),
@@ -72,19 +72,13 @@ export function DocRow({
             {ext}
           </span>
         ) : null}
-        <span className={chatStyles.docPicker4()}>
-          <span className={chatStyles.docPicker5()}>{label}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate t-small t-upper text-ink">{label}</span>
           {sub ? (
-            <span
-              className={
-                subTone === "active" ? chatStyles.docSubActive() : chatStyles.docSubQuiet()
-              }
-            >
-              {sub}
-            </span>
+            <span className={docSubRowRecipe({ active: subTone === "active" })}>{sub}</span>
           ) : null}
         </span>
-        {selected ? <span className={chatStyles.docPicker6()}>◉</span> : null}
+        {selected ? <span className="t-small face-mono shrink-0 text-ink">◉</span> : null}
       </PressContent>
     </Press>
   );

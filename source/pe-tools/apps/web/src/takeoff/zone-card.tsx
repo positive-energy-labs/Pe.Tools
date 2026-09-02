@@ -58,7 +58,7 @@ export function ZoneCard({
           <>
             <ZoneThumb zone={zone.zone} className="size-4" />
             <span className="face-mono shrink-0">{zone.zone.key}</span>
-            <span className="t-label min-w-0 flex-1 truncate text-ink-2">{zone.name}</span>
+            <span className="t-small t-upper min-w-0 flex-1 truncate text-ink-2">{zone.name}</span>
             <Press
               type="button"
               onClick={onClose}

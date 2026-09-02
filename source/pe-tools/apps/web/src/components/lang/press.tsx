@@ -11,10 +11,10 @@ export const pressRecipe = tv({
   // `min-w-0`: a press is a flex/grid item wherever it sits in a row, and min-width:auto let
   // its content push the row wider than the rail it lives in (measured, 2026-08-31). Its
   // children own their own truncation.
-  base: "inline-flex min-w-0 cursor-pointer items-center gap-1 appearance-none border border-transparent bg-transparent focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
+  base: "inline-flex min-w-0 cursor-pointer items-center gap-1 appearance-none border border-transparent bg-transparent focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
   variants: {
     hover: {
-      veil: "enabled:hover:veil",
+      veil: "veil",
       // A press whose hover ground would read as meaning (table headers on recess) keeps the
       // ink shift from its tone and no veil (takeoffs annotations, 2026-08-31).
       bare: "",
@@ -32,12 +32,12 @@ export const pressRecipe = tv({
       neutral: "text-ink",
       quiet: "text-ink-2 enabled:hover:text-ink",
       nav: "text-nav enabled:hover:underline enabled:hover:underline-offset-3",
-      agent: "text-pea-ink pea-wash",
+      agent: "",
     },
     size: {
-      caption: "t-caption",
-      label: "t-label",
-      value: "t-value",
+      caption: "t-small face-mono",
+      label: "t-small t-upper",
+      value: "t-small",
       title: "t-title",
       icon: "inline-flex size-6 shrink-0 items-center justify-center rounded-sm [&>svg]:pointer-events-none [&>svg]:shrink-0",
     },
@@ -59,6 +59,8 @@ export function Press({ type, tone, size, state, hover, frame, ...props }: Press
     <button
       type={type ?? "button"}
       className={pressRecipe({ tone, size, state, hover, frame })}
+      data-tone={tone === "agent" ? "pea" : undefined}
+      data-wash={tone === "agent" ? "" : undefined}
       data-selected={state === "selected" ? "" : undefined}
       {...props}
     />

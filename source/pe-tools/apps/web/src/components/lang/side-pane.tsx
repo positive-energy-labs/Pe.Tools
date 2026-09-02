@@ -41,7 +41,7 @@ export interface SidePaneProps {
 
 export const sidePaneRecipe = tv({
   slots: {
-    root: "relative flex shrink-0 flex-col border-line bg-page",
+    root: "relative flex shrink-0 flex-col border-line",
     handle:
       "absolute inset-y-0 z-raised w-[5px] cursor-col-resize touch-none hover:bg-line-2 active:bg-line-2",
   },
@@ -125,7 +125,13 @@ export function SidePane({
     // Product default: chevron-only rail. The `rail` slot is optional — the owner dislikes
     // icon-stack rails, so callers should normally leave it unset and get just the expander.
     return (
-      <div data-state="collapsed" data-side={side} style={{ width: RAIL }} className={root()}>
+      <div
+        data-state="collapsed"
+        data-side={side}
+        data-surface="page"
+        style={{ width: RAIL }}
+        className={root()}
+      >
         <Press tone="neutral" size="icon" aria-label="Expand pane" onClick={() => setOpen(true)}>
           <Expand />
         </Press>
@@ -136,7 +142,14 @@ export function SidePane({
 
   const { root, handle } = sidePaneRecipe({ side, state: "open" });
   return (
-    <div ref={paneRef} data-state="open" data-side={side} style={{ width }} className={root()}>
+    <div
+      ref={paneRef}
+      data-state="open"
+      data-side={side}
+      data-surface="page"
+      style={{ width }}
+      className={root()}
+    >
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2.5">
         <Press tone="neutral" size="icon" aria-label="Collapse pane" onClick={() => setOpen(false)}>
           <Collapse />

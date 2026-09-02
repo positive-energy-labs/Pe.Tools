@@ -55,12 +55,12 @@ export function FamiliesReadoutBands() {
           </div>
           {/* THE RULED TABLE IDIOM (2026-08-31): separate borders at zero spacing, rows at
               `--item-h`, tier type. This queue was the last table in the app drawn the old way —
-              `border-collapse` + a raw `leading-tight` + rows that measured 12.5-15px, stacked
+              `border-collapse` + a raw compact leading + rows that measured 12.5-15px, stacked
               directly above the 20px families matrix on the same page. A collapsed border belongs
               to the TABLE, so every rule here is drawn by the CELL instead (`hairline-b`), which
               is the same move `MasterTable` made and the reason its rules survive a sticky cell. */}
-          <table className="mt-0.5 w-full table-fixed border-separate border-spacing-0 t-value">
-            <thead className="face-mono t-caption t-upper text-ink-mute">
+          <table className="mt-0.5 w-full table-fixed border-separate border-spacing-0 t-small">
+            <thead className="t-small face-mono t-upper text-ink-mute">
               <tr className={QUEUE_ROW}>
                 <th className={cn(QUEUE_CELL, "w-8 font-normal")}>
                   <span className="sr-only">include</span>
@@ -110,7 +110,7 @@ export function FamiliesReadoutBands() {
                       {entry.plan.loweredActions.length === 1 ? "" : "s"}
                     </td>
                     <td
-                      className={cn(QUEUE_CELL, "face-mono t-caption truncate text-ink-2")}
+                      className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-2")}
                       title="Which layers of the profile decided this family's parameter facets, counted. It is a rollup of what the op reported, with no interpretation added — use it to see which part of the profile is doing the work."
                     >
                       {provenanceSummary(entry.plan)}
@@ -118,7 +118,7 @@ export function FamiliesReadoutBands() {
                     {/* A family the plan compiled nothing for is a verdict with nothing behind
                         it, not a warning about the model: quiet ink, off the meaning band. */}
                     <td
-                      className={cn(QUEUE_CELL, "face-mono t-caption w-80 truncate text-ink-mute")}
+                      className={cn(QUEUE_CELL, "t-small face-mono w-80 truncate text-ink-mute")}
                       title={flag ?? ""}
                     >
                       {flag ?? ""}
@@ -136,7 +136,7 @@ export function FamiliesReadoutBands() {
                   </td>
                   <td className={cn(QUEUE_CELL, "face-mono w-20 text-ink-mute")}>—</td>
                   <td
-                    className={cn(QUEUE_CELL, "face-mono t-caption truncate text-ink-mute")}
+                    className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-mute")}
                     colSpan={2}
                   >
                     in scope, but the bound profile does not claim this family
@@ -182,7 +182,7 @@ export function FamiliesReadoutBands() {
               </FactChip>
             )}
           </div>
-          <table className="mt-1 w-full border-separate border-spacing-0 t-value">
+          <table className="mt-1 w-full border-separate border-spacing-0 t-small">
             <tbody>
               {applyData.receipts.map((entry) => (
                 <tr key={entry.familyId} className={QUEUE_ROW}>
@@ -203,14 +203,14 @@ export function FamiliesReadoutBands() {
                     </FactChip>
                   </td>
                   <td
-                    className={cn(QUEUE_CELL, "face-mono t-caption w-40 text-ink-2")}
+                    className={cn(QUEUE_CELL, "t-small face-mono w-40 text-ink-2")}
                     title={`${entry.parametersChanged} parameter(s) written, breaking down as ${entry.diffSummary.added} added, ${entry.diffSummary.removed} removed, ${entry.diffSummary.modified} modified against the family's prior state.`}
                   >
                     {entry.parametersChanged} changed · +{entry.diffSummary.added} −
                     {entry.diffSummary.removed} ~{entry.diffSummary.modified}
                   </td>
                   <td
-                    className={cn(QUEUE_CELL, "face-mono t-caption truncate text-ink-2")}
+                    className={cn(QUEUE_CELL, "t-small face-mono truncate text-ink-2")}
                     title={
                       entry.operationsRun.length > 0
                         ? `Migrator operations that ran on this family, in order: ${entry.operationsRun.join(", ")}.`
@@ -295,7 +295,7 @@ export function FamiliesReadoutBands() {
           {projection.projections.map((entry) => (
             <div key={entry.familyId} className="mt-2">
               <div className="flex items-center gap-2">
-                <span className="t-label">{entry.familyName ?? entry.familyId}</span>
+                <span className="t-small t-upper">{entry.familyName ?? entry.familyId}</span>
                 {entry.profileJson && (
                   <Verb
                     label="copy"
@@ -313,7 +313,7 @@ export function FamiliesReadoutBands() {
               </div>
               {entry.profileJson && (
                 <pre
-                  className="face-mono t-caption mt-1 max-h-40 overflow-auto p-2 text-ink-2 inset-ring"
+                  className="t-small face-mono mt-1 max-h-40 overflow-auto p-2 text-ink-2 inset-ring"
                   data-surface="recess"
                 >
                   {entry.profileJson}

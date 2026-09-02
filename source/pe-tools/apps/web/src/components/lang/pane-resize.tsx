@@ -164,7 +164,7 @@ interface PaneResizeHandleProps {
 
 const paneResizeHandleRecipe = tv({
   slots: {
-    root: "group z-raised flex touch-none items-center justify-center bg-recess/50 outline-none hover:veil focus-visible:veil",
+    root: "veil group z-raised flex touch-none items-center justify-center outline-none",
     bar: "bg-line-2 group-hover:bg-ink-2 group-focus-visible:bg-ink-2",
   },
   variants: {
@@ -235,6 +235,7 @@ export function PaneResizeHandle({
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={Math.round(value)}
+      data-surface="recess"
       aria-label="Resize pane"
       title="Drag or use arrow keys to resize · Home or double-click resets"
       onPointerDown={onPointerDown}

@@ -23,7 +23,7 @@ export const BlockMarkdown = memo(function BlockMarkdown({ md }: { md: string })
 
 export const pageKey = (page: number) => `p${page}`;
 
-export const VEIL_HOVER = "hover:veil";
+export const VEIL_HOVER = "veil";
 
 export function GroundedDocView({
   engine,

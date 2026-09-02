@@ -16,10 +16,10 @@ export const paneRecipe = tv({
   },
   variants: {
     kind: {
-      navigation: { root: "bg-page", body: "overflow-y-auto" },
-      visual: { root: "bg-artifact", body: "relative overflow-hidden" },
-      content: { root: "bg-page", body: "overflow-auto" },
-      inspector: { root: "bg-page", body: "overflow-y-auto p-2" },
+      navigation: { body: "overflow-y-auto" },
+      visual: { body: "relative overflow-hidden" },
+      content: { body: "overflow-auto" },
+      inspector: { body: "overflow-y-auto p-2" },
     },
     scroll: {
       auto: { body: "overflow-auto" },
@@ -61,7 +61,12 @@ export function Pane({
   const hasHeader = title != null || meta != null || help != null || actions != null;
   const { root, body } = paneRecipe({ kind, scroll });
   return (
-    <section data-slot="pane" data-kind={kind} className={root()}>
+    <section
+      data-slot="pane"
+      data-kind={kind}
+      data-surface={kind === "visual" ? "artifact" : "page"}
+      className={root()}
+    >
       {hasHeader && (
         <div
           data-slot="pane-header"
@@ -69,7 +74,7 @@ export function Pane({
           className="flex h-8 shrink-0 items-center gap-2 border-b border-line px-2"
         >
           <div className="flex min-w-0 flex-1 items-baseline gap-2">
-            {title != null && <h2 className="t-label min-w-0 truncate">{title}</h2>}
+            {title != null && <h2 className="t-small t-upper min-w-0 truncate">{title}</h2>}
             {meta != null && (
               <span
                 title={typeof meta === "string" ? meta : undefined}

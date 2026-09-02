@@ -124,6 +124,7 @@ function TableCellField({
   return (
     <div className="space-y-1">
       <Input
+        face="mono"
         list={list}
         value={primitiveInputValue(field.value ?? value)}
         onChange={(event) => onChange(event.currentTarget.value)}
@@ -249,6 +250,7 @@ export function TableField({ path, effectiveNodeRef, label }: ResolvedFieldRende
                 <th key={columnKey} className="min-w-36 px-3 py-2">
                   <div className="flex items-center gap-2">
                     <Input
+                      face="mono"
                       defaultValue={columnKey}
                       onBlur={(event) => renameColumn(columnKey, event.currentTarget.value)}
                     />

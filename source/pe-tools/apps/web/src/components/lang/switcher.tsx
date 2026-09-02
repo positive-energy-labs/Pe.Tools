@@ -21,7 +21,7 @@ export const switcherRecipe = tv({
     // (two-height law, annotation round 2026-08-31).
     base: "inline-flex h-(--item-h) shrink-0 items-center rounded-sm border border-line-2",
     option:
-      "h-full cursor-pointer border-0 bg-transparent px-1.5 face-mono t-caption tracking-[0.05em] tabular-nums text-ink-2 enabled:hover:veil",
+      "veil h-full cursor-pointer border-0 bg-transparent px-1.5 t-small face-mono tracking-[0.05em] text-ink-2",
   },
   variants: {
     state: {

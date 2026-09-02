@@ -49,14 +49,14 @@ export function FamilyWorkspaceDocPane() {
   const partInspector = (part: GeomConstituent): React.ReactNode => (
     <>
       <p
-        className="face-mono t-caption mb-1.5 text-ink-2"
+        className="t-small face-mono mb-1.5 text-ink-2"
         title={`${part.slug} is a ${part.kind}. The kind is READ-ONLY here: a prism does not become a cylinder because a word changed, and the profile's job is to say what the geometry is, not to pretend it can be retyped.`}
       >
         {part.kind} · {part.dims.length} bindable · {part.meta.length} non-bindable
       </p>
 
       <div className="hairline-t mb-2 pt-1.5">
-        <p className="t-label t-upper mb-0.5 flex items-center gap-1 text-ink-2">
+        <p className="t-small t-upper mb-0.5 flex items-center gap-1 text-ink-2">
           bindable dims — represented in the table
           <HelpTip>
             The constituent&rsquo;s bindable numbers, shown here as a STATEMENT OF WHERE EACH ONE
@@ -69,7 +69,7 @@ export function FamilyWorkspaceDocPane() {
           const bound = boundParam(bindingOf(world, draft, part.slug, dim.property));
           return (
             <div key={dim.property} className="flex items-center gap-2 py-0.5">
-              <span className="face-mono t-caption w-24 shrink-0 text-ink-2" title={dim.note}>
+              <span className="t-small face-mono w-24 shrink-0 text-ink-2" title={dim.note}>
                 {dim.property}
               </span>
               {bound != null ? (
@@ -106,14 +106,14 @@ export function FamilyWorkspaceDocPane() {
 
       <div className="hairline-t pt-1.5">
         <p
-          className="t-label t-upper mb-0.5 text-ink-2"
+          className="t-small t-upper mb-0.5 text-ink-2"
           title="The half of the constituent no parameter can drive. It has no column in the table because it does not vary by type and it is not a number — and this is the ONLY place it appears, which is exactly the claim: it lives somewhere else."
         >
           non-bindable metadata — lives only here
         </p>
         {part.meta.map((meta) => (
           <div key={meta.key} className="flex items-baseline gap-2 py-0.5">
-            <span className="face-mono t-caption w-24 shrink-0 text-ink-2" title={meta.note}>
+            <span className="t-small face-mono w-24 shrink-0 text-ink-2" title={meta.note}>
               {meta.label}
             </span>
             <span className="min-w-0 flex-1">
@@ -133,14 +133,14 @@ export function FamilyWorkspaceDocPane() {
     const family = proposalsAt(name, null);
     return (
       <>
-        <p className="face-mono t-caption mb-1.5 text-ink-2">
+        <p className="t-small face-mono mb-1.5 text-ink-2">
           {row?.dataType ?? "unknown"} · bound per {row?.isInstance ? "instance" : "type"}
           {row?.group ? ` · ${row.group}` : ""}
           {world.missingInRevit.has(name) && <span className="ml-1">⊘ not in Revit</span>}
         </p>
 
         <div className="hairline-t mb-2 pt-1.5">
-          <p className="t-label t-upper mb-0.5 flex items-center gap-1 text-ink-2">
+          <p className="t-small t-upper mb-0.5 flex items-center gap-1 text-ink-2">
             family value {isFormula(authored) ? "· formula" : ""}
             <HelpTip>
               THE FAMILY-LEVEL VALUE — what every type inherits unless it overrides. The table shows
@@ -167,7 +167,7 @@ export function FamilyWorkspaceDocPane() {
             onCommit={(next) => editAuthored(name, next)}
           />
           {family.length > 0 && (
-            <p className="face-mono t-caption mt-1" data-tone="pea">
+            <p className="t-small face-mono mt-1" data-tone="pea">
               pea proposes {family[0]!.proposed} here — click the cell to bring the card into view;
               typing your own value clears the proposal instead.
             </p>
@@ -176,7 +176,7 @@ export function FamilyWorkspaceDocPane() {
 
         <div className="hairline-t mb-2 pt-1.5">
           <p
-            className="t-label t-upper mb-0.5 text-ink-2"
+            className="t-small t-upper mb-0.5 text-ink-2"
             title="Every geometry property this parameter drives. These have no rows of their own — this parameter IS their row — so editing the value above moves all of them together. That fan-out is the thing worth knowing before you type."
           >
             drives {drives.length} geometry propert{drives.length === 1 ? "y" : "ies"}
@@ -205,7 +205,7 @@ export function FamilyWorkspaceDocPane() {
 
         <div className="hairline-t pt-1.5">
           <p
-            className="t-label t-upper mb-0.5 text-ink-2"
+            className="t-small t-upper mb-0.5 text-ink-2"
             title="Where this number came from. Grounding is its own fact, independent of any proposal — accepting or denying pea's reading never erases the citation."
           >
             grounding
@@ -221,7 +221,7 @@ export function FamilyWorkspaceDocPane() {
             blocks.map((id) => (
               <p
                 key={id}
-                className="hairline-l face-mono t-caption py-0.5 pl-1.5 text-ink-2"
+                className="hairline-l t-small face-mono py-0.5 pl-1.5 text-ink-2"
                 title={`Block ${id} of ${world.spec?.fileName ?? "the spec"}, verbatim. If it does not say what the value says, the value is wrong.`}
               >
                 <span>{id} · </span>
@@ -242,7 +242,7 @@ export function FamilyWorkspaceDocPane() {
           <span>
             <Tag>{inspect.kind === "part" ? "constituent" : "parameter"}</Tag>
           </span>
-          <span className="t-label min-w-0 flex-1 truncate text-ink">
+          <span className="t-small t-upper min-w-0 flex-1 truncate text-ink">
             {inspect.kind === "part" ? inspect.slug : inspect.name}
           </span>
           <Verb
@@ -326,10 +326,10 @@ export function FamilyWorkspaceDocPane() {
             className="mb-1 flex items-baseline gap-2"
             title="Pea's reading of the spec, aimed at named cells. Accepting moves the value into the table where you can see it land; the citation stays lit either way, because the grounding is a separate fact from the proposal."
           >
-            <span className="t-label t-upper" data-tone="pea">
+            <span className="t-small t-upper" data-tone="pea">
               pea
             </span>
-            <span className="t-label t-upper text-ink-2">proposals · ephemeral · page-scoped</span>
+            <span className="t-small t-upper text-ink-2">proposals · ephemeral · page-scoped</span>
           </div>
           {world.proposals.length === 0 ? (
             <EmptyState story="scope" exit="ask pea to read the attached spec against the family">

@@ -1,6 +1,6 @@
 import { tv } from "#/lib/tv";
 
-export const valueDiffRecipe = tv({ base: "face-mono t-value" });
+export const valueDiffRecipe = tv({ base: "face-mono t-small" });
 
 /**
  * ValueDiff — the one way a value change is written anywhere in the workbench:

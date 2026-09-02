@@ -24,7 +24,7 @@ export function TargetCaption<K extends string>({ b, link }: { b: Bindings<K>; l
   const feed = b.feeds[link.key];
   const fresh = freshnessWord(b, link);
   return (
-    <span className="face-mono t-caption text-ink-mute">
+    <span className="t-small face-mono text-ink-mute">
       {targetMode(link)}
       {link.liveness ? ` · ${link.liveness}` : ""}
       {fresh ? ` · ${fresh}` : ""}
@@ -41,7 +41,7 @@ function Connector<K extends string>({ link, active }: { link: Link<K>; active: 
     <span
       aria-hidden
       className={cn(
-        "face-mono t-caption shrink-0 text-center",
+        "t-small face-mono shrink-0 text-center",
         active ? "text-ink" : "text-ink-mute",
       )}
       style={{ minWidth: 64 }}
@@ -77,7 +77,7 @@ function Terminal<K extends string>({
       >
         <TargetCaption b={b} link={link} />
         <span className="inline-flex items-baseline gap-1.5">
-          <span className="face-mono t-caption text-ink-2">{link.joiner}</span>
+          <span className="t-small face-mono text-ink-2">{link.joiner}</span>
           <Picker product={product} link={link} b={b} runner={runner} extra={extra} inert={dim} />
         </span>
       </div>
@@ -113,7 +113,7 @@ function Rail<K extends string>({
     <div
       className={`flex min-w-0 flex-col justify-center gap-1.5 ${side === "left" ? "items-end" : "items-start"}`}
     >
-      <span className="t-label px-1">{side === "left" ? "reads" : "writes · syncs"}</span>
+      <span className="t-small t-upper px-1">{side === "left" ? "reads" : "writes · syncs"}</span>
       {links.length ? (
         links.map((link) => (
           <Terminal
@@ -127,7 +127,7 @@ function Rail<K extends string>({
           />
         ))
       ) : (
-        <span className="face-mono t-caption px-1 text-ink-mute">none</span>
+        <span className="t-small face-mono px-1 text-ink-mute">none</span>
       )}
     </div>
   );
@@ -162,10 +162,10 @@ export function TargetingFlow<K extends string>({
         <ArtifactFrame
           head={
             <>
-              <span className="t-label">{product.name}</span>
-              <span className="t-label">trunks</span>
+              <span className="t-small t-upper">{product.name}</span>
+              <span className="t-small t-upper">trunks</span>
               {ends.map((end) => (
-                <span key={end.key} className="face-mono t-caption text-ink-2">
+                <span key={end.key} className="t-small face-mono text-ink-2">
                   {pathOf(product, end.key)
                     .filter((link) => link.dir === null)
                     .map((link) => b.labelOf(link) ?? link.placeholder)

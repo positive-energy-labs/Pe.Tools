@@ -168,7 +168,7 @@ export function MasterTable<Row extends RowData>({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-2 py-1">
         <span
-          className="t-label"
+          className="t-small t-upper"
           title="Everything currently in scope. This table is never hidden and never narrowed silently — every filter acting on it is a chip in this strip."
         >
           {scopeLabel}
@@ -179,18 +179,18 @@ export function MasterTable<Row extends RowData>({
             onChange={(event) => updateState((state) => ({ ...state, query: event.target.value }))}
             placeholder={searchPlaceholder}
             title="Free-text filter. It reads only the columns that declare themselves searchable, so a match here always points at a visible column."
-            className="face-mono t-value h-(--control-h) w-44 rounded-sm border border-line-2 bg-transparent px-1.5 outline-none focus:border-line-2 focus:veil"
+            className="face-mono t-small h-(--control-h) w-44 rounded-sm border border-line-2 bg-transparent px-1.5 outline-none focus:border-line-2"
           />
         )}
         {resolvedState.query && (
           <span
-            className="face-mono t-value text-ink-2"
+            className="face-mono t-small text-ink-2"
             title="How many rows survive the free-text filter, out of every row in scope."
           >
             {visibleRows.length} of {rows.length}
           </span>
         )}
-        {summary && <span className="face-mono t-value text-ink-2">{summary}</span>}
+        {summary && <span className="face-mono t-small text-ink-2">{summary}</span>}
         {chips.map((chip) => (
           <NarrowChip
             key={chip.label}
@@ -239,7 +239,7 @@ export function MasterTable<Row extends RowData>({
           // with a sticky cell — it scrolls out from under the locked column and the header and
           // leaves the page ground showing as a white seam. Every cell already draws its own
           // `border-b border-l` with `first:border-l-0`, so nothing doubles (annotation, 2026-08-31).
-          className="w-full border-separate border-spacing-0 t-value"
+          className="w-full border-separate border-spacing-0 t-small"
         >
           <MasterTableHeader
             table={table}
@@ -297,7 +297,7 @@ export function MasterTable<Row extends RowData>({
               focused && column?.readState ? column.readState(focused.row.original) : undefined;
             if (!focused || !cellState) return null;
             return (
-              <div className="t-label flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line bg-recess px-2 whitespace-nowrap on-recess">
+              <div className="t-small t-upper flex h-6 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-t border-line px-2 whitespace-nowrap on-recess">
                 <Tag>{column?.readWord?.(focused.row.original) ?? cellStateLabel(cellState)}</Tag>
                 <span className="truncate text-ink-2">
                   {cellFactsText(cellState) ??

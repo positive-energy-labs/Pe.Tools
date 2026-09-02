@@ -6,8 +6,7 @@ import { Moments } from "../aui";
 import { RouteChatPluginDock } from "../route-chat-plugins";
 import { WorldLane } from "../world";
 import { SidePane } from "#/components/lang/side-pane";
-import { EmptyState } from "#/components/lang/empty";
-import { chatStyles } from "#/components/lang/chat-appearance";
+import { EmptyState, emptyMark } from "#/components/lang/empty";
 import { TargetWorld } from "#/chat/chat-target";
 import { chipDescriptor, laneVar } from "#/host/target-ui";
 import { Press } from "#/components/lang/press";
@@ -160,7 +159,9 @@ export function Lens({
             <div {...annotation("chat")} ref={chatRef}>
               {moments.length === 0 ? (
                 <div className="grid min-h-[60vh] place-content-center justify-items-center gap-1.5 px-6 text-center">
-                  <h1 className={chatStyles.emptyMark()}>Pea</h1>
+                  <h1 className={emptyMark()} data-tone="pea">
+                    Pea
+                  </h1>
                   <EmptyState story="scope" exit="ask anything below, or pick a thread on the left">
                     no messages in this thread yet
                   </EmptyState>

@@ -233,7 +233,7 @@ export function SpecDrawing({
 
 const inp: React.CSSProperties = {
   width: 44,
-  fontSize: "var(--type-caption-size)",
+  fontSize: "var(--type-small-size)",
   backgroundColor: token("page"),
   textAlign: "center",
 };

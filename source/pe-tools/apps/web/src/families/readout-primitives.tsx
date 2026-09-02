@@ -24,7 +24,7 @@ export function Seam({ op }: { op: string }) {
 }
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span className="t-label t-upper text-ink-2">{children}</span>;
+  return <span className="t-small t-upper text-ink-2">{children}</span>;
 }
 
 /**
@@ -75,7 +75,7 @@ export function NamePicker({
         <ComboboxChips>
           {collapsed ? (
             <span
-              className="t-caption px-1 text-ink-2"
+              className="t-small face-mono px-1 text-ink-2"
               title="Every resolved name is in the draft. Open the list to deselect — chips appear once the set is narrowed."
             >
               all {values.length} {ariaLabel.replace(/^draft /, "")}

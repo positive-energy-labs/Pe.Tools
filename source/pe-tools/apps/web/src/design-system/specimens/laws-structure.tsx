@@ -83,15 +83,13 @@ export function StructureLaws({ owner }: { owner: (name: string) => string }) {
         <div className="flex flex-col gap-1">
           {ORDERED_SPECIMENS.map((props) => (
             <span key={cellStateLabel(props)} className="flex items-baseline gap-3">
-              <span className="w-20 t-caption face-mono text-ink-mute">
-                {cellStateLabel(props)}
-              </span>
+              <span className="w-20 t-small face-mono text-ink-mute">{cellStateLabel(props)}</span>
               <StateCell {...props} />
             </span>
           ))}
         </div>
         <CounterExample why="alphabetical order hides the states that need action">
-          <span className="t-caption face-mono text-ink-2">
+          <span className="t-small face-mono text-ink-2">
             clean · drift · locked · proposed · stale · staged · unverified
           </span>
         </CounterExample>

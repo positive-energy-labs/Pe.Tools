@@ -20,11 +20,13 @@ import "./lang.css";
 
 export const emptyStateRecipe = tv({
   slots: {
-    base: "block t-label text-ink-mute italic",
+    base: "block t-small t-upper text-ink-mute italic",
     exit: "text-ink-2 not-italic before:text-ink-mute before:content-['_—_']",
   },
   variants: { state: { scope: {}, filter: {} } },
 });
+
+export const emptyMark = tv({ base: "m-0 t-display face-display" });
 
 export function EmptyState({
   story,

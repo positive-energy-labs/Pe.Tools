@@ -165,14 +165,12 @@ function TargetingSentence<K extends string>({
         <span>{verbButton(v, runner)}</span>
         <span className="flex flex-wrap items-baseline gap-x-2">
           {v.demands.length === 0 ? (
-            <span className="face-mono t-caption text-ink-mute">—</span>
+            <span className="t-small face-mono text-ink-mute">—</span>
           ) : (
             v.demands.map((k) => <Demand key={k} product={product} k={k} b={b} />)
           )}
         </span>
-        <span
-          className={`face-mono t-caption text-right ${can.ok ? "text-ink-mute" : "text-ink-2"}`}
-        >
+        <span className={`t-small face-mono text-right ${can.ok ? "text-ink-mute" : "text-ink-2"}`}>
           {v.kind === "commit" && !can.ok ? "" : can.ok ? "ready" : can.reason}
         </span>
       </div>
@@ -198,7 +196,7 @@ function TargetingSentence<K extends string>({
 
   const line = (
     <>
-      {nameless ? null : <span className="t-label">{product.name}</span>}
+      {nameless ? null : <span className="t-small t-upper">{product.name}</span>}
       <span className="flex min-w-0 flex-1 flex-wrap items-end gap-x-3 gap-y-1">
         {targets(product).map((t) => {
           const dim = t.dir !== null && !b.demanded.has(t.key);
@@ -211,7 +209,7 @@ function TargetingSentence<K extends string>({
             >
               <TargetCaption b={b} link={t} />
               <span className="inline-flex items-baseline gap-1.5">
-                <span className="face-mono t-caption text-ink-2">{t.joiner}</span>
+                <span className="t-small face-mono text-ink-2">{t.joiner}</span>
                 <Picker
                   product={product}
                   link={t}
@@ -237,7 +235,7 @@ function TargetingSentence<K extends string>({
       {expanded ? (
         <>
           <div
-            className="t-label grid px-2.5 pt-1.5 pb-0.5"
+            className="t-small t-upper grid px-2.5 pt-1.5 pb-0.5"
             style={{
               gridTemplateColumns: "12rem minmax(8rem, 1fr) minmax(10rem, 1.4fr)",
               columnGap: "1rem",

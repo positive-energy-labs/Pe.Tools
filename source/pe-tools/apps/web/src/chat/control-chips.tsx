@@ -1,4 +1,3 @@
-import { chatStyles } from "#/components/lang/chat-appearance";
 import { Press } from "#/components/lang/press";
 import { EmptyState } from "#/components/lang/empty";
 import {
@@ -92,9 +91,9 @@ function Picker({
     >
       {/* ponytail: explicit anchor on the trigger — the in-popup search input can't be the
           positioner anchor or it feedback-loops (roaming/jittering popup). */}
-      <div ref={anchorRef} className={chatStyles.controlChips0()}>
+      <div ref={anchorRef} className="inline-flex">
         <ComboboxTrigger title={title} render={<Press tone="quiet" size="value" />}>
-          <span className={chatStyles.controlChips1()}>{label}</span>
+          <span className="face-mono truncate">{label}</span>
         </ComboboxTrigger>
       </div>
       <ComboboxContent anchor={anchorRef}>
@@ -104,10 +103,8 @@ function Picker({
           {(option: PickerOption) => (
             <ComboboxItem key={option.id} value={option}>
               <span className="flex min-w-0 flex-col">
-                <span className={chatStyles.controlChips2()}>{option.name}</span>
-                {option.hint ? (
-                  <span className={chatStyles.controlChips3()}>{option.hint}</span>
-                ) : null}
+                <span className="text-ink">{option.name}</span>
+                {option.hint ? <span className="text-ink-2">{option.hint}</span> : null}
               </span>
             </ComboboxItem>
           )}

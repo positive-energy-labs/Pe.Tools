@@ -15,7 +15,7 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
           <StateCell value="2 hr" stage="proposed" />
         </div>
         <CounterExample why="freshness is a fact, so weight must remain available for unsaved work">
-          <strong className="t-value">fresh reading</strong>
+          <strong className="t-small">fresh reading</strong>
         </CounterExample>
       </Law>
 
@@ -33,7 +33,7 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
         <CounterExample why="the word says stale but the value carries no machine-readable stale state">
           <span className="flex items-baseline gap-2">
             <StateCell value="5.5 in" />
-            <span className="t-caption text-ink-2">stale</span>
+            <span className="t-small face-mono text-ink-2">stale</span>
           </span>
         </CounterExample>
       </Law>
@@ -45,23 +45,24 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
       >
         <FactChip title="The plan this write was made against.">plan a91f#c04</FactChip>
         <CounterExample why="a human action is not a machine reading">
-          <span className="t-label text-ink">save changes</span>
+          <span className="t-small t-upper text-ink">save changes</span>
         </CounterExample>
       </Law>
 
       <Law
-        name="type is tier × face × case"
-        owner={owner("type is tier × face × case")}
-        ruling="Size says hierarchy, face says source, and case says category. A call site composes those axes instead of inventing a new size."
+        name="small type takes opt-in marks"
+        owner={owner("small type takes opt-in marks")}
+        ruling="Sub-prose text has one size. Mono marks machine readings, and upper case marks section heads."
       >
         <div className="flex flex-col gap-2">
           <span className="t-display face-display text-ink">display · human thesis</span>
           <span className="t-head text-ink">head · section claim</span>
-          <span className="t-value face-mono text-ink-2">value · plan a91f#c04</span>
-          <span className="t-caption t-upper text-ink-mute">caption · category</span>
+          <span className="t-small text-ink-2">small · plain reading</span>
+          <span className="t-small face-mono text-ink-2">small + mono · plan a91f#c04</span>
+          <span className="t-small t-upper text-ink-2">small + upper · category</span>
         </div>
         <CounterExample why="a plan hash is measured, so the display face lies about its source">
-          <span className="t-caption face-display text-ink">plan a91f#c04</span>
+          <span className="t-small face-mono face-display text-ink">plan a91f#c04</span>
         </CounterExample>
       </Law>
     </>

@@ -54,7 +54,7 @@ export function ScalarField({
       <div className="min-w-0">
         {shouldRenderSelect ? (
           <Select value={primitiveInputValue(field.value)} onValueChange={field.change}>
-            <SelectTrigger id={path}>
+            <SelectTrigger id={path} face="mono">
               <SelectValue placeholder="Select an option" />
             </SelectTrigger>
             <SelectContent>
@@ -79,6 +79,7 @@ export function ScalarField({
           <>
             <Input
               id={path}
+              face="mono"
               type={isNumber ? "number" : "text"}
               list={datalistId}
               value={primitiveInputValue(field.value)}
@@ -102,6 +103,7 @@ export function ScalarField({
         ) : (
           <Input
             id={path}
+            face="mono"
             type={isNumber ? "number" : "text"}
             value={primitiveInputValue(field.value)}
             onChange={(event) => {

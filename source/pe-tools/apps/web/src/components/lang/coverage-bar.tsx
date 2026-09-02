@@ -23,9 +23,9 @@ export const coverageBarRecipe = tv({
     base: "",
     bar: "flex h-2.5 overflow-hidden border border-line",
     segment: "border-r border-on",
-    rest: "bg-recess",
+    rest: "",
     legend: "mt-1 flex flex-wrap gap-x-3 gap-y-0.5",
-    key: "inline-flex items-center gap-1 face-mono t-caption tabular-nums text-ink",
+    key: "inline-flex items-center gap-1 t-small face-mono text-ink",
     dot: "inline-block size-[7px] rounded-[1px]",
     label: "text-ink-2",
     total: "text-ink-2",
@@ -78,6 +78,7 @@ export function CoverageBar({
         {sum < denom && (
           <div
             title={`unaccounted: ${denom - sum}`}
+            data-surface="recess"
             className={rest()}
             style={{ width: `${((denom - sum) / denom) * 100}%` }}
           />

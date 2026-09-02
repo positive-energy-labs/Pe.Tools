@@ -33,7 +33,7 @@ export function AtlasVisual() {
     selectZone,
   } = useAtlasWorkspace();
   return (
-    <Suspense fallback={<div className="t-label p-2 text-ink-2">reading plan…</div>}>
+    <Suspense fallback={<div className="t-small t-upper p-2 text-ink-2">reading plan…</div>}>
       <Pane
         kind="visual"
         headerSurface="recess"
@@ -92,7 +92,7 @@ export function AtlasVisual() {
               </Press>
             </span>
 
-            <span className="t-caption ml-auto min-w-0 truncate">
+            <span className="t-small face-mono ml-auto min-w-0 truncate">
               {selected ? `${selected.zone.key} in scope` : "whole house in scope"} · Esc clears
             </span>
           </>

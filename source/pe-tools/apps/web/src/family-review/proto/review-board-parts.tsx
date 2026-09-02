@@ -90,7 +90,7 @@ const VERDICT_KEYS: Verdict[] = ["good", "unsure", "wrong"];
  * GAP: a raw button element rather than a primitive. `lang/Verb` is a verb (it acts); this is a
  * three-way EXCLUSIVE CHOICE that must also express "not judged yet". `ui/toggle-group` is the
  * right shape and cannot be used: it carries shadcn chrome (`rounded-lg`, `border-line`,
- * `bg-recess/40`) instead of role tokens and the 2px radius, and it has no empty member. Owed as
+ * arbitrary translucent fills instead of role tokens and the 2px radius, and it has no empty member. Owed as
  * one line in the design-system ledger, naming this route.
  */
 export function VerdictStrip({

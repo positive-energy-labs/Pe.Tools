@@ -78,15 +78,15 @@ function FieldMetadataTooltip({
               <div className="space-y-2">
                 {description ? (
                   <div className="space-y-1">
-                    <div className="t-label t-upper text-ink">Description</div>
-                    <p className="whitespace-pre-wrap t-value text-ink-2">{description}</p>
+                    <div className="t-small t-upper text-ink">Description</div>
+                    <p className="whitespace-pre-wrap t-small text-ink-2">{description}</p>
                   </div>
                 ) : null}
                 {formattedDefault !== undefined ? (
                   <div className="space-y-1">
-                    <div className="t-label t-upper text-ink">Default</div>
+                    <div className="t-small t-upper text-ink">Default</div>
                     <pre
-                      className="face-mono t-value whitespace-pre-wrap break-words px-2 py-1 text-ink"
+                      className="face-mono t-small whitespace-pre-wrap break-words px-2 py-1 text-ink"
                       data-surface="recess"
                     >
                       {formattedDefault}
@@ -137,24 +137,24 @@ export function FieldChangeBadge({ path, compact = false }: { path?: string; com
             <Tooltip.Popup>
               <div className="space-y-2">
                 {change.isComposite && nestedChanges > 0 ? (
-                  <p className="t-value text-ink-2">
+                  <p className="t-small text-ink-2">
                     {nestedChanges} nested field
                     {nestedChanges === 1 ? "" : "s"} changed.
                   </p>
                 ) : null}
                 <div className="space-y-1">
-                  <div className="t-label t-upper text-ink">Before</div>
+                  <div className="t-small t-upper text-ink">Before</div>
                   <pre
-                    className="face-mono t-value whitespace-pre-wrap break-words px-2 py-1 text-ink"
+                    className="face-mono t-small whitespace-pre-wrap break-words px-2 py-1 text-ink"
                     data-surface="recess"
                   >
                     {beforeDisplay}
                   </pre>
                 </div>
                 <div className="space-y-1">
-                  <div className="t-label t-upper text-ink">After</div>
+                  <div className="t-small t-upper text-ink">After</div>
                   <pre
-                    className="face-mono t-value whitespace-pre-wrap break-words px-2 py-1 text-ink"
+                    className="face-mono t-small whitespace-pre-wrap break-words px-2 py-1 text-ink"
                     data-surface="recess"
                   >
                     {afterDisplay}
@@ -260,8 +260,10 @@ export function FieldLabelRow({
   path?: string;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1 [&_[data-slot=label]]:face-mono [&_[data-slot=label]]:t-label [&_[data-slot=label]]:text-ink-2">
-      <Label htmlFor={htmlFor}>{label}</Label>
+    <div className="flex min-w-0 items-center gap-1">
+      <Label htmlFor={htmlFor}>
+        <span className="t-small t-upper face-mono text-ink-2">{label}</span>
+      </Label>
       {required ? <RequiredBadge /> : null}
       <FieldMetadataTooltip description={description} defaultValue={defaultValue} />
       <span className="ml-auto">
@@ -285,7 +287,7 @@ export function FieldLegendRow({
   path?: string;
 }) {
   return (
-    <div className="hairline-b t-label t-upper flex w-full items-center gap-1 pb-1 text-ink-2">
+    <div className="hairline-b t-small t-upper flex w-full items-center gap-1 pb-1 text-ink-2">
       <span>{label}</span>
       {required ? <RequiredBadge /> : null}
       <FieldMetadataTooltip description={description} defaultValue={defaultValue} />

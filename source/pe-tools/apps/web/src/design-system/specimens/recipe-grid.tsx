@@ -38,7 +38,7 @@ export function RecipeGrid({
     <SpecimenFrame name={name} importPath={importPath}>
       {axes.length === 0 ? (
         <div className="grid gap-2">
-          <span className="t-caption face-mono text-ink-mute">
+          <span className="t-small face-mono text-ink-mute">
             {recipe.slots.length > 0 ? `slots · ${recipe.slots.join(" · ")}` : "base"}
           </span>
           <div data-recipe={name}>{render({})}</div>
@@ -68,8 +68,8 @@ export function SpecimenFrame({
 }) {
   return (
     <Section label={name}>
-      <code className="t-caption face-mono text-ink-mute">{importPath}</code>
-      <div className="overflow-x-auto py-2 t-caption text-ink">{children}</div>
+      <code className="t-small face-mono text-ink-mute">{importPath}</code>
+      <div className="overflow-x-auto py-2 t-small face-mono text-ink">{children}</div>
     </Section>
   );
 }
@@ -98,18 +98,18 @@ function VariantGrid({
       data-recipe={recipe}
       data-axes={axes.map(([axis]) => axis).join("+")}
     >
-      <span className="t-caption face-mono text-ink-mute">
+      <span className="t-small face-mono text-ink-mute">
         {rowAxis ? `${rowAxis[0]} × ${columnName}` : columnName}
       </span>
       {columns.map((column) => (
-        <span className="t-caption face-mono text-ink-2" key={column}>
+        <span className="t-small face-mono text-ink-2" key={column}>
           {`${columnName}=${column}`}
         </span>
       ))}
       {rows.flatMap((row, rowIndex) => {
         const rowProps = rowAxis && row ? { [rowAxis[0]]: variantValue(row) } : {};
         return [
-          <span className="t-caption face-mono text-ink-2" key={`${row ?? "specimen"}-head`}>
+          <span className="t-small face-mono text-ink-2" key={`${row ?? "specimen"}-head`}>
             {rowAxis && row ? `${rowAxis[0]}=${row}` : "specimen"}
           </span>,
           ...columns.map((column, columnIndex) => {

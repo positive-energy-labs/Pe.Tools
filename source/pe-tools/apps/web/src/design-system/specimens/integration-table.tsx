@@ -28,7 +28,7 @@ export function RealTable() {
         // GAP (MasterTable): `td` is `p-0` and `Column` has no cell-class hook — only
         // `headerClassName`, `width` and `right`. Every renderer must draw its own box model, so
         // cell padding is decided thirteen times per table instead of once by the primitive.
-        cell: (r) => <span className="px-1.5 py-1 t-value text-ink">{r.param}</span>,
+        cell: (r) => <span className="px-1.5 py-1 t-small text-ink">{r.param}</span>,
       },
       {
         key: "scope",
@@ -36,7 +36,7 @@ export function RealTable() {
         title: "Type-level or instance-level.",
         width: "w-24",
         facet: (r) => r.scope,
-        cell: (r) => <span className="px-1.5 py-1 t-caption face-mono text-ink-2">{r.scope}</span>,
+        cell: (r) => <span className="px-1.5 py-1 t-small face-mono text-ink-2">{r.scope}</span>,
       },
       {
         key: "value",
@@ -59,9 +59,7 @@ export function RealTable() {
         width: "w-24",
         right: true,
         sort: (r) => r.ageMin ?? Number.MAX_SAFE_INTEGER,
-        cell: (r) => (
-          <span className="px-1.5 py-1 t-caption face-mono text-ink-2">{ageText(r)}</span>
-        ),
+        cell: (r) => <span className="px-1.5 py-1 t-small face-mono text-ink-2">{ageText(r)}</span>,
       },
     ],
     [],
@@ -176,7 +174,7 @@ export function RealTable() {
       </ArtifactFrame>
 
       <div className="flex flex-col gap-1.5 pt-1">
-        <span className="t-label t-upper text-ink">what MasterTable cannot express</span>
+        <span className="t-small t-upper text-ink">what MasterTable cannot express</span>
         <Gap>
           <strong>the clause&apos;s residue.</strong> The cell-state clause (ruled 2026-08-16)
           discharged renderer identity, selection-as-hue, the hover law and the two-palette chrome —

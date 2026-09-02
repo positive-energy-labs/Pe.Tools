@@ -26,12 +26,12 @@ import "./lang.css";
 
 export const chipRecipe = tv({
   slots: {
-    base: "inline-flex h-[18px] max-w-[34ch] items-center gap-[5px] overflow-hidden whitespace-nowrap border border-line bg-artifact px-[5px] face-mono t-caption tracking-[0.03em] text-ink-2",
+    base: "inline-flex h-[18px] max-w-[34ch] items-center gap-[5px] overflow-hidden whitespace-nowrap border border-line px-[5px] t-small face-mono tracking-[0.03em] text-ink-2",
     label: "min-w-0 overflow-hidden text-ellipsis whitespace-nowrap",
     count: "text-ink-2 tabular-nums",
     remove:
-      "grid size-3 cursor-pointer place-items-center border-0 bg-transparent text-ink-2 enabled:hover:veil focus-visible:veil focus-visible:outline focus-visible:outline-line-2 [&>svg]:size-[9px]",
-    tag: "t-label tabular-nums",
+      "veil grid size-3 cursor-pointer place-items-center border-0 bg-transparent text-ink-2 focus-visible:outline focus-visible:outline-line-2 [&>svg]:size-[9px]",
+    tag: "t-small t-upper tabular-nums",
   },
   variants: {
     tone: {
@@ -69,6 +69,7 @@ export function FactChip({ children, tone = "meta", dashed, title }: FactChipPro
     <span
       className={base()}
       data-tone={tone === "meta" ? undefined : tone}
+      data-surface="artifact"
       data-seam={dashed === true ? "" : undefined}
       title={title}
     >
@@ -92,7 +93,7 @@ export interface NarrowChipProps {
 export function NarrowChip({ label, count, onRemove, title }: NarrowChipProps) {
   const { base, count: countSlot, remove } = chipRecipe();
   return (
-    <span className={base()} title={title}>
+    <span className={base()} data-surface="artifact" title={title}>
       {label}
       <span className={countSlot()}>{count}</span>
       <button

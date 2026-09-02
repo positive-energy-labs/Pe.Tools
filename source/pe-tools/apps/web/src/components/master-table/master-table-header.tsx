@@ -57,7 +57,7 @@ export function MasterTableHeader<Row extends RowData>({
               rowSpan={headerGroups.length}
               style={{ top: 0, width: gutterWidth, minWidth: gutterWidth }}
               title="Rows marked in this gutter owe a person a decision — the mark's own title says what."
-              className="sticky left-0 z-sticky border-b border-line bg-recess p-0 on-recess"
+              className="sticky left-0 z-sticky border-b border-line p-0 on-recess"
             />
           )}
           {headerGroup.headers.map((header) => {
@@ -91,7 +91,7 @@ export function MasterTableHeader<Row extends RowData>({
                 colSpan={header.colSpan}
                 rowSpan={header.rowSpan}
                 style={{ top: stickyTop(rowIndex) }}
-                className="t-label sticky z-sticky whitespace-nowrap border-b border-l border-line bg-recess px-(--item-pad-x) py-px text-left on-recess first:border-l-0"
+                className="t-small t-upper sticky z-sticky whitespace-nowrap border-b border-l border-line px-(--item-pad-x) py-px text-left on-recess first:border-l-0"
               >
                 <table.FlexRender header={header} />
               </th>
@@ -130,7 +130,7 @@ function LeafHeader<Row>({
       rowSpan={rowSpan}
       style={{ top: stickyTop, left: column.lock ? lockLeft : undefined }}
       className={cn(
-        "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line bg-recess px-(--item-pad-x) py-1 font-normal on-recess first:border-l-0",
+        "sticky z-sticky align-top whitespace-nowrap border-b border-l border-line px-(--item-pad-x) py-1 font-normal on-recess first:border-l-0",
         column.right ? "text-right" : "text-left",
         column.width,
         column.lock && "z-sticky",
@@ -147,7 +147,7 @@ function LeafHeader<Row>({
           hover="bare"
         >
           <PressContent geometry="block">
-            <span className="t-label">{column.header ?? column.label}</span>
+            <span className="t-small t-upper">{column.header ?? column.label}</span>
             {direction && (
               <span className="ml-1 text-ink">
                 {direction === "asc" ? "↑" : "↓"}
@@ -157,7 +157,7 @@ function LeafHeader<Row>({
           </PressContent>
         </Press>
       ) : (
-        <span className="t-label block">{column.header ?? column.label}</span>
+        <span className="t-small t-upper block">{column.header ?? column.label}</span>
       )}
       {children}
     </th>

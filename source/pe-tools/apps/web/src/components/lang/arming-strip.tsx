@@ -47,25 +47,23 @@ export const armingStripRecipe = tv({
   slots: {
     base: "flex flex-col gap-[7px] border-l-2 px-[11px] py-[9px]",
     line: "flex flex-wrap items-baseline gap-2",
-    phase: "t-label tabular-nums",
+    phase: "t-small t-upper tabular-nums",
     verb: "t-prose font-medium",
-    target: "t-label tabular-nums",
+    target: "t-small t-upper tabular-nums",
     input:
-      "w-full border-0 border-l border-line-2 bg-on py-0.5 pr-0 pl-2 t-value text-ink italic outline-none placeholder:text-ink-mute focus-visible:veil",
-    refusal: "m-0 max-w-[72ch] t-value",
+      "w-full border-0 border-l border-line-2 bg-on py-0.5 pr-0 pl-2 t-small text-ink italic outline-none placeholder:text-ink-mute",
+    refusal: "m-0 max-w-[72ch] t-small",
     controls: "flex flex-wrap items-center gap-2",
-    caveat: "t-label tabular-nums",
+    caveat: "t-small t-upper tabular-nums",
   },
   variants: {
     state: {
       unarmed: { base: "border-line-2 on-artifact" },
       armed: {
         base: "border-commit commit-wash-artifact",
-        phase: "text-commit",
       },
       refused: {
         base: "border-alarm alarm-wash-artifact",
-        phase: "text-alarm",
       },
     },
   },
@@ -115,7 +113,9 @@ export function ArmingStrip({
       <ArtifactFrame>
         <div className={slots.base()} data-phase="refused">
           <div className={slots.line()}>
-            <span className={slots.phase()}>refused</span>
+            <span className={slots.phase()} data-tone="alarm">
+              refused
+            </span>
             <span className={slots.verb()}>{verb}</span>
           </div>
           <p className={slots.refusal()}>{state.refusal}</p>
@@ -138,7 +138,9 @@ export function ArmingStrip({
     <ArtifactFrame>
       <div className={slots.base()} data-phase={armed ? "armed" : "unarmed"}>
         <div className={slots.line()}>
-          <span className={slots.phase()}>{armed ? "armed" : "unarmed"}</span>
+          <span className={slots.phase()} data-tone={armed ? "commit" : undefined}>
+            {armed ? "armed" : "unarmed"}
+          </span>
           <span className={slots.verb()}>{verb}</span>
           <span className={slots.target()}>{target}</span>
           <FactChip title="The plan this write was made against.">plan {planHash}</FactChip>

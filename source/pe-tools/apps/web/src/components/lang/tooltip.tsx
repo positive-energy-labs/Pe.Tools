@@ -8,7 +8,7 @@ export const tooltipRecipe = tv({
     trigger: "inline-flex items-center justify-center transition-colors",
     positioner: "isolate z-popup outline-none",
     popup:
-      "max-h-(--available-height) max-w-[min(24rem,var(--available-width))] overflow-y-auto overscroll-contain rounded-lg bg-artifact px-3 py-2 t-label text-ink-2 ring-1 ring-line",
+      "max-h-(--available-height) max-w-[min(24rem,var(--available-width))] overflow-y-auto overscroll-contain rounded-lg px-3 py-2 t-small t-upper text-ink-2 ring-1 ring-line",
   },
   variants: {
     kind: {
@@ -43,7 +43,7 @@ function TooltipPositioner(props: Omit<Primitive.Positioner.Props, "className">)
 
 function TooltipPopup(props: Omit<Primitive.Popup.Props, "className">) {
   const { popup } = tooltipRecipe();
-  return <Primitive.Popup className={popup()} {...props} />;
+  return <Primitive.Popup className={popup()} {...props} data-surface="artifact" />;
 }
 
 export const Tooltip = {

@@ -117,7 +117,7 @@
   top: 50%;
   transform: translateY(-50%);
   font-family: var(--font-mono);
-  font-size: var(--type-value-size);
+  font-size: var(--type-small-size);
   letter-spacing: 0.05em;
   font-variant-numeric: tabular-nums;
   color: var(--pe-ink-2);
@@ -276,7 +276,7 @@
   font-family: var(--font-body);
   font-size: var(--type-title-size);
   line-height: var(--type-title-line-height);
-  font-weight: 600;
+  font-weight: var(--weight-strong);
   letter-spacing: -0.01em;
 }
 /* A hairline at every you↔pea boundary: the transcript reads as a ledger of alternating speaker
@@ -304,8 +304,8 @@
   border-left: 2px solid var(--pe-pea);
   padding: 1px 7px 1px 9px;
   border-radius: 0; /* instrument surface — hard square */
-  font-size: var(--type-value-size);
-  line-height: var(--type-value-line-height);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
   color: var(--pe-ink-2);
   transition:
     background var(--motion-control) ease,
@@ -344,7 +344,7 @@
   grid-column: 2;
   min-width: 0; /* allow the ellipsis inside the marker's middle grid track */
   font-family: var(--font-mono);
-  font-size: var(--type-value-size);
+  font-size: var(--type-small-size);
   color: var(--pe-ink-2);
   /* Reset the global `code` pill (border + muted fill) — the marker target is inline. */
   background: transparent;
@@ -444,8 +444,8 @@
   margin: 0;
   padding: 3px 8px 6px;
   font-family: var(--font-mono);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line-height);
+  font-size: var(--type-small-size);
+  line-height: var(--type-small-line-height);
   color: var(--pe-ink-2);
   white-space: pre-wrap;
   word-break: break-word;

@@ -1,4 +1,3 @@
-import { chatStyles } from "#/components/lang/chat-appearance";
 import { getRouteApi } from "@tanstack/react-router";
 
 import { EmptyState } from "#/components/lang/empty";
@@ -11,7 +10,6 @@ import { worldTrunk } from "#/targeting/world";
 import { useWorkbench } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
 import { PressContent } from "#/components/anatomy/press-content";
-import { cn } from "#/lib/utils";
 
 /**
  * Chat-wired target surfaces. The pin is the `target` search param (a selector, retained like
@@ -52,14 +50,16 @@ export function TargetWorld() {
   const chip = chipDescriptor(resolution);
   const options = worldTrunk.feed(fleet).options ?? [];
   return (
-    <div className={cn(chatStyles.chatTarget0(), "border-b-0 py-2.5")}>
-      <div className={cn(chatStyles.chatTarget1(), "mb-1")}>
-        <span className={cn(chatStyles.chatTarget2(), "text-ink")}>World target</span>
-        <span className={chatStyles.chatTarget3()}>{chip.tone}</span>
+    <div className="hairline-b-faint border-b-0 px-3 py-2.5">
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="t-small t-upper text-ink">World target</span>
+        <span className="t-small face-mono text-ink-2">{chip.tone}</span>
       </div>
 
       {/* raw resolution — provenance, not decoration */}
-      <div className={cn(chatStyles.chatTarget4(), "mb-1.5")}>{resolutionReadout(resolution)}</div>
+      <div className="mb-1.5 break-all t-small face-mono text-ink-2">
+        {resolutionReadout(resolution)}
+      </div>
 
       {options.map((option) => {
         const optionResolution = resolveTarget(sessions, option.id);
@@ -78,8 +78,8 @@ export function TargetWorld() {
             title="pin the chat here"
           >
             <PressContent geometry="row">
-              <span className={chatStyles.chatTarget5()}>{option.label}</span>
-              <span className={chatStyles.chatTarget6()}>{option.sub}</span>
+              <span className="truncate text-ink">{option.label}</span>
+              <span className="whitespace-nowrap t-small face-mono text-ink-2">{option.sub}</span>
             </PressContent>
           </Press>
         );
@@ -94,7 +94,7 @@ export function TargetWorld() {
       ) : null}
 
       {worldLog.length > 0 ? (
-        <div className={chatStyles.chatTarget7()}>
+        <div className="hairline-t-faint mt-2 pt-1.5">
           {worldLog.slice(-5).map((event, i) => (
             <WorldLogLine key={`${event.atMs}-${i}`} event={event} />
           ))}
@@ -110,9 +110,9 @@ function WorldLogLine({ event }: { event: WorldEvent }) {
     minute: "2-digit",
   });
   return (
-    <div className={chatStyles.chatTarget8()}>
-      <span className={chatStyles.chatTarget9()}>{time}</span>
-      <span className={chatStyles.chatTarget10()}>{event.label}</span>
+    <div className="flex items-baseline gap-2 py-0.5 t-small face-mono text-ink-2">
+      <span className="opacity-70">{time}</span>
+      <span className="truncate">{event.label}</span>
     </div>
   );
 }
