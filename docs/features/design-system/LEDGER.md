@@ -303,6 +303,35 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   atoms, picker state, and head rendering. Targeting rides every route — tool-like routes mount
   the manifest, docs-like routes (`/`, `/design-system`) are name-plus-cluster only. Lands
   AFTER the execution-scope law so command scoping is in the spec from day one.
+- 2026-09-01 — PANE SLOTS + TWO-TIER HOTKEYS (demiurge verdict kaitpw: "yes s3"; evidence
+  `.artifacts/handoffs/2026-09-01-census-{pane-hotkeys,tutorial-panes}.md`): the route spec
+  declares pane SLOTS (key, kind, title) — structural identity that joins Pane, tutorial
+  measure, and product manifest; title string-matching dies. Hotkeys are two-tier: navigation
+  keys (focus, Escape, j/k/a/d) are pane-owned page code acting on page atoms; route VERBS
+  derive from the spec, and a verb's chord is declared on its command. The route document
+  gains ZERO fields from the pane/hotkey/tutorial cluster. S1 (all keys spec-derived), S2
+  (spikes as-is, second vocabulary), S4 (persist focus/tutorial in the doc) are killed.
+  The provider owns the manifest and a pane-element registry keyed by slot when ONE ROUTE
+  SPEC lands; until then `manifest-ref.ts` is the named interim shim.
+- 2026-09-01 — Tutorial-overlay protoui round 1 (worktree `protoui-tutorial-panes`, commit
+  `a63b221`): variant **A (chart)** ADOPTED as the base — a measured minimap of the live
+  `[data-slot="pane"]` rects with leader lines to hotkey cards. Variants B (in-situ), C
+  (timetable), D (live) KILLED; C's verbs-with-refusals section and D's route-as-sentence
+  section survive as chimera parts of A (round 2). The overlay's two data authorities: the
+  rendered DOM for geometry, the `Product` manifest (`targeting/model.ts`) for generated
+  instructions — pane `draws`, slot `needs`, live `runner.canRun` refusals. (Carried from the
+  worktree ledger at merge; the worktree copy is retired with the worktree.)
+- 2026-09-01 — Tutorial round-2 projection: INK ADOPTED, rails and badges KILLED (demiurge
+  verdict kaitpw: "yes ink", ruled on state shape): ink is the only projection that gives the
+  chart base's `hot` emphasis state its writer; `ChartArea` consumes `hot` under every
+  projection, so rails would leave a dangling producer. Rails' epitaph: a static duplicate of
+  on-demand emphasis; adds geometry, answers no state question.
+- 2026-09-01 — `activePaneAtom` is NEVER (demiurge verdict kaitpw: "do it never as long as ts
+  hotkeys still scopes and focuses properly. occam"): pane focus scoping belongs to
+  `@tanstack/react-hotkeys` DOM targets alone (the 2026-08-31 keyboard law's one door). The
+  spike's `activePaneAtom`, `AtlasPageState.activePane`, and `Pane.onActivate` do not port —
+  the atom had a producer and no consumer. Re-open only if a surface needs to READ focus and
+  DOM targeting cannot answer it.
 
 - 2026-08-16 — The design-guard test IS the lint: the web app has no CI, so token discipline holds
   by assertion in the deterministic lane, not by review.
@@ -440,6 +469,18 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Owed
 
+- 2026-09-01 pane/tutorial refinements (kaitpw at the merge verdict: "some refinements need to
+  be done on the pane+hotkey stuff"; the integration wave itself LANDED — report
+  `.artifacts/handoffs/2026-09-01-integrate-pane-tutorial-report.md`): specific refinements are
+  not yet enumerated by the owner. Known candidates from the wave's own audit: tutorial pane
+  tags read kind-fallback labels ("visual", "room") instead of pane titles — the measure join
+  labels want the pane's rendered title; the shortcut card renders disabled rows unmuted; a
+  non-string hotkey renders the literal word `custom`; card placement has no scroll or
+  `ResizeObserver` repositioning. Ink hover emphasis and final rendered geometry are still
+  UNPROVEN on the browser lane (hidden-tab limits; needs one visible-tab pass).
+  `manifest-ref.ts` rides as the named interim until the ONE ROUTE SPEC provider owns the
+  manifest and pane-element registry; pane slot declarations enter `CollaborativeRouteSpec`
+  when it lands.
 - 2026-09-01 grill execution, remaining after the canon + scope merges landed on main
   (design-guard 0 red, reports `.artifacts/handoffs/2026-09-01-{design-canon,execution-scope}-report.md`):
   the chat reducer demiurge (includes audit-record cards and the host event-ledger epoch —
