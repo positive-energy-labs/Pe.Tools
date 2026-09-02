@@ -77,7 +77,12 @@ export const bindSchema = z.object({
   at: addressSchema,
 });
 export type Bind = z.infer<typeof bindSchema>;
-export const routeBindingsSchema = z.record(z.string(), bindSchema).default({});
+export const sdkSessionSelectorSchema = z.templateLiteral(["session:", z.string().min(1)]);
+export const worldBindSchema = bindSchema.extend({ id: sdkSessionSelectorSchema });
+export const routeBindingsSchema = z
+  .object({ world: worldBindSchema.optional() })
+  .catchall(bindSchema)
+  .default({});
 
 /** A binding is meaningful only against the document where it was picked. */
 export const current = (bind: Bind | null | undefined, at: Address): Bind | null =>
