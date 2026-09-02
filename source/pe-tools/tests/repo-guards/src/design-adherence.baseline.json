@@ -23,10 +23,10 @@
     "byArea": {
       "families": 1,
       "grounded-doc": 1,
+      "instances": 1,
       "ops": 2,
       "rhvac": 1,
-      "runs": 2,
-      "workbench": 1
+      "runs": 2
     }
   },
   "escHandler": {
@@ -41,7 +41,8 @@
   "opacityDim": {
     "total": 20,
     "byArea": {
-      "components": 17,
+      "chat": 1,
+      "components": 16,
       "families": 1,
       "family": 2
     }

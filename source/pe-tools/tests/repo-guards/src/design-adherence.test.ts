@@ -24,9 +24,9 @@
  *                   the host".
  *  escHandler       a hand-rolled `key === "Escape"` branch. Three guard lists disagreed
  *                   (ledger, Duplication to collapse); one owner is owed.
- *  opacityDim       `opacity-*` utilities and `opacity:` styles. De-emphasis by opacity is an
- *                   UNRULED mechanism (ledger Owed: "rule whether opacity is legal or shadows
- *                   the ink ladder"). The count is the evidence for that verdict.
+ *  opacityDim       `opacity-1..99` utilities and `opacity:` styles. Ruled 2026-09-01: opacity
+ *                   is legal only as the 0<->100 visibility pair of a transition (pane halo,
+ *                   shortcut card); any value between is de-emphasis and counts.
  *  longTitle        `title=` over 120 chars. The guard fails at 240; the bimodal census said
  *                   two primitives were wearing one attribute above ~120 (Tried & rejected).
  *  busyState        a hand-rolled `useState` named busy/running/pending. `runVerb` is the one
@@ -90,7 +90,7 @@ const ownsHost = (rel: string) =>
   /\/(?:host|store|queries|world)\.tsx?$/.test(rel);
 
 type Metric = { name: string; re: RegExp; where?: (rel: string) => boolean; min?: number };
-const OPACITY_DIM = /(?<![-\w])opacity-(?:\d+|\[[^\]]+\])|\bopacity:\s*[\d.]/g;
+const OPACITY_DIM = /(?<![-\w])opacity-(?:[1-9]\d?(?!\d)|\[[^\]]+\])|\bopacity:\s*[\d.]/g;
 const INLINE_COLOR =
   /\b(?:color|borderColor|backgroundColor|background|fill|stroke):\s*(?=\S)(?:"(?!(?:currentColor|none|transparent|inherit)"\s*[,}])[^,}]+|'(?!(?:currentColor|none|transparent|inherit)'\s*[,}])[^,}]+|(?!["'])(?!(?:currentColor|none|transparent|inherit)\s*[,}])[^,}]+)/g;
 
@@ -239,7 +239,7 @@ describe("design adherence — component adoption ratchet", () => {
 
   it("opacityDim ignores keyframes without hiding UI dimming", () => {
     const fixture = stripKeyframes(
-      "opacity-50; @keyframes pulse{0%,100%{opacity:.15}50%{opacity:1}} opacity: 0.5",
+      "opacity-50 opacity-0 opacity-100; @keyframes pulse{0%,100%{opacity:.15}50%{opacity:1}} opacity: 0.5",
     );
     expect([...fixture.matchAll(OPACITY_DIM)].map((match) => match[0])).toEqual([
       "opacity-50",

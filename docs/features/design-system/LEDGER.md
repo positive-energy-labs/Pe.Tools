@@ -245,6 +245,11 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   `threadPalette4` already missing — a className bag, not a primitive. Class strings return to
   their JSX; the ~4 genuine roles (thread row active/quiet, doc sub active/quiet, `emptyMark`)
   are promoted to named homes.
+- 2026-09-01 — OPACITY RULED (verdict kaitpw, option 1a): opacity is legal only as the 0<->100
+  visibility pair of a transition on floating chrome (pane halo `lang/pane.tsx:167`, shortcut
+  card `:224-225`); any value between is de-emphasis and stays counted. The `opacityDim` regex at
+  `design-adherence.test.ts:93` now skips `opacity-0`/`opacity-100`; the baseline is re-stamped
+  at the new count. Refines the 2026-08-29 "not a de-emphasis mechanism" line, does not replace it.
 
 ### Route and state architecture (cross-route, owned here)
 
@@ -509,8 +514,7 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - The design guards misreport (found 2026-08-31 by the intent census,
   `.artifacts/runs/meaning-census-20260831/report.md`): the inline-color regex at
   `design-adherence.test.ts:107` backtracks past its optional quote, so 11 literal
-  `transparent`/`inherit` values count as debt; the opacity regex at `design-adherence.test.ts:102`
-  counts animation keyframes as dimming; the class guard's inverse `AUTHORING` filter counts 23
+  `transparent`/`inherit` values count as debt; the opacity regex counted keyframes as dimming (fixed; ruled 2026-09-01, see The language); the class guard's inverse `AUTHORING` filter counts 23
   typography/shape/accessibility utilities as "meaning, fill and stroke". Fix falls to phase 3
   with the meaning-system verdict.
 
