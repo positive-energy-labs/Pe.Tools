@@ -10,12 +10,7 @@ import {
   peaProductTools,
   peaStandardSkillsRoot,
 } from "@pe/mcps";
-import {
-  createPeaRuntime,
-  PeaContextSignalProvider,
-  PeaContextStateProcessor,
-  type PeaContextStateSignalArgs,
-} from "@pe/runtime/pea";
+import { createPeaRuntime } from "@pe/runtime/pea";
 import { createPeaCliCommand, getPeaCliCommandNames } from "../src/index.ts";
 
 const slowRuntimeTestTimeout = 30_000;
@@ -137,85 +132,6 @@ test(
   },
   slowRuntimeTestTimeout,
 );
-
-test("pea context signal provider exposes a snapshot state processor", () => {
-  const provider = new PeaContextSignalProvider();
-
-  expect(provider.getInputProcessors()).toEqual([
-    expect.objectContaining({ id: "pea-context-state", stateId: "pea-workbench-context" }),
-  ]);
-});
-
-test("pea context state processor emits first runtime context snapshot", () => {
-  const processor = new PeaContextStateProcessor();
-  const requestContext = createRuntimeRequestContext({
-    protocol: "tui",
-    resourceId: "pea:test",
-    entries: [
-      { description: " active document ", value: "  Project A & B.rvt  " },
-      { description: "blank", value: "  " },
-    ],
-  });
-
-  const signal = processor.computeStateSignal({
-    requestContext,
-    contextWindow: { hasSnapshot: false },
-  } satisfies PeaContextStateSignalArgs);
-
-  expect(signal).toEqual(
-    expect.objectContaining({
-      id: "pea-workbench-context",
-      cacheKey: "pea-workbench-context:15:active document17:Project A & B.rvt",
-      mode: "snapshot",
-      tagName: "pea-workbench-context",
-      value: { entries: [{ description: "active document", value: "Project A & B.rvt" }] },
-      attributes: { count: 1 },
-    }),
-  );
-  expect(signal?.contents).toContain("<pea-workbench-context>");
-  expect(signal?.contents).toContain("orientation, not truth");
-  expect(signal?.contents).toContain("Project A &amp; B.rvt");
-});
-
-test("pea context state processor skips unchanged context when snapshot remains active", () => {
-  const processor = new PeaContextStateProcessor();
-  const requestContext = createRuntimeRequestContext({
-    protocol: "tui",
-    resourceId: "pea:test",
-    entries: [{ description: "active document", value: "Project A.rvt" }],
-  });
-
-  const signal = processor.computeStateSignal({
-    requestContext,
-    contextWindow: { hasSnapshot: true },
-    tracking: { currentCacheKey: "pea-workbench-context:15:active document13:Project A.rvt" },
-  } satisfies PeaContextStateSignalArgs);
-
-  expect(signal).toBeUndefined();
-});
-
-test("pea context state processor emits on changed or missing active snapshot", () => {
-  const processor = new PeaContextStateProcessor();
-  const requestContext = createRuntimeRequestContext({
-    protocol: "tui",
-    resourceId: "pea:test",
-    entries: [{ description: "active document", value: "Project B.rvt" }],
-  });
-
-  const changed = processor.computeStateSignal({
-    requestContext,
-    contextWindow: { hasSnapshot: true },
-    tracking: { currentCacheKey: "pea-workbench-context:15:active document13:Project A.rvt" },
-  } satisfies PeaContextStateSignalArgs);
-  const reemitted = processor.computeStateSignal({
-    requestContext,
-    contextWindow: { hasSnapshot: false },
-    tracking: { currentCacheKey: "pea-workbench-context:15:active document13:Project B.rvt" },
-  } satisfies PeaContextStateSignalArgs);
-
-  expect(changed).toEqual(expect.objectContaining({ mode: "snapshot" }));
-  expect(reemitted).toEqual(expect.objectContaining({ mode: "snapshot" }));
-});
 
 test(
   "pea runtime starts with product defaults",

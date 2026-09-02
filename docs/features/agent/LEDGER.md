@@ -23,8 +23,10 @@ restated here.
 - 2026-07 — Parameter identity is a first-class join key; name-only joins are allowed only as explicit `NameFallback` evidence. Evidence/bindings ops run before coverage when identity is uncertain.
 - 2026-07 — Pea/Peco web surfaces stay thin projections over Mastra-backed thread data. No Pe-owned history tables, migrations, or shadow ledgers for UI state; direct SQLite reads only as a read-only latency fast path.
 - 2026-07 — TOON (or any compressed rendering) is a prompt renderer, never a transport or a public host-operation response format. Source of truth stays typed JSON DTOs + generated metadata. The `Toon` C# project landed as an available renderer/scripting library, not a contract.
-- 2026-07 — Pea's public identity is "a self-managing autonomous code executor for Revit work", not a chatbot with Revit tools; Pods are source-first shareable scripting workspaces (`pod.json` declares id + entrypoints, all `src/**/*.cs` must compile, generated/runtime/IDE/DLL payloads excluded from archives). Landed verbatim in `packages/runtime/src/pea-instructions.ts`.
+- 2026-09-01 — Pea's instruction system has one owner per concern and no compiler; the map is [INSTRUCTION-SYSTEM.md](INSTRUCTION-SYSTEM.md). The static kernel is capability-neutral (~500 tokens) and the Revit orientation is appended by `peaAgentInstructionsFor` on the same `capabilities.revit` flag that admits Revit tools. Pods stay source-first shareable scripting workspaces; their rules live in the `write-revit-csharp-script` skill, not the kernel.
 - 2026-07 — Build the operating loop and the available world into the harness and fat skills; keep the harness and the injected context minimal. Prefer generating doc-like artifacts on demand over standing prompt text.
+- 2026-09-01 — Every provider-visible tool name resolves to an intentional permission category: native `mastra_workspace_*` and `skill*` names are classified in `peaNativeToolCategories`; unknown names fall to `other`, which every access level denies. Before this, all three access levels denied every native workspace and skill call while their schemas stayed visible.
+- 2026-09-01 — Pea's bundled skills are practitioner stances adapted from the repo set (survey, diagnose, settle-intent, prove, teach, script, build-pod, settings, ducts). The kernel's view-visibility checklist moved into `diagnose-revit-behavior`; the parameter-links procedure moved onto the `route_command` description. index, docs, relay, delegate, goal, mine, reflect, protoui, and house are not exposed: Pea has no dispatcher, ledger, subagent, or UI-variant machinery for them.
 
 ### Collaborative UI — agent-writable route state
 
@@ -73,6 +75,9 @@ restated here.
 
 ## Tried & rejected
 
+- 2026-09-01 — A Pea request-context signal (`pea-context-signals.ts`): no production producer existed, entries carried no source or observation time, and a turn without entries replayed the previous snapshot as current truth. Deleted; a producer must stamp source and time and clear on absence.
+- 2026-09-01 — Materializing the repo stance set into Pea one-to-one: index is a router for a dispatcher Pea does not have (native skill metadata is the router), docs targets ledgers Pea never writes, protoui and house presuppose a browser surface and swatch kit Pods lack. Adapted nine, dropped nine.
+- 2026-09-01 — A prompt compiler, section registry, model-family kernels, or a second memory/compaction/inspector layer: every candidate concern already has a native owner and no failing behavior case demanded a new one.
 - 2026-08-26 — Fake Mesa through Git copy/sync, the in-process SDK filesystem, or a claimed mount without authenticated FUSE plus `bwrap`: none proves a versioned, isolated user world.
 - 2026-08-26 — Rewrite Pea/Host around Effect AI or newer Effect v4 for novelty: Mastra and Effect already own different seams, and the rewrite offered no deletion or named fix.
 - 2026-08-26 — Replace assistant-ui with private Mastra Factory UI or local primitives: Factory UI is not a public package, and rebuilding assistant-ui's 590-LOC render boundary would recreate message, markdown, streaming, and accessibility behavior.
@@ -93,6 +98,9 @@ restated here.
 
 ## Owed
 
+- Category-denied tools stay provider-visible: Pea's single mode installs no `availableTools` allowlist, so a read-only request still serializes edit and execute schemas. Own it in the mode/controller assembly, not in prose.
+- Skills materialize regardless of `capabilities.revit`; the Revit-only ones (survey, diagnose, prove, script, ducts) should be filtered on the same flag as the tools once the runtime test can run in a fresh worktree.
+- Behavioral rows D1-D13 from the 2026-09-01 instruction research are unrun; the deterministic kernel/classification test is structural proof only.
 - Fan rvt lifecycle events and human route edits into every bound Pea thread as document events.
 - Restore OM observation/reflection trace cards from `om_*` events (≈ +40 LOC) or accept the loss; native `omProgress` carries gauges, not a cycle log. Lost in the 2026-08-27 shadow wave.
 - The partial-write note says "N values failed": `useRouteState` hardwires the noun (`route-state.tsx:93`); the spec or handle should carry the domain noun (`cell` on `/schedule-grid`).

@@ -36,11 +36,9 @@ import type { RuntimeCreateRequest, RuntimeHandle, RuntimeHandleServices } from 
 import { createPeaProductStateStorageProfile } from "./storage/profiles.ts";
 import { createSystemPromptCapture } from "./system-prompt-capture.ts";
 import { createToolListCapture } from "./tool-list-capture.ts";
-import { PeaContextSignalProvider } from "./pea-context-signals.ts";
-import { peaAgentInstructions } from "./pea-instructions.ts";
+import { peaAgentInstructionsFor } from "./pea-instructions.ts";
 
-export { peaAgentInstructions } from "./pea-instructions.ts";
-export * from "./pea-context-signals.ts";
+export * from "./pea-instructions.ts";
 
 const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
 
@@ -134,8 +132,9 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
   });
   await materializeBundledPeaSkills({ productHomePath });
 
+  const instructions = peaAgentInstructionsFor(capabilities);
   const promptCapture = createSystemPromptCapture({
-    content: peaAgentInstructions,
+    content: instructions,
     source: "Pea agent instructions",
   });
   const toolCapture = createToolListCapture();
@@ -173,6 +172,7 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
         skills: resolvePeaSkillPaths({ productHomePath }),
       }),
       agent: createPeaAgent(
+        instructions,
         promptCapture.processor,
         toolCapture.wrap,
         () => controller?.listAvailableModels() ?? Promise.resolve([]),
@@ -553,6 +553,7 @@ function createPeaSessionAdmission(
 }
 
 function createPeaAgent(
+  instructions: string,
   captureProcessor: InputProcessor | undefined,
   wrapModel: ((model: MastraModelConfig) => MastraModelConfig) | undefined,
   listAvailableModels: () => Promise<AvailableModel[]>,
@@ -562,12 +563,15 @@ function createPeaAgent(
     id: "pea-agent",
     name: peaAgentName,
     description: peaAgentDescription,
-    instructions: peaAgentInstructions,
+    instructions,
     model: async ({ requestContext }) => {
       const model = await resolveCurrentModel(requestContext, listAvailableModels);
       return wrapModel ? wrapModel(model) : model;
     },
-    signals: [new TaskSignalProvider(), new PeaContextSignalProvider()],
+    // No Pea context signal: nothing produces request-context entries in production, and the old
+    // processor replayed its previous snapshot when a turn carried none. Wire one back only with a
+    // real producer that stamps source and observation time and clears on absence.
+    signals: [new TaskSignalProvider()],
     tools,
     inputProcessors: captureProcessor ? [captureProcessor] : undefined,
   });
@@ -599,9 +603,36 @@ async function resolveCurrentModel(
   return resolveModel(modelId, { requestContext });
 }
 
-function resolvePeaToolCategory(toolName: string): ToolCategory {
+// The names Mastra's Workspace and skills processors actually put in the provider request. Each one
+// is classified on purpose; an unlisted name falls to `other`, which every access level denies.
+export const peaNativeToolCategories = {
+  mastra_workspace_read_file: "read",
+  mastra_workspace_list_files: "read",
+  mastra_workspace_file_stat: "read",
+  mastra_workspace_grep: "read",
+  mastra_workspace_search: "read",
+  mastra_workspace_index: "read",
+  mastra_workspace_versions: "read",
+  mastra_workspace_lsp_inspect: "read",
+  mastra_workspace_get_process_output: "read",
+  mastra_workspace_write_file: "edit",
+  mastra_workspace_edit_file: "edit",
+  mastra_workspace_ast_edit: "edit",
+  mastra_workspace_mkdir: "edit",
+  mastra_workspace_delete: "edit",
+  mastra_workspace_execute_command: "execute",
+  mastra_workspace_kill_process: "execute",
+  skill: "read",
+  skill_search: "read",
+  skill_read: "read",
+} as const satisfies Record<string, ToolCategory>;
+
+export function resolvePeaToolCategory(toolName: string): ToolCategory {
   if (Object.hasOwn(peaProductToolMetadata, toolName)) {
     return peaProductToolMetadata[toolName as keyof typeof peaProductToolMetadata].category;
+  }
+  if (Object.hasOwn(peaNativeToolCategories, toolName)) {
+    return peaNativeToolCategories[toolName as keyof typeof peaNativeToolCategories];
   }
 
   const codeCategory = getToolCategory(toolName);

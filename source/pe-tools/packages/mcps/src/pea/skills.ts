@@ -11,166 +11,191 @@ export interface BundledPeaSkill {
 
 export const bundledPeaSkills: readonly BundledPeaSkill[] = [
   {
-    name: "audit-visible-revit-equipment",
+    name: "survey-revit-model",
     content: String.raw`---
-name: audit-visible-revit-equipment
-description: Orient an equipment visibility/schedule/electrical review without prescribing a fixed endpoint chain. Use when the user asks about equipment visible in a Revit view, sheet, or current context.
-metadata:
-  goal: true
+name: survey-revit-model
+description: Survey what is open before touching it. Use when the user asks what is in the model, what is open, selected, loaded, visible, or scheduled, asks for an audit or a report, or pastes a Revit problem without an instruction. Reads only; it ends by naming the next move.
 ---
 
-# Audit Visible Revit Equipment
+# Survey Revit Model
 
-Use this as orientation, not a recipe.
+Writes are off. The product is a map of what is actually there, in the user's words, with the difference between what they believe and what the model says stated first.
 
-## Posture
+## Method
 
-- Establish the scope and freshness requirements.
-- Let generated host-operation metadata identify useful context, catalog, matrix, detail, or scripting surfaces.
-- Prefer exact provenance over confident inference.
-- Use artifacts for broad rows or evidence.
-- Name uncertainty, API gaps, or missing model references directly.
+1. Restate the question in your own words and name the scope: document, view, level, category, or selection.
+2. Confirm freshness first: which document is active and whether the session is current.
+3. Pace it once wide with the smallest orientation surface (context, catalog, or matrix operations), then zoom into the two or three places that decide the answer.
+4. Every line of the report carries its stake: the operation or script that produced it and the document or view it came from. A plausible count is not a stake.
+5. Broad inventories go to an artifact; the reply carries the findings and the exceptions.
 
-## Useful Resources
+## Report
 
-- pe_status for current host/Revit readiness.
-- host_operation_search and host_operation_call for public capabilities.
-- script_bootstrap and script_execute when code is the clearer path.
-- pe_logs after host/Revit failures.
+Scope, evidence used, findings, what was not inspected, artifacts, and the next move: a change to draft, a diagnosis to run, or a decision the user owns.
+`,
+  },
+  {
+    name: "diagnose-revit-behavior",
+    content: String.raw`---
+name: diagnose-revit-behavior
+description: Find the cause of strange Revit behavior before proposing a fix. Use when something is hidden, missing in one view but present in another, different between views, wrong in a linked model, controlled by a template, failing, or slow. Ends with a cause and its evidence; the fix is the user's call.
+---
 
-## Output
+# Diagnose Revit Behavior
 
-Report the scope, evidence used, findings, uncertainty, artifacts, and remaining blockers.
+The model does not lie and cannot be treated. The only product is the cause, from live state, with the evidence that proves it. A fix before the cause is a guess wearing a change.
+
+## Method
+
+1. Build the smallest reproduction: one element, one view, one question the model can answer now.
+2. List the candidate causes and, for each, the inspection that would kill it. Kill the cheap ones first.
+3. Inspect live state before generic Revit advice. Distinguish observed facts from hypotheses in every sentence.
+4. A hang or timeout is a boundary, not a failure: name what it was waiting on.
+
+## Visibility causes to test, cheapest first
+
+View type and template controls, discipline, detail level and display style, phase and phase filter, design options, worksets, category visibility, view filters and overrides, element hide and isolate, temporary modes, crop, scope box, and section box, plan view range, plan regions and underlay, link visibility, display mode, linked view, and load state, imports and point clouds, graphics settings. View collectors report candidate drawn elements, not pixels on screen; use a view capture when the pixels matter.
+
+## Report
+
+Cause, the evidence that proves it, what would turn it green, and what was not inspected. The user decides the fix.
+`,
+  },
+  {
+    name: "settle-intent",
+    content: String.raw`---
+name: settle-intent
+description: Interview the user until a change or a Pod is settled enough to act on. Use before any mutation, layout, migration, or Pod build whose targets, standards, or trade-offs the user has not stated, or when the user asks to align, decide, or be pushed back on. Not for facts you can inspect.
+---
+
+# Settle Intent
+
+Decisions are the user's; facts are yours. Do not ask a question an inspection could answer, and do not make an engineering choice you could hand to them.
+
+## Method
+
+- Answer their question first if they asked one.
+- Look up the facts in the same round, then ask the whole frontier at once: every open question whose prerequisites are settled, numbered, each with your recommendation, so the user can answer "1. B, 2. yes".
+- Stress the boundary: before it settles, test one scenario that forces it against the current model or project standards, and surface every contradiction.
+- Read back each verdict as you understood it before acting on it.
+- Stop when nothing is left silently assumed and the user confirms. Then name the next move.
+
+Format each question as the title, the question with its choices, and your recommendation on the next line.
+`,
+  },
+  {
+    name: "prove-revit-change",
+    content: String.raw`---
+name: prove-revit-change
+description: Verify a change on the real model before calling it done. Use after any mutation, script, or Pod run, before reporting "done", and whenever the user asks whether something really worked or to be skeptical. Ends with a stamped verdict, never with "should work".
+---
+
+# Prove Revit Change
+
+Plausibility is not proof. A successful call proves that the call completed; the model is proven by reading it back.
+
+## Method
+
+1. Write the falsifier first: the read, count, capture, or schedule row that would show the change did not land.
+2. Read it back from the live document, fresh, after the change. A stale snapshot or the request payload is not a readback.
+3. Name the lane: a document readback, a rendered view capture, a schedule value, or a file on disk prove different things. Visual proof is its own lane.
+4. Stamp the verdict: PROVEN with what was read and when, FALSIFIED with what broke, or UNPROVEN with why. Fewer than that is void.
+5. Rank by consequence: one wrong element outranks twenty cosmetic misses.
+
+## Report
+
+Outcome, evidence, skipped or failed items, and what remains unproven.
+`,
+  },
+  {
+    name: "teach-revit-mechanism",
+    content: String.raw`---
+name: teach-revit-mechanism
+description: Teach a Revit or Revit API mechanism the user wants to own. Use when the user asks to learn, understand, or be taught something, or asks the same question a second time. Not for a one-off answer.
+---
+
+# Teach Revit Mechanism
+
+The user asked to learn, not to be told. The master corrects the hand and never touches the work.
+
+- Ask one question first if the use is not obvious: what will you do with this? Teach toward that use, in plain words, at their altitude.
+- Hand over one short artifact they keep: the load-bearing fifth, a dense example beside its explanation, the rest linked.
+- Cite primary sources: Revit API docs, observed model behavior, or a script they can rerun. Never teach from lore.
+- Explain by physical shape: document versus view, type versus instance, family versus project, what persists where.
+- Check transfer, not recall: they apply it to their own model before it is done.
 `,
   },
   {
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Author and run a C# Revit script through the Pe scripting workspace. Use when code is the clearest way to inspect, author, mutate, or experiment against Revit.
-metadata:
-  goal: true
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against the model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets, workspace files, and Pod rules.
 ---
 
 # Write Revit C# Script
 
-Use this as orientation for scripting work.
+## Method
 
-## Posture
+- Choose a script when no host operation is the smallest capable surface. Bootstrap the workspace when paths or references are unknown.
+- Inline snippets for tiny probes; workspace files for durable or multi-step work.
+- Default to ReadOnly. Use WriteTransaction only for an explicit, user-authorized mutation. Use NoTransaction only for APIs that reject an open transaction.
+- Treat compiler and runtime diagnostics as steering; fix the first one before rerunning.
+- Keep terminal output compact; write artifacts for broad evidence. Return structured results for anything a later step reads.
 
-- Choose script execution when code is clearer than an existing public host operation.
-- Bootstrap the workspace when paths or references are unknown.
-- Use inline snippets for tiny probes and workspace files for durable or multi-step work.
-- Default to ReadOnly; use WriteTransaction only for explicit mutations.
-- Treat compiler/runtime diagnostics as steering feedback.
-- Keep terminal output compact and write artifacts for broad evidence.
+## Pod rules
 
-## Output
+A Pod is a shareable scripting workspace: a project file for build and language support, src/ for C# scripts, optional supporting files, and a root pod.json that turns it into strict Pod mode. Loose workspaces run only the selected file. Pods validate the manifest, compile every src/**/*.cs, and run only declared entrypoints. Import and export are source-first and exclude generated, runtime, IDE, machine-specific, and DLL payloads.
 
-Report the script path or inline name, permission mode, diagnostics, key output, artifacts, and verification result.
+## Report
+
+Script path or inline name, permission mode, diagnostics, key output, artifacts, and the verification readback.
 `,
   },
   {
-    name: "inspect-active-revit-document",
+    name: "build-pod",
     content: String.raw`---
-name: inspect-active-revit-document
-description: Inspect the connected Revit document using status, generated host operations, scripts, and artifacts as appropriate.
-metadata:
-  goal: true
+name: build-pod
+description: Turn a repeated workflow or an add-in idea into a shareable Pod. Use when the user says "make this a Pod", "I want a button that", "every week I have to", "share this with my team", or when the same script has run twice. Shape first, then make it real, then delete what did not earn its place.
 ---
 
-# Inspect Active Revit Document
+# Build Pod
 
-Use this as orientation when the user asks what is open, selected, loaded, visible, scheduled, or present in the active model.
+The user supplies intent and ideas; you handle the code. Nothing that does not connect to the workflow, nothing longer than it must be.
 
-## Posture
+## Loop
 
-- Confirm current host/Revit state when freshness matters.
-- Use generated operation metadata to choose the smallest useful public capability.
-- Script only when code is the clearer way to answer or verify the question.
-- Preserve document/view/selection provenance in the answer.
-- Write artifacts for broad inventories.
+1. Name the nouns from the user's workflow, not from the API: what they start with, what they want at the end, what they decide along the way. Settle the intent before anything compounds.
+2. Lay out two or three shapes side by side, from the simplest script to the fuller add-in, and say what each makes impossible. The user picks; one shape on the table is always one you would argue against.
+3. Bootstrap the workspace, then make the chain real end to end on the real model: one entrypoint, one readback, before any polish. Stubs and placeholders are scaffolding; count them and strike them one per round.
+4. Drive the whole workflow by hand with the user on real parts. That is the bar for done, and it gets a proof readback.
+5. Purge: delete anything the working Pod does not need. Keep the why in a short README the user can hand to a colleague.
 
-## Output
+## Report
 
-Report observed scope, operations or scripts used, findings, artifacts, and any uncertainty.
+What the Pod does in the user's words, how to run it, what it will not do, and what remains scaffolding.
 `,
   },
   {
-    name: "author-family-foundry-profile",
+    name: "author-pe-settings",
     content: String.raw`---
-name: author-family-foundry-profile
-description: Author or revise a Family Foundry profile/settings document using files, schemas, validators, and diagnostics.
-metadata:
-  goal: true
+name: author-pe-settings
+description: Author, validate, or debug a Pe settings document such as a Family Foundry profile. Use when the user edits profiles or settings, a run produced diagnostics or artifacts to explain, or validation fails.
 ---
 
-# Author Family Foundry Profile
+# Author Pe Settings
 
-Use this as orientation for profile authoring.
+Settings and profiles are authored documents with a schema and a validator. Diagnostics drive the repair; the validator is the contract.
 
-## Posture
+## Method
 
-- Treat profiles as authored settings documents.
-- Edit files directly in the workspace.
-- Use available schemas and validators as the contract.
-- Let diagnostics drive repair.
+- Use host-reported workspace paths and the available schemas. Edit the files directly.
+- Start from produced artifacts and diagnostics before changing a profile. Keep authored intent, generated output, and runtime proof distinct.
+- Repair the first diagnostic, revalidate, repeat. Use a focused script only when artifacts do not explain the failure.
 - Keep generated proof artifacts separate from source profiles.
 
-## Output
+## Report
 
-Report changed files, validation result, diagnostics fixed or remaining, and any generated artifacts.
-`,
-  },
-  {
-    name: "debug-family-foundry-artifacts",
-    content: String.raw`---
-name: debug-family-foundry-artifacts
-description: Debug a Family Foundry run from produced artifacts, diagnostics, and profile inputs.
-metadata:
-  goal: true
----
-
-# Debug Family Foundry Artifacts
-
-Use this as orientation for artifact-first debugging.
-
-## Posture
-
-- Start from produced artifacts and diagnostics before changing profiles or scripts.
-- Preserve the distinction between authored intent, generated output, and runtime proof.
-- Use focused repros or scripts only when artifacts do not explain the issue.
-- Keep conclusions tied to evidence.
-
-## Output
-
-Report artifacts inspected, suspected cause, evidence, changes made if any, and verification result.
-`,
-  },
-  {
-    name: "validate-pe-settings-workspace",
-    content: String.raw`---
-name: validate-pe-settings-workspace
-description: Validate Pe settings workspace documents and repair diagnostics.
-metadata:
-  goal: true
----
-
-# Validate Pe Settings Workspace
-
-Use this as orientation for settings/profile validation.
-
-## Posture
-
-- Use host-reported workspace paths and available schemas.
-- Edit settings files directly.
-- Use validators as the source of truth.
-- Repair diagnostics and revalidate.
-- Keep ordinary file work ordinary; use host operations for schema and validation capabilities.
-
-## Output
-
-Report files checked, validation status, diagnostics fixed or remaining, and any follow-up needed.
+Files changed, validation result, diagnostics fixed or remaining, artifacts inspected, and any follow-up the user owns.
 `,
   },
   {
