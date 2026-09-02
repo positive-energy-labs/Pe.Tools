@@ -942,7 +942,7 @@ export function createTakeoffStore(deps: {
     }) {
       if (patch.bound || patch.multi || patch.stage) {
         const patches: RouteStatePatch[] = [];
-        for (const key of ["world", "folder", "r10"] as const) {
+        for (const key of ["folder", "r10"] as const) {
           const id = patch.bound?.[key];
           if (id !== undefined)
             patches.push({
