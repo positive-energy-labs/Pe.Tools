@@ -73,13 +73,29 @@ export type BridgeSessionView = {
   readonly state?: BridgeStateSnapshot;
 };
 
-/** A bridge frame worth relaying to browsers: Revit events, state syncs, connects/disconnects. */
+/**
+ * A bridge frame worth relaying to browsers: Revit events, state syncs, connects/disconnects.
+ * `seq`/`atMs` are broker truth stamped at publish (queue-provenance §"timestamp on events");
+ * `origin` carries the caller's x-pe-origin where a caller exists — these four frames are
+ * Revit-originated, so it is usually absent until the QueueLedger round threads it through.
+ */
 export type HostBridgeEvent = {
+  readonly seq: number;
+  readonly atMs: number;
   readonly sessionId: string;
   readonly kind: "event" | "state-sync" | "connected" | "disconnected";
   readonly eventName?: string;
   readonly payloadJson?: string | null;
+  readonly origin?: string;
+  /** Active document title at the moment of the event (connected/disconnected/state-sync). */
+  readonly docTitle?: string | null;
+  /** state-sync only: set (with prevDocTitle) when the active document actually changed. */
+  readonly docChanged?: boolean;
+  readonly prevDocTitle?: string | null;
 };
+
+/** Bounded in-memory replay ring: enough for a browser to reconstruct recent world history. */
+const EVENT_LEDGER_CAPACITY = 500;
 
 export function getBridgeRegistrationRejection(registration: BridgeRegistrationRequest) {
   return registration.contractVersion === BRIDGE_CONTRACT_VERSION
@@ -280,6 +296,8 @@ export class RevitBridge extends Context.Service<
       req: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
     readonly events: PubSub.PubSub<HostBridgeEvent>;
+    /** Snapshot of the bounded event ring, oldest first — replay for late-joining browsers. */
+    readonly ledger: Effect.Effect<readonly HostBridgeEvent[]>;
   }
 >()("RevitBridge") {}
 
@@ -354,6 +372,19 @@ export const RevitBridgeLive = Layer.effect(
     const currentSessionId = yield* Ref.make<string | null>(null);
     const events = yield* PubSub.unbounded<HostBridgeEvent>();
 
+    // Ring + monotonic seq, stamped here so every subscriber and the replay ledger agree on
+    // ordering and broker-clock timestamps (tabs used to invent their own — that shim is dead).
+    const eventLedger: HostBridgeEvent[] = [];
+    let eventSeq = 0;
+    const emit = (event: Omit<HostBridgeEvent, "seq" | "atMs">) =>
+      Effect.suspend(() => {
+        const entry: HostBridgeEvent = { ...event, seq: ++eventSeq, atMs: Date.now() };
+        eventLedger.push(entry);
+        if (eventLedger.length > EVENT_LEDGER_CAPACITY) eventLedger.shift();
+        return PubSub.publish(events, entry);
+      });
+    const ledger = Effect.sync<readonly HostBridgeEvent[]>(() => [...eventLedger]);
+
     const viewSession = Effect.fnUntraced(function* (session: Session) {
       return {
         connected: true,
@@ -398,9 +429,10 @@ export const RevitBridgeLive = Layer.effect(
         const remaining = yield* Ref.get(sessions);
         yield* Ref.set(currentSessionId, remaining.keys().next().value ?? null);
       }
-      yield* PubSub.publish(events, {
+      yield* emit({
         sessionId: closedSession.sessionId,
         kind: "disconnected",
+        docTitle: (yield* Ref.get(closedSession.state)).activeDocumentTitle ?? null,
       });
     });
 
@@ -478,9 +510,10 @@ export const RevitBridgeLive = Layer.effect(
               kind: "RegistrationAck",
               registrationAck: { accepted: true, sessionId: registeredSession.sessionId },
             });
-            yield* PubSub.publish(events, {
+            yield* emit({
               sessionId: registeredSession.sessionId,
               kind: "connected",
+              docTitle: frame.registration.state.activeDocumentTitle ?? null,
             });
             return;
           }
@@ -490,10 +523,16 @@ export const RevitBridgeLive = Layer.effect(
               return;
             }
             if (session) {
-              yield* Ref.set(session.state, frame.stateSync.state);
-              yield* PubSub.publish(events, {
+              const prevState = yield* Ref.get(session.state);
+              const nextState = frame.stateSync.state;
+              yield* Ref.set(session.state, nextState);
+              yield* emit({
                 sessionId: session.sessionId,
                 kind: "state-sync",
+                docTitle: nextState.activeDocumentTitle ?? null,
+                ...(prevState.activeDocumentKey !== nextState.activeDocumentKey
+                  ? { docChanged: true, prevDocTitle: prevState.activeDocumentTitle ?? null }
+                  : {}),
               });
             }
             return;
@@ -512,7 +551,7 @@ export const RevitBridgeLive = Layer.effect(
             }
             yield* Effect.log(`bridge event: ${frame.event.eventName}`);
             if (session)
-              yield* PubSub.publish(events, {
+              yield* emit({
                 sessionId: session.sessionId,
                 kind: "event",
                 eventName: frame.event.eventName,
@@ -655,6 +694,6 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.all([...map.values()].map((session) => viewSession(session)));
     });
 
-    return { invoke, snapshot, list, handleConnection, events };
+    return { invoke, snapshot, list, handleConnection, events, ledger };
   }),
 );

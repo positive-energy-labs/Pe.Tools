@@ -2,6 +2,7 @@
 
 ## Decided
 
+- 2026-09-01 — The no-document fallback is the portable `InstancesCluster` (`TakeoffsClusterFallback`), not a bespoke recents list, and it opens documents exactly as the Revit UI would (local `doc open`, cloud `recent:` pick; a staged start rides `session start --doc`). The cluster's shape is ruled in `docs/features/host/LEDGER.md`.
 - 2026-08-26 — One takeoff exists per rvt; there is no variant key.
 - 2026-08-25 — Generic active-document identity comes from `revit.context.document-session`, and plan-view type/level comes from `revit.catalog.project-index`; `takeoffs.*` keeps only Takeoff systems, regions, roles, provenance, and per-view FilledRegion counts. `documentId` (cloud model GUID or absolute path) is identity and title is label. `feed/views` offers only plan views whose Takeoff count is at least one.
 - 2026-08-25 — `/takeoffs` and Pea call ten typed `takeoffs.*` host operations; their thin handlers pass typed requests into `TakeoffAtlas`, and `takeoffs.snapshot` returns the persisted-read `from` identity. `scripting.execute` remains an exploration surface, never a route transport.
@@ -136,6 +137,8 @@
 - 2026-08-26 — The J3 Address law overturns the restored `from` law: `takeoffs.snapshot` persists `reading { at, version, observedAt }`, where `at` is the Revit document Address; world identity is not part of a read.
 
 ## Tried & rejected
+
+- 2026-09-01 — An `openStaged` working-copy policy on the cluster fallback (auto `doc clone --out *.PeTakeoffs.rvt`, cloud refused, starts booting empty): stranded `ProjectA1` documentless in the field, surfaced a raw `--out` clone failure in the card, and blocked cloud models the SDK opens fine. Opens now behave exactly like the Revit UI.
 - 2026-08-24 — Global `BoundarySimplifyFt = 1.0` is rejected despite fixing ML09 and improving board Held `nonOrthogonalLength` 16.00%→14.18%: it demotes 24 incumbent Accepted rooms, lowers Accepted edge-on-ink 0.754→0.735, and raises stairstep edges 285→364. Retaining every secondary frame worsens ML09 to 37.81%; disabling curve protection worsens it to 31.18%; small-room per-element caps reach only 20.87–26.10%; and admitting only one coherent secondary frame reaches 19.33% while creating a low-ink Accepted room. Do not retry those mechanisms or loosen their thresholds; the adopted material zone election preserves their ML09 gain without their board churn.
 - 2026-08-23 — Replacing raster-order wall-band centerlines globally is rejected despite exposing a real ordering defect: it churns 55 Accepted rooms, departs 13 incumbents, and creates 10 honesty losses. A strict per-zone nonregression admission salvages only LL02 and UL01 (~10.6 sf), below a material dual-run change. Fix wall authority only when it can preserve incumbent identity and honesty.
 - 2026-08-23 — Final-joint coverage simplification is rejected: fail-closed union is a no-op, while restoring its missing coverage as Excluded slightly worsens narrow residue. The completed-frame alternative changes only three rooms for ~5 sf at 109 lines. Neither earns production complexity.
@@ -211,6 +214,8 @@
 
 ## Owed
 
+- Explicit document-open variant verbs on the cluster fallback (`safe copy` via `doc clone`, `--detach`), kaitpw 2026-09-01 — the deleted implicit policy's honest replacement; takeoffs working-copy discipline currently relies on the operator choosing a detached/copy file themselves.
+- Resolve the accidental repo-root `$out/` extraction before another RHVAC help probe. Its 1,435 tracked files match every file member of the installed `Rhvac10.chm`, but the exact extraction command is unretained. Merge `bd2c431` swept the untracked directory into Git through `git add -A`. Choose an ignored scratch destination and add the smallest prevention guard.
 - `ApplyRegistry` deletion stands; rebuild it as a typed op only when needed.
 - `doc recents` lists files that no longer exist (`w4a-x.rvt`); the picker shows them and the open fails honestly. Either the SDK prunes on read or the feed marks `sub: "missing"` from a host stat.
 - `doc open <cld://…>` literal paths are treated as local (SDK gap, filed in Pe.Revit.Sdk `docs/context/NEXT.md`); `takeoff/store.ts` carries the `SHIM:` that sends `recent:<title>` for cloud rows — delete it when the CLI resolves the literal path.

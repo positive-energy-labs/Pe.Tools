@@ -167,6 +167,17 @@ describe("targeting world", () => {
       expect(resolveTarget(sessions, option.id)).toMatchObject({ kind: "resolved" });
   });
 
+  it("never offers gone or failed worlds as targets", () => {
+    const row = observation("pe.app-25", 25);
+    const worlds: WorldFacts[] = [
+      { id: "ready", custody: "controlled", phase: "ready", detail: "ready", row },
+      { id: "gone", custody: "controlled", phase: "gone", detail: "gone", row },
+      { id: "failed", custody: "controlled", phase: "failed", detail: "failed", row },
+    ];
+
+    expect(worldFeed(worlds).options?.map((option) => option.label)).toEqual(["ready"]);
+  });
+
   it("lets the SDK decide lifecycle custody for an observed world", async () => {
     const settled = vi.fn<(receipt: WorldLifecycleReceipt) => void>();
     const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {

@@ -508,23 +508,14 @@ function createPeaSessionAdmission(
       throw new Error(`Pea web session '${scopedThreadId}' has an immutable thread binding.`);
     };
     const setThread = session.thread.set.bind(session.thread);
-    const clearThread = session.thread.clear.bind(session.thread);
-    const clearAndReleaseLock = session.thread.clearAndReleaseLock.bind(session.thread);
     session.thread.set = () => immutable();
-    session.thread.clear = () => immutable();
-    session.thread.clearAndReleaseLock = async () => immutable();
     restoreScopedThreadLifecycle = () => {
       session.thread.set = setThread;
-      session.thread.clear = clearThread;
-      session.thread.clearAndReleaseLock = clearAndReleaseLock;
     };
     session.thread.switch = async () => immutable();
     session.thread.create = async () => immutable();
     session.thread.clone = async () => immutable();
     session.thread.cloneToCurrentResource = async () => immutable();
-    const deleteThread = session.thread.delete.bind(session.thread);
-    session.thread.delete = async (input) =>
-      input.threadId === scopedThreadId ? immutable() : deleteThread(input);
     session.identity.setResourceId = () => immutable();
   } else {
     const switchThread = session.thread.switch.bind(session.thread);

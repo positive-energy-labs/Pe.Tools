@@ -12,12 +12,13 @@ export async function fetchPeInfo(config: WorkbenchEndpointConfig) {
   const response = await fetch(url, { headers: { Accept: "application/json" } });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
   const status = (await response.json()) as Record<string, unknown>;
-  return peInfoSchema.parse({
+  const info = peInfoSchema.parse({
     controllerId: status.controllerId,
     resourceId: status.resourceId,
     capabilities: status.capabilities,
     world: status.world,
   });
+  return { ...info, bridgeIsConnected: status.bridgeIsConnected === true };
 }
 
 export function usePeInfo(config: WorkbenchEndpointConfig = resolveWorkbenchConfig()) {

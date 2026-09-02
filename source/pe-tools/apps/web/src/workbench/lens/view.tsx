@@ -172,7 +172,7 @@ export function Lens({
             </div>
           </ThreadPrimitive.Root>
 
-          <div className="col-start-1 sticky top-0">
+          <div className="col-start-1 sticky top-0 flex" {...annotation("side-pane")}>
             <SidePane
               side="left"
               storageKey="pe.sideWidth"
@@ -182,7 +182,6 @@ export function Lens({
               onOpenChange={onSideOpenChange}
               onWidthChange={onSideResize}
               header={sideHead}
-              {...annotation("side-pane")}
             >
               {mode === "trace" ? (
                 <div {...annotation("trace-frame")}>

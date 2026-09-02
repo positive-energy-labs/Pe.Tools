@@ -11,12 +11,18 @@ export const dialogRecipe = tv({
   slots: {
     overlay: "fixed inset-0 isolate z-modal bg-scrim supports-backdrop-filter:backdrop-blur-xs",
     content:
-      "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg bg-artifact p-4 text-ink ring-1 ring-line outline-none sm:max-w-lg",
+      "fixed top-1/2 left-1/2 z-modal grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg bg-artifact text-ink ring-1 ring-line outline-none sm:max-w-lg",
     header: "flex flex-col gap-1",
     footer: "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
     title: "t-title",
     description: "text-ink-2 *:[a]:underline *:[a]:underline-offset-3 *:[a]:hover:text-ink",
   },
+  variants: {
+    // A dialog whose body is one self-padding surface (the command palette) takes no chrome of
+    // its own — two nested pads read as a box inside a box.
+    pad: { normal: { content: "gap-4 p-4" }, none: { content: "" } },
+  },
+  defaultVariants: { pad: "normal" },
 });
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
@@ -39,11 +45,13 @@ function DialogOverlay(props: Omit<DialogPrimitive.Backdrop.Props, "className">)
 function DialogContent({
   children,
   showCloseButton = true,
+  pad,
   ...props
 }: Omit<DialogPrimitive.Popup.Props, "className"> & {
   showCloseButton?: boolean;
+  pad?: "normal" | "none";
 }) {
-  const { content } = dialogRecipe();
+  const { content } = dialogRecipe({ pad });
   return (
     <DialogPortal>
       <DialogOverlay />

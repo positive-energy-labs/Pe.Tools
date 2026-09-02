@@ -30,20 +30,30 @@ import type { ChatPluginRoute } from "#/workbench/route-chat-plugins";
 export function ChatShell({
   initialTurn,
   plugin,
+  live,
 }: {
   initialTurn?: number;
   plugin?: ChatPluginRoute;
+  live?: boolean;
 }) {
   return (
     <HotkeysProvider>
       <WorkbenchRuntimeProvider>
-        <Surface initialTurn={initialTurn} plugin={plugin} />
+        <Surface initialTurn={initialTurn} plugin={plugin} live={live} />
       </WorkbenchRuntimeProvider>
     </HotkeysProvider>
   );
 }
 
-function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatPluginRoute }) {
+function Surface({
+  initialTurn,
+  plugin,
+  live,
+}: {
+  initialTurn?: number;
+  plugin?: ChatPluginRoute;
+  live?: boolean;
+}) {
   const {
     store,
     chat,
@@ -131,20 +141,20 @@ function Surface({ initialTurn, plugin }: { initialTurn?: number; plugin?: ChatP
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
       <div className={chatStyles.chatShell1()}>
-        <header className={cn(chatStyles.chatShell2(), "h-12 py-0")}>
-          <div className={chatStyles.chatShell3()}>
-            {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
-                your call is owed (caution), error = a bridge/run error (caution — NOT the
-                alarm), idle = muted. */}
-            <span title={status} className={chatStyles.chatShell4()} data-s={status} />
-            <span className={cn(chatStyles.chatShell5(), "font-semibold tracking-tight")}>
-              {threadLabel}
-            </span>
-          </div>
-          <div className={chatStyles.chatShell6()}>
-            <WorldBadge world={world} />
-            <ChatSentence />
-          </div>
+        <header className={cn(chatStyles.chatShell2(), "block h-auto py-0 pb-2")}>
+          <ChatSentence
+            name={threadLabel}
+            live={live}
+            aside={
+              <>
+                {/* status lamp on meaning roles: running = pea acting (agent identity), waiting =
+                    your call is owed (caution), error = a bridge/run error (caution — NOT the
+                    alarm), idle = muted. */}
+                <span title={status} className={chatStyles.chatShell4()} data-s={status} />
+                <WorldBadge world={world} />
+              </>
+            }
+          />
         </header>
 
         <div aria-live="polite" className={chatStyles.chatShell7()}>

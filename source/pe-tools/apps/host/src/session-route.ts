@@ -4,13 +4,17 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { join } from "node:path";
 import {
   docCloneArgv,
+  docCloseArgv,
+  docCurrentArgv,
   docOpenArgv,
   docRecentsArgv,
+  doctorArgv,
   sessionHrArgv,
   sessionListArgv,
   sessionStartArgv,
   sessionStopArgv,
 } from "@pe/host-contracts/pe-revit-contract";
+import type { SessionAction, SessionActionRequest } from "@pe/host-contracts/contracts";
 import { hostOwnership, type HostLane } from "./host-ownership.ts";
 import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
 
@@ -33,23 +37,9 @@ import { peRevitLauncher, validatePeRevitEnvelope } from "./pe-revit-launch.ts";
  * `session hr --restart`, the SDK's cold-swap since beta.131 deleted `session restart`).
  */
 
-type SessionAction = "start" | "stop" | "restart";
-
-export type SessionActionRequest = {
-  readonly action: SessionAction;
-  readonly id?: string;
-  readonly year?: string;
-  /**
-   * Payload source for `start`, the CLI's own words: `installed` (default, a project-less start —
-   * the end-user case) or `dev` (this host's checkout Pe.App; refused on a host with no checkout).
-   * Explicit, never inferred from the host's lane: the same `{year}` must mean the same thing on
-   * the route as on the CLI (BB-1 F-14).
-   */
-  readonly lane?: HostLane;
-  readonly doc?: string;
-  readonly force?: boolean;
-  readonly timeoutSeconds?: number;
-};
+// Request shape is the shared hand-authored contract (@pe/host-contracts/contracts) so the web
+// client builds the exact type this route parses.
+export type { SessionActionRequest } from "@pe/host-contracts/contracts";
 
 const SESSION_ACTIONS: readonly SessionAction[] = ["start", "stop", "restart"];
 
@@ -78,6 +68,13 @@ export function parseSessionActionRequest(
     return { ok: false, error: 'lane must be "installed" (default) or "dev"' };
   if ((action === "stop" || action === "restart") && !id)
     return { ok: false, error: `${action} requires id` };
+  const conflictPolicy = readOptionalString(record.conflictPolicy);
+  if (
+    conflictPolicy !== undefined &&
+    conflictPolicy !== "keep" &&
+    conflictPolicy !== "discard-latest"
+  )
+    return { ok: false, error: 'conflictPolicy must be "keep" or "discard-latest"' };
   return {
     ok: true,
     request: {
@@ -86,6 +83,7 @@ export function parseSessionActionRequest(
       year,
       lane: action === "start" ? (lane as HostLane) : undefined,
       doc: readOptionalString(record.doc),
+      conflictPolicy,
       force: record.force === true,
       timeoutSeconds:
         typeof record.timeoutSeconds === "number" && Number.isFinite(record.timeoutSeconds)
@@ -128,6 +126,7 @@ export function sessionCliArgs(
         year: request.year!,
         id: request.id,
         doc: request.doc,
+        conflictPolicy: request.conflictPolicy,
         timeoutSeconds: request.timeoutSeconds,
       });
     case "restart":
@@ -214,6 +213,35 @@ export function parseDocCloneRequest(
 
 export function docCloneArgs(request: DocCloneRequest): string[] {
   return docCloneArgv(request);
+}
+
+type DocCloseRequest = {
+  readonly id: string;
+  readonly doc?: string;
+  readonly intent: string;
+};
+
+export function parseDocCloseRequest(
+  body: unknown,
+):
+  | { readonly ok: true; readonly request: DocCloseRequest }
+  | { readonly ok: false; readonly error: string } {
+  const record =
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+  const id = readOptionalString(record.id);
+  const intent = readOptionalString(record.intent);
+  if (!id || !intent) return { ok: false, error: "document close requires id and intent" };
+  return { ok: true, request: { id, intent, doc: readOptionalString(record.doc) } };
+}
+
+export function docCloseArgs(request: DocCloseRequest): string[] {
+  return docCloseArgv(request);
+}
+
+export function docCurrentArgs(id?: string | null, doc?: string | null): string[] {
+  return docCurrentArgv({ id: readOptionalString(id), doc: readOptionalString(doc) });
 }
 
 // Start and restart block on Revit readiness (cold boot is 180-300s; the CLI's own wait
@@ -305,6 +333,38 @@ const sessionsStatusRoute = HttpRouter.add("GET", "/sessions", (req) =>
   }),
 );
 
+// LEDGER (docs/features/host/LEDGER.md): the browser never mints session ids — this route
+// discloses the id the SDK WOULD mint, via `session start --plan` (no mutation). A
+// `session.bootstrap-missing` refusal for a never-converged year relays verbatim, like any envelope.
+const sessionsMintRoute = HttpRouter.add("GET", "/sessions/mint", (req) =>
+  Effect.gen(function* () {
+    const search = new URL(req.url, "http://localhost").searchParams;
+    const lane = search.get("lane");
+    const year = search.get("year")?.trim();
+    if ((lane !== "installed" && lane !== "dev") || !year)
+      return Response.jsonUnsafe(
+        { ok: false, error: 'mint requires lane ("installed" or "dev") and year (e.g. "25")' },
+        { status: 400 },
+      );
+    const project = resolveStartProject(hostOwnership.lane, hostOwnership.sourceRoot);
+    if (lane === "dev" && project === undefined)
+      return Response.jsonUnsafe(
+        {
+          ok: false,
+          error: `lane "dev" needs a source-linked host; this host (lane ${hostOwnership.lane}) has no checkout to build Pe.App from — mint with lane "installed" or run the host from a checkout`,
+        },
+        { status: 400 },
+      );
+    const outcome = yield* executeSessionCli(
+      sessionStartArgv({ project: lane === "dev" ? project : undefined, year, plan: true }),
+      runPeRevitCli,
+      STATUS_TIMEOUT_MS,
+      { action: "start --plan" },
+    );
+    return jsonResponse(outcome);
+  }),
+);
+
 const sessionsActionRoute = HttpRouter.add("POST", "/sessions", (req) =>
   Effect.gen(function* () {
     const body = yield* Effect.result(req.json);
@@ -332,7 +392,26 @@ const sessionsActionRoute = HttpRouter.add("POST", "/sessions", (req) =>
   }),
 );
 
-export const sessionsRoute = Layer.mergeAll(sessionsStatusRoute, sessionsActionRoute);
+// Machine census: relays `pe-revit doctor` verbatim. Web reads `result.revitYears` (beta.145)
+// as the installed-Revit-years authority; a failing check elsewhere still carries the years.
+const doctorRoute = HttpRouter.add("GET", "/doctor", () =>
+  Effect.gen(function* () {
+    const outcome = yield* executeSessionCli(
+      doctorArgv({ timeoutSeconds: 20 }),
+      runPeRevitCli,
+      STATUS_TIMEOUT_MS,
+      { action: "doctor" },
+    );
+    return jsonResponse(outcome);
+  }),
+);
+
+export const sessionsRoute = Layer.mergeAll(
+  sessionsStatusRoute,
+  sessionsMintRoute,
+  sessionsActionRoute,
+  doctorRoute,
+);
 
 const docsRecentsRoute = HttpRouter.add("GET", "/docs/recents", (req) =>
   Effect.gen(function* () {
@@ -377,4 +456,39 @@ const docsCloneRoute = HttpRouter.add("POST", "/docs/clone", (req) =>
   }),
 );
 
-export const docsRoute = Layer.mergeAll(docsRecentsRoute, docsOpenRoute, docsCloneRoute);
+const docsCurrentRoute = HttpRouter.add("GET", "/docs/current", (req) =>
+  Effect.gen(function* () {
+    const search = new URL(req.url, "http://localhost").searchParams;
+    const id = search.get("id");
+    const outcome = yield* executeSessionCli(
+      docCurrentArgs(id, search.get("doc")),
+      runPeRevitCli,
+      STATUS_TIMEOUT_MS,
+      { action: "doc current", id: id ?? undefined },
+    );
+    return jsonResponse(outcome);
+  }),
+);
+
+const docsCloseRoute = HttpRouter.add("POST", "/docs/close", (req) =>
+  Effect.gen(function* () {
+    const body = yield* Effect.result(req.json);
+    const parsed = parseDocCloseRequest(body._tag === "Success" ? body.success : null);
+    if (!parsed.ok) return Response.jsonUnsafe({ ok: false, error: parsed.error }, { status: 400 });
+    const outcome = yield* executeSessionCli(
+      docCloseArgs(parsed.request),
+      runPeRevitCli,
+      DOC_OPEN_TIMEOUT_MS,
+      { action: "doc close", id: parsed.request.id },
+    );
+    return jsonResponse(outcome);
+  }),
+);
+
+export const docsRoute = Layer.mergeAll(
+  docsRecentsRoute,
+  docsOpenRoute,
+  docsCloneRoute,
+  docsCurrentRoute,
+  docsCloseRoute,
+);

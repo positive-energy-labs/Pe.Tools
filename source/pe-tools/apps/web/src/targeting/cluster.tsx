@@ -30,12 +30,17 @@ import { resolveWorkbenchConfig } from "#/workbench/config";
 
 /** Acknowledge the update before the versioned host restarts, then poll the receipt until the
  * replacement host proves the new release. The Revit add-in remains staged until Revit restarts. */
-function UpdateButton() {
+function UpdateButton({ enabled }: { enabled: boolean }) {
   const installed = useQuery({
     queryKey: ["host-install"],
     queryFn: readInstallStatus,
+    enabled,
   });
-  const available = useQuery({ queryKey: ["host-update"], queryFn: readUpdateAvailability });
+  const available = useQuery({
+    queryKey: ["host-update"],
+    queryFn: readUpdateAvailability,
+    enabled,
+  });
   const update = useMutation({
     mutationFn: async () => {
       const previousVersion =
@@ -103,19 +108,27 @@ type Lamp = {
 };
 
 /**
- * THE SIGNAL: `/host/status` → `capabilities.revit` (`host/info.ts`, the same fact `takeoff/route`
- * gates the live document on and `host/live` gates the SSE relay on). The canon `usePeInfo` holds
- * it at `staleTime: Infinity` — correct for a route gate read once, a LIE for a lamp, which would
+ * THE SIGNAL: `/host/status` → `bridgeIsConnected` (`host/info.ts`). `capabilities.revit` says
+ * whether this Host supports Revit; it does not say whether a bridge is attached. The canon
+ * `usePeInfo` holds it at `staleTime: Infinity` — correct for a route gate read once, a LIE for a lamp, which would
  * sit green long after Revit closed. This poll is the lamp's own, at 5s, and it reports the clock
  * time of the answer it is drawing. Unknown is a real state: pending draws `mute`, never green.
  */
-function useHostLamp(): Lamp {
+function useHostLamp(enabled: boolean): Lamp {
   const info = useQuery({
     queryKey: ["front-door-host-lamp"],
     queryFn: () => fetchPeInfo(resolveWorkbenchConfig()),
+    enabled,
     refetchInterval: 5_000,
     retry: false,
   });
+  if (!enabled)
+    return {
+      tone: "mute",
+      word: "fixture",
+      says: "literal fixture lane — no host contacted",
+      checked: null,
+    };
   // A FAILED read is a sounding too, and it carries the same date — `dataUpdatedAt` is 0 while
   // the host is down, which would have left the unreachable lamp with no "as of".
   const at = Math.max(info.dataUpdatedAt, info.errorUpdatedAt);
@@ -136,6 +149,13 @@ function useHostLamp(): Lamp {
       says: "the host answers, but it reports no Revit capability — nothing is attached",
       checked,
     };
+  if (!info.data.bridgeIsConnected)
+    return {
+      tone: "ink",
+      word: "disconnected",
+      says: "the host supports Revit, but no Revit bridge is attached",
+      checked,
+    };
   return {
     tone: "done",
     word: "connected",
@@ -144,8 +164,8 @@ function useHostLamp(): Lamp {
   };
 }
 
-export function InstrumentCluster() {
-  const lamp = useHostLamp();
+export function InstrumentCluster({ live = true }: { live?: boolean }) {
+  const lamp = useHostLamp(live);
   return (
     <ArtifactFrame>
       <span className="flex items-center gap-1.5 px-1">
@@ -158,7 +178,7 @@ export function InstrumentCluster() {
             </span>
           </span>
         </FactChip>
-        <UpdateButton />
+        <UpdateButton enabled={live} />
         <ThemeToggle />
       </span>
     </ArtifactFrame>

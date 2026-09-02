@@ -1,6 +1,5 @@
 import { address, addressSchema } from "@pe/agent-contracts";
-import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "#/components/lang/empty";
@@ -15,9 +14,8 @@ import { usePeInfo } from "#/host/info";
 import { TakeoffsPage } from "#/takeoff/route-workspace";
 import { useFleet } from "#/host/fleet";
 import { documentTrunk, openLocalDocuments } from "#/targeting/world";
-import { DocGroup, DocRow, extOf } from "#/chat/doc-picker";
+import { InstancesCluster } from "#/instances/cluster";
 import { RouteHead } from "#/targeting/head";
-import { routeDocumentTabHref } from "#/workbench/route-document";
 import { HOST_QUERY_KEY, useHostOp } from "#/host/queries";
 
 export const PANES = [
@@ -138,7 +136,7 @@ export function LiveTakeoffsDocumentRoute({ target = "" }: { target?: string }) 
       sessions={fleet.sessions}
       choices={choices}
       onActivate={activate}
-      empty={(sessions) => <TakeoffsDocumentOpen sessions={sessions} target={target} />}
+      empty={() => <TakeoffsClusterFallback target={target} />}
     >
       {(at) => (
         <TakeoffsStoreOwner
@@ -155,102 +153,32 @@ export function LiveTakeoffsDocumentRoute({ target = "" }: { target?: string }) 
 export const liveTakeoffsStoreKey = (sessionId: string, documentAddress: string) =>
   `live:${sessionId}:${documentAddress}`;
 
-export function TakeoffsDocumentOpen({
-  sessions,
-  target = "",
-}: {
-  sessions: readonly SessionFacts[];
-  target?: string;
-}) {
+/**
+ * No document bound: the portable `InstancesCluster` IS the fallback (kaitpw 2026-09-01), and it
+ * opens documents exactly as the Revit UI would — no clone/detach policy (kaitpw ruling
+ * 2026-09-01, after the working-copy clone policy stranded `ProjectA1` documentless and refused a
+ * cloud model; explicit safe-copy/--detach verbs are owed in the takeoffs ledger). Once a
+ * document is active, `RouteDocument` binds it and the takeoff store owns working-copy concerns.
+ */
+function TakeoffsClusterFallback({ target = "" }: { target?: string }) {
+  const fleet = useFleet({ all: true });
   const router = useRouter();
   const href = useLocation({ select: (location) => location.href });
-  const resolved = resolveTarget(sessions, target);
-  const [sessionId, setSessionId] = useState(
-    resolved.kind === "resolved" ? resolved.session.sessionId : "",
-  );
-  const [opening, setOpening] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const session =
-    sessions.find((candidate) => candidate.sessionId === sessionId) ??
-    (resolved.kind === "resolved" ? resolved.session : sessions[0]);
-  const recents = useQuery({
-    queryKey: ["takeoffs", "document-recents", session?.year],
-    queryFn: () => documentTrunk.recents(session?.year),
-    enabled: session !== undefined,
-  });
-
-  const open = async (recent: RecentDocument) => {
-    if (!session) return;
-    if (recent.isCloud) return setFailure("cloud Takeoffs working copies are not supported yet");
-    const destination = takeoffsWorkingCopyPath(recent.path);
-    const at = addressSchema.safeParse(destination);
-    if (!at.success) return setFailure(`cannot address ${recent.title}`);
-    setOpening(destination);
-    setFailure(null);
-    try {
-      if (destination === recent.path)
-        await documentTrunk.pick(session, recent.path, recents.data ?? []);
-      else await documentTrunk.clone(session, recent.path, destination);
-      await router.navigate({ href: routeDocumentTabHref(href, at.data) });
-    } catch (error) {
-      setFailure(error instanceof Error ? error.message : "document open failed");
-    } finally {
-      setOpening(null);
-    }
+  const setTarget = (next: string) => {
+    const url = new URL(href, "http://takeoffs.local");
+    if (next) url.searchParams.set("target", next);
+    else url.searchParams.delete("target");
+    void router.navigate({ href: url.pathname + url.search, replace: true });
   };
-
   return (
     <main className="min-h-screen px-6 py-4">
       <RouteHead name="Takeoffs" />
-      {sessions.length === 0 ? (
-        <div className="grid min-h-[70vh] place-items-center">
-          <EmptyState story="scope" exit="start Revit from Instances, then return here">
-            no world available
-          </EmptyState>
-        </div>
-      ) : (
-        <section className="mx-auto mt-16 grid max-w-2xl gap-3">
-          <DocGroup label="OPEN A REVIT DOCUMENT" aside={`${recents.data?.length ?? 0} recent`} />
-          {sessions.length > 1 ? (
-            <select
-              aria-label="Revit world"
-              value={session?.sessionId}
-              onChange={(event) => setSessionId(event.target.value)}
-              className="px-2 py-1"
-            >
-              {sessions.map((candidate) => (
-                <option key={candidate.sessionId} value={candidate.sessionId}>
-                  {candidate.sdkSessionId ?? `pid ${candidate.processId}`}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          {recents.isPending ? <p>loading recent documents…</p> : null}
-          {recents.error ? <p role="alert">{recents.error.message}</p> : null}
-          {failure ? <p role="alert">{failure}</p> : null}
-          {recents.data?.map((recent) => {
-            const id = recent.modelGuid ?? recent.path;
-            const destination = recent.isCloud ? id : takeoffsWorkingCopyPath(recent.path);
-            return (
-              <DocRow
-                key={id}
-                ext={extOf(recent.path ?? recent.title)}
-                label={recent.title}
-                sub={
-                  recent.isCloud
-                    ? "cloud working copies are not supported yet"
-                    : destination === recent.path
-                      ? recent.path
-                      : `safe copy · ${destination}`
-                }
-                disabled={opening !== null || !session?.sdkSessionId || recent.isCloud}
-                selected={opening === destination}
-                onPick={() => void open(recent)}
-              />
-            );
-          })}
-        </section>
-      )}
+      <p className="t-caption face-mono mt-1 text-ink-2">
+        no document bound — pick a session and stage a document below
+      </p>
+      <div className="mx-auto mt-5 max-w-6xl">
+        <InstancesCluster fleet={fleet} target={target} setTarget={setTarget} />
+      </div>
     </main>
   );
 }

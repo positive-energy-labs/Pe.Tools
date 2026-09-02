@@ -177,10 +177,6 @@ test(
 
       expect(() => sessionA.thread.set({ threadId: "B" })).toThrow("immutable");
       expect(sessionA.thread.getId()).toBe("A");
-      expect(() => sessionA.thread.clear()).toThrow("immutable");
-      expect(sessionA.thread.getId()).toBe("A");
-      await expect(sessionA.thread.clearAndReleaseLock()).rejects.toThrow("immutable");
-      expect(sessionA.thread.getId()).toBe("A");
       await expect(sessionA.thread.switch({ threadId: "B" })).rejects.toThrow("immutable");
       await expect(sessionA.thread.create()).rejects.toThrow("immutable");
       await expect(sessionA.thread.clone()).rejects.toThrow("immutable");
@@ -196,6 +192,35 @@ test(
       ).rejects.toThrow("immutable");
       expect(sessionA.identity.getResourceId()).toBe(resourceId);
       expect(await runtime.controller.createSession({ resourceId, scope: "A" })).toBe(sessionA);
+
+      const cloned = await app.fetch(
+        new Request(
+          `http://local/api/agent-controller/pea/sessions/${encodeURIComponent(resourceId)}/threads/clone?sessionScope=A`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ sourceThreadId: "A" }),
+          },
+        ),
+      );
+      expect(cloned.status).toBe(200);
+      const clone = (await cloned.json()) as { id: string };
+      expect(clone.id).not.toBe("A");
+      expect(sessionA.thread.getId()).toBe("A");
+      expect((await runtime.controller.queryThreadById({ threadId: clone.id }))?.resourceId).toBe(
+        resourceId,
+      );
+
+      const deleted = await app.fetch(
+        new Request(
+          `http://local/api/agent-controller/pea/sessions/${encodeURIComponent(resourceId)}/threads/A?sessionScope=A`,
+          { method: "DELETE" },
+        ),
+      );
+      expect(deleted.status).toBe(200);
+      expect(await deleted.json()).toEqual({ ok: true });
+      expect(await runtime.controller.queryThreadById({ threadId: "A" })).toBeNull();
+      expect(await runtime.controller.getSessionByResource(resourceId, "A")).toBeUndefined();
 
       await sessionB.state.set({ yolo: true });
       await expect(sessionB.sendMessage({ content: "must not run" })).rejects.toThrow(

@@ -197,14 +197,9 @@ export function Composer({
         </div>
       ) : null}
 
-      {/* The composer carries state, but it belongs to the transcript rather than floating as a
-          second card. One top rule and the artifact ground separate input from history. */}
-      <div
-        className={cn(
-          chatStyles.composer4(),
-          "overflow-visible rounded-none border-x-0 border-b-0",
-        )}
-      >
+      {/* The composer is a box on the artifact ground — a closed edge all the way around, so the
+          input reads as a place you write rather than a strip the transcript ran into. */}
+      <div className={chatStyles.composer4()}>
         {topBar}
 
         {attachments.length > 0 ? (

@@ -58,7 +58,7 @@ export function ChatRouteContent({
   if (source === "fixture")
     return (
       <FixtureWorkbenchProvider>
-        <ChatShell initialTurn={turn} plugin={plugin} />
+        <ChatShell initialTurn={turn} plugin={plugin} live={false} />
       </FixtureWorkbenchProvider>
     );
   return (

@@ -68,7 +68,11 @@ describe("takeoffs document scope", () => {
     ]);
     expect(
       routeDocumentScope(
-        open.map(({ id, label, active: isActive }) => ({ at: address(id), label, active: isActive })),
+        open.map(({ id, label, active: isActive }) => ({
+          at: address(id),
+          label,
+          active: isActive,
+        })),
         address("C:\\Models\\Other.rvt"),
       ),
     ).toMatchObject({ kind: "activate" });

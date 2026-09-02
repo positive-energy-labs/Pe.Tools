@@ -1,5 +1,23 @@
+diff --git a/dist/agent-controller/agent-controller.d.ts b/dist/agent-controller/agent-controller.d.ts
+index dbffa46296d9acf356c6c307bb2de2537fb5d42d..ca0f7d1aa2a3820e807e615fa66f855a2049b0bd 100644
+--- a/dist/agent-controller/agent-controller.d.ts
++++ b/dist/agent-controller/agent-controller.d.ts
+@@ -247,6 +247,13 @@ export declare class AgentController<TState = {}> {
+     private deleteThreadRow;
+     /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
+     private cloneThreadRow;
++    /** Clone a thread without changing the session that supplies its memory context. */
++    cloneThread({ session, sourceThreadId, resourceId, title }: {
++        session: Session<TState>;
++        sourceThreadId: string;
++        resourceId: string;
++        title?: string;
++    }): Promise<AgentControllerThread>;
+     private readThreadMetadataValue;
+     private writeThreadMetadataValue;
+     private removeThreadMetadataValue;
 diff --git a/dist/agent-controller/session.d.ts b/dist/agent-controller/session.d.ts
-index c05ae9f..668aa66 100644
+index c05ae9f4987f57d3d14b5c54f5e7a7a541f6ac64..50e042efde5151a2593b8742a954a7d7403b3e7a 100644
 --- a/dist/agent-controller/session.d.ts
 +++ b/dist/agent-controller/session.d.ts
 @@ -327,8 +327,9 @@ export declare class SessionThread {
@@ -23,7 +41,7 @@ index c05ae9f..668aa66 100644
       * Clear the modified-files tally without touching the rest of the snapshot.
       * Used after a clone, which starts the cloned thread with a clean working set
 diff --git a/dist/agent-controller-DnS5KSfl.cjs b/dist/agent-controller-DnS5KSfl.cjs
-index bb70f63..a2947b1 100644
+index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..3f91cec3bcf79f2dcb06234adfa418bf4cec07d9 100644
 --- a/dist/agent-controller-DnS5KSfl.cjs
 +++ b/dist/agent-controller-DnS5KSfl.cjs
 @@ -1577,13 +1577,12 @@ var SessionThread = class {
@@ -89,8 +107,21 @@ index bb70f63..a2947b1 100644
  	}
  	/**
  	* Build the agent message input for a user turn, attaching any files as
+@@ -5278,6 +5288,12 @@ var AgentController = class {
+ 			metadata: result.thread.metadata
+ 		};
+ 	}
++	/** Clone a thread without changing the session that supplies its memory context. */
++	async cloneThread({ session, sourceThreadId, resourceId, title }) {
++		const source = await this.queryThreadById({ threadId: sourceThreadId });
++		if (!source || source.resourceId !== resourceId) throw new Error(`Thread not found: ${sourceThreadId}`);
++		return this.cloneThreadRow({ session, sourceThreadId, resourceId, title });
++	}
+ 	async readThreadMetadataValue({ threadId, key }) {
+ 		if (!this.#resolveStorage()) return void 0;
+ 		try {
 diff --git a/dist/agent-controller-sWTmXOK3.js b/dist/agent-controller-sWTmXOK3.js
-index c3ffac6..04e073d 100644
+index c3ffac6c49257d0bc21dafa0a93a30307a36f213..a4b410f40d6cdde7ab056fa5a63fb5cfb9872627 100644
 --- a/dist/agent-controller-sWTmXOK3.js
 +++ b/dist/agent-controller-sWTmXOK3.js
 @@ -1577,13 +1577,12 @@ var SessionThread = class {
@@ -156,3 +187,16 @@ index c3ffac6..04e073d 100644
  	}
  	/**
  	* Build the agent message input for a user turn, attaching any files as
+@@ -5278,6 +5288,12 @@ var AgentController = class {
+ 			metadata: result.thread.metadata
+ 		};
+ 	}
++	/** Clone a thread without changing the session that supplies its memory context. */
++	async cloneThread({ session, sourceThreadId, resourceId, title }) {
++		const source = await this.queryThreadById({ threadId: sourceThreadId });
++		if (!source || source.resourceId !== resourceId) throw new Error(`Thread not found: ${sourceThreadId}`);
++		return this.cloneThreadRow({ session, sourceThreadId, resourceId, title });
++	}
+ 	async readThreadMetadataValue({ threadId, key }) {
+ 		if (!this.#resolveStorage()) return void 0;
+ 		try {

@@ -4,8 +4,7 @@ import {
   type MastraDBMessage,
   type PlanResume,
 } from "@mastra/client-js";
-import { peUrl, type WorkbenchEndpointConfig } from "../config";
-import { readRecord, readString, shortId, type ChatState, type PeInspect } from "../chat-state";
+import { readRecord, readString, shortId, type ChatState } from "../chat-state";
 import { type WorkbenchAttachment } from "../store";
 import type {
   MessageFile,
@@ -43,16 +42,6 @@ export async function forkSessionThread(
 ) {
   const clone = await session.cloneThread({ sourceThreadId: currentThreadId });
   await gotoThread(clone.id);
-}
-
-export async function deleteSessionThread(
-  session: Pick<SessionClient, "deleteThread">,
-  currentThreadId: string,
-  threadId: string,
-  gotoThread: (threadId: string) => Promise<void>,
-) {
-  if (threadId === currentThreadId) await gotoThread(crypto.randomUUID());
-  await session.deleteThread(threadId);
 }
 
 export function resumeDataForSuspension(
@@ -154,14 +143,6 @@ export function toSummaries(threads: AgentControllerThreadInfo[]): StoredThreadS
       updatedAt: thread.updatedAt ?? new Date(0).toISOString(),
     }))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-}
-
-export async function fetchPeInspect(config: WorkbenchEndpointConfig): Promise<PeInspect> {
-  const response = await fetch(peUrl(config, "/inspect"), {
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) return {};
-  return (await response.json().catch(() => ({}))) as PeInspect;
 }
 
 export function readArray(value: unknown): unknown[] | undefined {

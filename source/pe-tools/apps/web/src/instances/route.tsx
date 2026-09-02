@@ -1,8 +1,6 @@
 import type { Verdict } from "#/components/master-table/model";
 import { type WorldFacts, useFleet } from "#/host/fleet";
-import { type WorldStart } from "#/targeting/world";
 import { InstancesWorkspace } from "#/instances/workspace";
-import { Input } from "#/components/lang/input";
 import { OutcomeLine } from "#/components/lang/outcome";
 
 export const YEARS = ["24", "25", "26"];
@@ -49,59 +47,6 @@ export function custodyVerdict(world: WorldFacts): Verdict {
         tone: "mute",
         note: "pe-revit holds no receipt: status and document reads only.",
       };
-}
-
-export function StartFields({
-  year,
-  lane,
-  doc,
-  disabled,
-  setYear,
-  setLane,
-  setDoc,
-}: {
-  year: string;
-  lane: WorldStart["lane"];
-  doc: string;
-  disabled: boolean;
-  setYear: (year: string) => void;
-  setLane: (lane: WorldStart["lane"]) => void;
-  setDoc: (doc: string) => void;
-}) {
-  return (
-    <span className="flex items-center gap-2 [&>input]:w-44">
-      <select
-        aria-label="Revit year"
-        value={year}
-        onChange={(event) => setYear(event.target.value)}
-        disabled={disabled}
-        className="px-1 py-0.5"
-      >
-        {YEARS.map((value) => (
-          <option key={value} value={value}>
-            20{value}
-          </option>
-        ))}
-      </select>
-      <select
-        aria-label="payload lane"
-        value={lane}
-        onChange={(event) => setLane(event.target.value as WorldStart["lane"])}
-        disabled={disabled}
-        className="px-1 py-0.5"
-      >
-        <option value="installed">installed</option>
-        <option value="dev">dev</option>
-      </select>
-      <Input
-        aria-label="document"
-        value={doc}
-        onChange={(event) => setDoc(event.target.value)}
-        disabled={disabled}
-        placeholder="document (optional)"
-      />
-    </span>
-  );
 }
 
 export function InstancesPage({

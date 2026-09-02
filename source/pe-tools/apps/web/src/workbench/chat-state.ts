@@ -5,6 +5,9 @@ import type {
   MastraMessagePart,
   PermissionRules,
 } from "@mastra/client-js";
+import type { PeInspect } from "#/host/inspect";
+
+export type { PeInspect } from "#/host/inspect";
 
 export type ChatDisplay = Omit<
   Partial<Extract<KnownAgentControllerEvent, { type: "display_state_changed" }>["displayState"]>,
@@ -23,15 +26,6 @@ export interface OmProgress {
   };
 }
 
-export interface PeInspect {
-  systemPrompt?: { content?: string; source?: string; updatedAt?: string };
-  toolList?: { tools?: unknown[] };
-  skills?: unknown[];
-  observationalMemory?: Record<string, unknown>;
-  contextWindow?: number;
-  agents?: unknown[];
-}
-
 export type AccessLevel = "read-only" | "ask" | "trusted";
 
 export interface ChatState {
@@ -40,15 +34,6 @@ export interface ChatState {
   inspect: PeInspect;
   models: { currentId?: string; available: AgentControllerAvailableModel[] };
   access: AccessLevel;
-  /**
-   * Raw AgentController session-state map — route slices live under `route:*` keys.
-   * ponytail: shim, and currently a shim with no reader. `session.state()` returns
-   * thread/mode/model/tasks and NOT this map, so `state_changed` is the only read that exists —
-   * but the route panes take their slice from the route-store kit instead
-   * (`route-chat-plugins.tsx` overrides the `sessionState` prop with `route.slice`). Kept per the
-   * wave ruling; delete it with the `state_changed` arm once that stays true.
-   */
-  sessionValues: Record<string, unknown>;
   errors: string[];
 }
 
@@ -59,7 +44,6 @@ export function emptyChatState(): ChatState {
     inspect: {},
     models: { available: [] },
     access: "ask",
-    sessionValues: {},
     errors: [],
   };
 }
@@ -96,8 +80,6 @@ export function applyEvent(state: ChatState, event: KnownAgentControllerEvent): 
     case "message_update":
     case "message_end":
       return { ...state, messages: upsertMessage(state.messages, event.message) };
-    case "state_changed":
-      return { ...state, sessionValues: event.state };
     case "model_changed":
       return { ...state, models: { ...state.models, currentId: event.modelId } };
     case "error":
@@ -152,24 +134,41 @@ export interface ToolCall {
 export function selectToolCalls(state: ChatState): ToolCall[] {
   const calls: ToolCall[] = [];
   const seen = new Set<string>();
-  for (const message of state.messages) {
+  for (const [messageAt, message] of state.messages.entries()) {
     for (const part of message.content.parts) {
       if (part.type !== "tool-invocation") continue;
       const call = part.toolInvocation;
+      const active = state.display.activeTools?.[call.toolCallId];
       const terminal =
         call.state === "result" || call.state === "output-error" || call.state === "output-denied";
-      const failed = call.isError === true || (terminal && call.state !== "result");
+      const interrupted =
+        !terminal &&
+        !active &&
+        (messageAt < state.messages.length - 1 || state.display.isRunning !== true);
+      const failed =
+        call.isError === true ||
+        (terminal && call.state !== "result") ||
+        active?.status === "error" ||
+        interrupted;
+      const completed = terminal || active?.status === "completed";
       const args = call.rawInput ?? call.args;
       seen.add(call.toolCallId);
       calls.push({
         id: call.toolCallId,
         title: call.toolName,
-        status: terminal ? (failed ? "failed" : "completed") : "in_progress",
+        status: failed ? "failed" : completed ? "completed" : "in_progress",
         args,
         target: toolTarget(args),
         parentMessageId: message.id,
-        ...(terminal ? { result: call.result } : {}),
-        ...(failed ? { error: call.errorText ?? stringify(call.result) } : {}),
+        ...(completed ? { result: call.result ?? active?.result } : {}),
+        ...(failed
+          ? {
+              error:
+                call.errorText ||
+                stringify(call.result ?? active?.result) ||
+                "Tool call ended without a terminal result.",
+            }
+          : {}),
       });
     }
   }

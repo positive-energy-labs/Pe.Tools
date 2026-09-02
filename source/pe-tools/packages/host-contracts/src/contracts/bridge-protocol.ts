@@ -9,6 +9,9 @@ export const HOST_CONTRACT_VERSION = 37 as const;
 export const BRIDGE_CONTRACT_VERSION = 20 as const;
 export const BRIDGE_PATH = "/api/bridge" as const;
 export const HOST_RPC_BRIDGE_SESSION_HEADER = "x-pe-bridge-session-id" as const;
+// Caller attribution (queue-provenance §1): `<lane>:<name>[#<id>]`, e.g. `web:/schedule-grid`,
+// `pea:chat#<threadId>`, `script:<runSlug>`. Lenient by design — missing reads as "unknown".
+export const HOST_RPC_ORIGIN_HEADER = "x-pe-origin" as const;
 
 const nullableString = Schema.optional(Schema.NullOr(Schema.String));
 

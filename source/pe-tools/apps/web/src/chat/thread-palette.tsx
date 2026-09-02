@@ -15,10 +15,9 @@ import { Press } from "#/components/lang/press";
 /** Status dot shared by the sidebar list + palette. */
 function ThreadDot({ active }: { active: boolean }) {
   return (
-    <span
-      aria-hidden
-      className={active ? chatStyles.threadDotActive() : chatStyles.threadDotQuiet()}
-    />
+    <span aria-hidden className={chatStyles.threadDotBox()}>
+      <span className={active ? chatStyles.threadDotActive() : chatStyles.threadDotQuiet()} />
+    </span>
   );
 }
 
@@ -43,7 +42,7 @@ function ThreadActions({
           event.stopPropagation();
           const title = window.prompt("Rename thread", thread.title)?.trim();
           if (title !== undefined && title !== "" && title !== thread.title)
-            void onRename(thread.id, title);
+            onRename(thread.id, title);
         }}
       >
         <Pencil className={chatStyles.threadActionIcon()} />
@@ -56,7 +55,7 @@ function ThreadActions({
         state="rest"
         onClick={(event) => {
           event.stopPropagation();
-          void onDelete(thread.id);
+          onDelete(thread.id);
         }}
       >
         <X className={chatStyles.threadActionIcon()} />

@@ -1,6 +1,8 @@
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { Cause } from "effect";
 import type {
+  DocCloseState,
+  DocCurrentResult,
   DocOperationResult,
   DocRecentsResult,
   Envelope,
@@ -16,6 +18,7 @@ import type {
   SessionStopResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { HostOpResponse } from "@pe/host-contracts/operation-types";
+import type { SessionActionRequest } from "@pe/host-contracts/contracts";
 import { addressSchema } from "@pe/agent-contracts";
 
 import type { WorldFacts } from "#/host/fleet";
@@ -23,13 +26,30 @@ import { mintSelector, type SessionFacts } from "#/host/target";
 import { feed, type Feed, type Lane, type TimedRead } from "#/state/route-store";
 import type { Bound, Feeds, Link, Option, Verb } from "#/targeting/model";
 
-type SdkEnvelope<T> = Omit<Partial<Envelope<T>>, "result"> & {
-  readonly result?: Partial<T>;
-  readonly error?: string;
+/**
+ * The host relays exactly two body shapes: the CLI's `Envelope<T>` verbatim (200, success AND
+ * failed verdicts), or its own non-envelope error (`{ ok: false, error }` on 4xx/5xx/504). Parse
+ * them as those two honest shapes and fail fast — no Partial-optional smearing across both.
+ */
+type HostRelayError = {
+  readonly ok: false;
+  readonly error: string;
+  readonly nextSteps?: readonly string[];
 };
 
-const sdkError = (body: SdkEnvelope<unknown>, fallback: string) =>
-  body.diagnostics?.[0]?.detail ?? body.error ?? fallback;
+const isRelayError = (body: unknown): body is HostRelayError =>
+  typeof body === "object" && body !== null && typeof (body as HostRelayError).error === "string";
+
+const envelopeError = (envelope: Envelope<unknown>, fallback: string) =>
+  envelope.diagnostics?.[0]?.detail ?? fallback;
+
+function parseEnvelope<T>(body: unknown, fallback: string): Envelope<T> {
+  if (isRelayError(body)) throw Error(body.error);
+  const envelope = body as Envelope<T> | null;
+  if (!envelope || envelope.result == null)
+    throw Error(envelope ? envelopeError(envelope, fallback) : fallback);
+  return envelope;
+}
 
 interface FleetFeed {
   readonly worlds: readonly WorldFacts[];
@@ -47,6 +67,10 @@ export interface WorldStart {
   readonly lane: "installed" | "dev";
   readonly year: string;
   readonly doc?: string;
+  /** Required by the CLI when `doc` is a cloud target: the explicit cloud conflict answer. */
+  readonly conflictPolicy?: "keep" | "discard-latest";
+  /** Caller-chosen session id (`session start --id`) — the session's NAME and provenance. */
+  readonly id?: string;
 }
 
 type WorldLifecycleResults = {
@@ -91,22 +115,23 @@ async function runLifecycle<Action extends WorldLifecycleAction>(
   const denied = lifecycleRefusal(action, world);
   if (denied) throw Error(denied);
   if (action === "start" && !start) throw Error("start needs lane and year");
+  const request: SessionActionRequest =
+    action === "start"
+      ? { action, ...start! }
+      : {
+          action,
+          id: world!.id,
+          ...(action === "stop" && world!.phase === "unresponsive" ? { force: true } : {}),
+        };
   const response = await fetch("/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(
-      action === "start"
-        ? { action, ...start }
-        : {
-            action,
-            id: world!.id,
-            ...(action === "stop" && world!.phase === "unresponsive" ? { force: true } : {}),
-          },
-    ),
+    body: JSON.stringify(request),
   });
-  const body = (await response.json()) as SdkEnvelope<WorldLifecycleResults[Action]>;
-  if (!body.result)
-    throw Error(sdkError(body, `${action} failed (${response.status})`));
+  const body = parseEnvelope<WorldLifecycleResults[Action]>(
+    await response.json(),
+    `${action} failed (${response.status})`,
+  );
   return { action, ...body } as Extract<WorldLifecycleReceipt, { readonly action: Action }>;
 }
 
@@ -201,7 +226,10 @@ export const worldTrunk = {
       return { options: null, state: "loading", lane: "live", stale: false };
     return {
       options: source.worlds
-        .filter((world) => world.session || world.row)
+        .filter(
+          (world) =>
+            world.phase !== "gone" && world.phase !== "failed" && (world.session || world.row),
+        )
         .map((world) => worldOption(world, source.sessions)),
       state: "ready",
       lane: "live",
@@ -217,9 +245,7 @@ type ActiveDocument = {
   readonly title: string;
 };
 
-export const openLocalDocuments = (
-  session: HostOpResponse<"revit.context.document-session">,
-) =>
+export const openLocalDocuments = (session: HostOpResponse<"revit.context.document-session">) =>
   session.openDocuments.flatMap((document) => {
     const path = !document.isModelInCloud && addressSchema.safeParse(document.path);
     return path && path.success
@@ -242,7 +268,7 @@ async function openSdkDocument(
   session: SessionFacts,
   path: string,
   conflictPolicy?: "keep",
-): Promise<Partial<DocOperationResult>> {
+): Promise<DocOperationResult> {
   if (!session.sdkSessionId) throw Error("open the document in Revit; this session is observed");
   const response = await fetch("/docs/open", {
     method: "POST",
@@ -253,9 +279,12 @@ async function openSdkDocument(
       ...(conflictPolicy ? { conflictPolicy } : {}),
     }),
   });
-  const body = (await response.json()) as SdkEnvelope<DocOperationResult>;
-  if (!response.ok || body.result?.state !== "ok")
-    throw Error(sdkError(body, `document open failed (${response.status})`));
+  const body = parseEnvelope<DocOperationResult>(
+    await response.json(),
+    `document open failed (${response.status})`,
+  );
+  if (body.result.state !== "ok")
+    throw Error(envelopeError(body, `document open failed (${response.status})`));
   return body.result;
 }
 
@@ -266,23 +295,64 @@ async function cloneSdkDocument(session: SessionFacts, source: string, out: stri
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ source, out, id: session.sdkSessionId }),
   });
-  const body = (await response.json()) as SdkEnvelope<DocOperationResult>;
-  if (response.ok && body.result?.state === "ok") return body.result;
-  if (body.diagnostics?.some((diagnostic) => diagnostic.code === "doc.output-exists")) {
+  const body = parseEnvelope<DocOperationResult>(
+    await response.json(),
+    `document clone failed (${response.status})`,
+  );
+  if (body.result.state === "ok") return body.result;
+  if (body.diagnostics.some((diagnostic) => diagnostic.code === "doc.output-exists")) {
     await openSdkDocument(session, out);
     return;
   }
-  throw Error(sdkError(body, `document clone failed (${response.status})`));
+  throw Error(envelopeError(body, `document clone failed (${response.status})`));
 }
+
+/**
+ * The SDK's `--doc` grammar for one MRU row: the local path, or the exact `cld://` identity when
+ * Revit.ini carries it. Never a bare or `recent:` title when identity exists — substring matching
+ * refused `…ProjectA_R25` because the title prefixes its detached/staging clones (field,
+ * 2026-09-01).
+ */
+export const docSelectorOf = (recent: RecentDocument): string =>
+  !recent.isCloud
+    ? recent.path
+    : recent.region && recent.projectGuid && recent.modelGuid
+      ? `cld://${recent.region}/{${recent.projectGuid}}p/{${recent.modelGuid}}${encodeURIComponent(recent.title)}.rvt`
+      : `recent:${recent.title}`;
 
 export const documentTrunk = {
   link: documentLink,
   async recents(year?: string): Promise<readonly RecentDocument[]> {
     const response = await fetch(`/docs/recents${year ? `?year=${encodeURIComponent(year)}` : ""}`);
-    const body = (await response.json()) as SdkEnvelope<DocRecentsResult>;
-    if (!response.ok || !body.result)
-      throw Error(sdkError(body, `document recents failed (${response.status})`));
+    const body = parseEnvelope<DocRecentsResult>(
+      await response.json(),
+      `document recents failed (${response.status})`,
+    );
     return body.result.recents ?? [];
+  },
+  async current(session: SessionFacts): Promise<DocCurrentResult> {
+    if (!session.sdkSessionId) throw Error("read the document in Revit; this session is observed");
+    const response = await fetch(`/docs/current?id=${encodeURIComponent(session.sdkSessionId)}`);
+    const body = parseEnvelope<DocCurrentResult>(
+      await response.json(),
+      `document current failed (${response.status})`,
+    );
+    return body.result;
+  },
+  async close(session: SessionFacts, doc: string, intent: string): Promise<string> {
+    if (!session.sdkSessionId) throw Error("close the document in Revit; this session is observed");
+    const response = await fetch("/docs/close", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: session.sdkSessionId, doc, intent }),
+    });
+    const body = parseEnvelope<{ readonly state: DocCloseState }>(
+      await response.json(),
+      `document close failed (${response.status})`,
+    );
+    if (body.result.state !== "ok")
+      throw Error(envelopeError(body, `document close failed (${response.status})`));
+    return `closed ${doc}`;
   },
   feed(
     active: AsyncResult.AsyncResult<TimedRead<ActiveDocument | null>, Error>,
@@ -301,9 +371,7 @@ export const documentTrunk = {
     return feed(
       active,
       (current) => {
-        const options: Option[] = current
-          ? [{ id: current.documentId, label: current.title }]
-          : [];
+        const options: Option[] = current ? [{ id: current.documentId, label: current.title }] : [];
         const seen = new Set(options.map((option) => option.id));
         for (const option of open) {
           if (!seen.has(option.id)) options.push(option);
@@ -328,11 +396,7 @@ export const documentTrunk = {
   ): Promise<string> {
     const recent = recents.find((item) => (item.modelGuid ?? item.path) === documentId);
     if (!recent) throw Error(`unknown recent document ${documentId}`);
-    await openSdkDocument(
-      session,
-      recent.isCloud ? `recent:${recent.title}` : recent.path,
-      recent.isCloud ? "keep" : undefined,
-    );
+    await openSdkDocument(session, docSelectorOf(recent), recent.isCloud ? "keep" : undefined);
     return `opened ${recent.title}`;
   },
   async activate(session: SessionFacts, path: string): Promise<string> {

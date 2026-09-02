@@ -44,17 +44,6 @@ test("the optimistic user echo is replaced in place by the server's canonical tu
   expect(state.messages.map((message) => message.id)).toEqual(["server-1"]);
 });
 
-test("state_changed carries the route:* map the route panes read", () => {
-  const state = reduce([
-    {
-      type: "state_changed",
-      state: { "route:family": { revision: 2 } },
-      changedKeys: ["route:family"],
-    },
-  ] as KnownAgentControllerEvent[]);
-  expect(state.sessionValues).toEqual({ "route:family": { revision: 2 } });
-});
-
 test("an error event's detail survives; a silent bad end falls back to Run failed.", () => {
   const detailed = reduce([
     { type: "error", error: { message: "bridge refused" } },
@@ -136,4 +125,39 @@ test("a settled tool-invocation part wins over the live activeTools entry", () =
       result: "hit",
     },
   ]);
+});
+
+test("an orphaned stored tool call is interrupted, not still in progress", () => {
+  const state: ChatState = {
+    ...emptyChatState(),
+    messages: [
+      {
+        id: "a1",
+        role: "assistant",
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: "tool-invocation",
+              toolInvocation: {
+                state: "call",
+                step: 0,
+                toolCallId: "t1",
+                toolName: "grep",
+                args: {},
+              },
+            },
+          ],
+        },
+      } as unknown as MastraDBMessage,
+      userMessage("u2", "next turn"),
+    ],
+  };
+
+  expect(selectToolCalls(state)[0]).toMatchObject({
+    id: "t1",
+    status: "failed",
+    error: "Tool call ended without a terminal result.",
+  });
 });

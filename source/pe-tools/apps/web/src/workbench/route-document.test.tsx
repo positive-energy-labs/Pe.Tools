@@ -93,7 +93,10 @@ describe("route document choice", () => {
       active: false,
     };
 
-    expect(routeDocumentScope([inactive], inactive.at)).toEqual({ kind: "activate", choice: inactive });
+    expect(routeDocumentScope([inactive], inactive.at)).toEqual({
+      kind: "activate",
+      choice: inactive,
+    });
     expect(routeDocumentScope([inactive], address("C:\\Models\\Other.rvt"))).toEqual({
       kind: "acquire",
     });

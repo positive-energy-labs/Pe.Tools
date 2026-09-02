@@ -20,22 +20,20 @@ import {
   type PeInspect,
 } from "../chat-state";
 import { usePeInfo } from "#/host/info";
+import { fetchPeInspect } from "#/host/inspect";
 import { appAtomRegistry } from "#/state/registry";
 import { useRouteStore } from "#/state/use-route-store";
 import { createChatPageStore, type WorkbenchAttachment } from "../store";
 import type { StoredThreadSummary, WorkbenchContextValue } from "./thread-summary";
 import { MESSAGE_LIMIT, WorkbenchContext } from "./thread-summary";
 import {
-  deleteSessionThread,
   errorMessage,
-  fetchPeInspect,
   forkSessionThread,
   optimisticMessage,
   rejectApproval,
   resumeDataForSuspension,
   toFiles,
   toSummaries,
-  withoutGate,
 } from "./use-workbench";
 
 export function WorkbenchProvider({ children }: { children: ReactNode }) {
@@ -60,10 +58,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [chat, setChat] = useState<ChatState>(emptyChatState);
   const chatRef = useRef(chat);
   chatRef.current = chat;
+  const settlingApprovalsRef = useRef(new Set<string>());
   const [threads, setThreads] = useState<StoredThreadSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [mintedThreadId] = useState(() => crypto.randomUUID());
+  const connectionIdRef = useRef(0);
+  const connectionRef = useRef<{
+    id: number;
+    threadId: string;
+    promise: Promise<void>;
+    dispose: () => void;
+  } | null>(null);
 
   const api = useMemo(() => {
     if (!info || !currentThreadId) return undefined;
@@ -82,11 +88,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshThreads = useCallback(async () => {
-    if (!api) return;
+    if (!api) return undefined;
     try {
-      setThreads(toSummaries(await api.session.listThreads()));
+      const next = toSummaries(await api.session.listThreads());
+      setThreads(next);
+      return next;
     } catch (caught) {
       setError(errorMessage(caught));
+      return undefined;
     }
   }, [api]);
 
@@ -113,6 +122,64 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [api, config],
   );
 
+  const terminalError = useCallback((caught: unknown) => {
+    setError(errorMessage(caught));
+    setChat((previous) => applyEvent(previous, { type: "agent_end", reason: "error" }));
+  }, []);
+
+  const connect = useCallback(() => {
+    if (!api || !currentThreadId) return Promise.reject(new Error("thread is not ready"));
+    if (connectionRef.current?.threadId === currentThreadId) return connectionRef.current.promise;
+    connectionRef.current?.dispose();
+    let active = true;
+    let unsubscribe = () => {};
+    const dispose = () => {
+      active = false;
+      unsubscribe();
+    };
+    const id = ++connectionIdRef.current;
+    const pending = (async () => {
+      await api.session.create({ threadId: currentThreadId });
+      if (!active) return;
+      await Promise.all([refreshThreads(), hydrate(currentThreadId)]);
+      if (!active) return;
+      const subscription = await api.session.subscribe({
+        reconnect: true,
+        onReconnect: () => void hydrate(currentThreadId, { silent: true }),
+        onEvent: (event) => {
+          if (!isKnownAgentControllerEvent(event)) return;
+          setChat((previous) => applyEvent(previous, event));
+          if (event.type === "thread_created" || event.type === "thread_deleted") {
+            void refreshThreads();
+          }
+        },
+        onError: terminalError,
+      });
+      if (!active) subscription.unsubscribe();
+      else unsubscribe = subscription.unsubscribe;
+    })();
+    const connection = {
+      id,
+      threadId: currentThreadId,
+      promise: pending.catch((caught) => {
+        if (connectionRef.current?.id === id) connectionRef.current = null;
+        dispose();
+        throw caught;
+      }),
+      dispose,
+    };
+    connectionRef.current = connection;
+    return connection.promise;
+  }, [api, currentThreadId, hydrate, refreshThreads, terminalError]);
+
+  useEffect(() => {
+    return () => {
+      if (connectionRef.current?.threadId !== currentThreadId) return;
+      connectionRef.current.dispose();
+      connectionRef.current = null;
+    };
+  }, [currentThreadId]);
+
   useEffect(() => {
     if (!infoQuery.error) return;
     setLoading(false);
@@ -126,59 +193,42 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!api) return;
     let cancelled = false;
-    let unsubscribe = () => {};
-    const terminalError = (caught: unknown) => {
-      if (cancelled) return;
-      setError(errorMessage(caught));
-      setChat((previous) => applyEvent(previous, { type: "agent_end", reason: "error" }));
-    };
     void (async () => {
       try {
         setChat(emptyChatState());
         setLoading(true);
-        await api.session.create({ threadId: currentThreadId });
+        const available = await refreshThreads();
         if (cancelled) return;
-        await Promise.all([refreshThreads(), hydrate(currentThreadId)]);
-        if (cancelled) return;
-        const subscription = await api.session.subscribe({
-          reconnect: true,
-          onReconnect: () => void hydrate(currentThreadId, { silent: true }),
-          onEvent: (event) => {
-            if (!isKnownAgentControllerEvent(event)) return;
-            setChat((previous) => applyEvent(previous, event));
-            if (event.type === "thread_created" || event.type === "thread_deleted") {
-              void refreshThreads();
-            }
-          },
-          onError: terminalError,
-        });
-        if (cancelled) subscription.unsubscribe();
-        else unsubscribe = subscription.unsubscribe;
+        if (!available?.some((thread) => thread.id === currentThreadId)) {
+          setLoading(false);
+          return;
+        }
+        await connect();
       } catch (caught) {
-        terminalError(caught);
+        if (!cancelled) terminalError(caught);
       }
     })();
     return () => {
       cancelled = true;
-      unsubscribe();
     };
-  }, [api, currentThreadId, hydrate, refreshThreads]);
+  }, [api, connect, currentThreadId, refreshThreads, terminalError]);
 
   const sendPrompt = useCallback(
     async (text: string, attachments?: WorkbenchAttachment[]) => {
       const prompt = text.trim();
       if ((!prompt && !attachments?.length) || !api) return;
       const files = toFiles(attachments);
-      setChat((previous) => ({
-        ...applyEvent(previous, {
-          type: "message_start",
-          message: optimisticMessage(prompt, files),
-        }),
-        display: { ...previous.display, isRunning: true },
-        errors: [],
-      }));
-      setError(undefined);
       try {
+        await connect();
+        setChat((previous) => ({
+          ...applyEvent(previous, {
+            type: "message_start",
+            message: optimisticMessage(prompt, files),
+          }),
+          display: { ...previous.display, isRunning: true },
+          errors: [],
+        }));
+        setError(undefined);
         await api.session.sendMessage({ content: prompt, files });
       } catch (caught) {
         setError(errorMessage(caught));
@@ -188,7 +238,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         }));
       }
     },
-    [api],
+    [api, connect],
   );
 
   const cancel = useCallback(() => {
@@ -238,11 +288,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     async (threadId: string) => {
       if (!api) return;
       try {
-        await deleteSessionThread(api.session, currentThreadId, threadId, gotoThread);
+        await api.session.deleteThread(threadId);
+        setThreads((previous) => previous.filter((thread) => thread.id !== threadId));
+        if (threadId === currentThreadId) await gotoThread(crypto.randomUUID());
+        else await refreshThreads();
       } catch (caught) {
         setError(errorMessage(caught));
       }
-      await refreshThreads();
     },
     [api, currentThreadId, gotoThread, refreshThreads],
   );
@@ -250,11 +302,15 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const resolveApproval = useCallback(
     async (toolCallId: string, optionId?: string) => {
       if (!api) return;
+      // Settlement is server-only (ledger 2026-09-01): the patched Mastra core clears the gate
+      // and re-emits display state when the approval actually disarms. The client never removes
+      // the gate itself; it only refuses a second send while one is in flight.
+      if (settlingApprovalsRef.current.has(toolCallId)) return;
+      settlingApprovalsRef.current.add(toolCallId);
       const reject = optionId?.startsWith("reject") ?? false;
       const approval = selectApprovals(chatRef.current.display).find(
         (item) => item.toolCallId === toolCallId,
       );
-      setChat((previous) => ({ ...previous, display: withoutGate(previous.display, toolCallId) }));
       try {
         if (approval?.suspended) {
           await api.session.respondToToolSuspension(
@@ -266,6 +322,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
         }
       } catch (caught) {
         setError(errorMessage(caught));
+      } finally {
+        settlingApprovalsRef.current.delete(toolCallId);
       }
     },
     [api],

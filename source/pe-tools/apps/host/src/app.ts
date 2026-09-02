@@ -54,6 +54,17 @@ const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
   }),
 );
 
+// Bounded replay of the bridge-event ring (broker truth, not tab observation): browsers fetch
+// this once, then stay live on /events, deduping by `seq`. A plain JSON snapshot beats
+// `?since=` replay-then-live on the SSE route — client-side seq dedupe sidesteps the
+// subscribe/snapshot race with no stream plumbing.
+const bridgeLedgerRoute = HttpRouter.add("GET", "/ledger", () =>
+  Effect.gen(function* () {
+    const bridge = yield* RevitBridge;
+    return Response.jsonUnsafe({ events: yield* bridge.ledger });
+  }),
+);
+
 // Runtime operation catalog for browsers/typegen: proxies host.ops.catalog to the
 // connected Revit session (the standard selector header targets one; ?session remains compatible)
 // op keys + request/response JSON Schemas as plain JSON. The host-local (TS-only) ops
@@ -153,6 +164,7 @@ export const NoRevitBoundaryLive = Layer.mergeAll(
   HttpRouter.add("*", "/ops", emptyNotFound),
   HttpRouter.add("*", "/sessions", emptyNotFound),
   HttpRouter.add("*", "/events", emptyNotFound),
+  HttpRouter.add("*", "/ledger", emptyNotFound),
   HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
   HttpRouter.add("*", "/host/install", emptyNotFound),
   HttpRouter.add("*", "/host/update", emptyNotFound),
@@ -354,6 +366,7 @@ function makeRevitComposition(includeInstallConverge: boolean) {
     routes: Layer.mergeAll(
       bridgeWsRoute,
       bridgeEventsRoute,
+      bridgeLedgerRoute,
       opsCatalogRoute,
       settingsSchemaRoute,
       hostStatusRoute,

@@ -143,7 +143,8 @@ function RouteDocumentActivation({
     attempted.current = choice.at;
     let current = true;
     void onActivate(choice).catch((error) => {
-      if (current) setFailure(error instanceof Error ? error.message : "document activation failed");
+      if (current)
+        setFailure(error instanceof Error ? error.message : "document activation failed");
     });
     return () => {
       current = false;

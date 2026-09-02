@@ -1,5 +1,6 @@
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_ORIGIN_HEADER,
   HostCallError,
   type HostSessionScope,
   type OpCallArgs,
@@ -42,6 +43,8 @@ async function postCall(
 ): Promise<unknown> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (options?.bridgeSessionId) headers[HOST_RPC_BRIDGE_SESSION_HEADER] = options.bridgeSessionId;
+  // queue-provenance §1: `web:<route>` — the current path is the route id at call time.
+  headers[HOST_RPC_ORIGIN_HEADER] = `web:${window.location.pathname}`;
 
   const response = await fetch(HOST_CALL_URL, {
     method: "POST",

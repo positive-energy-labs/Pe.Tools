@@ -182,7 +182,9 @@ export function useFleet(options: FleetOptions = {}) {
     processReadErrors: status.data?.processReadErrors ?? [],
     registryRoot: status.data?.registryRoot,
     isLoading: sessionsQuery.isLoading || status.isLoading,
-    stale: sessionsQuery.isFetching || status.isFetching,
+    // Stale = no settled data, not "a refetch is in flight" — background polls
+    // must not gate verbs (the 5s poll was flickering the whole verb row).
+    stale: sessionsQuery.isPending || status.isPending,
     error: sessionsQuery.error ?? status.error,
     at: Math.max(sessionsQuery.dataUpdatedAt, status.dataUpdatedAt) || undefined,
     basis: ["sessions.list", "bridge.sessions.list"],

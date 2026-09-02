@@ -4,10 +4,14 @@ import { tv, type VariantProps } from "#/lib/tv";
 import "./lang.css";
 
 export const pressRecipe = tv({
+  // `inline-flex items-center`: preflight makes every svg `display:block`, so an icon beside a
+  // label in a bare <button> dropped onto its own line (measured: the model/access chevrons,
+  // annotation round 2026-09-01). A press is a ROW of its content; stacking is a PressContent
+  // geometry, never an accident.
   // `min-w-0`: a press is a flex/grid item wherever it sits in a row, and min-width:auto let
   // its content push the row wider than the rail it lives in (measured, 2026-08-31). Its
   // children own their own truncation.
-  base: "min-w-0 cursor-pointer appearance-none border border-transparent bg-transparent focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
+  base: "inline-flex min-w-0 cursor-pointer items-center gap-1 appearance-none border border-transparent bg-transparent focus-visible:veil focus-visible:outline focus-visible:outline-line-2 disabled:cursor-not-allowed",
   variants: {
     hover: {
       veil: "enabled:hover:veil",

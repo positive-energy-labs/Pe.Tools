@@ -59,9 +59,7 @@ export function TargetWorld() {
       </div>
 
       {/* raw resolution — provenance, not decoration */}
-      <div className={cn(chatStyles.chatTarget4(), "mb-1.5 leading-relaxed")}>
-        {resolutionReadout(resolution)}
-      </div>
+      <div className={cn(chatStyles.chatTarget4(), "mb-1.5")}>{resolutionReadout(resolution)}</div>
 
       {options.map((option) => {
         const optionResolution = resolveTarget(sessions, option.id);

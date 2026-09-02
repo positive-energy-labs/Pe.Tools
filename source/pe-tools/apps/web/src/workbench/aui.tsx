@@ -275,7 +275,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
   status,
   approval,
 }) => {
-  const { chat, resolveApproval } = useWorkbench();
+  const { resolveApproval } = useWorkbench();
   const tone = isError ? "failed" : status?.type === "running" ? "active" : "";
   const target = toolTarget(args);
   const pending = approval && approval.approved === undefined && !approval.resolution;
@@ -296,7 +296,7 @@ const ToolCallPart: ToolCallMessagePartComponent = ({
         toolCallId={toolCallId}
         toolName={toolName}
         args={args}
-        sessionState={chat.sessionValues}
+        sessionState={{}}
         running={status?.type === "running"}
       />
       {pending ? (

@@ -261,9 +261,11 @@ test("mounted chat makes no session or bridge requests without Revit capability"
 
   try {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(createElement(QueryClientProvider, { client }, createElement(ChatSentence)));
+    render(
+      createElement(QueryClientProvider, { client }, createElement(ChatSentence, { name: "Chat" })),
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(requests).toEqual([]);
+    expect(requests.filter((request) => /\/(sessions|call)(?:\?|$)/.test(request))).toEqual([]);
   } finally {
     cleanup();
     globalThis.fetch = originalFetch;

@@ -27,6 +27,7 @@ import {
 } from "./rhvac-ops.ts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_ORIGIN_HEADER,
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
@@ -47,8 +48,13 @@ const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$
 
 export const callRoute = HttpRouter.add("POST", "/call", (req) => {
   // Set once dispatch begins so the catch below can attribute failures to the op.
-  let op: { key: string; request: unknown; tsOnly: boolean; startedAt: number } | undefined;
+  let op:
+    | { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string }
+    | undefined;
   return Effect.gen(function* () {
+    // Lenient by ruling (queue-provenance §1): origin is attribution, not authorization —
+    // a missing header is counted as "unknown", never rejected. No registry, no validation.
+    const origin = req.headers[HOST_RPC_ORIGIN_HEADER]?.trim() || "unknown";
     const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
     if (CALL_FORWARD_BASE) {
       const sessionHeader = req.headers[HOST_RPC_BRIDGE_SESSION_HEADER]?.trim();
@@ -59,6 +65,7 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
             headers: {
               "content-type": "application/json",
               ...(sessionHeader ? { [HOST_RPC_BRIDGE_SESSION_HEADER]: sessionHeader } : {}),
+              [HOST_RPC_ORIGIN_HEADER]: origin, // provenance survives the dev proxy hop
             },
             body: JSON.stringify(body),
           });
@@ -99,7 +106,7 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
       const sessions = yield* bridge.list;
       if (sessions.length > 1) return yield* Effect.fail(ambiguousBridgeTarget(sessions));
     }
-    op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now() };
+    op = { key, request, tsOnly: isTsOnlyOperationKey(key), startedAt: Date.now(), origin };
     const result = isTsOnlyOperationKey(key)
       ? yield* dispatchTsOnlyOperation(key, request, bridgeSessionId, bridge)
       : yield* bridge.invoke(key, request ?? {}, bridgeSessionId);
@@ -122,12 +129,13 @@ export const callRoute = HttpRouter.add("POST", "/call", (req) => {
  * they doubled event volume for no diagnostic value (the op key + input reproduce them);
  * failures carry the problem message instead. */
 function captureHostOp(
-  op: { key: string; request: unknown; tsOnly: boolean; startedAt: number },
+  op: { key: string; request: unknown; tsOnly: boolean; startedAt: number; origin: string },
   outcome: { ok: true } | { ok: false; problem: { kind: string; message: string } },
 ): void {
   const input = boundedPayload(op.request ?? null);
   capture("host_op", {
     op: op.key,
+    origin: op.origin,
     ts_only: op.tsOnly,
     ok: outcome.ok,
     error_kind: outcome.ok ? undefined : outcome.problem.kind,

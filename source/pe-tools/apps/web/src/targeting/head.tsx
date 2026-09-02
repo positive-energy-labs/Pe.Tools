@@ -89,12 +89,14 @@ export function RouteHead<K extends string>({
   name,
   aside,
   manifest,
+  instrumentLive,
 }: {
   name: string;
   /** EXTRA route chrome, beside the cluster. Not the sentence's `fact` — that one names a datum
    * inside the sentence; this one is furniture on the name's line. */
   aside?: React.ReactNode;
   manifest?: TargetingHeadProps<K>;
+  instrumentLive?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -112,7 +114,7 @@ export function RouteHead<K extends string>({
         <h1 className="t-head face-display text-ink">{name}</h1>
         <span className="flex shrink-0 items-center gap-3">
           {aside}
-          <InstrumentCluster />
+          <InstrumentCluster live={instrumentLive} />
         </span>
       </div>
       {manifest ? <TargetingHead {...manifest} nameless /> : null}

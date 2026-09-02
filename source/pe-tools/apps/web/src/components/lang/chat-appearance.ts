@@ -2,8 +2,10 @@ import { tv } from "#/lib/tv";
 
 export const chatStyles = tv({
   slots: {
-    threadDotActive: "size-1.5 shrink-0 rounded-full bg-ink",
-    threadDotQuiet: "size-1.5 shrink-0 rounded-full bg-line-2",
+    // The dot sits in a 3.5 box so its row's title lines up with rows led by a 3.5 icon.
+    threadDotBox: "flex size-3.5 shrink-0 items-center justify-center",
+    threadDotActive: "size-1.5 rounded-full bg-ink",
+    threadDotQuiet: "size-1.5 rounded-full bg-line-2",
     threadRowActive:
       "group/row flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 t-prose on-select",
     threadRowQuiet:
@@ -79,12 +81,12 @@ export const chatStyles = tv({
     threadPalette3: "flex flex-col gap-1 p-2",
     threadPalette5: "px-2 py-3",
     threadPalette6: "mt-auto flex flex-col gap-1 border-t-[0.5px] border-line p-2",
-    threadPalette7: "size-4",
+    threadPalette7: "size-3.5",
     threadPalette8: "size-3.5",
     threadPalette9: "flex-1 text-left",
     threadPalette10: "face-mono text-ink-2",
     threadPalette11: "rounded-sm border border-line-2 px-1 py-0.5 t-caption face-mono text-ink-2",
-    threadPalette12: "size-4",
+    threadPalette12: "size-3.5",
     threadPalette13: "flex-1",
     threadPalette14: "rounded-sm border border-line-2 px-1.5 py-0.5 t-caption face-mono text-ink-2",
     worldBadge0: "truncate text-ink-2",

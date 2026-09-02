@@ -16,13 +16,15 @@ import { tv } from "#/lib/tv";
 
 export const commandRecipe = tv({
   slots: {
-    root: "flex size-full flex-col overflow-hidden rounded-lg bg-artifact p-1 text-ink",
+    root: "flex size-full flex-col overflow-hidden rounded-lg bg-artifact p-2 text-ink",
     input: "w-full t-value outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
     list: "no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
     empty: "py-6 text-center t-value",
     group:
-      "overflow-hidden p-1 text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:t-label **:[[cmdk-group-heading]]:text-ink-2",
-    item: "group/command-item relative flex min-h-(--item-h) cursor-default items-center gap-2 rounded-sm border-l-2 border-transparent px-2 py-0.5 t-prose outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:border-ink data-selected:bg-select data-selected:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-ink-2",
+      "overflow-hidden text-ink **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1 **:[[cmdk-group-heading]]:t-label **:[[cmdk-group-heading]]:text-ink-2",
+    // The keyboard cursor is the selection FILL and nothing else — a rail plus a fill marks the
+    // same row twice (annotation round, 2026-09-01).
+    item: "group/command-item relative flex min-h-(--item-h) cursor-default items-center gap-2 rounded-sm px-2 t-prose outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-select data-selected:text-ink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:text-ink-2",
     shortcut: "ml-auto t-label text-ink-2 group-data-selected/command-item:text-ink",
   },
 });
@@ -52,7 +54,7 @@ function CommandDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
       </div>
-      <DialogContent showCloseButton={showCloseButton}>
+      <DialogContent showCloseButton={showCloseButton} pad="none">
         <Command>{children}</Command>
       </DialogContent>
     </Dialog>
@@ -64,7 +66,7 @@ function CommandInput(
 ) {
   const { input } = commandRecipe();
   return (
-    <div data-slot="command-input-wrapper" className="p-1 pb-0">
+    <div data-slot="command-input-wrapper" className="pb-2">
       <InputGroup>
         <CommandPrimitive.Input data-slot="command-input" className={input()} {...props} />
         <InputGroupAddon>

@@ -15,7 +15,9 @@ import { tv } from "#/lib/tv";
 
 export const comboboxRecipe = tv({
   slots: {
-    trigger: "[&_svg:not([class*='size-'])]:size-3.5",
+    // The trigger is a ROW: label then chevron. It owns this even when it renders as another
+    // element (base-ui's `render` replaces that element's className with the slot's).
+    trigger: "inline-flex items-center gap-1 [&_svg:not([class*='size-'])]:size-3.5",
     list: "no-scrollbar max-h-[min(15.75rem,calc(var(--available-height)-2.25rem))] scroll-py-1 overflow-y-auto overscroll-contain p-1 data-empty:p-0",
     item: "relative flex min-h-(--item-h) w-full cursor-default items-center gap-2 rounded-md px-2 py-1 outline-hidden select-none data-highlighted:bg-select data-highlighted:text-ink not-data-[variant=destructive]:data-highlighted:**:text-ink data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
     empty:

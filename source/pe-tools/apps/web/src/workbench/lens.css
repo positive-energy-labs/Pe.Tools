@@ -265,7 +265,9 @@
   padding-bottom: calc(var(--composer-h, 96px) + 24px);
 }
 [data-annotation="moment"] {
-  padding: 10px 0;
+  /* left inset is unconditional: the focal rule is an inset shadow, so padding it on ALL moments
+     keeps the contents put when focus moves. */
+  padding: 10px 0 10px 10px;
   scroll-margin-top: 12px;
 }
 

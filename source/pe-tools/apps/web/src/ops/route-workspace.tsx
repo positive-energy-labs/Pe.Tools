@@ -152,7 +152,7 @@ export function OpsPage({ store, fixture = false }: { store: OpsStore; fixture?:
               ? "error"
               : "ready",
         lane: fixture ? "fixture" : "live",
-        stale: fixture ? false : catalog.isFetching && !catalog.isPending,
+        stale: fixture ? false : catalog.isPending,
         at: fixture ? Date.UTC(2026, 7, 30, 18, 42, 0) : catalog.dataUpdatedAt || undefined,
         basis: fixture ? ["fixture.ops.catalog"] : ["host.ops.catalog"],
         note: fixture
