@@ -1,4 +1,3 @@
-import { chatStyles } from "#/components/lang/chat-appearance";
 import {
   useId,
   useMemo,
@@ -163,16 +162,17 @@ export function Composer({
   };
 
   return (
-    <form onSubmit={submit} className={chatStyles.composer0()}>
+    <form onSubmit={submit} className="relative w-full">
       {showMenu ? (
         <div
           id={menuId}
           role="listbox"
           aria-label="Commands"
           className={cn(
-            chatStyles.composer1(),
+            "hairline-x-faint hairline-y-faint absolute bottom-full mb-2 w-full overflow-hidden rounded-sm",
             "right-2 left-2 z-[8] mb-1.5 max-h-52 w-auto overflow-x-hidden overflow-y-auto p-1 shadow-sm [&>button]:w-full",
           )}
+          data-surface="artifact"
         >
           {visibleMatches.map((command, index) => (
             <Press
@@ -189,8 +189,8 @@ export function Composer({
             >
               <PressContent geometry="baseline">
                 {/* a slash command is a machine identifier — mono */}
-                <span className={chatStyles.composer2()}>/{command.name}</span>
-                <span className={chatStyles.composer3()}>{command.description}</span>
+                <span className="face-mono text-ink">/{command.name}</span>
+                <span className="truncate t-small t-upper">{command.description}</span>
               </PressContent>
             </Press>
           ))}
@@ -199,13 +199,20 @@ export function Composer({
 
       {/* The composer is a box on the artifact ground — a closed edge all the way around, so the
           input reads as a place you write rather than a strip the transcript ran into. */}
-      <div className={chatStyles.composer4()}>
+      <div
+        className="hairline-x-faint hairline-y-faint overflow-hidden rounded-sm"
+        data-surface="artifact"
+      >
         {topBar}
 
         {attachments.length > 0 ? (
-          <div className={chatStyles.composer5()}>
+          <div className="flex flex-wrap gap-1.5 px-3 pt-3">
             {attachments.map((attachment, index) => (
-              <span key={index} className={chatStyles.composer6()} data-surface="recess">
+              <span
+                key={index}
+                className="hairline-x-faint hairline-y-faint inline-flex items-center gap-1 rounded-sm px-2 py-0.5 t-small t-upper"
+                data-surface="recess"
+              >
                 {attachment.name ?? "attachment"}
                 <Press
                   type="button"
@@ -216,14 +223,14 @@ export function Composer({
                     )
                   }
                 >
-                  <X className={chatStyles.composer7()} />
+                  <X className="size-3" />
                 </Press>
               </span>
             ))}
           </div>
         ) : null}
 
-        <div className={cn(chatStyles.composer8(), "px-2 py-1.5")}>
+        <div className="p-2 px-2 py-1.5">
           <Textarea
             name="input"
             aria-label="Message"
@@ -246,14 +253,14 @@ export function Composer({
             onKeyDown={onKeyDown}
           />
           {/* Control row: attachments + session controls (model/access) left, send right. */}
-          <div className={cn(chatStyles.composer9(), "gap-1.5")}>
+          <div className="flex items-center gap-1.5 pt-1">
             <Press
               tone="quiet"
               size="icon"
               title="Attach files"
               onClick={() => fileRef.current?.click()}
             >
-              <Paperclip className={chatStyles.composer10()} />
+              <Paperclip className="size-4" />
             </Press>
             <input
               ref={fileRef}
@@ -263,10 +270,10 @@ export function Composer({
               onChange={(event) => void onFiles(event.currentTarget.files)}
             />
             <ControlChips />
-            <span className={chatStyles.composer11()} />
+            <span className="flex-1" />
             {isRunning ? (
               <Press tone="neutral" size="icon" title="Stop" aria-label="Stop" onClick={cancel}>
-                <Square className={chatStyles.composer12()} />
+                <Square className="size-3.5" />
               </Press>
             ) : (
               <Press
@@ -278,14 +285,14 @@ export function Composer({
                 disabled={!canSend}
                 onClick={sendCurrent}
               >
-                <ArrowUp className={chatStyles.composer13()} />
+                <ArrowUp className="size-4" />
               </Press>
             )}
           </div>
         </div>
         {/* a failed operation is an ERROR (caution) — the alarm is reserved for disagreement */}
         {operationError ? (
-          <span className={chatStyles.composer14()} data-tone="caution">
+          <span className="block px-3 pb-2 t-small t-upper" data-tone="caution">
             {operationError}
           </span>
         ) : null}

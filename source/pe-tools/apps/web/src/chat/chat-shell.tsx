@@ -1,4 +1,3 @@
-import { chatStyles } from "#/components/lang/chat-appearance";
 import { useEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
@@ -19,7 +18,6 @@ import { chatPluginTitle } from "#/workbench/route-chat-plugins";
 import { selectRoutePane } from "#/workbench/route-panes";
 import { ChatSentence } from "#/chat/chat-sentence";
 import { WorldBadge } from "#/chat/world-badge";
-import { cn } from "#/lib/utils";
 import "#/workbench/lens.css";
 
 /** Routes hostable as in-realm chat workspace panes.
@@ -137,12 +135,12 @@ function Surface({
       data-mode={mode}
       data-plugin={plugin}
       data-surface="page"
-      className={chatStyles.chatShell0()}
+      className="fixed inset-0 font-sans text-ink"
     >
       {/* Inner grid holds exactly the 3 rows; ThreadPalette stays OUT of the grid (its sr-only
           dialog header would otherwise absorb the 1fr lens row via auto-placement). */}
-      <div className={chatStyles.chatShell1()}>
-        <header className={cn(chatStyles.chatShell2(), "block h-auto py-0 pb-2")}>
+      <div className="grid h-full grid-rows-[auto_auto_minmax(0,1fr)]">
+        <header className="hairline-b block h-auto px-5 py-0 pb-2">
           <ChatSentence
             name={threadLabel}
             live={live}
@@ -153,7 +151,7 @@ function Surface({
                     alarm), idle = muted. */}
                 <span
                   title={status}
-                  className={chatStyles.chatShell4()}
+                  className="size-2 shrink-0 rounded-full data-[s=idle]:bg-ink-mute"
                   data-s={status}
                   data-tone={
                     status === "running" ? "pea" : status === "idle" ? undefined : "caution"
@@ -166,21 +164,19 @@ function Surface({
           />
         </header>
 
-        <div aria-live="polite" className={chatStyles.chatShell7()}>
+        <div aria-live="polite" className="min-h-0 px-5">
           {statusLine ? (
             <div
               data-tone={error || operationError ? "caution" : undefined}
-              className={
-                error || operationError ? chatStyles.statusError() : chatStyles.statusQuiet()
-              }
+              className="hairline-b py-1.5 t-small t-upper"
             >
               {statusLine}
             </div>
           ) : null}
         </div>
 
-        <div className={chatStyles.chatShell8()}>
-          <div className={chatStyles.chatShell9()}>
+        <div className="relative flex min-h-0 min-w-0">
+          <div className="relative min-h-0 min-w-0 flex-1">
             <Lens
               state={chat}
               mode={mode}
@@ -202,9 +198,9 @@ function Surface({
                 />
               }
             />
-            <div className={cn(chatStyles.chatShell10(), "pb-3")}>
-              <div className={chatStyles.chatShell11()}>
-                <div ref={composerRef} className={chatStyles.chatShell12()}>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 pb-3">
+              <div className="pe-composer-lane">
+                <div ref={composerRef} className="pointer-events-auto">
                   <Composer
                     setMode={setMode}
                     topBar={
@@ -229,8 +225,8 @@ function Surface({
               minWidth={480}
               defaultWidth={640}
               header={
-                <div className={chatStyles.chatShell13()}>
-                  <span className={chatStyles.chatShell14()}>{chatPluginTitle(plugin)}</span>
+                <div className="flex items-center justify-between">
+                  <span className="truncate t-title">{chatPluginTitle(plugin)}</span>
                   <Press
                     tone="neutral"
                     size="icon"

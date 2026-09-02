@@ -1,4 +1,3 @@
-import { chatStyles } from "#/components/lang/chat-appearance";
 import { Pencil, Plus, Search, X } from "lucide-react";
 import {
   CommandDialog,
@@ -11,12 +10,15 @@ import {
 import { EmptyState } from "#/components/lang/empty";
 import type { StoredThreadSummary } from "#/workbench/provider";
 import { Press } from "#/components/lang/press";
+import { threadRowRecipe } from "./appearance";
 
 /** Status dot shared by the sidebar list + palette. */
 function ThreadDot({ active }: { active: boolean }) {
   return (
-    <span aria-hidden className={chatStyles.threadDotBox()}>
-      <span className={active ? chatStyles.threadDotActive() : chatStyles.threadDotQuiet()} />
+    <span aria-hidden className="flex size-3.5 shrink-0 items-center justify-center">
+      <span
+        className={active ? "size-1.5 rounded-full bg-ink" : "size-1.5 rounded-full bg-line-2"}
+      />
     </span>
   );
 }
@@ -45,7 +47,7 @@ function ThreadActions({
             onRename(thread.id, title);
         }}
       >
-        <Pencil className={chatStyles.threadActionIcon()} />
+        <Pencil className="size-3.5" />
       </Press>
       <Press
         type="button"
@@ -58,7 +60,7 @@ function ThreadActions({
           onDelete(thread.id);
         }}
       >
-        <X className={chatStyles.threadActionIcon()} />
+        <X className="size-3.5" />
       </Press>
     </>
   );
@@ -66,8 +68,8 @@ function ThreadActions({
 
 export function ThreadEmpty() {
   return (
-    <main className={chatStyles.threadPalette0()} data-surface="page">
-      <a href="/chat" className={chatStyles.threadPalette1()}>
+    <main className="grid min-h-screen place-items-center font-sans" data-surface="page">
+      <a href="/chat" className="veil rounded-sm px-3 py-2">
         <EmptyState story="scope" exit="open the thread palette">
           pick or start a thread
         </EmptyState>
@@ -102,29 +104,27 @@ export function ThreadList({
   const shown = threads.slice(0, limit);
   const rest = threads.length - shown.length;
   return (
-    <div className={chatStyles.threadPalette2()}>
-      <div className={chatStyles.threadPalette3()}>
+    <div className="flex h-full flex-col">
+      <div className="flex flex-col gap-1 p-2">
         {shown.map((thread) => {
           const active = thread.id === currentThreadId;
+          const row = threadRowRecipe({ active });
           return (
             <div
               key={thread.id}
               // The open thread is a SELECTION — the selection fill, never a hue or a frame.
-              className={active ? chatStyles.threadRowActive() : chatStyles.threadRowQuiet()}
+              data-selected={active ? "" : undefined}
+              className={row.root()}
               onClick={() => onSelect(thread.id)}
             >
               <ThreadDot active={active} />
-              <span
-                className={active ? chatStyles.threadTitleActive() : chatStyles.threadTitleQuiet()}
-              >
-                {thread.title}
-              </span>
+              <span className={row.title()}>{thread.title}</span>
               <ThreadActions thread={thread} onRename={onRename} onDelete={onDelete} />
             </div>
           );
         })}
         {threads.length === 0 ? (
-          <div className={chatStyles.threadPalette5()}>
+          <div className="px-2 py-3">
             <EmptyState story="scope" exit="start one below — the first message names it">
               pick or start a thread
             </EmptyState>
@@ -132,7 +132,7 @@ export function ThreadList({
         ) : null}
       </div>
 
-      <div className={chatStyles.threadPalette6()}>
+      <div className="hairline-t-faint mt-auto flex flex-col gap-1 p-2">
         {/* page-scoped acts: neutral ink, veil on hover — no blue (blue = writes beyond / nav) */}
         <Press
           type="button"
@@ -140,7 +140,7 @@ export function ThreadList({
           tone="neutral"
           onClick={onNew}
         >
-          <Plus className={chatStyles.threadPalette7()} />
+          <Plus className="size-3.5" />
           New thread
         </Press>
         <Press
@@ -149,10 +149,12 @@ export function ThreadList({
           tone="quiet"
           onClick={onSearch}
         >
-          <Search className={chatStyles.threadPalette8()} />
-          <span className={chatStyles.threadPalette9()}>Search all threads</span>
-          {rest > 0 ? <span className={chatStyles.threadPalette10()}>+{rest}</span> : null}
-          <kbd className={chatStyles.threadPalette11()}>⌘K</kbd>
+          <Search className="size-3.5" />
+          <span className="flex-1 text-left">Search all threads</span>
+          {rest > 0 ? <span className="face-mono text-ink-2">+{rest}</span> : null}
+          <kbd className="hairline-x-faint hairline-y-faint rounded-sm px-1 py-0.5 t-small face-mono text-ink-2">
+            ⌘K
+          </kbd>
         </Press>
       </div>
     </div>
@@ -197,9 +199,11 @@ export function ThreadPalette({
           }}
           // keyboard cursor = selection fill, never a hue
         >
-          <Plus className={chatStyles.threadPalette12()} />
-          <span className={chatStyles.threadPalette13()}>New thread</span>
-          <kbd className={chatStyles.threadPalette14()}>⌘K</kbd>
+          <Plus className="size-3.5" />
+          <span className="flex-1">New thread</span>
+          <kbd className="hairline-x-faint hairline-y-faint rounded-sm px-1.5 py-0.5 t-small face-mono text-ink-2">
+            ⌘K
+          </kbd>
         </CommandItem>
         <CommandGroup heading="Recent">
           {threads.map((thread) => {
@@ -215,9 +219,7 @@ export function ThreadPalette({
               >
                 <ThreadDot active={active} />
                 <span
-                  className={
-                    active ? chatStyles.paletteTitleActive() : chatStyles.paletteTitleQuiet()
-                  }
+                  className={active ? "flex-1 truncate text-ink" : "flex-1 truncate text-ink-2"}
                 >
                   {thread.title}
                 </span>

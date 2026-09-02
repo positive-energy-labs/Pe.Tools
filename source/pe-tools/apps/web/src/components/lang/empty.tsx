@@ -26,6 +26,8 @@ export const emptyStateRecipe = tv({
   variants: { state: { scope: {}, filter: {} } },
 });
 
+export const emptyMark = tv({ base: "m-0 t-display face-display" });
+
 export function EmptyState({
   story,
   exit,
