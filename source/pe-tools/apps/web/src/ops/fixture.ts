@@ -7,7 +7,7 @@ import type { SessionFacts } from "#/host/target";
 import type { HostOperationCatalogEntry } from "#/ops/product";
 
 export const OPS_FIXTURE_ADDRESS = address("C:\\Review\\Operations Fixture.rvt");
-export const OPS_FIXTURE_WORLD = "session:fixture-26";
+export const OPS_FIXTURE_WORLD = "session:fixture-26" as const;
 export const OPS_FIXTURE_TARGET = "fixture-26";
 export const OPS_FIXTURE_SELECTED = "revit.context.visible-summary";
 export const OPS_FIXTURE_REQUEST = {

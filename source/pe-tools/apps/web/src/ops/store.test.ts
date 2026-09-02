@@ -43,7 +43,11 @@ const oldReceipt = {
 };
 const document = (target = "observed", receipt: OpsReceipt = oldReceipt): OpsRouteDocument => ({
   bindings: {
-    world: { id: target, label: target, at: address("C:\\Models\\Test.rvt") } satisfies Bind,
+    world: {
+      id: `session:${target}` as const,
+      label: target,
+      at: address("C:\\Models\\Test.rvt"),
+    } satisfies Bind,
   },
   receipt,
 });

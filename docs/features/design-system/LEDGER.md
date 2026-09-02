@@ -440,13 +440,13 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Owed
 
-- 2026-09-01 grill execution, in flight: (1) design canon purge — two-axis type migration, tone/
-  ground canon deletions, `chat-appearance.ts` deletion, declared-once guard (worktree
-  `Pe.Tools-design`); (2) execution-scope contract — typed world binding in route documents,
-  targeted `HostRpcCaller` in every command handler, send-command scope capture (worktree
-  `Pe.Tools-scope`). After both merge: the chat reducer demiurge (includes audit-record cards
-  and the host event-ledger epoch — `bridge.ts` `eventSeq` resets on restart and the browser's
-  `lastSeq` gate then rejects valid events) and the one-route-spec demiurge.
+- 2026-09-01 grill execution, remaining after the canon + scope merges landed on main
+  (design-guard 0 red, reports `.artifacts/handoffs/2026-09-01-{design-canon,execution-scope}-report.md`):
+  the chat reducer demiurge (includes audit-record cards and the host event-ledger epoch —
+  `bridge.ts` `eventSeq` resets on restart and the browser's `lastSeq` gate then rejects valid
+  events) and the one-route-spec demiurge. Browser-lane proof of the two-axis type migration is
+  owed (deterministic + compile only so far); the ten former `t-value face-mono` sites moved to
+  `ink-2` deliberately (mono-floor law).
 - `/data-tables` performs live Revit reads/writes with no document gate
   (`routes/data-tables.tsx:116-135`). Deferred by the 2026-08-31 priority law; falls to the S2a
   cutover crusade.
