@@ -223,6 +223,29 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   `RouteHead` and the host lamp never mount — absent exactly when "is the host alive" is the
   question. Either the gate moves below the head or the shell mounts `RouteHead` above the gate.
 
+- 2026-09-01 — TWO-AXIS TYPE (grill verdict kaitpw, SUPERSEDES the C2 ADOPTED and C2 CANONIZED
+  lines above; evidence `.artifacts/handoffs/2026-09-01-critic-design.md`): the three 10px
+  sub-prose tiers were never size tiers — they collapse to one size word `t-small`, with
+  `face-mono` (machine measured) and `t-upper` (section head) as OPT-IN marks. Mono returns to
+  the marked case (95 `t-caption`+`face-mono` pairs were redundant; 799 mono spans marked
+  nothing). The ink floor moves into the tone layer so a claim about meaning always outranks a
+  tier; the `:not()` escape at `base.css` is deleted — it listed five `text-*` classes with zero
+  real uses and lost to every `data-tone` site (`(0,3,0)` beats `:where()`'s zero), silencing
+  the targeting head's unbound caution and `FactChip.tone` entirely.
+- 2026-09-01 — TONE AND GROUND CANON (grill verdict kaitpw): `data-tone`/`data-surface` are the
+  ONE meaning vocabulary. The `text-alarm|caution|done|pea|commit` tone utilities and the four
+  `bg-page|artifact|recess|select` ground colors leave `@theme` (`design-lang.css`); a ground is
+  legal only where it rebinds `--pe-on`, so a wash never mixes against the wrong plane.
+- 2026-09-01 — DECLARED-ONCE GUARD (grill verdict kaitpw): `design-guard` asserts no class is
+  declared in two of `base.css`, `design-lang.css`, `lang.css`. The 16 restatements, the `veil`
+  hover contradiction (utility made it an always-on wash), the diverged `t-title`/`t-head`/
+  `t-display` bundles, and the dead `squiggle-*`/`ghost-drift`/`page-wrap` classes fall to it.
+- 2026-09-01 — `chat-appearance.ts` is DELETED (grill verdict kaitpw, SUPERSEDES the 2026-09-01
+  "ruled a `lang/` primitive" line): 73 numbered positional slots, 72 with exactly one consumer,
+  `threadPalette4` already missing — a className bag, not a primitive. Class strings return to
+  their JSX; the ~4 genuine roles (thread row active/quiet, doc sub active/quiet, `emptyMark`)
+  are promoted to named homes.
+
 ### Route and state architecture (cross-route, owned here)
 
 - 2026-08-19 — THREE-HOME ADDRESSING: the sentence carries external bindings (test: it survives the
@@ -254,7 +277,32 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   it does not have. Export/PDF/SVG verbs are `act` — `commit` stays the one filled blue.
 - 2026-08-28 — A user-placed review flag is `caution`. `alarm` is reserved for the model disagreeing.
 
-### Enforcement
+- 2026-09-01 — EXECUTION-SCOPE LAW (grill verdict kaitpw; evidence
+  `.artifacts/handoffs/2026-09-01-critic-{chat,contracts}.md`, both critics independently):
+  every Revit execution carries an exact document contract. The persisted binding is the
+  restart-stable SDK selector; it resolves to a live session id AT COMMAND TIME, and
+  `HostRpcCaller` always receives a target — an untargeted caller is a defect
+  (`takeoffs-commands.ts` built one; the takeoffs store's `setBindings` never wrote `world`).
+  A route binds ONE document. Chat is task-scoped and may touch MANY documents across a task;
+  every touch is transparent and traceable in the transcript.
+- 2026-09-01 — Transcript tool cards are AUDIT RECORDS (grill verdict kaitpw): a card retains
+  the event/receipt its turn observed. Overlaying the current live `route.slice` onto an old
+  card (today's `tool-names.tsx` behavior via `sessionState={{}}` at `aui.tsx`) is a defect —
+  a receipt that changes after the fact is not a receipt. Falls to the chat reducer demiurge.
+- 2026-09-01 — APPROVAL SETTLEMENT is server-only (grill verdict kaitpw): the patched Mastra
+  settlement (`@mastra__core` `respondToToolApproval` wasArmed hunk) is the one authority; the
+  client never clears the gate itself — it renders in-flight until `display_state_changed`.
+- 2026-09-01 — CHAT PRIMITIVE (grill verdict kaitpw): the client chat projection rebuilds as an
+  append-only thread event log — every event `{threadId, epoch, sequence}`, every command an
+  idempotent `clientMessageId` — reduced by ONE reducer. Mastra stays the persisted authority;
+  the demiurge replaces the client's two unordered writers (wholesale `hydrate` vs live
+  `applyEvent`), not the server. Text-equality optimistic reconciliation dies with it.
+- 2026-09-01 — ONE ROUTE SPEC (grill verdict kaitpw: "this was the biggest thing I wanted to
+  demiurge"): a `CollaborativeRouteSpec` from which UI verbs, Pea commands, the server route
+  registry, and the chat-plugin registry all DERIVE; one provider owns world resolution, doc
+  atoms, picker state, and head rendering. Targeting rides every route — tool-like routes mount
+  the manifest, docs-like routes (`/`, `/design-system`) are name-plus-cluster only. Lands
+  AFTER the execution-scope law so command scoping is in the spec from day one.
 
 - 2026-08-16 — The design-guard test IS the lint: the web app has no CI, so token discipline holds
   by assertion in the deterministic lane, not by review.
@@ -392,6 +440,13 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 
 ## Owed
 
+- 2026-09-01 grill execution, in flight: (1) design canon purge — two-axis type migration, tone/
+  ground canon deletions, `chat-appearance.ts` deletion, declared-once guard (worktree
+  `Pe.Tools-design`); (2) execution-scope contract — typed world binding in route documents,
+  targeted `HostRpcCaller` in every command handler, send-command scope capture (worktree
+  `Pe.Tools-scope`). After both merge: the chat reducer demiurge (includes audit-record cards
+  and the host event-ledger epoch — `bridge.ts` `eventSeq` resets on restart and the browser's
+  `lastSeq` gate then rejects valid events) and the one-route-spec demiurge.
 - `/data-tables` performs live Revit reads/writes with no document gate
   (`routes/data-tables.tsx:116-135`). Deferred by the 2026-08-31 priority law; falls to the S2a
   cutover crusade.
@@ -430,9 +485,12 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
   rail/separator hairlines (main drew them with inline `token()` strokes, now dropped); no
   pane-availability mark beyond the ink ladder (main's ready underline and disabled italic).
   Main is the reference, not the code; zero guard violations is the bar.
-- `/family`, `/families`, `/settings`, `/ops`, `/instances` have NO fixture lane on either
-  branch (`?source=fixture` falls back to the document gate); they cannot be censused or ported
-  without a controlled Revit session. `/takeoffs` is the only gated route with a real fixture.
+- `/family`, `/families`, `/settings`, `/ops` have NO fixture lane on either branch
+  (`?source=fixture` falls back to the document gate); they cannot be censused or ported
+  without a controlled Revit session. `/takeoffs` and `/instances` have real fixtures
+  (corrected 2026-09-01: `instances/fixture.tsx` builds typed `SessionObservation` rows and
+  `routes/instances.tsx` branches on `?source=fixture` — the earlier "no fixture" reading
+  was stale).
 - Port gaps (from `.artifacts/handoffs/ds-port.md`): `Section` has no tier slot, so a page head
   needs a second `t-head` line under it; `CounterExample` has no struck variant beyond the
   caption; `OutcomeLine` lost `dropped`/`partial`; `ArmingStrip` cannot show armed-at/by or plan
