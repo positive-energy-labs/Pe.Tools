@@ -1,17 +1,13 @@
 import { expect, test } from "vite-plus/test";
 import {
   address,
-  type FamilyTypesDocument,
   type ParameterLinkProfile,
   type ParameterLinksDocument,
   parameterLinksRouteState,
 } from "@pe/agent-contracts";
 
 const DOCUMENT_ADDRESS = address("C:\\Models\\A.rvt");
-import {
-  createFamilyTypesCommandHandlers,
-  createParameterLinksCommandHandlers,
-} from "../src/pea/route-state-commands.ts";
+import { createParameterLinksCommandHandlers } from "../src/pea/route-state-commands.ts";
 
 // The dispatcher hands handlers `input.safeParse(payload).data`, and zod strips undeclared keys —
 // so each command schema must accept exactly what the web plugin sends (route-chat-plugins.tsx):

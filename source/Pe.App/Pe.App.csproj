@@ -9,6 +9,7 @@
         <PeAddinVendorId>Development</PeAddinVendorId>
         <PeAddinUseRevitContext>False</PeAddinUseRevitContext>
         <PeAddinContextName>Pe.Tools</PeAddinContextName>
+        <PeDefaultRevitYear>2025</PeDefaultRevitYear>
     </PropertyGroup>
     <PropertyGroup>
         <UseWPF>true</UseWPF>

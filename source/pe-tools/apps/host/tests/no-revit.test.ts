@@ -25,7 +25,7 @@ test("dev:no-revit uses the shared source entrypoint and a distinct dev receipt"
   ]);
   const defaultServiceName = sourceHostServiceName(sourceRoot);
 
-  expect(rootPackage.scripts?.["dev:no-revit"]).toBe("pnpm --filter @pe/host dev:no-revit");
+  expect(rootPackage.scripts?.["dev:no-revit"]).toBe("vp run --filter @pe/host dev:no-revit");
   expect(hostPackage.scripts?.["dev:no-revit"]).toBe(
     "vp exec node --watch-path=src --import jiti/register src/dev.ts --take-over-host --no-revit",
   );
