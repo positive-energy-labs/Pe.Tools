@@ -16,3 +16,5 @@ export * from "./world.ts";
 export * from "./thread.ts";
 export * from "./scope.ts";
 export * from "./instances.ts";
+export * from "./capability.ts";
+export * from "./pods.ts";

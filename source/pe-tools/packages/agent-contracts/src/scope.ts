@@ -21,9 +21,19 @@ export const scopeRevisionSchema = z.object({
 export type ScopeRevision = z.infer<typeof scopeRevisionSchema>;
 export const scopeKey = (scope: Scope): string =>
   `scope:${scope.session ?? ""}|${scope.document ?? ""}`;
-/** The host bridge selector for a Scope's session; undefined lets the host pick the only session. */
+/**
+ * The host bridge selector for a Scope: the session when named, else the document (the host
+ * resolves it to the one connected session holding it); undefined lets the host pick the only session.
+ */
 export const bridgeSelector = (scope: Scope): string | undefined =>
-  scope.session ? `session:${scope.session}` : undefined;
+  scope.session ? `session:${scope.session}` : scope.document ? `doc:${scope.document}` : undefined;
+
+/** What a call actually ran against, as the host resolved it; every pe_do/pe_read result carries one. */
+export const resolvedTargetSchema = z.object({
+  session: z.string().nullable(),
+  document: z.string().nullable(),
+});
+export type ResolvedTarget = z.infer<typeof resolvedTargetSchema>;
 
 /** The turn context frozen at admission and read by every tool through requestContext. */
 export const turnContextKey = "pea.turn";

@@ -8,6 +8,8 @@
  * failed one — a single gerund string is the whole grammar.
  */
 
+import { parseRouteKey } from "./capability.ts";
+
 export type SentenceVerb =
   | "working"
   | "looking"
@@ -79,22 +81,26 @@ export function deriveOpActivity(key: string): Activity {
  * every chip/trace surface at once; unlisted tools fall back to title-cased wire names.
  */
 export const TOOL_TITLES: Record<string, string> = {
-  pe_status: "Status check",
-  pe_logs: "Read logs",
-  host_operation_search: "Find a capability",
-  host_operation_call: "Revit operation",
+  pe_find: "Find a capability",
+  pe_read: "Read",
+  pe_do: "Do",
+  scope_set: "Propose the Scope",
   request_access: "Ask for access",
   read_image: "Look at an image",
   capture_view: "Capture a view",
   revit_api_docs_search: "Search the Revit docs",
   revit_api_docs_fetch: "Read the Revit docs",
-  script_bootstrap: "Draft a script",
-  script_pod_list: "List script buttons",
-  script_execute: "Run a script",
-  route_state_read: "Read the workspace",
-  route_state_apply: "Suggest workspace changes",
-  route_command: "Workspace command",
 };
+
+/** `pe_read`/`pe_do` args → the route and member of a `route:` key, when the call targets a route. */
+export function routeCallOf(
+  toolName: string,
+  args: unknown,
+): { route: string; member?: string } | null {
+  if (toolName !== "pe_do" && toolName !== "pe_read") return null;
+  const key = str(parseArgs(args), "key");
+  return key ? parseRouteKey(key) : null;
+}
 
 /** Human title for a tool call. Alias first, else Title Cased wire name. */
 export function toolTitle(toolName: string): string {
@@ -110,19 +116,12 @@ export function toolTitle(toolName: string): string {
 
 /** Short action label for a route-plugin tool card ("Read", "Draft update", "Apply"). */
 export function actionLabel(toolName: string, args: unknown, running: boolean): string {
-  const parsed = parseArgs(args);
-  const command = str(parsed, "command");
+  const command = routeCallOf(toolName, args)?.member ?? str(parseArgs(args), "command");
   const action =
-    toolName === "route_state_read"
+    command === undefined
       ? "Read"
-      : toolName === "route_state_apply"
+      : command === "propose"
         ? "Draft update"
-        : command === "refresh"
-          ? "Refresh"
-          : command === "preview"
-            ? "Preview"
-            : command === "apply"
-              ? "Apply"
-              : (command ?? "Command");
+        : command.charAt(0).toUpperCase() + command.slice(1);
   return running ? `${action} in progress` : action;
 }
