@@ -162,6 +162,8 @@ type HostOperationCallResult =
       key: string;
       elapsedMs: number;
       operation?: HostOperationSearchResult;
+      /** The session and document the host actually resolved to (x-pe-resolved-* headers). */
+      resolvedTarget?: ResolvedTarget;
       response: unknown;
     }
   | {
@@ -332,6 +334,7 @@ const callHostRpcOperationEffect = Effect.fnUntraced(function* (
       operation:
         operation && verbosity !== "compact" ? toSearchResult(operation, verbosity) : undefined,
       response: result.success.rawBody,
+      resolvedTarget: result.success.resolvedTarget,
     } satisfies HostOperationCallResult;
   }
 
@@ -356,9 +359,25 @@ const callHostRpcEffect = Effect.fnUntraced(function* (
   options: HostRpcCallerOptions,
 ) {
   const started = performance.now();
-  const rawBody = yield* runHostRpcEffect(key, request, options);
-  return { status: 200, elapsedMs: Math.round(performance.now() - started), rawBody };
+  const call = yield* runHostRpcEffect(key, request, options);
+  return {
+    status: 200,
+    elapsedMs: Math.round(performance.now() - started),
+    rawBody: call.body,
+    resolvedTarget: call.resolvedTarget,
+  };
 });
+
+export type ResolvedTarget = { session: string | null; document: string | null };
+
+/** Every /call response names the target it ran against; absent headers mean no Revit session. */
+function readResolvedTarget(response: Response): ResolvedTarget | undefined {
+  const session = response.headers.get("x-pe-resolved-session");
+  const document = response.headers.get("x-pe-resolved-document");
+  return session || document
+    ? { session, document: document ? decodeURIComponent(document) : null }
+    : undefined;
+}
 
 // Plain POST /call — unknown keys pass through so runtime-registered Revit ops
 // are callable without a package rebuild; the host/Revit side owns validation.
@@ -397,7 +416,10 @@ const runHostRpcEffect = Effect.fnUntraced(function* (
           },
         );
       }
-      return (await response.json()) as unknown;
+      return {
+        body: (await response.json()) as unknown,
+        resolvedTarget: readResolvedTarget(response),
+      };
     },
     catch: (error) =>
       error instanceof HostCallError

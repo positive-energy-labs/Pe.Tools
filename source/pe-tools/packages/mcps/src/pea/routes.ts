@@ -13,6 +13,7 @@ import {
   familyTypesRouteState,
   opsRouteState,
   parameterLinksRouteState,
+  podsRouteState,
   scheduleGridRouteState,
   settingsRouteState,
   takeoffsRouteState,
@@ -20,6 +21,7 @@ import {
 
 import { createFamilyCommandHandlers } from "./family-commands.ts";
 import { createFamiliesCommandHandlers } from "./families-commands.ts";
+import { createPodsCommandHandlers } from "./pods-commands.ts";
 import {
   createFamilyTypesCommandHandlers,
   createParameterLinksCommandHandlers,
@@ -52,6 +54,7 @@ export function createRouteRegistrations(
     entry(familyRouteState, createFamilyCommandHandlers(options)),
     entry(familyTypesRouteState, createFamilyTypesCommandHandlers(options)),
     entry(opsRouteState, {}),
+    entry(podsRouteState, createPodsCommandHandlers(options)),
     entry(parameterLinksRouteState, createParameterLinksCommandHandlers(options)),
     entry(settingsRouteState, createSettingsCommandHandlers(options)),
     entry(scheduleGridRouteState, createScheduleGridCommandHandlers(options)),

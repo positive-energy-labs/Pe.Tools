@@ -1,8 +1,13 @@
 export {
   PeaCliCommands,
+  buildCapabilities,
   bundledPeaSkills,
   configurePeaProductToolContext,
+  createCapabilityCatalogSource,
   createRouteRegistrations,
+  peDo,
+  peFind,
+  peRead,
   materializeBundledPeaSkills,
   peaProductHomeEnvVar,
   peaProductToolMetadata,
@@ -13,7 +18,7 @@ export {
   resolvePeaSkillPaths,
   resolvePeaStandardSkillsRoot,
 } from "./pea/index.ts";
-export type { RouteRegistration } from "./pea/index.ts";
+export type { CapabilityCatalogSource, RouteRegistration } from "./pea/index.ts";
 export type { PeaCliCommandOptions } from "./pea/PeaCliCommands.ts";
 export {
   discoverHostBaseUrl,
