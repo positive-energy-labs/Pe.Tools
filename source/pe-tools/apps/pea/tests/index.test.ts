@@ -15,28 +15,24 @@ import { createPeaCliCommand, getPeaCliCommandNames } from "../src/index.ts";
 
 const slowRuntimeTestTimeout = 30_000;
 
-test("pea exposes the exact 15-tool product surface", () => {
+test("pea exposes three capability doors, one Scope door, and the media and docs helpers", () => {
   const names = [
-    "pe_status",
-    "pe_logs",
-    "host_operation_search",
-    "host_operation_call",
-    "request_access",
-    "read_image",
+    "pe_find",
+    "pe_read",
+    "pe_do",
+    "scope_set",
     "capture_view",
+    "read_image",
+    "request_access",
     "revit_api_docs_search",
     "revit_api_docs_fetch",
-    "script_bootstrap",
-    "script_pod_list",
-    "script_execute",
-    "route_state_read",
-    "route_state_apply",
-    "route_command",
   ];
 
   expect(Object.keys(peaProductTools)).toEqual(names);
   expect(Object.keys(peaProductToolMetadata)).toEqual(names);
-  expect(peaProductToolMetadata.host_operation_call.category).toBe("execute");
+  expect(peaProductToolMetadata.pe_find.category).toBe("read");
+  expect(peaProductToolMetadata.pe_read.category).toBe("read");
+  expect(peaProductToolMetadata.pe_do.category).toBe("execute");
 });
 
 test("pea composes product commands without dev", () => {

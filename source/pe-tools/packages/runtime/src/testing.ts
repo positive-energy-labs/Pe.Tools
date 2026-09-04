@@ -1,4 +1,4 @@
-import { Agent } from "@mastra/core/agent";
+import { Agent, type ToolsInput } from "@mastra/core/agent";
 import { type AvailableModel } from "@mastra/core/agent-controller";
 import { MastraLanguageModelV2Mock } from "@mastra/core/test-utils/llm-mock";
 import { createTool } from "@mastra/core/tools";
@@ -8,14 +8,13 @@ import { z } from "zod";
 import type { ServableRuntime } from "./agent-controller-web.ts";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
 import { createRuntimeMemoryProfile } from "./memory/profiles.ts";
-import { turnOf } from "@pe/agent-contracts";
 import { admitTurn, ScopeStore } from "./scope-store.ts";
 import { createRuntimeLibSqlStorage } from "./storage/profiles.ts";
 
 type DeterministicResponse =
   | { text: string; finishDelayMs?: number }
   | { toolCall: { name: "scenario_approval"; input: { value: string } } }
-  | { toolCall: { name: "scenario_scope"; input: Record<string, never> } }
+  | { toolCall: { name: "pe_find" | "pe_read" | "pe_do"; input: Record<string, unknown> } }
   | {
       toolCall: {
         name: "ask_user";
@@ -77,6 +76,8 @@ export async function createDeterministicRuntime(options: {
   databasePath: string;
   resourceId: string;
   responses: DeterministicResponse[];
+  /** Product tools to expose beside the scenario's own (the three doors, for instance). */
+  tools?: ToolsInput;
   preseed?: {
     threadId: string;
     messages: { id: string; role: "user" | "assistant"; text: string }[];
@@ -90,13 +91,6 @@ export async function createDeterministicRuntime(options: {
     requireApproval: true,
     execute: async ({ value }) => ({ output: `APPROVED:${value}` }),
   });
-  // The deterministic stand-in for every host-bound tool: it answers with the frozen turn it ran under.
-  const scopeTool = createTool({
-    id: "scenario_scope",
-    description: "Echo the Scope revision this turn was admitted under.",
-    inputSchema: z.object({}),
-    execute: async (_input, context) => ({ turn: turnOf(context) }),
-  });
   const agent = new Agent({
     id: "scenario-agent",
     name: "Scenario Agent",
@@ -108,7 +102,7 @@ export async function createDeterministicRuntime(options: {
         return { stream: responseStream(response, at) };
       },
     }) as never,
-    tools: { scenario_approval: approvalTool, scenario_scope: scopeTool },
+    tools: { scenario_approval: approvalTool, ...options.tools },
   });
   const storage = await createRuntimeLibSqlStorage({
     id: "browser-scenario",

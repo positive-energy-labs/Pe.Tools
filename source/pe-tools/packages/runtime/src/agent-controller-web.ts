@@ -1,4 +1,4 @@
-import { routeScopeKey } from "@pe/agent-contracts";
+import { bridgeSelector, routeScopeKey, type CapabilityCatalog } from "@pe/agent-contracts";
 import { AgentController, type Session } from "@mastra/core/agent-controller";
 import { Mastra } from "@mastra/core/mastra";
 import { MastraServer } from "@mastra/hono";
@@ -72,6 +72,8 @@ export interface BuildAgentControllerAppOptions {
   runtime: ServableRuntime;
   label: string;
   routeRegistrations?: readonly RouteWorkspaceRegistration[];
+  /** The one capability catalog, read for a bridge selector; served at GET /pe/capabilities. */
+  capabilityCatalog?: { read(bridgeSelector?: string): Promise<CapabilityCatalog> };
 }
 
 export async function buildAgentControllerApp(
@@ -166,6 +168,20 @@ export async function buildAgentControllerApp(
     } catch (error) {
       if (error instanceof ScopeRefused) return c.json({ error: error.message }, 409);
       throw error;
+    }
+  });
+  // The one capability catalog (ops, route docs and commands, pods, skills), keyed by the same
+  // Scope query as a route document: ?session=&doc=, either absent.
+  app.get("/pe/capabilities", async (c) => {
+    if (!options.capabilityCatalog) return c.json({ error: "no capability catalog" }, 503);
+    const scope = scopeOr400(c, "read");
+    if (scope instanceof Response) return scope;
+    try {
+      return c.json(
+        await options.capabilityCatalog.read(scope.scope ? bridgeSelector(scope.scope) : undefined),
+      );
+    } catch (error) {
+      return c.json({ error: errorMessage(error) }, 502);
     }
   });
   const registrations = options.routeRegistrations ?? [];

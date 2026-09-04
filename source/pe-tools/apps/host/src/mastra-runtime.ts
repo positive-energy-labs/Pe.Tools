@@ -1,9 +1,10 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { Cause, Context, Effect, Layer } from "effect";
+import { Cause, Context, Effect, Layer, Option, Stream } from "effect";
+import { RevitBridge } from "./bridge.ts";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { createRouteRegistrations } from "@pe/mcps";
+import { createCapabilityCatalogSource, createRouteRegistrations } from "@pe/mcps";
 import { buildAgentControllerApp, type ServableRuntime } from "@pe/runtime";
 import {
   createPeaRuntime,
@@ -124,6 +125,11 @@ export function makeMastraRuntimeLive(
       const address = server.address;
       const port = address._tag === "TcpAddress" ? address.port : 0;
       const hostBaseUrl = `http://127.0.0.1:${port}`;
+      const registrations = routeRegistrations({ hostBaseUrl });
+      const catalog = createCapabilityCatalogSource({ hostBaseUrl, registrations });
+      // With Revit present the op and pod rows describe the connected session, so a session
+      // arriving or leaving drops the 30 s cache; without Revit there is no bridge to watch.
+      yield* invalidateOnSessionChange(catalog);
 
       const handle = yield* Effect.acquireRelease(
         Effect.tryPromise(async () => {
@@ -131,7 +137,8 @@ export function makeMastraRuntimeLive(
           const app = await buildAgentControllerApp({
             runtime,
             label: "pea",
-            routeRegistrations: routeRegistrations({ hostBaseUrl }),
+            routeRegistrations: registrations,
+            capabilityCatalog: catalog,
           });
           setAgentRuntimeStatus({ available: true, error: null });
           // A stale error log from a previous degraded boot would misreport this healthy one.
@@ -216,3 +223,18 @@ export const MastraMountLive = HttpRouter.use((router) =>
     yield* router.add("*", "/pe/*", handler);
   }),
 );
+
+/**
+ * Drop the capability cache whenever a bridge session connects or leaves. The bridge is present
+ * only in the Revit composition; the no-Revit host has nothing to watch, so this is a no-op there.
+ */
+const invalidateOnSessionChange = Effect.fnUntraced(function* (catalog: { invalidate(): void }) {
+  const bridge = yield* Effect.serviceOption(RevitBridge);
+  if (Option.isNone(bridge)) return;
+  yield* Effect.forkScoped(
+    Stream.fromPubSub(bridge.value.events).pipe(
+      Stream.filter((event) => event.kind === "connected" || event.kind === "disconnected"),
+      Stream.runForEach(() => Effect.sync(() => catalog.invalidate())),
+    ),
+  );
+});

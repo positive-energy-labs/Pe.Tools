@@ -359,8 +359,8 @@ test(
         }
         await session.permissions.setForCategory({ category: "other", policy: "deny" });
         expect(session.resolveToolApproval("unknown_tool")).toBe("deny");
-        await session.permissions.setForTool({ toolName: "script_execute", policy: "deny" });
-        expect(session.resolveToolApproval("script_execute")).toBe("deny");
+        await session.permissions.setForTool({ toolName: "pe_do", policy: "deny" });
+        expect(session.resolveToolApproval("pe_do")).toBe("deny");
       } finally {
         await runtime.close?.();
       }
@@ -380,14 +380,14 @@ test(
     process.env.PE_TOOLS_STATE_DIR = path.join(root, "state");
     const productToolNames = Object.keys(peaProductToolMetadata);
     const noRevitToolNames = [
-      "request_access",
+      "pe_find",
+      "pe_read",
+      "pe_do",
+      "scope_set",
       "read_image",
+      "request_access",
       "revit_api_docs_search",
       "revit_api_docs_fetch",
-      "scope_set",
-      "route_state_read",
-      "route_state_apply",
-      "route_command",
     ];
 
     try {
@@ -433,7 +433,7 @@ test(
       yolo: false,
       permissionRules: {
         categories: { ...expectedPermissionRules.trusted.categories },
-        tools: { script_execute: "deny" as const },
+        tools: { pe_do: "deny" as const },
       },
     };
     try {
@@ -450,7 +450,7 @@ test(
             policy,
           }),
         ),
-        session.permissions.setForTool({ toolName: "script_execute", policy: "deny" }),
+        session.permissions.setForTool({ toolName: "pe_do", policy: "deny" }),
       ]);
       expect(await session.thread.getSetting({ key: "pea.permissions" })).toEqual(expected);
       await runtime.close?.();
@@ -493,7 +493,7 @@ test(
         } else {
           session.permissions.getRules = () => ({
             ...expectedPermissionRules.ask,
-            tools: { script_execute: "deny" },
+            tools: { pe_do: "deny" },
           });
         }
         await session.thread.create({ title: mode });
