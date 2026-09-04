@@ -8,6 +8,7 @@ import { createServer as createViteServer } from "vite-plus";
 import { expect, test } from "vite-plus/test";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
+import { configurePeaProductToolContext, peDo, peFind, peRead } from "@pe/mcps";
 import { resolvePeaWorld } from "@pe/runtime/pea";
 import { createDeterministicRuntime } from "@pe/runtime/testing";
 import { makeHttpLive } from "../src/app.ts";
@@ -20,7 +21,10 @@ const approvalToolValue = "MASTER_SCENARIO_TOOL";
 const questionText = "Which Revit session should Pea use?";
 const questionAnswer = "Revit 2025";
 const questionFinalText = "QUESTION_TURN_FINISHED";
-const scopeFinalText = "SCOPE_TURN_FINISHED";
+const findFinalText = "FIND_TURN_FINISHED";
+const readFinalText = "READ_TURN_FINISHED";
+const proposeFinalText = "PROPOSE_TURN_FINISHED";
+const stopFinalText = "STOP_TURN_FINISHED";
 const scopeSession = "pe.app-25";
 const scopeDocument = "C:\\Models\\Scenario.rvt";
 const abortedText = "VISIBLE_BEFORE_ABORT";
@@ -37,11 +41,14 @@ function scenarioRuntime(
   databasePath: string,
   preseed?: { threadId: string; messages: typeof preseeded },
 ): RuntimeFactory {
-  return async () => {
+  return async (options) => {
     const world = resolvePeaWorld();
+    // The three doors are the real product tools; only the model is deterministic.
+    configurePeaProductToolContext({ hostBaseUrl: options.hostBaseUrl });
     return createDeterministicRuntime({
       databasePath,
       resourceId: world.id,
+      tools: { pe_find: peFind, pe_read: peRead, pe_do: peDo },
       responses: [
         { toolCall: { name: "scenario_approval", input: { value: approvalToolValue } } },
         { text: approvalFinalText },
@@ -59,8 +66,27 @@ function scenarioRuntime(
           },
         },
         { text: questionFinalText },
-        { toolCall: { name: "scenario_scope", input: {} } },
-        { text: scopeFinalText },
+        { toolCall: { name: "pe_find", input: { limit: 8 } } },
+        { text: findFinalText },
+        { toolCall: { name: "pe_read", input: { key: "route:instances" } } },
+        { text: readFinalText },
+        {
+          toolCall: {
+            name: "pe_do",
+            input: {
+              key: "route:instances.propose",
+              expectedRevision: 0,
+              input: {
+                patches: [
+                  { path: ["staged"], value: { kind: "start", year: "2026", name: "scenario" } },
+                ],
+              },
+            },
+          },
+        },
+        { text: proposeFinalText },
+        { toolCall: { name: "pe_do", input: { key: "route:instances.stop" } } },
+        { text: stopFinalText },
         { text: abortedText, finishDelayMs: 10_000 },
       ],
       preseed,
@@ -214,6 +240,26 @@ test("the browser walks one durable chat lifecycle", async () => {
         )
         .toBe(true);
     const composer = page.getByRole("textbox", { name: "Message" });
+    // The deterministic controller runs at the `ask` access level, so a door may prompt once;
+    // approve it when it does, and stop when the turn's final text is on the page.
+    const driveTurn = async (prompt: string, finalText: string) => {
+      await composer.fill(prompt);
+      await page.getByRole("button", { name: "Send message" }).click();
+      const deadline = Date.now() + 20_000;
+      while (Date.now() < deadline) {
+        if ((await rows.allTextContents()).some((row: string) => row.includes(finalText))) {
+          // Settled means the run ended, not just that the text painted; the next send needs that.
+          await expect
+            .poll(() => page.getByRole("button", { name: "Stop" }).count(), { timeout: 15_000 })
+            .toBe(0);
+          return;
+        }
+        const approve = page.getByRole("button", { name: "Approve" }).last();
+        if ((await approve.count()) > 0) await approve.click().catch(() => undefined);
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      throw new Error(`turn did not finish: ${finalText}`);
+    };
 
     await composer.fill("APPROVAL_TURN");
     await page.getByRole("button", { name: "Send message" }).click();
@@ -271,13 +317,32 @@ test("the browser walks one durable chat lifecycle", async () => {
     await expect
       .poll(() => page.getByTestId("scope-revision").innerText(), { timeout: 15_000 })
       .toBe("r1");
-    await composer.fill("SCOPE_TURN");
-    await page.getByRole("button", { name: "Send message" }).click();
-    await waitForRowText(scopeFinalText);
-    const scopeTurnBody = JSON.stringify((await readThread()).messages);
-    expect(scopeTurnBody).toContain(`"session":"${scopeSession}"`);
-    expect(scopeTurnBody).toContain('"revision":1');
+    // pe_find under that Scope: the map, the connected sessions (none), and the silent sources.
+    await driveTurn("FIND_TURN", findFinalText);
+    const findBody = JSON.stringify((await readThread()).messages);
+    expect(findBody).toContain(`"session":"${scopeSession}"`);
+    expect(findBody).toContain('"revision":1');
+    expect(findBody).toContain('"map":{');
+    expect(findBody).toContain("route-command");
+    // pe_read route:instances under that Scope: the document lands under the Scope key.
+    await driveTurn("READ_TURN", readFinalText);
+    expect(JSON.stringify((await readThread()).messages)).toContain('"key":"route:instances"');
+    // pe_do route:instances.propose stages a start; the card shows r1 and the resolved target.
+    await driveTurn("PROPOSE_TURN", proposeFinalText);
+    await expect
+      .poll(() => page.getByTestId("tool-revision").last().innerText(), { timeout: 15_000 })
+      .toBe("r1");
+    expect(await page.getByTestId("tool-target").last().innerText()).toContain(scopeSession);
+    await expect
+      .poll(async () => (await rows.allTextContents()).join("\n"), { timeout: 15_000 })
+      .toContain("start scenario in Revit 2026");
+    // pe_do route:instances.stop is human-only: refused with a hint, nothing runs.
+    await driveTurn("STOP_TURN", stopFinalText);
+    expect(JSON.stringify((await readThread()).messages)).toContain("human-only");
     const routeQuery = `session=${scopeSession}&doc=${encodeURIComponent(scopeDocument)}`;
+    expect(
+      await (await fetch(`${baseUrl}/pe/route-state/instances?${routeQuery}`)).json(),
+    ).toMatchObject({ revision: 1, doc: { staged: { kind: "start", name: "scenario" } } });
     const applied = await fetch(`${baseUrl}/pe/route-state/ops/apply?${routeQuery}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
