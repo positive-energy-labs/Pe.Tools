@@ -1,12 +1,7 @@
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { Agent, createSignal, type AgentSignalInput } from "@mastra/core/agent";
-export {
-  threadSnapshot,
-  toWireEvent,
-  type ThreadSnapshot,
-  type ThreadWireEvent,
-} from "./thread-wire.ts";
+export { readThreadState } from "./thread-state.ts";
 import type {
   AgentController,
   AgentControllerRequestContext,
@@ -34,7 +29,13 @@ import {
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
-import type { PeaWorldDescriptor } from "@pe/agent-contracts";
+import {
+  threadAccess,
+  threadAccessPolicies,
+  turnScopeContextKey,
+  turnScopeSchema,
+  type PeaWorldDescriptor,
+} from "@pe/agent-contracts";
 import { z } from "zod";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
 import { createRuntimeMemoryOptions, createRuntimeMemoryProfile } from "./memory/profiles.ts";
@@ -50,15 +51,24 @@ export * from "./pea-context-signals.ts";
 
 const defaultPeaAgentModelId = "openai/gpt-5.6-terra";
 
+/** The whole model world Pea offers, in display order. Edit this list to change the picker. */
+export const peaModelAllowlist = [
+  "openai/gpt-5.6-terra",
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.6-luna",
+  "openai/gpt-5.6",
+  "anthropic/claude-fable-5",
+  "anthropic/claude-opus-5",
+];
+
+/** Narrow the gateway catalog (models.dev, ~13k ids) to the allowlist, allowlist order. */
+export function peaModels(catalog: AvailableModel[]): AvailableModel[] {
+  return peaModelAllowlist.flatMap((id) => catalog.find((model) => model.id === id) ?? []);
+}
+
 const peaAgentName = "Pea Revit Agent";
 const peaAgentDescription = "High-trust Revit/operator agent for Positive Energy tooling.";
 const permissionSettingKey = "pea.permissions";
-const permissionCategories: ToolCategory[] = ["read", "edit", "execute", "mcp", "other"];
-const permissionPolicies = {
-  "read-only": { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
-  ask: { read: "allow", edit: "ask", execute: "ask", mcp: "ask", other: "deny" },
-  trusted: { read: "allow", edit: "allow", execute: "allow", mcp: "allow", other: "deny" },
-} as const satisfies Record<RuntimeAccessLevel, Record<ToolCategory, "allow" | "ask" | "deny">>;
 const codePermissionRulesSchema = stateSchema.shape.permissionRules.unwrap();
 const permissionRecordSchema = z
   .object({
@@ -91,6 +101,7 @@ export type PeaRuntimeHandle = RuntimeHandle<
   PeaRuntimeServices,
   AgentController<PeaRuntimeState>
 > & {
+  resourceId: string;
   capabilities: Readonly<PeaRuntimeCapabilities>;
   world: PeaWorldDescriptor;
   isSessionAdmitted(session: Session<PeaRuntimeState>): boolean;
@@ -161,6 +172,9 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     request,
     configureController: (built) => {
       controller = built;
+      // One seam: snapshot, switchModel, and agent model resolution all read this method.
+      const nativeList = built.listAvailableModels.bind(built);
+      built.listAvailableModels = async () => peaModels(await nativeList());
       policy = installPeaControllerPolicy(built, {
         accessLevel: options.accessLevel,
         resourceId,
@@ -242,6 +256,7 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
     throw error;
   }
   return Object.assign(handle, {
+    resourceId: world.id,
     capabilities,
     world,
     isSessionAdmitted: (session: Session<PeaRuntimeState>) => policy!.isAdmitted(session),
@@ -313,6 +328,7 @@ function installPeaControllerPolicy(
       let admission = admissions.get(session);
       if (!admission) {
         admission = createPeaSessionAdmission(
+          controller,
           session,
           options.accessLevel,
           options.scopedWeb ? session.thread.requireId() : undefined,
@@ -333,17 +349,14 @@ function installPeaControllerPolicy(
     controller.createSession = (async (input = {}) => {
       const resourceId = input.resourceId ?? options.resourceId;
       const scope = input.scope?.trim();
-      const threadId = input.threadId?.trim();
+      const threadId = input.threadId?.trim() ?? scope;
       if (resourceId !== options.resourceId) throw new Error("Pea web resourceId is immutable.");
       if (!scope) throw new Error("Pea web sessions require a scope.");
-      if (threadId !== undefined && threadId !== scope) {
+      if (threadId !== scope) {
         throw new Error("Pea web session scope must equal threadId.");
       }
 
       const admitted = await controller.getSessionByResource(resourceId, scope);
-      if (!admitted && threadId !== scope) {
-        throw new Error("First Pea web session materialization requires threadId equal to scope.");
-      }
       const session = await createSession({ ...input, resourceId, scope, threadId });
       const admission = admissions.get(session);
       if (!admission) throw new Error("Pea session was not admitted.");
@@ -376,6 +389,7 @@ function installPeaControllerPolicy(
 }
 
 function createPeaSessionAdmission(
+  controller: AgentController<PeaRuntimeState>,
   session: Session<PeaRuntimeState>,
   requestedAccessLevel: RuntimeAccessLevel | undefined,
   scopedThreadId: string | undefined,
@@ -505,21 +519,26 @@ function createPeaSessionAdmission(
     };
   }) as typeof session.sendSignal;
 
-  // A send is a raw user signal so the persisted row carries the client's facts: `id` is the
-  // browser's `clientMessageId` (the optimistic echo reconciles by id, never by text) and
-  // `metadata.binding` is what the user was looking at. `requestContext` still rides the run so
-  // tools read the same binding. Ledger 2026-09-02 CHAT LEDGER SHAPE (agent).
+  // The turn scope is parsed once at admission, frozen for every tool call, and persisted on the
+  // user signal.
+  // This resolves at admission, not completion; the reply arrives on the session stream.
   session.sendMessage = async ({ content, files, requestContext }) => {
     await assertRunAdmitted();
-    const id = readContextKey(requestContext, "clientMessageId");
-    const binding = readContextKey(requestContext, "binding");
+    const parsedScope = turnScopeSchema.safeParse(
+      readContextKey(requestContext, turnScopeContextKey),
+    );
+    if (scopedThreadId && !parsedScope.success)
+      throw new Error("Pea web turns require a valid scope.");
+    const scope = parsedScope.success ? Object.freeze(parsedScope.data) : undefined;
+    const setter = (requestContext as { set?: (key: string, value: unknown) => void } | undefined)
+      ?.set;
+    if (scope && setter) setter.call(requestContext, turnScopeContextKey, scope);
     const signal = session.sendSignal(
       {
         type: "user",
         tagName: "user",
         contents: messageContents(content, files),
-        ...(typeof id === "string" && id ? { id } : {}),
-        ...(binding !== undefined ? { metadata: { binding } } : {}),
+        ...(scope ? { id: scope.id, metadata: { scope } } : {}),
       },
       { requestContext },
     );
@@ -683,9 +702,7 @@ async function configurePermissions(
   const stored = await storedPermission;
   assertCurrent();
   const persisted = readPermissionRecord(stored);
-  const persistedLevel = persisted
-    ? accessLevelFromPermissionRules(persisted.permissionRules)
-    : undefined;
+  const persistedLevel = persisted ? threadAccess(persisted.permissionRules) : undefined;
   const level =
     stored === undefined
       ? (requestedAccessLevel ?? "ask")
@@ -714,21 +731,12 @@ async function configurePermissions(
 }
 
 function permissionRulesForAccessLevel(level: RuntimeAccessLevel): PermissionRules {
-  return { categories: { ...permissionPolicies[level] }, tools: {} };
-}
-
-function accessLevelFromPermissionRules(rules: PermissionRules): RuntimeAccessLevel | undefined {
-  if (Object.keys(rules.categories).length !== permissionCategories.length) return undefined;
-  return (Object.keys(permissionPolicies) as RuntimeAccessLevel[]).find((level) =>
-    permissionCategories.every(
-      (category) => rules.categories[category] === permissionPolicies[level][category],
-    ),
-  );
+  return { categories: { ...threadAccessPolicies[level] }, tools: {} };
 }
 
 function readPermissionRecord(value: unknown): PermissionRecord | undefined {
   const parsed = permissionRecordSchema.safeParse(value);
-  if (!parsed.success || !accessLevelFromPermissionRules(parsed.data.permissionRules)) {
+  if (!parsed.success || !threadAccess(parsed.data.permissionRules)) {
     return undefined;
   }
   return parsed.data;

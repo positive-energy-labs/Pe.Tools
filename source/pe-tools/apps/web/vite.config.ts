@@ -63,7 +63,7 @@ const config = defineConfig(({ mode }) => {
             } as const;
             return {
               "/call": options,
-              "/ledger": options,
+              "/events": options,
               "/ops": options,
               "/schemas": options,
               "/host": options,

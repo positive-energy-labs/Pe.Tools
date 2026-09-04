@@ -90,7 +90,13 @@ function MomentSection({
   const register = useContext(MomentRegistry);
   const setRef = useCallback((el: HTMLElement | null) => register(id, el), [register, id]);
   return (
-    <section data-key={id} data-role={role} {...annotation("moment")} ref={setRef}>
+    <section
+      aria-label={`${role === "user" ? "User" : "Assistant"} message`}
+      data-key={id}
+      data-role={role}
+      {...annotation("moment")}
+      ref={setRef}
+    >
       {children}
     </section>
   );

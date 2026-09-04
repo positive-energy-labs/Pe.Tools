@@ -1,12 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { useLedger } from "#/host/ledger";
+import { useHostEvents } from "#/host/events";
 import { HOST_QUERY_KEY } from "#/host/queries";
 import { usePeInfo } from "#/host/info";
 
 /**
- * Invalidates every host query on any world ledger entry (Revit document changes, state syncs,
+ * Invalidates every host query on any world event (Revit document changes, state syncs,
  * session connect/disconnect). Mount once; every current and future host-backed route becomes
  * live with zero per-route work.
  *
@@ -16,10 +16,10 @@ import { usePeInfo } from "#/host/info";
 export function useHostLiveInvalidation() {
   const queryClient = useQueryClient();
   const revit = usePeInfo().data?.capabilities.revit === true;
-  const [tick] = useLedger<unknown, number>(
-    revit ? "world" : null,
-    (count) => count + 1,
-    () => 0,
+  const [tick, setTick] = useState(0);
+  useHostEvents(
+    revit,
+    useCallback(() => setTick((count) => count + 1), []),
   );
   useEffect(() => {
     if (!tick) return;

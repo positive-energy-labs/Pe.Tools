@@ -17,8 +17,6 @@ export type ToolResume = string | string[] | PlanResume;
 
 export type MessageFile = { data: string; mediaType: string; filename?: string };
 
-export const MESSAGE_LIMIT = 200;
-
 export type SessionClient = ReturnType<ReturnType<MastraClient["getAgentController"]>["session"]>;
 
 export interface WorkbenchContextValue {
@@ -42,6 +40,8 @@ export interface WorkbenchContextValue {
   deleteThread: (threadId: string) => Promise<void>;
   resolveApproval: (toolCallId: string, optionId?: string) => Promise<void>;
   setModel: (modelId: string) => Promise<void>;
+  /** Store a provider API key in the host's auth.json and refresh the model choices. */
+  addApiKey: (provider: string, apiKey: string) => Promise<void>;
   setAccessLevel: (accessLevel: AccessLevel) => Promise<void>;
 }
 

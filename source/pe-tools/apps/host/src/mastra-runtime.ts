@@ -4,10 +4,13 @@ import { Cause, Context, Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { createRouteRegistrations } from "@pe/mcps";
-import { buildAgentControllerApp } from "@pe/runtime";
-import { createPeaRuntime, type PeaRuntimeCapabilities } from "@pe/runtime/pea";
+import { buildAgentControllerApp, type ServableRuntime } from "@pe/runtime";
+import {
+  createPeaRuntime,
+  type PeaRuntimeCapabilities,
+  type PeaRuntimeOptions,
+} from "@pe/runtime/pea";
 import { productRoot } from "./host-ownership.ts";
-import { attachThreadLedgers } from "./thread-ledger.ts";
 import { setAgentRuntimeStatus } from "./local-ops.ts";
 
 /**
@@ -23,6 +26,8 @@ export class MastraRuntime extends Context.Service<
     readonly fetch: (request: Request) => Promise<Response>;
   }
 >()("pe/MastraRuntime") {}
+
+export type RuntimeFactory = (options: PeaRuntimeOptions) => Promise<ServableRuntime>;
 
 /**
  * D4 observability: spawned hosts run detached with stdio ignored, so `Effect.logError` alone
@@ -108,6 +113,7 @@ const recordMastraDegrade = (error: unknown) =>
 export function makeMastraRuntimeLive(
   capabilities: PeaRuntimeCapabilities,
   contactFactory: typeof createRouteRegistrations = createRouteRegistrations,
+  runtimeFactory: RuntimeFactory = createPeaRuntime,
 ) {
   const routeRegistrations = capabilities.revit ? contactFactory : () => [];
   return Layer.effect(
@@ -120,8 +126,7 @@ export function makeMastraRuntimeLive(
 
       const handle = yield* Effect.acquireRelease(
         Effect.tryPromise(async () => {
-          const runtime = await createPeaRuntime({ hostBaseUrl, protocol: "web", capabilities });
-          attachThreadLedgers(runtime);
+          const runtime = await runtimeFactory({ hostBaseUrl, protocol: "web", capabilities });
           const app = await buildAgentControllerApp({
             runtime,
             label: "pea",

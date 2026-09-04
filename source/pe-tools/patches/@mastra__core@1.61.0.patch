@@ -120,6 +120,58 @@ index bb70f63aee5dc09492c50dc57c37b41f36f70c0c..3f91cec3bcf79f2dcb06234adfa418bf
  	async readThreadMetadataValue({ threadId, key }) {
  		if (!this.#resolveStorage()) return void 0;
  		try {
+diff --git a/dist/agent-controller-DnS5KSfl.cjs b/dist/agent-controller-DnS5KSfl.cjs
+--- a/dist/agent-controller-DnS5KSfl.cjs
++++ b/dist/agent-controller-DnS5KSfl.cjs
+@@ -5828,5 +5828,6 @@ var AgentController = class {
+ 		const shared = {
+ 			maxSteps: CONTROLLER_MAX_STEPS,
+ 			savePerStep: false,
++			persistPartialOnAbort: true,
+ 			requireToolApproval: !isYolo && !channelAutoApprove
+ 		};
+diff --git a/dist/agent-controller-sWTmXOK3.js b/dist/agent-controller-sWTmXOK3.js
+--- a/dist/agent-controller-sWTmXOK3.js
++++ b/dist/agent-controller-sWTmXOK3.js
+@@ -5828,5 +5828,6 @@ var AgentController = class {
+ 		const shared = {
+ 			maxSteps: CONTROLLER_MAX_STEPS,
+ 			savePerStep: false,
++			persistPartialOnAbort: true,
+ 			requireToolApproval: !isYolo && !channelAutoApprove
+ 		};
+diff --git a/dist/agent-DSxJoGjY.js b/dist/agent-DSxJoGjY.js
+--- a/dist/agent-DSxJoGjY.js
++++ b/dist/agent-DSxJoGjY.js
+@@ -30996,11 +30996,6 @@ var SaveQueueManager = class {
+ 	*/
+ 	enqueueSave(threadId, messageList, memoryConfig) {
+-		const next = (this.saveQueues.get(threadId) || Promise.resolve()).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).catch((err) => {
+-			this.logger?.error?.("Error in enqueueSave", {
+-				err,
+-				threadId
+-			});
+-		}).then(() => {
++		const next = (this.saveQueues.get(threadId) || Promise.resolve()).catch(() => {}).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).finally(() => {
+ 			if (this.saveQueues.get(threadId) === next) this.saveQueues.delete(threadId);
+ 		});
+ 		this.saveQueues.set(threadId, next);
+diff --git a/dist/agent-NkjbehmN.cjs b/dist/agent-NkjbehmN.cjs
+--- a/dist/agent-NkjbehmN.cjs
++++ b/dist/agent-NkjbehmN.cjs
+@@ -30998,11 +30998,6 @@ var SaveQueueManager = class {
+ 	*/
+ 	enqueueSave(threadId, messageList, memoryConfig) {
+-		const next = (this.saveQueues.get(threadId) || Promise.resolve()).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).catch((err) => {
+-			this.logger?.error?.("Error in enqueueSave", {
+-				err,
+-				threadId
+-			});
+-		}).then(() => {
++		const next = (this.saveQueues.get(threadId) || Promise.resolve()).catch(() => {}).then(() => this.persistUnsavedMessages(messageList, memoryConfig)).finally(() => {
+ 			if (this.saveQueues.get(threadId) === next) this.saveQueues.delete(threadId);
+ 		});
+ 		this.saveQueues.set(threadId, next);
 diff --git a/dist/agent-controller-sWTmXOK3.js b/dist/agent-controller-sWTmXOK3.js
 index c3ffac6c49257d0bc21dafa0a93a30307a36f213..a4b410f40d6cdde7ab056fa5a63fb5cfb9872627 100644
 --- a/dist/agent-controller-sWTmXOK3.js

@@ -117,11 +117,12 @@ type Lamp = {
  */
 function useHostLamp(enabled: boolean): Lamp {
   const info = useQuery({
-    queryKey: ["front-door-host-lamp"],
+    queryKey: ["pe-info", resolveWorkbenchConfig().origin],
     queryFn: () => fetchPeInfo(resolveWorkbenchConfig()),
     enabled,
     refetchInterval: 5_000,
     retry: false,
+    staleTime: Infinity,
   });
   if (!enabled)
     return {

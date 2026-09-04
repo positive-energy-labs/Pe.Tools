@@ -5,6 +5,7 @@ import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 import { addressSchema, routeStatePatchSchema } from "@pe/agent-contracts";
+import { readThreadState } from "./thread-state.ts";
 import {
   RouteWorkspace,
   type RouteWorkspaceRegistration,
@@ -26,23 +27,23 @@ const routeStateCommandBodySchema = z.object({
 
 export interface ServableRuntime {
   controller: AgentController;
-  resourceId?: string;
+  resourceId: string;
   session?: Session;
   mastra?: Mastra;
   storage?: unknown;
   metadata?: Record<string, unknown>;
   isSessionAdmitted?(session: Session): boolean;
   close?: () => Promise<void> | void;
+  /** mastra code-sdk `AuthStorage` (auth.json): the one credential store Pea reads. */
+  authStorage?: {
+    setStoredApiKey(provider: string, key: string, envVar?: string): void;
+    hasStoredApiKey(provider: string): boolean;
+    isLoggedIn(provider: string): boolean;
+  };
 }
 
-function requireServableRuntime(value: unknown): ServableRuntime {
-  const runtime = value as Partial<ServableRuntime> | undefined;
-  if (!(runtime?.controller instanceof AgentController)) {
-    throw new Error("Runtime agent-controller web requires an AgentController.");
-  }
-  if (!runtime.resourceId) throw new Error("Runtime agent-controller web requires resourceId.");
-  return runtime as ServableRuntime;
-}
+/** mastra keys OpenAI credentials under its Codex OAuth id; stored keys must land in the same slot. */
+const authProviderId = (provider: string) => (provider === "openai" ? "openai-codex" : provider);
 
 function resolveServingTarget(runtime: ServableRuntime, label: string): Mastra {
   const existing = runtime.mastra ?? runtime.controller.getMastra();
@@ -67,13 +68,39 @@ export interface BuildAgentControllerAppOptions {
 export async function buildAgentControllerApp(
   options: BuildAgentControllerAppOptions,
 ): Promise<Hono> {
-  const runtime = requireServableRuntime(options.runtime);
+  const runtime = options.runtime;
   const mastra = resolveServingTarget(runtime, options.label);
-  const resourceId = runtime.resourceId!;
+  const resourceId = runtime.resourceId;
 
   const app = new Hono();
   // Native display state omits Pe prompt, tool, skill, and OM metadata.
   app.get("/pe/inspect", (c) => c.json((runtime.metadata?.workbench as unknown) ?? {}));
+  app.get("/pe/thread/:threadId", async (c) => {
+    const threadId = c.req.param("threadId");
+    try {
+      const session = await runtime.controller.createSession({
+        resourceId,
+        scope: threadId,
+        threadId,
+      });
+      return c.json(await readThreadState(runtime, session, threadId));
+    } catch (error) {
+      return c.json({ error: errorMessage(error) }, 500);
+    }
+  });
+  // Paste-a-key: writes auth.json, then drops the 10s catalog cache so the next snapshot sees it.
+  app.post("/pe/credentials/:provider", async (c) => {
+    const provider = c.req.param("provider");
+    const body = (await c.req.json().catch(() => ({}))) as { apiKey?: string };
+    const apiKey = body.apiKey?.trim();
+    if (!runtime.authStorage) return c.json({ error: "no credential store" }, 503);
+    if (!apiKey) return c.json({ error: "apiKey required" }, 400);
+    runtime.authStorage.setStoredApiKey(authProviderId(provider), apiKey);
+    (
+      runtime.controller as { invalidateAvailableModelsCache?: () => void }
+    ).invalidateAvailableModelsCache?.();
+    return c.json({ ok: true });
+  });
   const registrations = options.routeRegistrations ?? [];
   const storage = mastra.getStorage();
   const threadState = await storage?.getStore("threadState");

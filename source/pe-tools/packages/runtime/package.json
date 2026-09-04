@@ -24,6 +24,10 @@
     "./pea": {
       "types": "./src/pea-runtime.ts",
       "import": "./src/pea-runtime.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "import": "./src/testing.ts"
     }
   },
   "publishConfig": {

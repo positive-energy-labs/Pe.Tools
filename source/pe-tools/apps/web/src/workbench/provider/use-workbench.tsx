@@ -1,9 +1,5 @@
 import { useContext } from "react";
-import {
-  type AgentControllerThreadInfo,
-  type MastraDBMessage,
-  type PlanResume,
-} from "@mastra/client-js";
+import { type AgentControllerThreadInfo, type PlanResume } from "@mastra/client-js";
 import { readRecord, readString, shortId, type ChatState } from "../chat-state";
 import { type WorkbenchAttachment } from "../store";
 import type {
@@ -107,25 +103,6 @@ export function toFiles(attachments: WorkbenchAttachment[] | undefined): Message
     return [];
   });
   return files.length ? files : undefined;
-}
-
-/** The echo carries the same id the host will persist, so the canonical row upserts it in place. */
-export function optimisticMessage(
-  id: string,
-  content: string,
-  files: MessageFile[] | undefined,
-): MastraDBMessage {
-  const parts: MastraDBMessage["content"]["parts"] = [];
-  if (content) parts.push({ type: "text", text: content });
-  for (const file of files ?? []) {
-    parts.push({ type: "file", mimeType: file.mediaType, data: file.data });
-  }
-  return {
-    id,
-    role: "user",
-    createdAt: new Date(),
-    content: { format: 2, parts },
-  };
 }
 
 // ponytail: fine for text attachments; chunk the byte loop if multi-MB text ever needs base64ing.

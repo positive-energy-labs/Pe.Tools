@@ -2,6 +2,7 @@ import type { ToolCategory } from "@mastra/core/agent-controller";
 import { createTool } from "@mastra/core/tools";
 import z from "zod";
 import { HostLogTarget, type HostOpResponse } from "@pe/host-contracts/operation-types";
+import { turnScopeContextKey, turnScopeSchema } from "@pe/agent-contracts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 
 type ActiveDocumentSummary = NonNullable<
@@ -315,7 +316,7 @@ export const captureView = createCaptureViewTool((bridgeSessionId) =>
 // capability and never duplicates it — a second MCP surface for one lifecycle is exactly the
 // hand-registered switch case the verb catalog exists to prevent.
 
-export const peaProductTools = {
+const productTools = {
   [peStatus.id]: peStatus,
   [peLogs.id]: peLogs,
   [hostOperationSearch.id]: hostOperationSearch,
@@ -329,6 +330,49 @@ export const peaProductTools = {
   [scriptExecute.id]: scriptExecute,
   ...routeStateTools,
 };
+
+const targetScopedTools = new Set([
+  "pe_status",
+  "host_operation_call",
+  "capture_view",
+  "script_bootstrap",
+  "script_execute",
+]);
+const documentScopedTools = new Set(["route_state_read", "route_state_apply", "route_command"]);
+
+export const peaProductTools = Object.fromEntries(
+  Object.entries(productTools).map(([name, tool]) => {
+    const execute = tool.execute;
+    if (!execute || (!targetScopedTools.has(name) && !documentScopedTools.has(name))) {
+      return [name, tool];
+    }
+    return [
+      name,
+      {
+        ...tool,
+        execute: (input: unknown, context: unknown) => {
+          const requestContext = (context as { requestContext?: unknown } | undefined)
+            ?.requestContext;
+          const raw =
+            requestContext && typeof requestContext === "object" && "get" in requestContext
+              ? (requestContext as { get(key: string): unknown }).get(turnScopeContextKey)
+              : undefined;
+          const parsed = turnScopeSchema.safeParse(raw);
+          if (!parsed.success || !input || typeof input !== "object") {
+            return (execute as (input: unknown, context: unknown) => unknown)(input, context);
+          }
+          const scoped = { ...(input as Record<string, unknown>) };
+          const { document, target } = parsed.data;
+          if (target && targetScopedTools.has(name) && scoped.bridgeSessionId === undefined)
+            scoped.bridgeSessionId = target;
+          if (document && documentScopedTools.has(name) && scoped.doc === undefined)
+            scoped.doc = document;
+          return (execute as (input: unknown, context: unknown) => unknown)(scoped, context);
+        },
+      },
+    ];
+  }),
+) as typeof productTools;
 
 export const peaProductToolMetadata = {
   pe_status: { category: "read", requiresRevit: true },

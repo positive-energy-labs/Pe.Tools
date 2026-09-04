@@ -1,5 +1,4 @@
 import { Press } from "#/components/lang/press";
-import { EmptyState } from "#/components/lang/empty";
 import {
   Combobox,
   ComboboxContent,
@@ -17,16 +16,27 @@ interface PickerOption {
   id: string;
   name: string;
   hint?: string;
+  /** Refused, and the hint says why (house law 3). */
+  disabled?: boolean;
 }
 
-/** Model + access pickers — Combobox-backed chips replacing the hand-rolled Picker. */
+/** Model + access pickers — Combobox-backed chips. */
 export function ControlChips() {
-  const { chat, setModel, setAccessLevel } = useWorkbench();
+  const { chat, setModel, setAccessLevel, addApiKey } = useWorkbench();
   const { models, access } = chat;
   const modelLabel = models.currentId
     ? (models.available.find((item) => item.id === models.currentId)?.modelName ?? models.currentId)
     : "model";
   const accessLabel = ACCESS_LEVELS.find((item) => item.id === access)?.name ?? access;
+  // Providers on the list with nothing to sign with: each gets one exit, "add key".
+  const keyless = [
+    ...new Set(models.available.filter((item) => !item.hasApiKey).map((item) => item.provider)),
+  ];
+  // ponytail: window.prompt is the paste surface; a kit field replaces it when a second key flow exists.
+  const pasteKey = (provider: string) => {
+    const apiKey = window.prompt(`${provider} API key`)?.trim();
+    if (apiKey) void addApiKey(provider, apiKey);
+  };
 
   return (
     <>
@@ -38,9 +48,15 @@ export function ControlChips() {
         options={models.available.map((item) => ({
           id: item.id,
           name: item.modelName ?? item.id,
-          hint: item.provider,
+          hint: item.hasApiKey ? item.provider : `${item.provider} — no key`,
+          disabled: !item.hasApiKey,
         }))}
         onPick={(id) => void setModel(id)}
+        footer={keyless.map((provider) => (
+          <Press key={provider} tone="quiet" size="value" onClick={() => pasteKey(provider)}>
+            add {provider} key
+          </Press>
+        ))}
       />
       <Picker
         title="Access"
@@ -64,6 +80,7 @@ function Picker({
   options,
   onPick,
   searchable = false,
+  footer,
 }: {
   title: string;
   label: string;
@@ -71,15 +88,8 @@ function Picker({
   options: PickerOption[];
   onPick: (id: string) => void;
   searchable?: boolean;
+  footer?: React.ReactNode;
 }) {
-  // A picker with no options says where options come from (§4). No dashed edge — dashed is
-  // reserved for seam, and "nothing connected yet" is a scope-empty, not a stand-in.
-  if (options.length === 0)
-    return (
-      <EmptyState story="scope" exit="connect the agent — options arrive with the session">
-        no {title.toLowerCase()} choices
-      </EmptyState>
-    );
   const selected = options.find((option) => option.id === activeId) ?? null;
   const anchorRef = useComboboxAnchor();
   return (
@@ -88,20 +98,28 @@ function Picker({
       value={selected}
       onValueChange={(option: PickerOption | null) => option && onPick(option.id)}
       itemToStringLabel={(option: PickerOption) => option.name}
+      // A picker without a search input must never filter: Base UI otherwise narrows the list
+      // to the stale label query (a Read-only chip opened to only "Ask", 2026-09-03 scenario).
+      filter={searchable ? undefined : null}
     >
       {/* ponytail: explicit anchor on the trigger — the in-popup search input can't be the
           positioner anchor or it feedback-loops (roaming/jittering popup). */}
       <div ref={anchorRef} className="inline-flex">
-        <ComboboxTrigger title={title} render={<Press tone="quiet" size="value" />}>
+        <ComboboxTrigger
+          aria-label={title}
+          title={title}
+          render={<Press tone="quiet" size="value" />}
+        >
           <span className="face-mono truncate">{label}</span>
         </ComboboxTrigger>
       </div>
       <ComboboxContent anchor={anchorRef}>
         {searchable ? <ComboboxInput placeholder={`Search ${title.toLowerCase()}…`} /> : null}
-        <ComboboxEmpty>No matches</ComboboxEmpty>
+        {/* Empty is a state: with no session yet, options arrive with the snapshot. */}
+        <ComboboxEmpty>{options.length === 0 ? "no session yet" : "No matches"}</ComboboxEmpty>
         <ComboboxList>
           {(option: PickerOption) => (
-            <ComboboxItem key={option.id} value={option}>
+            <ComboboxItem key={option.id} value={option} disabled={option.disabled}>
               <span className="flex min-w-0 flex-col">
                 <span className="text-ink">{option.name}</span>
                 {option.hint ? <span className="text-ink-2">{option.hint}</span> : null}
@@ -109,6 +127,7 @@ function Picker({
             </ComboboxItem>
           )}
         </ComboboxList>
+        {footer}
       </ComboboxContent>
     </Combobox>
   );

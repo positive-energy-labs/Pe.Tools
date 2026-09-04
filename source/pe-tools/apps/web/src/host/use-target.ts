@@ -1,12 +1,12 @@
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import type { SessionFacts } from "#/host/target";
 import { usePeInfo } from "#/host/info";
-import { useLedger, type Stamped } from "#/host/ledger";
+import { useHostEvents } from "#/host/events";
 import { worldTrunk } from "#/targeting/world";
 
-/** Broker bridge event as stamped on the `world` ledger (host `HostBridgeEvent`). */
-export type HostLedgerEvent = Stamped<{
+export type HostEvent = {
+  atMs: number;
   sessionId: string;
   kind: "event" | "state-sync" | "connected" | "disconnected";
   eventName?: string;
@@ -15,7 +15,7 @@ export type HostLedgerEvent = Stamped<{
   docTitle?: string | null;
   docChanged?: boolean;
   prevDocTitle?: string | null;
-}>;
+};
 
 type WorldEventKind = "session-appeared" | "session-gone" | "doc-changed";
 
@@ -28,7 +28,7 @@ export interface WorldEvent {
 
 const LOG_CAP = 100;
 
-function toWorldEvent(event: HostLedgerEvent, sessions: SessionFacts[]): WorldEvent | null {
+function toWorldEvent(event: HostEvent, sessions: SessionFacts[]): WorldEvent | null {
   const base = { atMs: event.atMs, sessionId: event.sessionId };
   switch (event.kind) {
     case "connected": {
@@ -65,22 +65,20 @@ function toWorldEvent(event: HostLedgerEvent, sessions: SessionFacts[]): WorldEv
 }
 
 /**
- * Broker-fed world history: the `world` ledger replayed then live, one reducer. Timestamps are
- * broker truth (`atMs` stamped at publish), not tab observation. A host restart is a new epoch, so
- * the log resets instead of dropping the new boot's events.
+ * Broker-fed world history. Timestamps are host publish time, not tab observation time.
  */
 export function useWorldLog(sessions: SessionFacts[]): WorldEvent[] {
   const revit = usePeInfo().data?.capabilities.revit === true;
-  // Label enrichment only — the ledger must not reopen on session-list churn.
+  // Label enrichment only — the stream must not reopen on session-list churn.
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
-  const [log] = useLedger<HostLedgerEvent, WorldEvent[]>(
-    revit ? "world" : null,
-    (current, event) => {
+  const [log, setLog] = useState<WorldEvent[]>([]);
+  useHostEvents<HostEvent>(
+    revit,
+    useCallback((event) => {
       const world = toWorldEvent(event, sessionsRef.current);
-      return world ? [...current.slice(-(LOG_CAP - 1)), world] : current;
-    },
-    () => [],
+      if (world) setLog((current) => [...current.slice(-(LOG_CAP - 1)), world]);
+    }, []),
   );
   return log;
 }

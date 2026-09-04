@@ -219,6 +219,7 @@ export function FixtureWorkbenchProvider({ children }: { children: ReactNode }) 
         ...previous,
         display: withoutGate(previous.display, toolCallId),
       })),
+    addApiKey: async () => {},
     setModel: async (modelId) =>
       setChat((previous) => ({
         ...previous,

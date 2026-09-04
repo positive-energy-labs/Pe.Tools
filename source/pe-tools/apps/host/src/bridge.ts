@@ -1,5 +1,4 @@
-import { Context, Deferred, Effect, Layer, Ref, Schema } from "effect";
-import { makeLedger, type Ledger } from "./ledger.ts";
+import { Context, Deferred, Effect, Layer, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpServerResponse as Response } from "effect/unstable/http";
 import { capture } from "@pe/runtime";
@@ -76,9 +75,8 @@ export type BridgeSessionView = {
 
 /**
  * A bridge frame worth relaying to browsers: Revit events, state syncs, connects/disconnects.
- * The world ledger stamps `epoch`/`seq`/`atMs` at publish (see `ledger.ts`); `origin` carries the
- * caller's x-pe-origin where a caller exists — these four frames are Revit-originated, so it is
- * usually absent until the QueueLedger round threads it through.
+ * A bridge event worth relaying to browsers. `origin` carries the caller's x-pe-origin where one
+ * exists. These four frames are Revit-originated, so it is usually absent.
  */
 export type HostBridgeEvent = {
   readonly sessionId: string;
@@ -93,8 +91,8 @@ export type HostBridgeEvent = {
   readonly prevDocTitle?: string | null;
 };
 
-/** Bounded in-memory replay ring: enough for a browser to reconstruct recent world history. */
-const EVENT_LEDGER_CAPACITY = 500;
+/** Backpressure cap for transient world notifications; current state remains query-owned. */
+const EVENT_STREAM_CAPACITY = 500;
 
 export function getBridgeRegistrationRejection(registration: BridgeRegistrationRequest) {
   return registration.contractVersion === BRIDGE_CONTRACT_VERSION
@@ -294,8 +292,7 @@ export class RevitBridge extends Context.Service<
     readonly handleConnection: (
       req: HttpServerRequest.HttpServerRequest,
     ) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
-    /** The `world` ledger: stamped bridge events, replayed and streamed by `/ledger/world`. */
-    readonly ledger: Ledger<HostBridgeEvent>;
+    readonly events: PubSub.PubSub<HostBridgeEvent>;
   }
 >()("RevitBridge") {}
 
@@ -368,8 +365,11 @@ export const RevitBridgeLive = Layer.effect(
   Effect.gen(function* () {
     const sessions = yield* Ref.make(new Map<string, Session>());
     const currentSessionId = yield* Ref.make<string | null>(null);
-    const ledger = makeLedger<HostBridgeEvent>({ name: "world", capacity: EVENT_LEDGER_CAPACITY });
-    const emit = (event: HostBridgeEvent) => Effect.sync(() => void ledger.emit(event));
+    const events = yield* Effect.acquireRelease(
+      PubSub.sliding<HostBridgeEvent>(EVENT_STREAM_CAPACITY),
+      PubSub.shutdown,
+    );
+    const emit = (event: HostBridgeEvent) => PubSub.publish(events, event).pipe(Effect.asVoid);
 
     const viewSession = Effect.fnUntraced(function* (session: Session) {
       return {
@@ -680,6 +680,6 @@ export const RevitBridgeLive = Layer.effect(
       return yield* Effect.all([...map.values()].map((session) => viewSession(session)));
     });
 
-    return { invoke, snapshot, list, handleConnection, ledger };
+    return { invoke, snapshot, list, handleConnection, events };
   }),
 );

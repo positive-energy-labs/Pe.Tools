@@ -5,9 +5,8 @@ import type {
   MastraMessagePart,
   PermissionRules,
 } from "@mastra/client-js";
+import { threadAccessPolicies, type ThreadViewState } from "@pe/agent-contracts";
 import type { PeInspect } from "#/host/inspect";
-
-export type { PeInspect } from "#/host/inspect";
 
 export type ChatDisplay = Omit<
   Partial<Extract<KnownAgentControllerEvent, { type: "display_state_changed" }>["displayState"]>,
@@ -26,21 +25,18 @@ export interface OmProgress {
   };
 }
 
-export type AccessLevel = "read-only" | "ask" | "trusted";
-
-export interface ChatState {
-  display: ChatDisplay;
-  messages: MastraDBMessage[];
-  inspect: PeInspect;
-  models: { currentId?: string; available: AgentControllerAvailableModel[] };
-  access: AccessLevel;
-  errors: string[];
-}
+export type ChatState = ThreadViewState<
+  MastraDBMessage,
+  ChatDisplay,
+  AgentControllerAvailableModel,
+  PermissionRules | undefined,
+  PeInspect
+>;
+export type AccessLevel = ChatState["access"];
 
 /**
- * A user turn is the optimistic echo (role `user`) or a user signal. The persisted row says
- * `type: "user"` with text parts; the live `message_start` says it under `content.metadata.signal`
- * with a `data-user-message` part. Same turn, two shapes.
+ * A user turn is a persisted user row or a live user signal. The persisted row says `type: "user"`
+ * with text parts; the live `message_start` carries a `data-user-message` signal part.
  */
 export function isUserTurn(message: MastraDBMessage): boolean {
   if (message.role === "user") return true;
@@ -55,75 +51,10 @@ export function emptyChatState(): ChatState {
     messages: [],
     inspect: {},
     models: { available: [] },
+    permissions: undefined,
     access: "ask",
-    errors: [],
+    modeId: "",
   };
-}
-
-/** The host thread ledger's snapshot (`packages/runtime/src/thread-wire.ts` `ThreadSnapshot`), as JSON. */
-export interface ChatSnapshot {
-  type: "snapshot";
-  display: ChatDisplay;
-  messages: MastraDBMessage[];
-  models: { currentId?: string; available: AgentControllerAvailableModel[] };
-  permissions?: PermissionRules;
-  inspect: PeInspect;
-}
-
-/** A client-local change reduced through the same function as host events. */
-export interface ChatPatch {
-  type: "patch";
-  patch: Partial<Omit<ChatState, "display">> & { display?: Partial<ChatDisplay> };
-}
-
-export type ChatEvent = KnownAgentControllerEvent | ChatSnapshot | ChatPatch;
-
-export function applyEvent(state: ChatState, event: ChatEvent): ChatState {
-  switch (event.type) {
-    case "snapshot":
-      return {
-        display: event.display,
-        messages: event.messages,
-        inspect: event.inspect,
-        models: event.models,
-        access: accessLevelFromPermissions(event.permissions),
-        errors: [],
-      };
-    case "patch":
-      return { ...state, ...event.patch, display: { ...state.display, ...event.patch.display } };
-    case "display_state_changed":
-      return { ...state, display: event.displayState };
-    case "message_start":
-    case "message_update":
-    case "message_end":
-      return { ...state, messages: upsertMessage(state.messages, event.message) };
-    case "model_changed":
-      return { ...state, models: { ...state.models, currentId: event.modelId } };
-    case "error":
-      return pushError(state, errorText(event.error));
-    case "agent_end":
-      return event.reason === "error" && state.errors.length === 0
-        ? pushError(state, "Run failed.")
-        : state;
-    default:
-      return state;
-  }
-}
-
-// The optimistic echo shares the persisted id (`clientMessageId`), so id is the only identity.
-function upsertMessage(messages: MastraDBMessage[], next: MastraDBMessage): MastraDBMessage[] {
-  const index = messages.findIndex((message) => message.id === next.id);
-  if (index >= 0) return messages.map((message, at) => (at === index ? next : message));
-  return [...messages, next];
-}
-
-function pushError(state: ChatState, message: string): ChatState {
-  return state.errors.includes(message) ? state : { ...state, errors: [...state.errors, message] };
-}
-
-function errorText(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return readString(readRecord(error)?.message) || stringify(error) || "Unknown error.";
 }
 
 export type ToolStatus = "in_progress" | "completed" | "failed";
@@ -230,10 +161,9 @@ export function selectApprovals(display: ChatDisplay): Approval[] {
   return approvals;
 }
 
-export type RunStatus = "idle" | "running" | "waiting" | "error";
+export type RunStatus = "idle" | "running" | "waiting";
 
 export function selectRunStatus(state: ChatState): RunStatus {
-  if (state.errors.length > 0) return "error";
   if (selectApprovals(state.display).length > 0) return "waiting";
   return state.display.isRunning ? "running" : "idle";
 }
@@ -258,22 +188,7 @@ export const ACCESS_LEVELS: AccessLevelInfo[] = [
   { id: "trusted", name: "Trusted", description: "Run trusted workspace tools directly." },
 ];
 
-export const PERMISSION_LEVELS = {
-  "read-only": { read: "allow", edit: "deny", execute: "deny", mcp: "deny", other: "deny" },
-  ask: { read: "allow", edit: "ask", execute: "ask", mcp: "ask", other: "deny" },
-  trusted: { read: "allow", edit: "allow", execute: "allow", mcp: "allow", other: "deny" },
-} as const;
-
-export function accessLevelFromPermissions(rules: PermissionRules | undefined): AccessLevel {
-  if (!rules) return "ask";
-  const categories = rules.categories ?? {};
-  return (
-    (Object.entries(PERMISSION_LEVELS) as [AccessLevel, Record<string, string>][]).find(
-      ([, expected]) =>
-        Object.entries(expected).every(([category, policy]) => categories[category] === policy),
-    )?.[0] ?? "read-only"
-  );
-}
+export const PERMISSION_LEVELS = threadAccessPolicies;
 
 export const APPROVAL_OPTIONS = [
   { id: "allow_once", kind: "allow-once", label: "Approve" },

@@ -297,11 +297,9 @@ Rebuilt 2026-08-29 after goal `design-normalization-2`; git history holds the ti
 - 2026-09-01 — APPROVAL SETTLEMENT is server-only (grill verdict kaitpw): the patched Mastra
   settlement (`@mastra__core` `respondToToolApproval` wasArmed hunk) is the one authority; the
   client never clears the gate itself — it renders in-flight until `display_state_changed`.
-- 2026-09-01 — CHAT PRIMITIVE (grill verdict kaitpw): the client chat projection rebuilds as an
-  append-only thread event log — every event `{threadId, epoch, sequence}`, every command an
-  idempotent `clientMessageId` — reduced by ONE reducer. Mastra stays the persisted authority;
-  the demiurge replaces the client's two unordered writers (wholesale `hydrate` vs live
-  `applyEvent`), not the server. Text-equality optimistic reconciliation dies with it.
+- 2026-09-03 — CHAT PRIMITIVE (2026-09-01) is SUPERSEDED (verdict kaitpw): it named a mechanism
+  (`{threadId, epoch, sequence}`, one reducer) and that mechanism was built and deleted in two
+  days. The chat transport verdicts live in `docs/features/agent/LEDGER.md` (CHAT TRANSPORT S1).
 - 2026-09-01 — ONE ROUTE SPEC (grill verdict kaitpw: "this was the biggest thing I wanted to
   demiurge"): a `CollaborativeRouteSpec` from which UI verbs, Pea commands, the server route
   registry, and the chat-plugin registry all DERIVE; one provider owns world resolution, doc

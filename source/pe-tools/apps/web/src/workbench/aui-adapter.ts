@@ -18,9 +18,18 @@ type LikePart = LikeContent[number];
 
 export function toThreadMessages(state: ChatState): ThreadMessageLike[] {
   const display = state.display;
-  const chat = state.messages.filter(
+  const stored = state.messages.filter(
     (message) => isUserTurn(message) || message.role === "assistant",
   );
+  const wireMessage = display.isRunning ? display.currentMessage : undefined;
+  const current: MastraDBMessage | undefined = wireMessage
+    ? { ...wireMessage, createdAt: new Date(wireMessage.createdAt) }
+    : undefined;
+  const chat = current
+    ? stored.some((message) => message.id === current.id)
+      ? stored.map((message) => (message.id === current.id ? current : message))
+      : [...stored, current]
+    : stored;
   const lastAssistantId = [...chat].reverse().find((m) => m.role === "assistant")?.id;
   const streamingId = display.isRunning ? display.currentMessage?.id : undefined;
   const emitted = new Set<string>();

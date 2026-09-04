@@ -92,6 +92,7 @@ export async function createRuntimeController<
   let session: Session<TState> | undefined;
   let memory: AgentControllerConfig<TState>["memory"];
   let ownedMemory: SettleableMemory | undefined;
+  let ownedStorage: ClosableStorage | undefined;
   let mastra: Mastra | undefined;
   const sessions = new Map<Session<TState>, (() => void) | undefined>();
   let unsubscribeCreated: (() => void) | undefined;
@@ -110,6 +111,7 @@ export async function createRuntimeController<
     >;
     const resolvedConfig = await resolveRuntimeControllerConfig(createOptions, request);
     config = resolvedConfig;
+    ownedStorage = resolvedConfig.storage;
     resourceId = resolvedConfig.resourceId ?? resolvedConfig.id;
     memory = resolvedConfig.memory;
     ownedMemory = typeof memory === "function" ? undefined : memory;
@@ -159,7 +161,7 @@ export async function createRuntimeController<
         unsubscribeDeleted,
         controllerCleanup,
         hasInjectedRuntimeController(options) ? undefined : mastra,
-        hasInjectedRuntimeController(options) ? config.storage : undefined,
+        hasInjectedRuntimeController(options) ? config.storage : ownedStorage,
       );
       return closeTask;
     },
@@ -253,8 +255,8 @@ async function closeRuntimeController<TState extends Record<string, unknown>>(
   );
   sessions.clear();
   await memory?.settled();
-  if (!mastra) return await storage?.close?.();
-  await mastra.shutdown();
+  if (mastra) await mastra.shutdown();
+  await storage?.close?.();
 }
 
 async function resolveRuntimeControllerConfig<

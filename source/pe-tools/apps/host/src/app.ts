@@ -9,7 +9,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { BRIDGE_PATH, hostProcessIdentity } from "@pe/host-contracts/contracts";
 import type { PeaRuntimeCapabilities } from "@pe/runtime/pea";
 import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
-import { ledgerRoutes } from "./ledger.ts";
 import { getHostStatus } from "./local-ops.ts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
@@ -130,13 +129,32 @@ const noRevitHostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthP
 
 const emptyNotFound = Effect.succeed(Response.empty({ status: 404 }));
 
+const bridgeEventsRoute = HttpRouter.add("GET", "/events", () =>
+  Effect.gen(function* () {
+    const bridge = yield* RevitBridge;
+    const encoder = new TextEncoder();
+    const body = Stream.make(encoder.encode(": open\n\n")).pipe(
+      Stream.concat(
+        Stream.fromPubSub(bridge.events).pipe(
+          Stream.map((event) =>
+            encoder.encode(`data: ${JSON.stringify({ ...event, atMs: Date.now() })}\n\n`),
+          ),
+        ),
+      ),
+    );
+    return Response.stream(body, {
+      contentType: "text/event-stream",
+      headers: { "cache-control": "no-cache", connection: "keep-alive" },
+    });
+  }),
+);
+
 export const NoRevitBoundaryLive = Layer.mergeAll(
   HttpRouter.add("*", BRIDGE_PATH, emptyNotFound),
   HttpRouter.add("*", "/call", emptyNotFound),
   HttpRouter.add("*", "/ops", emptyNotFound),
   HttpRouter.add("*", "/sessions", emptyNotFound),
   HttpRouter.add("*", "/events", emptyNotFound),
-  HttpRouter.add("*", "/ledger", emptyNotFound),
   HttpRouter.add("*", "/schemas/settings/*", emptyNotFound),
   HttpRouter.add("*", "/host/install", emptyNotFound),
   HttpRouter.add("*", "/host/update", emptyNotFound),
@@ -299,7 +317,7 @@ const ServedSessionLive = Layer.effectDiscard(
     const bridge = yield* RevitBridge;
     const { handle: handleDeferred } = yield* HostLifecycle;
     yield* Effect.forkScoped(
-      Stream.fromPubSub(bridge.ledger.events).pipe(
+      Stream.fromPubSub(bridge.events).pipe(
         Stream.filter((event) => event.kind === "connected"),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
@@ -324,7 +342,7 @@ const InstallConvergeLive = Layer.effectDiscard(
     yield* Effect.forkScoped(runInstallConverge);
     const bridge = yield* RevitBridge;
     yield* Effect.forkScoped(
-      Stream.fromPubSub(bridge.ledger.events).pipe(
+      Stream.fromPubSub(bridge.events).pipe(
         Stream.filter((event) => event.kind === "disconnected"),
         Stream.runForEach(() => runInstallConverge),
       ),
@@ -337,6 +355,7 @@ function makeRevitComposition(includeInstallConverge: boolean) {
     provider: RevitBridgeLive,
     routes: Layer.mergeAll(
       bridgeWsRoute,
+      bridgeEventsRoute,
       opsCatalogRoute,
       settingsSchemaRoute,
       hostStatusRoute,
@@ -396,7 +415,6 @@ export function makeHttpLive(options: HttpLiveOptions) {
 
   const CommonAppLive = Layer.mergeAll(
     adminShutdownRoute,
-    ledgerRoutes,
     MastraMountLive,
     options.viteServer ? viteWebLayer(options.viteServer) : staticSpaLayer(options.webRoot),
   );
