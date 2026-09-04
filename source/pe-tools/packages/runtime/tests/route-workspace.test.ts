@@ -5,8 +5,8 @@ import path from "node:path";
 import { serve } from "@hono/node-server";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { address, current, routeBindingsSchema } from "@pe/agent-contracts";
-import type { RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
+import { address, routeBindingsSchema } from "@pe/agent-contracts";
+import type { RouteScope, RouteStateCommandHandlers, RouteStateSpec } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import { buildAgentControllerApp } from "../src/agent-controller-web.ts";
 import { createPeaRuntime } from "../src/pea-runtime.ts";
@@ -80,12 +80,11 @@ function registration(
 
 function memoryStore() {
   const state = new Map<string, unknown>();
-  const key = (documentAddress: string, route: string) => `${documentAddress}\0${route}`;
+  const key = (scopeKey: string, route: string) => `${scopeKey}\0${route}`;
   const store: RouteDocumentStore = {
-    getState: async ({ documentAddress, route }) =>
-      structuredClone(state.get(key(documentAddress, route))),
-    setState: async ({ documentAddress, route, value }) => {
-      state.set(key(documentAddress, route), structuredClone(value));
+    getState: async ({ scopeKey, route }) => structuredClone(state.get(key(scopeKey, route))),
+    setState: async ({ scopeKey, route, value }) => {
+      state.set(key(scopeKey, route), structuredClone(value));
     },
   };
   return { store, state };
@@ -103,10 +102,13 @@ function workspace(
   });
 }
 
-const documentA = { documentAddress: address("C:\\Models\\A.rvt") } as const;
-const documentB = { documentAddress: address("C:\\Models\\B.rvt") } as const;
+const documentA = {
+  scope: { session: "pe.app-25", document: address("C:\\Models\\A.rvt") },
+} as const;
+const documentB = { scope: { session: null, document: address("C:\\Models\\B.rvt") } } as const;
+const queryA = `session=pe.app-25&doc=${encodeURIComponent(documentA.scope.document)}`;
 
-function bind(module: RouteWorkspace, scope = documentA) {
+function bind(module: RouteWorkspace, scope: RouteScope = documentA) {
   return {
     read: () => module.read(scope, "test-route"),
     apply: (actor: RouteWorkspaceActor, patches: RouteWorkspacePatch[], revision: number) =>
@@ -139,8 +141,8 @@ test("document-scoped route documents are isolated and survive module recreation
       "human",
       [
         {
-          path: ["bindings", "world"],
-          value: { id: "session:pe.app-25", label: "pe.app-25", at: documentA.documentAddress },
+          path: ["bindings", "profile"],
+          value: { id: "profile-a", label: "Profile A" },
         },
       ],
       1,
@@ -148,7 +150,7 @@ test("document-scoped route documents are isolated and survive module recreation
   ).toMatchObject({ ok: true });
   const restarted = workspace(store);
   const reloaded = (await bind(restarted).read())?.doc as TestDocument;
-  expect(current(reloaded.bindings.world, documentA.documentAddress)?.id).toBe("session:pe.app-25");
+  expect(reloaded.bindings.profile?.id).toBe("profile-a");
 
   expect(second.list()).toEqual([
     {
@@ -420,14 +422,15 @@ test("HTTP writes forward revision and request identity while refusing a missing
       label: "pea",
       routeRegistrations: [registration({ external })],
     });
-    const response = await app.fetch(new Request("http://local/pe/route-state/test-route"));
+    const response = await app.fetch(
+      new Request("http://local/pe/route-state/test-route?doc=not-an-address"),
+    );
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ hint: "doc required" });
+    expect(await response.json()).toMatchObject({ error: /invalid route scope/ });
 
-    const doc = encodeURIComponent(documentA.documentAddress);
     const post = (path: string, body: unknown) =>
       app.fetch(
-        new Request(`http://local${path}?doc=${doc}`, {
+        new Request(`http://local${path}?${queryA}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
@@ -482,14 +485,13 @@ test("route event stream publishes an applied revision and ends on abort", async
     const socket = server.address();
     if (!socket || typeof socket === "string") throw new Error("Expected a TCP server.");
     const base = `http://127.0.0.1:${socket.port}`;
-    const doc = encodeURIComponent(documentA.documentAddress);
-    const response = await fetch(`${base}/pe/route-state/test-route/events?doc=${doc}`, {
+    const response = await fetch(`${base}/pe/route-state/test-route/events?${queryA}`, {
       signal: abort.signal,
     });
     const reader = response.body!.getReader();
     expect((await readSse(reader)).revision).toBe(0);
 
-    await fetch(`${base}/pe/route-state/test-route/apply?doc=${doc}`, {
+    await fetch(`${base}/pe/route-state/test-route/apply?${queryA}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { RouteStateSpec } from "./route-state.ts";
-import { sdkSessionSelectorSchema } from "./route-state.ts";
+const sdkSessionSelectorSchema = z.templateLiteral(["session:", z.string().min(1)]);
 
 const documentSelector = z.string().trim().min(1);
 export const instancesDocumentSchema = z.object({
@@ -30,7 +30,6 @@ export const instancesDocumentSchema = z.object({
 export type InstancesDocument = z.infer<typeof instancesDocumentSchema>;
 export const instancesRouteState = {
   route: "instances",
-  scope: "workspace",
   title: "Instances",
   description:
     "Select Revit sessions and stage documents. Refresh to discover installed years, sessions and recents. Stage then open or start. Other lifecycle commands are human-only.",

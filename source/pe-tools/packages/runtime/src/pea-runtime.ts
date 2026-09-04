@@ -29,13 +29,7 @@ import {
   resolvePeaSkillPaths,
   resolveWorkspaceKey,
 } from "@pe/mcps";
-import {
-  threadAccess,
-  threadAccessPolicies,
-  turnScopeContextKey,
-  turnScopeSchema,
-  type PeaWorldDescriptor,
-} from "@pe/agent-contracts";
+import { threadAccess, threadAccessPolicies, type PeaWorldDescriptor } from "@pe/agent-contracts";
 import { z } from "zod";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
 import { createRuntimeMemoryOptions, createRuntimeMemoryProfile } from "./memory/profiles.ts";
@@ -43,6 +37,8 @@ import type { RuntimeCreateRequest, RuntimeHandle, RuntimeHandleServices } from 
 import { createPeaProductStateStorageProfile } from "./storage/profiles.ts";
 import { createSystemPromptCapture } from "./system-prompt-capture.ts";
 import { createToolListCapture } from "./tool-list-capture.ts";
+import { admitTurn, ScopeStore, type ScopeStateStore } from "./scope-store.ts";
+export { messageContents } from "./message-contents.ts";
 import { peaAgentInstructionsFor } from "./pea-instructions.ts";
 
 export * from "./pea-instructions.ts";
@@ -100,6 +96,7 @@ export type PeaRuntimeHandle = RuntimeHandle<
   AgentController<PeaRuntimeState>
 > & {
   resourceId: string;
+  scopes: ScopeStore;
   capabilities: Readonly<PeaRuntimeCapabilities>;
   world: PeaWorldDescriptor;
   isSessionAdmitted(session: Session<PeaRuntimeState>): boolean;
@@ -166,6 +163,11 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
   const resourceId = world.id;
   let controller: AgentController<PeaRuntimeState> | undefined;
   let policy: PeaControllerPolicy | undefined;
+  let threadState: Promise<ScopeStateStore> | undefined;
+  const scopes = new ScopeStore(
+    () => (threadState ??= resolveThreadStateStore(handle.mastra?.getStorage())),
+    resourceId,
+  );
 
   const handle = await createRuntimeController<PeaRuntimeState, PeaRuntimeServices>({
     request,
@@ -178,6 +180,7 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
         accessLevel: options.accessLevel,
         resourceId,
         scopedWeb: request.protocol === "web",
+        scopes,
       });
       return policy.close;
     },
@@ -257,6 +260,7 @@ export async function createPeaRuntime(options: PeaRuntimeOptions = {}): Promise
   }
   return Object.assign(handle, {
     resourceId: world.id,
+    scopes,
     capabilities,
     world,
     isSessionAdmitted: (session: Session<PeaRuntimeState>) => policy!.isAdmitted(session),
@@ -275,50 +279,13 @@ interface PeaSessionAdmission {
   close(): Promise<void>;
 }
 
-function readContextKey(context: unknown, key: string): unknown {
-  if (!context || typeof context !== "object") return undefined;
-  const get = (context as { get?: (key: string) => unknown }).get;
-  return typeof get === "function"
-    ? get.call(context, key)
-    : (context as Record<string, unknown>)[key];
-}
-
-type MessageFile = { data: string; mediaType: string; filename?: string };
-
-/** Mirrors core `Session.createMessageInput` (private there): text and JSON files inline as fenced text. */
-export function messageContents(content: string, files: MessageFile[] | undefined) {
-  if (!files?.length) return content;
-  const fileParts = files.map((file) => {
-    if (file.mediaType.startsWith("text/") || file.mediaType === "application/json") {
-      const base64 = /^data:[^;]*;base64,(.*)$/.exec(file.data)?.[1];
-      const text = base64 ? Buffer.from(base64, "base64").toString("utf-8") : file.data;
-      const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
-      const fence = "`".repeat(Math.max(3, longest + 1));
-      const label = file.filename ? `[File: ${file.filename}]` : "[Attached file]";
-      return {
-        type: "text" as const,
-        text: `${label}
-${fence}
-${text}
-${fence}`,
-      };
-    }
-    return {
-      type: "file" as const,
-      data: file.data,
-      mediaType: file.mediaType,
-      ...(file.filename ? { filename: file.filename } : {}),
-    };
-  });
-  return content ? [{ type: "text" as const, text: content }, ...fileParts] : fileParts;
-}
-
 function installPeaControllerPolicy(
   controller: AgentController<PeaRuntimeState>,
   options: {
     accessLevel?: RuntimeAccessLevel;
     resourceId: string;
     scopedWeb: boolean;
+    scopes: ScopeStore;
   },
 ): PeaControllerPolicy {
   const admissions = new Map<Session<PeaRuntimeState>, PeaSessionAdmission>();
@@ -332,6 +299,7 @@ function installPeaControllerPolicy(
           session,
           options.accessLevel,
           options.scopedWeb ? session.thread.requireId() : undefined,
+          options.scopes,
         );
         admissions.set(session, admission);
       }
@@ -393,6 +361,7 @@ function createPeaSessionAdmission(
   session: Session<PeaRuntimeState>,
   requestedAccessLevel: RuntimeAccessLevel | undefined,
   scopedThreadId: string | undefined,
+  scopes: ScopeStore,
 ): PeaSessionAdmission {
   let permissionThreadId = session.thread.requireId();
   let permissionGeneration = 0;
@@ -519,30 +488,11 @@ function createPeaSessionAdmission(
     };
   }) as typeof session.sendSignal;
 
-  // The turn scope is parsed once at admission, frozen for every tool call, and persisted on the
-  // user signal.
-  // This resolves at admission, not completion; the reply arrives on the session stream.
-  session.sendMessage = async ({ content, files, requestContext }) => {
+  // The Scope is read once at admission, frozen for every tool call, and persisted on the user
+  // signal. This resolves at admission, not completion; the reply arrives on the session stream.
+  session.sendMessage = async (input) => {
     await assertRunAdmitted();
-    const parsedScope = turnScopeSchema.safeParse(
-      readContextKey(requestContext, turnScopeContextKey),
-    );
-    if (scopedThreadId && !parsedScope.success)
-      throw new Error("Pea web turns require a valid scope.");
-    const scope = parsedScope.success ? Object.freeze(parsedScope.data) : undefined;
-    const setter = (requestContext as { set?: (key: string, value: unknown) => void } | undefined)
-      ?.set;
-    if (scope && setter) setter.call(requestContext, turnScopeContextKey, scope);
-    const signal = session.sendSignal(
-      {
-        type: "user",
-        tagName: "user",
-        contents: messageContents(content, files),
-        ...(scope ? { id: scope.id, metadata: { scope } } : {}),
-      },
-      { requestContext },
-    );
-    await signal.accepted;
+    await admitTurn(scopes, session, input);
   };
   const steer = session.steer.bind(session);
   session.steer = async (input) => {
@@ -770,4 +720,12 @@ function readPermissionRecord(value: unknown): PermissionRecord | undefined {
     return undefined;
   }
   return parsed.data;
+}
+
+async function resolveThreadStateStore(storage: unknown): Promise<ScopeStateStore> {
+  const store = await (
+    storage as { getStore?: (name: "threadState") => Promise<ScopeStateStore | undefined> }
+  )?.getStore?.("threadState");
+  if (!store) throw new Error("Pea Scope requires the native threadState store.");
+  return store;
 }

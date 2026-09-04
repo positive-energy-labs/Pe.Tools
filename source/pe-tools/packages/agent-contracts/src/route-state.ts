@@ -12,7 +12,7 @@
  * (unmasked) and receives document snapshots through its route-specific event stream.
  */
 import { z } from "zod";
-import { addressSchema, type Address } from "./reading.ts";
+import { scopeKey, scopeSchema, type Scope } from "./scope.ts";
 
 /** A named side-effectful command a route exposes. `actor:"human"` commands reject pea. */
 export interface RouteStateCommandSpec {
@@ -26,7 +26,6 @@ export interface RouteStateCommandSpec {
 }
 
 export interface RouteStateSpec<TSchema extends z.ZodType> {
-  scope?: "document" | "workspace";
   /** Route name, e.g. `family-types` — the URL segment transport adapters key on. */
   route: string;
   /** Human-facing discovery metadata; adapters should not duplicate this. */
@@ -42,11 +41,19 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
   commands: Record<string, RouteStateCommandSpec>;
 }
 
+/** A route document lives under a chat Scope (session + document) or a named standalone workspace. */
 export type RouteScope =
-  | { documentAddress: Address; workspaceId?: never }
-  | { workspaceId: string; documentAddress?: never };
+  | { scope: Scope; workspaceId?: never }
+  | { workspaceId: string; scope?: never };
 export const routeScopeKey = (scope: RouteScope): string =>
-  scope.workspaceId !== undefined ? `workspace:${scope.workspaceId}` : scope.documentAddress;
+  scope.workspaceId !== undefined ? `workspace:${scope.workspaceId}` : scopeKey(scope.scope);
+export const routeScopeSchema = z.union([
+  z.object({ scope: scopeSchema }),
+  z.object({ workspaceId: z.string().trim().min(1).max(200) }),
+]);
+/** The Scope a route command runs under; workspace routes carry the empty Scope. */
+export const scopeOfRoute = (scope: RouteScope): Scope =>
+  scope.scope ?? { session: null, document: null };
 
 /** The document type a spec's schema parses to. */
 export type RouteDocOf<TSpec> =
@@ -72,34 +79,13 @@ export type RouteStateWriteResult =
       revision?: number;
     };
 
-/* ── Session binding (substrate-owned doc segment) ─────────────────────────── */
+/* ── Bindings (substrate-owned doc segment) ────────────────────────────────── */
 
-/**
- * A route document's named external bindings. Each records the document Address
- * where it was picked; `current` rejects a binding from any other document.
- */
-export const bindSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  at: addressSchema,
-});
+/** A route document's named external bindings (a profile, a settings file). The Revit session is
+ * never a binding: it is the Scope the document is keyed under. */
+export const bindSchema = z.object({ id: z.string(), label: z.string() });
 export type Bind = z.infer<typeof bindSchema>;
-export const sdkSessionSelectorSchema = z.templateLiteral(["session:", z.string().min(1)]);
-export const worldBindSchema = bindSchema.extend({ id: sdkSessionSelectorSchema });
-export const routeBindingsSchema = z
-  .object({ world: worldBindSchema.optional() })
-  .catchall(bindSchema)
-  .default({});
-
-/** A binding is meaningful only against the document where it was picked. */
-export const current = (bind: Bind | null | undefined, at: Address): Bind | null =>
-  bind?.at === at ? bind : null;
-
-/** Return a command's explicit world target, when present. */
-export function resolveTarget(input: unknown): string | undefined {
-  const explicit = (input as { target?: unknown } | null | undefined)?.target;
-  return typeof explicit === "string" && explicit.length > 0 ? explicit : undefined;
-}
+export const routeBindingsSchema = z.object({}).catchall(bindSchema).default({});
 
 /** Parse a raw route document; null when absent or invalid. */
 export function parseRouteDoc<TSchema extends z.ZodType>(
@@ -113,8 +99,8 @@ export function parseRouteDoc<TSchema extends z.ZodType>(
 
 /** What a command handler receives: read the current document, write the next one. */
 export interface RouteStateCommandContext<TDoc = unknown> {
-  /** The Revit document this route document belongs to. */
-  documentAddress: Address;
+  /** The Scope this route document is keyed under. */
+  scope: Scope;
   /** The current document (schema-parsed; a fresh empty document when absent). */
   getDoc(): TDoc;
   /** Replace the document (schema-validated before it lands). */

@@ -9,7 +9,7 @@
  * domain deltas: how to select, expand, run, and fold.
  */
 import type { RouteStateCommandHandler } from "./route-state.ts";
-import { resolveTarget } from "./route-state.ts";
+import { bridgeSelector } from "./scope.ts";
 import { type TrichotomyCellLike, stagedEntries } from "./trichotomy.ts";
 
 export interface CommitFailure {
@@ -33,7 +33,7 @@ export interface CommitCommandOptions<TDoc, TCell extends TrichotomyCellLike, TE
   toEdits(key: string, cell: TCell, doc: TDoc): TEdit[] | { error: string };
   /**
    * One transaction over all edits. `target` is already resolved
-   * (input.target ?? doc.binding.target). Returns per-key failures; a key absent
+   * (the Scope session). Returns per-key failures; a key absent
    * from the result committed successfully.
    */
   run(edits: TEdit[], doc: TDoc, target: string | undefined): Promise<CommitFailure[]>;
@@ -76,7 +76,7 @@ export function defineCommitCommand<TDoc, TCell extends TrichotomyCellLike, TEdi
     }
 
     if (edits.length > 0) {
-      failures.push(...(await options.run(edits, doc, resolveTarget(input))));
+      failures.push(...(await options.run(edits, doc, bridgeSelector(ctx.scope))));
     }
 
     const failedKeys = new Set(failures.map((failure) => failure.key));

@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import { instancesRouteState, address } from "@pe/agent-contracts";
+import { instancesRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import { createInstancesCommandHandlers } from "../../mcps/src/pea/instances-commands.ts";
 
@@ -22,18 +22,15 @@ test("Instances isolates workspaces, denies agent lifecycle controls and replays
       },
     ],
     store: {
-      getState: async ({ documentAddress, route }) => data.get(`${documentAddress}/${route}`),
-      setState: async ({ documentAddress, route, value }) => {
-        data.set(`${documentAddress}/${route}`, structuredClone(value));
+      getState: async ({ scopeKey, route }) => data.get(`${scopeKey}/${route}`),
+      setState: async ({ scopeKey, route, value }) => {
+        data.set(`${scopeKey}/${route}`, structuredClone(value));
       },
     },
   });
   const a = { workspaceId: "chat-a" };
   const b = { workspaceId: "chat-b" };
   try {
-    await expect(
-      workspace.read({ documentAddress: address("C:\\Models\\A.rvt") }, "instances"),
-    ).rejects.toThrow("workspace scope");
     expect(
       await workspace.apply(a, "instances", "agent", [{ path: ["observation"], value: {} }], 0),
     ).toMatchObject({ ok: false });

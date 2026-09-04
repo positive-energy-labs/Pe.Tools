@@ -5,7 +5,8 @@ import { MastraServer } from "@mastra/hono";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { z } from "zod";
-import { addressSchema, routeStatePatchSchema } from "@pe/agent-contracts";
+import { routeStatePatchSchema, scopeSchema, type ScopeRevision } from "@pe/agent-contracts";
+import { ScopeRefused, type ScopeStore } from "./scope-store.ts";
 import { readThreadState, toWireDisplayState } from "./thread-state.ts";
 import {
   RouteWorkspace,
@@ -18,6 +19,11 @@ import {
 const routeStateApplyBodySchema = z.object({
   patches: z.array(routeStatePatchSchema),
   expectedRevision: z.number().int().nonnegative(),
+});
+const scopeSetBodySchema = z.object({
+  scope: scopeSchema,
+  expectedRevision: z.number().int().nonnegative(),
+  turn: z.uuid().optional(),
 });
 const routeStateCommandBodySchema = z.object({
   command: z.string(),
@@ -32,6 +38,8 @@ export interface ServableRuntime {
   session?: Session;
   mastra?: Mastra;
   storage?: unknown;
+  /** The one Scope per thread; every turn is admitted under its current revision. */
+  scopes: ScopeStore;
   metadata?: Record<string, unknown>;
   isSessionAdmitted?(session: Session): boolean;
   close?: () => Promise<void> | void;
@@ -118,6 +126,48 @@ export async function buildAgentControllerApp(
     ).invalidateAvailableModelsCache?.();
     return c.json({ ok: true });
   });
+  // The ONE endpoint pair for Scope: read (or watch with ?watch) and set. A set while pea is
+  // mid-turn is refused unless it comes from that turn itself (pea's approved scope_set), and the
+  // new revision applies to the next turn; the running turn keeps the revision it was admitted under.
+  app.get("/pe/scope/:threadId", async (c) => {
+    const threadId = c.req.param("threadId");
+    if (c.req.query("watch") === undefined) return c.json(await runtime.scopes.read(threadId));
+    return streamSSE(c, async (stream) => {
+      const send = (next: ScopeRevision) => stream.writeSSE({ data: JSON.stringify(next) });
+      const unsubscribe = runtime.scopes.subscribe((thread, next) => {
+        if (thread === threadId) void send(next);
+      });
+      await send(await runtime.scopes.read(threadId));
+      await new Promise<void>((resolve) => stream.onAbort(resolve));
+      unsubscribe();
+    });
+  });
+  app.put("/pe/scope/:threadId", async (c) => {
+    const threadId = c.req.param("threadId");
+    const parsed = scopeSetBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json(
+        { error: "invalid body", hint: "expected { scope, expectedRevision, turn? }" },
+        400,
+      );
+    const session = await openSession(threadId);
+    if (session.run.isRunning() && parsed.data.turn !== runtime.scopes.admittedTurn(threadId))
+      return c.json(
+        {
+          error: "pea is mid-turn",
+          hint: "the turn keeps the Scope it was admitted under; wait or stop it.",
+        },
+        409,
+      );
+    try {
+      return c.json(
+        await runtime.scopes.set(threadId, parsed.data.scope, parsed.data.expectedRevision),
+      );
+    } catch (error) {
+      if (error instanceof ScopeRefused) return c.json({ error: error.message }, 409);
+      throw error;
+    }
+  });
   const registrations = options.routeRegistrations ?? [];
   const storage = mastra.getStorage();
   const threadState = await storage?.getStore("threadState");
@@ -127,21 +177,19 @@ export async function buildAgentControllerApp(
   const routeWorkspace = new RouteWorkspace({
     registrations,
     store: {
-      getState: ({ documentAddress, route }) =>
-        threadState!.getState({
-          threadId: resourceId,
-          type: routeDocumentKey(documentAddress, route),
-        }),
-      setState: ({ documentAddress, route, value }) =>
+      getState: ({ scopeKey, route }) =>
+        threadState!.getState({ threadId: resourceId, type: routeDocumentKey(scopeKey, route) }),
+      setState: ({ scopeKey, route, value }) =>
         threadState!.setState({
           threadId: resourceId,
-          type: routeDocumentKey(documentAddress, route),
+          type: routeDocumentKey(scopeKey, route),
           value,
         }),
     },
   });
 
-  // Discovery is unscoped; every document read or write must name one scope.
+  // Discovery is unscoped; every document read or write names one route scope: a chat Scope
+  // (?session, ?doc, either absent) or a standalone ?workspace.
   app.get("/pe/route-state", (c) => c.json(routeWorkspace.list()));
   app.get("/pe/route-state/:route", async (c) => {
     const scope = scopeOr400(c, "read");
@@ -228,16 +276,18 @@ export async function buildAgentControllerApp(
 
 function scopeOr400(c: Context, shape: "read" | "write"): RouteWorkspaceScope | Response {
   const workspaceId = c.req.query("workspace")?.trim();
-  if (workspaceId && !c.req.query("doc") && workspaceId.length <= 200) return { workspaceId };
-  if (workspaceId) return c.json({ error: "Provide exactly one route scope" }, 400);
-  const parsed = addressSchema.safeParse(c.req.query("doc")?.trim());
-  if (parsed.success) return { documentAddress: parsed.data };
-  return c.json(
-    shape === "read"
-      ? { error: "route scope is required", hint: "doc required" }
-      : { ok: false, kind: "error", error: "route scope is required", hint: "doc required" },
-    400,
-  );
+  const session = c.req.query("session")?.trim() || null;
+  const doc = c.req.query("doc")?.trim() || null;
+  const invalid = (error: string) =>
+    c.json(shape === "read" ? { error } : { ok: false, kind: "error", error, hint: error }, 400);
+  if (workspaceId) {
+    if (session || doc || workspaceId.length > 200)
+      return invalid("Provide exactly one route scope");
+    return { workspaceId };
+  }
+  const parsed = scopeSchema.safeParse({ session, document: doc });
+  if (!parsed.success) return invalid("invalid route scope: session or doc malformed");
+  return { scope: parsed.data };
 }
 
 function streamRouteWorkspace(
@@ -277,9 +327,9 @@ function streamRouteWorkspace(
   });
 }
 
-function routeDocumentKey(documentAddress: string, route: string): string {
+function routeDocumentKey(scopeKey: string, route: string): string {
   // ponytail: KV keyed by string on resourceId; use a document table only for enumeration or scope-delete.
-  return `${route}:${documentAddress}`;
+  return `${route}:${scopeKey}`;
 }
 
 function errorMessage(error: unknown): string {

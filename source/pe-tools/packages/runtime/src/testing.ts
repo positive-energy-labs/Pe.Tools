@@ -5,16 +5,17 @@ import { createTool } from "@mastra/core/tools";
 import { LocalFilesystem, Workspace } from "@mastra/core/workspace";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { turnScopeContextKey, turnScopeSchema } from "@pe/agent-contracts";
 import type { ServableRuntime } from "./agent-controller-web.ts";
 import { createRuntimeController } from "./controller/create-runtime-controller.ts";
 import { createRuntimeMemoryProfile } from "./memory/profiles.ts";
-import { messageContents } from "./pea-runtime.ts";
+import { turnOf } from "@pe/agent-contracts";
+import { admitTurn, ScopeStore } from "./scope-store.ts";
 import { createRuntimeLibSqlStorage } from "./storage/profiles.ts";
 
 type DeterministicResponse =
   | { text: string; finishDelayMs?: number }
   | { toolCall: { name: "scenario_approval"; input: { value: string } } }
+  | { toolCall: { name: "scenario_scope"; input: Record<string, never> } }
   | {
       toolCall: {
         name: "ask_user";
@@ -89,6 +90,13 @@ export async function createDeterministicRuntime(options: {
     requireApproval: true,
     execute: async ({ value }) => ({ output: `APPROVED:${value}` }),
   });
+  // The deterministic stand-in for every host-bound tool: it answers with the frozen turn it ran under.
+  const scopeTool = createTool({
+    id: "scenario_scope",
+    description: "Echo the Scope revision this turn was admitted under.",
+    inputSchema: z.object({}),
+    execute: async (_input, context) => ({ turn: turnOf(context) }),
+  });
   const agent = new Agent({
     id: "scenario-agent",
     name: "Scenario Agent",
@@ -100,7 +108,7 @@ export async function createDeterministicRuntime(options: {
         return { stream: responseStream(response, at) };
       },
     }) as never,
-    tools: { scenario_approval: approvalTool },
+    tools: { scenario_approval: approvalTool, scenario_scope: scopeTool },
   });
   const storage = await createRuntimeLibSqlStorage({
     id: "browser-scenario",
@@ -134,36 +142,18 @@ export async function createDeterministicRuntime(options: {
       })),
     });
   }
+  const scopes = new ScopeStore(async () => {
+    const store = await storage.getStore("threadState");
+    if (!store) throw new Error("scenario storage has no threadState store");
+    return store;
+  }, options.resourceId);
   const runtime = await createRuntimeController({
     request: { protocol: "web" },
     memoryProfile: createRuntimeMemoryProfile({ options: { observationalMemory: false } }),
     configureController: (controller) =>
       controller.onSessionCreated(
         (session) => {
-          const sendMessage = session.sendMessage.bind(session);
-          session.sendMessage = async (input) => {
-            const context = input.requestContext as
-              | { get?: (key: string) => unknown }
-              | Record<string, unknown>
-              | undefined;
-            const scope = turnScopeSchema.safeParse(
-              typeof context?.get === "function"
-                ? context.get(turnScopeContextKey)
-                : (context as Record<string, unknown> | undefined)?.[turnScopeContextKey],
-            );
-            if (!scope.success) return sendMessage(input);
-            const signal = session.sendSignal(
-              {
-                type: "user",
-                tagName: "user",
-                id: scope.data.id,
-                contents: messageContents(input.content, input.files),
-                metadata: { scope: scope.data },
-              },
-              { requestContext: input.requestContext },
-            );
-            await signal.accepted;
-          };
+          session.sendMessage = (input) => admitTurn(scopes, session, input);
         },
         { blocking: true },
       ),
@@ -207,6 +197,7 @@ export async function createDeterministicRuntime(options: {
     resourceId: options.resourceId,
     mastra: runtime.mastra,
     storage,
+    scopes,
     metadata: runtime.metadata,
     close: runtime.close,
   };
